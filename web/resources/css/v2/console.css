@@ -2352,6 +2352,13 @@ html[dir='rtl'] .v2-row-title {
     min-width: 0;
 }
 
+/* A view's open ⋯ menu sits above the rows after it (they come later on the page, at the same level), so Rename, Move
+   and Delete are what a click there reaches, in the sidebar and in the panel or its flyout alike. */
+.v2-sb-view:focus-within,
+.v2-sb-view:has(.v2-sb-more[aria-expanded='true']) {
+    z-index: var(--el-layer-menu);
+}
+
 .v2-sb-view > .fi-dropdown {
     position: absolute;
     inset-inline-end: var(--el-space-4);

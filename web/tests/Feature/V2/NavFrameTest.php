@@ -16,6 +16,7 @@ use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Support\NavFrame;
 use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
+use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
 use App\Models\LabelList;
 use App\Models\SentItem;
@@ -399,7 +400,14 @@ describe('after the desktop\'s review', function () {
         foreach (['library', 'projects', 'live', 'ask', 'activity', 'settings'] as $place) {
             expect($html)->toContain("x-effect=\"expanded(\$el, '{$place}')\"")->toContain('id="v2-panel-'.$place.'"');
         }
-        expect($html)->toContain("x-on:keydown.escape.window=\"if (flyout !== null) closeFlyout('escape')\"")->toContain("x-on:click.outside=\"closeFlyout('outside')\"")
+        // Esc, a click outside and the focus leaving close the flyout, never from inside a dialog it opened (⋮ › Rename).
+        expect($html)->toContain("x-on:keydown.escape.window=\"if (flyout !== null && ! inDialog(\$event.target)) closeFlyout('escape')\"")
+            ->toContain("x-on:click.outside=\"if (! inDialog(\$event.target)) closeFlyout('outside')\"")
+            // Focus leaving the flyout (a click on audio or video controls, which sends no click, or into a frame) closes it too.
+            ->toContain("x-on:focusin.window=\"if (flyout !== null && ! \$el.contains(\$event.target) && ! inDialog(\$event.target)) closeFlyout('outside')\"")
+            ->toContain('inDialog(target) { return window.ElFrameCore.inDialog(target); },')
+            ->toContain("x-on:blur.window=\"if (flyout !== null && document.activeElement?.tagName === 'IFRAME') closeFlyout('outside')\"")
+            ->toContain('const lost = window.ElFrameCore.focusLost(active, document.body, panel);')
             ->toContain('core.railFlyout({ narrow: this.folded(), hasPanel: this.hasPanel(key), flyout: this.flyout, key, current: this.place })')
             ->toContain("session.set('el-nav-flyout', key)");
     });
@@ -438,6 +446,24 @@ describe('after the desktop\'s review', function () {
         expect($panel)->not->toContain('Acme')->not->toContain('Quiet project')->not->toContain('data-ask-project');
         // The page still asks about a project, from its own picker.
         expect($html)->toContain('for="ask-project"');
+    });
+
+    it('draws the frame for its page on the sidebar\'s own requests (a view renamed from the panel), never as Home\'s rail alone', function () {
+        $this->actingAs($this->owner->fresh(), 'web');
+        foreach (['/app/sessions' => 'library', '/app/clients?show=pinned' => 'projects', '/app/activity' => 'activity', '/app/settings/profile' => 'settings'] as $here => $place) {
+            $html = Livewire::test(Sidebar::class)->set('here', $here)->call('$refresh')->html();
+            expect($html)->toContain('data-place="'.$place.'"')->toContain('\u0022place\u0022:\u0022'.$place.'\u0022')
+                ->toMatch('~class="v2-rail-item is-on"\s+aria-current="page"[^>]*data-module="'.$place.'"~')
+                ->toMatch('~<section class="v2-panel" data-panel="'.$place.'" aria-label="[^"]+"\s+x-bind:hidden~');
+        }
+        // The Rename dialog opened from the panel and closed again: the Library's frame still.
+        $sidebar = Livewire::test(Sidebar::class)->set('here', '/app/sessions');
+        $view = collect(app(SavedViews::class)->index((int) $this->owner->current_workspace_id, $this->owner->id))->first();
+        $sidebar->call('mountAction', 'renameView', ['id' => $view['id']])->call('unmountAction');
+        expect($sidebar->html())->toContain('data-place="library"');
+        // A view's open ⋯ menu is above the rows after it, so Rename is what a click there reaches.
+        expect((string) file_get_contents(resource_path('css/v2/console.css')))
+            ->toContain(".v2-sb-view:focus-within,\n.v2-sb-view:has(.v2-sb-more[aria-expanded='true']) {\n    z-index: var(--el-layer-menu);");
     });
 
     it('says how many recordings the list holds in the Library\'s header, never only in the table\'s foot', function () {

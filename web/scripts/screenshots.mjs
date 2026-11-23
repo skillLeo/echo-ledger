@@ -259,18 +259,16 @@ async function navChecks(page, width) {
     const memory = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
     if (memory.includes('el-nav-last:library') || memory.includes('el-nav:000000000000.00000000:last:library')) wrong.push(`someone else's memory stayed: ${memory.join(', ')}`);
     if (!memory.some((k) => /^el-nav:[0-9a-f]{12}\.[0-9a-f]{8}:last:library$/.test(k))) wrong.push(`no memory of this place for this person: ${memory.join(', ')}`);
-    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens. (What they typed is cleared as typing would clear it, so
-    // the Library's search settles before the next step.)
-    const search = page.locator('.v2-library .fi-ta-search-field input').first();
-    await search.focus();
+    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens, and the field keeps the focus and what was typed. (A field
+    // of its own, put on the page for the check: the Library's search would search for what the keys typed.)
+    await page.evaluate(() => { const f = Object.assign(document.createElement('input'), { id: 'el-nav-field', value: 'typed' }); Object.assign(f.style, { position: 'fixed', top: '8px', left: '50%', zIndex: '1' }); document.body.appendChild(f); f.focus(); });
     await page.keyboard.press('Alt+Digit1');
     await page.keyboard.press(mod + '+Digit2');
     await page.waitForTimeout(600);
-    if (!at().startsWith('/app/sessions')) wrong.push(`Alt+1 or ${mod}+2 in the search went to ${at()}`);
-    await search.fill('');
-    await settle();
-    await page.evaluate(() => document.activeElement?.blur());
-    await page.waitForFunction(() => location.search === '', null, { timeout: 5000 }).catch(() => {});
+    const field = await page.evaluate(() => ({ focus: document.activeElement?.id, value: document.getElementById('el-nav-field')?.value }));
+    if (at() !== '/app/sessions') wrong.push(`Alt+1 or ${mod}+2 in a field went to ${at()}`);
+    if (field.focus !== 'el-nav-field' || !String(field.value).startsWith('typed')) wrong.push(`Alt+1 or ${mod}+2 in a field took the focus or the words: ${JSON.stringify(field)}`);
+    await page.evaluate(() => document.getElementById('el-nav-field')?.remove());
     // Each step waits (up to 5 s, on a busy machine) for the address it should reach, then says where it is.
     const reach = (ok) => page.waitForFunction(ok, null, { timeout: 5000 }).catch(() => {});
     const filtered = () => decodeURIComponent(location.search).includes('f[source]');
@@ -304,6 +302,33 @@ async function navChecks(page, width) {
         await settle();
         if (at() !== '/app/sessions?tab=unread') wrong.push(`choosing in the flyout went to ${at()}`);
         if (await flyout()) wrong.push('the flyout stayed open after choosing');
+        // A dialog opened from the flyout (⋮ › Rename on a view) is the flyout's own: Esc closes the dialog, the flyout
+        // stays open, and focus comes back to ⋮.
+        if (await page.locator('.v2-panel[data-panel="library"] [data-view-menu]').count() > 0) {
+            // The Library icon starts it over (All recordings) and opens its flyout on the new page.
+            if (!(await flyout())) { await page.click('[data-rail="library"]'); await settle(); }
+            await page.waitForFunction(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'), null, { timeout: 5000 }).catch(() => {});
+            const menu = page.locator('.v2-panel[data-panel="library"] [data-view-menu]').first();
+            const menuId = await menu.getAttribute('data-view-menu');
+            await menu.click();
+            await page.locator('.v2-panel[data-panel="library"] [data-view-rename]').first().click();
+            await page.waitForFunction(() => [...document.querySelectorAll('.fi-modal-open[aria-modal="true"], [role="dialog"][aria-modal="true"]')].some((el) => el.getClientRects().length > 0), null, { timeout: 5000 }).catch(() => {});
+            // The dialog has opened when its name field has the focus (it opens with a short transition).
+            await page.waitForFunction(() => document.activeElement?.closest('.fi-modal-open') !== null, null, { timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(300);
+            const opened = await flyout();
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(600);
+            const after = await page.evaluate(() => ({ dialog: [...document.querySelectorAll('.fi-modal-open[aria-modal="true"]')].some((el) => el.getClientRects().length > 0), focus: document.activeElement?.getAttribute('data-view-menu') }));
+            if (!opened) wrong.push('opening ⋮ › Rename closed the flyout');
+            if (after.dialog) wrong.push('Esc did not close the Rename dialog');
+            if (!(await flyout())) wrong.push('Esc in the Rename dialog closed the flyout');
+            if (after.focus !== menuId) wrong.push(`after the Rename dialog focus is on ${after.focus ?? 'something else'}, not ⋮`);
+            await page.click('.v2-panel[data-panel="library"] [data-panel-toggle]');
+            await page.waitForTimeout(300);
+        } else {
+            wrong.push('no saved view in the Library panel to check ⋮ › Rename with');
+        }
         // Another place's icon opens its flyout, expanded; Esc, ⊟ and a click outside close it, focus back on the icon.
         for (const close of ['Escape', 'toggle', 'outside']) {
             await page.click('[data-rail="projects"]');
@@ -312,12 +337,46 @@ async function navChecks(page, width) {
             if (!(await flyout()) || opened.expanded !== 'true') wrong.push(`Projects' flyout (${close}): open ${await flyout()}, aria-expanded ${opened.expanded}`);
             if (close === 'Escape') await page.keyboard.press('Escape');
             if (close === 'toggle') await page.click('.v2-panel[data-panel="projects"] [data-panel-toggle]');
-            // An empty spot of the page far from the rail (the left in Urdu, where the rail is on the right).
-            if (close === 'outside') await page.mouse.click((await page.evaluate(() => document.documentElement.dir)) === 'rtl' ? 40 : width - 40, 860);
+            // A spot of the page with nothing to focus (a plain box put there for the check, far from the rail: the left
+            // in Urdu), so the click leaves the focus nowhere and it comes back to the icon.
+            if (close === 'outside') {
+                const spot = await page.evaluate(() => {
+                    const el = document.createElement('div');
+                    el.id = 'el-nav-empty';
+                    const rtl = document.documentElement.dir === 'rtl';
+                    Object.assign(el.style, { position: 'fixed', bottom: '8px', [rtl ? 'left' : 'right']: '8px', width: '120px', height: '40px', zIndex: '1' });
+                    document.body.appendChild(el);
+                    const r = el.getBoundingClientRect();
+                    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+                });
+                await page.mouse.click(spot.x, spot.y);
+                await page.evaluate(() => document.getElementById('el-nav-empty')?.remove());
+            }
             await page.waitForTimeout(300);
             const closed = await state('projects');
             if (await flyout()) wrong.push(`the flyout stayed open after ${close}`);
             if (closed.expanded !== 'false' || closed.focus !== 'projects') wrong.push(`after ${close}: aria-expanded ${closed.expanded}, focus on ${closed.focus}`);
+        }
+        // A click outside on something that takes focus itself keeps it there: audio controls, an element a script
+        // made focusable (tabindex -1). Both are put on an empty spot of the page for the check, then removed.
+        for (const probe of ['audio', 'focusable']) {
+            await page.click('[data-rail="projects"]');
+            await page.waitForTimeout(300);
+            const box = await page.evaluate((kind) => {
+                const el = kind === 'audio' ? Object.assign(document.createElement('audio'), { controls: true }) : Object.assign(document.createElement('div'), { tabIndex: -1, textContent: 'probe' });
+                el.id = 'el-nav-probe';
+                const rtl = document.documentElement.dir === 'rtl';
+                Object.assign(el.style, { position: 'fixed', bottom: '8px', [rtl ? 'left' : 'right']: '8px', width: '240px', height: '40px', zIndex: '1' });
+                document.body.appendChild(el);
+                const r = el.getBoundingClientRect();
+                return { x: r.left + 20, y: r.top + r.height / 2 };
+            }, probe);
+            await page.mouse.click(box.x, box.y);
+            await page.waitForTimeout(300);
+            const after = await page.evaluate(() => ({ focus: document.activeElement?.id || document.activeElement?.tagName, open: document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout') }));
+            if (after.open) wrong.push(`the flyout stayed open after a click on the ${probe} probe`);
+            if (after.focus !== 'el-nav-probe') wrong.push(`a click on the ${probe} probe left focus on ${after.focus}`);
+            await page.evaluate(() => document.getElementById('el-nav-probe')?.remove());
         }
         await forget();
         return wrong;
@@ -536,7 +595,7 @@ for (const theme of themes) {
                 // Browser checks of a page (docs/PLAN_NAV_3_LEVELS.md section 8): `checks` is an async function of the
                 // page and the width that answers a list of what went wrong; the page is loaded again afterwards.
                 if (spec.checks) {
-                    const wrong = await spec.checks(page, width).catch((e) => [`threw: ${e.message.split('\n')[0]}`]);
+                    const wrong = await spec.checks(page, width).catch((e) => [`threw: ${e.message.split('\n').slice(0, 3).join(' | ')}`]);
                     if (wrong.length > 0) {
                         console.error(`${name} ${width} ${theme}: ${wrong.join('; ')}`);
                         process.exitCode = 1;

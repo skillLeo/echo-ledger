@@ -72,6 +72,9 @@
             },
             memory(what, place) { return window.ElFrameCore.memoryKey(this.scope, what, place); },
             hasPanel(key) { return this.panels.includes(key); },
+            // A dialog opened from the flyout (⋮ › Rename, + New label) is the flyout's own: a key, a click or the focus in
+            // it never closes the flyout, so focus comes back to what opened the dialog when it closes.
+            inDialog(target) { return window.ElFrameCore.inDialog(target); },
             shown() { return this.flyout ?? this.place; },
             folded() { return this.narrow || ! wide(); },
             // The rail icon's state for assistive tools while its panel is a flyout: expanded or not, and what it opens.
@@ -151,10 +154,9 @@
                 this.$nextTick(() => {
                     const active = document.activeElement;
                     const panel = this.$root.querySelector('[data-panel="' + key + '"]');
-                    // Focus is lost when nothing a person works with has it: the body, the page's main (a skip link's
-                    // target, focused by a click on it), or the flyout now hidden.
-                    const works = active instanceof Element && active.matches('a[href], button, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])');
-                    const lost = ! works || (panel !== null && panel.contains(active));
+                    // Focus is lost only on nothing, the body, the page's main or the flyout now hidden (ElFrameCore.focusLost);
+                    // audio or video controls, a frame or an element a script focused keep it.
+                    const lost = window.ElFrameCore.focusLost(active, document.body, panel);
                     if (! window.ElFrameCore.flyoutFocusBack(how, lost)) return;
                     const back = opener && opener.isConnected ? opener : this.$root.querySelector('[data-rail="' + key + '"]');
                     back?.focus();

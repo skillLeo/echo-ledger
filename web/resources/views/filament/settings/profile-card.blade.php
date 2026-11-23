@@ -53,6 +53,6 @@
         </span>
     </a>
     @if ($button !== null)
-        <a href="{{ UpgradeFlow::chooseUrl($context->higherPlans()[0]->key ?? null) }}" class="el-btn {{ $button === 'primary' ? 'el-btn-primary' : 'el-btn-outline' }}" data-upgrade="{{ $button }}">Upgrade</a>
+        <a href="{{ UpgradeFlow::chooseUrl($context->higherPlans()[0]->key ?? null) }}" class="el-btn {{ $button === 'primary' ? 'el-btn-primary' : 'el-btn-outline' }}" data-upgrade="{{ $button }}">{{ __('Upgrade') }}</a>
     @endif
 </div>
