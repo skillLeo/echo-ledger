@@ -1111,16 +1111,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** A new client folder, added to the list right away. */
+    /**
+     * A new client folder, added to the list right away: the server is asked on IO, and the list changed once back
+     * (on the main thread, at once for a caller already there, also one blocking it with runBlocking).
+     */
     suspend fun createClient(name: String): ClientDto? {
         val epoch = graph.accountEpoch.get()
-        return withContext(Dispatchers.IO) {
+        val created = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.createClient(name.trim()) }
                 .onFailure {
                     _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.")
                 }.getOrNull()
-                ?.also { created -> sameAccount(epoch) { _clients.value = _clients.value.filterNot { it.id == created.id } + created } }
-        }
+        } ?: return null
+        sameAccount(epoch) { _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+        return created
     }
 
     // ---- Projects, filing rules and sharing (since v1.5) -----------------------------------------------------------
