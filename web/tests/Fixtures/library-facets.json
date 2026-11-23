@@ -6,6 +6,7 @@
     "The clock stands at `now`; dates are counted in `tz`. A recording that is `deleted` or still `recording` is never in the list or the counts; one still recording does count in Needs you.",
     "Each filter set's `expect.facets` gives, for each section, the count of each option with every other section's filter applied and not its own, in the panel's order.",
     "Search: every word somewhere among the title, the transcript text and the project path (the project's name and the names of the folders above it), ignoring capitals; the words may be in different places.",
+    "Needs you's stuck: Status processing for more than 24 hours since `processing_since` (the start of the current upload or transcript attempt, as the library item carries it), else since `ended_at`, else `started_at`. `transcript_attempt_at` and `upload_attempt_at` are what the server stores it from.",
     "`bookmarks` lists the tag of each bookmark (null for one without a tag): a library item's `marker_count` is how many and its `tags` the tags."
   ],
   "now": "2026-11-23T10:00:00+00:00",
@@ -90,6 +91,9 @@
       "bookmarks": [
         "Decision"
       ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -121,6 +125,9 @@
       "opened": false,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -152,6 +159,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp_business",
         "status": "transcribed",
@@ -181,6 +191,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "transcribed",
@@ -212,6 +225,9 @@
       "bookmarks": [
         null
       ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "transcribed",
@@ -243,6 +259,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
@@ -272,6 +291,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
@@ -301,6 +323,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "microsoft_teams",
         "status": "transcribed",
@@ -332,6 +357,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "phone_call",
         "status": "transcribed",
@@ -361,6 +389,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "phone_call",
         "status": "transcribed",
@@ -390,6 +421,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "telegram",
         "status": "transcribed",
@@ -425,6 +459,9 @@
         "Price",
         "decision"
       ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "signal",
         "status": "transcribed",
@@ -454,6 +491,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
@@ -485,6 +525,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "imported",
         "status": "transcribed",
@@ -514,6 +557,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "imported",
         "status": "transcribed",
@@ -543,6 +589,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "imported",
         "status": "transcribed",
@@ -572,6 +621,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "transcribed",
@@ -601,6 +653,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "not_transcribed",
@@ -630,6 +685,9 @@
       "opened": false,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "not_transcribed",
@@ -659,6 +717,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "messenger",
         "status": "not_transcribed",
@@ -690,6 +751,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "instagram",
         "status": "failed",
@@ -719,6 +783,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "skype",
         "status": "failed",
@@ -748,6 +815,9 @@
       "opened": false,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "slack",
         "status": "failed",
@@ -777,6 +847,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "discord",
         "status": "processing",
@@ -806,6 +879,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "processing",
@@ -837,6 +913,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "processing",
@@ -866,6 +945,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "microsoft_teams",
         "status": "processing",
@@ -895,6 +977,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "other",
         "status": "transcribed",
@@ -924,6 +1009,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "other",
         "status": "transcribed",
@@ -953,6 +1041,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -984,6 +1075,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -1013,6 +1107,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
@@ -1044,6 +1141,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -1075,6 +1175,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -1104,6 +1207,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp_business",
         "status": "transcribed",
@@ -1135,6 +1241,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
@@ -1164,6 +1273,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
@@ -1193,6 +1305,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -1225,6 +1340,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
@@ -1256,6 +1374,9 @@
       "bookmarks": [
         "Follow-up"
       ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "transcribed",
@@ -1285,6 +1406,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "processing",
@@ -1314,6 +1438,9 @@
       "opened": true,
       "deleted": false,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "zoom",
         "status": "processing",
@@ -1345,18 +1472,117 @@
       "opened": true,
       "deleted": true,
       "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur"
       }
+    },
+    {
+      "id": "01JFXR00000000000000000044",
+      "note": "Its transcript failed a month ago and was retried an hour ago: on its way again, not stuck (the clock starts at the retry)",
+      "title": "Retried today",
+      "text": null,
+      "started_at": "2026-10-20T07:00:00+00:00",
+      "ended_at": "2026-10-20T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "pending",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": "2026-11-23T09:00:00+00:00",
+      "upload_attempt_at": null,
+      "processing_since": "2026-11-23T09:00:00+00:00",
+      "facets": {
+        "source": "zoom",
+        "status": "processing",
+        "language": "unknown"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000045",
+      "note": "Its upload failed last week and started again 2 hours ago: uploading, not stuck",
+      "title": "Recording 45",
+      "text": null,
+      "started_at": "2026-11-14T07:00:00+00:00",
+      "ended_at": "2026-11-14T07:10:00+00:00",
+      "status": "uploading",
+      "source_app": "phone_call",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": "2026-11-23T08:00:00+00:00",
+      "processing_since": "2026-11-23T08:00:00+00:00",
+      "facets": {
+        "source": "phone_call",
+        "status": "processing",
+        "language": "unknown"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000046",
+      "note": "Retried 25 hours ago and still being transcribed: stuck, counted from the retry (the upload began long before)",
+      "title": "Recording 46",
+      "text": null,
+      "started_at": "2026-11-01T07:00:00+00:00",
+      "ended_at": "2026-11-01T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "google_meet",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "processing",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": "2026-11-22T09:00:00+00:00",
+      "upload_attempt_at": "2026-11-01T07:15:00+00:00",
+      "processing_since": "2026-11-22T09:00:00+00:00",
+      "facets": {
+        "source": "google_meet",
+        "status": "processing",
+        "language": "unknown"
+      }
     }
   ],
   "needs_you": {
-    "count": 7,
+    "count": 8,
     "failed": 3,
     "waiting": 2,
-    "stuck": 2,
+    "stuck": 3,
     "ids": {
       "01JFXR00000000000000000021": "failed",
       "01JFXR00000000000000000022": "failed",
@@ -1364,12 +1590,13 @@
       "01JFXR00000000000000000024": "stuck",
       "01JFXR00000000000000000026": "stuck",
       "01JFXR00000000000000000041": "waiting",
-      "01JFXR00000000000000000042": "waiting"
+      "01JFXR00000000000000000042": "waiting",
+      "01JFXR00000000000000000046": "stuck"
     }
   },
   "library_counts": {
-    "all": 40,
-    "needs_you": 7,
+    "all": 43,
+    "needs_you": 8,
     "unread": 4,
     "important": 3,
     "not_transcribed": 3,
@@ -1382,7 +1609,7 @@
       "filters": {},
       "search": null,
       "expect": {
-        "total": 40,
+        "total": 43,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -1405,6 +1632,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000012",
@@ -1418,10 +1646,12 @@
           "01JFXR00000000000000000031",
           "01JFXR00000000000000000032",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -1429,15 +1659,15 @@
           "date": {
             "today": 6,
             "last_7_days": 18,
-            "this_month": 36
+            "this_month": 38
           },
           "source": {
             "whatsapp": 11,
             "whatsapp_business": 2,
-            "google_meet": 3,
-            "zoom": 5,
+            "google_meet": 4,
+            "zoom": 6,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 1,
             "messenger": 1,
@@ -1450,12 +1680,12 @@
             "other": 2
           },
           "device": {
-            "phone": 24,
-            "desktop": 13,
+            "phone": 25,
+            "desktop": 15,
             "web": 3
           },
           "project": {
-            "none": 30,
+            "none": 33,
             "01JFXP00000000000000000001": 7,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -1467,12 +1697,12 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 30,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -1607,7 +1837,7 @@
       },
       "search": null,
       "expect": {
-        "total": 27,
+        "total": 30,
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -1622,6 +1852,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000012",
@@ -1632,24 +1863,26 @@
           "01JFXR00000000000000000029",
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000032",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000036"
         ],
         "facets": {
           "date": {
             "today": 3,
             "last_7_days": 11,
-            "this_month": 24
+            "this_month": 26
           },
           "source": {
             "whatsapp": 11,
             "whatsapp_business": 2,
-            "google_meet": 3,
-            "zoom": 5,
+            "google_meet": 4,
+            "zoom": 6,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 1,
             "messenger": 1,
@@ -1662,12 +1895,12 @@
             "other": 2
           },
           "device": {
-            "phone": 12,
-            "desktop": 12,
+            "phone": 13,
+            "desktop": 14,
             "web": 3
           },
           "project": {
-            "none": 22,
+            "none": 25,
             "01JFXP00000000000000000001": 3,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -1679,12 +1912,12 @@
             "ar": 1,
             "fr": 1,
             "de": 1,
-            "unknown": 6
+            "unknown": 9
           },
           "status": {
             "transcribed": 20,
             "not_transcribed": 1,
-            "processing": 3,
+            "processing": 6,
             "failed": 3
           },
           "labels": {
@@ -1762,7 +1995,7 @@
             "web": 1
           },
           "project": {
-            "none": 30,
+            "none": 33,
             "01JFXP00000000000000000001": 7,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -1818,7 +2051,7 @@
       },
       "search": null,
       "expect": {
-        "total": 33,
+        "total": 36,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -1837,6 +2070,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000015",
@@ -1847,10 +2081,12 @@
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000032",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -1858,15 +2094,15 @@
           "date": {
             "today": 4,
             "last_7_days": 14,
-            "this_month": 29
+            "this_month": 31
           },
           "source": {
             "whatsapp": 8,
             "whatsapp_business": 1,
-            "google_meet": 3,
-            "zoom": 4,
+            "google_meet": 4,
+            "zoom": 5,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 0,
             "messenger": 1,
@@ -1879,12 +2115,12 @@
             "other": 2
           },
           "device": {
-            "phone": 19,
-            "desktop": 12,
+            "phone": 20,
+            "desktop": 14,
             "web": 2
           },
           "project": {
-            "none": 30,
+            "none": 33,
             "01JFXP00000000000000000001": 7,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -1896,12 +2132,12 @@
             "ar": 1,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 23,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -1939,7 +2175,7 @@
       },
       "search": null,
       "expect": {
-        "total": 33,
+        "total": 36,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -1958,6 +2194,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000015",
@@ -1968,10 +2205,12 @@
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000032",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -1979,15 +2218,15 @@
           "date": {
             "today": 4,
             "last_7_days": 14,
-            "this_month": 29
+            "this_month": 31
           },
           "source": {
             "whatsapp": 8,
             "whatsapp_business": 1,
-            "google_meet": 3,
-            "zoom": 4,
+            "google_meet": 4,
+            "zoom": 5,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 0,
             "messenger": 1,
@@ -2000,12 +2239,12 @@
             "other": 2
           },
           "device": {
-            "phone": 19,
-            "desktop": 12,
+            "phone": 20,
+            "desktop": 14,
             "web": 2
           },
           "project": {
-            "none": 30,
+            "none": 33,
             "01JFXP00000000000000000001": 7,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -2017,12 +2256,12 @@
             "ar": 1,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 23,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -2159,7 +2398,7 @@
       },
       "search": null,
       "expect": {
-        "total": 33,
+        "total": 36,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2178,6 +2417,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000015",
@@ -2189,25 +2429,27 @@
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000032",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035"
         ],
         "facets": {
           "date": {
             "today": 4,
             "last_7_days": 14,
-            "this_month": 30
+            "this_month": 32
           },
           "source": {
             "whatsapp": 7,
             "whatsapp_business": 2,
-            "google_meet": 2,
-            "zoom": 5,
+            "google_meet": 3,
+            "zoom": 6,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 0,
             "messenger": 1,
@@ -2220,12 +2462,12 @@
             "other": 2
           },
           "device": {
-            "phone": 19,
-            "desktop": 11,
+            "phone": 20,
+            "desktop": 13,
             "web": 3
           },
           "project": {
-            "none": 27,
+            "none": 30,
             "01JFXP00000000000000000001": 3,
             "01JFXP00000000000000000002": 1,
             "01JFXP00000000000000000004": 0,
@@ -2237,12 +2479,12 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 8
+            "unknown": 11
           },
           "status": {
             "transcribed": 24,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 2
           },
           "labels": {
@@ -2374,7 +2616,7 @@
       },
       "search": null,
       "expect": {
-        "total": 37,
+        "total": 40,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2396,6 +2638,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000012",
@@ -2407,10 +2650,12 @@
           "01JFXR00000000000000000030",
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -2418,15 +2663,15 @@
           "date": {
             "today": 6,
             "last_7_days": 17,
-            "this_month": 33
+            "this_month": 35
           },
           "source": {
             "whatsapp": 10,
             "whatsapp_business": 2,
-            "google_meet": 3,
-            "zoom": 4,
+            "google_meet": 4,
+            "zoom": 5,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 1,
             "messenger": 1,
@@ -2439,12 +2684,12 @@
             "other": 2
           },
           "device": {
-            "phone": 22,
-            "desktop": 12,
+            "phone": 23,
+            "desktop": 14,
             "web": 3
           },
           "project": {
-            "none": 29,
+            "none": 32,
             "01JFXP00000000000000000001": 5,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -2456,12 +2701,12 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 27,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -2552,7 +2797,7 @@
           "status": {
             "transcribed": 30,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -2773,7 +3018,7 @@
       },
       "search": null,
       "expect": {
-        "total": 36,
+        "total": 39,
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2793,6 +3038,7 @@
           "01JFXR00000000000000000006",
           "01JFXR00000000000000000007",
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000015",
@@ -2805,10 +3051,12 @@
           "01JFXR00000000000000000031",
           "01JFXR00000000000000000032",
           "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
           "01JFXR00000000000000000034",
           "01JFXR00000000000000000010",
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -2816,15 +3064,15 @@
           "date": {
             "today": 5,
             "last_7_days": 15,
-            "this_month": 32
+            "this_month": 34
           },
           "source": {
             "whatsapp": 10,
             "whatsapp_business": 2,
-            "google_meet": 3,
-            "zoom": 3,
+            "google_meet": 4,
+            "zoom": 4,
             "microsoft_teams": 2,
-            "phone_call": 2,
+            "phone_call": 3,
             "telegram": 1,
             "signal": 0,
             "messenger": 1,
@@ -2837,12 +3085,12 @@
             "other": 2
           },
           "device": {
-            "phone": 22,
-            "desktop": 11,
+            "phone": 23,
+            "desktop": 13,
             "web": 3
           },
           "project": {
-            "none": 29,
+            "none": 32,
             "01JFXP00000000000000000001": 4,
             "01JFXP00000000000000000002": 2,
             "01JFXP00000000000000000004": 0,
@@ -2854,12 +3102,12 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 26,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -2903,7 +3151,7 @@
       },
       "search": null,
       "expect": {
-        "total": 8,
+        "total": 9,
         "ids": [
           "01JFXR00000000000000000026",
           "01JFXR00000000000000000023",
@@ -2912,13 +3160,14 @@
           "01JFXR00000000000000000019",
           "01JFXR00000000000000000020",
           "01JFXR00000000000000000021",
-          "01JFXR00000000000000000022"
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045"
         ],
         "facets": {
           "date": {
             "today": 0,
             "last_7_days": 7,
-            "this_month": 8
+            "this_month": 9
           },
           "source": {
             "whatsapp": 3,
@@ -2926,7 +3175,7 @@
             "google_meet": 0,
             "zoom": 0,
             "microsoft_teams": 0,
-            "phone_call": 0,
+            "phone_call": 1,
             "telegram": 0,
             "signal": 0,
             "messenger": 1,
@@ -2939,12 +3188,12 @@
             "other": 0
           },
           "device": {
-            "phone": 8,
-            "desktop": 2,
+            "phone": 9,
+            "desktop": 4,
             "web": 0
           },
           "project": {
-            "none": 8,
+            "none": 9,
             "01JFXP00000000000000000001": 0,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -2956,12 +3205,12 @@
             "ar": 1,
             "fr": 1,
             "de": 0,
-            "unknown": 6
+            "unknown": 7
           },
           "status": {
             "transcribed": 16,
             "not_transcribed": 3,
-            "processing": 2,
+            "processing": 3,
             "failed": 3
           },
           "labels": {
@@ -2999,26 +3248,29 @@
       },
       "search": null,
       "expect": {
-        "total": 4,
+        "total": 7,
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
           "01JFXR00000000000000000026",
-          "01JFXR00000000000000000024"
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000044"
         ],
         "facets": {
           "date": {
             "today": 2,
             "last_7_days": 4,
-            "this_month": 4
+            "this_month": 6
           },
           "source": {
             "whatsapp": 1,
             "whatsapp_business": 0,
-            "google_meet": 0,
-            "zoom": 1,
+            "google_meet": 1,
+            "zoom": 2,
             "microsoft_teams": 1,
-            "phone_call": 0,
+            "phone_call": 1,
             "telegram": 0,
             "signal": 0,
             "messenger": 0,
@@ -3031,12 +3283,12 @@
             "other": 0
           },
           "device": {
-            "phone": 2,
-            "desktop": 2,
+            "phone": 3,
+            "desktop": 4,
             "web": 0
           },
           "project": {
-            "none": 4,
+            "none": 7,
             "01JFXP00000000000000000001": 0,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -3048,12 +3300,12 @@
             "ar": 0,
             "fr": 0,
             "de": 0,
-            "unknown": 4
+            "unknown": 7
           },
           "status": {
             "transcribed": 30,
             "not_transcribed": 3,
-            "processing": 4,
+            "processing": 7,
             "failed": 3
           },
           "labels": {
@@ -3091,7 +3343,7 @@
       },
       "search": null,
       "expect": {
-        "total": 16,
+        "total": 18,
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -3108,19 +3360,21 @@
           "01JFXR00000000000000000017",
           "01JFXR00000000000000000029",
           "01JFXR00000000000000000008",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000036"
         ],
         "facets": {
           "date": {
             "today": 4,
             "last_7_days": 8,
-            "this_month": 15
+            "this_month": 16
           },
           "source": {
             "whatsapp": 1,
             "whatsapp_business": 0,
-            "google_meet": 3,
-            "zoom": 5,
+            "google_meet": 4,
+            "zoom": 6,
             "microsoft_teams": 2,
             "phone_call": 0,
             "telegram": 0,
@@ -3135,12 +3389,12 @@
             "other": 1
           },
           "device": {
-            "phone": 24,
-            "desktop": 13,
+            "phone": 25,
+            "desktop": 15,
             "web": 3
           },
           "project": {
-            "none": 13,
+            "none": 15,
             "01JFXP00000000000000000001": 2,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -3152,12 +3406,12 @@
             "ar": 1,
             "fr": 0,
             "de": 1,
-            "unknown": 2
+            "unknown": 4
           },
           "status": {
             "transcribed": 14,
             "not_transcribed": 0,
-            "processing": 2,
+            "processing": 4,
             "failed": 0
           },
           "labels": {
@@ -3255,7 +3509,7 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 15,
@@ -3363,7 +3617,7 @@
             "ar": 2,
             "fr": 1,
             "de": 1,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 17,
@@ -3408,9 +3662,10 @@
       },
       "search": null,
       "expect": {
-        "total": 6,
+        "total": 7,
         "ids": [
           "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
           "01JFXR00000000000000000013",
           "01JFXR00000000000000000014",
           "01JFXR00000000000000000012",
@@ -3421,7 +3676,7 @@
           "date": {
             "today": 6,
             "last_7_days": 18,
-            "this_month": 36
+            "this_month": 38
           },
           "source": {
             "whatsapp": 0,
@@ -3429,7 +3684,7 @@
             "google_meet": 0,
             "zoom": 0,
             "microsoft_teams": 0,
-            "phone_call": 0,
+            "phone_call": 1,
             "telegram": 0,
             "signal": 1,
             "messenger": 0,
@@ -3442,12 +3697,12 @@
             "other": 0
           },
           "device": {
-            "phone": 3,
+            "phone": 4,
             "desktop": 1,
             "web": 2
           },
           "project": {
-            "none": 4,
+            "none": 5,
             "01JFXP00000000000000000001": 2,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -3459,12 +3714,12 @@
             "ar": 1,
             "fr": 0,
             "de": 0,
-            "unknown": 1
+            "unknown": 2
           },
           "status": {
             "transcribed": 5,
             "not_transcribed": 0,
-            "processing": 0,
+            "processing": 1,
             "failed": 1
           },
           "labels": {
@@ -3525,7 +3780,7 @@
           "date": {
             "today": 6,
             "last_7_days": 18,
-            "this_month": 36
+            "this_month": 38
           },
           "source": {
             "whatsapp": 6,
@@ -3606,10 +3861,11 @@
       },
       "search": null,
       "expect": {
-        "total": 4,
+        "total": 5,
         "ids": [
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
           "01JFXR00000000000000000035",
           "01JFXR00000000000000000036"
         ],
@@ -3617,13 +3873,13 @@
           "date": {
             "today": 6,
             "last_7_days": 18,
-            "this_month": 36
+            "this_month": 38
           },
           "source": {
             "whatsapp": 0,
             "whatsapp_business": 1,
             "google_meet": 1,
-            "zoom": 0,
+            "zoom": 1,
             "microsoft_teams": 0,
             "phone_call": 1,
             "telegram": 1,
@@ -3639,11 +3895,11 @@
           },
           "device": {
             "phone": 3,
-            "desktop": 1,
+            "desktop": 2,
             "web": 0
           },
           "project": {
-            "none": 3,
+            "none": 4,
             "01JFXP00000000000000000001": 0,
             "01JFXP00000000000000000002": 0,
             "01JFXP00000000000000000004": 0,
@@ -3655,12 +3911,12 @@
             "ar": 0,
             "fr": 0,
             "de": 0,
-            "unknown": 0
+            "unknown": 1
           },
           "status": {
             "transcribed": 4,
             "not_transcribed": 0,
-            "processing": 0,
+            "processing": 1,
             "failed": 0
           },
           "labels": {
@@ -3723,7 +3979,7 @@
           "date": {
             "today": 1,
             "last_7_days": 5,
-            "this_month": 7
+            "this_month": 8
           },
           "source": {
             "whatsapp": 1,
@@ -3952,7 +4208,7 @@
             "fr": 1,
             "de": 1,
             "es": 0,
-            "unknown": 9
+            "unknown": 12
           },
           "status": {
             "transcribed": 0,

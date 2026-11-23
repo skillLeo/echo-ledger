@@ -38,7 +38,7 @@ use Illuminate\Support\Facades\DB;
  * transactions: a read in between never keeps uncommitted rows under the new stamp); until then this request reads the
  * person's library afresh and keeps nothing of it. A change made some other way is seen within ROWS_TTL at most.
  *
- * @phpstan-type Row array{id: string, started: int, ended: int|null, session_status: string, source: string, device: string, projects: list<string>, language: string, status: string, labels: list<string>, marked: list<string>, bookmarks: list<string>, opened: bool}
+ * @phpstan-type Row array{id: string, started: int, ended: int|null, since: int|null, session_status: string, source: string, device: string, projects: list<string>, language: string, status: string, labels: list<string>, marked: list<string>, bookmarks: list<string>, opened: bool}
  * @phpstan-type Filters array<string, array{op: string, values: list<string>, from?: string, to?: string}>
  */
 final class LibraryFacets
@@ -181,7 +181,7 @@ final class LibraryFacets
     private static function inPlace(array $row, string $place, int $now): bool
     {
         if ($place === 'needs_you') {
-            return LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now) !== null;
+            return LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now, $row['since']) !== null;
         }
         if ($row['session_status'] === SessionStatus::Recording->value) {
             return false;
@@ -553,7 +553,7 @@ final class LibraryFacets
         $now = Carbon::now()->getTimestamp();
         $found = [];
         foreach ($this->rows($workspaceId, $userId, $this->version($workspaceId, $userId)) as $row) {
-            $reason = LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now);
+            $reason = LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now, $row['since']);
             if ($reason !== null) {
                 $found[$row['id']] = $reason;
             }
@@ -663,7 +663,8 @@ final class LibraryFacets
      */
     private function rows(int $workspaceId, int $userId, string $version): array
     {
-        $key = 'library-facets:rows:'.$workspaceId.':'.$userId.':'.$version;
+        // `rows2`: the rows carry `since` (2.0.0-p, Needs you's "stuck"); rows kept before it are never read.
+        $key = 'library-facets:rows2:'.$workspaceId.':'.$userId.':'.$version;
 
         /** @var list<Row> */
         return $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->readRows($workspaceId, $userId));
@@ -674,9 +675,17 @@ final class LibraryFacets
     {
         $mine = self::personSessions($workspaceId, $userId);
         $finals = [];
+        $attempts = [];
         foreach (DB::table('transcripts')->whereIn('capture_session_id', $mine)->where('kind', TranscriptKind::Final->value)
-            ->orderBy('created_at')->orderBy('id')->get(['capture_session_id', 'status', 'language']) as $t) {
+            ->orderBy('created_at')->orderBy('id')->get(['capture_session_id', 'status', 'language', 'attempt_started_at']) as $t) {
             $finals[(string) $t->capture_session_id] = [(string) $t->status, $t->language === null ? null : (string) $t->language];
+            $attempts[(string) $t->capture_session_id] = $t->attempt_started_at === null ? null : self::instant((string) $t->attempt_started_at);
+        }
+        // The start of each recording's latest upload (2.0.0-p), with the transcript's run: when its processing began.
+        foreach (DB::table('recordings')->whereIn('capture_session_id', $mine)->whereNotNull('upload_started_at')
+            ->groupBy('capture_session_id')->selectRaw('capture_session_id, MAX(upload_started_at) AS at')->get() as $u) {
+            $at = self::instant((string) $u->at);
+            $attempts[(string) $u->capture_session_id] = max($at, $attempts[(string) $u->capture_session_id] ?? $at);
         }
         $failedUploads = array_flip(DB::table('recordings')->whereIn('capture_session_id', $mine)->where('upload_status', UploadStatus::Failed->value)
             ->distinct()->pluck('capture_session_id')->map(fn ($id): string => (string) $id)->all());
@@ -707,6 +716,7 @@ final class LibraryFacets
                 'id' => $id,
                 'started' => self::instant((string) $s->started_at),
                 'ended' => $s->ended_at === null ? null : self::instant((string) $s->ended_at),
+                'since' => $attempts[$id] ?? null,
                 'session_status' => (string) $s->status,
                 'source' => LibraryFilters::source((string) $s->source_app, $s->origin === null ? null : (string) $s->origin),
                 'device' => (string) $s->source_device,

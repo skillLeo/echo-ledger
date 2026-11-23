@@ -56,7 +56,14 @@ function seedFacetsFixture(User $me, array $fixture): void
         if ($r['final_status'] !== null) {
             Transcript::query()->forceCreate(['capture_session_id' => $session->id, 'kind' => TranscriptKind::Final, 'provider' => 'assemblyai',
                 'status' => $r['final_status'], 'language' => $r['final_language'], 'text' => $r['text'] ?? 'Hello there.',
+                'attempt_started_at' => $r['transcript_attempt_at'] !== null ? Carbon::parse($r['transcript_attempt_at']) : null,
                 'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => $r['text'] ?? 'Hello there.', 'words' => []]]]);
+        }
+        if ($r['upload_attempt_at'] !== null) {
+            DB::table('recordings')->insert(['id' => (string) Str::ulid(), 'capture_session_id' => $session->id, 'role' => 'primary', 'mime' => 'audio/ogg',
+                'declared_size_bytes' => 10, 'sha256' => str_repeat('0', 64), 'chunk_size_bytes' => 10, 'total_chunks' => 1, 'received_chunks' => '[]',
+                'upload_status' => $r['status'] === 'uploading' ? 'uploading' : 'ready', 'upload_started_at' => Carbon::parse($r['upload_attempt_at']),
+                'created_at' => now(), 'updated_at' => now()]);
         }
         if ($r['upload_failed']) {
             DB::table('recordings')->insert(['id' => (string) Str::ulid(), 'capture_session_id' => $session->id, 'role' => 'primary', 'mime' => 'audio/ogg',
@@ -103,7 +110,9 @@ it('gives every library item the facets the fixture says', function () {
 
             continue;
         }
-        expect($items[$r['id']]['facets'] ?? null)->toBe($r['facets'], "{$r['id']}: {$r['note']}");
+        expect($items[$r['id']]['facets'] ?? null)->toBe($r['facets'], "{$r['id']}: {$r['note']}")
+            // What the apps count Needs you's "stuck" from.
+            ->and($items[$r['id']]['processing_since'])->toBe($r['processing_since'], "{$r['id']}: processing_since");
         // What the apps count Bookmarks from.
         expect($items[$r['id']]['marker_count'])->toBe(count($r['bookmarks']))
             ->and($items[$r['id']]['tags'])->toBe(array_values(array_unique(array_filter($r['bookmarks'], 'is_string'))));
@@ -143,7 +152,8 @@ it('names each project and list option with what the apps show', function () {
     $projects = collect($this->fixture['projects'])->keyBy('id');
     foreach ($sections['project'] as $option) {
         if ($option['value'] === 'none') {
-            expect($option)->toBe(['value' => 'none', 'count' => 30]);
+            // No project: as many as the fixture counts with no filter on.
+            expect($option)->toBe(['value' => 'none', 'count' => collect($this->fixture['filter_sets'])->firstWhere('name', 'everything')['expect']['facets']['project']['none']]);
 
             continue;
         }

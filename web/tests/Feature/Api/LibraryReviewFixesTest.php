@@ -13,6 +13,8 @@ use App\Models\SessionLabel;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\Accounts\AccountExporter;
+use App\Services\ChunkedUploadService;
+use App\Services\FinalTranscriptCoordinator;
 use App\Services\Library\LibraryFacets;
 use App\Services\Library\SavedViews;
 use App\Services\Lists\LabelLists;
@@ -22,6 +24,7 @@ use Illuminate\Support\Defer\DeferredCallbackCollection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -156,6 +159,66 @@ describe('Needs you and the shared folder', function () {
                 ->assertJson(['code' => 'validation_failed'])->assertJsonValidationErrors([$field]);
         }
         $this->api($this->token)->getJson('/api/library?folder=shared')->assertOk();
+    });
+});
+
+describe('stuck, counted from the current attempt', function () {
+    beforeEach(function () {
+        Queue::fake();
+        Fx::fakeRecordingsDisk();
+        $this->needs = fn (): array => app(LibraryFacets::class)->needsYou($this->ws, $this->me->id);
+        $this->reason = function (CaptureSession $session): ?string {
+            app('auth')->forgetGuards();
+            $item = collect($this->api($this->token)->getJson('/api/library?view=needs_you&limit=100')->assertOk()->json('data'))->firstWhere('id', $session->id);
+
+            return $item === null ? null : ($item['facets']['status'] === 'failed' ? 'failed' : 'stuck');
+        };
+    });
+
+    it('starts the clock again when a transcript that failed a month ago is retried', function () {
+        $session = reviewed($this->me, ['started_at' => now()->subDays(30), 'ended_at' => now()->subDays(30)->addMinutes(10)], TranscriptStatus::Failed->value);
+        Fx::readyRecording($session);
+        expect(($this->reason)($session))->toBe('failed');
+
+        app(FinalTranscriptCoordinator::class)->start($session->fresh(), $session->finalTranscript()->first());
+        $final = $session->finalTranscript()->first();
+        expect($final->attempt_started_at?->toAtomString())->toBe(now()->toAtomString())
+            ->and(($this->reason)($session))->toBeNull()->and(($this->needs)()['stuck'])->toBe(0);
+        $item = collect($this->api($this->token)->getJson('/api/library?limit=100')->assertOk()->json('data'))->firstWhere('id', $session->id);
+        expect($item['facets']['status'])->toBe('processing')->and($item['processing_since'])->toBe(now()->toAtomString());
+
+        // More than 24 hours since the retry, not 24 hours exactly.
+        $this->travel(24)->hours();
+        expect(($this->needs)()['stuck'])->toBe(0);
+        $this->travel(1)->seconds();
+        expect(($this->needs)()['stuck'])->toBe(1)->and(($this->reason)($session))->toBe('stuck');
+    });
+
+    it('starts the clock again when an upload that failed starts again', function () {
+        $plain = random_bytes(1024);
+        Carbon::setTestNow(now()->subDays(10));
+        $session = reviewed($this->me, ['status' => SessionStatus::Uploading, 'started_at' => now()->subMinutes(10), 'ended_at' => now()], null);
+        $recording = Fx::pendingRecording($session, $plain);
+        Carbon::setTestNow(now()->addDays(10));
+        // Uploading for ten days since its upload began: stuck.
+        expect(($this->reason)($session))->toBe('stuck');
+
+        app(ChunkedUploadService::class)->discard($recording->fresh(), 'The connection dropped.');
+        expect(($this->reason)($session))->toBe('failed');
+        $chunk = fopen('php://temp', 'r+');
+        fwrite($chunk, $plain);
+        rewind($chunk);
+        app(ChunkedUploadService::class)->storeChunk($recording->fresh(), 0, hash('sha256', $plain), $chunk);
+        expect($recording->fresh()->upload_started_at?->toAtomString())->toBe(now()->toAtomString())
+            ->and(($this->reason)($session))->toBeNull();
+        $this->travel(25)->hours();
+        expect(($this->reason)($session))->toBe('stuck');
+    });
+
+    it('counts from the end, else the start, when no attempt time is stored', function () {
+        $ended = reviewed($this->me, ['status' => SessionStatus::Processing, 'started_at' => now()->subHours(30), 'ended_at' => now()->subHours(23)], null);
+        $open = reviewed($this->me, ['status' => SessionStatus::Processing, 'started_at' => now()->subHours(25), 'ended_at' => null], null);
+        expect(($this->reason)($ended))->toBeNull()->and(($this->reason)($open))->toBe('stuck');
     });
 });
 
