@@ -81,7 +81,7 @@ data class UploadRow(
     val duration: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val failed: Boolean,
-    /** "queued" | "uploading" | "failed" | "duplicate" (classic's upload states). */
+    /** "queued" | "uploading" | "failed" | "duplicate" (classic's upload states), or "waiting" (for Transcribe or Delete). */
     val state: String = if (failed) "failed" else "uploading",
     /** While uploading: how much of it was sent (0-100), null before the first part went. */
     val percent: Int? = null
@@ -97,9 +97,20 @@ sealed interface LibraryState {
     data class Ready(val rows: List<V2Row>, val uploads: List<UploadRow>, val offline: Boolean, val anyAtAll: Boolean) : LibraryState
 }
 
-/** [sent]: parts sent of all parts per recording uploading now (the upload worker's [com.echoledger.mobile.core.RowProgress.uploads]). */
-fun uploadRows(pending: List<LocalRecording>, text: V2Text, sent: Map<String, Pair<Int, Int>> = emptyMap()): List<UploadRow> = pending
-    .filter { it.state == "queued" || it.state == "uploading" || it.state == "failed" || it.state == "duplicate" }
+/**
+ * [sent]: parts sent of all parts per recording uploading now (the upload worker's
+ * [com.echoledger.mobile.core.RowProgress.uploads]); [waiting]: the calls waiting for Transcribe or Delete too (Needs you).
+ */
+fun uploadRows(
+    pending: List<LocalRecording>,
+    text: V2Text,
+    sent: Map<String, Pair<Int, Int>> = emptyMap(),
+    waiting: Boolean = false
+): List<UploadRow> = pending
+    .filter {
+        it.state == "queued" || it.state == "uploading" || it.state == "failed" || it.state == "duplicate" ||
+            (waiting && it.state == "pending_decision")
+    }
     .map {
         val app = SourceApp.from(it.sourceApp)
         UploadRow(
@@ -110,7 +121,7 @@ fun uploadRows(pending: List<LocalRecording>, text: V2Text, sent: Map<String, Pa
             formatClock(it.durationMs + 500),
             LibraryModel.icon(app),
             it.state == "failed",
-            it.state,
+            if (it.state == "pending_decision") "waiting" else it.state,
             sent[it.id]?.takeIf { _ -> it.state == "uploading" }
                 ?.let { (done, total) -> com.echoledger.mobile.core.RowProgress.uploading(done, total).percent }
         )
@@ -147,7 +158,9 @@ fun V2LibraryScreen(
     extras: LibraryExtras? = null,
     /** The title menu's Shared ▸ Shared with me and Request files. */
     onSharedWithMe: () -> Unit = {},
-    onRequests: () -> Unit = {}
+    onRequests: () -> Unit = {},
+    /** A call waiting for Transcribe or Delete, listed in Needs you: where the choice is made (Activity). */
+    onReviewWaiting: () -> Unit = {}
 ) {
     val text = v2Text
     // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
@@ -240,9 +253,10 @@ fun V2LibraryScreen(
     val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
     val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.source) } } }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.source) } }
-    val visible = remember(filtered, kind, choice, settings.libraryOpened) {
+    val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
+    val visible = remember(filtered, kind, choice, settings.libraryOpened, waiting) {
         com.echoledger.mobile.core.LibraryQuery.apply(
-            filtered.filter { kind.holds(it.source) }.map { it.item },
+            (filtered.filter { kind.holds(it.source) } + waiting).map { it.item },
             com.echoledger.mobile.core.LibraryFilters(),
             "",
             choice.sortBy,
@@ -258,13 +272,14 @@ fun V2LibraryScreen(
     }
     val rows = remember(groups) { groups.flatMap { it.rows } }
     val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
-    // What waits on this phone: in All recordings, and in Needs you the ones that failed or are stuck.
+    // What waits on this phone: in All recordings, and in Needs you the calls waiting for a choice and the uploads that
+    // failed or are stuck (each counted in Needs you), whatever the filters.
     val uploads = remember(pending, text, sending, target, now) {
         when (target) {
             LibraryTarget.ALL -> uploadRows(pending, text, sending)
 
             LibraryTarget.Place(LibraryPlace.NEEDS_YOU) ->
-                uploadRows(pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }, text, sending)
+                uploadRows(pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }, text, sending, waiting = true)
 
             else -> emptyList()
         }
@@ -549,6 +564,7 @@ fun V2LibraryScreen(
         onRetryUpload = { vm.retryUpload(it) },
         onDismissUpload = { vm.dismissLocal(it) },
         onDeleteUpload = { vm.deleteNotUploaded(it) },
+        onReviewWaiting = onReviewWaiting,
         onRetry = { vm.refresh() },
         onTrash = onTrash,
         onAccount = onAccount,
@@ -858,7 +874,9 @@ fun V2LibraryContent(
     /** An import the Library already had: a tap removes its row. */
     onDismissUpload: (String) -> Unit = {},
     /** A recording that never uploaded, deleted after the question (this phone has the only copy). */
-    onDeleteUpload: (String) -> Unit = {}
+    onDeleteUpload: (String) -> Unit = {},
+    /** A call waiting for Transcribe or Delete (Needs you): opens where the choice is made. */
+    onReviewWaiting: () -> Unit = {}
 ) {
     val c = EchoV2.colors
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1014,7 +1032,8 @@ fun V2LibraryContent(
                             up,
                             onRetry = { onRetryUpload(up.id) },
                             onDismiss = { onDismissUpload(up.id) },
-                            onMenu = { uploadMenu = up }
+                            onMenu = { uploadMenu = up },
+                            onReview = onReviewWaiting
                         )
                     }
                     if (state.rows.isEmpty() && state.uploads.isEmpty()) {
@@ -1149,15 +1168,17 @@ private fun SearchHeader(words: String) = EchoSectionHeader(words)
  * long press for Retry upload and Delete recording….
  */
 @Composable
-private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Unit, onMenu: () -> Unit) {
+private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Unit, onMenu: () -> Unit, onReview: () -> Unit = {}) {
     val c = EchoV2.colors
     val text = v2Text
     val duplicate = up.state == "duplicate"
+    val waiting = up.state == "waiting"
     val more = stringResource(R.string.v2_lib_upload_more, up.title)
     EchoListRow(
         title = up.title,
         meta = when {
             up.failed -> null
+            waiting -> stringResource(R.string.v2_lf_waiting_row)
             duplicate -> stringResource(R.string.v2_lib_upload_duplicate)
             up.state == "queued" -> text.waitingToUpload
             else -> up.percent?.let { stringResource(R.string.v2_lib_uploading_pct, it) } ?: text.uploading
@@ -1173,11 +1194,13 @@ private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Un
         tall = true,
         onClickLabel = when {
             up.failed -> text.tryAgain
+            waiting -> stringResource(R.string.v2_lib_need_review)
             duplicate -> stringResource(R.string.v2_lib_upload_dismiss)
             else -> null
         },
         onClick = when {
             up.failed -> onRetry
+            waiting -> onReview
             duplicate -> onDismiss
             else -> null
         },

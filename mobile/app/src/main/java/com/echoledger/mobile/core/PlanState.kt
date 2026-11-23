@@ -15,8 +15,6 @@ data class PlanState(
     val liveTranslate: Boolean = true,
     val aiNotes: Boolean = true,
     val workspace: String? = null,
-    /** The workspace's id (from the config): whose saved views these are, with the server and the email. */
-    val workspaceId: Long? = null,
     val role: String? = null,
     val monthlyMinutes: Long? = null,
     val usedMinutes: Long? = null,
@@ -109,7 +107,6 @@ data class PlanState(
             liveTranslate = plan?.features?.liveTranslate ?: true,
             aiNotes = plan?.features?.aiNotes ?: true,
             workspace = workspace?.name,
-            workspaceId = workspace?.id,
             role = workspace?.role,
             monthlyMinutes = plan?.limits?.monthlyMinutes,
             usedMinutes = plan?.used?.minutes

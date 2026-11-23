@@ -103,13 +103,9 @@ class LibraryFiltersShotsTest : ScreenTest() {
                     "search":null,"sort":"newest","group":"date","density":"comfortable"}],"views_version":1,"limit":30}"""
             )
         )
+        server.on("GET", "/api/account", FakeServer.json(200, """{"email":"asad@bilaltraders.pk","workspace":{"id":7}}"""))
         runBlocking { app.graph.library.refresh() }
-        vm.updateSettings {
-            it.copy(
-                account = com.echoledger.mobile.core.Owner.of(server.baseUrl, "asad@bilaltraders.pk"),
-                plan = it.plan.copy(workspaceId = 7)
-            )
-        }
+        vm.refreshQuietly()
         com.echoledger.mobile.testsupport.pumpUntil("my views") { vm.savedViews.value.isNotEmpty() }
     }
 

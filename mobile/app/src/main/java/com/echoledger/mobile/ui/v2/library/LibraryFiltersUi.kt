@@ -77,6 +77,7 @@ import com.echoledger.mobile.ui.v2.components.startAlign
 import com.echoledger.mobile.ui.v2.shell.sourceName
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.LocalDate
@@ -477,8 +478,8 @@ fun LibraryMenuSheet(data: LibraryMenuData, actions: LibraryMenuActions, onDismi
 }
 
 /**
- * One row of the title menu: its icon (or a label's colour dot), its words, its count at the end (bold for Needs you
- * and Unread) and its ⋮; the current one tinted, and said so.
+ * One row of the title menu, a button: its icon (or a label's colour dot), its words, its count at the end when above 0
+ * (bold for Needs you and Unread) and its ⋮; the current one tinted, and said to be the one selected.
  */
 @Composable
 private fun MenuRow(
@@ -496,7 +497,9 @@ private fun MenuRow(
 ) {
     val c = EchoV2.colors
     val selected = EchoV2.strings.selected
-    val spoken = count?.let { stringResource(R.string.v2_lf_count, words, it) } ?: words
+    // A count of 0 is not shown (as on the desktop and the web).
+    val shown = count?.takeIf { it > 0 }
+    val spoken = shown?.let { stringResource(R.string.v2_lf_count, words, it) } ?: words
     Row(
         Modifier
             .fillMaxWidth()
@@ -509,7 +512,7 @@ private fun MenuRow(
             Modifier
                 .weight(1f)
                 .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
-                .clickable(role = if (expandable != null) Role.Button else Role.Tab, onClick = onClick)
+                .clickable(role = Role.Button, onClick = onClick)
                 .semantics(mergeDescendants = true) {
                     contentDescription = spoken
                     if (current) stateDescription = selected
@@ -535,11 +538,11 @@ private fun MenuRow(
                 textAlign = startAlign(),
                 modifier = Modifier.weight(1f)
             )
-            count?.let {
+            shown?.let {
                 Text(
                     "$it",
-                    style = EchoV2.type.meta.copy(fontWeight = if (bold && it > 0) FontWeight.SemiBold else EchoV2.type.meta.fontWeight),
-                    color = if (bold && it > 0) c.textPrimary else c.textSecondary,
+                    style = EchoV2.type.meta.copy(fontWeight = if (bold) FontWeight.SemiBold else EchoV2.type.meta.fontWeight),
+                    color = if (bold) c.textPrimary else c.textSecondary,
                     maxLines = 1
                 )
             }
@@ -630,21 +633,26 @@ fun LibraryFiltersSheet(
                 }
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (canSave) {
-                EchoButton(
-                    stringResource(R.string.v2_lf_save_view),
-                    { onSave(draft) },
-                    Modifier.weight(1f),
-                    kind = EchoButtonKind.Secondary,
-                    enabled = !draft.isEmpty
-                )
+        val save: @Composable (Modifier) -> Unit = { m ->
+            EchoButton(stringResource(R.string.v2_lf_save_view), {
+                onSave(draft)
+            }, m, kind = EchoButtonKind.Secondary, enabled = !draft.isEmpty)
+        }
+        val show: @Composable (Modifier) -> Unit = { m ->
+            EchoButton(pluralStringResource(R.plurals.v2_lf_show_results, n, n), { onApply(draft) }, m)
+        }
+        val padded = Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
+        // From 150 % text the two buttons don't fit side by side (Urdu above all): one above the other, full width.
+        if (largeText()) {
+            Column(padded, verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                if (canSave) save(Modifier.fillMaxWidth())
+                show(Modifier.fillMaxWidth())
             }
-            EchoButton(pluralStringResource(R.plurals.v2_lf_show_results, n, n), { onApply(draft) }, Modifier.weight(1f))
+        } else {
+            Row(padded, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8), verticalAlignment = Alignment.CenterVertically) {
+                if (canSave) save(Modifier.weight(1f))
+                show(Modifier.weight(1f))
+            }
         }
     }
     picking?.let { end ->

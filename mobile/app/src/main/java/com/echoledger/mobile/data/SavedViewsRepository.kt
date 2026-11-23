@@ -73,7 +73,9 @@ data class ViewProblem(val kind: Kind, val name: String) {
  * offline at once; each change is marked and sent to `/api/views` when the server can be reached (a view made offline
  * goes with its own `client_ref`, so sending it twice never makes it twice). When the library sync's `views_version`
  * differs from the copy's, the copy is read again. The copy is the account's: the server, the email and the workspace
- * ([accountKey]); none shows and none is sent until all three are known, and the last one is remembered for offline.
+ * ([accountKey]) as this sign-in's account read says them ([confirm]); none shows until they are known, and none is
+ * sent or read until the account read confirms them. The last one is remembered for this sign-in only (its device id,
+ * new at each sign-in), to show its copy offline before the account can be read ([lastAccount]).
  * A permanent refusal (`validation_failed`, `views_limit`, `view_not_found`) drops a new view or gives a change back,
  * and says why ([problems]); every other error leaves the change waiting. Signing out deletes the copy ([clear]).
  */
@@ -86,12 +88,22 @@ class SavedViewsRepository(
     @Serializable
     private data class Copy(val views: List<MyView> = emptyList(), val version: Long? = null, val reorder: Boolean = false)
 
+    /** The account confirmed last, and the sign-in (device id) it was confirmed for. */
     @Serializable
-    private data class Kept(val accounts: Map<String, Copy> = emptyMap(), val last: String? = null)
+    private data class Last(val device: String, val key: String)
+
+    @Serializable
+    private data class Kept(val accounts: Map<String, Copy> = emptyMap(), val last: Last? = null)
 
     private val file = File(context.noBackupFilesDir, "views.bin")
     private var kept: Kept = load() ?: Kept()
     private var account: String? = null
+
+    /** The account read confirmed [account] for this sign-in: only then is anything sent or read. */
+    private var confirmed = false
+
+    /** The copy is still to be read from the server since [account] was taken up (whatever the version says). */
+    @Volatile private var fresh = false
 
     /** Each account switch (or sign-out) starts a new generation; what an older sync hears back is dropped. */
     private var gen = 0
@@ -112,32 +124,50 @@ class SavedViewsRepository(
     private val _problems = MutableSharedFlow<ViewProblem>(extraBufferCapacity = 16)
     val problems: SharedFlow<ViewProblem> = _problems
 
-    /** Uses [key]'s copy ([accountKey]); null shows none. A new account syncs at once. */
-    fun use(key: String?) {
+    /**
+     * Uses [key]'s copy ([accountKey]); null shows none. Only a [confirmed] key syncs, at once (after a sync of the
+     * account before it, if one runs), and its copy is then read again whatever its version; an unconfirmed one (this
+     * sign-in's remembered account, offline) only shows its copy. A remembered key never undoes a confirmation of it.
+     */
+    fun use(key: String?, confirmed: Boolean = true) {
         synchronized(this) {
-            if (key == account) return
-            gen++
-            account = key
-            again = false
-            if (key != null && kept.last != key) {
-                kept = kept.copy(last = key)
-                save()
+            if (key == account && (confirmed == this.confirmed || !confirmed)) return
+            if (key != account) {
+                gen++
+                again = false
             }
+            account = key
+            this.confirmed = key != null && confirmed
+            fresh = true
             publish()
         }
-        if (key != null) scope.launch(Dispatchers.IO) { sync() }
+        if (key != null && confirmed) scope.launch(Dispatchers.IO) { sync(wait = true) }
     }
 
-    /** The account whose views showed last with [server] (to show them while the account can't be read), or null. */
-    fun lastAccount(server: String?): String? = synchronized(this) {
-        val host = host(server)
-        kept.last?.takeIf { host.isNotEmpty() && it.startsWith("$host|") }
+    /** This sign-in's ([device]) account read says whose the views are: [key]'s copy shows, syncs and is remembered. */
+    fun confirm(device: String, key: String) {
+        synchronized(this) {
+            if (kept.last != Last(device, key)) {
+                kept = kept.copy(last = Last(device, key))
+                save()
+            }
+        }
+        use(key, confirmed = true)
     }
+
+    /** Whether the account read has confirmed whose the views are for the sign-in [device]. */
+    fun confirmedFor(device: String?): Boolean = synchronized(this) {
+        confirmed && device != null && kept.last == account?.let { Last(device, it) }
+    }
+
+    /** The account confirmed last for the sign-in [device] (to show its copy before the account can be read), or null. */
+    fun lastAccount(device: String?): String? = synchronized(this) { kept.last?.takeIf { device != null && it.device == device }?.key }
 
     /** Signed out: every account's copy is deleted from this phone, and whose they were is forgotten. */
     fun clear() = synchronized(this) {
         gen++
         account = null
+        confirmed = false
         kept = Kept()
         file.delete()
         publish()
@@ -256,7 +286,7 @@ class SavedViewsRepository(
     }
 
     private suspend fun round(serverVersion: Long?) {
-        val (g, start) = synchronized(this) { gen to (copy() ?: return) }
+        val (g, start) = synchronized(this) { if (!confirmed) return else gen to (copy() ?: return) }
         val client = runCatching { api() }.getOrNull() ?: return
         var sent = false
         for (waiting in start.views.filter { it.pending != null }) {
@@ -311,7 +341,7 @@ class SavedViewsRepository(
             }
         }
         val version = synchronized(this) { if (g != gen) return else copy()?.version }
-        if (!sent && version != null && (serverVersion == null || serverVersion == version)) return
+        if (!sent && !fresh && version != null && (serverVersion == null || serverVersion == version)) return
         val answer = try {
             client.views()
         } catch (e: Exception) {
@@ -325,6 +355,7 @@ class SavedViewsRepository(
                 Copy(answer.data.sortedBy { it.position }.map(::fromServer), answer.viewsVersion)
             }
         }
+        synchronized(this) { if (g == gen) fresh = false }
     }
 
     /** A new view the server made: the server's id from now on, keeping its place and what changed since it was sent. */

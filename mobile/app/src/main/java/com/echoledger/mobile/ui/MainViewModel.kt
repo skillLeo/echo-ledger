@@ -123,12 +123,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         SelfUpdate.restore(app)
-        // My views are the account's own (the server, the email and the workspace): the copy follows who is signed in.
+        // My views are the account's own (the server, the email and the workspace), as this sign-in's account read
+        // says (confirmViews). Until it has, only this sign-in's remembered copy shows, and nothing is sent or read.
         viewModelScope.launch {
-            settings.map { s ->
-                com.echoledger.mobile.data.SavedViewsRepository.accountKey(s.serverUrl, s.account?.email, s.plan.workspaceId)
-                    ?: s.serverUrl?.let { graph.views.lastAccount(it) }
-            }.distinctUntilChanged().collect { graph.views.use(it) }
+            graph.settings.settings.map { it.deviceId }.distinctUntilChanged().collect { device ->
+                graph.views.use(graph.views.lastAccount(device), confirmed = false)
+            }
         }
     }
 
@@ -155,7 +155,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** After a library sync: My views sent and read again when the sync's `views_version` is not the copy's. */
     private suspend fun syncViews() {
+        runCatching { confirmViews() }
         runCatching { graph.views.sync(graph.library.viewsVersion.value) }
+    }
+
+    /**
+     * Whose My views are, from this sign-in's own account read (`GET /api/account`: the email and the workspace), never
+     * from what the settings kept of an earlier sign-in. Asked once a sign-in, until it answers.
+     */
+    private suspend fun confirmViews() {
+        val device = graph.settings.current().deviceId ?: return
+        if (graph.views.confirmedFor(device)) return
+        val server = graph.settings.current().serverUrl
+        val answer = withContext(Dispatchers.IO) { graph.api()?.account() } ?: return
+        val key = com.echoledger.mobile.data.SavedViewsRepository.accountKey(server, answer.email, answer.workspace?.id) ?: return
+        // Still the same sign-in (not signed out, nor someone else, while it was read).
+        if (graph.settings.current().deviceId == device) graph.views.confirm(device, key)
     }
 
     /** Since v1.5: the website build's own updates (the Google Play build always stays idle). */
@@ -225,6 +240,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         email: String? = null
     ) {
         val previous = graph.settings.current().let { it.account ?: it.serverUrl?.let { url -> Owner.of(url, null) } }
+        // A new sign-in shows no one's views until its own account read says whose they are (confirmViews).
+        graph.views.use(null)
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {

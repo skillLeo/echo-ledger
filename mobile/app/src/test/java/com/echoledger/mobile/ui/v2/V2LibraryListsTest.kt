@@ -360,7 +360,8 @@ class V2LibraryListsTest : ScreenTest() {
         menu()
         compose.onNode(hasContentDescription("Unread, 1")).assertExists()
         compose.onNode(hasContentDescription("Clients, 1")).assertExists()
-        compose.onNode(hasContentDescription("Family, 0")).assertExists()
+        // A count of 0 is not shown: the empty label is just its name.
+        compose.onNode(hasContentDescription("Family")).assertExists()
         compose.onAllNodes(hasText("New label") and hasClickAction()).assertCountEquals(1)
     }
 

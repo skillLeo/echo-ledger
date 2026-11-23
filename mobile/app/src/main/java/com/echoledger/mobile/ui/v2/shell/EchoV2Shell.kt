@@ -547,7 +547,8 @@ private fun ShellBody(
                                     onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
                                     extras = extras,
                                     onSharedWithMe = { route = V2Route.Folder(com.echoledger.mobile.ui.SmartFolder.SHARED.key) },
-                                    onRequests = { route = V2Route.Requests() }
+                                    onRequests = { route = V2Route.Requests() },
+                                    onReviewWaiting = { route = V2Route.Activity }
                                 )
                             }
                         } else {

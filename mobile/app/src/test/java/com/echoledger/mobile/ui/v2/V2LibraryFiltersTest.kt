@@ -1,7 +1,9 @@
 package com.echoledger.mobile.ui.v2
 
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -21,13 +23,13 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.R
-import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.library.KIND_ROW_TAG
@@ -66,7 +68,11 @@ class V2LibraryFiltersTest : ScreenTest() {
         ServerFixtures.libraryItem(id, title = title, sourceApp = app, startedAt = startedAt, client = null)
             .replace("\"updated_at\"", "$extra,\"updated_at\"")
 
-    private fun seed(language: EchoLanguage = EchoLanguage.English, views: String = """{"data":[],"views_version":0,"limit":30}""") {
+    private fun seed(
+        language: EchoLanguage = EchoLanguage.English,
+        views: String = """{"data":[],"views_version":0,"limit":30}""",
+        more: List<String> = emptyList()
+    ) {
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
         server.on(
@@ -81,7 +87,7 @@ class V2LibraryFiltersTest : ScreenTest() {
                         row("01JC", "Rec Charlie", "voice_note", "\"labels\":[],\"opened\":true", today),
                         row("01JD", "Rec Delta", "skype", "\"labels\":[\"Clients\"],\"opened\":false"),
                         row("01JE", "Rec Echo", "slack", "\"labels\":[],\"opened\":true,\"pinned\":true")
-                    )
+                    ) + more
                 ).replace("\"server_time\"", "\"views_version\":3,\"server_time\"")
             )
         )
@@ -92,9 +98,10 @@ class V2LibraryFiltersTest : ScreenTest() {
         )
         server.on("GET", "/api/search.*", FakeServer.json(200, """{"data":[]}"""))
         server.on("GET", "/api/views", FakeServer.json(200, views))
-        runBlocking { app.graph.library.refresh() }
-        vm.updateSettings { it.copy(account = Owner.of(server.baseUrl, "asad@example.com"), plan = it.plan.copy(workspaceId = 7)) }
-        pumpUntil("the account's views") { vm.savedViewsReady.value }
+        // Whose views: this sign-in's account read (the email and the workspace).
+        server.on("GET", "/api/account", FakeServer.json(200, """{"email":"asad@example.com","workspace":{"id":7,"name":"Bilal"}}"""))
+        vm.refreshQuietly()
+        pumpUntil("the account's views") { vm.savedViewsReady.value && vm.library.value.size == 5 + more.size }
         show {
             EchoV2Theme(darkTheme = false, language = language) {
                 val toasts = rememberEchoToastState()
@@ -107,7 +114,8 @@ class V2LibraryFiltersTest : ScreenTest() {
                             onTrash = { trashed += "trash" },
                             onAccount = {},
                             onSharedWithMe = { shared += "with me" },
-                            onRequests = { shared += "requests" }
+                            onRequests = { shared += "requests" },
+                            onReviewWaiting = { shared += "review" }
                         )
                         EchoToastHost(toasts)
                     }
@@ -145,8 +153,17 @@ class V2LibraryFiltersTest : ScreenTest() {
         seed()
         tap("All recordings")
         // Views with their counts (Needs you and Unread bold); TalkBack hears the count with the name.
-        listOf("All recordings, 5", "Needs you, 0", "Unread, 2", "Important, 1", "Not transcribed, 0", "Audio only, 0", "Clients, 2")
-            .forEach { compose.onNode(hasContentDescription(it)).assertExists() }
+        // Views are buttons; their counts end the name, and a count of 0 is not shown.
+        listOf("All recordings, 5", "Needs you", "Unread, 2", "Important, 1", "Not transcribed", "Audio only", "Clients, 2")
+            .forEach {
+                compose.onNode(
+                    hasContentDescription(it) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+                ).assertExists()
+            }
+        compose.onNode(
+            hasContentDescription("All recordings, 5")
+        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        compose.onAllNodesWithText("0").assertCountEquals(0)
         listOf("Views", "My views", "Labels", "Shared", "New view", "New label", "Trash").forEach {
             compose.onAllNodesWithText(it).fetchSemanticsNodes().let { n -> assertTrue(it, n.isNotEmpty()) }
         }
@@ -178,6 +195,54 @@ class V2LibraryFiltersTest : ScreenTest() {
         tap("Clients")
         tapDescribed("All recordings, 5")
         shown("Rec Alpha", "Rec Bravo", "Rec Charlie", "Rec Delta", "Rec Echo")
+    }
+
+    /**
+     * Needs you lists the calls waiting for Transcribe or Delete (the server's still `recording`, and this phone's on
+     * the card) whatever the filters, the tab and the search, while the filters, the tabs and their counts never count
+     * them; anywhere else they don't show.
+     */
+    @Test
+    fun needsYouAlwaysListsTheCallsWaitingButNeverCountsThemInTheFilters() {
+        seed(
+            more = listOf(
+                ServerFixtures.libraryItem(
+                    "01JW",
+                    title = "Rec Waiting",
+                    sourceApp = "zoom",
+                    status = "recording",
+                    finalStatus = null,
+                    client = null
+                )
+            )
+        )
+        runBlocking { app.storeRecording(id = "r-omar", state = "pending_decision", startedAt = today) }
+        vm.reloadLocal()
+        tap("All recordings")
+        // Both are in Needs you's count; All recordings is still the five.
+        compose.onNode(hasContentDescription("Needs you, 2")).assertExists()
+        compose.onNode(hasContentDescription("All recordings, 5")).assertExists()
+        tapDescribed("Needs you, 2")
+        pumpUntil("both listed") {
+            compose.onAllNodesWithText("Rec Waiting").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("Waiting: Transcribe or Delete").fetchSemanticsNodes().isNotEmpty()
+        }
+        // The tabs count none of them.
+        compose.onNode(hasText("All · 0") and hasAnyAncestor(hasTestTag(KIND_ROW_TAG))).assertExists()
+        // A filter keeps nothing else, and they stay listed.
+        tapDescribed("Filters")
+        compose.onNodeWithText("Show 0 results").assertExists()
+        option("Pinned").performScrollTo().performClick()
+        tap("Show 0 results")
+        assertTrue(compose.onAllNodesWithText("Rec Waiting").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("Waiting: Transcribe or Delete").fetchSemanticsNodes().isNotEmpty())
+        // The phone's own opens where the choice is made.
+        compose.onAllNodes(hasText("Waiting: Transcribe or Delete", substring = true) and hasClickAction()).onFirst().performClick()
+        assertEquals(listOf("review"), shared)
+        // Anywhere else they don't show.
+        tap("Needs you")
+        tapDescribed("All recordings, 5")
+        compose.onAllNodesWithText("Rec Waiting").assertCountEquals(0)
     }
 
     @Test

@@ -215,23 +215,58 @@ class SavedViewsRepositoryTest : AppTest() {
     }
 
     @Test
-    fun eachAccountHasItsOwnCopyAndTheLastIsRememberedForTheSameServer() {
-        views.use(account)
+    fun eachAccountHasItsOwnCopyAndTheLastIsRememberedForThisSignInOnly() {
+        views.confirm("device-1", account)
         settle()
         assertEquals(1, views.views.value.size)
         server.on("GET", "/api/views", FakeServer.json(200, list(0)))
         views.use("http://phone.test|someone@example.com|7")
         settle()
         assertTrue(views.views.value.isEmpty())
-        views.use(account)
-        // This account's copy shows at once, before any answer.
+        val reads = server.requestsTo("GET", "/api/views").size
+        // This sign-in's remembered account: its copy shows at once, and nothing is read or sent for it.
+        views.use(views.lastAccount("device-1"), confirmed = false)
         assertEquals("WhatsApp this week", views.views.value.single().name)
-        assertEquals(account, views.lastAccount("http://phone.test/"))
-        assertNull(views.lastAccount("http://other.test"))
+        settle()
+        assertEquals(reads, server.requestsTo("GET", "/api/views").size)
+        // Another sign-in (a new device id) remembers nothing.
+        assertEquals(account, views.lastAccount("device-1"))
+        assertNull(views.lastAccount("device-2"))
+        assertNull(views.lastAccount(null))
         // The key needs all three.
         assertNull(SavedViewsRepository.accountKey("http://phone.test", null, 7))
         assertNull(SavedViewsRepository.accountKey("http://phone.test", "a@b.c", null))
         assertEquals("http://phone.test|a@b.c|7", SavedViewsRepository.accountKey("HTTP://Phone.test/", " A@B.c ", 7))
+    }
+
+    @Test
+    fun switchingToAKeyReadsItsListAgainWhateverTheVersion() {
+        views.use(account)
+        settle()
+        views.use("http://phone.test|someone@example.com|7")
+        settle()
+        val reads = server.requestsTo("GET", "/api/views").size
+        server.on("GET", "/api/views", FakeServer.json(200, list(4, first.replace("WhatsApp this week", "Renamed, same version"))))
+        views.use(account)
+        settle()
+        assertEquals(reads + 1, server.requestsTo("GET", "/api/views").size)
+        assertEquals("Renamed, same version", views.views.value.single().name)
+    }
+
+    @Test
+    fun aNewAccountsFirstSyncWaitsForTheOneBeforeItInsteadOfBeingSkipped() {
+        val release = java.util.concurrent.CountDownLatch(1)
+        val slow = java.util.concurrent.atomic.AtomicBoolean(true)
+        server.on("GET", "/api/views") {
+            if (slow.getAndSet(false)) release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            FakeServer.json(200, oneView)
+        }
+        views.use("http://phone.test|someone@example.com|7")
+        pumpUntil("the first read on its way") { server.requestsTo("GET", "/api/views").isNotEmpty() }
+        views.use(account)
+        release.countDown()
+        pumpUntil("the new account's list") { views.views.value.singleOrNull()?.name == "WhatsApp this week" }
+        assertEquals(2, server.requestsTo("GET", "/api/views").size)
     }
 
     @Test
@@ -249,7 +284,7 @@ class SavedViewsRepositoryTest : AppTest() {
 
     @Test
     fun signingOutDeletesTheCopy() {
-        views.use(account)
+        views.confirm("device-1", account)
         settle()
         assertTrue(File(app.noBackupFilesDir, "views.bin").exists())
         val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
@@ -257,6 +292,68 @@ class SavedViewsRepositoryTest : AppTest() {
         pumpUntil("signed out") { out.isCompleted }
         assertTrue(views.views.value.isEmpty())
         assertFalse(File(app.noBackupFilesDir, "views.bin").exists())
-        assertNull(views.lastAccount(server.baseUrl))
+        assertNull(views.lastAccount("device-1"))
+    }
+
+    /**
+     * The review's case: A signs out, B signs in on the same phone and B's account can't be read, then A signs in again
+     * to the same workspace. The settings still hold A's email and the server during B's sign-in: B's views never go
+     * under A's account, nothing is read or sent with B's token before B's account read, and A sees only A's views.
+     */
+    @Test
+    fun aNewSignInNeverMixesTwoPeoplesViews() {
+        val tokens = mapOf("a@example.com" to "11|eld_tokena", "b@example.com" to "12|eld_tokenb")
+        val devices = java.util.concurrent.ConcurrentLinkedQueue(
+            listOf("01JDEVICEA000000000000000A", "01JDEVICEB000000000000000B", "01JDEVICEC000000000000000C")
+        )
+        server.on("POST", "/api/auth/password") { req ->
+            val email = Json.parseToJsonElement(req.bodyText()).jsonObject.getValue("email").jsonPrimitive.content
+            val body = com.echoledger.mobile.testsupport.ServerFixtures.registerResponse(token = tokens.getValue(email))
+                .replace(com.echoledger.mobile.testsupport.ServerFixtures.DEVICE_ID, devices.remove())
+            FakeServer.json(201, body)
+        }
+        fun bearer(req: mockwebserver3.RecordedRequest) = req.headers["Authorization"].orEmpty()
+        server.on("GET", "/api/library", FakeServer.json(200, com.echoledger.mobile.testsupport.ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, """{"data":[]}"""))
+        server.on("GET", "/api/account") { req ->
+            if (bearer(req).endsWith("tokena")) {
+                FakeServer.json(200, """{"email":"a@example.com","workspace":{"id":7}}""")
+            } else {
+                FakeServer.json(500, """{"message":"Server error"}""")
+            }
+        }
+        server.on("GET", "/api/views") { req ->
+            FakeServer.json(
+                200,
+                list(
+                    4,
+                    view(
+                        "01JV00000000000000000000" + if (bearer(req).endsWith("tokena")) "AA" else "BB",
+                        if (bearer(req).endsWith("tokena")) "A's view" else "B's view"
+                    )
+                )
+            )
+        }
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        val seen = CopyOnWriteArrayList<String>()
+        vm.savedViews.onEach { list -> list.forEach { seen += it.name } }.launchIn(CoroutineScope(Dispatchers.Unconfined))
+
+        vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
+        pumpUntil("A's views") { vm.savedViews.value.map { it.name } == listOf("A's view") }
+        val out = vm.unpair()
+        pumpUntil("signed out") { out.isCompleted }
+        assertTrue(vm.savedViews.value.isEmpty())
+
+        vm.signIn(server.baseUrl, "b@example.com", "pw", null, "Phone")
+        pumpUntil("B's account asked") { server.requests.any { it.url.encodedPath == "/api/account" && bearer(it).endsWith("tokenb") } }
+        pumpUntil("B's sync done") { !vm.syncing.value }
+        assertTrue(vm.savedViews.value.isEmpty())
+        assertFalse(vm.savedViewsReady.value)
+
+        vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
+        pumpUntil("A's views again") { vm.savedViews.value.map { it.name } == listOf("A's view") }
+        // Nothing was read or sent with B's token, and B's views never showed.
+        assertTrue(server.requests.none { it.url.encodedPath.startsWith("/api/views") && bearer(it).endsWith("tokenb") })
+        assertFalse(seen.contains("B's view"))
     }
 }

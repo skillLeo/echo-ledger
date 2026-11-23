@@ -60,9 +60,12 @@ object LibraryScreenState {
     /** A row's title as it shows (the source's name when untitled): what the search reads. */
     fun shownTitle(item: LibraryItem, text: V2Text): String = item.title?.takeIf { it.isNotBlank() } ?: text.sourceName(item.sourceApp)
 
-    /** What a target keeps: a Library view its recordings, a label the ones carrying it, one of My views every one. */
+    /**
+     * What a target keeps, the recordings the filters, the tabs and the counts work on: a Library view its recordings,
+     * a label the ones carrying it, one of My views every one. Never a call still waiting for Keep or Discard ([waiting]).
+     */
     fun inTarget(facts: List<LibraryFacts>, target: LibraryTarget): List<LibraryFacts> = when (target) {
-        is LibraryTarget.Place -> facts.filter { LibraryFacets.inPlace(it, target.place) }
+        is LibraryTarget.Place -> facts.filter { !it.waiting && LibraryFacets.inPlace(it, target.place) }
         is LibraryTarget.Label -> facts.filter { !it.waiting && target.label in it.values.getValue(FilterSection.LABELS) }
         is LibraryTarget.View -> facts.filter { LibraryFacets.inPlace(it, LibraryPlace.ALL) }
     }
@@ -75,6 +78,13 @@ object LibraryScreenState {
             .map { com.echoledger.mobile.core.ProjectNode(it.id, it.name) }
         return known + more
     }
+
+    /**
+     * The calls still waiting for Keep or Discard on the server: Needs you always lists them, whatever the filters, the
+     * tab and the search (as the server's `view=needs_you` keeps them), and they are counted only in Needs you itself.
+     */
+    fun waiting(facts: List<LibraryFacts>, target: LibraryTarget): List<LibraryFacts> =
+        if (target == LibraryTarget.Place(LibraryPlace.NEEDS_YOU)) facts.filter { it.waiting } else emptyList()
 
     /** How many recordings carry each label (by its key), as the title menu counts them. */
     fun labelCounts(facts: List<LibraryFacts>): Map<String, Int> =
