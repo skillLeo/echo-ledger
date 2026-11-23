@@ -21,27 +21,31 @@ const out = join(desktop, "..", "docs", "design", "screens", "desktop", "library
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 
 const prefix = process.argv[2] ?? "after";
-/** The sidebar's foot (Trash, the sync line, Activity, Settings) is wholly inside the window, the middle scrolling. */
+/**
+ * The rail's foot (Settings, the avatar) and the Library panel's foot (Trash, the sync line) are wholly inside the
+ * window, the panel's list scrolling (PLAN_NAV_3_LEVELS: the rail and the panel at every height).
+ */
 async function footOnScreen(page) {
   const problem = await page.evaluate(() => {
-    const side = document.querySelector(".el-shell > .el-sidebar");
-    if (!side) return "no sidebar";
     const out = [];
+    const rail = document.querySelector(".el-rail");
+    const panel = document.querySelector("[data-testid=nav-panel]");
+    if (!rail) return "no rail";
     const items = [
-      ["Trash", side.querySelector(".el-shell__foot-start .el-nav-item")],
-      ["the sync line", side.querySelector("[data-testid=sidebar-synced]")],
-      ...[...side.querySelectorAll(".el-shell__foot .el-shell__actions > .el-nav-item")].slice(0, 2).map((el) => [el.textContent.trim(), el]),
+      ["Settings", [...rail.querySelectorAll(".el-rail__item")].find((b) => (b.getAttribute("aria-label") ?? "").startsWith("Settings"))],
+      ["the avatar", rail.querySelector(".el-rail__avatar")],
+      ...(panel ? [["Trash", panel.querySelector(".el-library-foot .el-nav-item")], ["the sync line", panel.querySelector("[data-testid=sidebar-synced]")]] : []),
     ];
     for (const [name, el] of items) {
       if (!el) { out.push(`${name} missing`); continue; }
       const r = el.getBoundingClientRect();
       if (r.top < 0 || r.bottom > innerHeight + 0.5 || r.height < 1) out.push(`${name} at ${Math.round(r.top)}-${Math.round(r.bottom)} of ${innerHeight}`);
     }
-    const middle = side.querySelector(".el-sidebar__middle");
-    if (!middle || getComputedStyle(middle).overflowY !== "auto") out.push("the middle doesn't scroll");
+    const body = panel?.querySelector(".el-panel__body");
+    if (panel && (!body || getComputedStyle(body).overflowY !== "auto")) out.push("the panel's list doesn't scroll");
     return out.join("; ");
   });
-  if (problem) throw new Error(`Sidebar foot: ${problem}`);
+  if (problem) throw new Error(`Rail and panel foot: ${problem}`);
 }
 const widths = process.argv[3] ? process.argv[3].split(",").map(Number) : [1024, 1440, 800, 1280, 1920];
 const HEIGHT = 900;
@@ -78,12 +82,12 @@ try {
       await list(page);
       await rest(page);
       await footOnScreen(page);
-      // How much room the middle (LIBRARY, MY VIEWS, LABELS, PROJECTS) has, and whether its edge says there is more.
+      // How much room the panel's list has.
       const room = await page.evaluate(() => {
-        const m = document.querySelector(".el-sidebar__middle");
+        const m = document.querySelector(".el-panel__body");
         return m ? `${Math.round(m.clientHeight)} px of ${Math.round(m.scrollHeight)}${m.hasAttribute("data-more-below") ? ", more below shaded" : ""}` : "none";
       });
-      console.log(`${width}x${height} ${theme}: the middle has ${room}`);
+      console.log(`${width}x${height} ${theme}: the panel's list has ${room}`);
       if (shot) await shoot(page, `sidebar-${width}x${height}-${theme}.png`);
       else console.log(`${width}x${height} ${theme}: the foot is on screen`);
       await page.close();

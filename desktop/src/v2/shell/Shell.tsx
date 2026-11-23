@@ -10,6 +10,8 @@ import type { MainTab } from "../../lib/mainView";
 import { isConfirmOpen } from "../../lib/confirm";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../lib/shell";
+import { NavShell } from "./NavShell";
+import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -121,6 +123,21 @@ export type ShellProps = {
   footStart?: ReactNode;
   /** Needs you's count: a dot on the Library's icon in the rail. */
   libraryAttention?: boolean;
+  /**
+   * The three levels' own parts (with `library`): the other places' panels and feet, the place chosen in the rail (the
+   * window brings it back as it was left; `again`: start it over), the badges and dots, call recording, the avatar's menu.
+   */
+  nav?: {
+    panels?: Partial<Record<Place, ReactNode>>;
+    feet?: Partial<Record<Place, ReactNode>>;
+    onPlace?: (place: Place, again: boolean) => void;
+    libraryCount?: number;
+    liveDot?: boolean;
+    liveDotWords?: string;
+    setupAttention?: boolean;
+    callRecording?: { on: boolean; toggle: () => void };
+    account?: MenuItem[];
+  };
   /** Today's page for the current tab. */
   children: ReactNode;
 };
@@ -262,8 +279,8 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
                     <Icon icon={open ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />
                   </button>
                 ) : <span className="el-nav-tree__fold" aria-hidden="true" />}
-                <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" dir="auto" aria-current={current === p.id ? "page" : undefined}
-                  onClick={() => onOpen(p.id)}>{p.name}</button>
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" aria-current={current === p.id ? "page" : undefined}
+                  onClick={() => onOpen(p.id)}><bdi>{p.name}</bdi></button>
               </div>
               {open && branch(p.id, depth + 1)}
             </li>
@@ -278,7 +295,64 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
 /** A place of the Library in the sidebar: its key, words and count; `drop` takes dropped recordings (the Inbox). */
 export type SidebarPlace = { key: string; label: string; count: number; drop?: boolean };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, projectTree, pinnedProjects = [], projectId = null, onProject, shared, rail, onRail, width, onWidth, uploading, uploadsWait = false, workspace, library, footStart, libraryAttention, children }: ShellProps) {
+/**
+ * The shell: with the Library's sections (`library`), the three levels of PLAN_NAV_3_LEVELS (rail · panel · page,
+ * NavShell); without, the sidebar of PLAN_V2_PARITY 2.
+ */
+export function Shell(props: ShellProps) {
+  return props.library ? <ShellNav {...props} /> : <ShellSidebar {...props} />;
+}
+
+/** The three levels: Live and Ask are the shell's own pages, as in the sidebar; the rest are MainApp's tabs. */
+function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
+  searchKeys, onHelp, projectTree, projectId = null, onProject, uploading, library, footStart, nav, children }: ShellProps) {
+  const [own, setOwn] = useState<"live" | "ask" | null>(null);
+  const [lastTab, setLastTab] = useState(tab);
+  if (tab !== lastTab) {
+    setLastTab(tab);
+    setOwn(null);
+  }
+  const place: Place | null = own ?? (tab === "record" ? null : moduleOf(tab) as Place);
+  const onPlace = (p: Place, again: boolean) => {
+    if (p === "live" || p === "ask") {
+      setOwn(p);
+      nav?.onPlace?.(p, again);
+      return;
+    }
+    setOwn(null);
+    if (nav?.onPlace) nav.onPlace(p, again);
+    else onGo(MODULE_TAB[p]);
+  };
+  // While recordings are dragged (lib/dragMove.ts), the Library's panel lists where they can go: No project (out of
+  // their project) and every project. Hidden otherwise; Move to project… is the way for the keyboard.
+  const drops = (
+    <div className="el-panel-drops" aria-hidden="true">
+      <p className="el-caption el-secondary el-panel-drops__title">Drop on a project</p>
+      <NoProjectDrop />
+      {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} />}
+    </div>
+  );
+  const projectsPanel = onProject && (
+    <ProjectsPanel projects={projectTree ?? []} current={tab === "projects" ? projectId : null} allCurrent={tab === "projects" && !projectId}
+      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject} onRequest={onRequestLink}
+      tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
+  );
+  return (
+    <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status}
+      panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
+      libraryCount={nav?.libraryCount} activityCount={activity} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
+      setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
+      recording={recording} onRecord={onRecord} onUpload={onUpload} onVoiceNote={onVoiceNote} callRecording={nav?.callRecording}
+      onSearch={onSearch} searchKeys={searchKeys} me={me} account={nav?.account} uploading={uploading} notices={notices} banners={banners}>
+      {own === "live" && live ? <section className="content page-live">{live}</section>
+        : own === "ask" && ask ? <section className="content page-ask">{ask}</section>
+          : own ? <EmptyState icon={own === "live" ? Icons.RecordIcon : Icons.AskIcon} title={own === "live" ? "Live is on its way" : "Ask is on its way"}
+            body="Its place is here soon." /> : children}
+    </NavShell>
+  );
+}
+
+function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, projectTree, pinnedProjects = [], projectId = null, onProject, shared, rail, onRail, width, onWidth, uploading, uploadsWait = false, workspace, library, footStart, libraryAttention, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);

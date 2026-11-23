@@ -44,6 +44,8 @@ async function app() {
 }
 
 beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
   resetTauriMock();
   restartForTests();
   resetEntitlementsForTests(makeEntitlements());
@@ -334,7 +336,7 @@ describe("Home's needs you", () => {
     await act(flushAsync);
     await act(flushAsync);
     expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
-    expect(within(nav()).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("DT-HOME-002 to DT-HOME-004 in the app: Review opens the Library's Needs you (Waiting's home now), and the notifications open Activity", async () => {
@@ -350,7 +352,7 @@ describe("Home's needs you", () => {
     await act(flushAsync);
     await act(flushAsync);
     expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
-    expect(within(nav()).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
     await act(flushAsync);
