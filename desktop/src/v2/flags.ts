@@ -254,7 +254,8 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean,
   }, [atOnce, enabled, listening, screen, chosen, recording]);
   useEffect(() => {
     if (!answer || recording) return;
-    setAnswer(null);
+    // Only this answer is done: one set after it was drawn (React runs this effect before that update) stays for next.
+    setAnswer((current) => (current === answer ? null : current));
     // The core's first `ui:flags` comes second to a read that has had the server's answer meanwhile.
     if (answer.screen === null && heard.current) return;
     heard.current = answer.heard;

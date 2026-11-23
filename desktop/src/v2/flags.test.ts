@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { ALL_OFF, DESIGN_KEY, DESKTOP_V2_FLAGS, READ_RETRY_MS, anyV2, chooseDesign, designOffer, parseUiState, readDesign, readUiState, setClassic, useUiFlags } from "./flags";
 import { callsOf, emitEvent, fail, flushAsync, listen, listenerCount, resetTauriMock, respond, respondWith } from "../test/tauri";
 
@@ -394,6 +394,34 @@ describe("useUiFlags hears the core's first answer (ui:flags)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("ui:flags that comes after a read's answer is drawn but before it is applied is applied after it, not lost", async () => {
+    let resolve: (value: unknown) => void = () => undefined;
+    respondWith("ui_flags", () => new Promise((done) => { resolve = done; }));
+    // The first commit after `armed` (the one that holds the read's answer, before the effect that applies it) is when
+    // the core's first ui:flags comes: from a layout effect, which runs between that commit and its passive effects.
+    let armed = false;
+    const { result } = renderHook(() => {
+      const flags = useUiFlags(true, "library", false);
+      useLayoutEffect(() => {
+        if (!armed) return;
+        armed = false;
+        hear(V2);
+      });
+      return flags;
+    });
+    await act(flushAsync);
+    expect(callsOf("ui_flags")).toHaveLength(1);
+    await act(async () => {
+      armed = true;
+      resolve(BEFORE_CONFIG);
+      for (let i = 0; i < 25; i++) await Promise.resolve();
+    });
+    await act(flushAsync);
+    expect(armed).toBe(false);
+    expect(result.current[0].flags["ui_v2.shell"]).toBe(true);
+    expect(result.current[0].flags["ui_v2.library"]).toBe(true);
   });
 
   it("lets go of ui:flags when the view goes", async () => {
