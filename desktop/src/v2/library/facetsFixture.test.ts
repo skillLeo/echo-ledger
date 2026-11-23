@@ -16,6 +16,9 @@ type Recording = {
   source_device: "phone" | "desktop" | "web" | null; client_id: string | null; language: string | null; final_status: string | null;
   final_language: string | null; labels: string[]; pinned: boolean; important: boolean; keep: boolean; opened: boolean; deleted: boolean;
   bookmarks: (string | null)[]; facets: { source: string; status: string; language: string };
+  /** The start of the current upload or transcript attempt, as the library item carries it (the server stores it from
+   * transcript_attempt_at and upload_attempt_at, which the apps never read). */
+  processing_since?: string | null;
 };
 type Fixture = {
   now: string; tz: string;
@@ -35,6 +38,7 @@ const now = Date.parse(fixture.now);
 /** A recording as this computer holds it: a library item from the sync, with the server's facets. */
 const asItem = (r: Recording): LibraryItem => ({
   id: r.id, deleted: r.deleted, updated_at: r.started_at, title: r.title, started_at: r.started_at, ended_at: r.ended_at ?? undefined,
+  processing_since: r.processing_since ?? undefined,
   status: r.status, source_app: r.source_app ?? undefined, source_device: r.source_device ?? undefined,
   client: r.client_id ? { id: r.client_id, name: fixture.projects.find((p) => p.id === r.client_id)?.name ?? r.client_id } : null,
   language: (r.language ?? null) as LibraryItem["language"], labels: r.labels, pinned: r.pinned, important: r.important, keep: r.keep, opened: r.opened,

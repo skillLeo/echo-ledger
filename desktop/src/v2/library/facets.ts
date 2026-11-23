@@ -106,13 +106,17 @@ export function sourceOf(item: LibraryItem, imported?: ReadonlySet<string>): { v
   return { value, label: SOURCE_NAMES[value] };
 }
 
-/** When a recording ended (else started), as ms. */
-const endedAt = (item: LibraryItem) => Date.parse((item as LibraryItem & { ended_at?: string | null }).ended_at || item.started_at || "");
+/**
+ * Since when a recording has been Processing, as ms: the start of its current upload or transcript attempt (the item's
+ * `processing_since`, so a retry starts the clock again), else when it ended, else when it started.
+ */
+const processingSince = (item: LibraryItem) => Date.parse(item.processing_since || item.ended_at || item.started_at || "");
 
 /**
  * Why a recording needs the person, or null (Needs you, one reason at most, the first that holds): `waiting` (a call
  * still waiting for Keep or Discard on the server: session `recording`), `failed` (Status Failed: an upload, a
- * transcript or the recording failed), `stuck` (still Processing 24 hours or more after it ended). The calls and
+ * transcript or the recording failed), `stuck` (still Processing more than 24 hours after its current attempt began,
+ * else after it ended; exactly 24 hours is not stuck yet). The calls and
  * uploads waiting on this computer are not in the library list: needsYouCount adds them.
  */
 export function needsReason(item: LibraryItem, now: number): "waiting" | "failed" | "stuck" | null {
@@ -121,8 +125,8 @@ export function needsReason(item: LibraryItem, now: number): "waiting" | "failed
   const status = statusOf(item);
   if (status === "failed") return "failed";
   if (status !== "processing") return null;
-  const ended = endedAt(item);
-  return Number.isFinite(ended) && now - ended >= STUCK_MS ? "stuck" : null;
+  const since = processingSince(item);
+  return Number.isFinite(since) && now - since > STUCK_MS ? "stuck" : null;
 }
 export const needsYou = (item: LibraryItem, now: number) => needsReason(item, now) !== null;
 

@@ -53,7 +53,7 @@ import { shellChip } from "../../v2/shell/status";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import { syncLibrary } from "../../v2/library/syncClock";
-import { forgetViewsAccount, lastViewsAccount, rememberViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
+import { lastViewsAccount, rememberViewsAccount, settleViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
 import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
@@ -190,15 +190,19 @@ export default function MainApp() {
   // My views are each account's own in each workspace (the server, the email, the workspace), synced through
   // /api/views. Whose they were last is kept on this computer for this sign-in: an offline start shows (and saves) that
   // account's views until the account can be read; signing out forgets it, and another account's sign-in replaces it.
+  // What is kept for this is tied to the core's id for this sign-in: another sign-in, or none, finds nothing of it (and
+  // the copies of a sign-in that is over go, but for what still waits to be sent). The remembered account's views show
+  // and change here only; they are sent once account_get confirms the same server, email and workspace.
   const liveViews = viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id);
+  const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
   useEffect(() => {
-    if (liveViews) rememberViewsAccount(status?.serverUrl, liveViews);
-  }, [liveViews, status?.serverUrl]);
+    if (signIn !== undefined) settleViewsAccount(signIn);
+  }, [signIn]);
   useEffect(() => {
-    if (status && status.paired === false) forgetViewsAccount();
-  }, [status]);
-  const lastViews = useMemo(() => (status?.paired === true ? lastViewsAccount(status.serverUrl) : null), [status?.paired, status?.serverUrl, liveViews]);
-  useViewsAccount(liveViews ?? lastViews);
+    if (liveViews && signIn) rememberViewsAccount(status?.serverUrl, liveViews, signIn);
+  }, [liveViews, signIn, status?.serverUrl]);
+  const lastViews = useMemo(() => (signIn ? lastViewsAccount(status?.serverUrl, signIn) : null), [signIn, status?.serverUrl, liveViews]);
+  useViewsAccount(liveViews ?? lastViews, liveViews !== null);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);

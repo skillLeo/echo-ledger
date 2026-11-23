@@ -26,6 +26,8 @@ pub struct AppStatus {
     pub paired: bool,
     pub server_url: Option<String>,
     pub device_name: Option<String>,
+    /// This sign-in's id, made at each sign-in (none while signed out): see Settings.sign_in_id.
+    pub sign_in: Option<String>,
     pub pinned: bool,
     pub recording: Option<crate::audio::RecordingInfo>,
     pub captions_live: bool,
@@ -96,6 +98,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
+        sign_in: state.sign_in_id(),
         server_url: settings.server_url.clone(),
         device_name: settings.device_name.clone(),
         pinned: !settings.pins.is_empty(),
@@ -209,6 +212,8 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
         s.pins = final_pins.clone();
         s.device_id = Some(registered.device.id.clone());
         s.device_name = Some(registered.device.name.clone());
+        // A new sign-in: what the window kept for the last one is not this one's.
+        s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());
     })?;
     state.apply_config(registered.config);
     state.upload_notify.notify_one();
@@ -456,6 +461,7 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     state.update_settings(|s| {
         s.device_id = None;
         s.device_name = None;
+        s.sign_in_id = None;
     })?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();

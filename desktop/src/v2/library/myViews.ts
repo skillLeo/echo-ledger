@@ -130,8 +130,21 @@ const refusalOf = (answer: unknown): ViewRefusal | null =>
  * the server refuses for good is dropped (a new view) or given back to the server's copy (a change), said through
  * `onProblem`, and the sync goes on with the next.
  */
-export function syncedViewsStore(): ViewsStore & { use(account: string | null): void; sync(): Promise<void>; onProblem(f: (text: string) => void): () => void } {
+export type SyncedViewsStore = ViewsStore & {
+  /**
+   * Whose views: `confirmed` once the server has said whose account this is; until then (the account remembered from
+   * this sign-in, offline) they show and change on this computer only, and nothing is sent or read from the server.
+   */
+  use(account: string | null, confirmed?: boolean): void;
+  /** Stops showing these accounts' views (their sign-in is over). */
+  release(accounts: readonly string[]): void;
+  sync(): Promise<void>;
+  onProblem(f: (text: string) => void): () => void;
+};
+
+export function syncedViewsStore(): SyncedViewsStore {
   let key: string | null = null;
+  let confirmed = false;
   let kept: Kept = EMPTY;
   let shown: MyView[] = [];
   let gen = 0;
@@ -277,7 +290,7 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
   };
   /** One sync at a time per account; a change made while one runs is sent by one more round. */
   const sync = (): Promise<void> => {
-    if (key === null) return Promise.resolve();
+    if (key === null || !confirmed) return Promise.resolve();
     if (running && running.gen === gen) {
       again = true;
       return running.promise;
@@ -296,17 +309,28 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
   };
 
   return {
-    use(account) {
+    use(account, sure = true) {
       const next = account ? `${KEY}:${account}` : null;
-      if (next === key) return;
+      if (next === key) {
+        // The same account, now confirmed by the server: what waits here is sent from now on.
+        if (sure && !confirmed && next) {
+          confirmed = true;
+          if (listeners.size) void sync();
+        }
+        return;
+      }
       gen++;
       key = next;
+      confirmed = sure && next !== null;
       again = false;
       running = null;
       show(next ? read(next) : EMPTY);
       if (next && listeners.size) void sync();
     },
     sync,
+    release(accounts) {
+      if (key && accounts.some((a) => `${KEY}:${a}` === key)) this.use(null);
+    },
     onProblem(f) {
       problems.add(f);
       return () => void problems.delete(f);
@@ -379,7 +403,7 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
 }
 
 /** The app's views store (one for the window: the sidebar and the Library share it). */
-export const viewsStore = syncedViewsStore();
+export const viewsStore: SyncedViewsStore = syncedViewsStore();
 
 /** The person's views, kept up to date. */
 export function useMyViews(store: ViewsStore = viewsStore): readonly MyView[] {
@@ -400,25 +424,58 @@ export function viewsAccount(server: string | null | undefined, email: string | 
 const LAST_ACCOUNT_KEY = "echoledger-my-views-account";
 const hostOf = (server: string | null | undefined) => (server ?? "").trim().replace(/\/+$/, "").toLowerCase();
 
-/** Keeps whose views were shown last on this computer (for this sign-in), to show them while the account can't be read. */
-export function rememberViewsAccount(server: string | null | undefined, account: string) {
+/**
+ * What is kept for one sign-in (the core's id for it, AppStatus.signIn): whose views were shown last, and every
+ * account whose views were kept on this computer during it (to clear them at sign-out).
+ */
+type Remembered = { server: string; signIn: string; account: string; accounts: string[] };
+function remembered(): Remembered | null {
   try {
-    window.localStorage.setItem(LAST_ACCOUNT_KEY, JSON.stringify({ server: hostOf(server), account }));
-  } catch {
-    // Storage unavailable: offline, no views until the account is read.
-  }
-}
-/** Whose views were shown last with this server, or null (another server, or none kept). */
-export function lastViewsAccount(server: string | null | undefined): string | null {
-  try {
-    const kept = JSON.parse(window.localStorage.getItem(LAST_ACCOUNT_KEY) ?? "null") as { server?: unknown; account?: unknown } | null;
-    return kept && kept.server === hostOf(server) && hostOf(server) && typeof kept.account === "string" ? kept.account : null;
+    const kept = JSON.parse(window.localStorage.getItem(LAST_ACCOUNT_KEY) ?? "null") as Partial<Remembered> | null;
+    return kept && typeof kept.signIn === "string" && typeof kept.account === "string" && typeof kept.server === "string"
+      ? { server: kept.server, signIn: kept.signIn, account: kept.account, accounts: Array.isArray(kept.accounts) ? kept.accounts.filter((a): a is string => typeof a === "string") : [kept.account] }
+      : null;
   } catch {
     return null;
   }
 }
-/** Signed out: whose views they were is forgotten (the next sign-in may be someone else). */
-export function forgetViewsAccount() {
+
+/** Keeps whose views were shown last in this sign-in, to show them (on this computer only) while the account can't be read. */
+export function rememberViewsAccount(server: string | null | undefined, account: string, signIn: string | null | undefined) {
+  if (!signIn) return;
+  const now = remembered();
+  const accounts = now?.signIn === signIn ? [...new Set([...now.accounts, account])] : [account];
+  try {
+    window.localStorage.setItem(LAST_ACCOUNT_KEY, JSON.stringify({ server: hostOf(server), signIn, account, accounts }));
+  } catch {
+    // Storage unavailable: offline, no views until the account is read.
+  }
+}
+/** Whose views were shown last in this very sign-in with this server, or null. */
+export function lastViewsAccount(server: string | null | undefined, signIn: string | null | undefined): string | null {
+  const kept = remembered();
+  return kept && signIn && kept.signIn === signIn && hostOf(server) && kept.server === hostOf(server) ? kept.account : null;
+}
+
+/**
+ * The sign-in now (null: signed out). What was kept for another sign-in goes: whose views they were, and each of its
+ * accounts' copies, unless something in a copy still waits to be sent; that copy stays under its own account (no one
+ * else's views read it) and is sent when that account signs in here again.
+ */
+export function settleViewsAccount(signIn: string | null | undefined) {
+  const kept = remembered();
+  if (!kept || (signIn && kept.signIn === signIn)) return;
+  viewsStore.release(kept.accounts);
+  for (const account of kept.accounts) {
+    const copy = `${KEY}:${account}`;
+    const waiting = read(copy);
+    if (waiting.views.some((v) => v.pending) || waiting.reorder) continue;
+    try {
+      window.localStorage.removeItem(copy);
+    } catch {
+      // Nothing to clear.
+    }
+  }
   try {
     window.localStorage.removeItem(LAST_ACCOUNT_KEY);
   } catch {
@@ -426,9 +483,12 @@ export function forgetViewsAccount() {
   }
 }
 
-/** Uses the signed-in account's own copy in its workspace (viewsAccount); none while it isn't known. */
-export function useViewsAccount(account: string | null) {
+/**
+ * Uses an account's own copy in its workspace (viewsAccount); none while it isn't known. `confirmed`: the server said
+ * so (else it is the one remembered from this sign-in: shown, kept here, never sent until confirmed).
+ */
+export function useViewsAccount(account: string | null, confirmed = true) {
   useEffect(() => {
-    viewsStore.use(account);
-  }, [account]);
+    viewsStore.use(account, confirmed);
+  }, [account, confirmed]);
 }

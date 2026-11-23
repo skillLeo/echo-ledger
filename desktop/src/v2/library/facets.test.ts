@@ -42,13 +42,20 @@ describe("a recording's status, one of four", () => {
 });
 
 describe("Needs you", () => {
-  it("failed, or still processing 24 hours or more after it ended", () => {
+  it("failed, or still processing more than 24 hours after its current attempt began (else after it ended, else started)", () => {
     const now = NOW.getTime();
     expect(ITEMS.filter((i) => needsYou(i, now)).map((i) => i.id)).toEqual(["tm1", "old"]);
-    const ended = (ms: number) => ({ ...makeItem("p", { status: "processing", transcript: { ...none, final_status: "processing" }, started_at: new Date(now - 3 * STUCK_MS).toISOString() }), ended_at: new Date(now - ms).toISOString() }) as LibraryItem;
-    // Counted from when it ended, not when it started: just under 24 hours is not stuck yet.
-    expect(needsReason(ended(STUCK_MS - 60_000), now)).toBeNull();
-    expect(needsReason(ended(STUCK_MS), now)).toBe("stuck");
+    const at = (ms: number) => new Date(now - ms).toISOString();
+    const processing = (extra: Partial<LibraryItem>) => ({ ...makeItem("p", { status: "processing", transcript: { ...none, final_status: "processing" }, started_at: at(3 * STUCK_MS) }), ...extra }) as LibraryItem;
+    // From when it ended, not when it started; exactly 24 hours is not stuck yet.
+    expect(needsReason(processing({ ended_at: at(STUCK_MS - 60_000) }), now)).toBeNull();
+    expect(needsReason(processing({ ended_at: at(STUCK_MS) }), now)).toBeNull();
+    expect(needsReason(processing({ ended_at: at(STUCK_MS + 60_000) }), now)).toBe("stuck");
+    // A retry starts the clock again: the current attempt's start counts, however long ago it ended.
+    expect(needsReason(processing({ ended_at: at(20 * STUCK_MS), processing_since: at(60 * 60_000) }), now)).toBeNull();
+    expect(needsReason(processing({ ended_at: at(STUCK_MS - 60_000), processing_since: at(STUCK_MS + 60_000) }), now)).toBe("stuck");
+    // Neither: from when it started.
+    expect(needsReason(processing({}), now)).toBe("stuck");
   });
   it("one reason each, the first that holds: waiting (a call still to keep or discard), failed, stuck", () => {
     expect(needsReason(makeItem("w", { status: "recording", transcript: none }), NOW.getTime())).toBe("waiting");

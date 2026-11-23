@@ -78,6 +78,8 @@ export interface AppStatus {
   pillHidden: boolean;
   pendingDecisions: number;
   failedUploads: number;
+  /** The core's id for this sign-in, made at each sign-in (none while signed out; from a core before 2.0.0-p, none). */
+  signIn?: string | null;
   trayState: TrayState;
   budget: BudgetState;
   /** What the workspace's plan and the person's role allow (since v1.5). */
@@ -404,6 +406,7 @@ export interface Settings {
   deviceId: string | null;
   deviceName: string | null;
   installId: string | null; // since v1.6: sent with every sign-in, never exported
+  signInId: string | null; // since 2.0.0-p: made at each sign-in, forgotten at sign-out (AppStatus.signIn)
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
@@ -894,8 +897,10 @@ export interface LibraryItem {
   };
   /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
   filed_by?: "user" | "contact" | "rule" | null;
-  /** When it ended (Needs you's 24 hours are counted from it). */
+  /** When it ended (Needs you's 24 hours are counted from it when no attempt is under way). */
   ended_at?: string | null;
+  /** When its current upload or transcript attempt began (since 2.0.0-p): Needs you's 24 hours are counted from it. */
+  processing_since?: string | null;
   /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p). */
   facets?: { source?: string; status?: string; language?: string } | null;
 }

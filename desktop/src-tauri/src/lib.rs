@@ -297,6 +297,25 @@ impl AppState {
         id
     }
 
+    /// This sign-in's id (AppStatus.signIn), none while signed out. A sign-in kept from before 2.0.0-p gets one now.
+    pub fn sign_in_id(&self) -> Option<String> {
+        if !self.is_paired() {
+            return None;
+        }
+        if let Some(id) = self.settings().sign_in_id {
+            return Some(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        match self.update_settings(|s| s.sign_in_id = Some(id.clone())) {
+            Ok(_) => Some(id),
+            // Not kept: none (the window keeps nothing for this sign-in rather than something for any).
+            Err(e) => {
+                eprintln!("[echoledger] the sign-in id could not be kept: {e}");
+                None
+            }
+        }
+    }
+
     pub fn is_paired(&self) -> bool {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }

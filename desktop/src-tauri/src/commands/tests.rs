@@ -588,3 +588,19 @@ fn a_view_change_that_can_wait_stays_an_error() {
     // A server without saved views yet.
     assert!(view_answer(Err(server(404, None, ""))).unwrap_err().to_string().contains("Saved views"));
 }
+
+#[test]
+fn each_sign_in_has_its_own_id_and_signing_out_forgets_it() {
+    let commands = include_str!("../commands.rs");
+    let body = |start: &str| {
+        let at = commands.find(start).unwrap_or_else(|| panic!("{start}"));
+        &commands[at..at + commands[at..].find("\n}\n").unwrap()]
+    };
+    assert!(body("async fn adopt_registration(").contains("s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());"), "a new sign-in");
+    assert!(body("pub async fn unpair(").contains("s.sign_in_id = None;"), "sign-out");
+    assert!(body("pub fn status(app: &AppHandle)").contains("sign_in: state.sign_in_id(),"), "the status says it");
+    // Kept with the settings, and none by default.
+    assert_eq!(Settings::default().sign_in_id, None);
+    let kept: Settings = serde_json::from_value(json!({"signInId": "a1"})).unwrap();
+    assert_eq!(kept.sign_in_id.as_deref(), Some("a1"));
+}
