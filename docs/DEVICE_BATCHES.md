@@ -6,7 +6,7 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
-## Tonight 20:00 (2026-11-23) — the call choice and the new navigation, Mac 2.0.11 and phone 2.0.9, about 50 minutes
+## Tonight 20:00 (2026-11-23) — the call choice and the new navigation, Mac 2.0.11 and phone 2.0.9, about 55 minutes
 
 Builds:
 - **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting in the lead's scratchpad. The lead installs it after "mac free".
@@ -15,7 +15,7 @@ Builds:
 
 **1. Mac, about 15 minutes**
 1. **Install and check permissions.**
-   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.8.
+   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.11.
    - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
 2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
    - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
@@ -28,6 +28,7 @@ Builds:
    Press Transcribe, then Undo, then Transcribe again.
 5. **Pill menu.** During a second short meeting, click the pill and choose "Save audio only". Pass if no card shows after it.
 6. **Library and navigation (new in 2.0.11).** Click a few views and filters, then press the rail's Library icon: back to All recordings with nothing filtered. Try the tabs All · Calls · Meetings · Voice notes, Filters (F), ⌘[ to go back, and ⌘\\ to hide the panel. Make the window narrow: the panel opens as an overlay.
+   - Known, don't log it: ⌘] (Forward) right after ⌘[ can land on the wrong page. The fix is being built and comes after tomorrow's website update.
 
 **2. Phone, about 25 minutes.** Check `mCallState=0` first.
 1. **Three WhatsApp calls**, each about 20 s, with "After each call: Ask me" (the default after the update):
@@ -41,9 +42,10 @@ Builds:
 4. **Screenshot while recording.** Pass if the pill shows in the screenshot. With live captions on, note whether you get a black box or Samsung refuses the screenshot.
 5. **Back-to-back calls.** End two calls within 10 s. Pass if there's one grouped line, never two cards.
 
-**3. Approvals, about 5 minutes**
+**3. Approvals, about 10 minutes**
 - **The card, old and new side by side:** `docs/design/screens/call-choice/` (phone `old-*` / `new-*`, desktop `desktop-old-*` / `desktop-new-*`). Approve the look (VISUAL-OK) or say what to change.
 - **D12 rows:** "rows OK" (`~/Desktop/EchoLedger-row-redesign`).
+- **Navigation, before and after:** open `~/Desktop/EchoLedger-nav-compare/index.html`. Your SkillLeo screenshots are at the top. Below them, for each place, are the website before, the website after and the Mac app after, at 1280 or 1440, light or dark, English or Urdu. Put WhatsApp desktop next to it. Reply "NAV-OK" or say what to change.
 
 ## Tonight 20:00–21:30 PKT (2026-11-22) — 2.0.4 on the Mac and Windows, phone 2.0.5, about 85 minutes
 
