@@ -207,14 +207,8 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     // Another account may be signing in: the last one's WhatsApp share copies and kept pictures go.
     forget_whatsapp_shares(app);
     forget_avatars(app);
-    state.update_settings(|s| {
-        s.server_url = Some(api.base_url().to_string());
-        s.pins = final_pins.clone();
-        s.device_id = Some(registered.device.id.clone());
-        s.device_name = Some(registered.device.name.clone());
-        // A new sign-in: what the window kept for the last one is not this one's.
-        s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());
-    })?;
+    // A new sign-in: what the window kept for the last one is not this one's (a fresh sign-in id).
+    state.note_sign_in(api.base_url(), &final_pins, &registered.device.id, &registered.device.name)?;
     state.apply_config(registered.config);
     state.upload_notify.notify_one();
     let _ = refresh_library_inner(app).await;
@@ -458,11 +452,7 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
-    state.update_settings(|s| {
-        s.device_id = None;
-        s.device_name = None;
-        s.sign_in_id = None;
-    })?;
+    state.note_sign_out()?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();
     Ok(status(&app))
@@ -1736,8 +1726,9 @@ pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, shar
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
 /// `consentAcknowledged` stays out too: the recording-laws notice is acknowledged by the person using this install, never by a file.
-/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one.
-pub const NOT_PORTABLE: [&str; 8] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "clientId", "onboardingDone", "consentAcknowledged"];
+/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one. `signInId`
+/// (2.0.0-p) is this sign-in's: imported, the window would read what it kept for another sign-in as this one's.
+pub const NOT_PORTABLE: [&str; 9] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "signInId", "clientId", "onboardingDone", "consentAcknowledged"];
 /// The `format` marker of an exported settings file.
 pub const SETTINGS_FORMAT: &str = "echoledger-settings";
 

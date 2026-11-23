@@ -205,6 +205,86 @@ describe("the way back to all recordings", () => {
     expect(title()).toHaveTextContent(/^Important/);
   });
 
+  it("⌘[ and ⌘] while typing (the search, the panel's search) are the field's; the mouse's buttons wait behind a question", async () => {
+    render(<App />);
+    await settle();
+    fireEvent.click(nav().getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(nav().getByRole("button", { name: /^Important, / }));
+    await settle();
+    const box = search()!;
+    box.focus();
+    fireEvent.keyDown(box, { key: "[", metaKey: true });
+    fireEvent.keyDown(box, { key: "]", ctrlKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
+    // A question open: the mouse's back button does nothing.
+    const question = document.createElement("div");
+    question.setAttribute("role", "alertdialog");
+    document.body.appendChild(question);
+    fireEvent.mouseUp(window, { button: 3 });
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
+    question.remove();
+    fireEvent.mouseUp(window, { button: 3 });
+    await settle();
+    expect(title()).toHaveTextContent(/^Unread/);
+  });
+
+  it("two quick presses step twice, and Forward walks them back", async () => {
+    render(<App />);
+    await settle();
+    for (const name of [/^Unread, /, /^Important, /, /^Audio only, /]) {
+      fireEvent.click(nav().getByRole("button", { name }));
+      await settle();
+    }
+    // Twice before the Library has settled.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Unread/);
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Audio only/);
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    atAll();
+  });
+
+  it("a view deleted since (on another device) falls back to All recordings, and the history goes on from there", async () => {
+    render(<App />);
+    await settle();
+    const made = await act(async () => viewsStore.create("WhatsApp", { filters: { source: { op: "is", values: ["whatsapp"] } }, search: null, sort: "newest", group: "date" }));
+    await settle();
+    fireEvent.click(within(nav().getByRole("list", { name: "My views" })).getByRole("button", { name: "WhatsApp" }));
+    await settle();
+    expect(title()).toHaveTextContent(/^WhatsApp/);
+    fireEvent.click(nav().getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await act(async () => viewsStore.remove(made.id));
+    await settle();
+    // Back to the view that is gone: All recordings.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    atAll();
+    // The history still records: a new place, Back, Forward.
+    fireEvent.click(nav().getByRole("button", { name: /^Important, / }));
+    await settle();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    atAll();
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
+  });
+
   it("with a recording open, Back goes back to the list first", async () => {
     respond("session_detail", { playback_url: null });
     render(<App />);
