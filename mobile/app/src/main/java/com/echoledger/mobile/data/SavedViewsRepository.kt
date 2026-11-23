@@ -74,8 +74,9 @@ data class ViewProblem(val kind: Kind, val name: String) {
  * goes with its own `client_ref`, so sending it twice never makes it twice). When the library sync's `views_version`
  * differs from the copy's, the copy is read again. The copy is the account's: the server, the email and the workspace
  * ([accountKey]) as this sign-in's account read says them ([confirm]); none shows until they are known, and none is
- * sent or read until the account read confirms them. The last one is remembered for this sign-in only (its device id,
- * new at each sign-in), to show its copy offline before the account can be read ([lastAccount]).
+ * sent or read until the account read confirms them. The last one is remembered for this sign-in only ([signIn]: a
+ * count of this phone's sign-ins, never the device id, which the server gives the same person's install again), to
+ * show its copy offline before the account can be read ([lastAccount]).
  * A permanent refusal (`validation_failed`, `views_limit`, `view_not_found`) drops a new view or gives a change back,
  * and says why ([problems]); every other error leaves the change waiting. Signing out deletes the copy ([clear]).
  */
@@ -88,9 +89,9 @@ class SavedViewsRepository(
     @Serializable
     private data class Copy(val views: List<MyView> = emptyList(), val version: Long? = null, val reorder: Boolean = false)
 
-    /** The account confirmed last, and the sign-in (device id) it was confirmed for. */
+    /** The account confirmed last, and the sign-in it was confirmed for ([signIn]). */
     @Serializable
-    private data class Last(val device: String, val key: String)
+    private data class Last(val signIn: String, val key: String)
 
     @Serializable
     private data class Kept(val accounts: Map<String, Copy> = emptyMap(), val last: Last? = null)
@@ -144,24 +145,24 @@ class SavedViewsRepository(
         if (key != null && confirmed) scope.launch(Dispatchers.IO) { sync(wait = true) }
     }
 
-    /** This sign-in's ([device]) account read says whose the views are: [key]'s copy shows, syncs and is remembered. */
-    fun confirm(device: String, key: String) {
+    /** The account read of the sign-in [signIn] says whose the views are: [key]'s copy shows, syncs and is remembered. */
+    fun confirm(signIn: String, key: String) {
         synchronized(this) {
-            if (kept.last != Last(device, key)) {
-                kept = kept.copy(last = Last(device, key))
+            if (kept.last != Last(signIn, key)) {
+                kept = kept.copy(last = Last(signIn, key))
                 save()
             }
         }
         use(key, confirmed = true)
     }
 
-    /** Whether the account read has confirmed whose the views are for the sign-in [device]. */
-    fun confirmedFor(device: String?): Boolean = synchronized(this) {
-        confirmed && device != null && kept.last == account?.let { Last(device, it) }
+    /** Whether the account read has confirmed whose the views are for the sign-in [signIn]. */
+    fun confirmedFor(signIn: String?): Boolean = synchronized(this) {
+        confirmed && signIn != null && kept.last == account?.let { Last(signIn, it) }
     }
 
-    /** The account confirmed last for the sign-in [device] (to show its copy before the account can be read), or null. */
-    fun lastAccount(device: String?): String? = synchronized(this) { kept.last?.takeIf { device != null && it.device == device }?.key }
+    /** The account confirmed last for the sign-in [signIn] (to show its copy before the account can be read), or null. */
+    fun lastAccount(signIn: String?): String? = synchronized(this) { kept.last?.takeIf { signIn != null && it.signIn == signIn }?.key }
 
     /** Signed out: every account's copy is deleted from this phone, and whose they were is forgotten. */
     fun clear() = synchronized(this) {
@@ -471,6 +472,9 @@ class SavedViewsRepository(
     }
 
     companion object {
+        /** One sign-in of this phone: its device and the count of its sign-ins (null while signed out). */
+        fun signIn(settings: AppSettings): String? = settings.deviceId?.let { "$it#${settings.signIns}" }
+
         const val MAX_VIEWS = 30
         const val NAME_MAX = 60
         private const val LOCAL = "local-"

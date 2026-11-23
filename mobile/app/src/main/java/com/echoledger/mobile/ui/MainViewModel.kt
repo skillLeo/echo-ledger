@@ -74,6 +74,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .map { (it as? SettingsState.Loaded)?.settings ?: AppSettings() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val library: StateFlow<List<LibraryItem>> = graph.library.items
+
+    /** The person's calls still waiting for Keep or Discard on any device (since 2.0.0-p): Needs you lists them. */
+    val libraryWaiting: StateFlow<List<LibraryItem>> = graph.library.waiting
     val helper: StateFlow<HelperConnection.State> = graph.helper.state
 
     private val _pending = MutableStateFlow<List<LocalRecording>>(emptyList())
@@ -126,9 +129,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // My views are the account's own (the server, the email and the workspace), as this sign-in's account read
         // says (confirmViews). Until it has, only this sign-in's remembered copy shows, and nothing is sent or read.
         viewModelScope.launch {
-            graph.settings.settings.map { it.deviceId }.distinctUntilChanged().collect { device ->
-                graph.views.use(graph.views.lastAccount(device), confirmed = false)
-            }
+            graph.settings.settings.map { com.echoledger.mobile.data.SavedViewsRepository.signIn(it) }.distinctUntilChanged()
+                .collect { signIn -> graph.views.use(graph.views.lastAccount(signIn), confirmed = false) }
         }
     }
 
@@ -161,16 +163,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Whose My views are, from this sign-in's own account read (`GET /api/account`: the email and the workspace), never
-     * from what the settings kept of an earlier sign-in. Asked once a sign-in, until it answers.
+     * from what the settings kept of an earlier sign-in. Asked once a sign-in, until it answers. An answer for an
+     * earlier sign-in (read with its token, still on its way when the next one began) confirms nothing.
      */
     private suspend fun confirmViews() {
-        val device = graph.settings.current().deviceId ?: return
-        if (graph.views.confirmedFor(device)) return
-        val server = graph.settings.current().serverUrl
+        val before = graph.settings.current()
+        val signIn = com.echoledger.mobile.data.SavedViewsRepository.signIn(before) ?: return
+        if (graph.views.confirmedFor(signIn)) return
         val answer = withContext(Dispatchers.IO) { graph.api()?.account() } ?: return
-        val key = com.echoledger.mobile.data.SavedViewsRepository.accountKey(server, answer.email, answer.workspace?.id) ?: return
-        // Still the same sign-in (not signed out, nor someone else, while it was read).
-        if (graph.settings.current().deviceId == device) graph.views.confirm(device, key)
+        val key = com.echoledger.mobile.data.SavedViewsRepository.accountKey(before.serverUrl, answer.email, answer.workspace?.id) ?: return
+        if (com.echoledger.mobile.data.SavedViewsRepository.signIn(graph.settings.current()) == signIn) graph.views.confirm(signIn, key)
     }
 
     /** Since v1.5: the website build's own updates (the Google Play build always stays idle). */
@@ -259,6 +261,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         graph.invalidateApi()
+        // A new sign-in, counted once its token is the one in use: an account read made with the token before it
+        // confirms nothing for this one (confirmViews).
+        graph.settings.update { it.copy(signIns = it.signIns + 1) }
         // Since v1.5: whose account this is (the typed email, else the server's answer; an older server has none), and
         // recordings made under another account wait for it instead of uploading into this one.
         val known = email ?: withContext(Dispatchers.IO) { runCatching { graph.api()?.account()?.email }.getOrNull() }
@@ -571,7 +576,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
-        if (runCatching { graph.library.refresh() }.isSuccess) syncViews()
+        if (runCatching { graph.library.refresh() }.isSuccess) {
+            runCatching { graph.library.refreshWaiting() }
+            syncViews()
+        }
         // Since v1.6: the widget's "Transcribing · part 2 of 3" moves with the app's.
         WidgetStateStore.refresh(getApplication())
     }
@@ -618,6 +626,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
                 }
                 graph.library.refresh()
+                // The calls waiting for Keep or Discard on any device, which the sync leaves out (Needs you lists them).
+                runCatching { graph.library.refreshWaiting() }
                 syncViews()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())

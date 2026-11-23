@@ -213,6 +213,46 @@ class LibraryRepositoryTest : AppTest() {
     }
 
     /**
+     * The calls still waiting for Keep or Discard (status recording), which a sync leaves out, are read beside it with
+     * `status=recording`, every page, in place of the ones before; they are kept in the cache and go on sign-out.
+     */
+    @Test
+    fun `the waiting calls are read with status recording and replace the ones before`() = runBlocking {
+        val repo = repository()
+        fun waitingItem(id: String) = ServerFixtures.libraryItem(id, title = "Waiting $id", status = "recording", finalStatus = null)
+        server.on("GET", "/api/library") { req ->
+            when {
+                req.url.queryParameter("status") != "recording" -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"))))
+
+                req.url.queryParameter(
+                    "cursor"
+                ) == null -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingItem("w1")), "page2"))
+
+                else -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingItem("w2"))))
+            }
+        }
+        repo.refresh()
+        repo.refreshWaiting()
+        assertEquals(listOf("a"), repo.items.value.map { it.id })
+        assertEquals(listOf("w1", "w2"), repo.waiting.value.map { it.id })
+        assertNull(libraryRequests().last().url.queryParameter("since"))
+        assertEquals(listOf("w1", "w2"), repository().waiting.value.map { it.id })
+        // Decided since: the next read has none, and none stays.
+        server.on("GET", "/api/library") { req ->
+            if (req.url.queryParameter("status") == "recording") {
+                FakeServer.json(200, ServerFixtures.libraryPage(emptyList()))
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"))))
+            }
+        }
+        repo.refreshWaiting()
+        assertTrue(repo.waiting.value.isEmpty())
+        repo.refreshWaiting()
+        repo.clear()
+        assertTrue(repository().waiting.value.isEmpty())
+    }
+
+    /**
      * Contract 2.0.0-p: items carry ended_at, facets and processing_since, which a cache kept before has none of. Such a
      * cache still shows at once; its next sync reads the whole library (no since) and replaces it, then syncs as before.
      */

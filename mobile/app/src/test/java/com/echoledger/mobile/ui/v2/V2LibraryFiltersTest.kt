@@ -56,6 +56,10 @@ import org.junit.Test
  * in Urdu, right to left.
  */
 class V2LibraryFiltersTest : ScreenTest() {
+    private companion object {
+        const val RECORDING = "\"status\":\"recording\""
+    }
+
     private val now: ZonedDateTime by lazy { ZonedDateTime.now() }
     private val today: String by lazy {
         minOf(now, now.toLocalDate().atStartOfDay(now.zone).plusMinutes(1)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
@@ -75,22 +79,14 @@ class V2LibraryFiltersTest : ScreenTest() {
     ) {
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
-        server.on(
-            "GET",
-            "/api/library",
-            FakeServer.json(
-                200,
-                ServerFixtures.libraryPage(
-                    listOf(
-                        row("01JA", "Rec Alpha", "whatsapp", "\"labels\":[\"Clients\"],\"opened\":false", today),
-                        row("01JB", "Rec Bravo", "zoom", "\"labels\":[],\"opened\":true,\"important\":true"),
-                        row("01JC", "Rec Charlie", "voice_note", "\"labels\":[],\"opened\":true", today),
-                        row("01JD", "Rec Delta", "skype", "\"labels\":[\"Clients\"],\"opened\":false"),
-                        row("01JE", "Rec Echo", "slack", "\"labels\":[],\"opened\":true,\"pinned\":true")
-                    ) + more
-                ).replace("\"server_time\"", "\"views_version\":3,\"server_time\"")
-            )
-        )
+        val rows = listOf(
+            row("01JA", "Rec Alpha", "whatsapp", "\"labels\":[\"Clients\"],\"opened\":false", today),
+            row("01JB", "Rec Bravo", "zoom", "\"labels\":[],\"opened\":true,\"important\":true"),
+            row("01JC", "Rec Charlie", "voice_note", "\"labels\":[],\"opened\":true", today),
+            row("01JD", "Rec Delta", "skype", "\"labels\":[\"Clients\"],\"opened\":false"),
+            row("01JE", "Rec Echo", "slack", "\"labels\":[],\"opened\":true,\"pinned\":true")
+        ) + more
+        server.on("GET", "/api/library") { req -> FakeServer.json(200, library(rows, req)) }
         server.on(
             "GET",
             "/api/lists",
@@ -101,7 +97,10 @@ class V2LibraryFiltersTest : ScreenTest() {
         // Whose views: this sign-in's account read (the email and the workspace).
         server.on("GET", "/api/account", FakeServer.json(200, """{"email":"asad@example.com","workspace":{"id":7,"name":"Bilal"}}"""))
         vm.refreshQuietly()
-        pumpUntil("the account's views") { vm.savedViewsReady.value && vm.library.value.size == 5 + more.size }
+        val waiting = rows.count { it.contains(RECORDING) }
+        pumpUntil("the account's views") {
+            vm.savedViewsReady.value && vm.library.value.size == rows.size - waiting && vm.libraryWaiting.value.size == waiting
+        }
         show {
             EchoV2Theme(darkTheme = false, language = language) {
                 val toasts = rememberEchoToastState()
@@ -123,6 +122,22 @@ class V2LibraryFiltersTest : ScreenTest() {
             }
         }
         pumpUntil("the library") { compose.onAllNodesWithText("Rec ", substring = true).fetchSemanticsNodes().size >= 5 }
+    }
+
+    /**
+     * `GET /api/library` as LibraryController answers it: a session still `recording` (a call waiting for Keep or
+     * Discard) only when `status`, `view=waiting` or `view=needs_you` asks for it; `status` keeps that status only.
+     */
+    private fun library(rows: List<String>, req: mockwebserver3.RecordedRequest): String {
+        val status = req.url.queryParameter("status")
+        val waitingToo = req.url.queryParameter("view") in setOf("waiting", "needs_you")
+        val kept = rows.filter { r ->
+            when {
+                status != null -> r.contains("\"status\":\"$status\"")
+                else -> waitingToo || !r.contains(RECORDING)
+            }
+        }
+        return ServerFixtures.libraryPage(kept).replace("\"server_time\"", "\"views_version\":3,\"server_time\"")
     }
 
     private fun shown(vararg titles: String) {

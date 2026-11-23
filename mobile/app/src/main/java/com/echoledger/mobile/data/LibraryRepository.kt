@@ -22,7 +22,12 @@ class LibraryRepository(
      * none of them, so its next sync reads the whole library again (and replaces it) instead of only what changed.
      */
     @Serializable
-    private data class Cache(val since: String? = null, val items: List<LibraryItem> = emptyList(), val format: Int = 1)
+    private data class Cache(
+        val since: String? = null,
+        val items: List<LibraryItem> = emptyList(),
+        val format: Int = 1,
+        val waiting: List<LibraryItem> = emptyList()
+    )
 
     private val file = File(context.noBackupFilesDir, "library.bin")
     private val lock = Mutex()
@@ -32,6 +37,14 @@ class LibraryRepository(
     private var stale = false
     private val _items = MutableStateFlow(emptyList<LibraryItem>())
     val items: StateFlow<List<LibraryItem>> = _items
+
+    private val _waiting = MutableStateFlow(emptyList<LibraryItem>())
+
+    /**
+     * The person's calls still waiting for Keep or Discard (session `recording`) on any device, which the sync leaves out
+     * (contract 2.0.0-p): Needs you lists them. Read whole each time ([refreshWaiting]).
+     */
+    val waiting: StateFlow<List<LibraryItem>> = _waiting
 
     private val _viewsVersion = MutableStateFlow<Long?>(null)
 
@@ -43,6 +56,7 @@ class LibraryRepository(
             stale = it.format < FORMAT
             since = it.since.takeUnless { _ -> stale }
             _items.value = it.items
+            _waiting.value = it.waiting
         }
     }
 
@@ -68,6 +82,24 @@ class LibraryRepository(
         _items.value = current
         save(Cache(since, current))
         changed
+    }
+
+    /**
+     * The calls still waiting for Keep or Discard (`GET /api/library?status=recording`, every page), in place of the
+     * ones read before. Throws like [refresh] when the server can't be reached; the last ones stay.
+     */
+    suspend fun refreshWaiting() = lock.withLock {
+        val client = api() ?: return@withLock
+        val found = mutableListOf<LibraryItem>()
+        var cursor: String? = null
+        var pages = 0
+        do {
+            val page = client.library(since = null, cursor = cursor, status = "recording")
+            found += page.data.filter { !it.deleted && it.status == "recording" }
+            cursor = page.nextCursor?.takeIf { it != cursor }
+        } while (cursor != null && ++pages < MAX_WAITING_PAGES)
+        _waiting.value = found.distinctBy { it.id }
+        save(Cache(since, _items.value))
     }
 
     /** Marks [id] opened here at once (the dot goes away before the server hears of it). */
@@ -108,6 +140,7 @@ class LibraryRepository(
         since = null
         stale = false
         _items.value = emptyList()
+        _waiting.value = emptyList()
         _viewsVersion.value = null
         file.delete()
     }
@@ -119,7 +152,7 @@ class LibraryRepository(
 
     /** Keeps [cache] in the current format (still the old one while a whole read is owed). */
     private fun save(cache: Cache) {
-        val kept = cache.copy(format = if (stale) 1 else FORMAT)
+        val kept = cache.copy(format = if (stale) 1 else FORMAT, waiting = _waiting.value)
         val enc = cipher.encrypt(ApiJson.encodeToString(Cache.serializer(), kept).toByteArray(), CONTEXT)
         val tmp = File(file.parentFile, "library.bin.tmp")
         tmp.writeBytes(enc)
@@ -131,6 +164,9 @@ class LibraryRepository(
 
         /** The cache's format: 2 since 2.0.0-p (see [Cache]). */
         private const val FORMAT = 2
+
+        /** Waiting calls are a few: at most this many pages of them are read. */
+        private const val MAX_WAITING_PAGES = 10
 
         /** Pure merge (unit-tested): tombstones remove, newer versions replace, unknown items insert. */
         fun merge(existing: List<LibraryItem>, incoming: List<LibraryItem>): List<LibraryItem> {

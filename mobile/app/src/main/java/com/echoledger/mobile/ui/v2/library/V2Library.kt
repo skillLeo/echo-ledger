@@ -244,8 +244,15 @@ fun V2LibraryScreen(
     // The person's projects as a tree; one a recording is in that the list doesn't have yet (offline) is offered too.
     val projects = remember(clients, library) { LibraryScreenState.projects(clients, library) }
     // Every rule of contract 2.0.0-p worked out here, from the synced library (LibraryFacets): instant and offline.
-    val facts = remember(library, projects, text) {
-        LibraryFacets.prepare(library, projects, now.zone, now.toInstant()) { LibraryScreenState.shownTitle(it, text) }
+    val waitingCalls by vm.libraryWaiting.collectAsState()
+    val facts = remember(library, waitingCalls, projects, text) {
+        LibraryFacets.prepare(LibraryScreenState.withWaiting(library, waitingCalls), projects, now.zone, now.toInstant()) {
+            LibraryScreenState.shownTitle(it, text)
+        }
+    }
+    // This phone's own that need the person (each by every reference the server may know it by).
+    val localNeeds = remember(pending, now) {
+        pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }.map { LibraryScreenState.refs(it) }
     }
     val words = remember(query) { LibraryFacets.searchWords(query) }
     val searched = remember(facts, words) { facts.filter { it.matches(words) } }
@@ -253,7 +260,7 @@ fun V2LibraryScreen(
     val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
     val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.source) } } }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.source) } }
-    val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
+    val waiting = remember(facts, target, localNeeds) { LibraryScreenState.waiting(facts, target, localNeeds) }
     val visible = remember(filtered, kind, choice, settings.libraryOpened, waiting) {
         com.echoledger.mobile.core.LibraryQuery.apply(
             (filtered.filter { kind.holds(it.source) } + waiting).map { it.item },
@@ -289,13 +296,8 @@ fun V2LibraryScreen(
     val res0 = androidx.compose.ui.platform.LocalContext.current.resources
     val filterWords = remember(res0, locale, clients, lists, library) { LibraryScreenState.words(res0, locale, clients, lists, library) }
     val depth = remember(projects) { LibraryFacets.depth(projects) }
-    val placeCounts = remember(facts, pending, now) {
-        LibraryFacets.placeCounts(facts) + (
-            LibraryPlace.NEEDS_YOU to LibraryFacets.needsYouCount(
-                facts,
-                pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }.map { it.clientRef ?: it.id }
-            )
-            )
+    val placeCounts = remember(facts, localNeeds) {
+        LibraryFacets.placeCounts(facts) + (LibraryPlace.NEEDS_YOU to LibraryFacets.needsYouCount(facts, localNeeds))
     }
     val labelCounts = remember(facts) { LibraryScreenState.labelCounts(facts) }
     val openView = (target as? LibraryTarget.View)?.let { t -> savedViews.firstOrNull { it.id == t.id } }

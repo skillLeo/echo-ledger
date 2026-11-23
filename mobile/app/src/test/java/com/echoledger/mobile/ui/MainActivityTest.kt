@@ -452,7 +452,10 @@ class MainActivityTest : AppTest() {
         awaitText("Weekly sync")
         compose.waitForIdle()
 
-        assertEquals(1, server.requestsTo("GET", "/api/library").size)
+        // One sync (the waiting calls, which it leaves out, are read beside it once too).
+        val reads = server.requestsTo("GET", "/api/library")
+        assertEquals(1, reads.count { it.url.queryParameter("status") == null })
+        assertEquals(1, reads.count { it.url.queryParameter("status") == "recording" })
     }
 
     // ---- what the launching intent asks for ------------------------------------------------------------------------------------

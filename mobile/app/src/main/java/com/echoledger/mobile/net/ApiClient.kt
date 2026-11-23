@@ -558,9 +558,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$sessionId/transcripts").post(body).build(), null as KSerializer<Unit>?)
     }
 
-    suspend fun library(since: String?, cursor: String?): LibraryResponse {
+    /** `GET /api/library`; [status] `recording` lists the calls still waiting for Keep or Discard, which a sync leaves out. */
+    suspend fun library(since: String?, cursor: String?, status: String? = null): LibraryResponse {
         val builder = url("library").toHttpUrl().newBuilder().addQueryParameter("limit", "100")
         since?.let { builder.addQueryParameter("since", it) }
+        status?.let { builder.addQueryParameter("status", it) }
         cursor?.let { builder.addQueryParameter("cursor", it) }
         val req = Request.Builder().url(builder.build()).header("Accept", "application/json")
             .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()

@@ -515,13 +515,14 @@ object LibraryFacets {
     }
 
     /**
-     * Needs you's count on this phone: the synced recordings that need the person, plus its own ones the server can't
-     * know ([local]: calls waiting on the card or Choose again, uploads that failed or are stuck here), each once
-     * ([localRefs] are their references; one the server already has, by `client_ref`, is counted there).
+     * Needs you's count on this phone: the synced recordings that need the person (the server's calls still waiting
+     * too), plus its own ones the server can't know ([local]: calls waiting on the card or Choose again, uploads that
+     * failed or are stuck here), each once: [local] gives each one's references (its id, its `client_ref`, its server
+     * session); one the server already has, by any of them, is counted there.
      */
-    fun needsYouCount(facts: List<LibraryFacts>, local: Collection<String>): Int {
+    fun needsYouCount(facts: List<LibraryFacts>, local: Collection<Set<String>>): Int {
         val known = facts.mapNotNull { it.item.clientRef }.toSet() + facts.map { it.item.id }.toSet()
-        return facts.count { it.needs != null } + local.count { it !in known }
+        return facts.count { it.needs != null } + local.count { refs -> refs.none { it in known } }
     }
 }
 

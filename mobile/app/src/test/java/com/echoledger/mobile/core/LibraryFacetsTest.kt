@@ -165,8 +165,9 @@ class LibraryFacetsTest {
             zone,
             now
         )
-        // Its own: a call waiting here (ref-9), and an upload that failed here whose recording the server has (ref-1).
-        assertEquals(2, LibraryFacets.needsYouCount(facts, listOf("ref-9", "ref-1")))
+        // Its own: a call waiting here (ref-9), an upload that failed here whose recording the server has (ref-1), and a
+        // call waiting here whose open session the server lists (its server id 02).
+        assertEquals(2, LibraryFacets.needsYouCount(facts, listOf(setOf("r-9", "ref-9"), setOf("r-1", "ref-1"), setOf("r-2", "02"))))
     }
 
     @Test
