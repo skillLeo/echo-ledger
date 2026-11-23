@@ -1142,7 +1142,7 @@ export default function MainApp() {
           <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
         </Suspense>
       )}
-      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
+      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>

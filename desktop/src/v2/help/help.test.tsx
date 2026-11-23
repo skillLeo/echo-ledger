@@ -309,3 +309,23 @@ describe("Help › Shortcuts and Settings › Keyboard shortcuts follow the layo
     expect(list.getByText("Hide or show the panel")).toBeInTheDocument();
   });
 });
+
+describe("the older Help sheet (? when the new Help can't be reached) follows the layout too", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+  });
+
+  it("with the three levels it lists the panel's keys, not the sidebar's [", async () => {
+    const { HelpDialog } = await import("../../views/main/HelpDialog");
+    const { unmount } = render(<HelpDialog platform="windows" threeLevels onClose={() => undefined} onSettings={() => undefined} />);
+    await act(flushAsync);
+    expect(screen.queryByText("Collapse or expand the sidebar")).toBeNull();
+    expect(screen.getByText("Hide or show the panel")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+1 … Ctrl+6")).toBeInTheDocument();
+    unmount();
+    render(<HelpDialog platform="windows" onClose={() => undefined} onSettings={() => undefined} />);
+    await act(flushAsync);
+    expect(screen.getByText("Collapse or expand the sidebar")).toBeInTheDocument();
+  });
+});

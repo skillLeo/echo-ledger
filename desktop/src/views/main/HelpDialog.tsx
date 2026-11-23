@@ -56,7 +56,11 @@ export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = 
 /** How to get a screenshot of EchoLedger and what to send for support (D-125). */
 export const CAPTURE_HELP = "While EchoLedger hides from screen shares it is hidden from screenshots too: turn on Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support (both in Settings › Screen-share privacy).";
 
-export function HelpDialog({ platform, onClose, onSettings }: { platform: string; onClose: () => void; onSettings: (page: string) => void }) {
+export function HelpDialog({ platform, onClose, onSettings, threeLevels = false }: {
+  platform: string; onClose: () => void; onSettings: (page: string) => void;
+  /** The rail · panel · page layout: its keys in place of the sidebar's "[". */
+  threeLevels?: boolean;
+}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   useEffect(() => {
     api.settings().then(setSettings).catch(() => undefined);
@@ -70,7 +74,7 @@ export function HelpDialog({ platform, onClose, onSettings }: { platform: string
       <div className="help-body">
         <h3 className="help-head">In this window</h3>
         <dl className="key-list">
-          {windowKeys(platform).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
+          {windowKeys(platform, threeLevels).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
         </dl>
         <h3 className="help-head">Anywhere on this computer</h3>
         <dl className="key-list">
