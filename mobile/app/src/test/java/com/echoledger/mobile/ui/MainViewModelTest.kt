@@ -664,4 +664,24 @@ class MainViewModelTest : AppTest() {
         assertNull(runBlocking { vm.makeNotes("s1", "en") })
         assertEquals("The AI assistant is not set up on the server yet.", vm.message.value)
     }
+
+    /**
+     * The live status asks every 5 s while something moves (refreshQuietly): the waiting calls are read with it at
+     * most every 30 s, and with every full sync.
+     */
+    @Test
+    fun `the live status reads the waiting calls at most every 30 seconds`() {
+        pairLocally()
+        serveLibrary()
+        fun waitingReads() = server.requestsTo("GET", "/api/library").count { it.url.queryParameter("status") == "recording" }
+        fun quietly() = vm.refreshQuietly().let { job -> pumpUntil("the live status") { job.isCompleted } }
+        quietly()
+        quietly()
+        assertEquals(1, waitingReads())
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(31))
+        quietly()
+        assertEquals(2, waitingReads())
+        syncNow()
+        pumpUntil("the full sync's read") { waitingReads() == 3 }
+    }
 }

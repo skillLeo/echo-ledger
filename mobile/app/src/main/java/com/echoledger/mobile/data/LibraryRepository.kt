@@ -86,10 +86,12 @@ class LibraryRepository(
 
     /**
      * The calls still waiting for Keep or Discard (`GET /api/library?status=recording`, every page), in place of the
-     * ones read before. Throws like [refresh] when the server can't be reached; the last ones stay.
+     * ones read before. Read without the library's lock (a tap marking a recording opened never waits for it), and
+     * kept (the cache written) only when they changed. Throws like [refresh] when the server can't be reached; the
+     * last ones stay.
      */
-    suspend fun refreshWaiting() = lock.withLock {
-        val client = api() ?: return@withLock
+    suspend fun refreshWaiting() {
+        val client = api() ?: return
         val found = mutableListOf<LibraryItem>()
         var cursor: String? = null
         var pages = 0
@@ -98,8 +100,12 @@ class LibraryRepository(
             found += page.data.filter { !it.deleted && it.status == "recording" }
             cursor = page.nextCursor?.takeIf { it != cursor }
         } while (cursor != null && ++pages < MAX_WAITING_PAGES)
-        _waiting.value = found.distinctBy { it.id }
-        save(Cache(since, _items.value))
+        val next = found.distinctBy { it.id }
+        lock.withLock {
+            if (next == _waiting.value) return
+            _waiting.value = next
+            save(Cache(since, _items.value))
+        }
     }
 
     /** Marks [id] opened here at once (the dot goes away before the server hears of it). */

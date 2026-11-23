@@ -245,8 +245,10 @@ fun V2LibraryScreen(
     val projects = remember(clients, library) { LibraryScreenState.projects(clients, library) }
     // Every rule of contract 2.0.0-p worked out here, from the synced library (LibraryFacets): instant and offline.
     val waitingCalls by vm.libraryWaiting.collectAsState()
-    val facts = remember(library, waitingCalls, projects, text) {
-        LibraryFacets.prepare(LibraryScreenState.withWaiting(library, waitingCalls), projects, now.zone, now.toInstant()) {
+    // Every recording still on this phone, as the server may know it (a waiting call of its own is never twice).
+    val own = remember(pending) { pending.map { LibraryScreenState.refs(it) } }
+    val facts = remember(library, waitingCalls, own, projects, text) {
+        LibraryFacets.prepare(LibraryScreenState.withWaiting(library, waitingCalls, own), projects, now.zone, now.toInstant()) {
             LibraryScreenState.shownTitle(it, text)
         }
     }
@@ -260,7 +262,7 @@ fun V2LibraryScreen(
     val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
     val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.source) } } }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.source) } }
-    val waiting = remember(facts, target, localNeeds) { LibraryScreenState.waiting(facts, target, localNeeds) }
+    val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
     val visible = remember(filtered, kind, choice, settings.libraryOpened, waiting) {
         com.echoledger.mobile.core.LibraryQuery.apply(
             (filtered.filter { kind.holds(it.source) } + waiting).map { it.item },

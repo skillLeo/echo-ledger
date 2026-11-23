@@ -77,6 +77,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The person's calls still waiting for Keep or Discard on any device (since 2.0.0-p): Needs you lists them. */
     val libraryWaiting: StateFlow<List<LibraryItem>> = graph.library.waiting
+
+    /** When [refreshQuietly] last read the waiting calls (elapsed realtime); null before it has. */
+    @Volatile private var waitingReadAt: Long? = null
     val helper: StateFlow<HelperConnection.State> = graph.helper.state
 
     private val _pending = MutableStateFlow<List<LocalRecording>>(emptyList())
@@ -242,8 +245,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         email: String? = null
     ) {
         val previous = graph.settings.current().let { it.account ?: it.serverUrl?.let { url -> Owner.of(url, null) } }
-        // A new sign-in shows no one's views until its own account read says whose they are (confirmViews).
+        // A new sign-in shows no one's views until its own account read says whose they are (confirmViews), and is
+        // counted before its token is saved: an account read of the sign-in before it, landing from now on, confirms
+        // nothing. Counted again once the new token is in use (below).
         graph.views.use(null)
+        graph.settings.update { it.copy(signIns = it.signIns + 1) }
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {
@@ -261,8 +267,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         graph.invalidateApi()
-        // A new sign-in, counted once its token is the one in use: an account read made with the token before it
-        // confirms nothing for this one (confirmViews).
+        // Counted again once its token is the one in use: a read begun between the two counts (with the token before
+        // it, the client not renewed yet) confirms nothing either (confirmViews).
         graph.settings.update { it.copy(signIns = it.signIns + 1) }
         // Since v1.5: whose account this is (the typed email, else the server's answer; an older server has none), and
         // recordings made under another account wait for it instead of uploading into this one.
@@ -577,7 +583,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
         if (runCatching { graph.library.refresh() }.isSuccess) {
-            runCatching { graph.library.refreshWaiting() }
+            // The live status asks every 5 s while something moves: the waiting calls at most every 30 s of it.
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (waitingReadAt.let { it == null || now - it >= WAITING_EVERY_MS }) {
+                waitingReadAt = now
+                runCatching { graph.library.refreshWaiting() }
+            }
             syncViews()
         }
         // Since v1.6: the widget's "Transcribing · part 2 of 3" moves with the app's.
@@ -627,6 +638,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 graph.library.refresh()
                 // The calls waiting for Keep or Discard on any device, which the sync leaves out (Needs you lists them).
+                waitingReadAt = android.os.SystemClock.elapsedRealtime()
                 runCatching { graph.library.refreshWaiting() }
                 syncViews()
             }
@@ -2096,6 +2108,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** How often the live status reads the waiting calls at most. */
+        const val WAITING_EVERY_MS = 30_000L
+
         /** Recordings remembered for Sort by Recently opened. */
         private const val OPENED_KEEP = 300
 

@@ -83,20 +83,21 @@ object LibraryScreenState {
      * The calls still waiting for Keep or Discard on the server: Needs you always lists them, whatever the filters, the
      * tab and the search (as the server's `view=needs_you` keeps them), and they are counted only in Needs you itself.
      */
-    fun waiting(facts: List<LibraryFacts>, target: LibraryTarget, local: Collection<Set<String>> = emptyList()): List<LibraryFacts> {
-        if (target != LibraryTarget.Place(LibraryPlace.NEEDS_YOU)) return emptyList()
-        // One waiting on this phone's own card is its row there (with what to do), not twice.
-        val here = local.flatten().toSet()
-        return facts.filter { it.waiting && it.item.id !in here && it.item.clientRef !in here }
-    }
+    fun waiting(facts: List<LibraryFacts>, target: LibraryTarget): List<LibraryFacts> =
+        if (target == LibraryTarget.Place(LibraryPlace.NEEDS_YOU)) facts.filter { it.waiting } else emptyList()
 
     /** A recording of this phone's own as the server may know it: its id, its `client_ref` and its server sessions. */
     fun refs(rec: LocalRecording): Set<String> = setOfNotNull(rec.id, rec.clientRef, rec.serverSessionId, rec.serverCopy)
 
-    /** The library with the server's waiting calls (the sync leaves them out), each recording once. */
-    fun withWaiting(library: List<LibraryItem>, waiting: List<LibraryItem>): List<LibraryItem> {
+    /**
+     * The library with the server's waiting calls (the sync leaves them out), each recording once. A waiting call that
+     * is one of this phone's own ([own]: every recording still on it, by [refs]) is left out: here it is waiting on
+     * the card (its own row, counted there), or already decided and on its way (offline, the server not told yet).
+     */
+    fun withWaiting(library: List<LibraryItem>, waiting: List<LibraryItem>, own: Collection<Set<String>> = emptyList()): List<LibraryItem> {
         val ids = library.mapTo(HashSet()) { it.id }
-        return library + waiting.filter { it.id !in ids }
+        val here = own.flatten().toSet()
+        return library + waiting.filter { it.id !in ids && it.id !in here && it.clientRef !in here }
     }
 
     /** How many recordings carry each label (by its key), as the title menu counts them. */

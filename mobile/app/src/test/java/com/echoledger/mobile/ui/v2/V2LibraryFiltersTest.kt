@@ -260,6 +260,44 @@ class V2LibraryFiltersTest : ScreenTest() {
         compose.onAllNodesWithText("Rec Waiting").assertCountEquals(0)
     }
 
+    /**
+     * A call the server still lists as waiting, already decided on this phone (Transcribe: queued to upload) while the
+     * phone is offline, so the server isn't told yet: it is this phone's own, shown as its upload row in All
+     * recordings, and neither listed nor counted in Needs you.
+     */
+    @Test
+    fun aCallDecidedHereWhileOfflineIsNotWaitingInNeedsYou() {
+        seed(
+            more = listOf(
+                ServerFixtures.libraryItem(
+                    "01JW",
+                    title = "Rec Waiting",
+                    sourceApp = "zoom",
+                    status = "recording",
+                    finalStatus = null,
+                    client = null
+                )
+            )
+        )
+        // Decided a moment ago (not stuck: that would be Needs you's own, after 24 hours).
+        val moment = now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val decided = runBlocking { app.storeRecording(id = "r-omar", state = "queued", startedAt = moment, endedAt = moment) }
+        app.graph.recordings.save(decided.copy(serverSessionId = "01JW"))
+        vm.reloadLocal()
+        // Offline from now on: the server's list stays as it was read.
+        server.on("*", ".*", FakeServer.json(503, """{"message":"Maintenance"}"""))
+        vm.refreshQuietly()
+        pumpUntil("its upload row") { compose.onAllNodesWithText("Waiting to upload").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf("01JW"), vm.libraryWaiting.value.map { it.id })
+        tap("All recordings")
+        // Needs you counts nothing (its count of 0 is not shown).
+        compose.onNode(hasContentDescription("Needs you")).assertExists()
+        tapDescribed("Needs you")
+        compose.onNodeWithText("Nothing in Needs you yet").assertExists()
+        compose.onAllNodesWithText("Rec Waiting").assertCountEquals(0)
+        compose.onAllNodesWithText("Waiting: Transcribe or Delete").assertCountEquals(0)
+    }
+
     @Test
     fun theTabsSplitByKindWithCountsAndAndWithTheView() {
         seed()

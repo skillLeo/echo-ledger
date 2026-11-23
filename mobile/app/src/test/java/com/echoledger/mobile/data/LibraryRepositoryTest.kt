@@ -253,6 +253,40 @@ class LibraryRepositoryTest : AppTest() {
     }
 
     /**
+     * The waiting calls are read without the library's lock: a tap marking a recording opened never waits for a slow
+     * read. And an answer with the same calls keeps the cache as it is (it is not encrypted and written again).
+     */
+    @Test
+    fun `a slow waiting read never holds up marking a recording opened and the same calls write nothing`() = runBlocking {
+        val repo = repository()
+        val release = java.util.concurrent.CountDownLatch(1)
+        val asked = java.util.concurrent.atomic.AtomicBoolean(false)
+        val unopened = item("a").replace("\"updated_at\"", "\"opened\":false,\"updated_at\"")
+        val waitingOne = ServerFixtures.libraryItem("w1", title = "Waiting", status = "recording", finalStatus = null)
+        server.on("GET", "/api/library") { req ->
+            if (req.url.queryParameter("status") == "recording") {
+                asked.set(true)
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingOne)))
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(unopened)))
+            }
+        }
+        repo.refresh()
+        val slow = async(kotlinx.coroutines.Dispatchers.IO) { repo.refreshWaiting() }
+        while (!asked.get()) Thread.sleep(5)
+        kotlinx.coroutines.withTimeout(2_000) { repo.markOpenedLocally("a") }
+        assertEquals(true, repo.items.value.single().opened)
+        release.countDown()
+        slow.await()
+        assertEquals(listOf("w1"), repo.waiting.value.map { it.id })
+        // The same calls again: the cache stays as it was (a write seals it anew, with a new nonce).
+        val sealed = cacheFile.readBytes()
+        repo.refreshWaiting()
+        assertTrue(sealed.contentEquals(cacheFile.readBytes()))
+    }
+
+    /**
      * Contract 2.0.0-p: items carry ended_at, facets and processing_since, which a cache kept before has none of. Such a
      * cache still shows at once; its next sync reads the whole library (no since) and replaces it, then syncs as before.
      */

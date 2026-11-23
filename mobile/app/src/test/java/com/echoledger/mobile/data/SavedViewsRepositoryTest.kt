@@ -341,6 +341,59 @@ class SavedViewsRepositoryTest : AppTest() {
     }
 
     /**
+     * The first sign-in's account read (its token) answers just after the second sign-in has saved its token, before
+     * it counts itself the second time: the sign-in was counted before its token was saved, so that answer confirms
+     * nothing either.
+     */
+    @Test
+    fun anOldTokensAnswerLandingAsTheTokenChangesConfirmsNothing() {
+        val tokens = java.util.concurrent.ConcurrentLinkedQueue(listOf("31|eld_tokenws7", "32|eld_tokenws8"))
+        val names = java.util.concurrent.ConcurrentLinkedQueue(listOf("Pixel 9", "Pixel 9b"))
+        server.on("POST", "/api/auth/password") {
+            FakeServer.json(
+                201,
+                com.echoledger.mobile.testsupport.ServerFixtures.registerResponse(token = tokens.remove(), name = names.remove())
+            )
+        }
+        fun bearer(req: mockwebserver3.RecordedRequest) = req.headers["Authorization"].orEmpty()
+        server.on("GET", "/api/library", FakeServer.json(200, com.echoledger.mobile.testsupport.ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, """{"data":[]}"""))
+        val answered7 = java.util.concurrent.atomic.AtomicBoolean(false)
+        server.on("GET", "/api/account") { req ->
+            if (bearer(req).endsWith("tokenws7")) {
+                // Answers once the second sign-in has saved its token and its device (its name is the second one).
+                val deadline = System.nanoTime() + 20_000_000_000L
+                while (System.nanoTime() < deadline &&
+                    runBlocking { app.graph.settings.current().deviceName } != "Pixel 9b"
+                ) {
+                    Thread.sleep(2)
+                }
+                answered7.set(true)
+                FakeServer.json(200, """{"email":"a@example.com","workspace":{"id":7}}""")
+            } else {
+                FakeServer.json(200, """{"email":"a@example.com","workspace":{"id":8}}""")
+            }
+        }
+        server.on("GET", "/api/views") { req ->
+            val ws = if (bearer(req).endsWith("tokenws7")) "7" else "8"
+            FakeServer.json(200, list(4, view("01JV00000000000000000000W$ws", "Workspace $ws view")))
+        }
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
+        pumpUntil("the first account read on its way") {
+            server.requests.any { it.url.encodedPath == "/api/account" && bearer(it).endsWith("tokenws7") }
+        }
+        vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
+        pumpUntil("the first read answered") { answered7.get() }
+        pumpUntil("the second workspace's views") { vm.savedViews.value.map { it.name } == listOf("Workspace 8 view") }
+        com.echoledger.mobile.testsupport.awaitAppIdle()
+        assertEquals(listOf("Workspace 8 view"), vm.savedViews.value.map { it.name })
+        assertTrue(server.requests.none { it.url.encodedPath.startsWith("/api/views") && bearer(it).endsWith("tokenws7") })
+        val signIn = SavedViewsRepository.signIn(runBlocking { app.graph.settings.current() })
+        assertEquals("${server.baseUrl.lowercase()}|a@example.com|8", views.lastAccount(signIn))
+    }
+
+    /**
      * The review's case: A signs out, B signs in on the same phone and B's account can't be read, then A signs in again
      * to the same workspace. The settings still hold A's email and the server during B's sign-in: B's views never go
      * under A's account, nothing is read or sent with B's token before B's account read, and A sees only A's views.
