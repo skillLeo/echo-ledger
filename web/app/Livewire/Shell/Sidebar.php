@@ -22,6 +22,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Livewire\Sidebar as FilamentSidebar;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\View\View as IlluminateView;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Renderless;
 use Throwable;
 
@@ -35,7 +37,11 @@ class Sidebar extends FilamentSidebar
 {
     use DropsRecordings;
 
-    /** The address the page was opened at: the sidebar draws again on its own requests and still marks where you are. */
+    /**
+     * The address the page was opened at: the sidebar draws again on its own requests and still marks where you are.
+     * Locked: only the page sets it (the frame is drawn from the route it names).
+     */
+    #[Locked]
     public ?string $here = null;
 
     public function mount(): void
@@ -43,44 +49,34 @@ class Sidebar extends FilamentSidebar
         $this->here = request()->getRequestUri();
     }
 
-    /** The request of the sidebar's own update while it is drawn for its page (rendering() to rendered()). */
-    private ?Request $updateRequest = null;
-
     /**
      * With the three levels the frame is drawn from the page it is on (its place, its panel, what is chosen there). On
-     * the sidebar's own requests (a view renamed or deleted from the panel, refresh-sidebar) the request is Livewire's
-     * update, not the page: for the time it is drawn, the request is the page's address ($here) again, so the frame
-     * never turns into Home's (the rail alone) after one.
+     * the sidebar's own requests (a view renamed or deleted from the panel, a dialog closed, refresh-sidebar) the
+     * request is Livewire's update, not the page: this is the page's request again ($here, on the same scheme, host and
+     * port, with the same headers, person and session), for the frame's view to be drawn from. Null on the page itself,
+     * without the frame, or when $here names no page of the console.
      */
-    public function rendering(): void
+    private function pageRequest(): ?Request
     {
         $current = request();
-        if (! ConsoleV2::frame() || $this->here === null || $current->getRequestUri() === $this->here) {
-            return;
+        $here = (string) $this->here;
+        if (! ConsoleV2::frame() || $here === '' || $here[0] !== '/' || str_starts_with($here, '//') || $current->getRequestUri() === $here) {
+            return null;
         }
-        $page = Request::create($this->here, 'GET');
+        $page = Request::create($current->getSchemeAndHttpHost().$here, 'GET', [], [], [], $current->server->all());
         try {
             $route = app('router')->getRoutes()->match($page);
         } catch (Throwable) {
-            return;
+            return null;
         }
-        $page->headers->replace($current->headers->all());
         $page->setUserResolver($current->getUserResolver());
         if ($current->hasSession()) {
             $page->setLaravelSession($current->session());
         }
         $route->bind($page);
         $page->setRouteResolver(fn () => $route);
-        $this->updateRequest = $current;
-        app()->instance('request', $page);
-    }
 
-    public function rendered(): void
-    {
-        if ($this->updateRequest !== null) {
-            app()->instance('request', $this->updateRequest);
-            $this->updateRequest = null;
-        }
+        return $page;
     }
 
     /** Since 2.0.0-p: a saved view's ⋯ › Rename. */
@@ -187,10 +183,34 @@ class Sidebar extends FilamentSidebar
     {
         // Since v2.0: the five-module sidebar under ui_v2.shell (the classic one otherwise, unchanged).
         // Since docs/PLAN_NAV_3_LEVELS.md: the rail, the place's panel and the page's tabs with the new frame and Library.
-        return view(match (true) {
+        $view = view(match (true) {
             ConsoleV2::frame() => 'filament.v2.frame',
             ConsoleV2::shell() => 'filament.v2.sidebar',
             default => 'filament.shell.sidebar',
         });
+        $page = $this->pageRequest();
+        if ($page === null) {
+            return $view;
+        }
+
+        // Drawn with the page's request bound, and the update's bound again afterwards, also when drawing fails.
+        return new class($view, $page) extends IlluminateView
+        {
+            public function __construct(IlluminateView $view, private readonly Request $page)
+            {
+                parent::__construct($view->getFactory(), $view->getEngine(), $view->name(), $view->getPath(), $view->getData());
+            }
+
+            public function render(?callable $callback = null): string
+            {
+                $update = app('request');
+                app()->instance('request', $this->page);
+                try {
+                    return parent::render($callback);
+                } finally {
+                    app()->instance('request', $update);
+                }
+            }
+        };
     }
 }
