@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Exceptions\MissingPhpExtension;
 use App\Mail\ServerHealthMail;
+use App\Models\StaffRole;
 use App\Models\User;
 use App\Services\Health\PhpExtensions;
 use App\Services\RecordingCipher;
@@ -71,7 +72,7 @@ describe('the health check', function () {
         Log::shouldNotHaveReceived('critical');
     });
 
-    it('emails the super admins once an hour while it lasts, and at once when it starts again', function () {
+    it('emails the super admins once an hour while it lasts, and no more often when it flaps', function () {
         Mail::fake();
         $admin = Fx::superAdmin();
         $member = User::factory()->create();
@@ -88,11 +89,15 @@ describe('the health check', function () {
         healthCheck();
         Mail::assertSent(ServerHealthMail::class, 2);
 
+        // A pass in between does not open the gate: a check that flaps mails once an hour at most.
         withoutExtensions();
+        healthCheck();
+        withoutExtensions('sodium');
+        $this->travel(5)->minutes();
         healthCheck();
         Mail::assertSent(ServerHealthMail::class, 2);
 
-        withoutExtensions('sodium');
+        $this->travel(56)->minutes();
         healthCheck();
         Mail::assertSent(ServerHealthMail::class, 3);
     });
@@ -116,12 +121,44 @@ describe('the health check', function () {
         expect((string) $this->get('/admin')->assertOk()->getContent())->not->toContain('data-server-health');
     });
 
+    it('shows the banner to super admins only: it names the server\'s internals', function () {
+        withoutExtensions('sodium');
+        healthCheck();
+        $support = Fx::user();
+        $support->forceFill(['staff_role_id' => StaffRole::query()->where('key', 'support')->value('id'), 'app_authentication_secret' => Fx::STAFF_TOTP_SECRET])->save();
+
+        $html = (string) $this->actingAs($support->fresh(), 'web')->get('/admin')->assertOk()->getContent();
+        expect($html)->not->toContain('data-server-health')->not->toContain('sodium');
+        expect((string) $this->actingAs(Fx::superAdmin(), 'web')->get('/admin')->assertOk()->getContent())->toContain('data-server-health');
+    });
+
+    it('fails, and keeps answering everywhere, when the check itself cannot run on an unwritable temp folder', function () {
+        $locked = sys_get_temp_dir().'/el-health-'.bin2hex(random_bytes(6));
+        mkdir($locked, 0500);
+        config(['echoledger.tmp_dir' => $locked.'/tmp']);
+        Log::spy();
+        try {
+            expect(healthCheck())->toBe(1)
+                ->and(Artisan::output())->toContain('Recordings cipher: fails');
+            Log::shouldHaveReceived('critical')->once();
+            expect(Artisan::call('about', ['--only' => 'server_health']))->toBe(0)
+                ->and(Artisan::output())->toContain('fails');
+            $this->getJson('/health/php')->assertStatus(503)->assertExactJson(['ok' => false]);
+            $html = (string) $this->actingAs(Fx::superAdmin(), 'web')->get('/admin')->assertOk()->getContent();
+            expect($html)->toContain('data-server-health')->toContain('Web PHP');
+        } finally {
+            chmod($locked, 0700);
+            @rmdir($locked.'/tmp');
+            rmdir($locked);
+        }
+    });
+
     it('is part of php artisan about', function () {
-        Artisan::call('about', ['--only' => 'echoledger']);
+        Artisan::call('about', ['--only' => 'server_health']);
         expect(Artisan::output())->toContain('PHP extensions')->toContain('Recordings cipher');
 
         withoutExtensions('sodium');
-        Artisan::call('about', ['--only' => 'echoledger']);
+        Artisan::call('about', ['--only' => 'server_health']);
         expect(Artisan::output())->toContain('missing: sodium');
     });
 

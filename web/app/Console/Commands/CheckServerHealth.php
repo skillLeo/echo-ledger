@@ -16,7 +16,8 @@ use Throwable;
 /**
  * Whether this PHP has every extension the server needs and can encrypt and decrypt a recording (W-INC-1124). Exits 1
  * when not, for deploy/check-php.sh. The scheduler runs it with --report every five minutes: a failure writes one
- * critical log line, stays on the admin dashboard until a check passes, and emails the super admins once an hour.
+ * critical log line, stays on the admin dashboard until a check passes, and emails the super admins at most once an
+ * hour, also when it flaps.
  */
 final class CheckServerHealth extends Command
 {
@@ -66,11 +67,11 @@ final class CheckServerHealth extends Command
         });
     }
 
+    /** The hour since the last email stays: a check that flaps between failing and passing mails once an hour at most. */
     private function clear(): void
     {
         if (Cache::pull(ServerHealth::SCHEDULED) !== null) {
             Log::info('Server health check passes again.');
         }
-        Cache::forget(ServerHealth::MAILED);
     }
 }

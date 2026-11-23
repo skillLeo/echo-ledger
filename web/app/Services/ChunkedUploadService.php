@@ -220,6 +220,21 @@ final class ChunkedUploadService
     public const NOT_FINISHED = 'Upload could not be finished. Send the file again.';
 
     /**
+     * How long the parts are kept for another try after a fault of the server (W-INC-1124): until 48 hours after
+     * `complete`, or 8 rounds of recordings:recover, whichever comes first. The rounds wait 15 minutes, then twice as
+     * long each time up to 8 hours (15 m, 30 m, 1 h, 2 h, 4 h, 8 h, 8 h, 8 h: about 32 hours for all eight), so an
+     * outage of hours is waited out, and a fault that never clears costs at most 8 tries before the device is asked
+     * for the file again.
+     */
+    public const KEEP_PARTS_HOURS = 48;
+
+    public const RECOVERY_ROUNDS = 8;
+
+    public const FIRST_ROUND_MINUTES = 15;
+
+    public const LONGEST_ROUND_MINUTES = 480;
+
+    /**
      * Idempotent `complete`: a repeat while assembling or after a failure (before new chunks arrive) gives the same
      * answer again.
      */
@@ -233,7 +248,7 @@ final class ChunkedUploadService
         if ($missing !== []) {
             return CompleteOutcome::incomplete($missing);
         }
-        $recording->update(['upload_status' => UploadStatus::Assembling]);
+        $recording->update(['upload_status' => UploadStatus::Assembling, 'assembling_since' => now(), 'recovery_rounds' => 0]);
 
         $queued = true;
         if ($recording->declared_size_bytes <= self::SYNC_ASSEMBLE_MAX_BYTES) {
@@ -322,6 +337,19 @@ final class ChunkedUploadService
             }
             @unlink($plainPath);
         }
+    }
+
+    /** Whether a recording kept after a fault of the server has had its tries (KEEP_PARTS_HOURS, RECOVERY_ROUNDS). */
+    public function pastKeeping(Recording $recording): bool
+    {
+        return (int) $recording->recovery_rounds >= self::RECOVERY_ROUNDS
+            || ($recording->assembling_since !== null && $recording->assembling_since->lt(now()->subHours(self::KEEP_PARTS_HOURS)));
+    }
+
+    /** How long recordings:recover waits since the last try before the next round: 15 minutes, doubling up to 8 hours. */
+    public static function roundWaitMinutes(int $rounds): int
+    {
+        return min(self::LONGEST_ROUND_MINUTES, self::FIRST_ROUND_MINUTES * 2 ** min(max(0, $rounds), 6));
     }
 
     /** Whether a part is missing, as one listing says; a listing that fails says nothing, so it answers false. */

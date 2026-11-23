@@ -94,7 +94,8 @@ final class AssembleRecordingJob implements ShouldQueue
      * never to the device. Any other fault is the server's (a missing PHP extension, an error in the code, a disk or
      * bucket that fails): the parts stay and the recording stays `assembling`, so recordings:recover or a retry of
      * this job finishes it once the server is fixed, with no new upload (W-INC-1124: a hosting change took sodium out
-     * of PHP, and six recordings were thrown away here).
+     * of PHP, and six recordings were thrown away here). Only for so long: past ChunkedUploadService::pastKeeping
+     * (48 hours after `complete`, or 8 recovery rounds) the parts go after all, and the device sends the file again.
      */
     public function failed(?Throwable $exception): void
     {
@@ -102,13 +103,14 @@ final class AssembleRecordingJob implements ShouldQueue
         if ($recording === null || $recording->upload_status !== UploadStatus::Assembling) {
             return;
         }
-        if ($exception instanceof AssemblyDataFault) {
-            app(ChunkedUploadService::class)->discard($recording, ChunkedUploadService::NOT_FINISHED);
+        $uploads = app(ChunkedUploadService::class);
+        if ($exception instanceof AssemblyDataFault || $uploads->pastKeeping($recording)) {
+            $uploads->discard($recording, ChunkedUploadService::NOT_FINISHED);
 
             return;
         }
         Log::warning('Assembly failed on a server fault; the parts are kept for recordings:recover.', [
-            'recording' => $recording->id, 'fault' => $exception === null ? null : $exception::class,
+            'recording' => $recording->id, 'fault' => $exception === null ? null : $exception::class, 'rounds' => (int) $recording->recovery_rounds,
         ]);
     }
 }

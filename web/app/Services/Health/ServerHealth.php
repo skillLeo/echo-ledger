@@ -46,15 +46,24 @@ final class ServerHealth
         return $pdo === null ? self::REQUIRED : [...self::REQUIRED, $pdo];
     }
 
-    /** @return array{missing: list<string>, cipher: string|null} cipher: null when the round trip works, else why not */
+    /**
+     * Never throws: a check that cannot run (a full or unwritable disk, a broken config) is itself a failed check, so the
+     * admin dashboard, /health/php, `about` and the scheduled run always answer.
+     *
+     * @return array{missing: list<string>, cipher: string|null} cipher: null when the round trip works, else why not
+     */
     public function check(): array
     {
-        $missing = array_values(array_filter($this->required(), fn (string $extension): bool => ! $this->extensions->loaded($extension)));
-        if ($this->extensions->loaded('gd') && ! function_exists('imagewebp')) {
-            $missing[] = 'gd with WebP';
-        }
+        try {
+            $missing = array_values(array_filter($this->required(), fn (string $extension): bool => ! $this->extensions->loaded($extension)));
+            if ($this->extensions->loaded('gd') && ! function_exists('imagewebp')) {
+                $missing[] = 'gd with WebP';
+            }
 
-        return ['missing' => $missing, 'cipher' => $this->cipherFault()];
+            return ['missing' => $missing, 'cipher' => $this->cipherFault()];
+        } catch (Throwable $e) {
+            return ['missing' => [], 'cipher' => 'the health check itself failed: '.Str::limit($e->getMessage(), 300)];
+        }
     }
 
     /** @param array{missing: list<string>, cipher: string|null} $result */
@@ -88,9 +97,11 @@ final class ServerHealth
     /** Encrypts and decrypts a random file: fixed texts only come back, never a recording or its path. */
     private function cipherFault(): ?string
     {
-        $plain = RecordingFiles::tempPath('health');
-        $sealed = RecordingFiles::tempPath('health');
+        $plain = $sealed = null;
         try {
+            // Inside the try: tempPath makes the temp folder, which fails on a full or unwritable disk.
+            $plain = RecordingFiles::tempPath('health');
+            $sealed = RecordingFiles::tempPath('health');
             $bytes = random_bytes(4096);
             file_put_contents($plain, $bytes);
             $cipher = app(RecordingCipher::class);
@@ -102,8 +113,11 @@ final class ServerHealth
         } catch (Throwable $e) {
             return Str::limit($e->getMessage(), 300);
         } finally {
-            @unlink($plain);
-            @unlink($sealed);
+            foreach ([$plain, $sealed] as $path) {
+                if ($path !== null && is_file($path)) {
+                    @unlink($path);
+                }
+            }
         }
     }
 }

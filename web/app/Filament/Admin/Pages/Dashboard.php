@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Health\ServerHealth;
 use App\Services\Staff\StaffAccess;
@@ -32,15 +33,15 @@ class Dashboard extends FilamentDashboard
         return StaffAccess::isStaff();
     }
 
-    /** @var list<array{where: string, php: string, checked_at: string|null, summary: string}>|null */
-    private ?array $serverProblems = null;
-
     public function content(Schema $schema): Schema
     {
+        // Added only while something is wrong (a hidden component would still leave an empty column in the page), and
+        // only for super admins: it names the server's internals.
+        $user = auth()->user();
+        $problems = $user instanceof User && $user->is_super_admin ? $this->serverProblems() : [];
+
         return $schema->components([
-            View::make('filament.admin.server-health')
-                ->visible(fn (): bool => $this->serverProblems() !== [])
-                ->viewData(fn (): array => ['problems' => $this->serverProblems()]),
+            ...($problems === [] ? [] : [View::make('filament.admin.server-health')->viewData(['problems' => $problems])]),
             $this->getWidgetsContentComponent(),
             View::make('filament.pages.workspaces-overview')
                 ->visible(fn (): bool => StaffAccess::can('customers.view'))
@@ -56,9 +57,6 @@ class Dashboard extends FilamentDashboard
      */
     private function serverProblems(): array
     {
-        if ($this->serverProblems !== null) {
-            return $this->serverProblems;
-        }
         $problems = [];
         $web = app(ServerHealth::class)->check();
         if (! ServerHealth::healthy($web)) {
@@ -72,7 +70,7 @@ class Dashboard extends FilamentDashboard
             ];
         }
 
-        return $this->serverProblems = $problems;
+        return $problems;
     }
 
     /** @return list<array{name: string, plan: string, members: int, devices: int, minutes: float}> */

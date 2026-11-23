@@ -293,6 +293,67 @@ describe('the assembly job', function () {
         @unlink($temp);
     });
 
+    it('gives a fault that never clears 8 spaced rounds, then asks the device for the file again', function () {
+        $stuck = stuckAssembling($this);
+        // From here PHP lacks sodium for good: every round fails the same way.
+        app()->instance(PhpExtensions::class, new PhpExtensions(['sodium']));
+        Recording::query()->whereKey($stuck['id'])->update(['assembling_since' => now()->subMinutes(20), 'updated_at' => now()->subMinutes(20)]);
+        $recording = fn (): Recording => Recording::query()->findOrFail($stuck['id']);
+
+        $waits = [];
+        for ($round = 1; $round <= ChunkedUploadService::RECOVERY_ROUNDS; $round++) {
+            // The round is not due a minute early, then it is.
+            $wait = $round === 1 ? 0 : ChunkedUploadService::roundWaitMinutes($round - 1);
+            if ($wait > 0) {
+                $this->travel($wait - 1)->minutes();
+                recoverRecordings();
+                expect($recording()->recovery_rounds)->toBe($round - 1, "round {$round} came early");
+                $this->travel(1)->minutes();
+            }
+            recoverRecordings();
+            $waits[] = $wait;
+            if ($round < ChunkedUploadService::RECOVERY_ROUNDS) {
+                expect($recording()->recovery_rounds)->toBe($round)
+                    ->and($recording()->upload_status)->toBe(UploadStatus::Assembling)
+                    ->and(Storage::disk('recordings')->directoryExists("parts/{$stuck['id']}"))->toBeTrue();
+            }
+        }
+        expect($waits)->toBe([0, 30, 60, 120, 240, 480, 480, 480]);
+
+        // The eighth round's failure was the last: the parts go and the device is asked for the file.
+        expect($recording()->upload_status)->toBe(UploadStatus::Failed)
+            ->and($recording()->error)->toBe(ChunkedUploadService::NOT_FINISHED)
+            ->and($recording()->received_chunks)->toBe([])
+            ->and(Storage::disk('recordings')->directoryExists("parts/{$stuck['id']}"))->toBeFalse();
+        $this->getJson("/api/recordings/{$stuck['id']}")->assertOk()->assertJsonPath('upload.status', 'failed');
+    });
+
+    it('asks for the file again 48 hours after complete, in the recovery and in the job\'s last failure', function () {
+        $byRecovery = stuckAssembling($this);
+        Recording::query()->whereKey($byRecovery['id'])->update(['assembling_since' => now()->subHours(49), 'recovery_rounds' => 2, 'updated_at' => now()->subMinutes(20)]);
+        recoverRecordings();
+        expect(Recording::query()->findOrFail($byRecovery['id'])->upload_status)->toBe(UploadStatus::Failed);
+
+        $byJob = stuckAssembling($this);
+        Recording::query()->whereKey($byJob['id'])->update(['assembling_since' => now()->subHours(49)]);
+        (new AssembleRecordingJob($byJob['id']))->failed(new TypeError('Argument #1 must be of type string, null given'));
+        expect(Recording::query()->findOrFail($byJob['id'])->upload_status)->toBe(UploadStatus::Failed)
+            ->and(Storage::disk('recordings')->directoryExists("parts/{$byJob['id']}"))->toBeFalse();
+    });
+
+    it('starts the bound again at each complete', function () {
+        $bytes = Fixtures::audio(300_000);
+        $id = (string) $this->createSession($bytes)->assertCreated()->json('recordings.0.id');
+        $this->uploadAll($id, $bytes, (int) Recording::query()->findOrFail($id)->chunk_size_bytes);
+        Queue::fake();
+
+        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(202);
+
+        $recording = Recording::query()->findOrFail($id);
+        expect($recording->assembling_since?->toIso8601String())->toBe(now()->toIso8601String())
+            ->and($recording->recovery_rounds)->toBe(0);
+    });
+
     it('leaves a recording that is already ready alone when a late attempt fails', function () {
         $flow = $this->uploadRecording(Fixtures::audio(4000));
 

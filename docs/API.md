@@ -1022,9 +1022,14 @@ SHA-256, encrypts the file at rest, and starts the final transcript when every r
   new chunks arrive.
 - A scheduled recovery (every 5 minutes) finishes recordings left in `assembling` for more than 15 minutes when
   every part is still on disk, and marks them `failed` (upload again) otherwise **(since v1.1)**.
-- Only a fault of the upload itself (the checksum, a part missing or damaged) ends in `failed`. When the server is at
-  fault (its PHP, its storage), the recording stays `assembling` with its parts, and the recovery finishes it once the
-  server is fixed: the client keeps polling and its local audio, and uploads nothing again. No field changes
+- Only a fault of the upload itself (the checksum, a part missing or damaged) ends in `failed` at once. When the
+  server is at fault (its PHP, its storage), the recording stays `assembling` with its parts, and the recovery finishes
+  it once the server is fixed: the client keeps polling and its local audio, and uploads nothing again. For so long
+  only: 48 hours after `complete`, or after 8 rounds of the recovery (15 minutes apart at first, then twice as long
+  each time up to 8 hours: about 32 hours for all eight), whichever comes first, the parts are discarded and the
+  recording is `failed`, so the client sends the whole file again. The desktop (a `Verifying` upload) and the phone
+  (`STILL_VERIFYING`) keep their local audio for as long as the recording is `assembling` and delete it only once it is
+  `ready` (checked 2026-11-24 in desktop/src-tauri/src/net/uploader.rs and mobile UploadWorker.kt). No field changes
   **(since W-INC-1124, 2026-11-24)**.
 
 ### `POST /api/sessions/{id}/transcripts` — `sessions:write`

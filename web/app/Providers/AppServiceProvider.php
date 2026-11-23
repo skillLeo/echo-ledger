@@ -157,7 +157,7 @@ class AppServiceProvider extends ServiceProvider
         InterfaceFlags::define();
 
         // `php artisan about` says whether this PHP has what the server needs (W-INC-1124; echoledger:health in full).
-        AboutCommand::add('EchoLedger', static function (): array {
+        AboutCommand::add('Server health', static function (): array {
             $result = app(ServerHealth::class)->check();
 
             return [
