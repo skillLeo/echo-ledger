@@ -175,6 +175,15 @@ fun pumpUntil(what: String = "condition", timeoutMs: Long = 20_000, condition: (
     }
 }
 
+/** Waits on a plain thread (not the main looper's) until [condition], at most [timeoutMs]; fails naming [what]. */
+fun waitFor(what: String, timeoutMs: Long = 10_000, condition: () -> Boolean) {
+    val deadline = System.nanoTime() + timeoutMs * 1_000_000
+    while (!condition()) {
+        if (System.nanoTime() > deadline) throw AssertionError("Timed out after ${timeoutMs}ms waiting for $what")
+        Thread.sleep(5)
+    }
+}
+
 /**
  * Waits until no other thread is running app or DataStore code, so work a test left running (a sync, a token read, a
  * settings write) cannot reach the next test's stores. Main-thread work is processed meanwhile. Gives up quietly after
@@ -251,6 +260,23 @@ class FakeServer : AutoCloseable {
 
     private class Route(val method: String, val path: Regex, val handler: (RecordedRequest) -> MockResponse)
 
+    private val holds = CopyOnWriteArrayList<java.util.concurrent.CountDownLatch>()
+
+    /**
+     * A gate a handler waits at to hold its answer ([Hold.await], always with a timeout). Every gate opens when the
+     * server closes, whatever the test did, so no held request outlives its test.
+     */
+    fun hold(): Hold = Hold(java.util.concurrent.CountDownLatch(1).also { holds += it })
+
+    class Hold(private val gate: java.util.concurrent.CountDownLatch) {
+        /** Waits on the server's thread until [open], at most [seconds]. */
+        fun await(seconds: Long = 10) {
+            gate.await(seconds, java.util.concurrent.TimeUnit.SECONDS)
+        }
+
+        fun open() = gate.countDown()
+    }
+
     val baseUrl: String get() = "http://localhost:${server.port}"
 
     init {
@@ -279,7 +305,10 @@ class FakeServer : AutoCloseable {
             Regex(path).matches(it.url.encodedPath)
     }
 
-    override fun close() = server.close()
+    override fun close() {
+        holds.forEach { it.countDown() }
+        server.close()
+    }
 
     companion object {
         const val ANY = "*"

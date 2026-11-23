@@ -33,6 +33,16 @@ class LibraryRepository(
     private val lock = Mutex()
     private var since: String? = null
 
+    /**
+     * Each [clear] (a sign-out) starts a new generation: a sync or a waiting read that was still on the network then
+     * is dropped when it lands (nothing shown, nothing written), so the person who signed out never comes back.
+     */
+    @Volatile private var gen = 0
+
+    /** Each waiting read is numbered; an answer is kept only when no later-asked read's answer was kept before it. */
+    private var waitingAsked = 0L
+    private var waitingKept = 0L
+
     /** The cache is from before 2.0.0-p: the next sync reads everything and replaces it. */
     private var stale = false
     private val _items = MutableStateFlow(emptyList<LibraryItem>())
@@ -61,26 +71,34 @@ class LibraryRepository(
     }
 
     suspend fun refresh(): Int = lock.withLock {
+        val g = gen
         val client = api() ?: return@withLock 0
         var cursor: String? = null
         var changed = 0
         var serverTime: String? = null
+        var version: Long? = null
         // The whole read owed after an update of the cache's format replaces the items: nothing old stays.
         var current = if (stale) emptyList() else _items.value
+        val from = since
         do {
-            val page = client.library(since, cursor)
+            val page = client.library(from, cursor)
             changed += page.data.size
             if (serverTime == null) {
                 serverTime = page.serverTime
-                page.viewsVersion?.let { _viewsVersion.value = it }
+                version = page.viewsVersion
             }
             current = merge(current, page.data)
             cursor = page.nextCursor
         } while (cursor != null)
-        since = serverTime // the do/while runs once and always sets it
-        stale = false
-        _items.value = current
-        save(Cache(since, current))
+        // Signed out meanwhile: what this read brought belongs to the person who left.
+        synchronized(this) {
+            if (g != gen) return@withLock 0
+            since = serverTime // the do/while runs once and always sets it
+            stale = false
+            version?.let { _viewsVersion.value = it }
+            _items.value = current
+            save(Cache(since, current))
+        }
         changed
     }
 
@@ -91,6 +109,7 @@ class LibraryRepository(
      * last ones stay.
      */
     suspend fun refreshWaiting() {
+        val (g, asked) = synchronized(this) { gen to ++waitingAsked }
         val client = api() ?: return
         val found = mutableListOf<LibraryItem>()
         var cursor: String? = null
@@ -102,19 +121,26 @@ class LibraryRepository(
         } while (cursor != null && ++pages < MAX_WAITING_PAGES)
         val next = found.distinctBy { it.id }
         lock.withLock {
-            if (next == _waiting.value) return
-            _waiting.value = next
-            save(Cache(since, _items.value))
+            synchronized(this) {
+                // Signed out meanwhile, or a read asked later has answered already: this answer is older news.
+                if (g != gen || asked <= waitingKept) return
+                waitingKept = asked
+                if (next == _waiting.value) return
+                _waiting.value = next
+                save(Cache(since, _items.value))
+            }
         }
     }
 
     /** Marks [id] opened here at once (the dot goes away before the server hears of it). */
     suspend fun markOpenedLocally(id: String) = lock.withLock {
-        val current = _items.value
-        if (current.none { it.id == id && it.opened == false }) return@withLock
-        val updated = current.map { if (it.id == id) it.copy(opened = true) else it }
-        _items.value = updated
-        save(Cache(since, updated))
+        synchronized(this) {
+            val current = _items.value
+            if (current.none { it.id == id && it.opened == false }) return@withLock
+            val updated = current.map { if (it.id == id) it.copy(opened = true) else it }
+            _items.value = updated
+            save(Cache(since, updated))
+        }
     }
 
     /**
@@ -122,27 +148,45 @@ class LibraryRepository(
      * with nothing done) does not change the recording, so no sync brings it.
      */
     suspend fun setViewsLocally(id: String, views: RowViewsDto) = lock.withLock {
-        val current = _items.value
-        val updated = current.map { item ->
-            if (item.id == id) item.copy(transcript = item.transcript?.copy(views = views)) else item
+        synchronized(this) {
+            val current = _items.value
+            val updated = current.map { item ->
+                if (item.id == id) item.copy(transcript = item.transcript?.copy(views = views)) else item
+            }
+            if (updated == current) return@withLock
+            _items.value = updated
+            save(Cache(since, updated))
         }
-        if (updated == current) return@withLock
-        _items.value = updated
-        save(Cache(since, updated))
     }
 
     /** Puts the server's answer for one recording ([item]) in the Library now, before the next sync brings it. */
     suspend fun upsertLocally(item: LibraryItem) = lock.withLock {
-        val current = _items.value
-        val updated = if (current.any { it.id == item.id }) current.map { if (it.id == item.id) item else it } else listOf(item) + current
-        _items.value = updated
-        save(Cache(since, updated))
+        synchronized(this) {
+            val current = _items.value
+            val updated = if (current.any { it.id == item.id }) {
+                current.map {
+                    if (it.id ==
+                        item.id
+                    ) {
+                        item
+                    } else {
+                        it
+                    }
+                }
+            } else {
+                listOf(item) + current
+            }
+            _items.value = updated
+            save(Cache(since, updated))
+        }
     }
 
     /** True once a sync has completed (the server time of the last sync is known). */
     fun hasSynced(): Boolean = since != null
 
-    fun clear() {
+    /** Signed out: the items, the sync point, the waiting calls and the cache go, and what is still on its way is dropped. */
+    fun clear() = synchronized(this) {
+        gen++
         since = null
         stale = false
         _items.value = emptyList()

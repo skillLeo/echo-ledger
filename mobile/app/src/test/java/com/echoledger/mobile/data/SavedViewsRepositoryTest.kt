@@ -255,16 +255,16 @@ class SavedViewsRepositoryTest : AppTest() {
 
     @Test
     fun aNewAccountsFirstSyncWaitsForTheOneBeforeItInsteadOfBeingSkipped() {
-        val release = java.util.concurrent.CountDownLatch(1)
+        val release = server.hold()
         val slow = java.util.concurrent.atomic.AtomicBoolean(true)
         server.on("GET", "/api/views") {
-            if (slow.getAndSet(false)) release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            if (slow.getAndSet(false)) release.await()
             FakeServer.json(200, oneView)
         }
         views.use("http://phone.test|someone@example.com|7")
         pumpUntil("the first read on its way") { server.requestsTo("GET", "/api/views").isNotEmpty() }
         views.use(account)
-        release.countDown()
+        release.open()
         pumpUntil("the new account's list") { views.views.value.singleOrNull()?.name == "WhatsApp this week" }
         assertEquals(2, server.requestsTo("GET", "/api/views").size)
     }
@@ -309,11 +309,11 @@ class SavedViewsRepositoryTest : AppTest() {
         fun bearer(req: mockwebserver3.RecordedRequest) = req.headers["Authorization"].orEmpty()
         server.on("GET", "/api/library", FakeServer.json(200, com.echoledger.mobile.testsupport.ServerFixtures.libraryPage(emptyList())))
         server.on("GET", "/api/clients", FakeServer.json(200, """{"data":[]}"""))
-        val release = java.util.concurrent.CountDownLatch(1)
+        val release = server.hold()
         val answered7 = java.util.concurrent.atomic.AtomicBoolean(false)
         server.on("GET", "/api/account") { req ->
             if (bearer(req).endsWith("tokenws7")) {
-                release.await(20, java.util.concurrent.TimeUnit.SECONDS)
+                release.await(20)
                 answered7.set(true)
                 FakeServer.json(200, """{"email":"a@example.com","workspace":{"id":7}}""")
             } else {
@@ -331,7 +331,7 @@ class SavedViewsRepositoryTest : AppTest() {
         }
         vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
         pumpUntil("the second workspace's views") { vm.savedViews.value.map { it.name } == listOf("Workspace 8 view") }
-        release.countDown()
+        release.open()
         pumpUntil("the first read answered") { answered7.get() }
         com.echoledger.mobile.testsupport.awaitAppIdle()
         assertEquals(listOf("Workspace 8 view"), vm.savedViews.value.map { it.name })
@@ -359,15 +359,11 @@ class SavedViewsRepositoryTest : AppTest() {
         server.on("GET", "/api/library", FakeServer.json(200, com.echoledger.mobile.testsupport.ServerFixtures.libraryPage(emptyList())))
         server.on("GET", "/api/clients", FakeServer.json(200, """{"data":[]}"""))
         val answered7 = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Opened by the test once the second sign-in has saved its token and its device (the second device name).
+        val tokenChanged = server.hold()
         server.on("GET", "/api/account") { req ->
             if (bearer(req).endsWith("tokenws7")) {
-                // Answers once the second sign-in has saved its token and its device (its name is the second one).
-                val deadline = System.nanoTime() + 20_000_000_000L
-                while (System.nanoTime() < deadline &&
-                    runBlocking { app.graph.settings.current().deviceName } != "Pixel 9b"
-                ) {
-                    Thread.sleep(2)
-                }
+                tokenChanged.await(20)
                 answered7.set(true)
                 FakeServer.json(200, """{"email":"a@example.com","workspace":{"id":7}}""")
             } else {
@@ -384,6 +380,8 @@ class SavedViewsRepositoryTest : AppTest() {
             server.requests.any { it.url.encodedPath == "/api/account" && bearer(it).endsWith("tokenws7") }
         }
         vm.signIn(server.baseUrl, "a@example.com", "pw", null, "Phone")
+        pumpUntil("the second sign-in's token and device saved") { vm.settings.value.deviceName == "Pixel 9b" }
+        tokenChanged.open()
         pumpUntil("the first read answered") { answered7.get() }
         pumpUntil("the second workspace's views") { vm.savedViews.value.map { it.name } == listOf("Workspace 8 view") }
         com.echoledger.mobile.testsupport.awaitAppIdle()
