@@ -123,6 +123,20 @@ describe('the cache', function () {
     });
 });
 
+it('renews on a label\'s colour set through PUT /api/labels/color, written without model events', function () {
+    reviewed($this->me, [], 'completed', ['Clients']);
+    // The list is there already, so setting its colour writes nothing but the colour.
+    LabelList::query()->create(['workspace_id' => $this->ws, 'user_id' => $this->me->id, 'label_key' => 'clients', 'name' => 'Clients', 'color' => null, 'position' => 0]);
+    ($this->endOfRequest)();
+    $colour = fn (): mixed => collect(app(LibraryFacets::class)->facets($this->ws, $this->me->id, [])['sections']['labels'])->firstWhere('value', 'clients')['color'] ?? null;
+    expect($colour())->toBeNull();
+    $before = ($this->stamp)();
+
+    $this->api($this->token)->putJson('/api/labels/color', ['label' => 'Clients', 'color' => '#2D9A63'])->assertOk();
+    // The request is over: the stamp is new, and the next reader sees the colour at once.
+    expect(($this->stamp)())->not->toBe($before)->and($colour())->toBe('#2d9a63');
+});
+
 describe('Needs you and the shared folder', function () {
     it('keeps the waiting calls of Needs you with filters or a search', function () {
         $waiting = CaptureSession::factory()->open()->create(['user_id' => $this->me->id, 'source_app' => 'zoom', 'title' => 'Invoice call']);

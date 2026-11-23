@@ -61,5 +61,28 @@
         return s.rowChecked && s.checked > 1 ? 'selection-menu' : 'row-menu';
     }
 
-    return { isTyping, isControl, keyAction, clickAction, contextAction };
+
+    /**
+     * Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the keys of the filter panel, the search and the sidebar's
+     * places, decided before keyAction. e as keyAction's (with code); s: {modal, panelOpen, places (how many places
+     * answer a number)}. F opens or closes the filters, ⌘F / Ctrl+F goes to the search (also from another field), Esc
+     * closes the panel before it clears a selection, and ⌘1…⌘9 (Alt+1…9 too, where the browser keeps ⌘ and Ctrl for its
+     * tabs) opens the sidebar's first nine places. Returns {do, at?} or null.
+     */
+    function shellKey(e, s) {
+        if (e.defaultPrevented || s.modal) return null;
+        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        if ((e.ctrlKey || e.metaKey) && ! e.altKey && key === 'f') return { do: 'search' };
+        const digit = /^Digit([1-9])$/.exec(e.code || '') || /^([1-9])$/.exec(e.key || '');
+        if (digit && (e.ctrlKey || e.metaKey || e.altKey) && ! isTyping(e.target)) {
+            const at = Number(digit[1]) - 1;
+            return at < s.places ? { do: 'place', at } : null;
+        }
+        if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return key === 'Escape' && s.panelOpen ? { do: 'close-filters' } : null;
+        if (key === 'f') return { do: 'toggle-filters' };
+        if (key === 'Escape' && s.panelOpen) return { do: 'close-filters' };
+        return null;
+    }
+
+    return { isTyping, isControl, keyAction, clickAction, contextAction, shellKey };
 });

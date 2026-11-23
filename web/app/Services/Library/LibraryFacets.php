@@ -293,6 +293,21 @@ final class LibraryFacets
         return $counts;
     }
 
+    /**
+     * The ids of the person's recordings the search finds (waiting calls too), or null when it holds no word.
+     *
+     * @return list<string>|null
+     */
+    public function searchIds(int $workspaceId, int $userId, ?string $query): ?array
+    {
+        $query = self::cleanQuery($query);
+        if ($query === null) {
+            return null;
+        }
+
+        return array_column($this->searched($workspaceId, $userId, $query, $this->version($workspaceId, $userId)), 'id');
+    }
+
     /** The search as the counts use it: null when it holds no word (under 2 characters, or only punctuation). */
     public static function cleanQuery(?string $query): ?string
     {

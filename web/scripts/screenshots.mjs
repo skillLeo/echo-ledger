@@ -66,6 +66,16 @@ const pages = {
     'library-folder': { path: '/app/sessions?folder=whatsapp' },
     'library-failed': { path: '/app/sessions?tab=failed' },
     'library-empty': { path: '/app/sessions?search=zzzz-nothing-matches' },
+    // The Library's filters and views (contract 2.0.0-p): the window as it opens, the whole page, the filter panel open
+    // (a drawer under 1280 px), filters applied as pills, and nothing matching.
+    'lf-window': { path: '/app/sessions', full: false },
+    'lf-full': { path: '/app/sessions' },
+    'lf-panel': { path: '/app/sessions', run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))", full: false },
+    'lf-pills': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp&f[date][op]=is_not&f[date][values][0]=today', full: false },
+    'lf-pill-edit': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp', click: '[data-pill=source]', full: false },
+    'lf-sort': { path: '/app/sessions', click: '[data-menu=display]', full: false },
+    'lf-record': { path: '/app/sessions', click: '[data-record-menu]', full: false },
+    'lf-empty': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=discord', full: false },
     recording: { path: async (page) => `/app/sessions/${await recording(page, 'Retainer check-in')}` },
     'recording-urdu': { path: async (page) => `/app/sessions/${await recording(page, 'Invoice questions')}` },
     upload: { path: '/app/upload' },
