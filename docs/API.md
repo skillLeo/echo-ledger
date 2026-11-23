@@ -1276,9 +1276,9 @@ list by `facets.source`, the same on the web, the desktop and the phone. **All**
 (`whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype`), **Meetings**
 (`zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord`) and **Voice notes** (`voice_note`); `imported` and
 `other` are under All only. A tab narrows the place, the filters and the search (AND with them; a Source filter still
-applies inside it), and each tab's count is how many the place, the filters and the search keep in it. (Planned, with
-the 3-level navigation: the web will keep the tab in the address as `kind=calls`, `kind=meetings` or `kind=voice_notes`,
-none for All. Until then the Library has no tabs and no `kind` parameter.)
+applies inside it), and each tab's count is how many the place, the filters and the search keep in it. The web keeps
+the tab in the address as `kind=calls|meetings|voice_notes`, none for All (any other value is All too), with the
+3-level navigation on (`ui_v2.shell` and `ui_v2.library`).
 
 ### `GET /api/library/facets` — `library:read` (since 2.0.0-p)
 The filter panel's counts. Query: `filters`, `q`, `tz` as above.

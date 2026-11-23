@@ -407,9 +407,8 @@
   "page": "projects",
   "scope": "main",
   "keys": [
-   "a|new project",
    "input|search",
-   "a|qt qureshi textiles recordings · last call nov automatic pin to the top",
+   "a|qt qureshi textiles recordings last activity nov pin to the top",
    "button|pin to the top"
   ]
  },

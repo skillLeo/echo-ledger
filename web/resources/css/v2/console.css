@@ -2998,7 +2998,7 @@ button.v2-row-tile:focus-visible,
 }
 
 @media (min-width: 1024px) {
-    /* Folded: the rail alone; under the flyout width the panel opens over the page from a rail icon. */
+    /* Folded: the rail alone; under the flyout width the panel opens over the page from a rail icon (its ⊟ closes it). */
     .v2-frame:not(.fi-sidebar-open) .v2-panels {
         display: none;
     }
@@ -3010,10 +3010,6 @@ button.v2-row-tile:focus-visible,
         z-index: var(--el-layer-overlay);
         display: block;
         box-shadow: var(--el-shadow-3);
-    }
-
-    .v2-frame .v2-frame-inner.is-narrow .v2-panel-hide {
-        display: none;
     }
 }
 
@@ -3204,4 +3200,110 @@ button.v2-row-tile:focus-visible,
 
 :root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-foot {
     border-block-start-color: var(--el-role-text-secondary);
+}
+
+/* Setup & health is the rail's own place, with no panel: the rail alone, as on Home. */
+:root:has(.v2-frame[data-place='setup']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+/* The Library's count in its header under the wide width, where the table's own count folds away with its narrower
+   box, so it never depends on the table's foot (while the filters push the list, their panel's title says it). */
+.v2-lib-total {
+    display: none;
+    flex: none;
+    margin-inline-end: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 1440px) {
+    .v2-lib-shell.is-right .v2-lib-total {
+        display: block;
+    }
+}
+
+/* Settings' home: "Show groups" while the panel isn't beside the page (folded, or under the flyout width). */
+.el-set-show-groups {
+    margin-block-end: var(--el-space-16);
+    cursor: pointer;
+}
+
+:root:has(.v2-frame.fi-sidebar-open) .el-set-show-groups {
+    display: none;
+}
+
+/* The Projects overview: a card per project (its counts, its last activity, pinned), the tree being the panel's. */
+.v2-projects-overview .v2-project-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-12);
+    min-width: 0;
+}
+
+.v2-project-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+    min-width: 0;
+}
+
+.v2-project-card-name {
+    overflow: hidden;
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+    line-height: var(--el-text-body-strong-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-project-card-meta {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-body-line);
+}
+
+.v2-project-card-pin {
+    flex: none;
+    margin-inline-start: auto;
+    padding-inline: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    padding-inline: var(--el-space-8);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record::after {
+    display: none;
+}
+
+/* The filter panel's title says how many the list holds (with the three levels; beside the list the toolbar has no
+   room for it), and the toolbar's count goes while the panel pushes the list. */
+.v2-lib-panel-total {
+    margin-inline-start: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-shell.is-right.is-pushing .v2-lib-total {
+    display: none;
+}
+
+/* The tabs give way after the search, so every tab stays in sight while there is room; beside the filters (no room
+   for both) they scroll sideways first, as before. */
+.v2-lib-shell.is-right:not(.is-pushing) .v2-library .fi-ta-header-toolbar .v2-lib-tabs {
+    flex-shrink: 0;
 }

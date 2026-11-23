@@ -22,6 +22,7 @@ use App\Services\ActivityFeed;
 use App\Services\InterfaceFlags;
 use App\Services\Library\LibraryFilters;
 use App\Services\Library\SavedViews;
+use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Illuminate\Support\Carbon;
@@ -147,7 +148,7 @@ describe('the panels', function () {
                 $url = (string) preg_replace('~#.*$~', '', $href);
                 $html = ($this->page)(str_replace('https://echoledger.test', '', $url));
                 // Live Assist's settings are Settings' (Live & overlays); every other item stays in its place.
-                $expected = str_contains($url, '/live-assist/settings') ? 'settings' : (str_contains($url, '/app/settings') || str_contains($url, '/get-the-apps') || str_contains($url, '/app/devices') || str_contains($url, '/app/workspace') ? 'settings' : $place);
+                $expected = str_contains($url, '/live-assist/settings') ? 'settings' : (str_contains($url, '/app/settings') || str_contains($url, '/app/workspace') ? 'settings' : $place);
                 expect(navRailOf($html))->toMatch('~class="v2-rail-item is-on"\s+aria-current="page"[^>]*data-module="'.$expected.'"~', "{$place} › {$links[$href]} ({$url})");
                 $opened++;
             }
@@ -167,7 +168,8 @@ describe('the panels', function () {
         expect(array_values(navPanelLinks(($this->page)('/app/activity'), 'activity')))->toBe(['All', 'Needs you 2', 'Done']);
         $settings = navPanelLinks(($this->page)('/app/settings'), 'settings');
         // (A transcription key is for a plan that brings its own: one page here.)
-        expect(array_values($settings))->toBe(['Settings', 'Transcription & language', 'Privacy & data 2', 'Notifications', 'Appearance', 'Account & plan 4', 'Setup & health 2', 'Shortcuts', 'About & help']);
+        // (Setup & health is the rail's own, not one of these.)
+        expect(array_values($settings))->toBe(['Settings', 'Transcription & language', 'Privacy & data 2', 'Notifications', 'Appearance', 'Account & plan 4', 'Shortcuts', 'About & help']);
     });
 
     it('shows Projects\' Pinned and Recent, every level of the tree', function () {
@@ -290,5 +292,86 @@ describe('nothing twice, nothing called the Inbox', function () {
             'kind' => 'session', 'capture_session_id' => $this->call->id, 'title' => 'Payment terms', 'sent_at' => now()]);
         $shared = Livewire::test(SharedWithMe::class)->mountTableAction('save', $item);
         expect((string) $shared->instance()->getMountedAction()?->getModalDescription())->toContain('copied into this workspace\'s recordings, with no project')->not->toContain('Inbox');
+    });
+});
+
+describe('after the desktop\'s review', function () {
+    it('keeps Setup & health on the rail only: its own place with no panel, Devices and Get the apps as its tabs', function () {
+        $settings = ($this->page)('/app/settings');
+        expect(implode(' | ', navPanelLinks($settings, 'settings')))->not->toContain('Setup')->not->toContain('Devices')->not->toContain('Get the apps');
+        $tabs = NavFrame::setupTabs();
+        expect(array_column($tabs, 'label'))->toBe(['Devices', 'Get the apps']);
+        foreach ($tabs as $tab) {
+            $html = ($this->page)(str_replace('https://echoledger.test', '', $tab['url']));
+            $rail = navRailOf($html);
+            expect($rail)->toMatch('~class="v2-rail-item is-on"\s+aria-current="page"[^>]*data-module="setup"~', $tab['label'])
+                ->and(substr_count($rail, 'aria-current="page"'))->toBe(1, $tab['label'].': Settings not chosen')
+                ->and($html)->toContain('data-place="setup"')
+                ->not->toMatch('~<section class="v2-panel" data-panel="[a-z]+" aria-label="[^"]+"\s+x-bind:hidden~', $tab['label'].': no panel')
+                ->toMatch('~class="v2-tab is-on"\s+aria-current="page"\s+data-page-tab="'.$tab['key'].'"~', $tab['label'].' is its tab')
+                ->toContain('data-page-tab="devices"')->toContain('data-page-tab="get-the-apps"');
+        }
+        expect(navRailOf($settings))->toMatch('~<a href="'.preg_quote(e($tabs[0]['url']), '~').'" class="v2-rail-item"~');
+    });
+
+    it('gives Settings\' home a Show groups button, for when the panel is folded away', function () {
+        expect(($this->page)('/app/settings'))->toMatch('~<button type="button" class="v2-chip el-set-show-groups" x-data x-on:click="\$dispatch\(\'el-nav-show-panel\'\)" data-show-groups>Show groups</button>~')
+            ->toContain('x-on:el-nav-show-panel.window="showPanel($event)"');
+        expect(($this->page)('/app/settings/notifications'))->not->toContain('data-show-groups');
+    });
+
+    it('keeps the tree and + New project in Projects\' panel only; the page is an overview of cards with counts, last activity and pinned', function () {
+        $sub = Fx::client($this->owner, 'Contracts');
+        $sub->forceFill(['parent_id' => $this->acme->id])->save();
+        $html = ($this->page)('/app/clients');
+        $main = (string) preg_replace('~^.*?(<main\b.*?</main>).*$~s', '$1', $html);
+        expect($main)->not->toContain('New project')->not->toContain('data-project="')
+            ->and(substr_count($html, 'data-new-project'))->toBe(1)
+            ->and(navPanelLinks($html, 'projects'))->toContain('New project', 'Contracts');
+        // A card per top-level project: its counts, its last activity, pinned; the subfolder is counted, not listed.
+        expect($main)->toMatch('~data-project-card="'.$this->acme->id.'".*?data-project-counts>1 recording · 1 subfolder</span>.*?data-project-last>Last activity [^<]+</span>.*?data-project-pinned>Pinned</span>~s')
+            ->toMatch('~data-project-card="'.$this->quiet->id.'".*?data-project-counts>0 recordings</span>.*?data-project-last>No recordings yet</span>~s')
+            ->not->toContain('data-project-card="'.$sub->id.'"')
+            ->and((string) preg_replace('~^.*?data-project-card="'.$this->quiet->id.'"(.*?)</div>.*$~s', '$1', $main))->not->toContain('data-project-pinned');
+        Livewire::withQueryParams([])->test(ListClients::class)->assertActionDoesNotExist('create')->assertCanNotSeeTableRecords([$sub]);
+    });
+
+    it('keeps each place\'s memory under one person in one workspace, and forgets it all once signed out', function () {
+        $html = ($this->page)('/app/sessions');
+        $mine = NavFrame::memoryScope();
+        expect($mine)->toMatch('/^[0-9a-f]{12}\.[0-9a-f]{8}$/')->and($html)->toContain($mine)->not->toContain('data-forget-places');
+        [$person, $workspace] = explode('.', $mine);
+        // The same person in another workspace: the same person, another workspace.
+        [$samePerson, $otherWorkspace] = explode('.', (string) CurrentWorkspace::runAs((int) $this->owner->current_workspace_id + 1000, fn (): string => NavFrame::memoryScope()));
+        expect($samePerson)->toBe($person)->and($otherWorkspace)->not->toBe($workspace);
+        // Someone else signing in here: another person (so frame-core's staleMemory drops the first one's).
+        $other = Fx::user(['name' => 'Sana Malik']);
+        $this->actingAs($other->fresh(), 'web');
+        expect(explode('.', NavFrame::memoryScope())[0])->not->toBe($person);
+        // Signed out: the login page forgets every place's memory.
+        app('auth')->forgetGuards();
+        $login = (string) $this->get('/app/login')->assertOk()->getContent();
+        expect($login)->toContain('<script data-forget-places>')->toContain('allMemory(Object.keys(localStorage))');
+    });
+
+    it('starts the place you are in over from its rail icon under the flyout width too, with aria-expanded while its flyout is open', function () {
+        $html = ($this->page)('/app/sessions');
+        foreach (['library', 'projects', 'live', 'ask', 'activity', 'settings'] as $place) {
+            expect($html)->toContain("x-effect=\"expanded(\$el, '{$place}')\"")->toContain('id="v2-panel-'.$place.'"');
+        }
+        expect($html)->toContain("x-on:keydown.escape.window=\"if (flyout !== null) closeFlyout('escape')\"")->toContain("x-on:click.outside=\"closeFlyout('outside')\"")
+            ->toContain('core.railFlyout({ narrow: this.folded(), hasPanel: this.hasPanel(key), flyout: this.flyout, key, current: this.place })')
+            ->toContain("session.set('el-nav-flyout', key)");
+    });
+
+    it('says how many recordings the list holds in the Library\'s header, never only in the table\'s foot', function () {
+        $tabs = Livewire::withQueryParams([])->test(ListCaptureSessions::class)->instance()->libraryTabs();
+        $all = collect($tabs)->firstWhere('key', 'all')['count'];
+        $calls = collect($tabs)->firstWhere('key', 'calls')['count'];
+        expect($all)->toBeGreaterThan(1)->and($calls)->toBeGreaterThan(1);
+        expect(($this->page)('/app/sessions'))->toMatch('~<p class="v2-lib-total" data-library-total>'.$all.' recordings</p>~');
+        expect(($this->page)('/app/sessions?kind=calls'))->toMatch('~<p class="v2-lib-total" data-library-total>'.$calls.' recordings</p>~');
+        // Beside the list (from the wide width) the toolbar has no room for it: the filter panel's title says it.
+        expect(($this->page)('/app/sessions?kind=calls'))->toMatch('~<h2 class="v2-lib-panel-title">Filters <span class="v2-lib-panel-total" data-filters-total>'.$calls.' recordings</span></h2>~');
     });
 });

@@ -16,6 +16,12 @@
     $inner = $framed && $mode === 'page' ? \App\Filament\Support\NavFrame::settingsInnerList() : null;
     $innerList = $inner !== null ? view('filament.settings.inner-list', ['inner' => $inner])->render() : '';
     $frameClass = $framed ? ' is-framed'.($inner !== null ? ' has-inner' : '') : '';
+    // Setup & health (Devices here) is the rail's own place: its pages are its tabs, not a Settings group.
+    $setupTabs = $framed && $mode === 'page' && \App\Filament\Support\NavFrame::place() === 'setup'
+        ? view('filament.v2.page-tabs', ['tabs' => \App\Filament\Support\NavFrame::setupTabs()])->render() : '';
+    // Settings' home lists no groups of its own (the panel does): when the panel is folded away, a way to it.
+    $showGroups = $framed && $mode === 'overview'
+        ? '<button type="button" class="v2-chip el-set-show-groups" x-data x-on:click="$dispatch(\'el-nav-show-panel\')" data-show-groups>'.e(__('Show groups')).'</button>' : '';
 @endphp
 <x-filament-panels::page class="el-settings-page">
     <div class="el-settings-wrap">
@@ -67,13 +73,13 @@
                 @if ($searching)
                     @include('filament.settings.search-results', ['results' => $this->searchResults(), 'query' => $this->settingsQuery])
                 @elseif ($this->subpage === '')
-                    <h1 class="el-set-h1">Settings</h1>
+                    <h1 class="el-set-h1">Settings</h1>{!! $showGroups !!}
                     @include('filament.settings.profile-card')
                     @include('filament.settings.state-row')
                     @include('filament.settings.this-month')
                 @else
                     <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Settings') }}</a>
-                    <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>
+                    <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>{!! $setupTabs !!}
                     {{ $this->content }}
                 @endif
             </main>

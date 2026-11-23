@@ -12,6 +12,7 @@ use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\OrganiseController;
@@ -189,6 +190,10 @@ class ClientResource extends Resource
 
     public static function table(Table $table): Table
     {
+        // With the three levels the panel holds the tree and + New project; the All projects page is an overview of
+        // cards (each with its counts, last activity and whether it is pinned) that doesn't list the tree again.
+        $overview = ConsoleV2::frame() && $table->getLivewire() instanceof ListClients;
+
         return $table
             ->defaultSort('name')
             // The top level, like a file browser; a search looks through every level (rows then show their folder).
@@ -198,14 +203,14 @@ class ClientResource extends Resource
             // The phone's client list: initials avatar, name, "2 recordings · Last call Oct 24"; a row opens the workspace.
             ->columns([
                 Split::make([
-                    ViewColumn::make('name')->label(__('Name'))->view('filament.clients.row')->searchable()->sortable(),
-                    TextColumn::make('language')->placeholder(__('Automatic'))->grow(false)->visibleFrom('md')->color('gray')
+                    ViewColumn::make('name')->label(__('Name'))->view($overview ? 'filament.clients.card' : 'filament.clients.row')->searchable()->sortable(),
+                    TextColumn::make('language')->placeholder(__('Automatic'))->grow(false)->visibleFrom('md')->color('gray')->hidden($overview)
                         ->formatStateUsing(fn (?string $state): string => LanguageChoice::offered()[(string) $state] ?? (string) $state),
                     IconColumn::make('pinned')->label(__('Pinned'))->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
                         ->grow(false)->tooltip(fn (Client $record): string => $record->pinned ? __('Unpin') : __('Pin to the top'))
                         ->extraAttributes(fn (Client $record): array => ['class' => $record->pinned ? 'el-pin el-on' : 'el-pin'])
                         ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
-                ])->extraAttributes(['class' => 'el-split']),
+                ])->extraAttributes(['class' => $overview ? 'el-split v2-project-card-row' : 'el-split']),
                 TextColumn::make('keyterms_count')->label(__('Keyterms'))->hidden(),
                 TextColumn::make('capture_sessions_count')->label(__('Recordings'))->hidden(),
             ])
@@ -218,10 +223,13 @@ class ClientResource extends Resource
                     SharingActions::deleteProject(),
                 ])->label(__('More'))->tooltip(__('More'))->color('gray'),
             ])
+            ->contentGrid($overview ? ['md' => 2] : null)
             ->emptyStateIcon(Heroicon::OutlinedFolder)
             ->emptyStateHeading(__('No projects yet'))
-            ->emptyStateDescription(__('A project groups its recordings, files and notes, and teaches the engines its names and words.'))
-            ->emptyStateActions([CreateAction::make()->label(__('Add a project'))]);
+            ->emptyStateDescription($overview
+                ? __('A project groups its recordings, files and notes, and teaches the engines its names and words. Start one with New project in the panel.')
+                : __('A project groups its recordings, files and notes, and teaches the engines its names and words.'))
+            ->emptyStateActions($overview ? [] : [CreateAction::make()->label(__('Add a project'))]);
     }
 
     public static function getRelations(): array

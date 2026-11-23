@@ -38,12 +38,54 @@
 
     /**
      * What the rail does with a click when the panel is folded away (under the flyout width, or on a phone's drawer):
-     * a place with a panel opens its panel as a flyout (the same one again closes it), a place without one is
-     * followed. s: {narrow, hasPanel, flyout (the place whose panel is open), key}. Returns 'open', 'close' or 'go'.
+     * another place with a panel opens its panel as a flyout (the same one again closes it), the place you are in starts
+     * over as on a computer and its flyout opens or closes too ('restart'), a place without one is followed.
+     * s: {narrow, hasPanel, flyout (the place whose panel is open), key, current (the place you are in)}. Returns
+     * 'open', 'close', 'restart' or 'go'.
      */
     function railFlyout(s) {
         if (! s.narrow || ! s.hasPanel) return 'go';
+        if (s.key === s.current) return 'restart';
         return s.flyout === s.key ? 'close' : 'open';
+    }
+
+    /**
+     * Whether focus goes back to what opened the flyout when it closes: after Esc and ⊟ (or ⌘\) always; after a click
+     * outside it only when that click left focus nowhere (on the page's body, or in the flyout now hidden), never taking
+     * it from a field or button the click went to; after choosing something in it, never (the page changes).
+     * how: 'escape' | 'toggle' | 'outside' | 'chosen'; lost: whether focus is nowhere or still in the flyout.
+     */
+    function flyoutFocusBack(how, lost) {
+        if (how === 'escape' || how === 'toggle') return true;
+        return how === 'outside' && lost === true;
+    }
+
+    /**
+     * This browser's memory of each place (where you left it, whether its panel was folded) belongs to one person in one
+     * workspace: scope is an opaque name of both (person.workspace, from the server), so it never carries over to
+     * someone else signing in here, and the login page forgets it all (signing out). what: 'last' | 'panel'.
+     */
+    function memoryKey(scope, what, place) {
+        return 'el-nav:' + scope + ':' + what + ':' + place;
+    }
+
+    /**
+     * The remembered keys to forget when scope signs in here: anyone else's (another person; the same person's other
+     * workspaces stay) and the unscoped ones kept before memory had a scope. keys: this browser's storage keys.
+     */
+    function staleMemory(keys, scope) {
+        const person = String(scope).split('.')[0];
+        return keys.filter((k) => {
+            if (typeof k !== 'string') return false;
+            if (k.startsWith('el-nav-last:') || k.startsWith('el-nav-panel:')) return true;
+            if (! k.startsWith('el-nav:')) return false;
+            return k.slice('el-nav:'.length).split(':')[0].split('.')[0] !== person;
+        });
+    }
+
+    /** Every key of the places' memory, to forget on the login page (after signing out). */
+    function allMemory(keys) {
+        return keys.filter((k) => typeof k === 'string' && (k.startsWith('el-nav:') || k.startsWith('el-nav-last:') || k.startsWith('el-nav-panel:')));
     }
 
     /**
@@ -80,5 +122,5 @@
         return null;
     }
 
-    return { isField, railTarget, sameConsole, railFlyout, panelOpen, frameKey };
+    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
 });

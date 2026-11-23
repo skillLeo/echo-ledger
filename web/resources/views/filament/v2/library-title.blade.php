@@ -10,5 +10,5 @@
 </div>
 {{-- The top tabs follow the breadcrumb on the same row while there is room (docs/PLAN_NAV_3_LEVELS.md section 4). --}}
 @if (\App\Filament\Support\ConsoleV2::frame())
-    @include('filament.v2.library-tabs')
+    @include('filament.v2.library-tabs', ['tabs' => $this->libraryTabs()])
 @endif

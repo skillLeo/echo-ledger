@@ -42,9 +42,14 @@ final class NavFrame
         'ask' => ['filament.app.pages.ask'],
         'activity' => ['filament.app.pages.activity'],
         'settings' => ['filament.app.auth.profile', 'filament.app.pages.upgrade*', 'filament.app.pages.security', 'filament.app.pages.usage',
-            'filament.app.pages.workspace', 'filament.app.resources.devices.*', 'filament.app.pages.get-the-apps', 'filament.app.pages.help',
-            'filament.app.pages.live-assist.settings'],
+            'filament.app.pages.workspace', 'filament.app.pages.help', 'filament.app.pages.live-assist.settings'],
     ];
+
+    /**
+     * Setup & health: the rail's own (at its foot, not one of Settings' groups), with no panel; its pages are its tabs.
+     * Devices is a settings page by address (profile/devices), Get the apps its own.
+     */
+    public const SETUP_PAGES = ['devices', '@get-the-apps'];
 
     /**
      * Settings' groups as the panel lists them (plan section 3), each with the settings pages the web has: a group of
@@ -57,17 +62,20 @@ final class NavFrame
         'notifications' => ['Notifications', ['notifications']],
         'appearance' => ['Appearance', ['appearance']],
         'account' => ['Account & plan', ['profile', 'plan', 'security', 'workspace']],
-        'setup' => ['Setup & health', ['devices', '@get-the-apps']],
         'shortcuts' => ['Shortcuts', ['shortcuts']],
         'about' => ['About & help', ['help']],
     ];
 
-    /** The place the page belongs to (null on Home, which the logo opens). */
+    /** The place the page belongs to (null on Home, which the logo opens; 'setup' for Setup & health, which has no panel). */
     public static function place(): ?string
     {
         $route = request()->route()?->getName();
         if ($route === null) {
             return null;
+        }
+        if (request()->routeIs('filament.app.resources.devices.*', 'filament.app.pages.get-the-apps')
+            || (request()->routeIs('filament.app.auth.profile') && (string) (request()->route('subpage') ?? '') === 'devices')) {
+            return 'setup';
         }
         // Live Assist's settings are Live & overlays in Settings.
         if (request()->routeIs('filament.app.pages.live-assist.settings')) {
@@ -116,20 +124,60 @@ final class NavFrame
     }
 
     /**
-     * Setup & health at the rail's foot: Settings › Setup & health, with a dot while setting up has a step open.
+     * Setup & health at the rail's foot (its own place, no panel), with a dot while setting up has a step open.
      *
      * @return array{label: string, url: string, active: bool, dot: bool}|null
      */
     private static function setupPage(): ?array
     {
-        $group = collect(self::settingsGroups())->firstWhere('key', 'setup');
-        if (! is_array($group)) {
+        $tabs = self::setupTabs();
+        if ($tabs === []) {
             return null;
         }
         $user = auth()->user();
         $dot = $user instanceof User && app(OnboardingChecklist::class)->visibleTo($user);
 
-        return ['label' => __('Setup & health'), 'url' => $group['url'], 'active' => $group['active'], 'dot' => $dot];
+        return ['label' => __('Setup & health'), 'url' => $tabs[0]['url'], 'active' => self::place() === 'setup', 'dot' => $dot];
+    }
+
+    /**
+     * Setup & health's pages as its tabs: Devices (signed in here and on your phone and computers) and Get the apps.
+     *
+     * @return list<array{key: string, label: string, url: string, active: bool}>
+     */
+    public static function setupTabs(): array
+    {
+        $context = SettingsContext::current();
+        if ($context === null) {
+            return [];
+        }
+        $routes = request()->route()?->getName() !== null;
+        $subpage = $routes && request()->routeIs('filament.app.auth.profile') ? (string) (request()->route('subpage') ?? '') : null;
+        $tabs = [];
+        foreach (self::SETUP_PAGES as $page) {
+            $item = $page === '@get-the-apps'
+                ? ['label' => __('Get the apps'), 'url' => GetTheApps::getUrl(), 'active' => $routes && request()->routeIs('filament.app.pages.get-the-apps')]
+                : self::settingsPage($context, $page, $subpage);
+            if ($item !== null) {
+                $tabs[] = ['key' => ltrim($page, '@'), 'label' => $item['label'], 'url' => $item['url'],
+                    'active' => $item['active'] || ($page === 'devices' && $routes && request()->routeIs('filament.app.resources.devices.*'))];
+            }
+        }
+
+        return $tabs;
+    }
+
+    /**
+     * The name this browser keeps the places' memory under (frame-core memoryKey): opaque, one person in one workspace,
+     * so where someone left a place never shows to someone else signing in here.
+     */
+    public static function memoryScope(): string
+    {
+        $key = (string) config('app.key');
+        $person = substr(hash_hmac('sha256', 'nav-person|'.(int) auth()->id(), $key), 0, 12);
+        $workspace = substr(hash_hmac('sha256', 'nav-workspace|'.(int) CurrentWorkspace::id(), $key), 0, 8);
+
+        return $person.'.'.$workspace;
     }
 
     /**
@@ -153,7 +201,6 @@ final class NavFrame
                 $item = match ($page) {
                     '@assist-settings' => AssistSettings::canAccess() ? ['label' => __('Live Assist'), 'url' => AssistSettings::getUrl(),
                         'active' => $routes && request()->routeIs('filament.app.pages.live-assist.settings')] : null,
-                    '@get-the-apps' => ['label' => __('Get the apps'), 'url' => GetTheApps::getUrl(), 'active' => $routes && request()->routeIs('filament.app.pages.get-the-apps')],
                     default => self::settingsPage($context, $page, $subpage),
                 };
                 if ($item !== null) {
@@ -164,7 +211,7 @@ final class NavFrame
                 continue;
             }
             $active = collect($items)->contains('active', true) || ($key === 'account' && $routes && request()->routeIs(['filament.app.pages.upgrade*', 'filament.app.pages.security', 'filament.app.pages.usage', 'filament.app.pages.workspace']))
-                || ($key === 'setup' && $routes && request()->routeIs('filament.app.resources.devices.*')) || ($key === 'about' && $routes && request()->routeIs('filament.app.pages.help'));
+                || ($key === 'about' && $routes && request()->routeIs('filament.app.pages.help'));
             $groups[] = ['key' => $key, 'label' => __($label), 'url' => $items[0]['url'], 'active' => $active, 'pages' => $items];
         }
 

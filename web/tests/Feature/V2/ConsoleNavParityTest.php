@@ -97,7 +97,7 @@ it('folds the place\'s panel with ⊟ or ⌘\\ and remembers it for each place; 
     $html = navPage($this, $this->owner, $this->pages['library']);
     expect($html)->toContain('x-on:click="togglePanel()" data-panel-toggle')->toContain('aria-label="Hide the panel"')
         ->toContain('x-data="elV2Frame(')->toContain("x-bind:class=\"{ 'is-flyout': flyout !== null, 'is-narrow': narrow }\"")
-        ->toContain("x-on:click=\"railClick(\$event, 'library')\"")->toContain("store.get('el-nav-panel:' + this.place)")
+        ->toContain("x-on:click=\"railClick(\$event, 'library')\"")->toContain("store.get(this.memory('panel', this.place))")
         ->toContain("token('--el-breakpoint-flyout', '--el-breakpoint-medium')");
     // Every place's panel is drawn, the one you are in shown, the others for the flyout.
     $side = navSidebar($html);

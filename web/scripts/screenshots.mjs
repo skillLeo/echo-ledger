@@ -80,6 +80,8 @@ const pages = {
     'nav-ask': { path: '/app/ask', full: false },
     'nav-activity': { path: '/app/activity?show=needs_you', full: false },
     'nav-settings': { path: '/app/settings/profile', full: false },
+    // Setup & health, the rail's own place (no panel): Devices and Get the apps as its tabs.
+    'nav-setup': { path: '/app/settings/devices', full: false },
     'nav-flyout': { path: '/app/sessions', full: false, click: '[data-rail="library"]' },
     'nav-filters': { path: '/app/sessions', full: false, run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))" },
     'nav-folded': { path: '/app/sessions', full: false, run: "document.querySelector('[data-panel-toggle]')?.click()" },
@@ -245,7 +247,20 @@ async function navChecks(page, width) {
     const settle = async () => { await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); };
     const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
     await page.goto(base + '/app/sessions', { waitUntil: 'networkidle' });
-    await page.evaluate(() => { try { localStorage.removeItem('el-nav-last:library'); localStorage.removeItem('el-nav-panel:library'); } catch (e) {} });
+    const forget = () => page.evaluate(() => { try { Object.keys(localStorage).filter((k) => k.startsWith('el-nav')).forEach((k) => localStorage.removeItem(k)); } catch (e) {} });
+    await forget();
+    // The memory is one person's in one workspace: someone else's, and the kind kept before it had a scope, go.
+    await page.evaluate(() => { localStorage.setItem('el-nav-last:library', '/app/sessions?tab=unread'); localStorage.setItem('el-nav:000000000000.00000000:last:library', '/app/sessions?tab=important'); });
+    await page.reload({ waitUntil: 'networkidle' });
+    const memory = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
+    if (memory.includes('el-nav-last:library') || memory.includes('el-nav:000000000000.00000000:last:library')) wrong.push(`someone else's memory stayed: ${memory.join(', ')}`);
+    if (!memory.some((k) => /^el-nav:[0-9a-f]{12}\.[0-9a-f]{8}:last:library$/.test(k))) wrong.push(`no memory of this place for this person: ${memory.join(', ')}`);
+    // Alt+1…9 in a field types there: nothing opens.
+    await page.locator('.v2-library .fi-ta-search-field input').first().focus();
+    await page.keyboard.press('Alt+Digit1');
+    await page.waitForTimeout(600);
+    if (at() !== '/app/sessions') wrong.push(`Alt+1 in the search went to ${at()}`);
+    await page.evaluate(() => { document.activeElement?.blur(); const i = document.querySelector('.v2-library .fi-ta-search-field input'); if (i) i.value = ''; });
     // A row's source mark filters; the recording does not open.
     await page.locator('.v2-lib-row [data-quick-source]').first().click();
     await settle();
@@ -258,19 +273,35 @@ async function navChecks(page, width) {
     await page.keyboard.press(mod + '+BracketRight');
     await settle();
     if (!at().includes('f[source]')) wrong.push(`⌘] left ${at()}`);
-    // The Library's rail icon from inside the Library starts it over.
+    // The Library's rail icon from inside the Library starts it over (All recordings, no filter), at every width.
     await page.click('[data-rail="library"]');
     await settle();
-    if (width >= 1100 && at() !== '/app/sessions') wrong.push(`the Library's icon in the Library went to ${at()}`);
+    if (at() !== '/app/sessions') wrong.push(`the Library's icon in the Library went to ${at()}`);
     if (width < 1100) {
-        // Under the flyout width the icon opens the panel over the page instead; choosing closes it.
-        const open = await page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
-        if (!open) wrong.push('the rail icon did not open the flyout');
+        const flyout = () => page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
+        const state = (key) => page.evaluate((k) => ({ expanded: document.querySelector('[data-rail="' + k + '"]')?.getAttribute('aria-expanded'),
+            focus: document.activeElement?.getAttribute('data-rail') ?? document.activeElement?.tagName }), key);
+        // Under the flyout width its panel opens over the page too; choosing closes it.
+        if (!(await flyout())) wrong.push('starting the Library over did not open its flyout');
         await page.click('.v2-panel[data-panel="library"] [data-place="unread"]');
         await settle();
         if (at() !== '/app/sessions?tab=unread') wrong.push(`choosing in the flyout went to ${at()}`);
-        const still = await page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
-        if (still) wrong.push('the flyout stayed open after choosing');
+        if (await flyout()) wrong.push('the flyout stayed open after choosing');
+        // Another place's icon opens its flyout, expanded; Esc, ⊟ and a click outside close it, focus back on the icon.
+        for (const close of ['Escape', 'toggle', 'outside']) {
+            await page.click('[data-rail="projects"]');
+            await page.waitForTimeout(300);
+            const opened = await state('projects');
+            if (!(await flyout()) || opened.expanded !== 'true') wrong.push(`Projects' flyout (${close}): open ${await flyout()}, aria-expanded ${opened.expanded}`);
+            if (close === 'Escape') await page.keyboard.press('Escape');
+            if (close === 'toggle') await page.click('.v2-panel[data-panel="projects"] [data-panel-toggle]');
+            if (close === 'outside') await page.mouse.click(width - 40, 860);
+            await page.waitForTimeout(300);
+            const closed = await state('projects');
+            if (await flyout()) wrong.push(`the flyout stayed open after ${close}`);
+            if (closed.expanded !== 'false' || closed.focus !== 'projects') wrong.push(`after ${close}: aria-expanded ${closed.expanded}, focus on ${closed.focus}`);
+        }
+        await forget();
         return wrong;
     }
     // Where you left it: Unread, then Projects, then the Library's icon brings Unread back.
@@ -301,7 +332,17 @@ async function navChecks(page, width) {
     if (width >= 1440 && !shell.push) wrong.push('the filters do not push the list at this width');
     if (width < 1440 && !shell.drawer) wrong.push('the filters are not over the list at this width');
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('el-filters', { detail: { action: 'close' } })));
-    await page.evaluate(() => { try { localStorage.removeItem('el-lib-filters'); localStorage.removeItem('el-nav-last:library'); } catch (e) {} });
+    await page.evaluate(() => { try { localStorage.removeItem('el-lib-filters'); } catch (e) {} });
+    await forget();
+    // Signed out, the login page forgets every place's memory (a fresh window here: no sign-in to lose).
+    const guest = await page.context().browser().newContext();
+    const login = await guest.newPage();
+    await login.goto(base + '/app/login', { waitUntil: 'networkidle' });
+    await login.evaluate(() => { localStorage.setItem('el-nav:0123456789ab.01234567:last:library', '/app/sessions?tab=unread'); localStorage.setItem('el-nav-panel:library', 'closed'); });
+    await login.reload({ waitUntil: 'networkidle' });
+    const left = await login.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
+    if (left.length > 0) wrong.push(`the login page kept ${left.join(', ')}`);
+    await guest.close();
     return wrong;
 }
 

@@ -1,7 +1,8 @@
 {{--
     Settings' panel (docs/PLAN_NAV_3_LEVELS.md section 3): the search, then Transcription & language, Live & overlays,
-    Privacy & data, Notifications, Appearance, Account & plan, Setup & health, Shortcuts, About & help (those this
-    console has; Recording is the apps'). A group of several pages shows them as the page's inner list.
+    Privacy & data, Notifications, Appearance, Account & plan, Shortcuts, About & help (those this console has;
+    Recording is the apps', and Setup & health is the rail's own). A group of several pages shows them as the page's
+    inner list.
 --}}
 <form method="get" action="{{ \App\Filament\Support\NavFrame::settingsUrl() }}" class="v2-panel-search" role="search">
     <x-el.v2.icon name="search" />

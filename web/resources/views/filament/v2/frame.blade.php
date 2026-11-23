@@ -19,7 +19,7 @@
     $upload = ConsoleV2Nav::upload();
     $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
     $panels = collect(['library', 'projects', 'live', 'ask', 'activity', 'settings'])->filter(fn (string $key): bool => $places->has($key) && $places[$key]['url'] !== null)->values()->all();
-    $config = ['place' => $here, 'panels' => $panels, 'homes' => $places->map(fn (array $p): ?string => $p['url'])->all()];
+    $config = ['place' => $here, 'panels' => $panels, 'homes' => $places->map(fn (array $p): ?string => $p['url'])->all(), 'scope' => NavFrame::memoryScope()];
 @endphp
 <div>
     {{-- format-ignore-start --}}
@@ -35,7 +35,8 @@
         data-place="{{ $here ?? 'home' }}"
     >
         <div class="v2-frame-inner" x-data="elV2Frame(@js($config))" x-bind:class="{ 'is-flyout': flyout !== null, 'is-narrow': narrow }"
-            x-on:keydown.escape="closeFlyout(true)" x-on:click.outside="closeFlyout(false)">
+            x-on:keydown.escape.window="if (flyout !== null) closeFlyout('escape')" x-on:click.outside="closeFlyout('outside')"
+            x-on:el-nav-show-panel.window="showPanel($event)">
             <nav class="v2-rail" aria-label="{{ __('Places') }}">
                 <a href="{{ NavFrame::homeUrl() }}" @class(['v2-rail-logo', 'is-on' => $here === null && request()->routeIs('filament.app.pages.dashboard')])
                     title="{{ __('Home') }}" data-module="home" data-initial="{{ mb_substr(\App\Support\Brand::name(), 0, 1) }}">
@@ -108,15 +109,17 @@
                         @php $place = $places[$key]; @endphp
                         {{-- The place you are in shows at once; the others wait for the flyout (hidden until chosen). --}}
                         <section class="v2-panel" data-panel="{{ $key }}" aria-label="{{ $place['label'] }}" @if ($key !== $here) hidden @endif
-                            x-bind:hidden="shown() !== @js($key)">
+                            x-bind:hidden="shown() !== @js($key)" id="v2-panel-{{ $key }}">
                             <header class="v2-panel-head">
                                 <h2 class="v2-panel-title"><a href="{{ $place['url'] }}" data-panel-home="{{ $key }}">{{ $place['label'] }}</a></h2>
+                                {{-- As a flyout it closes (focus back on what opened it); beside the page it hides. --}}
                                 <button type="button" class="v2-icon-btn v2-panel-hide" x-on:click="togglePanel()" data-panel-toggle
-                                    aria-label="{{ __('Hide the panel') }}" title="{{ __('Hide the panel') }} ({{ $mac ? '⌘\\' : 'Ctrl \\' }})">
+                                    aria-label="{{ __('Hide the panel') }}" title="{{ __('Hide the panel') }} ({{ $mac ? '⌘\\' : 'Ctrl \\' }})"
+                                    x-bind:aria-label="flyout !== null ? @js(__('Close the panel')) : @js(__('Hide the panel'))">
                                     <x-el.v2.icon name="columns" />
                                 </button>
                             </header>
-                            <div class="v2-panel-body" x-on:click="if ($event.target.closest('a[href]')) closeFlyout(false)">
+                            <div class="v2-panel-body" x-on:click="if ($event.target.closest('a[href]')) closeFlyout('chosen')">
                                 @include('filament.v2.frame-panel-'.$key)
                             </div>
                         </section>

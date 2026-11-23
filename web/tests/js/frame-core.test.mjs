@@ -40,6 +40,52 @@ test('under the flyout width a rail icon opens its place\'s panel over the page,
     assert.equal(core.railFlyout({ narrow: true, hasPanel: false, flyout: null, key: 'home' }), 'go');
 });
 
+test('under the flyout width the place you are in starts over from its icon too (its flyout opening or closing with it)', () => {
+    assert.equal(core.railFlyout({ narrow: true, hasPanel: true, flyout: null, key: 'library', current: 'library' }), 'restart');
+    assert.equal(core.railFlyout({ narrow: true, hasPanel: true, flyout: 'library', key: 'library', current: 'library' }), 'restart');
+    // Another place still opens its flyout; wide, the place you are in starts over as always.
+    assert.equal(core.railFlyout({ narrow: true, hasPanel: true, flyout: null, key: 'projects', current: 'library' }), 'open');
+    assert.equal(core.railFlyout({ narrow: false, hasPanel: true, flyout: null, key: 'library', current: 'library' }), 'go');
+    // Starting over: its own page, the memory dropped (All recordings, no filter).
+    assert.deepEqual(core.railTarget({ key: 'library', current: 'library', home: '/app/sessions', last: '/app/sessions?f[source][op]=is', origin }), { go: '/app/sessions', reset: true });
+});
+
+test('a closed flyout gives focus back to what opened it after Esc and ⊟, after a click outside only when focus was left nowhere', () => {
+    assert.equal(core.flyoutFocusBack('escape', false), true);
+    assert.equal(core.flyoutFocusBack('toggle', false), true);
+    assert.equal(core.flyoutFocusBack('outside', true), true);
+    // A click outside that went to a field or a button keeps it there; choosing something changes the page.
+    assert.equal(core.flyoutFocusBack('outside', false), false);
+    assert.equal(core.flyoutFocusBack('chosen', true), false);
+});
+
+test('the places\' memory is one person\'s in one workspace: anyone else\'s goes, and the login page forgets it all', () => {
+    const mine = 'aaaaaaaaaaaa.11111111';
+    assert.equal(core.memoryKey(mine, 'last', 'library'), 'el-nav:aaaaaaaaaaaa.11111111:last:library');
+    assert.equal(core.memoryKey(mine, 'panel', 'projects'), 'el-nav:aaaaaaaaaaaa.11111111:panel:projects');
+    const keys = [
+        'el-nav:aaaaaaaaaaaa.11111111:last:library', // mine, here
+        'el-nav:aaaaaaaaaaaa.22222222:last:library', // mine, in my other workspace
+        'el-nav:bbbbbbbbbbbb.11111111:last:library', // someone else's, in this workspace
+        'el-nav:bbbbbbbbbbbb.33333333:panel:ask', // someone else's
+        'el-nav-last:library', 'el-nav-panel:library', // kept before the memory had a scope
+        'filament:theme:mode', 'el-lib-filters', // not the places' memory
+    ];
+    assert.deepEqual(core.staleMemory(keys, mine), ['el-nav:bbbbbbbbbbbb.11111111:last:library', 'el-nav:bbbbbbbbbbbb.33333333:panel:ask', 'el-nav-last:library', 'el-nav-panel:library']);
+    assert.deepEqual(core.allMemory(keys), keys.slice(0, 6));
+});
+
+test('Alt+digit in a field does nothing: no panel item opens, whichever field or editor has the focus', () => {
+    for (const field of [{ tagName: 'INPUT' }, { tagName: 'input' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' }, { field: true }, { editable: true }, { tagName: 'DIV', isContentEditable: true }]) {
+        for (let n = 1; n <= 9; n++) {
+            assert.equal(core.frameKey(key(String(n), { altKey: true, code: 'Digit' + n, target: field }), frame()), null, `${JSON.stringify(field)} Alt+${n}`);
+            assert.equal(core.frameKey(key(String(n), { altKey: true, code: 'Numpad' + n, target: field }), frame()), null, `${JSON.stringify(field)} Alt+Numpad${n}`);
+        }
+    }
+    // Out of a field the same keys open the panel's items.
+    assert.deepEqual(core.frameKey(key('1', { altKey: true, code: 'Digit1' }), frame()), { do: 'item', at: 0 });
+});
+
 test('each place\'s panel stays as it was left there: open unless folded, never on Home', () => {
     assert.equal(core.panelOpen(null, true), true);
     assert.equal(core.panelOpen('open', true), true);

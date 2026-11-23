@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Clients\Pages;
 
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleV2;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -25,9 +26,10 @@ class ListClients extends ListRecords
     #[Url(except: '')]
     public string $show = '';
 
+    /** With the three levels + New project is the panel's, only there. */
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->label(__('New project'))->icon('heroicon-o-plus')];
+        return ConsoleV2::frame() ? [] : [CreateAction::make()->label(__('New project'))->icon('heroicon-o-plus')];
     }
 
     /** The phone's flat list with its search pill, one column wide. */
@@ -38,7 +40,7 @@ class ListClients extends ListRecords
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                 EmbeddedTable::make(),
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
-            ])->extraAttributes(['class' => 'el-list', 'style' => 'max-width: 880px']),
+            ])->extraAttributes(ConsoleV2::frame() ? ['class' => 'el-list v2-projects-overview'] : ['class' => 'el-list', 'style' => 'max-width: 880px']),
         ]);
     }
 

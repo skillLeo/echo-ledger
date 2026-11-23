@@ -274,6 +274,10 @@ class ListCaptureSessions extends ListRecords
      */
     public function libraryTabs(): array
     {
+        // Asked by the tabs and the filter panel's count in one render: counted once (never kept between requests).
+        if ($this->tabsOnce !== null) {
+            return $this->tabsOnce;
+        }
         $facets = app(LibraryFacets::class);
         $ws = (int) CurrentWorkspace::id();
         $user = (int) CurrentWorkspace::userId();
@@ -284,7 +288,7 @@ class ListCaptureSessions extends ListRecords
                 'count' => $facets->total($ws, $user, $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace(), $key === 'all' ? null : LibraryFilters::KINDS[$key])];
         }
 
-        return $tabs;
+        return $this->tabsOnce = $tabs;
     }
 
     /** A top tab: All (null) or one of LibraryFilters::KINDS. */
@@ -292,6 +296,7 @@ class ListCaptureSessions extends ListRecords
     {
         $this->kind = $kind !== null && isset(LibraryFilters::KINDS[$kind]) ? $kind : null;
         $this->facetsOnce = null;
+        $this->tabsOnce = null;
         $this->resetPage();
         $this->deselectAllTableRecords();
         $this->flushCachedTableRecords();
@@ -299,6 +304,9 @@ class ListCaptureSessions extends ListRecords
 
     /** @var array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}|null */
     private ?array $facetsOnce = null;
+
+    /** @var list<array{key: string, label: string, count: int, active: bool}>|null the top tabs, for this render */
+    private ?array $tabsOnce = null;
 
     /** @return list<array<string, mixed>> the filter panel's sections */
     public function filterPanel(): array
@@ -408,6 +416,7 @@ class ListCaptureSessions extends ListRecords
     {
         $this->lf = $filters;
         $this->facetsOnce = null;
+        $this->tabsOnce = null;
         $this->resetPage();
         $this->deselectAllTableRecords();
         $this->flushCachedTableRecords();
@@ -601,6 +610,7 @@ class ListCaptureSessions extends ListRecords
         LibraryView::forgetCounts();
         $this->foldersOnce = null;
         $this->facetsOnce = null;
+        $this->tabsOnce = null;
     }
 
     /** @var array<string, array{label: string, icon: string, count: int, url: string|null}>|null the folders, for this render */

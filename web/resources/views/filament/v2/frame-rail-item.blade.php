@@ -10,7 +10,7 @@
 @if ($place['url'] !== null)
     <a href="{{ $place['url'] }}" @class(['v2-rail-item', 'is-on' => $place['active']]) @if ($place['active']) aria-current="page" @endif
         title="{{ $tip }}" data-module="{{ $place['key'] }}" data-rail="{{ $place['key'] }}" data-rail-shortcut="{{ $place['shortcut'] }}"
-        x-on:click="railClick($event, @js($place['key']))">
+        x-on:click="railClick($event, @js($place['key']))" x-effect="expanded($el, @js($place['key']))">
         <span class="v2-rail-icon"><x-el.v2.icon :name="$place['icon']" :filled="$place['active']" /></span>
         <span class="v2-rail-label">{{ $place['label'] }}</span>
         @if ($place['badge'] !== null)
