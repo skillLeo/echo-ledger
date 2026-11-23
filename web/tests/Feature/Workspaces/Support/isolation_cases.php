@@ -74,6 +74,7 @@ const ISO_WEB_BYPASS = [
     'request.files.complete' => 'public request link: the token is the only key',
     'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
     'site.home' => 'public landing page: no workspace data',
+    'health.php' => 'the web PHP\'s own health check for the deploy (W-INC-1124): ok or not, server-wide, no workspace data',
     'site.pricing' => 'public pricing page (v2.0): the plans on offer, server-wide, no workspace data',
     'legacy.profile' => 'the account page\'s old address (before v1.7): a redirect to Settings, no data',
     'legacy.security' => 'the security centre\'s old address (before v1.7): a redirect to Settings, no data',

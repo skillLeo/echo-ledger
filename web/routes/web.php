@@ -23,6 +23,7 @@ use App\Http\Controllers\PaymentProofMediaController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
+use App\Http\Controllers\ServerHealthController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\WorkspaceSwitchController;
 use App\Http\Middleware\AccountGate;
@@ -56,6 +57,9 @@ Route::middleware('throttle:site')->group(function (): void {
         ->where('name', '[A-Za-z0-9][A-Za-z0-9._-]{0,119}')
         ->name('downloads.file');
 });
+
+// W-INC-1124: the web PHP's own check for deploy/check-php.sh, ok or not (ServerHealthController). Throttled per IP.
+Route::get('/health/php', ServerHealthController::class)->middleware('throttle:site')->name('health.php');
 
 // Since v1.6 (P2.1) the app lives at /app and /admin is the staff panel: the app's old addresses under /admin go to the
 // same page under /app (LegacyConsoleRedirect; a good signed link is signed again for its new address).

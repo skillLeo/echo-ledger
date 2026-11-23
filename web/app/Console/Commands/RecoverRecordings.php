@@ -10,12 +10,14 @@ use App\Models\Recording;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * Finishes recordings left in `assembling` by a request or worker that died mid-assembly (docs/API.md "complete"):
  * every part still on disk → assemble again on the queue; parts gone but the encrypted file written → keep it when it
- * verifies; otherwise → `failed`, so the device uploads the file again.
+ * verifies; otherwise → `failed`, so the device uploads the file again. Since W-INC-1124 the rounds of one assembly
+ * are spaced and bounded (ChunkedUploadService::roundWaitMinutes, ::pastKeeping): past the bound → `failed` as well.
  */
 final class RecoverRecordings extends Command
 {
@@ -63,8 +65,22 @@ final class RecoverRecordings extends Command
                 return null;
             }
             if ($uploads->missingChunks($recording) === []) {
-                // Start the waiting period again, so a queue that is merely slow is not flooded with copies.
-                $recording->touch();
+                // W-INC-1124: parts kept after a fault of the server get their rounds, then the device sends the file again.
+                if ($uploads->pastKeeping($recording)) {
+                    $uploads->discard($recording, ChunkedUploadService::NOT_FINISHED);
+                    Log::warning('Assembly gave up after a lasting fault of the server; the device is asked for the file again.', [
+                        'recording' => $recording->id, 'rounds' => (int) $recording->recovery_rounds,
+                    ]);
+
+                    return 'failed';
+                }
+                $rounds = (int) $recording->recovery_rounds;
+                if ($rounds > 0 && $recording->updated_at->gt(now()->subMinutes(ChunkedUploadService::roundWaitMinutes($rounds)))) {
+                    return null; // its next round is not due yet
+                }
+                // Counting the round also starts the waiting period again, so a queue that is merely slow is not
+                // flooded with copies.
+                $recording->forceFill(['recovery_rounds' => $rounds + 1, 'assembling_since' => $recording->assembling_since ?? now()])->save();
                 $outcome = 'requeued';
             } elseif ($uploads->adoptStoredFile($recording) === true) {
                 $outcome = 'ready';

@@ -322,6 +322,12 @@ Next to the ones in [web/DEPLOY.md](../web/DEPLOY.md):
 - `php artisan echoledger:prune-exports` hourly: removes export ZIPs after 24 hours.
 - `php artisan recordings:check-storage`, by hand, only when recordings are moved to a bucket
   ([DEPLOY_VPS.md](DEPLOY_VPS.md)): it tries a write, a read and a delete on the bucket and warns if it keeps old versions.
+- `php artisan echoledger:health --report` every 5 minutes (since W-INC-1124): checks that PHP has every extension the
+  server needs and that recordings can still be encrypted. When it fails, the admin panel's Overview shows a red
+  banner naming what is missing (for the web PHP and for the PHP of the scheduled tasks), the log gets one critical
+  line, and super admins get an email at most once an hour until it is fixed. Only super admins see the banner. Uploads
+  that fail meanwhile keep their parts and finish by themselves once PHP is fixed, for up to 48 hours (then the device
+  is asked to send the file again). Without `--report` it only prints the result; `php artisan about` shows it too.
 
 ## 8. Claude and ChatGPT
 
