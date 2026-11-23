@@ -6,12 +6,12 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
-## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.8 and phone 2.0.9, about 45 minutes
+## Tonight 20:00 (2026-11-23) — the call choice and the new navigation, Mac 2.0.11 and phone 2.0.9, about 50 minutes
 
 Builds:
-- **Mac:** 2.0.8, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
-- **Windows:** `EchoLedger_2.0.8_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.8.
-- **Phone:** 2.0.9 (code 29), `phone-v2.0.9`. The lead installs it with `install -r` once Wireless debugging is on and `mCallState=0`.
+- **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting in the lead's scratchpad. The lead installs it after "mac free".
+- **Windows:** `EchoLedger_2.0.11_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.11.
+- **Phone:** 2.0.9 (code 29) is installed (the call choice, screenshots while recording). The phone's Library filters come as 2.0.10 after review.
 
 **1. Mac, about 15 minutes**
 1. **Install and check permissions.**
@@ -27,7 +27,7 @@ Builds:
    - "Close to keep audio only".
    Press Transcribe, then Undo, then Transcribe again.
 5. **Pill menu.** During a second short meeting, click the pill and choose "Save audio only". Pass if no card shows after it.
-6. **Library.** No banner. The header shows "N need you" with a dot. The sidebar folder counts are readable grey numbers (in 2.0.8).
+6. **Library and navigation (new in 2.0.11).** Click a few views and filters, then press the rail's Library icon: back to All recordings with nothing filtered. Try the tabs All · Calls · Meetings · Voice notes, Filters (F), ⌘[ to go back, and ⌘\\ to hide the panel. Make the window narrow: the panel opens as an overlay.
 
 **2. Phone, about 25 minutes.** Check `mCallState=0` first.
 1. **Three WhatsApp calls**, each about 20 s, with "After each call: Ask me" (the default after the update):
