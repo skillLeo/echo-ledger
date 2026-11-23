@@ -7,6 +7,7 @@ import { Button, Icon, Icons, SearchField } from "../components";
 import type { IconType } from "../components/Button";
 import { Menu, type MenuItem } from "../components/Menu";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
+import { recentProjects } from "./recentProjects";
 
 /** The rail's places, in their order (⌘1…⌘6); Home is the logo's, Record the round button's. */
 export type Place = "library" | "projects" | "live" | "ask" | "activity" | "settings";
@@ -96,8 +97,8 @@ export type PanelProject = { id: string; name: string; parent_id?: string | null
 export const PROJECT_SEARCH_FROM = 11;
 
 /**
- * The Projects panel: All projects, + New project, then the projects as a tree (pinned first, subfolders under their
- * project, each a target for dragged recordings), with a search box from 11 projects.
+ * The Projects panel: All projects (the page), then which projects the list below shows (every one as a tree,
+ * Pinned, or Recent: opened here lately), + New project, and the list, with a search box from 11 projects.
  */
 export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, onNew, tree }: {
   projects: readonly PanelProject[]; current: string | null; onAll: () => void; allCurrent: boolean; onOpen: (id: string) => void; onNew?: () => void;
@@ -105,17 +106,33 @@ export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, on
   tree: (projects: readonly PanelProject[], current: string | null, onOpen: (id: string) => void) => ReactNode;
 }) {
   const [find, setFind] = useState("");
+  const [which, setWhich] = useState<"all" | "pinned" | "recent">("all");
+  const recent = recentProjects();
   const q = find.trim().toLowerCase();
-  const shown = q ? projects.filter((p) => p.name.toLowerCase().includes(q)).map((p) => ({ ...p, parent_id: null })) : projects;
+  const picked = which === "pinned" ? projects.filter((p) => p.pinned)
+    : which === "recent" ? recent.map((id) => projects.find((p) => p.id === id)).filter((p): p is PanelProject => !!p) : projects;
+  // Pinned, Recent and a search list their projects flat; All keeps the tree.
+  const flat = which !== "all" || !!q;
+  const shown = (q ? picked.filter((p) => p.name.toLowerCase().includes(q)) : picked).map((p) => (flat ? { ...p, parent_id: null } : p));
+  const view = (key: typeof which, label: string, icon: IconType, count: number) => (
+    <li>
+      <button type="button" className="el-nav-item el-nav-item--row" aria-pressed={which === key} onClick={() => setWhich(key)}>
+        <Icon icon={icon} /><span className="el-nav-item__label">{label}</span>
+        <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{count}</span>
+      </button>
+    </li>
+  );
   return (
     <div className="el-panel__group">
       <ul className="el-nav-list" aria-label="Projects views">
         <li>
-          <button type="button" className="el-nav-item el-nav-item--row" aria-current={allCurrent ? "page" : undefined} onClick={onAll}>
+          <button type="button" className="el-nav-item el-nav-item--row" aria-current={allCurrent ? "page" : undefined} onClick={() => { setWhich("all"); onAll(); }}>
             <Icon icon={Icons.FolderIcon} /><span className="el-nav-item__label">All projects</span>
             <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{projects.length}</span>
           </button>
         </li>
+        {projects.some((p) => p.pinned) && view("pinned", "Pinned", Icons.PinIcon, projects.filter((p) => p.pinned).length)}
+        {recent.some((id) => projects.some((p) => p.id === id)) && view("recent", "Recent", Icons.ClockIcon, recent.filter((id) => projects.some((p) => p.id === id)).length)}
         {onNew && (
           <li>
             <button type="button" className="el-nav-item el-nav-item--row el-nav-item--add" onClick={onNew}>

@@ -57,9 +57,20 @@ export type SettingsV2Props = {
   setupHealth?: boolean;
   /** Shown under the groups ("Switch back to classic"). */
   footer?: ReactNode;
+  /**
+   * The three levels (PLAN_NAV_3_LEVELS §3, §4): the groups and the search are the panel's, so the home shows the
+   * profile card and Sign out only, and a page has its group's sections in an inner list beside it.
+   */
+  inPanel?: boolean;
 };
 
-export function SettingsV2({ available, section = null, renderPage, onSignOut, setupHealth = false, footer }: SettingsV2Props) {
+/** The goal group a section is in (a page or one of its settings: "calls", "calls#calls.after"). */
+export function groupOf(sectionId: string) {
+  const id = sectionId.split("#")[0].split(".")[0];
+  return GOAL_GROUPS.find((g) => g.ids.some((x) => x === sectionId.split("#")[0] || x.split(".")[0] === id)) ?? null;
+}
+
+export function SettingsV2({ available, section = null, renderPage, onSignOut, setupHealth = false, footer, inPanel = false }: SettingsV2Props) {
   const [opened, setOpened] = useState<{ id: string; seq: number } | null>(null);
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -77,7 +88,52 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   }, [section]);
 
   const open = (id: string) => setOpened({ id, seq: ++seq.current });
+  if (opened && inPanel) {
+    // The group's sections beside the page (Level 3: an inner list, as a site's settings have).
+    const group = groupOf(opened.id);
+    const ids = (group?.ids ?? []).filter((id) => id === "setup_health" ? setupHealth : !!SETTINGS.find((e) => e.id === id && available(e)));
+    const here = opened.id.split("#")[0];
+    return (
+      <div className="el-settings-split">
+        {group && ids.length > 1 && (
+          <nav className="el-settings-split__list" aria-label={`${group.title} sections`}>
+            <h2 className="el-caption el-body-strong el-settings-split__title">{group.title}</h2>
+            <ul className="el-nav-list">
+              {ids.map((id) => {
+                const entry = SETTINGS.find((e) => e.id === id);
+                const name = id === "setup_health" ? "Setup & health" : entry ? titleV2(entry) : id;
+                return (
+                  <li key={id}>
+                    <button type="button" className="el-nav-item el-nav-item--row" aria-current={here === id || here.startsWith(`${id}.`) ? "page" : undefined}
+                      onClick={() => open(id)}><span className="el-nav-item__label">{name}</span></button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )}
+        <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>
+      </div>
+    );
+  }
   if (opened) return <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>;
+  if (inPanel) {
+    return (
+      <div className="el-page el-page--narrow" data-v2="settings">
+        <header className="el-page__head"><h1 className="el-title-l">Settings</h1></header>
+        <AccountCard />
+        <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
+        {onSignOut && (
+          <Card>
+            <List label="Sign out" className="el-group__rows">
+              <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title="Sign out" onClick={onSignOut} />
+            </List>
+          </Card>
+        )}
+        {footer}
+      </div>
+    );
+  }
 
   const answer = query.trim().length >= 2 ? searchSettings(query, available) : null;
   const go = (entry: SettingEntry) => {

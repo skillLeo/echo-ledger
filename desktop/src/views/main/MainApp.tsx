@@ -54,6 +54,7 @@ import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/face
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
 import type { Place as NavPlace } from "../../v2/shell/NavRail";
+import { noteRecentProject } from "../../v2/shell/recentProjects";
 import type { ActivityShow } from "../../v2/shell/PlacePanels";
 import * as Icons from "../../v2/components/icons";
 import { syncLibrary } from "../../v2/library/syncClock";
@@ -782,6 +783,7 @@ export default function MainApp() {
     setTab("projects");
     setProjectId(id);
     lastProject.current = id;
+    if (id) noteRecentProject(id);
   };
   const openShared = (next: SharedTab) => {
     setTab("shared");
@@ -1078,6 +1080,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
             <SettingsV2 key={settingsVisit} available={settingsAvailable} section={settingsSection} onSignOut={() => void signOut()} setupHealth={ui.flags["ui_v2.setup_health"]}
+              inPanel={ui.flags["ui_v2.library"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
@@ -1184,7 +1187,7 @@ export default function MainApp() {
                 ask: <Suspense fallback={null}><AskPanelV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} current={askProject.id}
                   onAsk={(id) => setAskProject((a) => ({ id, seq: a.seq + 1 }))} /></Suspense>,
                 activity: <Suspense fallback={null}><ActivityPanelV2 show={activityShow} needs={needsYou} onShow={(next) => { setActivityShow(next); setTab("activity"); }} /></Suspense>,
-                settings: <Suspense fallback={null}><SettingsPanelV2 current={tab === "settings" ? settingsSection?.id ?? null : null} onOpen={openAccount} /></Suspense>,
+                settings: <Suspense fallback={null}><SettingsPanelV2 current={tab === "settings" ? settingsSection?.id ?? null : null} onOpen={openAccount} available={settingsAvailable} /></Suspense>,
               },
             }}
             footStart={ui.flags["ui_v2.library"] ? (

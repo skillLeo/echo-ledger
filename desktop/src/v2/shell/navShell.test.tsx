@@ -75,7 +75,7 @@ describe("the three levels", () => {
     expect(panel()).toBeNull();
   });
 
-  it("⌘1…⌘6 go to the places; ⌘\\ hides and shows the panel, remembered per place", () => {
+  it("⌘1…⌘6 go to the places; ⌘ with the backslash key hides and shows the panel, remembered per place", () => {
     setWidth(1440);
     const onPlace = vi.fn();
     render(<App onPlace={onPlace} />);
@@ -106,7 +106,7 @@ describe("the three levels", () => {
     field.remove();
   });
 
-  it(`under ${FLYOUT_BELOW} px the panel is a flyout from the rail that closes once something is chosen, or on Esc`, () => {
+  it("under 1100 px the panel is a flyout from the rail that closes once something is chosen, or on Esc", () => {
     // The width is the token's: tokens.css --el-breakpoint-flyout.
     const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
     expect(tokens).toContain(`--el-breakpoint-flyout: ${FLYOUT_BELOW}px;`);
@@ -133,6 +133,22 @@ describe("the three levels", () => {
       expect(panel()).toBeNull();
       done();
     }, 10));
+  });
+
+  it("in a short window the rail keeps its icons only, every place and its foot still named (the old sidebar's short foot)", () => {
+    setWidth(1440);
+    Object.defineProperty(window, "innerHeight", { value: 640, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    render(<App />);
+    expect(document.querySelector(".el-shell")).toHaveClass("el-shell--short-rail");
+    for (const name of ["Library, 4", "Activity, 2", "Search", "Setup, needs setup", "Help", "Settings", "Ayesha Khan: account"]) {
+      expect(rail().getByRole("button", { name })).toBeInTheDocument();
+    }
+    // The panel's foot (the Library's Trash and sync line, the status) is the panel's, under its scrolling list.
+    expect(within(panel()!).getByText("Synced just now").closest(".el-panel__foot")).not.toBeNull();
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+    act(() => { window.dispatchEvent(new Event("resize")); });
+    expect(document.querySelector(".el-shell")).not.toHaveClass("el-shell--short-rail");
   });
 
   it("Record's menu: Record now, Import audio files, Call recording on or off, the Record page", () => {

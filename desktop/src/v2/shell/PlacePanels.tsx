@@ -4,7 +4,9 @@
 import { useState, type ReactNode } from "react";
 import { Icon, Icons, SearchField } from "../components";
 import type { IconType } from "../components/Button";
-import { GOAL_GROUPS } from "../settings/SettingsV2";
+import { GOAL_GROUPS, groupOf, sectionFor } from "../settings/SettingsV2";
+import { searchSettings } from "../../lib/settingsIndex";
+import { SETTINGS, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
 
 function Row({ icon, label, current, onClick, end, strong }: { icon?: IconType; label: string; current?: boolean; onClick: () => void; end?: ReactNode; strong?: boolean }) {
   return (
@@ -75,19 +77,28 @@ export function ActivityPanel({ show, needs, onShow }: { show: ActivityShow; nee
   );
 }
 
-/** Settings: a search, then its groups; a group opens its first page. */
-export function SettingsPanel({ current, onOpen, available }: { current: string | null; onOpen: (id: string) => void; available?: (id: string) => boolean }) {
+/**
+ * Settings: a search over every setting (two letters or more: the matches, each opening where it lives), else its
+ * groups; a group opens its first page, whose inner list has the rest.
+ */
+export function SettingsPanel({ current, onOpen, available }: { current: string | null; onOpen: (id: string) => void; available: (entry: SettingEntry) => boolean }) {
   const [find, setFind] = useState("");
-  const q = find.trim().toLowerCase();
-  const groups = GOAL_GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => !available || available(id)) }))
-    .filter((g) => g.ids.length > 0 && (!q || g.title.toLowerCase().includes(q) || g.description.toLowerCase().includes(q)));
+  const answer = find.trim().length >= 2 ? searchSettings(find, available) : null;
+  const here = current ? groupOf(current) : null;
+  const groups = GOAL_GROUPS.filter((g) => g.ids.some((id) => id === "setup_health" || SETTINGS.some((e) => e.id === id && available(e))));
   return (
     <>
       <SearchField label="Search settings" value={find} onChange={setFind} className="el-panel__search" />
-      <Group>
-        {groups.map((g) => <Row key={g.title} icon={g.icon} label={g.title} current={!!current && g.ids.includes(current)} onClick={() => onOpen(g.ids[0])} />)}
-        {groups.length === 0 && <li className="el-caption el-secondary el-panel__none">No setting matches</li>}
-      </Group>
+      {answer ? (
+        <Group title="Matches">
+          {answer.settings.slice(0, 12).map((r) => <Row key={r.entry.id} label={titleV2(r.entry)} onClick={() => onOpen(sectionFor(r.entry))} />)}
+          {answer.settings.length === 0 && <li className="el-caption el-secondary el-panel__none">No setting matches</li>}
+        </Group>
+      ) : (
+        <Group>
+          {groups.map((g) => <Row key={g.title} icon={g.icon} label={g.title} current={here?.title === g.title} onClick={() => onOpen(g.ids[0])} />)}
+        </Group>
+      )}
     </>
   );
 }

@@ -13,6 +13,8 @@ import type { ShellStatus } from "./status";
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
 export const FLYOUT_BELOW = 1100;
 const PANEL_KEY = "echoledger-nav-panels";
+/** Below this window height the rail shows its icons only. */
+export const SHORT_RAIL_BELOW = 820;
 const PRESS_HOLD_MS = 3000;
 
 /** Which places' panels are hidden, kept on this computer (shown unless hidden). */
@@ -76,12 +78,19 @@ export type NavShellProps = {
 export function NavShell({ place, onPlace, onHome, status, panels, feet, libraryCount, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
   onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
+  const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
   useEffect(() => {
-    const follow = () => setWidth(window.innerWidth);
+    const follow = () => {
+      setWidth(window.innerWidth);
+      setHeight(window.innerHeight);
+    };
     window.addEventListener("resize", follow);
     return () => window.removeEventListener("resize", follow);
   }, []);
   const narrow = width < FLYOUT_BELOW;
+  // A short window: the rail's names go (each place keeps its name for assistive tools and in its tooltip), so every
+  // place and the foot stay on screen.
+  const short = height < SHORT_RAIL_BELOW;
   const [hidden, setHidden] = useState<Set<Place>>(loadHidden);
   const [flyout, setFlyout] = useState(false);
   const hasPanel = !!place && !!panels[place];
@@ -163,7 +172,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
       dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} />
   );
   return (
-    <div className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}`} data-shell="v2">
+    <div className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short-rail" : ""}`} data-shell="v2">
       <nav className="el-rail" aria-label="Main">
         <button type="button" className="el-rail__home" aria-label="EchoLedger, Home" title="Home" aria-current={place === null ? "page" : undefined} onClick={onHome}>
           <BrandMark size={28} className="el-rail__mark" />

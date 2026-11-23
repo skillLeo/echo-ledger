@@ -279,8 +279,8 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
                     <Icon icon={open ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />
                   </button>
                 ) : <span className="el-nav-tree__fold" aria-hidden="true" />}
-                <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" dir="auto" aria-current={current === p.id ? "page" : undefined}
-                  onClick={() => onOpen(p.id)}>{p.name}</button>
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" aria-current={current === p.id ? "page" : undefined}
+                  onClick={() => onOpen(p.id)}><bdi>{p.name}</bdi></button>
               </div>
               {open && branch(p.id, depth + 1)}
             </li>
