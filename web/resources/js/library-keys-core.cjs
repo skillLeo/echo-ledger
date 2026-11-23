@@ -105,5 +105,41 @@
         return s.modal || editor || isField(e.target) ? 'stay' : way;
     }
 
-    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
+    /**
+     * Back and Forward while the Library is still answering the last step (docs/PLAN_NAV_3_LEVELS.md section 0). Livewire
+     * applies a step's answer to whatever address is current when it arrives, so a step taken before it (⌘] right after
+     * ⌘[, a mouse's buttons, the browser's) had its address rewritten by the late answer and its own update pushed as a
+     * new entry. The gate holds a step that comes while one of the Library's requests is out, and hands it back, the
+     * latest one only, once none is: the page then puts that step's address and state back and lets it through.
+     * start()/end() around each request of the Library; pop(entry) for each step: 'hold' or 'pass'; end() returns the
+     * held step to replay, or null. held() is the one waiting (for a time limit).
+     */
+    function historyGate() {
+        let out = 0;
+        let waiting = null;
+        return {
+            start() { out += 1; },
+            end() {
+                out = Math.max(0, out - 1);
+                if (out > 0 || waiting === null) return null;
+                const step = waiting;
+                waiting = null;
+                return step;
+            },
+            pop(entry) {
+                if (out === 0) return 'pass';
+                waiting = entry;
+                return 'hold';
+            },
+            held() { return waiting; },
+            release() {
+                const step = waiting;
+                waiting = null;
+                out = 0;
+                return step;
+            },
+        };
+    }
+
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey, historyGate };
 });

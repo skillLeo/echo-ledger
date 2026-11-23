@@ -19,6 +19,7 @@ use App\Services\InterfaceFlags;
 use App\Services\Library\SavedViews;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Process;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -165,3 +166,16 @@ it('keeps Back and Forward: the place, the filters and the view in the address, 
         ->toContain("if (way === 'back') window.history.back(); else window.history.forward();\n        });");
     expect(collect(ManagesAppPages::shortcuts()['Everywhere'])->pluck(1)->all())->toContain('Back and forward');
 });
+
+it('lets a Back or Forward taken while the Library is still answering wait for that answer, then go through as it was', function () {
+    // The rule is ElLibraryKeysCore.historyGate (tests/js/library-keys-core.test.mjs); in a browser with every answer
+    // held back, scripts/screenshots.mjs (nav-library) checks that a quick ⌘[ ⌘] lands on the filtered list and keeps it.
+    $html = ($this->page)();
+    expect($html)->toContain("if (gate.pop({ state, url: location.href }) !== 'hold') return;")->toContain('e.stopImmediatePropagation();')
+        ->toContain('}, true);')->toContain("history.replaceState(step.state, '', step.url);")
+        ->toContain("window.dispatchEvent(new PopStateEvent('popstate', { state: step.state }));")
+        ->toContain('limit = setTimeout(() => replay(gate.release()), 10000);')
+        ->toContain('historyGate()');
+    $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/library-keys-core.test.mjs']);
+    expect($result->exitCode())->toBe(0, $result->output().$result->errorOutput());
+})->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');

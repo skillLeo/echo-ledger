@@ -288,6 +288,36 @@ async function navChecks(page, width) {
     await reach(filtered);
     await settle();
     if (!at().includes('f[source]')) wrong.push(`⌘] left ${at()}`);
+    // Back and Forward while the Library is still answering: every answer held back 1.2 s, Forward 0.2 s after Back.
+    // Forward lands on the filtered address and keeps it (its rows too), adds no entry, and one more Back is All again.
+    // The filtered list as it is once drawn (its pill shown, the row count still for half a second).
+    const rowsSettled = async () => {
+        await page.waitForFunction(() => document.querySelector('[data-pill]') !== null, null, { timeout: 5000 }).catch(() => {});
+        let last = -1;
+        for (let i = 0; i < 20; i++) {
+            const now = await page.evaluate(() => document.querySelectorAll('.v2-lib-row').length);
+            if (now === last) return now;
+            last = now;
+            await page.waitForTimeout(500);
+        }
+        return last;
+    };
+    const filteredRows = await rowsSettled();
+    const entries = await page.evaluate(() => history.length);
+    await page.route('**/livewire*/update', async (route) => { await new Promise((r) => setTimeout(r, 1200)); await route.continue(); });
+    await page.keyboard.press(mod + '+BracketLeft');
+    await page.waitForTimeout(200);
+    await page.keyboard.press(mod + '+BracketRight');
+    await page.waitForTimeout(4500);
+    await page.unroute('**/livewire*/update');
+    await settle();
+    const quick = { rows: await rowsSettled(), entries: await page.evaluate(() => history.length) };
+    if (!at().includes('f[source]') || quick.rows !== filteredRows) wrong.push(`a quick ⌘[ ⌘] left ${at()} with ${quick.rows} rows (the filtered list has ${filteredRows})`);
+    if (quick.entries !== entries) wrong.push(`a quick ⌘[ ⌘] changed the history from ${entries} to ${quick.entries} entries`);
+    await page.keyboard.press(mod + '+BracketLeft');
+    await reach(() => location.search === '');
+    await settle();
+    if (at() !== '/app/sessions') wrong.push(`⌘[ after the quick ⌘[ ⌘] left ${at()}`);
     // The Library's rail icon from inside the Library starts it over (All recordings, no filter), at every width.
     await page.click('[data-rail="library"]');
     await settle();

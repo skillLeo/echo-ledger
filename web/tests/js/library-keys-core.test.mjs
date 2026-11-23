@@ -156,3 +156,30 @@ test('⌘[ and ⌘] in a form field, an editor or over a dialog keep the page (t
     assert.equal(core.historyKey(key('a', { metaKey: true, code: 'KeyA', target: { tagName: 'INPUT' } }), mac), null);
     assert.equal(core.historyKey(key('[', { code: 'BracketLeft', target: { tagName: 'INPUT' } }), mac), null);
 });
+
+test('Back and Forward while the Library is answering wait for the answer, then the latest step goes through', () => {
+    const gate = core.historyGate();
+    // No request out: a step goes straight through.
+    assert.equal(gate.pop({ url: '/app/sessions' }), 'pass');
+    assert.equal(gate.end(), null);
+    // Back's request is out; Forward comes: it waits, and is handed back once the answer is in.
+    gate.start();
+    const forward = { url: '/app/sessions?f[source][op]=is', state: { alpine: { f: { value: { source: {} } } } } };
+    assert.equal(gate.pop(forward), 'hold');
+    assert.equal(gate.held(), forward);
+    assert.deepEqual(gate.end(), forward);
+    assert.equal(gate.held(), null);
+    // Several steps while two requests are out: only the latest, after the last answer.
+    gate.start();
+    gate.start();
+    assert.equal(gate.pop({ url: '/a' }), 'hold');
+    assert.equal(gate.pop({ url: '/b' }), 'hold');
+    assert.equal(gate.end(), null);
+    assert.deepEqual(gate.end(), { url: '/b' });
+    // An answer that never comes: release hands the step back and clears the count.
+    gate.start();
+    assert.equal(gate.pop({ url: '/c' }), 'hold');
+    assert.deepEqual(gate.release(), { url: '/c' });
+    assert.equal(gate.pop({ url: '/d' }), 'pass');
+});
+
