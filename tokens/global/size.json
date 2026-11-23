@@ -54,11 +54,15 @@
       "$type": "dimension",
       "$value": "1440px"
     },
+    "flyout": {
+      "$type": "dimension",
+      "$value": "1100px"
+    },
     "panel": {
       "$type": "dimension",
       "$value": "1280px"
     },
-    "$description": "Window widths: below compact (web) and below rail (desktop, whose window is at least 720 px) the sidebar collapses to icons; below medium two-pane views stack; below panel the Library's filter panel opens as a drawer over the list instead of a column."
+    "$description": "Window widths: below compact (web) and below rail (desktop, whose window is at least 720 px) the sidebar collapses to icons; below medium two-pane views stack; below panel the Library's filter panel opens as a drawer over the list instead of a column; below flyout the context panel (the second navigation level) collapses and opens as a flyout over the page."
   },
   "layer": {
     "base": {

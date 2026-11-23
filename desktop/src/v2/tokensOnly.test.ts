@@ -85,7 +85,7 @@ describe("v2 uses tokens only", () => {
   });
 
   it("lets a media query name a breakpoint from tokens.css, and no other width", () => {
-    expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1280px", "1440px", "720px", "780px"]);
+    expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1100px", "1280px", "1440px", "720px", "780px"]);
     expect(violations("@media (width < 720px) {")).toEqual([]);
     expect(violations("@media (width >= 1024px) and (width < 1440px) {")).toEqual([]);
     expect(violations("@media (width < 700px) {")).not.toEqual([]);
