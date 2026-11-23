@@ -1,5 +1,5 @@
 // The Library's filters (PLAN_LIBRARY_FILTERS §1): the panel (280 px on the start side of the list, closed by default,
-// opened by [Filters n] or F, closed by Esc; under 1280 px it is a drawer over the list) with its sections, live counts,
+// opened by [Filters n] or F, closed by Esc; from the end side, 320 px: from 1440 px it pushes the list, below it slides over it) with its sections, live counts,
 // a search box in long sections, each section's Clear and Save as view at its foot; and the pills row under the
 // toolbar, only while filters are on: one pill per section ("Source: WhatsApp, Zoom ×"), which opens to edit it with
 // "is" or "is not", then Clear all and Save as view.
@@ -83,14 +83,14 @@ type FilterPanelProps = {
   spec: FilterSpec;
   onSpec: (spec: FilterSpec) => void;
   counts: Record<SectionKey, FacetOption[]>;
-  /** Under 1280 px: a drawer over the list (with its scrim), not a column beside it. */
+  /** Under 1440 px: a drawer over the list (with its scrim), not a column beside it. */
   drawer: boolean;
   onClose: () => void;
   onSaveView: () => void;
   canSave: boolean;
 };
 
-/** The filter panel: a column beside the list, or under 1280 px a modal drawer over it (FilterDrawer). */
+/** The filter panel: a column at the list's end, or under 1440 px a modal drawer over it (FilterDrawer). */
 export function FilterPanel(props: FilterPanelProps) {
   return props.drawer ? <FilterDrawer {...props} /> : <FilterAside {...props} />;
 }

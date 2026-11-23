@@ -48,6 +48,8 @@ const settle = async () => {
 
 describe("the Library's places", () => {
   beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
     resetTauriMock();
     resetSyncClock();
     window.localStorage.clear();
@@ -155,6 +157,32 @@ describe("the Library's places", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
     await settle();
     expect(rows()).toEqual(["call"]);
+  });
+
+  it("in the app, each place comes back as it was left; the Library's rail icon pressed again starts it over (PLAN_NAV_3_LEVELS §6)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await settle();
+    expect(rows()).toEqual(["zoom"]);
+    // Projects, then the Library again: Unread with Source: Zoom, as left.
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // Pressed again while shown: All recordings, nothing filtered.
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
   });
 
   it("in the app, All after a view shows every recording again", async () => {

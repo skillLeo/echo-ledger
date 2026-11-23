@@ -1,6 +1,6 @@
 // The v2 Library (ui_v2.library), as PLAN_LIBRARY_FILTERS lays it out: what it shows is chosen in the sidebar (a
 // library view, one of My views, a label, Trash: LibraryNav.tsx); one toolbar row (Search ⌘F, [Filters n],
-// [Sort & display ▾]); the filter panel on the start side (F; a drawer under 1280 px: FilterPanel.tsx); the pills row
+// [Sort & display ▾]); the filters from the end side (F; 320 px, pushing the list from 1440 px, over it below: FilterPanel.tsx); the pills row
 // only while filters are on; then the list, which starts within 120 px of the window's top. Rows have a checkbox on
 // hover and the toolbar a Select all, so there is no Select button; picking turns the toolbar into the selection bar.
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
@@ -22,7 +22,8 @@ import { ScreensMark } from "./screens";
 import { binHours, binSentence, isUntranscribed, rowModel, type SavedView } from "./model";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, matchesSearch, prepare, searchWords, sourceOf, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, LIBRARY_TABS, matchesSearch, prepare, searchWords, sourceOf, tabCounts, toggleValue,
+  type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
@@ -69,21 +70,30 @@ const MAX_TRANSCRIBE = 50;
 
 /** Results follow the panel this long after the last tick (counts and list, instantly enough, never on every key). */
 export const FILTER_DEBOUNCE_MS = 150;
-/** Under this window width the filter panel is a drawer over the list: tokens.css `--el-breakpoint-panel` (a test keeps them one). */
-export const DRAWER_BELOW = 1280;
+/** Under this window width the filters slide over the list; from it they push it: tokens.css `--el-breakpoint-wide` (a
+ * test keeps them one). */
+export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
 /** A search is one step of Back and Forward once typing has stopped this long. */
 const SEARCH_STEP_MS = 700;
 /** How many steps Back keeps. */
 const HISTORY_MAX = 50;
+/** A Library place as the window keeps it while another place is shown: its filters, search and tab. */
+export type LibraryPlaceState = { scope: LibraryScope; spec: FilterSpec; query: string; tab: LibraryTab };
 /** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
 type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
 /** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
  * --el-breakpoint-medium. */
 const WIDE = 1440;
-/** …and with the filter panel open beside the list. */
-const WIDE_WITH_PANEL = 1600;
+/** …and with the filters pushing the list (the rail and the place's panel take their room too). */
+const WIDE_WITH_PANEL = 1800;
 const NARROW = 1024;
+/** The search's placeholder for the room its box has. */
+function placeholderFor(width: number, filtersBeside: boolean): string {
+  if (width >= (filtersBeside ? WIDE_WITH_PANEL : WIDE)) return `Search titles, transcripts and projects (${MOD}F)`;
+  if (width >= NARROW && !filtersBeside) return `Search recordings (${MOD}F)`;
+  return `Search (${MOD}F)`;
+}
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
 const typing = (target: EventTarget | null) =>
@@ -107,7 +117,7 @@ const savePanel = (open: boolean) => {
   }
 };
 
-/** The window's size, kept up to date (the filter panel is a drawer under 1280 px, and as tall as the window). */
+/** The window's size, kept up to date (the filters slide over the list under 1440 px, and are as tall as the window). */
 function useWindowSize(): { width: number; height: number } {
   const [size, setSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   useEffect(() => {
@@ -138,7 +148,10 @@ export type LibraryV2Props = {
   /** A view from before the redesign (Home's "isn't transcribed", a notice): opened where it lives now. */
   viewRequest?: { view: SavedView; seq: number } | null;
   /** What the sidebar chose: a library view, one of My views, a label or Trash; `seq` makes the same one open again. */
-  scopeRequest?: { scope: LibraryScope; seq: number } | null;
+  /** Open a place; `restore` (the rail's per-place memory) brings back its filters, search and tab as left. */
+  scopeRequest?: { scope: LibraryScope; seq: number; restore?: LibraryPlaceState } | null;
+  /** Where the Library is now, as it would be restored (MainApp keeps it while another place is shown). */
+  onPlace?: (place: LibraryPlaceState) => void;
   /** The Library moved somewhere itself (Save as view opens the new view; Needs you from Activity's Review). */
   onScope?: (scope: LibraryScope) => void;
   /** Open the filters (the sidebar's "+ New view"); `seq` makes it open again. */
@@ -159,12 +172,13 @@ export type LibraryV2Props = {
   onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
+export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scope, setScopeNow] = useState<LibraryScope>(ALL_SCOPE);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<LibraryTab>("all");
   const [openId, setOpenIdNow] = useState<string | null>(null);
   // Recently opened (Sort by) remembers each recording opened here.
   const [opened, setOpened] = useState<Record<string, number>>(() => loadOpened());
@@ -195,7 +209,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const myViews = useMyViews();
   const [newLabel, setNewLabel] = useState<{ ids: string[] } | null>(null);
   const [savingView, setSavingView] = useState(false);
-  // The filter panel: open or closed is remembered; under 1280 px it is a drawer and starts closed.
+  // The filter panel: open or closed is remembered; under 1440 px it slides over the list and starts closed.
   const { width, height } = useWindowSize();
   const drawer = width < DRAWER_BELOW;
   const [panel, setPanelNow] = useState(() => readPanel() && window.innerWidth >= DRAWER_BELOW);
@@ -365,6 +379,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setScopeNow(next);
     setOpenIdNow(null);
     setCollapsed(new Set());
+    setTab("all");
     const view = next.kind === "saved" ? viewsStore.list().find((v) => isView(v, next.id)) : null;
     if (exact) {
       // Back or Forward: the place as it was left, its filters and search exactly.
@@ -384,7 +399,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (report) onScope?.(next);
   }, [onScope, setSpec]);
   useEffect(() => {
-    if (scopeRequest) show(scopeRequest.scope);
+    if (!scopeRequest) return;
+    const r = scopeRequest.restore;
+    show(scopeRequest.scope, r?.spec ?? {}, false, r ? { query: r.query } : undefined);
+    setTab(r?.tab ?? "all");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeRequest]);
   // A view from before the redesign opens where it lives now (Today: All with Date: Today; Waiting: Needs you…).
@@ -573,7 +591,17 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
   // which no other view has), whatever the filters and the search, as the server's Needs you does.
   const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
-  const shownItems = useMemo(() => [...waitingHere, ...filterFacts(searched, applied).map((f) => f.item)], [waitingHere, searched, applied]);
+  // The page's tabs (All · Calls · Meetings · Voice notes), by Source, ANDed with the filters; counted with the
+  // place, the filters and the search.
+  const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
+  const tabCount = useMemo(() => tabCounts(filtered), [filtered]);
+  const shownItems = useMemo(() => [...waitingHere, ...filtered.filter((f) => inTab(f, tab)).map((f) => f.item)], [waitingHere, filtered, tab]);
+  // Kept by the window while another place is shown, to come back to as it was.
+  const placeNow = useRef(onPlace);
+  placeNow.current = onPlace;
+  useEffect(() => {
+    placeNow.current?.({ scope, spec: applied, query, tab });
+  }, [scope, applied, query, tab]);
   // Only pinned recordings on screen already (Marked is Pinned alone): no Pinned section of its own.
   const onlyPinned = applied.marked?.values.length === 1 && applied.marked.values[0] === "pinned" && applied.marked.op !== "is_not";
   const groups = useMemo(() => sections(shownItems, choice.group, choice.sort, opened, !onlyPinned),
@@ -1143,8 +1171,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               {!trash && (
                 <>
                   <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={width >= (panelShown && !drawer ? WIDE_WITH_PANEL : WIDE) ? `Search titles, transcripts and projects (${MOD}F)`
-                      : width >= NARROW ? `Search recordings (${MOD}F)` : `Search (${MOD}F)`}
+                    placeholder={placeholderFor(width, panelShown && !drawer)}
                     className="el-lib-toolbar__search" />
                   <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
                     title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
@@ -1155,6 +1182,25 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                 </>
               )}
             </header>
+          )}
+          {!trash && !choosing && (
+            <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
+              {LIBRARY_TABS.map((t) => (
+                <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
+                  onClick={() => setTab(t)} onKeyDown={(e) => {
+                    const at = LIBRARY_TABS.indexOf(t);
+                    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+                    const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
+                    if (!step) return;
+                    e.preventDefault();
+                    const next = LIBRARY_TABS[(at + step + LIBRARY_TABS.length) % LIBRARY_TABS.length];
+                    setTab(next);
+                    (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[LIBRARY_TABS.indexOf(next)])?.focus();
+                  }}>
+                  {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
+                </button>
+              ))}
+            </div>
           )}
           {!trash && !choosing && (filtersOn > 0 || changed) && (
             <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}

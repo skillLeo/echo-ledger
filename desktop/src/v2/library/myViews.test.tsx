@@ -478,21 +478,22 @@ describe("My views in the sidebar and the Library", () => {
     expect(title()).toHaveTextContent(/^Two/);
   });
 
-  it("⌘1…⌘9 open the sidebar's first nine: the library views, then My views", async () => {
+  it("Alt+1…Alt+9 open the panel's first nine: the library views, then My views (⌘1…⌘6 are the rail's)", async () => {
     render(<App />);
     await act(flushAsync);
     await viewsStore.create("WhatsApp", SPEC);
     await act(flushAsync);
-    fireEvent.keyDown(window, { key: "3", metaKey: true });
+    // Option+3 types "£" on a Mac: the key's place counts.
+    fireEvent.keyDown(window, { key: "£", code: "Digit3", altKey: true });
     await act(flushAsync);
     expect(nav().getByRole("button", { name: "Unread, 1" })).toHaveAttribute("aria-current", "page");
     expect(rows()).toEqual(["wa2"]);
-    fireEvent.keyDown(window, { key: "7", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "7", code: "Digit7", altKey: true });
     await act(flushAsync);
     expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
-    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Meta+7 Control+7");
+    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+7");
     // Nothing at 9: nothing happens.
-    fireEvent.keyDown(window, { key: "9", metaKey: true });
+    fireEvent.keyDown(window, { key: "9", code: "Digit9", altKey: true });
     expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
   });
 });

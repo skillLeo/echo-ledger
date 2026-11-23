@@ -1,0 +1,218 @@
+// The app's frame in three levels (PLAN_NAV_3_LEVELS): the rail (Home's logo, ● Record, Library, Projects, Live, Ask,
+// Activity; at its foot Setup & health, Help, Settings and the avatar), the selected place's panel (260 px; hidden by
+// ⊟ or ⌘\ and remembered per place; under 1100 px a flyout from the rail that closes once something is chosen), and
+// the page. Clicking the selected place again starts that place over; ⌘1…⌘6 go to the places.
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Avatar, Icon, Icons, Status } from "../components";
+import { Menu, type MenuItem } from "../components/Menu";
+import { BrandMark } from "../../components/BrandMark";
+import { initials } from "../settings/initials";
+import { PLACE_NAMES, PlacePanel, RAIL_PLACES, RailItem, railItemProps, type Place } from "./NavRail";
+import type { ShellStatus } from "./status";
+
+/** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
+export const FLYOUT_BELOW = 1100;
+const PANEL_KEY = "echoledger-nav-panels";
+const PRESS_HOLD_MS = 3000;
+
+/** Which places' panels are hidden, kept on this computer (shown unless hidden). */
+function loadHidden(): Set<Place> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(PANEL_KEY) ?? "[]");
+    return new Set(Array.isArray(saved) ? saved.filter((p): p is Place => RAIL_PLACES.includes(p as Place)) : []);
+  } catch {
+    return new Set();
+  }
+}
+function saveHidden(hidden: ReadonlySet<Place>) {
+  try {
+    localStorage.setItem(PANEL_KEY, JSON.stringify([...hidden]));
+  } catch {
+    // Kept for this session only.
+  }
+}
+
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+    || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
+
+export type NavShellProps = {
+  /** The place shown (null: Home, the Record page). */
+  place: Place | null;
+  /** Go to a place (the window brings back how it was left); `again`: it was the place shown, so start it over. */
+  onPlace: (place: Place, again: boolean) => void;
+  onHome: () => void;
+  status: ShellStatus;
+  /** Each place's panel and, for some, its foot (the Library's Trash and sync line). */
+  panels: Partial<Record<Place, ReactNode>>;
+  feet?: Partial<Record<Place, ReactNode>>;
+  /** Badges: the Library's Needs you, Activity's unread needs. */
+  libraryCount?: number;
+  activityCount?: number;
+  /** Live's red dot: a call is recorded, or call recording is on and listening. */
+  liveDot?: boolean;
+  liveDotWords?: string;
+  /** Setup & health's dot: something to fix. */
+  setupAttention?: boolean;
+  onSetupHealth: () => void;
+  onHelp?: () => void;
+  recording?: boolean;
+  onRecord?: () => unknown;
+  onUpload?: () => void;
+  onVoiceNote?: () => void;
+  /** Call recording on or off (Settings › Recording's switch), from Record's menu. */
+  callRecording?: { on: boolean; toggle: () => void };
+  onSearch?: () => void;
+  searchKeys?: string;
+  me?: { name: string; email: string; plan: string | null } | null;
+  /** The avatar's menu: the account, the plan, the workspace, the theme, sign out. */
+  account?: MenuItem[];
+  uploading?: string | null;
+  notices?: ReactNode;
+  banners?: ReactNode;
+  children: ReactNode;
+};
+
+export function NavShell({ place, onPlace, onHome, status, panels, feet, libraryCount, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
+  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, children }: NavShellProps) {
+  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
+  useEffect(() => {
+    const follow = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", follow);
+    return () => window.removeEventListener("resize", follow);
+  }, []);
+  const narrow = width < FLYOUT_BELOW;
+  const [hidden, setHidden] = useState<Set<Place>>(loadHidden);
+  const [flyout, setFlyout] = useState(false);
+  const hasPanel = !!place && !!panels[place];
+  const shown = hasPanel && (narrow ? flyout : !hidden.has(place!));
+  const togglePanel = useCallback(() => {
+    if (!place || !panels[place]) return;
+    if (narrow) {
+      setFlyout((f) => !f);
+      return;
+    }
+    setHidden((now) => {
+      const next = new Set(now);
+      if (next.has(place)) next.delete(place);
+      else next.add(place);
+      saveHidden(next);
+      return next;
+    });
+  }, [place, panels, narrow]);
+  // Another place: the flyout closes (it opens again from the rail).
+  const [lastPlace, setLastPlace] = useState(place);
+  if (place !== lastPlace) {
+    setLastPlace(place);
+    if (flyout && !narrow) setFlyout(false);
+  }
+  const press = (p: Place) => {
+    const again = p === place;
+    if (narrow) setFlyout(again ? !flyout : !!panels[p]);
+    if (!again || !narrow) onPlace(p, again);
+  };
+  // ⌘1…⌘6 (Ctrl elsewhere): the places; ⌘\ the panel. Never while typing or behind a dialog.
+  const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  keys.current = (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.defaultPrevented || typing(e.target)) return;
+    if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+    if (e.key === "\\") {
+      e.preventDefault();
+      togglePanel();
+      return;
+    }
+    const at = /^[1-6]$/.test(e.key) ? Number(e.key) - 1 : -1;
+    if (at < 0) return;
+    e.preventDefault();
+    press(RAIL_PLACES[at]);
+  };
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keys.current(e);
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+  // One press records or stops; while the core answers, more presses do nothing.
+  const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
+  if (pressing && !!recording !== pressing.from) setPressing(null);
+  useEffect(() => {
+    if (!pressing) return;
+    const fallback = window.setTimeout(() => setPressing(null), PRESS_HOLD_MS);
+    return () => window.clearTimeout(fallback);
+  }, [pressing]);
+  const stops = !!onRecord && !!recording;
+  const pressRecord = () => {
+    if (!onRecord) return onHome();
+    if (pressing) return;
+    setPressing({ from: !!recording });
+    void Promise.resolve(onRecord()).catch(() => setPressing(null));
+  };
+  const recordMenu: MenuItem[] = [
+    ...(onRecord ? [{ label: stops ? "Stop recording" : "Record now", icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
+    ...(onUpload ? [{ label: "Import audio files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
+    ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
+    ...(callRecording ? [{ label: "Call recording", group: "Calls", checked: callRecording.on, onPick: callRecording.toggle }] : []),
+    { label: "Record page", icon: Icons.HomeIcon, onPick: onHome },
+  ];
+  const mac = searchKeys?.startsWith("⌘") ?? false;
+  const counts: Partial<Record<Place, number | undefined>> = { library: libraryCount || undefined, activity: activityCount || undefined };
+  const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
+    library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
+  };
+  const railPlace = (p: Place) => (
+    <RailItem key={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
+      dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} />
+  );
+  return (
+    <div className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}`} data-shell="v2">
+      <nav className="el-rail" aria-label="Main">
+        <button type="button" className="el-rail__home" aria-label="EchoLedger, Home" title="Home" aria-current={place === null ? "page" : undefined} onClick={onHome}>
+          <BrandMark size={28} className="el-rail__mark" />
+        </button>
+        <div className="el-rail__record" role="group" aria-label="Record">
+          <button type="button" className={`el-rail__rec${stops ? " el-rail__rec--stop" : ""}`} aria-label={stops ? "Stop recording" : "Record"} title={stops ? "Stop recording" : "Record now"}
+            aria-disabled={pressing ? true : undefined} onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>
+            <Icon icon={stops ? Icons.StopIcon : Icons.RecordIcon} size="md" />
+          </button>
+          <Menu label="More ways to record" items={recordMenu} button={{ variant: "quiet", size: "sm", icon: Icons.ChevronDownIcon, className: "el-rail__rec-more" }} />
+        </div>
+        <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
+        <div className="el-rail__foot">
+          {onSearch && <RailItem icon={Icons.SearchIcon} label="Search" current={false} onClick={onSearch} shortcut={mac ? "⌘K" : "Ctrl+K"} keys={mac ? "Meta+K" : "Control+K"} />}
+          <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />
+          {onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}
+          {railPlace("settings")}
+          {me && account && (
+            <div className="el-rail__me">
+              <Menu label={`${me.name}: account`} items={account} button={{ variant: "quiet", className: "el-rail__avatar", title: me.email,
+                "aria-label": `${me.name}: account`, text: <Avatar initials={initials(me.name, me.email)} size="sm" /> }} />
+            </div>
+          )}
+        </div>
+      </nav>
+      {shown && (
+        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={() => setFlyout(false)}
+          foot={<>
+            {feet?.[place!]}
+            {uploading && <p className="el-shell__uploads el-caption el-secondary" aria-live="polite" data-testid="sidebar-uploads"><span className="el-spinner" aria-hidden="true" /><span dir="auto">{uploading}</span></p>}
+            <div className="el-shell__status el-caption">
+              {status.kind === "setup" ? (
+                <button type="button" className="el-shell__status-fix" onClick={onSetupHealth}><Status kind={status.kind} live>{status.text}</Status></button>
+              ) : <Status kind={status.kind} live>{status.text}</Status>}
+              {status.kind === "recording" && status.time && <span className="el-shell__time el-num" dir="ltr">{` · ${status.time}`}</span>}
+            </div>
+          </>}>
+          {panels[place!]}
+        </PlacePanel>
+      )}
+      {!shown && hasPanel && !narrow && (
+        <button type="button" className="el-panel-show" aria-label={`Show the ${PLACE_NAMES[place!]} panel`} title={`Show panel (${mac ? "⌘" : "Ctrl+"}\\)`}
+          aria-keyshortcuts="Meta+\ Control+\" onClick={togglePanel}><Icon icon={Icons.SidebarIcon} /></button>
+      )}
+      <main className="el-shell__main">
+        {notices}
+        {banners}
+        {children}
+      </main>
+    </div>
+  );
+}

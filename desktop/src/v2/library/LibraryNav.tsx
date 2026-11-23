@@ -110,16 +110,18 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
   const [sharedFolded, foldShared] = useFolded("shared-folded", true);
   const sharedShown = !sharedFolded || sharedOpen;
 
-  // ⌘1…⌘9 (Ctrl+1…9 on Windows): the first nine views of the sidebar, the library views then My views.
+  // Alt+1…Alt+9 (Option on a Mac): the first nine views of the panel, the library views then My views (⌘1…⌘6 are the
+  // rail's places). By the key's place, not its letter: Option+1 types "¡" on a Mac.
   const order = useRef<LibraryScope[]>([]);
   order.current = [...LIBRARY_VIEWS.map((view): LibraryScope => ({ kind: "view", view })), ...views.map((v): LibraryScope => ({ kind: "saved", id: v.id }))].slice(0, 9);
   const go = useRef(onScope);
   go.current = onScope;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !/^[1-9]$/.test(e.key) || typing(e.target) || e.defaultPrevented) return;
+      const digit = /^Digit([1-9])$/.exec(e.code)?.[1] ?? (/^[1-9]$/.test(e.key) ? e.key : null);
+      if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || !digit || typing(e.target) || e.defaultPrevented) return;
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
-      const scope = order.current[Number(e.key) - 1];
+      const scope = order.current[Number(digit) - 1];
       if (!scope) return;
       e.preventDefault();
       go.current(scope);
@@ -130,15 +132,14 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
   const key = (scope: LibraryScope) => order.current.findIndex((s) => JSON.stringify(s) === JSON.stringify(scope));
   const shortcut = (scope: LibraryScope) => {
     const at = key(scope);
-    return at >= 0 ? `Meta+${at + 1} Control+${at + 1}` : undefined;
+    return at >= 0 ? `Alt+${at + 1}` : undefined;
   };
   const currentLabel = current?.startsWith("label:") ? current.slice(6) : null;
 
   return (
     <div className="el-library-nav">
-      <section className="el-nav-section" aria-label="Library">
-        <SectionHead title="Library" folded={libraryFolded} onFold={foldLibrary} titleHint="All recordings, nothing filtered"
-          onTitle={() => onScope({ kind: "view", view: "all" })} />
+      <section className="el-nav-section" aria-label="Views">
+        <SectionHead title="Views" folded={libraryFolded} onFold={foldLibrary} />
         {!libraryFolded && <ul className="el-nav-list" aria-label="Library views">
           {LIBRARY_VIEWS.map((view) => (
             <li key={view}>

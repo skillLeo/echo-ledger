@@ -14,6 +14,27 @@ export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = {
   all: "All recordings", needs: "Needs you", unread: "Unread", important: "Important", not_transcribed: "Not transcribed", audio_only: "Audio only",
 };
 
+/**
+ * The Library's page tabs (PLAN_NAV_3_LEVELS §4; docs/API.md, the UI's guidance): All, Calls, Meetings, Voice notes,
+ * each a set of Source values ANDed with the filters. Imported and Other are under All only.
+ */
+export type LibraryTab = "all" | "calls" | "meetings" | "voice_notes";
+export const LIBRARY_TABS: readonly LibraryTab[] = ["all", "calls", "meetings", "voice_notes"];
+export const LIBRARY_TAB_NAMES: Record<LibraryTab, string> = { all: "All", calls: "Calls", meetings: "Meetings", voice_notes: "Voice notes" };
+const TAB_SOURCES: Record<Exclude<LibraryTab, "all">, ReadonlySet<string>> = {
+  calls: new Set(["whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype"]),
+  meetings: new Set(["zoom", "google_meet", "microsoft_teams", "slack", "discord"]),
+  voice_notes: new Set(["voice_note"]),
+};
+/** Whether a recording is in a tab (by its Source). */
+export const inTab = (f: Facts, tab: LibraryTab) => tab === "all" || f.values.source.some((v) => TAB_SOURCES[tab].has(v));
+/** Each tab's count among these recordings (already the place's, filtered and searched). */
+export function tabCounts(facts: readonly Facts[]): Record<LibraryTab, number> {
+  const out = { all: facts.length, calls: 0, meetings: 0, voice_notes: 0 } as Record<LibraryTab, number>;
+  for (const f of facts) for (const t of ["calls", "meetings", "voice_notes"] as const) if (inTab(f, t)) out[t]++;
+  return out;
+}
+
 /** The filter sections, in the panel's (and the contract's) order. */
 export type SectionKey = "date" | "source" | "device" | "project" | "language" | "status" | "labels" | "marked" | "bookmarks";
 export const SECTIONS: readonly SectionKey[] = ["date", "source", "device", "project", "language", "status", "labels", "marked", "bookmarks"];

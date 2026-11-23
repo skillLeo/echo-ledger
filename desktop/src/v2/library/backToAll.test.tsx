@@ -97,7 +97,7 @@ describe("the way back to all recordings", () => {
     expect(document.body).not.toHaveTextContent(/Inbox/);
   });
 
-  it("from every view, the sidebar's Library and the breadcrumb's Library both go back to All recordings, filters and search cleared", async () => {
+  it("from every view, the panel's All recordings and the breadcrumb's Library both go back to All recordings, filters and search cleared", async () => {
     render(<App />);
     await settle();
     await act(async () => {
@@ -129,7 +129,8 @@ describe("the way back to all recordings", () => {
           await act(() => new Promise((r) => setTimeout(r, 200)));
           expect(screen.getByRole("group", { name: "Filters on" })).toBeInTheDocument();
         }
-        if (way === "sidebar") fireEvent.click(nav().getByRole("button", { name: "Library" }));
+        // The panel's All recordings (the rail's Library pressed again does the same: navShell.test.tsx).
+        if (way === "sidebar") fireEvent.click(nav().getByRole("button", { name: /^All recordings, / }));
         else fireEvent.click(crumbs().getByRole("button", { name: "Library" }));
         await settle();
         atAll();

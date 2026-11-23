@@ -52,6 +52,10 @@ import { useUiFlags } from "../../v2/flags";
 import { shellChip } from "../../v2/shell/status";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
+import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
+import type { Place as NavPlace } from "../../v2/shell/NavRail";
+import type { ActivityShow } from "../../v2/shell/PlacePanels";
+import * as Icons from "../../v2/components/icons";
 import { syncLibrary } from "../../v2/library/syncClock";
 import { lastViewsAccount, rememberViewsAccount, settleViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
 import { sourceAppLabel } from "../../lib/format";
@@ -64,6 +68,10 @@ const v2 = () => import("../../v2/app");
 const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
 const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
 const LibraryNavV2 = lazy(() => v2().then((m) => ({ default: m.LibraryNav })));
+const LivePanelV2 = lazy(() => v2().then((m) => ({ default: m.LivePanel })));
+const AskPanelV2 = lazy(() => v2().then((m) => ({ default: m.AskPanel })));
+const ActivityPanelV2 = lazy(() => v2().then((m) => ({ default: m.ActivityPanel })));
+const SettingsPanelV2 = lazy(() => v2().then((m) => ({ default: m.SettingsPanel })));
 const LibraryFootV2 = lazy(() => v2().then((m) => ({ default: m.LibraryFoot })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
@@ -183,7 +191,13 @@ export default function MainApp() {
   // Trash), the request that tells the Library, and the recordings the sidebar counts from (read here, and fresher from
   // the Library while it is open, with what was opened there).
   const [libraryScope, setLibraryScope] = useState<LibraryScope>(ALL_SCOPE);
-  const [scopeRequest, setScopeRequest] = useState<{ scope: LibraryScope; seq: number } | null>(null);
+  const [scopeRequest, setScopeRequest] = useState<{ scope: LibraryScope; seq: number; restore?: LibraryPlaceState } | null>(null);
+  // The three levels' memory (PLAN_NAV_3_LEVELS §6): each place as it was left, to come back to from the rail.
+  const libraryPlace = useRef<LibraryPlaceState | null>(null);
+  const lastProject = useRef<string | null>(null);
+  const lastSettings = useRef<string | null>(null);
+  const [activityShow, setActivityShow] = useState<ActivityShow>("all");
+  const [askProject, setAskProject] = useState<{ id: string | null; seq: number }>({ id: null, seq: 0 });
   const [filtersRequest, setFiltersRequest] = useState<{ seq: number } | null>(null);
   const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
   const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
@@ -767,6 +781,7 @@ export default function MainApp() {
   const openProject = (id: string | null) => {
     setTab("projects");
     setProjectId(id);
+    lastProject.current = id;
   };
   const openShared = (next: SharedTab) => {
     setTab("shared");
@@ -801,6 +816,48 @@ export default function MainApp() {
   const openAccount = (section: string) => {
     setTab("settings");
     setSettingsSection({ id: section, seq: ++navigations.current });
+    lastSettings.current = section;
+  };
+  /**
+   * A place chosen in the rail: back as it was left (the Library's view, filters, search and tab; the project; the
+   * Settings page), or, pressed again while shown, started over (All recordings, All projects, Settings' list).
+   */
+  /** Live's panel: the part of the Live page to show. */
+  const showLivePart = (part: "assist" | "translate" | "dictation" | "captions") => {
+    const words = { assist: /live assist/i, translate: /translate/i, dictation: /dictation/i, captions: /caption/i }[part];
+    window.requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>(".page-live h2, .page-live h3, .page-live [aria-label]")].find((el) => words.test(el.getAttribute("aria-label") ?? el.textContent ?? ""));
+      target?.scrollIntoView({ block: "start" });
+    });
+  };
+  const openNavPlace = (place: NavPlace, again: boolean) => {
+    switch (place) {
+      case "library": {
+        const kept = !again ? libraryPlace.current : null;
+        setTab("library");
+        setLibraryFolder(null);
+        setLibraryView(null);
+        setSharedFocus(null);
+        const scope = kept?.scope ?? ALL_SCOPE;
+        setLibraryScope(scope);
+        setScopeRequest({ scope, seq: ++navigations.current, restore: kept ?? undefined });
+        return;
+      }
+      case "projects": return openProject(again ? null : lastProject.current);
+      case "settings":
+        if (again || !lastSettings.current) {
+          lastSettings.current = null;
+          return goTo("settings");
+        }
+        return openAccount(lastSettings.current);
+      case "activity":
+        if (again) setActivityShow("all");
+        return setTab("activity");
+      case "ask":
+        if (again) setAskProject((a) => ({ id: null, seq: a.seq + 1 }));
+        return;
+      case "live": return;
+    }
   };
   const helpInV2 = ui.flags["ui_v2.shell"] && ui.flags["ui_v2.settings"] && helpV2Reachable(ui.flags);
   const openHelp = () => {
@@ -914,7 +971,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
             folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={() => setLibraryFolder(null)}
-            scopeRequest={scopeRequest} onScope={setLibraryScope} filtersRequest={filtersRequest}
+            scopeRequest={scopeRequest} onScope={setLibraryScope} onPlace={(p) => { libraryPlace.current = p; }} filtersRequest={filtersRequest}
             onItems={(items, read) => setLibraryItems({ items, read })}
             onOpenProject={(id) => openProject(id)} initialOpen={restoredRecording} onOpenChange={rememberRecording}
             top={ui.flags["ui_v2.shell"] ? {
@@ -994,7 +1051,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
+            <ActivityV2 status={status} show={activityShow} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -1102,6 +1159,34 @@ export default function MainApp() {
               </Suspense>
             ) : undefined}
             libraryAttention={(libraryCounts?.needs ?? 0) > 0}
+            nav={{
+              onPlace: openNavPlace,
+              libraryCount: libraryCounts?.needs || undefined,
+              liveDot: !!status.recording || status.captionsLive || status.dictationActive,
+              liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
+              setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
+              callRecording: canRecord ? { on: status.autoMode, toggle: () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on") } : undefined,
+              account: account ? [
+                { label: `${account.name || account.email}`, group: account.email, disabled: true },
+                { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
+                { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
+                { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
+                ...(shellWorkspace ? [
+                  { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
+                  ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),
+                  { label: "Switch or manage in the browser", icon: Icons.WebIcon, group: "Workspace", onPick: shellWorkspace.onManage },
+                ] : []),
+                ...(account.super_admin === true ? [{ label: "Admin panel", icon: Icons.LinkIcon, onPick: () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) }] : []),
+                { label: "Sign out", icon: Icons.SignOutIcon, separator: true, onPick: () => void signOut() },
+              ] : undefined,
+              panels: {
+                live: <Suspense fallback={null}><LivePanelV2 callRecording={status.autoMode} onCalls={() => openAccount("calls")} onPart={showLivePart} /></Suspense>,
+                ask: <Suspense fallback={null}><AskPanelV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} current={askProject.id}
+                  onAsk={(id) => setAskProject((a) => ({ id, seq: a.seq + 1 }))} /></Suspense>,
+                activity: <Suspense fallback={null}><ActivityPanelV2 show={activityShow} needs={needsYou} onShow={(next) => { setActivityShow(next); setTab("activity"); }} /></Suspense>,
+                settings: <Suspense fallback={null}><SettingsPanelV2 current={tab === "settings" ? settingsSection?.id ?? null : null} onOpen={openAccount} /></Suspense>,
+              },
+            }}
             footStart={ui.flags["ui_v2.library"] ? (
               <Suspense fallback={null}>
                 <LibraryFootV2 trashCurrent={tab === "library" && libraryScope.kind === "trash"} onTrash={() => openScope({ kind: "trash" })}
@@ -1124,7 +1209,7 @@ export default function MainApp() {
             </div></Suspense>}
             ask={ui.flags["ui_v2.ask"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
-                <AskV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
+                <AskV2 key={askProject.seq} initialProjectId={askProject.id} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
                   onOpenProject={(id) => openProject(id)} onLibrary={() => openFolder(null)} />
               </div></Suspense>
             ) : undefined}

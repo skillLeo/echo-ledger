@@ -359,7 +359,7 @@ export function Menu({ label, items: given, button, chip }: {
           {chip.text}<Icon icon={ChevronDownIcon} />
         </button>
       ) : (
-        <Button {...buttonProps} ref={opener} aria-label={text ? undefined : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
+        <Button {...buttonProps} ref={opener} aria-label={text ? buttonProps["aria-label"] : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
           onClick={press} onKeyDown={openerKey}>{text}</Button>
       )}
       {open && (

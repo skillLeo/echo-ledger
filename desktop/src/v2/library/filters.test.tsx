@@ -1,5 +1,5 @@
 // Find in the v2 Library (PLAN_LIBRARY_FILTERS; docs/v2/audit/parity.csv DT-LIB-001..059): one toolbar row (Search,
-// [Filters n], [Sort & display ▾]); the filter panel (F, Esc; remembered; a drawer under 1280 px) with its sections,
+// [Filters n], [Sort & display ▾]); the filters (F, Esc; remembered; from the end side, pushing the list from 1440 px, over it below) with its sections,
 // live counts (an option at 0 dimmed, still a choice), a search box in a long section and each section's Clear, the
 // list following 150 ms after the last tick; the pills row only while filters are on (edit with "is" or "is not",
 // × removes one, Clear all); a row's source logo or label dot as a quick filter; the keys; sections with counts that
@@ -416,10 +416,10 @@ describe("Find in the Library", () => {
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
   });
 
-  it("under 1280 px (the panel's breakpoint token) the panel is a drawer over the list that starts closed; the scrim and Esc close it", async () => {
-    // The width is the token's: tokens.css --el-breakpoint-panel.
+  it("under 1440 px (the wide breakpoint token) the filters slide over the list from the end side and start closed; the scrim and Esc close it", async () => {
+    // The width is the token's: tokens.css --el-breakpoint-wide.
     const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
-    expect(tokens).toContain(`--el-breakpoint-panel: ${DRAWER_BELOW}px;`);
+    expect(tokens).toContain(`--el-breakpoint-wide: ${DRAWER_BELOW}px;`);
     window.localStorage.setItem("echoledger-library-filters-open", "1");
     setWidth(1100);
     await show();
