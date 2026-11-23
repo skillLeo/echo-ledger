@@ -170,19 +170,24 @@ describe("the search", () => {
     makeItem("d", { title: "Kick-off", transcript: none, client: { id: "p3", name: "Northwind" } }),
   ], { now: NOW.getTime(), projects: [{ id: "p1", name: "Qureshi Holdings" }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Northwind" }] });
   const found = (q: string) => facts.filter((f) => matchesSearch(f, searchWords(q))).map((f) => f.item.id);
-  it("every word in the title, or every word in the transcript, whatever the case", () => {
+  it("every word somewhere among the title, the transcript and the project path, whatever the case", () => {
     expect(found("budget acme")).toEqual(["a", "b"]);
-    expect(found("ACME invoice")).toEqual([]);
     expect(found("invoice")).toEqual(["a"]);
+    // The words may be in different places: Acme in the title, invoice in the transcript.
+    expect(found("ACME invoice")).toEqual(["a"]);
+    // Every word somewhere: one missing is no match.
+    expect(found("acme zebra")).toEqual([]);
   });
-  it("or every word in the project's name and the folders above it", () => {
+  it("the project path: the project's name and the folders above it, with the title and the transcript", () => {
     expect(found("northwind")).toEqual(["d"]);
     // A folder's name finds the recordings in its subfolders.
     expect(found("qureshi")).toEqual(["c"]);
     expect(found("holdings contracts")).toEqual(["c"]);
     expect(found("CONTRACTS")).toEqual(["c"]);
-    // Each place on its own: a word in the project and another in the title is no match.
-    expect(found("contracts clause")).toEqual([]);
+    // A word in the project and another in the title, or in the transcript.
+    expect(found("contracts clause")).toEqual(["c"]);
+    expect(found("qureshi four")).toEqual(["c"]);
+    expect(found("northwind clause")).toEqual([]);
     // No project: nothing to match.
     expect(found("no project")).toEqual([]);
   });

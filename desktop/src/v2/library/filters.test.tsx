@@ -328,7 +328,7 @@ describe("Find in the Library", () => {
     expect(rows()).toEqual(["tp", "t", "ti"]);
   });
 
-  it("the search finds the title, the transcript, or the project with the folders above it", async () => {
+  it("the search finds every word among the title, the transcript and the project with the folders above it", async () => {
     respond("list_clients", { data: [{ id: "p0", name: "Holdings" }, { id: "c1", name: "Acme", parent_id: "p0" }] });
     await show();
     const search = screen.getByRole("searchbox", { name: "Search recordings" });
@@ -345,6 +345,10 @@ describe("Find in the Library", () => {
     fireEvent.change(search, { target: { value: "dawood" } });
     await act(flushAsync);
     expect(rows()).toEqual(["d"]);
+    // The words in different places: Holdings (Ali's project's folder) and "one" (Ali's transcript).
+    fireEvent.change(search, { target: { value: "holdings one" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["a"]);
   });
 
   it("a row's source logo or label dot filters by it at once", async () => {

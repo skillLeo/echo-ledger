@@ -263,12 +263,12 @@ export function searchWords(q: string): string[] {
   return s.toLowerCase().split(/\s+/).filter(Boolean);
 }
 /**
- * The search keeps a recording when every word is in its title, or every word is in its transcript, or every word is in
- * its project's name and the names of the folders above it ("acme" finds Acme Holdings › Contracts too).
+ * The search keeps a recording when every word is somewhere among its title, its transcript and its project's path (the
+ * project's name and the folders above it), each word in any of them: "contracts clause" finds a recording in Contracts
+ * whose transcript says "clause"; "acme" finds Acme Holdings › Contracts too.
  */
 export const matchesSearch = (f: Facts, words: readonly string[]) =>
-  words.length === 0 || words.every((w) => f.title.includes(w)) || words.every((w) => f.text.includes(w))
-  || (!!f.project && words.every((w) => f.project.includes(w)));
+  words.every((w) => f.title.includes(w) || f.text.includes(w) || f.project.includes(w));
 
 /** The days a Date choice keeps, inclusive, as YYYY-MM-DD; null for an open end. Nothing after today is in Today or Last 7 days. */
 export function dateRange(preset: DatePreset, now: number, tz?: string, custom: { from?: string; to?: string } = {}): { from: string | null; to: string | null } {
