@@ -29,6 +29,7 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Process;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -98,6 +99,31 @@ function navPanelActive(string $html, string $place): array
     }
 
     return $links;
+}
+
+/** The sidebar's snapshot from a page the person opened (it is mounted there, with that page's address). */
+function navSidebarSnapshot(object $test, string $url): string
+{
+    app('auth')->forgetGuards();
+    SettingsContext::forget();
+    $html = (string) $test->actingAs($test->owner->fresh(), 'web')->get($url)->assertOk()->getContent();
+    preg_match_all('/wire:snapshot="([^"]*)"[^>]*wire:name="([^"]*)"/s', $html, $found);
+    foreach ($found[2] as $i => $name) {
+        if ($name === Sidebar::class) {
+            return html_entity_decode($found[1][$i], ENT_QUOTES | ENT_HTML5);
+        }
+    }
+
+    throw new RuntimeException("No sidebar on {$url}");
+}
+
+/** The sidebar's own update, as the browser sends it (Livewire's update request); the HTML it draws. */
+function navSidebarUpdate(object $test, string $snapshot, array $calls): string
+{
+    $response = $test->postJson(Livewire::getUpdateUri(), ['components' => [['snapshot' => $snapshot, 'updates' => [], 'calls' => $calls]]], ['X-Livewire' => 'true']);
+    $response->assertOk();
+
+    return (string) ($response->json('components.0.effects.html') ?? '');
 }
 
 /** The links of one place's panel, as [href => text]. */
@@ -449,21 +475,43 @@ describe('after the desktop\'s review', function () {
     });
 
     it('draws the frame for its page on the sidebar\'s own requests (a view renamed from the panel), never as Home\'s rail alone', function () {
-        $this->actingAs($this->owner->fresh(), 'web');
         foreach (['/app/sessions' => 'library', '/app/clients?show=pinned' => 'projects', '/app/activity' => 'activity', '/app/settings/profile' => 'settings'] as $here => $place) {
-            $html = Livewire::test(Sidebar::class)->set('here', $here)->call('$refresh')->html();
+            // Mounted by the page itself (its address in the snapshot), then drawn again on its own update.
+            $html = navSidebarUpdate($this, navSidebarSnapshot($this, $here), [['path' => '', 'method' => '$refresh', 'params' => []]]);
             expect($html)->toContain('data-place="'.$place.'"')->toContain('\u0022place\u0022:\u0022'.$place.'\u0022')
                 ->toMatch('~class="v2-rail-item is-on"\s+aria-current="page"[^>]*data-module="'.$place.'"~')
                 ->toMatch('~<section class="v2-panel" data-panel="'.$place.'" aria-label="[^"]+"\s+x-bind:hidden~');
         }
         // The Rename dialog opened from the panel and closed again: the Library's frame still.
-        $sidebar = Livewire::test(Sidebar::class)->set('here', '/app/sessions');
         $view = collect(app(SavedViews::class)->index((int) $this->owner->current_workspace_id, $this->owner->id))->first();
-        $sidebar->call('mountAction', 'renameView', ['id' => $view['id']])->call('unmountAction');
-        expect($sidebar->html())->toContain('data-place="library"');
+        $html = navSidebarUpdate($this, navSidebarSnapshot($this, '/app/sessions'), [
+            ['path' => '', 'method' => 'mountAction', 'params' => ['renameView', ['id' => $view['id']]]],
+            ['path' => '', 'method' => 'unmountAction', 'params' => []],
+        ]);
+        expect($html)->toContain('data-place="library"');
         // A view's open ⋯ menu is above the rows after it, so Rename is what a click there reaches.
         expect((string) file_get_contents(resource_path('css/v2/console.css')))
             ->toContain(".v2-sb-view:focus-within,\n.v2-sb-view:has(.v2-sb-more[aria-expanded='true']) {\n    z-index: var(--el-layer-menu);");
+    });
+
+    it('lets only the page set where the sidebar is ($here is locked)', function () {
+        $snapshot = navSidebarSnapshot($this, '/app/sessions');
+        $this->withoutExceptionHandling();
+        expect(fn () => $this->postJson(Livewire::getUpdateUri(), ['components' => [['snapshot' => $snapshot, 'updates' => ['here' => '/app/clients'], 'calls' => []]]], ['X-Livewire' => 'true']))
+            ->toThrow(CannotUpdateLockedPropertyException::class);
+    });
+
+    it('binds the update\'s own request again after drawing the frame, also when drawing it fails', function () {
+        $snapshot = navSidebarSnapshot($this, '/app/sessions');
+        view()->composer('filament.v2.frame', function (): void {
+            throw new RuntimeException('The frame failed to draw.');
+        });
+        $this->withoutExceptionHandling();
+        expect(fn () => navSidebarUpdate($this, $snapshot, [['path' => '', 'method' => '$refresh', 'params' => []]]))
+            ->toThrow(RuntimeException::class, 'The frame failed to draw.');
+        // The page's request was bound only while the frame was drawn: the update's is the request again.
+        expect(app('request')->getRequestUri())->toBe('/'.ltrim((string) parse_url(Livewire::getUpdateUri(), PHP_URL_PATH), '/'))
+            ->and(app('request')->route()?->getName())->not->toBe('filament.app.resources.sessions.index');
     });
 
     it('says how many recordings the list holds in the Library\'s header, never only in the table\'s foot', function () {
