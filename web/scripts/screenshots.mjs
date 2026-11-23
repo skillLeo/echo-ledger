@@ -69,7 +69,8 @@ const pages = {
     // The Library's filters and views (contract 2.0.0-p): the window as it opens, the whole page, the filter panel open
     // (a drawer under 1280 px), filters applied as pills, and nothing matching.
     // listTop: the guard of docs/PLAN_LIBRARY_FILTERS.md section 4 (below).
-    // reach: every one of these can be scrolled to in the sidebar's middle and is then seen, not covered (below).
+    // reach: every one of these can be scrolled to in the sidebar's middle, and focused from either end, and is then
+    // seen, not covered (below).
     'lf-window': { path: '/app/sessions', full: false, listTop: true, reach: ['[data-place]', '[data-new-view]', '[data-label]', '[data-new-label]', '[data-projects-fold] > summary', '[data-sidebar-scroll] [data-project]', '[data-module=projects]', '[data-module=live]', '[data-module=ask]'] },
     // The sidebar's middle scrolled to its end at 1440 × 900: LABELS, PROJECTS, Live and Ask, and the way back up.
     'lf-sidebar-end': { path: '/app/sessions', full: false, run: "document.querySelector('[data-sidebar-scroll]').scrollTop = 100000" },
@@ -346,19 +347,32 @@ for (const theme of themes) {
                                     }
                                 }
                                 await frame();
+                                const seen = () => {
+                                    const r = el.getBoundingClientRect();
+                                    const n = nav.getBoundingClientRect();
+                                    // At the middle of its name (a row's other end may hold its own button, such as PROJECTS' fold).
+                                    const name = (el.querySelector('.v2-sb-label') ?? el).getBoundingClientRect();
+                                    const hit = document.elementFromPoint(name.left + name.width / 2, name.top + name.height / 2);
+                                    return r.height > 0 && r.top >= n.top - 1 && r.bottom <= n.bottom + 1 && hit !== null && (el === hit || el.contains(hit));
+                                };
+                                const label = `${selector} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`;
                                 // Scrolled within the sidebar only (scrollIntoView would move the page too).
                                 const before = el.getBoundingClientRect();
                                 const box = nav.getBoundingClientRect();
                                 nav.scrollTop += before.top - box.top - (box.height - before.height) / 2;
                                 await frame();
-                                const r = el.getBoundingClientRect();
-                                const n = nav.getBoundingClientRect();
-                                // At the middle of its name (a row's other end may hold its own button, such as PROJECTS' fold).
-                                const name = (el.querySelector('.v2-sb-label') ?? el).getBoundingClientRect();
-                                const hit = document.elementFromPoint(name.left + name.width / 2, name.top + name.height / 2);
-                                if (r.height === 0 || r.top < n.top - 1 || r.bottom > n.bottom + 1 || hit === null || !(el === hit || el.contains(hit))) {
-                                    out.push(`${selector} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`);
+                                if (!seen()) out.push(label);
+                                // Reached with the keyboard, from either end: the browser scrolls it in, clear of the
+                                // sticky "More" and back-to-top bars (the middle's scroll-padding).
+                                for (const [end, top] of [['top', 0], ['end', nav.scrollHeight]]) {
+                                    document.activeElement?.blur();
+                                    nav.scrollTop = top;
+                                    await frame();
+                                    el.focus();
+                                    await frame();
+                                    if (document.activeElement !== el || !seen()) out.push(`${label} by keyboard from the ${end}`);
                                 }
+                                el.blur();
                                 for (const d of folds) d.open = false;
                             }
                         }

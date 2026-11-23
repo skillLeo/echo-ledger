@@ -18,6 +18,8 @@ use App\Models\Transcript;
 use App\Services\LibrarySearch;
 use App\Services\Lists\LabelLists;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
+use App\Support\UrduText;
 use ArrayObject;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -583,26 +585,41 @@ final class LibraryFacets
     }
 
     /**
-     * The ids of the rows that hold every word of [$query]: one query a word for the titles, transcripts and screen
-     * moments (LibrarySearch), and the project paths from the rows (a row's projects are its own and every one above).
+     * The ids of the rows that hold every word of [$query]: one query a word for the transcripts and screen moments
+     * (LibrarySearch, folded there), and the titles as shown and the project paths here (a row's projects are its own
+     * and every one above), all folded alike: Urdu spelling variants made one, capitals ignored (UrduText).
      *
      * @param  list<Row>  $rows
      * @return list<string>
      */
     private function searchMatches(int $workspaceId, int $userId, string $query, array $rows): array
     {
+        $person = fn () => CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId);
         $names = Client::acrossPeople()->where('workspace_id', $workspaceId)->where('user_id', $userId)->pluck('name', 'id')
-            ->map(fn (mixed $name): string => mb_strtolower((string) $name))->all();
+            ->map(fn (mixed $name): string => UrduText::fold((string) $name))->all();
+        $titles = [];
+        $shown = $person();
+        [$expression, $bindings] = TitleSql::shown($shown);
+        foreach ($shown->toBase()->selectRaw("capture_sessions.id AS id, {$expression} AS shown", $bindings)->get() as $title) {
+            $titles[(string) $title->id] = UrduText::fold((string) $title->shown);
+        }
         $kept = null;
         foreach (LibrarySearch::terms($query) as $term) {
-            $found = array_fill_keys($this->search->matchingTerms(CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)
-                ->where('capture_sessions.user_id', $userId), [$term])->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all(), true);
-            $needle = mb_strtolower($term);
-            $named = array_filter($names, fn (string $name): bool => str_contains($name, $needle));
-            if ($named !== []) {
-                foreach ($rows as $row) {
-                    if (array_intersect_key(array_flip($row['projects']), $named) !== []) {
-                        $found[$row['id']] = true;
+            $found = array_fill_keys($this->search->matchingTerms($person(), [$term], titles: false)
+                ->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all(), true);
+            $needle = UrduText::fold($term);
+            if ($needle !== '') {
+                foreach ($titles as $id => $title) {
+                    if (str_contains($title, $needle)) {
+                        $found[$id] = true;
+                    }
+                }
+                $named = array_filter($names, fn (string $name): bool => str_contains($name, $needle));
+                if ($named !== []) {
+                    foreach ($rows as $row) {
+                        if (array_intersect_key(array_flip($row['projects']), $named) !== []) {
+                            $found[$row['id']] = true;
+                        }
                     }
                 }
             }

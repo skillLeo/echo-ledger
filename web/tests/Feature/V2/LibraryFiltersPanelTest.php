@@ -19,6 +19,8 @@ use App\Models\SavedView;
 use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Library\SavedViews;
+use App\Services\LibraryOrganiser;
+use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
@@ -215,6 +217,8 @@ describe('old links', function () {
 
     it('opens each old view and folder on the rows it held (Waiting and Failed uploads in Needs you)', function () {
         $all = ['whatsapp', 'zoom', 'old', 'failed', 'waiting', 'pinned', 'marked', 'voice', 'imported', 'business', 'broken'];
+        // Since 2.0.0-p a call still waiting for its decision lives only in Needs you: Today and This week (the old
+        // views listed it) open their date filter without it; the waiting call is in Needs you.
         $cases = [
             'tab=today' => ['whatsapp'],
             'tab=this_week' => ['whatsapp'],
@@ -251,6 +255,27 @@ describe('old links', function () {
             ->and(Livewire::withQueryParams(['tab' => 'pinned'])->test(ListCaptureSessions::class)->html())->toContain('data-pill="marked"');
         // Shared with me was never this list: its own page opens.
         Livewire::withQueryParams(['folder' => 'shared'])->test(ListCaptureSessions::class)->assertRedirect(SharedWithMe::getUrl());
+    });
+
+    it('opens This week as Monday to Sunday in the console\'s time zone: the old view\'s rows, without the waiting calls', function () {
+        app(SettingsRepository::class)->set('display.timezone', 'Asia/Karachi');
+        // Wednesday 25 November, noon in Karachi (UTC+5).
+        Carbon::setTestNow(Carbon::parse('2026-11-25 07:00:00', 'UTC'));
+        $at = fn (string $utc, string $title, array $state = []) => Fx::session($this->owner, $this->device, ['title' => $title, 'started_at' => Carbon::parse($utc, 'UTC'), ...$state]);
+        $monday = $at('2026-11-22 19:30:00', 'Monday 00:30 in Karachi');
+        $sunday = $at('2026-11-22 18:30:00', 'The Sunday before, 23:30 in Karachi');
+        $next = $at('2026-11-29 19:00:00', 'Next Monday 00:00 in Karachi');
+        $waiting = $at('2026-11-25 06:55:00', 'Waiting this week', ['status' => SessionStatus::Recording, 'ended_at' => null]);
+
+        $page = Livewire::withQueryParams(['tab' => 'this_week'])->test(ListCaptureSessions::class);
+        $page->assertSet('lf.date', ['op' => 'is', 'values' => ['custom'], 'from' => '2026-11-23', 'to' => '2026-11-29'])
+            ->assertCanSeeTableRecords([$monday])->assertCanNotSeeTableRecords([$sunday, $next, $waiting]);
+        $listed = $page->instance()->getTableRecords()->pluck('id')->sort()->values()->all();
+        $old = app(LibraryOrganiser::class)->applyView(CaptureSession::query()->where('workspace_id', $this->owner->current_workspace_id)->ofPerson(), 'this_week')
+            ->where('status', '!=', SessionStatus::Recording->value)->pluck('id')->sort()->values()->all();
+        expect($listed)->toBe($old)->toContain($monday->id)
+            ->and(app(LibraryOrganiser::class)->applyView(CaptureSession::query()->ofPerson(), 'this_week')->pluck('id')->all())->toContain($waiting->id);
+        Livewire::withQueryParams(['tab' => 'needs_you'])->test(ListCaptureSessions::class)->assertCanSeeTableRecords([$waiting]);
     });
 
     it('points Activity, the waiting line and Home at Needs you, where the waiting call is listed', function () {
@@ -353,8 +378,11 @@ describe('the sidebar', function () {
             // The way down and back up, named, shown only while there is more that way.
             ->toContain('x-show="below"')->toContain('data-scroll-down')->toContain('aria-label="Show more of the menu"')
             ->toContain('x-show="above"')->toContain('data-scroll-up')->toContain('aria-label="Show the top of the menu"');
-        expect((string) file_get_contents(resource_path('css/v2/console.css')))->toMatch('~\.v2-sb-nav \{[^}]*overflow-y: auto;~');
-        // In a browser, scripts/screenshots.mjs (lf-window, `reach`) scrolls to each one and checks it is seen, not covered.
+        // Tabbing through it never leaves the focused item under "More" or the bar back to the top.
+        expect((string) file_get_contents(resource_path('css/v2/console.css')))->toMatch('~\.v2-sb-nav \{[^}]*overflow-y: auto;~')
+            ->toMatch('~\.v2-sb-nav \{[^}]*scroll-padding-block: var\(--el-space-24\);~');
+        // In a browser, scripts/screenshots.mjs (lf-window, `reach`) scrolls to each one, and focuses it from either end,
+        // and checks it is seen, not covered.
         expect((string) file_get_contents(base_path('scripts/screenshots.mjs')))->toContain("'[data-module=live]', '[data-module=ask]'");
     });
 

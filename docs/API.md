@@ -1239,13 +1239,19 @@ brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
 
 **Search** (`q`, at most 200 characters; under 2, or only punctuation, is no search): a recording matches when every
 word appears somewhere among its title (as shown), its transcript and its project path, capitals ignored. The project
-path is the project's name plus the names of the folders above it. The words may be in different places: `contracts
-clause` finds a recording in "Contracts" whose transcript says "clause", and `acme` finds the recordings in "Acme" and
-in its folder "Acme › Contracts". Words are split on spaces, `"quoted phrases"` stay together, and at most 8 words of up
-to 64 characters each are read (as `GET /api/search` reads them). On the server "its transcript" is any of its
-transcripts and its screen moments; the apps search the transcript text they hold, and the project tree of
-`GET /api/clients`. A teammate's project never counts. The shared test file has the cases (`search_*`).
-`GET /api/search` keeps its own rule (every word in the title, or every word in one transcript or screen moment).
+path is the project's name plus the names of the folders above it. The title, the transcript and the project names are
+compared folded, so an Urdu word is found however the keyboard or the engine spelt it: Arabic Yeh, Alef Maksura and
+Yeh with Hamza → ی, Arabic Kaf → ک, Arabic Heh, Teh Marbuta, Heh with Yeh above and Teh Marbuta Goal → ہ, Alef with
+Hamza, Madda or Wasla → ا, Waw with Hamza → و, Yeh Barree with Hamza → ے, Arabic-Indic digits → 0-9; harakat,
+superscript Alef, tatweel and zero-width joiners dropped (the words of the search are folded the same way). `کراچی`
+finds the project "كراچي آفس" written with Arabic Kaf and Yeh, and `قیمت` the title "قيمت كی بات" written with Arabic
+Yeh. The words may be in different places: `contracts clause` finds a recording in "Contracts" whose transcript says
+"clause", and `acme` finds the recordings in "Acme" and in its folder "Acme › Contracts". Words are split on spaces,
+`"quoted phrases"` stay together, and at most 8 words of up to 64 characters each are read (as `GET /api/search` reads
+them). On the server "its transcript" is any of its transcripts and its screen moments; the apps search the transcript
+text they hold, and the project tree of `GET /api/clients`. A teammate's project never counts. The shared test file
+has the cases (`search_*`). `GET /api/search` keeps its own rule (every word in the title as written, or every word in
+one transcript or screen moment).
 
 **What is counted:** the person's own recordings in the device's workspace, not in Trash and not still `recording`
 (those are only in Needs you); never a teammate's or another workspace's (Shared with me is its own list).

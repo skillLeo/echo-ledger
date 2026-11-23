@@ -2583,6 +2583,8 @@ button.v2-row-tile:focus-visible,
 
 .v2-sb-nav {
     position: relative;
+    /* The sticky "More" and back-to-top bars never cover the item the keyboard moved to. */
+    scroll-padding-block: var(--el-space-24);
 }
 
 .v2-sb-scroll {

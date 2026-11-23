@@ -187,8 +187,10 @@ class ListCaptureSessions extends ListRecords
             $this->folder = null;
         }
         // An old view's link opens what holds its rows now: Waiting for decision and Failed uploads (Activity's Review, a
-        // notice) open Needs you, where both are; Today, This week, Bookmarked and Pinned become their filters (shown as
-        // pills, counted by the panel); Untranscribed is the place Not transcribed.
+        // notice) open Needs you, where both are; Today, This week (Monday to Sunday in the console's time zone, as the
+        // old view counted it), Bookmarked and Pinned become their filters (shown as pills, counted by the panel), without
+        // the calls waiting for their decision, which now live only in Needs you; Untranscribed is the place Not
+        // transcribed.
         $tab = (string) $this->activeTab;
         $week = Carbon::now(app(SettingsRepository::class)->displayTimezone())->startOfWeek(Carbon::MONDAY);
         $filters += match ($tab) {
