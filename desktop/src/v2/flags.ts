@@ -10,8 +10,9 @@
 // design all the desktop's, while a feature flag (live_assist) stays the server's.
 //   ui_flags                      → { ui_flags: { "<name>": bool, … }, ui_classic: bool }   (cached; no request)
 //   ui_classic_set { classic }    → PUT /api/account/ui {"classic": bool}, the same shape from its answer
-import { api, errorMessage } from "../lib/ipc";
-import { useEffect, useRef, useState } from "react";
+//   event ui:flags                → the same shape, whenever the core's cached flags change
+import { api, errorMessage, listenTo } from "../lib/ipc";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export const UI_FLAG_NAMES = [
   "ui_v2.shell", "ui_v2.home", "ui_v2.library", "ui_v2.recording_controls", "ui_v2.after_call", "ui_v2.live", "ui_v2.ask",
@@ -118,18 +119,35 @@ function devOverride(search: string): UiState | null {
   return { flags: Object.fromEntries(UI_FLAG_NAMES.map((n) => [n, on.has(n)])) as UiFlags, classic: false, design: null };
 }
 
-/** The flags for this person now, under the design chosen here; all v2 screens off when the core can't say. */
-export async function readUiState(): Promise<UiState> {
-  const forced = typeof location !== "undefined" ? devOverride(location.search) : null;
-  if (forced) return forced;
+function forcedFlags(): UiState | null {
+  return typeof location !== "undefined" ? devOverride(location.search) : null;
+}
+
+/** The core's answer as this window shows it: a 2.0.0-g server has applied the person's design to its flags already. */
+function shownFrom(server: UiState): UiState {
+  return server.design ? server : applyDesign(server, readDesign());
+}
+
+/**
+ * readUiState, and whether the answer is the server's. It is not when the read failed, or before the core's first
+ * `GET /api/config` answer, when it says everything off with no design (as an older server with nothing on does, which
+ * is taken the same way).
+ */
+async function readFromCore(): Promise<{ state: UiState; heard: boolean }> {
+  const forced = forcedFlags();
+  if (forced) return { state: forced, heard: true };
   let server = ALL_OFF;
   try {
     server = parseUiState(await api.uiFlags());
   } catch {
     // An older core: no feature flags; the design still decides the screens.
   }
-  // A 2.0.0-g server has applied the person's design to its flags already.
-  return server.design ? server : applyDesign(server, readDesign());
+  return { state: shownFrom(server), heard: !same(server, ALL_OFF) };
+}
+
+/** The flags for this person now, under the design chosen here; all v2 screens off when the core can't say. */
+export async function readUiState(): Promise<UiState> {
+  return (await readFromCore()).state;
 }
 
 /** "Switch back to classic" (or to the new screens): the server's new answer. Errors reach the caller. */
@@ -139,14 +157,32 @@ export async function setClassic(classic: boolean): Promise<UiState> {
 
 /**
  * The flags in a view. Read at start and again whenever `screen` changes (a change applies on the next screen the
- * person opens), never while `recording` is true, so nothing switches under a running call. The third value is the
- * `screen` the flags were last read for: a window that must not show stale flags waits until it equals its key.
+ * person opens) or a recording ends, never while `recording` is true, so nothing switches under a running call. The
+ * third value is the `screen` the flags were last read for: a window that must not show stale flags waits until it
+ * equals its key.
+ *
+ * A window can open before the core has its first `GET /api/config` answer, and then reads everything off. Until it
+ * has the server's answer (or while its last read failed) it takes the core's `ui:flags` at once, or when the
+ * recording ends if one runs; after that, a `ui:flags` change waits for the next screen like any other. It listens
+ * before its first read, so no announcement falls between the two. `atOnce: false` (the pill and the after-call card,
+ * which read again before each thing they show) leaves `ui:flags` alone: what they show never changes under the person.
  */
-export function useUiFlags(enabled: boolean, screen: string, recording: boolean): [UiState, (next: UiState) => void, string | null] {
+export function useUiFlags(enabled: boolean, screen: string, recording: boolean, options: { atOnce?: boolean } = {}): [UiState, (next: UiState) => void, string | null] {
+  const atOnce = options.atOnce !== false;
   const [state, setState] = useState<UiState>(ALL_OFF);
   const [readFor, setReadFor] = useState<string | null>(null);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  // Whether this window shows the server's answer; until it does, `ui:flags` applies at once.
+  const heard = useRef(false);
+  // The server's answer in the last `ui:flags`, and how many came: one that comes while a read is on its way is newer.
+  const announced = useRef<UiState | null>(null);
+  const announcements = useRef(0);
+  const [listening, setListening] = useState(!atOnce);
   // A design chosen in this window or another is read again at once (not while recording: then at the next screen).
   const [chosen, setChosen] = useState(0);
   useEffect(() => {
@@ -160,18 +196,51 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean)
     };
   }, []);
   useEffect(() => {
-    if (!enabled || recordingRef.current) return;
+    if (!atOnce) return;
     let live = true;
-    void readUiState().then((next) => {
+    const un = listenTo("ui:flags", (raw) => {
+      if (!live || forcedFlags()) return;
+      announced.current = parseUiState(raw);
+      announcements.current += 1;
+      if (heard.current || !enabledRef.current || recordingRef.current) return;
+      heard.current = true;
+      const next = shownFrom(announced.current);
+      setState((prev) => (same(prev, next) ? prev : next));
+      setReadFor(screenRef.current);
+    });
+    // Read even when listening fails (an older core): the window then works as before.
+    const listens = () => live && setListening(true);
+    un.then(listens, listens);
+    return () => {
+      live = false;
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, [atOnce]);
+  useEffect(() => {
+    if (!enabled || !listening || recordingRef.current) return;
+    let live = true;
+    const since = announcements.current;
+    void readFromCore().then((got) => {
       if (!live || recordingRef.current) return;
+      // `ui:flags` heard while this read was on its way is newer; one heard before stands when the read had no answer of
+      // the server's (it failed, or the core said everything off).
+      const latest = announced.current;
+      const take = latest !== null && (announcements.current !== since || !got.heard);
+      const next = take ? shownFrom(latest) : got.state;
+      heard.current = take || got.heard;
       setState((prev) => (same(prev, next) ? prev : next));
       setReadFor(screen);
     });
     return () => {
       live = false;
     };
-  }, [enabled, screen, chosen]);
-  return [state, setState, readFor];
+  }, [enabled, listening, screen, chosen, recording]);
+  // The server's answer set from here ("Switch back to classic"): a later `ui:flags` waits for the next screen.
+  const set = useCallback((next: UiState) => {
+    heard.current = true;
+    setState(next);
+  }, []);
+  return [state, set, readFor];
 }
 
 /** How many times `on` turned from false to true (a window shown, a recording started): a key for useUiFlags. */

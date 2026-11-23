@@ -61,10 +61,11 @@ export default function ReviewApp() {
   const closeAsk = useCallback((id: string) => setAsk((current) => (current?.id === id ? null : current)), []);
   const drop = useCallback((part: "ask" | "done" | "group") => setState((s) => ({ ...s, [part]: null })), []);
 
-  // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts).
+  // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts);
+  // `ui:flags` is left alone, so a card on screen never changes its look under the person.
   const windowShown = useWindowShown();
   const showKey = `show-${useRisingCount(windowShown && !!(ask || state.ask || state.done || state.group))}`;
-  const [ui, , flagsFor] = useUiFlags(true, showKey, false);
+  const [ui, , flagsFor] = useUiFlags(true, showKey, false, { atOnce: false });
 
   const concealed = useConcealed();
   useHitRegions([ask?.id ?? null, state.ask?.id ?? null, state.ask?.deadlineAt ?? null, state.done?.id ?? null, state.done?.kind ?? null, !!state.done?.offerAlways, state.group?.count ?? null, concealed]);
