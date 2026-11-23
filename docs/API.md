@@ -1267,9 +1267,17 @@ The server knows what reached it. Only the apps know their own: an upload that f
 reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
 those to the server's, never counting one recording twice.
 
-The sidebar's Library views: **All** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
+The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
 **Important** (`important=1`, or Marked is Important), **Not transcribed** (Status is Not transcribed), **Audio only**
 (`status=audio_only`) and **Shared** (Shared with me, My links, Request links).
+
+**The Library's tabs** (UI guidance, no API change; docs/PLAN_NAV_3_LEVELS.md section 4): the page's top tabs split the
+list by `facets.source`, the same on the web, the desktop and the phone. **All** (every source), **Calls**
+(`whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype`), **Meetings**
+(`zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord`) and **Voice notes** (`voice_note`); `imported` and
+`other` are under All only. A tab narrows the place, the filters and the search (AND with them; a Source filter still
+applies inside it), and each tab's count is how many the place, the filters and the search keep in it. The web keeps
+the tab in the address as `kind=calls`, `kind=meetings` or `kind=voice_notes` (none for All).
 
 ### `GET /api/library/facets` — `library:read` (since 2.0.0-p)
 The filter panel's counts. Query: `filters`, `q`, `tz` as above.
