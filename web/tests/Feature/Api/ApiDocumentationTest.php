@@ -91,8 +91,13 @@ const SERVED_BEFORE_DOCUMENTED = [
     'POST /api/assist/sessions/{}/live',
 ];
 
-// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served: nothing documented waits for the router.
-const NOT_SERVED_YET = [];
+// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served. Contract 2.0.0-r is written ahead of the server: BE-02
+// (the Activity groups), BE-03 (Retry all) and BE-04 (the badge) each remove their line when they serve it.
+const NOT_SERVED_YET = [
+    'GET /api/activity/groups',
+    'POST /api/activity/retry-all',
+    'GET /api/badge',
+];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
