@@ -62,7 +62,7 @@ final class LibraryFilters
     /** A section takes at most this many values. */
     public const MAX_VALUES = 50;
 
-    /** "Needs you": a recording stuck uploading or being transcribed this long after it ended. */
+    /** "Needs you": a recording stuck uploading or being transcribed for more than this since its current attempt began. */
     public const STUCK_HOURS = 24;
 
     /**
@@ -153,9 +153,11 @@ final class LibraryFilters
 
     /**
      * "Needs you" for one recording, or null: `waiting` (a call still waiting for Keep or Discard), `failed` (Status
-     * failed) or `stuck` (Status processing, and it ended more than STUCK_HOURS ago).
+     * failed) or `stuck` (Status processing for more than STUCK_HOURS since [$processingSince], the start of the current
+     * upload or transcript attempt, so a retry starts the clock again; only when none is stored, since it ended, else
+     * since it started).
      */
-    public static function needsYou(string $sessionStatus, string $status, ?int $endedAt, int $startedAt, int $now): ?string
+    public static function needsYou(string $sessionStatus, string $status, ?int $endedAt, int $startedAt, int $now, ?int $processingSince = null): ?string
     {
         if ($sessionStatus === SessionStatus::Recording->value) {
             return 'waiting';
@@ -164,7 +166,7 @@ final class LibraryFilters
             return 'failed';
         }
 
-        return $status === 'processing' && ($endedAt ?? $startedAt) <= $now - self::STUCK_HOURS * 3600 ? 'stuck' : null;
+        return $status === 'processing' && ($processingSince ?? $endedAt ?? $startedAt) < $now - self::STUCK_HOURS * 3600 ? 'stuck' : null;
     }
 
     /**

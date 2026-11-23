@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
+use App\Exceptions\ApiError;
 use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Upload;
@@ -13,25 +14,30 @@ use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\LibraryFilterBar;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
-use App\Filament\Support\V2DismissedBanners;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
 use App\Services\ConsoleUploads;
+use App\Services\Library\LibraryFacets;
+use App\Services\Library\LibraryFilters;
+use App\Services\Library\SavedViews;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
+use App\Services\SettingsRepository;
 use App\Services\Sharing\Teammates;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Group;
@@ -50,6 +56,7 @@ use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
@@ -122,12 +129,342 @@ class ListCaptureSessions extends ListRecords
     /** Since v1.6 (P4.4): the Library as the phone's list or as a table, remembered per person (Shell::LAYOUTS). */
     public string $libraryLayout = 'list';
 
+    /**
+     * Since 2.0.0-p (ui_v2.library): the filters that are on (LibraryFilters' shape), in the address, so a link and
+     * Back keep them.
+     *
+     * @var array<string, mixed>
+     */
+    public array $lf = [];
+
+    /** Since 2.0.0-p: the saved view shown (its id), in the address; the sidebar marks it. */
+    public ?string $savedView = null;
+
+    /** Since 2.0.0-p: "+ New view" from the sidebar on another page opens Save as view here. */
+    public ?string $compose = null;
+
+    /**
+     * The new Library's part of the address (2.0.0-p): the filters (`f`), the saved view (`v`) and "+ New view"
+     * (`compose`), each change a step Back can undo. Only under ui_v2.library: the classic page's address stays as it was.
+     *
+     * @return array<string, array{as: string, history?: bool}>
+     */
+    protected function queryString(): array
+    {
+        return ConsoleV2::library() ? ['lf' => ['as' => 'f', 'history' => true], 'savedView' => ['as' => 'v', 'history' => true], 'compose' => ['as' => 'compose', 'history' => false]] : [];
+    }
+
     public function mount(): void
     {
         $user = auth()->user();
         $this->libraryLayout = Shell::preferences($user instanceof User ? $user : null)['layout'];
         parent::mount();
         $this->loadLibraryView();
+        if (ConsoleV2::library()) {
+            $this->mountFilters();
+        }
+    }
+
+    /**
+     * The new Library's start (2.0.0-p): an old address's folder becomes its Source or Project filter, an old view its
+     * place or filter, a saved view in the address is opened, and the filters are read as LibraryFilters keeps them.
+     */
+    private function mountFilters(): void
+    {
+        $filters = $this->filterSet();
+        $folder = $this->folder;
+        if ($folder !== null) {
+            $source = ['whatsapp' => 'whatsapp', 'whatsapp_business' => 'whatsapp_business', 'google_meet' => 'google_meet', 'zoom' => 'zoom',
+                'teams' => 'microsoft_teams', 'phone' => 'phone_call', 'voice_notes' => 'voice_note', 'imported' => 'imported'][$folder] ?? null;
+            if ($source !== null) {
+                $filters['source'] = ['op' => 'is', 'values' => [$source]];
+            } elseif ($folder === 'inbox') {
+                $filters['project'] = ['op' => 'is', 'values' => [LibraryFilters::NO_PROJECT]];
+            } elseif ($folder === 'shared') {
+                // Others' recordings were never in this list: Shared with me is the sidebar's own page.
+                $this->redirect(SharedWithMe::getUrl());
+            }
+            $this->folder = null;
+        }
+        // An old view's link opens what holds its rows now: Waiting for decision and Failed uploads (Activity's Review, a
+        // notice) open Needs you, where both are; Today, This week (Monday to Sunday in the console's time zone, as the
+        // old view counted it), Bookmarked and Pinned become their filters (shown as pills, counted by the panel), without
+        // the calls waiting for their decision, which now live only in Needs you; Untranscribed is the place Not
+        // transcribed.
+        $tab = (string) $this->activeTab;
+        $week = Carbon::now(app(SettingsRepository::class)->displayTimezone())->startOfWeek(Carbon::MONDAY);
+        $filters += match ($tab) {
+            'today' => ['date' => ['op' => 'is', 'values' => ['today']]],
+            'this_week' => ['date' => ['op' => 'is', 'values' => ['custom'], 'from' => $week->toDateString(), 'to' => $week->copy()->addDays(6)->toDateString()]],
+            'bookmarked' => ['bookmarks' => ['op' => 'is', 'values' => ['any']]],
+            'pinned' => ['marked' => ['op' => 'is', 'values' => ['pinned']]],
+            default => [],
+        };
+        $this->activeTab = match ($tab) {
+            'waiting', 'failed' => 'needs_you',
+            'untranscribed' => 'not_transcribed',
+            'today', 'this_week', 'bookmarked', 'pinned' => 'all',
+            default => $this->activeTab,
+        };
+        $this->lf = $filters;
+        if ($this->savedView !== null) {
+            $this->openSavedView($this->savedView);
+        }
+    }
+
+    /**
+     * The filters that are on, as LibraryFilters keeps them (an address that does not read as filters is no filter).
+     *
+     * @return array<string, array{op: string, values: list<string>, from?: string, to?: string}>
+     */
+    public function filterSet(): array
+    {
+        try {
+            return LibraryFilters::normalize($this->lf);
+        } catch (ApiError) {
+            return [];
+        }
+    }
+
+    /** How many sections are on: the number on [Filters n]. */
+    public function activeFilterCount(): int
+    {
+        return count($this->filterSet());
+    }
+
+    /** The place of the sidebar's Library the list is in (LibraryFacets::PLACES). */
+    public function libraryPlace(): string
+    {
+        return LibraryFacets::place((string) ($this->activeTab ?: 'all'));
+    }
+
+    /**
+     * The filter panel's counts: every option of every section, in the place, with the search (memoised per render).
+     *
+     * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
+     */
+    public function libraryFacets(): array
+    {
+        return $this->facetsOnce ??= app(LibraryFacets::class)->facets((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(),
+            $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace());
+    }
+
+    /** @var array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}|null */
+    private ?array $facetsOnce = null;
+
+    /** @return list<array<string, mixed>> the filter panel's sections */
+    public function filterPanel(): array
+    {
+        return LibraryFilterBar::panel($this->filterSet(), $this->libraryFacets());
+    }
+
+    /** @return list<array<string, mixed>> the pills of the filters that are on */
+    public function filterPills(): array
+    {
+        return LibraryFilterBar::pills($this->filterSet(), $this->libraryFacets());
+    }
+
+    /** The view's name at the start of the toolbar: the saved view, else the place. */
+    public function libraryHeading(): string
+    {
+        $view = $this->currentSavedView();
+        if ($view !== null) {
+            return $view['name'];
+        }
+
+        return match ($this->libraryPlace()) {
+            'needs_you' => __('Needs you'),
+            'unread' => __('Unread'),
+            'important' => __('Important'),
+            'not_transcribed' => __('Not transcribed'),
+            'audio_only' => __('Audio only'),
+            default => __('Library'),
+        };
+    }
+
+    /** The panel's filter set as it was sent (every section at once), 150 ms after the last change. */
+    public function applyFilters(mixed $filters): void
+    {
+        try {
+            $this->setFilters(LibraryFilters::normalize(is_array($filters) ? $filters : []));
+        } catch (ApiError) {
+            // A half-typed custom date or an option that went away: the list stays as it was.
+        }
+    }
+
+    /** A pill's × or a section's Clear. */
+    public function removeFilter(string $section): void
+    {
+        $filters = $this->filterSet();
+        unset($filters[$section]);
+        $this->setFilters($filters);
+    }
+
+    /** A pill's "is" / "is not". */
+    public function setFilterOp(string $section, string $op): void
+    {
+        $filters = $this->filterSet();
+        if (isset($filters[$section]) && in_array($op, LibraryFilters::OPS, true)) {
+            $filters[$section]['op'] = $op;
+            $this->setFilters($filters);
+        }
+    }
+
+    /** A pill's value ticked or unticked (a section left with none goes). */
+    public function toggleFilterValue(string $section, string $value): void
+    {
+        $filters = $this->filterSet();
+        $values = $filters[$section]['values'] ?? [];
+        $values = in_array($value, $values, true) ? array_values(array_diff($values, [$value])) : [...$values, $value];
+        $this->applyFilters([...$filters, $section => ['op' => $filters[$section]['op'] ?? 'is', 'values' => $values]]);
+    }
+
+    /** The row's source logo or label dot: only those recordings (another click on the same one takes it away). */
+    public function quickFilter(string $section, string $value): void
+    {
+        if (! in_array($section, ['source', 'labels'], true)) {
+            return;
+        }
+        $filters = $this->filterSet();
+        if (($filters[$section] ?? null) === ['op' => 'is', 'values' => [mb_strtolower($value)]] || ($filters[$section] ?? null) === ['op' => 'is', 'values' => [$value]]) {
+            $this->removeFilter($section);
+
+            return;
+        }
+        $this->applyFilters([...$filters, $section => ['op' => 'is', 'values' => [$value]]]);
+    }
+
+    /** Clear all (the pills) and Clear filters (nothing matches): every filter off. */
+    public function clearFilters(): void
+    {
+        $this->setFilters([]);
+    }
+
+    /** @param array<string, array{op: string, values: list<string>, from?: string, to?: string}> $filters */
+    private function setFilters(array $filters): void
+    {
+        $this->lf = $filters;
+        $this->facetsOnce = null;
+        $this->resetPage();
+        $this->deselectAllTableRecords();
+        $this->flushCachedTableRecords();
+    }
+
+    /** Sort & display › Density, the console's own (Settings › Appearance). */
+    public function setLibraryDensity(string $density): void
+    {
+        $user = auth()->user();
+        if ($user instanceof User && isset(Shell::DENSITIES[$density])) {
+            Shell::remember($user, 'density', $density);
+            $this->js('document.documentElement.dataset.density = '.json_encode($density));
+        }
+    }
+
+    /**
+     * The saved view shown, as SavedViews answers it; null when none is (or it is gone).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function currentSavedView(): ?array
+    {
+        if ($this->savedView === null) {
+            return null;
+        }
+
+        return $this->viewsOnce[$this->savedView] ??= collect(app(SavedViews::class)->index((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId()))
+            ->firstWhere('id', $this->savedView);
+    }
+
+    /** @var array<string, array<string, mixed>|null> */
+    private array $viewsOnce = [];
+
+    /** Whether the filters, the search or the order differ from the saved view's (Save changes). */
+    public function savedViewChanged(): bool
+    {
+        $view = $this->currentSavedView();
+        if ($view === null) {
+            return false;
+        }
+        $kept = LibraryFilters::read(json_decode((string) json_encode($view['filters']), true));
+
+        return $kept !== $this->filterSet() || (string) ($view['search'] ?? '') !== trim((string) $this->tableSearch)
+            || $view['sort'] !== $this->librarySort || $view['group'] !== self::viewGroup($this->libraryGroup);
+    }
+
+    /** Opens a saved view: its filters, search and order (a view that is gone opens nothing). */
+    private function openSavedView(string $id): void
+    {
+        $view = $this->currentSavedView();
+        if ($view === null) {
+            $this->savedView = null;
+
+            return;
+        }
+        $this->lf = LibraryFilters::read(json_decode((string) json_encode($view['filters']), true));
+        $this->tableSearch = (string) ($view['search'] ?? '');
+        $group = $view['group'] === 'source' ? 'app' : $view['group'];
+        $this->applyLibraryView(isset(LibraryView::GROUPS[$group]) ? $group : LibraryView::DEFAULT_GROUP, isset(LibraryView::SORTS[$view['sort']]) ? $view['sort'] : LibraryView::DEFAULT_SORT, remember: false);
+        unset($id);
+    }
+
+    /** The console's Group by as a view keeps it (the API calls App / Type `source`). */
+    private static function viewGroup(string $group): string
+    {
+        return $group === 'app' ? 'source' : $group;
+    }
+
+    /**
+     * What a view keeps of the list as it is now.
+     *
+     * @return array<string, mixed>
+     */
+    private function viewState(): array
+    {
+        return ['filters' => $this->filterSet(), 'search' => trim((string) $this->tableSearch) ?: null, 'sort' => $this->librarySort,
+            'group' => self::viewGroup($this->libraryGroup), 'density' => Shell::preferences()['density']];
+    }
+
+    /** Save as view (the pills, the panel's foot, + New view): a name, then the view at the end of My views. */
+    public function saveViewAction(): Action
+    {
+        return Action::make('saveView')->label(__('Save as view'))->modalHeading(__('Save as view'))
+            ->modalDescription(__('Keeps these filters, the search and the order in My views, on every device.'))
+            ->modalSubmitActionLabel(__('Save view'))
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(SavedViews::MAX_NAME)->autofocus()])
+            ->action(function (array $data): void {
+                try {
+                    $made = app(SavedViews::class)->create((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), ['name' => $data['name'], ...$this->viewState()]);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+
+                    return;
+                }
+                $this->savedView = $made['view']['id'];
+                $this->viewsOnce = [];
+                Notification::make()->title(__('View saved'))->success()->send();
+                $this->dispatch('refresh-sidebar');
+            });
+    }
+
+    /** Save changes: the open saved view takes the filters, search and order as they are now. */
+    public function updateViewAction(): Action
+    {
+        return Action::make('updateView')->label(__('Save changes'))->requiresConfirmation(false)
+            ->action(function (): void {
+                if ($this->savedView === null) {
+                    return;
+                }
+                try {
+                    app(SavedViews::class)->update((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), $this->savedView, $this->viewState());
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+
+                    return;
+                }
+                $this->viewsOnce = [];
+                Notification::make()->title(__('View saved'))->success()->send();
+                $this->dispatch('refresh-sidebar');
+            });
     }
 
     /** The toolbar's List / Table switch. */
@@ -200,14 +537,11 @@ class ListCaptureSessions extends ListRecords
     {
         LibraryView::forgetCounts();
         $this->foldersOnce = null;
-        $this->v2ViewsOnce = null;
+        $this->facetsOnce = null;
     }
 
     /** @var array<string, array{label: string, icon: string, count: int, url: string|null}>|null the folders, for this render */
     private ?array $foldersOnce = null;
-
-    /** @var list<array{key: string, label: string, count: int|null, on: bool}>|null the saved views, for this render */
-    private ?array $v2ViewsOnce = null;
 
     private function loadLibraryView(): void
     {
@@ -246,6 +580,12 @@ class ListCaptureSessions extends ListRecords
                 ->badge($counts[$view] > 0 ? $counts[$view] : null)
                 ->modifyQueryUsing(fn (Builder $query): Builder => $organiser->applyView($query, $view));
         }
+        // Since 2.0.0-p (ui_v2.library): the sidebar's Library places; LibraryFacets narrows the list to each one.
+        if (ConsoleV2::library()) {
+            foreach (['needs_you', 'unread', 'important', 'not_transcribed', 'audio_only'] as $place) {
+                $tabs[$place] = Tab::make($place);
+            }
+        }
         // Since v2.0 (ui_v2.library): the apps' saved view Untranscribed.
         if (ConsoleV2::library()) {
             $untranscribed = $organiser->untranscribedCount((int) CurrentWorkspace::id());
@@ -280,86 +620,6 @@ class ListCaptureSessions extends ListRecords
         return $folders;
     }
 
-    /**
-     * The v2.0 Library's saved views as chips: All, Today, Untranscribed, Pinned and Voice notes, with Waiting and
-     * Failed uploads only while they hold something. Each is a place openPlace() opens.
-     *
-     * @return list<array{key: string, label: string, count: int|null, on: bool}>
-     */
-    public function v2Views(): array
-    {
-        return $this->v2ViewsOnce ??= $this->listV2Views();
-    }
-
-    /** @return list<array{key: string, label: string, count: int|null, on: bool}> */
-    private function listV2Views(): array
-    {
-        $tabs = $this->getCachedTabs();
-        $badge = fn (string $key): ?int => isset($tabs[$key]) && is_numeric($tabs[$key]->getBadge()) ? (int) $tabs[$key]->getBadge() : null;
-        $place = $this->activePlace();
-        $voice = $this->folders()['voice_notes']['count'] ?? 0;
-        $views = [
-            ['key' => 'all', 'label' => __('All'), 'count' => null],
-            ['key' => 'today', 'label' => __('Today'), 'count' => $badge('today')],
-            ['key' => 'untranscribed', 'label' => __('Untranscribed'), 'count' => $badge('untranscribed')],
-            ['key' => 'pinned', 'label' => __('Pinned'), 'count' => $badge('pinned')],
-            ['key' => 'folder:voice_notes', 'label' => __('Voice notes'), 'count' => $voice > 0 ? $voice : null],
-        ];
-        foreach (['waiting' => __('Waiting'), 'failed' => __('Failed uploads')] as $key => $label) {
-            if ($badge($key) !== null || $place === $key) {
-                $views[] = ['key' => $key, 'label' => $label, 'count' => $badge($key)];
-            }
-        }
-
-        return array_map(fn (array $v): array => $v + ['on' => $v['key'] === $place], $views);
-    }
-
-    /**
-     * The v2.0 Library's "Views ▾": every view of the classic Library's All recordings menu, in its order, with
-     * Untranscribed last, each with its count.
-     *
-     * @return list<array{key: string, label: string, count: int|null, on: bool}>
-     */
-    public function v2ViewMenu(): array
-    {
-        $tabs = $this->getCachedTabs();
-        $place = $this->activePlace();
-        $menu = [['key' => 'all', 'label' => __('All recordings'), 'count' => null]];
-        foreach ([...array_keys(self::VIEW_LABELS), 'untranscribed'] as $key) {
-            if (isset($tabs[$key])) {
-                $badge = $tabs[$key]->getBadge();
-                $menu[] = ['key' => $key, 'label' => (string) $tabs[$key]->getLabel(), 'count' => is_numeric($badge) ? (int) $badge : null];
-            }
-        }
-
-        return array_map(fn (array $v): array => [...$v, 'label' => __($v['label']), 'on' => $v['key'] === $place], $menu);
-    }
-
-    /** How many calls wait for Keep or Discard (the v2.0 Library's quiet line). */
-    public function v2Waiting(): int
-    {
-        $tabs = $this->getCachedTabs();
-
-        return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
-    }
-
-    /** Whether the person closed the quiet line and nothing has risen since (V2DismissedBanners); also for a read-only console. */
-    public function v2WaitingDismissed(int $waiting): bool
-    {
-        $user = auth()->user();
-
-        return V2DismissedBanners::hidden($user instanceof User ? $user : null, (int) CurrentWorkspace::id(), 'library', ['waiting' => $waiting]);
-    }
-
-    /** The quiet line's ×: hidden until more calls wait than now (the server's count, never the page's). */
-    public function dismissV2Waiting(): void
-    {
-        $user = auth()->user();
-        if ($user instanceof User) {
-            V2DismissedBanners::dismiss($user, (int) CurrentWorkspace::id(), 'library', ['waiting' => $this->v2Waiting()]);
-        }
-    }
-
     /** The empty state's "Show all recordings": no smart view and no folder. */
     public function showAllRecordings(): void
     {
@@ -380,9 +640,10 @@ class ListCaptureSessions extends ListRecords
         } elseif (str_starts_with($key, 'folder:') && array_key_exists(substr($key, 7), self::FOLDER_LABELS) && $key !== 'folder:shared') {
             $this->folder = substr($key, 7);
             $this->activeTab = 'all';
-        } elseif (array_key_exists($key, self::VIEW_LABELS) || ($key === 'untranscribed' && ConsoleV2::library())) {
+        } elseif (array_key_exists($key, self::VIEW_LABELS) || (ConsoleV2::library() && ($key === 'untranscribed' || in_array($key, LibraryFacets::PLACES, true)))) {
             $this->folder = null;
-            $this->activeTab = $key;
+            // Since 2.0.0-p Waiting for decision and Failed uploads are Needs you.
+            $this->activeTab = ConsoleV2::library() && in_array($key, ['waiting', 'failed'], true) ? 'needs_you' : $key;
         } else {
             return;
         }
@@ -399,7 +660,7 @@ class ListCaptureSessions extends ListRecords
         }
         $tab = (string) ($this->activeTab ?: 'all');
 
-        return array_key_exists($tab, self::VIEW_LABELS) || ($tab === 'untranscribed' && ConsoleV2::library()) ? $tab : 'all';
+        return array_key_exists($tab, self::VIEW_LABELS) || (ConsoleV2::library() && ($tab === 'untranscribed' || in_array($tab, LibraryFacets::PLACES, true))) ? $tab : 'all';
     }
 
     /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
@@ -572,6 +833,11 @@ class ListCaptureSessions extends ListRecords
     protected function modifyQueryWithActiveTab(Builder $query, bool $isResolvingRecord = false): Builder
     {
         $query = parent::modifyQueryWithActiveTab($query, $isResolvingRecord);
+        // Since 2.0.0-p (ui_v2.library): the place and the filters, as LibraryFacets counts them (a call still waiting
+        // for its decision is in Needs you only).
+        if (! $isResolvingRecord && ConsoleV2::library()) {
+            app(LibraryFacets::class)->apply($query, (int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), $this->filterSet(), null, null, $this->libraryPlace());
+        }
         if ($isResolvingRecord || $this->folder === null || $this->folder === 'shared' || ! array_key_exists($this->folder, self::FOLDER_LABELS)) {
             return $query;
         }
@@ -611,12 +877,16 @@ class ListCaptureSessions extends ListRecords
             return $schema->components([
                 View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
                     ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
+                // Since 2.0.0-p: the filter panel left of the list, the one toolbar row, then the pills and the rows.
                 Group::make([
-                    View::make('filament.v2.library-views'),
-                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
-                    EmbeddedTable::make(),
-                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
-                ])->extraAttributes(['class' => 'v2-library el-library']),
+                    View::make('filament.v2.library-filters'),
+                    Group::make([
+                        RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+                        EmbeddedTable::make(),
+                        RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+                    ])->extraAttributes(['class' => 'v2-library el-library']),
+                ])->extraAttributes(fn (): array => ['class' => 'v2-lib-shell', 'x-data' => 'elV2LibraryShell({ compose: '.($this->compose === 'view' ? 'true' : 'false').' })',
+                    'x-bind:class' => "{ 'is-drawer': drawer }"]),
                 View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
             ]);
         }
@@ -650,9 +920,13 @@ class ListCaptureSessions extends ListRecords
     {
         // Both are registered together: the scoped one says whether this panel's views have them already.
         if (! FilamentView::hasRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, self::class)) {
-            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self && ! ConsoleV2::library() ? view('filament.library.toolbar')->render() : '');
-            // Since v2.0 (ui_v2.library): the quick filters right after the search field.
+            // The classic toolbar under the search; since 2.0.0-p under the new one the pills, while filters are on.
+            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self
+                ? view(ConsoleV2::library() ? 'filament.v2.library-pills' : 'filament.library.toolbar')->render() : '');
+            // Since v2.0 (ui_v2.library): the quick filters right after the search field; since 2.0.0-p [Filters n] and
+            // Sort & display, the view's name before the search, and the pills on a row of their own under it.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
+            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_BEFORE, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-title')->render() : '');
             FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
             // Since U9b: the new Library's Load more, under the list.
             FilamentView::registerRenderHook(TablesRenderHook::CONTENT_AFTER, fn (): string => ConsoleV2::library() ? view('filament.v2.library-more')->render() : '', scopes: self::class);
@@ -729,18 +1003,10 @@ class ListCaptureSessions extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        if (ConsoleAccess::readOnly()) {
+        // Since 2.0.0-p (ui_v2.library) Record and Import are the sidebar's ● Record ▾, and the page has no header: its
+        // name leads the one toolbar row.
+        if (ConsoleAccess::readOnly() || ConsoleV2::library()) {
             return [];
-        }
-        // Since v2.0 (ui_v2.library): Upload recording is the one primary action (the web's main action, PLAN_V2_PARITY
-        // section 2), with a voice note recorded here beside it.
-        if (ConsoleV2::library()) {
-            return [
-                Action::make('upload')->label(__('Upload recording'))
-                    ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-                Action::make('voiceNote')->label(__('New voice note'))->color('gray')->outlined()
-                    ->url(fn (): string => Upload::getUrl(['record' => 1])),
-            ];
         }
 
         return [
@@ -771,6 +1037,12 @@ class ListCaptureSessions extends ListRecords
             'maxBytes' => (int) config('echoledger.max_recording_bytes'),
             'nativeHashMaxBytes' => self::NATIVE_HASH_MAX_BYTES,
         ];
+    }
+
+    /** Since 2.0.0-p (ui_v2.library): no header, the list starts under the one toolbar row, which carries the heading. */
+    public function getHeader(): ?ViewContract
+    {
+        return ConsoleV2::library() ? view('filament.v2.library-header') : parent::getHeader();
     }
 
     public function getTitle(): string|Htmlable

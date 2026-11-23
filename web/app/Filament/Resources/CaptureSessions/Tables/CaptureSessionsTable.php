@@ -24,6 +24,7 @@ use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\Library\LibraryFacets;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
 use App\Services\Titles\TitleSql;
@@ -118,7 +119,8 @@ final class CaptureSessionsTable
             ]))
             ->columnManagerTriggerAction(fn (Action $action): Action => $action->label(__('Columns'))->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
-            ->filters([
+            // Since 2.0.0-p (ui_v2.library) the filter panel holds every filter (filament.v2.library-filters).
+            ->filters(ConsoleV2::library() ? [] : [
                 // The filters in the console's language (since W-213; English reads exactly as before).
                 SelectFilter::make('source_device')->label(__('Source device'))->options(self::choices(SourceDevice::class))->multiple(),
                 SelectFilter::make('source_app')->label(__('Source app'))->options(self::choices(SourceApp::class))->multiple(),
@@ -173,12 +175,16 @@ final class CaptureSessionsTable
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['heading'])
             ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['description'])
             ->emptyStateActions([
-                Action::make('clearSearchAndFilters')->label(__('Clear search and filters'))->color('gray')
+                Action::make('clearSearchAndFilters')->label(fn (HasTable $livewire): string => ConsoleV2::library() && ! $livewire->hasTableSearch() ? __('Clear filters') : __('Clear search and filters'))->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'search')
                     // Only the sessions list page shows this table, and its page has the filter form.
                     ->action(function (ListRecords $livewire): void {
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
+                        // Since 2.0.0-p: the new Library's own filters too.
+                        if (method_exists($livewire, 'clearFilters')) {
+                            $livewire->clearFilters();
+                        }
                     }),
                 Action::make('showAll')->label(__('Show all recordings'))->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'view')
@@ -206,8 +212,9 @@ final class CaptureSessionsTable
     {
         return [
             Split::make([
+                // Since 2.0.0-p every word somewhere among the title, the transcripts (and screen moments) and the project path.
                 ViewColumn::make('title')->label(__('Title'))->view('filament.v2.library-row')
-                    ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
+                    ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitlesAndTranscripts($query, $search)),
             ]),
         ];
     }
@@ -273,7 +280,8 @@ final class CaptureSessionsTable
      */
     public static function failedActions(): array
     {
-        $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && (string) $livewire->activeTab === 'failed';
+        // Since 2.0.0-p also in Needs you, where failures are listed with the calls waiting for a decision.
+        $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && in_array((string) $livewire->activeTab, ['failed', 'needs_you'], true);
         $retry = fn (CaptureSession $record): ?string => FailedUpload::for($record)['retry'] ?? null;
         // In the console's language (since W-213 in the classic Library too; English reads exactly as before).
         $t = fn (string $words, array $replace = []): string => __($words, $replace);
@@ -310,9 +318,12 @@ final class CaptureSessionsTable
      */
     public static function emptyState(HasTable $livewire, Table $table): array
     {
-        if ($livewire->hasTableSearch() || $table->isFiltered()) {
+        // Since 2.0.0-p the new Library's own filters (the panel's) count as filters too: "Clear filters".
+        $filtered = $table->isFiltered() || (method_exists($livewire, 'activeFilterCount') && $livewire->activeFilterCount() > 0);
+        if ($livewire->hasTableSearch() || $filtered) {
+            // Since 2.0.0-p, with only filters on, the words speak of filters only.
             return ['kind' => 'search', 'icon' => 'heroicon-o-magnifying-glass', 'heading' => $livewire->hasTableSearch() ? __('No recordings match your search') : __('No recordings match these filters'),
-                'description' => __('Try other words, or clear the search and filters.')];
+                'description' => $livewire->hasTableSearch() || ! ConsoleV2::library() ? __('Try other words, or clear the search and filters.') : __('Try other filters, or clear them.')];
         }
         $view = property_exists($livewire, 'activeTab') ? (string) ($livewire->activeTab ?: 'all') : 'all';
         $folder = property_exists($livewire, 'folder') && is_string($livewire->folder) ? $livewire->folder : null;
@@ -899,6 +910,21 @@ final class CaptureSessionsTable
         }
 
         return $session->source_device === SourceDevice::Web ? 'Web upload' : (string) $session->source_device->getLabel();
+    }
+
+    /**
+     * The new Library's search (2.0.0-p): every word somewhere among the title shown, the transcripts (and screen
+     * moments) and the project path, the words in any of them (LibraryFacets, read once with the person's library and
+     * kept with it; docs/API.md "Library filters": the apps search the same way).
+     *
+     * @param  Builder<CaptureSession>  $query
+     * @return Builder<CaptureSession>
+     */
+    public static function searchTitlesAndTranscripts(Builder $query, string $search): Builder
+    {
+        $ids = app(LibraryFacets::class)->searchIds((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), $search);
+
+        return $ids === null ? $query : $query->whereIn($query->qualifyColumn('id'), $ids === [] ? ['__none__'] : $ids);
     }
 
     /**

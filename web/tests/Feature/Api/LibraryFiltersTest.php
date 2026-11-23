@@ -204,6 +204,36 @@ describe('each section, is and is not', function () {
             ->and(facetsFor($this, ['source' => ['op' => 'is', 'values' => ['zoom']]], ['q' => 'invoice'])['total'])->toBe(2);
     });
 
+    it('finds every word somewhere among the title, the transcript and the project path, the words in different places', function () {
+        $acme = Fx::client($this->me, 'Acme Holdings');
+        $contracts = Fx::client($this->me, 'Contracts');
+        $contracts->forceFill(['parent_id' => $acme->id])->save();
+        // Mixed places: "contracts" is the project's name, "clause" is in the transcript.
+        $clause = filtered($this->me, ['title' => 'Monday', 'client_id' => $contracts->id]);
+        Transcript::query()->where('capture_session_id', $clause->id)->firstOrFail()->update(['text' => 'Read the penalty clause again.']);
+        $inAcme = filtered($this->me, ['title' => 'Tuesday', 'client_id' => $acme->id]);
+        $byTitle = filtered($this->me, ['title' => 'Acme clause review']);
+        $elsewhere = filtered($this->me, ['title' => 'Wednesday']);
+        Transcript::query()->where('capture_session_id', $elsewhere->id)->firstOrFail()->update(['text' => 'No clause here.']);
+        // A teammate's project of the same names finds nothing of theirs, and nothing of mine.
+        $mate = Fx::user();
+        app(Workspaces::class)->addMember($this->workspace, $mate, WorkspaceRole::Member);
+        $theirs = Fx::client($mate, 'Contracts');
+        $theirs->forceFill(['workspace_id' => $this->workspace->id])->save();
+        filtered($mate, ['workspace_id' => $this->workspace->id, 'client_id' => $theirs->id, 'title' => 'Their clause']);
+
+        expect(listedFor($this, [], ['q' => 'contracts clause']))->toBe(idsOf($clause))
+            // A subfolder: "acme" is the name of the folder above Contracts; capitals ignored.
+            ->and(listedFor($this, [], ['q' => 'ACME']))->toBe(idsOf($clause, $inAcme, $byTitle))
+            ->and(listedFor($this, [], ['q' => 'acme clause']))->toBe(idsOf($clause, $byTitle))
+            ->and(listedFor($this, [], ['q' => 'holdings tuesday']))->toBe(idsOf($inAcme))
+            ->and(listedFor($this, [], ['q' => '"acme holdings" penalty']))->toBe(idsOf($clause))
+            // Every word somewhere: "wednesday" is in no project of Acme's.
+            ->and(listedFor($this, [], ['q' => 'acme wednesday']))->toBe([])
+            ->and(facetsFor($this, [], ['q' => 'acme clause'])['total'])->toBe(2)
+            ->and(listedFor($this, ['project' => ['op' => 'is', 'values' => [$acme->id]]], ['q' => 'clause']))->toBe(idsOf($clause));
+    });
+
     it('refuses what is not a filter, with the field named', function () {
         foreach ([
             '{"colour": {"op": "is", "values": ["red"]}}' => 'filters.colour',
