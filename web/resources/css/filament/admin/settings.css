@@ -1471,3 +1471,22 @@ details.el-set-group[open] > summary .el-set-chevron {
     font-size: 14px;
     font-weight: 500;
 }
+
+/* ---------- with the three levels (ConsoleV2::frame): Settings' groups are the panel's; a group of several pages
+   shows them as the page's inner list on the left (docs/PLAN_NAV_3_LEVELS.md section 4) ---------- */
+@container settings (min-width: 760px) {
+    .el-settings.is-framed {
+        grid-template-columns: minmax(0, 720px);
+    }
+
+    .el-settings.is-framed.has-inner {
+        grid-template-columns: 200px minmax(0, 720px);
+    }
+}
+
+@container settings (max-width: 759.98px) {
+    .el-settings.is-framed[data-mode='page'] .v2-inner-list {
+        display: flex;
+        flex-flow: row wrap;
+    }
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\LiveAssist;
 
 use App\Filament\Concerns\LiveAssistOnly;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
@@ -34,6 +35,18 @@ class AssistSessions extends Page implements HasTable
 {
     use InteractsWithTable;
     use LiveAssistOnly;
+
+    /**
+     * Since docs/PLAN_NAV_3_LEVELS.md (Live's panel and Live Assist's tabs), with the three levels only: the Show filter
+     * in the address, as a list page keeps it, so Past reports (calls) and Practice are links of their own and Back keeps
+     * them. Without them the page's address stays as it was.
+     *
+     * @return array<string, array{as: string}>
+     */
+    protected function queryString(): array
+    {
+        return ConsoleV2::frame() ? ['tableFilters' => ['as' => 'filters']] : [];
+    }
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSparkles;
 

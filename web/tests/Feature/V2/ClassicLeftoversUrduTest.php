@@ -75,6 +75,23 @@ const LEFTOVER_FRAME = ['Help & shortcuts', 'Search recordings, transcripts, pag
     // W-213: the skip link and the bell's name.
     'Skip to content', '="Notifications, 1 needs you"'];
 
+/**
+ * With the three levels (the new frame and the new Library) Projects is an overview of cards: each says its last
+ * activity, and the project's language is in its Settings, not on the card (docs/PLAN_NAV_3_LEVELS.md section 3).
+ */
+const LEFTOVER_FRAMED = ['projects' => ['Automatic' => null, 'Last call Nov 17' => 'Last activity Nov 17']];
+
+/** A page's English in this world, with the three levels' own words where they differ. */
+function leftoverPhrases(string $page, array $phrases, bool $framed): array
+{
+    if (! $framed) {
+        return $phrases;
+    }
+    $swap = LEFTOVER_FRAMED[$page] ?? [];
+
+    return array_values(array_filter(array_map(fn (string $english): ?string => array_key_exists($english, $swap) ? $swap[$english] : $english, $phrases)));
+}
+
 /** Per page (and whether the new Library is on): the English it shows in this world. */
 const LEFTOVER_ENGLISH = [
     'library' => [false, ['Nov 16', '="Nov 15, 2026 · 5:00 PM"', 'Phone call · Galaxy S25', 'Voice note · Galaxy S25', '="Nov 17, 2026 · 9:00 AM"',
@@ -99,12 +116,13 @@ const LEFTOVER_ENGLISH = [
 it('shows the classic pages\' last English in Urdu in the new frame, with Urdu month names and the digits 0-9', function () {
     foreach (LEFTOVER_ENGLISH as $page => [$library, $phrases]) {
         $html = leftoverPage($this, true, 'ur', $page, $library);
-        foreach ([...$phrases, ...LEFTOVER_FRAME] as $english) {
+        // (None of it in English: what the classic page said, and the three levels' own words.)
+        foreach (array_unique([...$phrases, ...leftoverPhrases($page, $phrases, $library), ...LEFTOVER_FRAME]) as $english) {
             expect(leftoverHas($html, $english))->toBeFalse("{$page}: \"{$english}\" is still in English");
         }
     }
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'library', false)))->toContain('16 نومبر')->toContain('فون کال · Galaxy S25');
-    expect(leftoverWords(leftoverPage($this, true, 'ur', 'projects')))->toContain('آخری کال 17 نومبر')->not->toMatch('/[٠-٩۰-۹]/u');
+    expect(leftoverWords(leftoverPage($this, true, 'ur', 'projects')))->toContain('آخری سرگرمی 17 نومبر')->not->toMatch('/[٠-٩۰-۹]/u');
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'project-recordings')))->toContain('پروجیکٹس')->toContain('نیا پروجیکٹ');
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'usage')))->toContain('نومبر 2026');
     // W-213: the classic Library's days as "اتوار، 15 نومبر", Activity's as "17 نومبر 2026", a new project's words.
@@ -123,7 +141,11 @@ it('keeps the same words in English in the new frame and in classic', function (
     foreach ([true, false] as $v2) {
         foreach (LEFTOVER_ENGLISH as $page => [$library, $phrases]) {
             $html = leftoverPage($this, $v2, 'en', $page, $library);
-            foreach ([...$phrases, ...LEFTOVER_FRAME] as $english) {
+            // With the three levels (the new frame and the new Library) the bell is the rail's Activity
+            // (docs/PLAN_NAV_3_LEVELS.md section 2: never the same thing at two levels), so the top bar has none.
+            // Help & shortcuts lists the frame's own keys there in place of the sidebar's [ line.
+            $frame = $v2 && $library ? ['="Notifications, 1 needs you"', 'Fold the sidebar to icons, and back'] : [];
+            foreach ([...leftoverPhrases($page, $phrases, $v2 && $library), ...array_diff(LEFTOVER_FRAME, $frame)] as $english) {
                 expect(leftoverHas($html, $english))->toBeTrue(($v2 ? 'v2' : 'classic')." {$page}: \"{$english}\" is missing");
             }
         }

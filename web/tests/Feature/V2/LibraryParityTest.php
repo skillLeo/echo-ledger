@@ -216,16 +216,17 @@ it('ticks the current choice in Sort & display (Group by, Sort, Density) and the
         ->and(libraryMenuOption($html, 'sort-newest'))->not->toContain('M16.704 4.153');
 });
 
-it('moves Upload recording and New voice note to the sidebar\'s ● Record ▾, the frame\'s one filled button', function () {
+it('moves Upload recording and New voice note to the rail\'s ● Record, the frame\'s one filled button', function () {
     // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 6): Record a voice note, and Import audio files in its menu
-    // (the file picker on the Library); the page itself has no header actions.
+    // (the file picker on the Library); the page itself has no header actions. Since docs/PLAN_NAV_3_LEVELS.md section 2
+    // the round accent button at the top of the rail.
     Livewire::test(ListCaptureSessions::class)->assertActionDoesNotExist('upload')->assertActionDoesNotExist('voiceNote');
     $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
-    expect($html)->toMatch('~href="[^"]*/app/upload\?record=1" class="v2-sb-record[^"]*" data-sidebar-upload data-record~')
+    expect($html)->toMatch('~href="[^"]*/app/upload\?record=1" class="v2-rail-rec[^"]*" data-sidebar-upload data-record~')
         ->toContain('data-record-menu')->toContain('Record a voice note')->toContain('Import audio files')
         ->toContain("\$dispatch('el-upload-pick')");
     $css = (string) file_get_contents(resource_path('css/v2/console.css'));
-    expect($css)->toContain('.v2-sb-record-more {')->toContain('background-color: var(--el-role-accent-default);');
+    expect($css)->toContain('.v2-rail-rec-dot {')->toContain('border-radius: var(--el-radius-full);')->toContain('background-color: var(--el-role-accent-default);');
 });
 
 it('lets a row\'s title take its own direction, so an English title in Urdu ends in its own "…"', function () {
