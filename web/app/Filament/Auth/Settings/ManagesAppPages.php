@@ -276,6 +276,8 @@ trait ManagesAppPages
                 ['[', 'Fold the sidebar to icons, and back'],
                 ['?', 'Help & shortcuts'],
                 ['Esc', 'Close a panel, a menu or a dialog'],
+                // Since docs/PLAN_NAV_3_LEVELS.md section 0 (the new Library's frame): Back and Forward, as the apps have them.
+                ...(ConsoleV2::library() ? [[$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', 'Back and forward']] : []),
             ],
             'In the Library' => [
                 ['J  K', 'Next and previous recording'],

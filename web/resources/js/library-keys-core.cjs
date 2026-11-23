@@ -85,5 +85,19 @@
         return null;
     }
 
-    return { isTyping, isControl, keyAction, clickAction, contextAction, shellKey };
+    /**
+     * Back and Forward from the keyboard (docs/PLAN_NAV_3_LEVELS.md sections 0 and 6): ⌘[ and ⌘] on a Mac, Ctrl+[ and
+     * Ctrl+] elsewhere, as the apps have them; the browser's own Back, Forward and the mouse's back button keep working
+     * (the Library keeps its place, filters and view in the address). Not while typing, nor over a dialog. e as
+     * keyAction's (with code and shiftKey); s: {mac, modal}. Returns 'back', 'forward' or null.
+     */
+    function historyKey(e, s) {
+        if (e.defaultPrevented || s.modal || e.altKey || e.shiftKey || isTyping(e.target)) return null;
+        if (s.mac ? ! (e.metaKey && ! e.ctrlKey) : ! (e.ctrlKey && ! e.metaKey)) return null;
+        if (e.code === 'BracketLeft' || e.key === '[') return 'back';
+        if (e.code === 'BracketRight' || e.key === ']') return 'forward';
+        return null;
+    }
+
+    return { isTyping, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
 });

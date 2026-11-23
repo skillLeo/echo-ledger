@@ -271,15 +271,30 @@ class ListCaptureSessions extends ListRecords
         if ($view !== null) {
             return $view['name'];
         }
+        $place = $this->libraryPlace();
+        // A label opened from the sidebar (Labels is one value, nothing else on) is named as the sidebar names it.
+        $filters = $this->filterSet();
+        if ($place === 'all' && array_keys($filters) === ['labels'] && $filters['labels']['op'] === 'is' && count($filters['labels']['values']) === 1) {
+            $label = collect($this->libraryFacets()['sections']['labels'])->firstWhere('value', $filters['labels']['values'][0]);
+            if (is_array($label)) {
+                return (string) ($label['name'] ?? $label['value']);
+            }
+        }
 
-        return match ($this->libraryPlace()) {
+        return match ($place) {
             'needs_you' => __('Needs you'),
             'unread' => __('Unread'),
             'important' => __('Important'),
             'not_transcribed' => __('Not transcribed'),
             'audio_only' => __('Audio only'),
-            default => __('Library'),
+            default => __('All recordings'),
         };
+    }
+
+    /** The breadcrumb's "Library": All recordings, with no filter, search or view (since §0 of docs/PLAN_NAV_3_LEVELS.md). */
+    public function libraryHomeUrl(): string
+    {
+        return CaptureSessionResource::getUrl('index');
     }
 
     /** The panel's filter set as it was sent (every section at once), 150 ms after the last change. */

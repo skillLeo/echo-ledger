@@ -120,3 +120,23 @@ test('Cmd, Ctrl or Alt with 1 to 9 opens the sidebar\'s first nine places, and o
     // A plain digit is the page's.
     assert.equal(core.shellKey(key('2', { code: 'Digit2' }), shell()), null);
 });
+
+test('⌘[ and ⌘] go Back and Forward on a Mac, Ctrl+[ and Ctrl+] elsewhere, never while typing or over a dialog', () => {
+    const mac = { mac: true, modal: false };
+    const pc = { mac: false, modal: false };
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), mac), 'back');
+    assert.equal(core.historyKey(key(']', { metaKey: true, code: 'BracketRight' }), mac), 'forward');
+    assert.equal(core.historyKey(key('[', { ctrlKey: true, code: 'BracketLeft' }), pc), 'back');
+    assert.equal(core.historyKey(key(']', { ctrlKey: true, code: 'BracketRight' }), pc), 'forward');
+    // A layout whose bracket key types another character still goes by the key's place.
+    assert.equal(core.historyKey(key('ü', { metaKey: true, code: 'BracketLeft' }), mac), 'back');
+    // The other platform's modifier, Alt or Shift with it, no modifier, typing and a dialog: nothing.
+    assert.equal(core.historyKey(key('[', { ctrlKey: true, code: 'BracketLeft' }), mac), null);
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), pc), null);
+    assert.equal(core.historyKey(key('[', { metaKey: true, altKey: true, code: 'BracketLeft' }), mac), null);
+    assert.equal(core.historyKey(key('{', { metaKey: true, shiftKey: true, code: 'BracketLeft' }), mac), null);
+    assert.equal(core.historyKey(key('[', { code: 'BracketLeft' }), mac), null);
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { typing: true } }), mac), null);
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), { mac: true, modal: true }), null);
+    assert.equal(core.historyKey(key('x', { metaKey: true, code: 'KeyX' }), mac), null);
+});

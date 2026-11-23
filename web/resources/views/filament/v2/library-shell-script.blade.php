@@ -3,7 +3,8 @@
     ui_v2.library. elV2LibraryShell keeps the panel open or closed (remembered by this browser, closed by default) and
     makes it a drawer over the list when the window is narrower than --el-breakpoint-panel (tokens.css), a modal dialog
     then; the keys: F opens or closes the filters while the Library has the focus (WCAG 2.1.4), ⌘F / Ctrl+F goes to the search, Esc closes the panel before it clears a selection, and ⌘1…⌘9
-    (Alt+1…9 too) opens the sidebar's first nine places. ElLibraryKeysCore.shellKey decides (tests/js).
+    (Alt+1…9 too) opens the sidebar's first nine places. ElLibraryKeysCore.shellKey decides (tests/js). On every page
+    of the console, ⌘[ / ⌘] (Ctrl+[ / Ctrl+] off a Mac) go Back and Forward (ElLibraryKeysCore.historyKey).
 --}}
 <script>
     (() => {
@@ -53,6 +54,20 @@
             },
         }));
         if (window.Alpine) register(); else document.addEventListener('alpine:init', register);
+
+        // ⌘[ / ⌘] (Ctrl+[ / Ctrl+] off a Mac): Back and Forward on every page of the console (ElLibraryKeysCore.historyKey).
+        const mac = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || '');
+        document.addEventListener('keydown', (e) => {
+            const core = window.ElLibraryKeysCore;
+            if (! core || typeof core.historyKey !== 'function') return;
+            const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
+            const way = core.historyKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
+                defaultPrevented: e.defaultPrevented, target: field(e.target) }, { mac, modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null });
+            if (! way) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (way === 'back') window.history.back(); else window.history.forward();
+        }, true);
 
         // The keys, before the list's own (library-keys): ElLibraryKeysCore.shellKey decides.
         document.addEventListener('keydown', (e) => {

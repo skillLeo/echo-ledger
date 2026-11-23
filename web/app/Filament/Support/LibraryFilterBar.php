@@ -174,6 +174,18 @@ final class LibraryFilterBar
     }
 
     /**
+     * The Library's places by key, in the console's language: All recordings first (docs/PLAN_NAV_3_LEVELS.md section 0;
+     * nothing is called the Inbox), then Needs you, Unread, Important, Not transcribed and Audio only.
+     *
+     * @return array<string, string>
+     */
+    public static function placeNames(): array
+    {
+        return ['all' => __('All recordings'), 'needs_you' => __('Needs you'), 'unread' => __('Unread'), 'important' => __('Important'),
+            'not_transcribed' => __('Not transcribed'), 'audio_only' => __('Audio only')];
+    }
+
+    /**
      * The sidebar's Library: the places with their counts, the person's saved views and labels. [$here] is the address
      * the page was opened at (the sidebar draws again on its own requests), to mark where you are.
      *
@@ -198,7 +210,7 @@ final class LibraryFilterBar
 
         $places = [];
         $icons = ['all' => 'library', 'needs_you' => 'alert', 'unread' => 'inbox', 'important' => 'flag', 'not_transcribed' => 'transcript', 'audio_only' => 'mic'];
-        $names = ['all' => __('All'), 'needs_you' => __('Needs you'), 'unread' => __('Unread'), 'important' => __('Important'), 'not_transcribed' => __('Not transcribed'), 'audio_only' => __('Audio only')];
+        $names = self::placeNames();
         foreach (LibraryFacets::PLACES as $place) {
             $places[] = ['key' => $place, 'label' => $names[$place], 'icon' => $icons[$place], 'url' => $place === 'all' ? $library : $library.'?tab='.$place,
                 'count' => $place === 'all' ? 0 : $counts[$place], 'strong' => in_array($place, ['needs_you', 'unread'], true),

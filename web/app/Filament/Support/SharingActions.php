@@ -254,7 +254,10 @@ final class SharingActions
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading(fn (Client $record): string => __('Delete “:name”?', ['name' => $record->name]))
-            ->modalDescription(__('Its recordings are not deleted: they go to the Inbox. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.'))
+            // Since the new Library nothing is called the Inbox (docs/PLAN_NAV_3_LEVELS.md section 0): the recordings keep no project.
+            ->modalDescription(ConsoleV2::library()
+                ? __('Its recordings are not deleted: they stay in All recordings, with no project. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.')
+                : __('Its recordings are not deleted: they go to the Inbox. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.'))
             ->modalSubmitActionLabel(__('Delete project'))
             ->visible(fn (Client $record): bool => ($user = auth()->user()) instanceof User && app(ProjectTree::class)->canDelete($user, $record))
             ->action(function (Client $record) use ($after): void {
@@ -267,7 +270,9 @@ final class SharingActions
                     return;
                 }
                 Notification::make()->title(__('Project deleted'))
-                    ->body(trans_choice(':count recording moved to the Inbox.|:count recordings moved to the Inbox.', $moved['moved_sessions'], ['count' => $moved['moved_sessions']]))->success()->send();
+                    ->body(ConsoleV2::library()
+                        ? trans_choice(':count recording now has no project.|:count recordings now have no project.', $moved['moved_sessions'], ['count' => $moved['moved_sessions']])
+                        : trans_choice(':count recording moved to the Inbox.|:count recordings moved to the Inbox.', $moved['moved_sessions'], ['count' => $moved['moved_sessions']]))->success()->send();
                 if ($after !== null) {
                     $after();
                 }

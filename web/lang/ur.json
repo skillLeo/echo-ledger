@@ -1030,5 +1030,10 @@
     "Show or hide the projects": "پروجیکٹس دکھائیں یا چھپائیں",
     "Open or close the filters (while the Library has focus)": "فلٹرز کھولیں یا بند کریں (جب لائبریری پر فوکس ہو)",
     "Search titles, transcripts and projects in the Library": "لائبریری میں عنوانات، ٹرانسکرپٹس اور پروجیکٹس تلاش کریں",
-    "Open the sidebar's first nine places": "سائیڈ بار کی پہلی نو جگہیں کھولیں"
+    "Open the sidebar's first nine places": "سائیڈ بار کی پہلی نو جگہیں کھولیں",
+    "Its recordings are not deleted: they stay in All recordings, with no project. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.": "اس کی ریکارڈنگز حذف نہیں ہوتیں: وہ بغیر پروجیکٹ کے تمام ریکارڈنگز میں رہتی ہیں۔ اس کے ذیلی فولڈرز ایک سطح اوپر چلے جاتے ہیں۔ اس کی فائلیں، بریف، نوٹس، یادداشت، اصول اور شیئر لنکس حذف ہو جاتے ہیں۔",
+    ":count recording now has no project.|:count recordings now have no project.": ":count ریکارڈنگ اب کسی پروجیکٹ میں نہیں۔|:count ریکارڈنگز اب کسی پروجیکٹ میں نہیں۔",
+    "The recording, its audio and transcript are copied into this workspace's recordings, with no project. Your copy stays when the sender deletes theirs.": "ریکارڈنگ، اس کی آڈیو اور ٹرانسکرپٹ اس ورک اسپیس کی ریکارڈنگز میں، بغیر پروجیکٹ کے، کاپی ہو جاتی ہیں۔ بھیجنے والا اپنی حذف کر دے تو بھی آپ کی کاپی رہتی ہے۔",
+    "No project (sound and video only)": "کوئی پروجیکٹ نہیں (صرف آڈیو اور ویڈیو)",
+    "Back and forward": "پیچھے اور آگے"
 }

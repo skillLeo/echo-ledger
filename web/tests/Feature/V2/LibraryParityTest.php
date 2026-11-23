@@ -166,7 +166,8 @@ it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retr
 
     $page = Livewire::test(ListCaptureSessions::class);
     expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('واٹس ایپ')->toContain('فون کال')->not->toContain('WhatsApp');
-    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('ان باکس')->not->toContain('Inbox');
+    // Since docs/PLAN_NAV_3_LEVELS.md section 0 nothing is called the Inbox: a recording without a project is "No project".
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('کوئی پروجیکٹ نہیں')->not->toContain('Inbox')->not->toContain('ان باکس');
     expect(implode(' | ', $heads($page->call('setLibraryGroup', 'status')->html())))->toContain('ناکام')->not->toContain('Failed');
 
     // The table's App column too.
