@@ -170,7 +170,8 @@ final class SavedViews
      */
     public static function payload(SavedView $view): array
     {
-        $filters = LibraryFilters::normalize($view->filters);
+        // Read forgivingly: a view kept before an option was withdrawn still opens, without it.
+        $filters = LibraryFilters::read($view->filters);
 
         return [
             'id' => $view->id,

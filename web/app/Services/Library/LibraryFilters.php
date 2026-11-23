@@ -230,6 +230,42 @@ final class LibraryFilters
         return $out;
     }
 
+    /**
+     * A filter set kept earlier (a saved view), read as forgivingly as the apps read one: a section or option no longer
+     * offered is left out, and a section that no longer reads (or is left with no value) goes, never an error. Writes
+     * stay strict (normalize()).
+     *
+     * @return array<string, array{op: string, values: list<string>, from?: string, to?: string}>
+     */
+    public static function read(mixed $stored): array
+    {
+        if (is_string($stored)) {
+            $stored = json_decode($stored, true);
+        }
+        if (! is_array($stored)) {
+            return [];
+        }
+        $out = [];
+        foreach (self::SECTIONS as $section) {
+            $raw = $stored[$section] ?? null;
+            if (! is_array($raw)) {
+                continue;
+            }
+            $values = array_values(array_filter(is_array($raw['values'] ?? null) ? $raw['values'] : [],
+                fn (mixed $value): bool => is_string($value) && self::value($section, $value) !== null));
+            try {
+                $clean = self::section($section, [...$raw, 'values' => array_slice($values, 0, self::MAX_VALUES)], 'filters.'.$section);
+            } catch (ApiError) {
+                continue;
+            }
+            if ($clean !== null) {
+                $out[$section] = $clean;
+            }
+        }
+
+        return $out;
+    }
+
     /** @return array{op: string, values: list<string>, from?: string, to?: string}|null */
     private static function section(string $section, mixed $raw, string $field): ?array
     {

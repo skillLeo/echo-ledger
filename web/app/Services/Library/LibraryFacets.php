@@ -18,6 +18,8 @@ use App\Models\Transcript;
 use App\Services\LibrarySearch;
 use App\Services\Lists\LabelLists;
 use App\Services\SettingsRepository;
+use ArrayObject;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -31,14 +33,19 @@ use Illuminate\Support\Facades\DB;
  * Every recording is read once as a compact row (its values in each section, LibraryFilters) and the filters are
  * matched in PHP, the way the phone and the desktop match them on their synced library, so the three agree by
  * construction. The rows and each filter set's answer are cached under the person's library version: a stamp that every
- * saved recording, transcript, upload, label, bookmark, open or project of theirs renews (listen()), with what the recordings say
- * of themselves (how many, the newest change). A change made some other way is seen within ROWS_TTL at most.
+ * saved recording, transcript, upload, label, bookmark, open, list or project of theirs renews (listen()), with what the
+ * recordings say of themselves (how many, the newest change). The stamp is renewed once a request, after it (so after its
+ * transactions: a read in between never keeps uncommitted rows under the new stamp); until then this request reads the
+ * person's library afresh and keeps nothing of it. A change made some other way is seen within ROWS_TTL at most.
  *
  * @phpstan-type Row array{id: string, started: int, ended: int|null, session_status: string, source: string, device: string, projects: list<string>, language: string, status: string, labels: list<string>, marked: list<string>, bookmarks: list<string>, opened: bool}
  * @phpstan-type Filters array<string, array{op: string, values: list<string>, from?: string, to?: string}>
  */
 final class LibraryFacets
 {
+    /** The sidebar's Library places (the web console's; the apps count theirs from their own library). */
+    public const PLACES = ['all', 'needs_you', 'unread', 'important', 'not_transcribed', 'audio_only'];
+
     /** How long one filter set's counts are kept (seconds); the date and the 24 hours of Needs you move with the clock. */
     private const RESULT_TTL = 60;
 
@@ -47,6 +54,9 @@ final class LibraryFacets
 
     /** @var array<string, mixed> rows and search results already read, by version */
     private array $memo = [];
+
+    /** Where the application keeps, for this request (or job, or command), whose library changed and how often. */
+    private const CHANGES = 'library-facets.changes';
 
     /**
      * Renews the library version of the person whose recording (or project) changed. Registered for the models whose
@@ -64,19 +74,63 @@ final class LibraryFacets
         }
         Client::saved(fn (Client $c) => $person((int) $c->workspace_id, (int) $c->user_id));
         Client::deleted(fn (Client $c) => $person((int) $c->workspace_id, (int) $c->user_id));
-        foreach ([Transcript::class, Recording::class, SessionLabel::class, SessionMarker::class, SessionOpen::class] as $model) {
+        // A list's name, colour or place, and a new empty list: the Labels section's options.
+        LabelList::saved(fn (LabelList $l) => $person((int) $l->workspace_id, (int) $l->user_id));
+        LabelList::deleted(fn (LabelList $l) => $person((int) $l->workspace_id, (int) $l->user_id));
+        // An upload saves its recording at every part it receives: only a change of its state moves anything.
+        Recording::created(fn (Recording $r) => $ofSession($r->capture_session_id));
+        Recording::updated(fn (Recording $r) => $r->wasChanged('upload_status') ? $ofSession($r->capture_session_id) : null);
+        Recording::deleted(fn (Recording $r) => $ofSession($r->capture_session_id));
+        foreach ([Transcript::class, SessionLabel::class, SessionMarker::class, SessionOpen::class] as $model) {
             $model::saved(fn ($row) => $ofSession($row->getAttribute('capture_session_id')));
             $model::deleted(fn ($row) => $ofSession($row->getAttribute('capture_session_id')));
         }
     }
 
-    /** The person's counts are read again on the next ask (in this request too). */
+    /**
+     * The person's library changed: this request reads it afresh from now on, and their stamp is renewed once, after the
+     * request (deferred, so after every transaction of it, and once however many rows changed).
+     */
     public static function forget(int $workspaceId, int $userId): void
     {
+        $key = $workspaceId.':'.$userId;
+        if (app()->bound('request')) {
+            request()->attributes->remove(self::versionKey($workspaceId, $userId));
+        }
+        $changes = self::changes();
+        $changes[$key] = ($changes[$key] ?? 0) + 1;
+        // One renewal however many rows change: a deferred callback of the same name replaces the one before.
+        defer(fn () => DB::afterCommit(fn () => self::renew($workspaceId, $userId)), 'library-facets:'.$key, always: true);
+    }
+
+    /** @return ArrayObject<string, int> */
+    private static function changes(): ArrayObject
+    {
+        if (! app()->bound(self::CHANGES)) {
+            app()->instance(self::CHANGES, new ArrayObject);
+        }
+
+        /** @var ArrayObject<string, int> */
+        return app(self::CHANGES);
+    }
+
+    /** Renews the person's stamp: every reader reads their library again. */
+    public static function renew(int $workspaceId, int $userId): void
+    {
+        $changes = self::changes();
+        if ($changes->offsetExists($workspaceId.':'.$userId)) {
+            $changes->offsetUnset($workspaceId.':'.$userId);
+        }
         Cache::forever(self::stampKey($workspaceId, $userId), bin2hex(random_bytes(8)));
         if (app()->bound('request')) {
             request()->attributes->remove(self::versionKey($workspaceId, $userId));
         }
+    }
+
+    /** How many changes of the person's library wait for the stamp's renewal in this request (0 when none). */
+    public static function pending(int $workspaceId, int $userId): int
+    {
+        return self::changes()[$workspaceId.':'.$userId] ?? 0;
     }
 
     private static function stampKey(int $workspaceId, int $userId): string
@@ -99,14 +153,47 @@ final class LibraryFacets
      * @param  Filters  $filters
      * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
-    public function facets(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null): array
+    public function facets(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): array
     {
         $zone ??= $this->settings->displayTimezone();
         $query = self::cleanQuery($query);
+        $place = self::place($place);
         $version = $this->version($workspaceId, $userId);
-        $key = 'library-facets:result:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
+        $key = 'library-facets:result:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, $place, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
 
-        return Cache::remember($key, self::RESULT_TTL, fn (): array => $this->count($workspaceId, $userId, $filters, $query, $zone, $version));
+        return self::kept($version, $key, self::RESULT_TTL, fn (): array => $this->count($workspaceId, $userId, $filters, $query, $zone, $version, $place));
+    }
+
+    /**
+     * A place of the sidebar's Library (the web console counts and lists within it): `all`, `needs_you`, `unread`,
+     * `important`, `not_transcribed` or `audio_only`; anything else is `all`.
+     */
+    public static function place(?string $place): string
+    {
+        return in_array($place, self::PLACES, true) ? (string) $place : 'all';
+    }
+
+    /**
+     * Whether a row is in [$place]: a call still waiting only in Needs you, every other row by its own values.
+     *
+     * @param  Row  $row
+     */
+    private static function inPlace(array $row, string $place, int $now): bool
+    {
+        if ($place === 'needs_you') {
+            return LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now) !== null;
+        }
+        if ($row['session_status'] === SessionStatus::Recording->value) {
+            return false;
+        }
+
+        return match ($place) {
+            'unread' => ! $row['opened'],
+            'important' => in_array('important', $row['marked'], true),
+            'not_transcribed' => $row['status'] === 'not_transcribed',
+            'audio_only' => $row['session_status'] === SessionStatus::AudioOnly->value,
+            default => true,
+        };
     }
 
     /**
@@ -116,18 +203,20 @@ final class LibraryFacets
      * @param  Filters  $filters
      * @return list<string>|null
      */
-    public function matchingIds(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null): ?array
+    public function matchingIds(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): ?array
     {
         $query = self::cleanQuery($query);
-        if ($filters === [] && $query === null) {
+        $place = self::place($place);
+        if ($filters === [] && $query === null && $place === 'all') {
             return null;
         }
         $zone ??= $this->settings->displayTimezone();
         $rows = $this->searched($workspaceId, $userId, $query, $this->version($workspaceId, $userId));
         $ranges = self::ranges($filters, $zone);
+        $now = Carbon::now()->getTimestamp();
         $ids = [];
         foreach ($rows as $row) {
-            if ($row['session_status'] !== SessionStatus::Recording->value && self::passes($row, $filters, $ranges) === true) {
+            if (self::inPlace($row, $place, $now) && self::passes($row, $filters, $ranges) === true) {
                 $ids[] = $row['id'];
             }
         }
@@ -142,22 +231,28 @@ final class LibraryFacets
      * @param  Filters  $filters
      * @return Builder<CaptureSession>
      */
-    public function apply(Builder $builder, int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null): Builder
+    public function apply(Builder $builder, int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): Builder
     {
-        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone);
+        $place = self::place($place);
+        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place);
+        if ($ids === null) {
+            // Every recording: a call still waiting is in Needs you only.
+            return $builder->where($builder->qualifyColumn('status'), '!=', SessionStatus::Recording->value);
+        }
 
-        return $ids === null ? $builder : self::restrictTo($builder, $ids, $this->liveIds($workspaceId, $userId));
+        return self::restrictTo($builder, $ids, $this->liveIds($workspaceId, $userId, $place === 'needs_you'), $place === 'needs_you');
     }
 
     /**
-     * Narrows a query to the recordings that need the person ("Needs you": waiting calls included).
+     * How many recordings [$filters] keep in [$place] (a saved view's count in the sidebar), without the facets.
      *
-     * @param  Builder<CaptureSession>  $builder
-     * @return Builder<CaptureSession>
+     * @param  Filters  $filters
      */
-    public function applyNeedsYou(Builder $builder, int $workspaceId, int $userId): Builder
+    public function total(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): int
     {
-        return self::restrictTo($builder, array_map('strval', array_keys($this->needsYouOf($workspaceId, $userId))), $this->liveIds($workspaceId, $userId, true), true);
+        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place);
+
+        return $ids === null ? count($this->liveIds($workspaceId, $userId)) : count($ids);
     }
 
     /**
@@ -210,10 +305,11 @@ final class LibraryFacets
      * @param  Filters  $filters
      * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
-    private function count(int $workspaceId, int $userId, array $filters, ?string $query, string $zone, string $version): array
+    private function count(int $workspaceId, int $userId, array $filters, ?string $query, string $zone, string $version, string $place = 'all'): array
     {
+        $now = Carbon::now()->getTimestamp();
         $all = array_values(array_filter($this->rows($workspaceId, $userId, $version), fn (array $r): bool => $r['session_status'] !== SessionStatus::Recording->value));
-        $rows = $query === null ? $all : array_values(array_filter($this->searched($workspaceId, $userId, $query, $version), fn (array $r): bool => $r['session_status'] !== SessionStatus::Recording->value));
+        $rows = array_values(array_filter($this->searched($workspaceId, $userId, $query, $version), fn (array $r): bool => self::inPlace($r, $place, $now)));
         $ranges = self::ranges($filters, $zone);
         $optionRanges = [];
         foreach (['today', 'last_7_days', 'this_month'] as $date) {
@@ -463,7 +559,7 @@ final class LibraryFacets
             return $rows;
         }
         $key = 'library-facets:search:'.$workspaceId.':'.$userId.':'.sha1($version.'|'.$query);
-        $ids = $this->memo[$key] ??= Cache::remember($key, self::ROWS_TTL, fn (): array => $this->search->matching(
+        $ids = $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->search->matching(
             CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId), $query,
         )->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all());
         $found = array_flip($ids);
@@ -487,10 +583,29 @@ final class LibraryFacets
         $projects = DB::table('clients')->where('workspace_id', $workspaceId)->where('user_id', $userId)
             ->selectRaw('COUNT(*) AS n, MAX(updated_at) AS changed')->first();
         $opens = DB::table('session_opens')->where('user_id', $userId)->whereIn('capture_session_id', self::personSessions($workspaceId, $userId))->count();
-        $version = sha1((string) json_encode([Cache::get(self::stampKey($workspaceId, $userId)), $sessions, $projects, $opens]));
+        // Changed in this request and not renewed yet: a version of this process alone, new at every change, never kept.
+        $pending = self::pending($workspaceId, $userId);
+        $version = sha1((string) json_encode([Cache::get(self::stampKey($workspaceId, $userId)), $sessions, $projects, $opens, $pending > 0 ? [getmypid(), spl_object_id($this), $pending] : null]));
+        if ($pending > 0) {
+            $version = 'local:'.$version;
+        }
         request()->attributes->set($key, $version);
 
         return $version;
+    }
+
+    /**
+     * The shared cache's answer for [$key], made by [$make] when missing; a version of this request alone (a change not
+     * renewed yet) is never kept there.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $make
+     * @return T
+     */
+    private static function kept(string $version, string $key, int $ttl, Closure $make): mixed
+    {
+        return str_starts_with($version, 'local:') ? $make() : Cache::remember($key, $ttl, $make);
     }
 
     /**
@@ -503,7 +618,7 @@ final class LibraryFacets
         $key = 'library-facets:rows:'.$workspaceId.':'.$userId.':'.$version;
 
         /** @var list<Row> */
-        return $this->memo[$key] ??= Cache::remember($key, self::ROWS_TTL, fn (): array => $this->readRows($workspaceId, $userId));
+        return $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->readRows($workspaceId, $userId));
     }
 
     /** @return list<Row> */
