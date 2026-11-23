@@ -37,6 +37,13 @@
         "$type": "dimension",
         "$value": "48px"
       }
+    },
+    "titlebar": {
+      "macos": {
+        "$type": "dimension",
+        "$value": "38px",
+        "$description": "The macOS main window's title-bar strip (D-214): the native row of its traffic lights, 16 px buttons + trafficLightPosition.y (22) in desktop/src-tauri/tauri.conf.json. Empty; the content starts below it. Not in full screen."
+      }
     }
   }
 }

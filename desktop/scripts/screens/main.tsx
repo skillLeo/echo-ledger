@@ -18,6 +18,8 @@ import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording,
 import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
+import conf from "../../src-tauri/tauri.conf.json";
+import { applyTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -33,6 +35,39 @@ if (params.get("lang") === "ur") {
 }
 const controls = screen.startsWith("controls");
 document.documentElement.dataset.window = controls ? "controls" : "main";
+// "&platform=macos" (or "windows"): the main window as on that computer, as main.tsx sets it from window_appearance.
+// "&lights=1" draws macOS's close, minimize and zoom where the app puts them (tauri.conf.json trafficLightPosition), so
+// a picture shows whether anything sits under them; "&fullscreen=1" is the window in full screen (no lights).
+// "&inactive=1": the window not in front (macOS greys its buttons; the page looks the same).
+const platform = params.get("platform");
+if (platform === "macos" || platform === "windows") document.documentElement.dataset.platform = platform;
+const fullscreen = params.get("fullscreen") === "1";
+// "&start=<ms>": the app starting on a Mac. The core's start script (src/lib/titlebarStart.js, which
+// scripts/navLevels.mjs adds before the page as the core does) has set the strip, and the window answers whether it is
+// full screen only after that many milliseconds, as main.tsx asks it. Otherwise the answer is the one main.tsx keeps.
+const start = params.get("start");
+if (start !== null && platform === "macos") watchTitlebar("macos", () => new Promise((done) => window.setTimeout(() => done(fullscreen), Number(start))));
+else applyTitlebar(titlebarMode(platform, fullscreen));
+if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTrafficLights(params.get("inactive") === "1");
+
+/**
+ * macOS's three window buttons over the page, at the left whatever the page's direction. tao moves the close button's
+ * frame (14 x 16) to x and makes the title bar 16 + y tall, the buttons 6 above its bottom edge: each 12 px light is
+ * centred 7 px into its frame, the next one 20 px on.
+ */
+function drawTrafficLights(inactive: boolean) {
+  const { x, y } = conf.app.windows[0].trafficLightPosition;
+  const strip = document.createElement("div");
+  strip.dataset.trafficLights = "";
+  strip.setAttribute("aria-hidden", "true");
+  strip.style.cssText = `position: fixed; left: ${x + 1}px; top: ${y - 4}px; width: 54px; height: 12px; z-index: 2147483647; pointer-events: none; display: flex; gap: 8px; direction: ltr;`;
+  for (const colour of inactive ? ["#cfcfcf", "#cfcfcf", "#cfcfcf"] : ["#ff5f57", "#febc2e", "#28c840"]) {
+    const light = document.createElement("span");
+    light.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
+    strip.append(light);
+  }
+  document.body.append(strip);
+}
 
 /** One second of silence, so the player has something to load. */
 function silentWav(): string {

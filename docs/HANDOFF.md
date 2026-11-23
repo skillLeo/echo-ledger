@@ -1209,3 +1209,17 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - Full suite 7665 passed. The runbook is ~/EchoLedgerTeam/handover/deploy-nav3.md.
 - **After the deploy:** fix/W-forward-filters @ bfa51ddd (⌘] Forward), approved in four review rounds.
 - **Checking:** the S2 "fix now" bugs W-001–003 (provider costs and engine tools seen by customers, a credential name in an error). They join tomorrow's deploy if they are real and ready.
+
+## 2026-11-24 03:20 PKT — incident: uploads failed for 9 hours (sodium missing on the host); fixed
+- **What:** at 11:44 UTC on 2026-11-23, the hosting account's PHP selection changed. ~/.cl.selector/defaults.cfg was rewritten, the account default became 8.2, and the per-user PHP 8.4 extension set lost `sodium`. We did not make this change; it came from the host or from another site on the account.
+  - From 13:04:50 UTC every upload crashed in RecordingCipher.php:34 ("Undefined constant SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES"): 48 errors and 12 failed AssembleRecordingJob runs.
+  - `failed()` discarded the parts of 6 of the owner's recordings: 4 from the phone (2 calls and 2 voice notes) and 1 from the Mac, all from 2026-11-23, plus one more.
+- **Fix, 22:19 UTC:** `selectorctl --interpreter=php --version=8.4 --enable-user-extensions=sodium`, with the old cfg backed up as ~/.cl.selector/alt_php84.cfg.bak-20261124.
+  - Web PHP 8.4.28 and CLI 8.4 both load sodium, and there have been no errors since.
+  - The account default (8.2) was left alone, because other sites share the account. The site runs on 8.4 through its own setting.
+- **Recovery:** the audio is still on the devices, and each device sends it again with Retry (phone: Library › "didn't upload" › Review › Retry). A server-side retry can't recover it, because the parts were discarded.
+- **So it can't happen silently again (fix/W-required-extensions):**
+  - a health check every 5 minutes, with an admin banner and an email;
+  - a deploy check for the required extensions;
+  - parts kept, rather than discarded, after an environment fault;
+  - a clear message from RecordingCipher.

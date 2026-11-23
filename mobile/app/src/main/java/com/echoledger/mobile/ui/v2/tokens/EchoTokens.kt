@@ -143,6 +143,7 @@ object EchoTokens {
         val controlHeight = 36.dp
         val controlHeightMobile = 48.dp
         val controlTouchMin = 48.dp
+        val titlebarMacos = 38.dp
     }
 
     object Border {
