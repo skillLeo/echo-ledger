@@ -11,11 +11,12 @@ Phone rules for every batch: `pm install -r` only; never uninstall, never clear 
 Builds:
 - **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting in the lead's scratchpad. The lead installs it after "mac free".
 - **Windows:** `EchoLedger_2.0.11_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.11.
-- **Phone:** 2.0.9 (code 29) is installed (the call choice, screenshots while recording). The phone's Library filters come as 2.0.10 after review.
+- **Phone:** 2.0.10 (code 30) is installed (21:46): everything in 2.0.9 (the call choice, screenshots while recording) plus the Library filters and saved views.
 
 **1. Mac, about 15 minutes**
 1. **Install and check permissions.**
-   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.11.
+   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.11 (installed 21:46).
+   - Known in 2.0.11 (D-211, fix in 2.0.12): after it opens, the window can keep the old look (Inbox, Pinned, no rail) until you open another screen. Click Settings, then Library: the rail, the panel and the tabs show.
    - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
 2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
    - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
