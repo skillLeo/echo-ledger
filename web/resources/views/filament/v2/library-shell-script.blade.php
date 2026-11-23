@@ -79,19 +79,27 @@
         // Back and Forward while the Library is still answering the last step (ElLibraryKeysCore.historyGate): the step
         // waits for that answer, then its address and state are put back as it left them and it goes through, so a late
         // answer never rewrites the address of the step after it, and that step replaces its entry instead of adding one.
-        // Held before Livewire hears it (capture, on the window); a step held longer than ten seconds goes through anyway.
+        // Held before Livewire hears it (capture, on the window). Each request is counted back on respond(), which every
+        // ending reaches (ElLibraryKeysCore.watchRequest). A held step goes through after ten seconds from the first one
+        // held at the latest, and is dropped if the person went somewhere since (a filter or a tab pushed an entry).
         let gate = null;
         let replaying = false;
         let limit = null;
+        let pushes = 0;
+        const push = history.pushState.bind(history);
+        history.pushState = function (...args) { pushes += 1; return push(...args); };
+        const where = () => ({ key: window.navigation?.currentEntry?.key ?? null, pushes });
         const library = (component) => {
             const el = component && component.el;
             return el instanceof Element && (el.querySelector('.v2-library') !== null || el.matches('.v2-library'));
         };
         const replay = (step) => {
-            if (! step) return;
             clearTimeout(limit);
-            // After Livewire is done with the answer (its handlers, and the previous step's reset a frame later).
-            requestAnimationFrame(() => setTimeout(() => {
+            limit = null;
+            if (! step) return;
+            // After Livewire is done with the answer: its render a frame later, and the previous step's reset after it.
+            requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
+                if (! window.ElLibraryKeysCore.stillCurrent(step.at, where())) return;
                 history.replaceState(step.state, '', step.url);
                 replaying = true;
                 try {
@@ -99,18 +107,14 @@
                 } finally {
                     replaying = false;
                 }
-            }, 0));
+            }, 0)));
         };
         const watch = () => {
-            window.Livewire.hook('commit', ({ component, succeed, fail }) => {
+            window.Livewire.hook('commit', ({ component, respond }) => {
                 const core = window.ElLibraryKeysCore;
-                if (! library(component) || ! core || typeof core.historyGate !== 'function') return;
+                if (! library(component) || ! core || typeof core.watchRequest !== 'function') return;
                 gate = gate || core.historyGate();
-                gate.start();
-                let done = false;
-                const end = () => { if (! done) { done = true; replay(gate.end()); } };
-                succeed(end);
-                fail(end);
+                core.watchRequest(gate, { respond }, replay);
             });
         };
         if (window.Livewire && typeof window.Livewire.hook === 'function') watch(); else document.addEventListener('livewire:init', watch);
@@ -118,10 +122,10 @@
             if (replaying || gate === null) return;
             let state = e.state;
             try { state = structuredClone(e.state); } catch (err) { /* kept as it is */ }
-            if (gate.pop({ state, url: location.href }) !== 'hold') return;
+            if (gate.pop({ state, url: location.href, at: where() }, Date.now()) !== 'hold') return;
             e.stopImmediatePropagation();
-            clearTimeout(limit);
-            limit = setTimeout(() => replay(gate.release()), 10000);
+            // From the first step held only: a later one never moves the limit.
+            if (limit === null) limit = setTimeout(() => replay(gate.release()), 10000);
         }, true);
 
         // The keys, before the list's own (library-keys): ElLibraryKeysCore.shellKey decides.

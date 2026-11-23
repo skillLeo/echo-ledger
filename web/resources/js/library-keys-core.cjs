@@ -111,35 +111,69 @@
      * ⌘[, a mouse's buttons, the browser's) had its address rewritten by the late answer and its own update pushed as a
      * new entry. The gate holds a step that comes while one of the Library's requests is out, and hands it back, the
      * latest one only, once none is: the page then puts that step's address and state back and lets it through.
-     * start()/end() around each request of the Library; pop(entry) for each step: 'hold' or 'pass'; end() returns the
-     * held step to replay, or null. held() is the one waiting (for a time limit).
+     * start()/end() around each request of the Library (end() returns the held step to replay, or null); pop(entry,
+     * now) for each step: 'hold' or 'pass'; heldSince() is when the first step now held came (the time limit counts from
+     * it, never from a later one); release() hands the held step back and forgets the requests (the limit).
      */
     function historyGate() {
         let out = 0;
         let waiting = null;
+        let since = null;
+        const take = () => {
+            const step = waiting;
+            waiting = null;
+            since = null;
+            return step;
+        };
         return {
             start() { out += 1; },
             end() {
                 out = Math.max(0, out - 1);
-                if (out > 0 || waiting === null) return null;
-                const step = waiting;
-                waiting = null;
-                return step;
+                return out > 0 || waiting === null ? null : take();
             },
-            pop(entry) {
+            pop(entry, now) {
                 if (out === 0) return 'pass';
+                if (waiting === null) since = typeof now === 'number' ? now : 0;
                 waiting = entry;
                 return 'hold';
             },
             held() { return waiting; },
+            heldSince() { return since; },
             release() {
-                const step = waiting;
-                waiting = null;
                 out = 0;
-                return step;
+                return take();
             },
         };
     }
 
-    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey, historyGate };
+    /**
+     * One request of the Library through the gate: counted out now and back exactly once, however it ends. Livewire calls
+     * a commit's respond() on every end (answered, skipped, superseded by a newer one, failed, cancelled), while succeed()
+     * and fail() miss some of them (a superseded or skipped message, a network failure), so the count never leaks.
+     * hooks: the commit hook's {respond}; replay(step): what to do with a held step handed back (or null).
+     */
+    function watchRequest(gate, hooks, replay) {
+        gate.start();
+        let done = false;
+        const end = () => {
+            if (done) return;
+            done = true;
+            replay(gate.end());
+        };
+        hooks.respond(end);
+        return end;
+    }
+
+    /**
+     * Whether a held step may still go through when it is handed back: not when the person went somewhere since (a filter
+     * or a tab pushed a new entry while it was held), or its replay would overwrite that newer entry. held and now:
+     * {key (the Navigation API's current entry key, where the browser has it), pushes (how many entries the page pushed)}.
+     * The key decides where there is one (a replace keeps it, a push changes it); else no push since the hold.
+     */
+    function stillCurrent(held, now) {
+        if (held && now && typeof held.key === 'string' && typeof now.key === 'string') return held.key === now.key;
+        return !! held && !! now && held.pushes === now.pushes;
+    }
+
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey, historyGate, watchRequest, stillCurrent };
 });

@@ -171,10 +171,14 @@ it('lets a Back or Forward taken while the Library is still answering wait for t
     // The rule is ElLibraryKeysCore.historyGate (tests/js/library-keys-core.test.mjs); in a browser with every answer
     // held back, scripts/screenshots.mjs (nav-library) checks that a quick ⌘[ ⌘] lands on the filtered list and keeps it.
     $html = ($this->page)();
-    expect($html)->toContain("if (gate.pop({ state, url: location.href }) !== 'hold') return;")->toContain('e.stopImmediatePropagation();')
+    expect($html)->toContain("if (gate.pop({ state, url: location.href, at: where() }, Date.now()) !== 'hold') return;")->toContain('e.stopImmediatePropagation();')
         ->toContain('}, true);')->toContain("history.replaceState(step.state, '', step.url);")
         ->toContain("window.dispatchEvent(new PopStateEvent('popstate', { state: step.state }));")
-        ->toContain('limit = setTimeout(() => replay(gate.release()), 10000);')
+        // Counted back on respond (every ending), the limit from the first step held, a step dropped after a push.
+        ->toContain("window.Livewire.hook('commit', ({ component, respond }) => {")->toContain('core.watchRequest(gate, { respond }, replay);')
+        ->not->toContain('succeed(end)')
+        ->toContain('if (limit === null) limit = setTimeout(() => replay(gate.release()), 10000);')
+        ->toContain('if (! window.ElLibraryKeysCore.stillCurrent(step.at, where())) return;')
         ->toContain('historyGate()');
     $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/library-keys-core.test.mjs']);
     expect($result->exitCode())->toBe(0, $result->output().$result->errorOutput());

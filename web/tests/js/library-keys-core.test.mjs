@@ -160,26 +160,80 @@ test('⌘[ and ⌘] in a form field, an editor or over a dialog keep the page (t
 test('Back and Forward while the Library is answering wait for the answer, then the latest step goes through', () => {
     const gate = core.historyGate();
     // No request out: a step goes straight through.
-    assert.equal(gate.pop({ url: '/app/sessions' }), 'pass');
+    assert.equal(gate.pop({ url: '/app/sessions' }, 0), 'pass');
     assert.equal(gate.end(), null);
     // Back's request is out; Forward comes: it waits, and is handed back once the answer is in.
     gate.start();
     const forward = { url: '/app/sessions?f[source][op]=is', state: { alpine: { f: { value: { source: {} } } } } };
-    assert.equal(gate.pop(forward), 'hold');
+    assert.equal(gate.pop(forward, 1000), 'hold');
     assert.equal(gate.held(), forward);
     assert.deepEqual(gate.end(), forward);
     assert.equal(gate.held(), null);
+    assert.equal(gate.heldSince(), null);
     // Several steps while two requests are out: only the latest, after the last answer.
     gate.start();
     gate.start();
-    assert.equal(gate.pop({ url: '/a' }), 'hold');
-    assert.equal(gate.pop({ url: '/b' }), 'hold');
+    assert.equal(gate.pop({ url: '/a' }, 2000), 'hold');
+    assert.equal(gate.pop({ url: '/b' }, 2500), 'hold');
     assert.equal(gate.end(), null);
     assert.deepEqual(gate.end(), { url: '/b' });
     // An answer that never comes: release hands the step back and clears the count.
     gate.start();
-    assert.equal(gate.pop({ url: '/c' }), 'hold');
+    assert.equal(gate.pop({ url: '/c' }, 3000), 'hold');
     assert.deepEqual(gate.release(), { url: '/c' });
-    assert.equal(gate.pop({ url: '/d' }), 'pass');
+    assert.equal(gate.pop({ url: '/d' }, 3100), 'pass');
 });
 
+test('the time limit counts from the first step held, never from a later one', () => {
+    const gate = core.historyGate();
+    gate.start();
+    gate.pop({ url: '/a' }, 1000);
+    gate.pop({ url: '/b' }, 4000);
+    gate.pop({ url: '/c' }, 9000);
+    assert.equal(gate.heldSince(), 1000);
+    assert.deepEqual(gate.release(), { url: '/c' });
+    assert.equal(gate.heldSince(), null);
+});
+
+test('a request is counted back exactly once however it ends, so later steps never wait for nothing', () => {
+    // Livewire calls respond() on every end; succeed() and fail() miss a superseded or skipped message and a network failure.
+    const request = () => {
+        const callbacks = [];
+        return { hooks: { respond: (cb) => callbacks.push(cb) }, finish: () => callbacks.forEach((cb) => cb()) };
+    };
+    for (const ending of ['answered', 'skipped', 'superseded', 'network failure', 'cancelled', 'error']) {
+        const gate = core.historyGate();
+        const replayed = [];
+        const r = request();
+        core.watchRequest(gate, r.hooks, (step) => replayed.push(step));
+        assert.equal(gate.pop({ url: '/held' }, 0), 'hold', ending);
+        r.finish();
+        // Called twice (an answer and its render, a retry): still counted back once.
+        r.finish();
+        assert.equal(replayed.length, 1, ending);
+        assert.deepEqual(replayed[0], { url: '/held' }, ending);
+        // Nothing is out any more: the next step goes straight through.
+        assert.equal(gate.pop({ url: '/next' }, 10), 'pass', ending);
+    }
+    // A poll crossing a filter change: two requests, the older one superseded (it ends without an answer).
+    const gate = core.historyGate();
+    const poll = request();
+    const filter = request();
+    core.watchRequest(gate, poll.hooks, () => {});
+    core.watchRequest(gate, filter.hooks, () => {});
+    poll.finish();
+    filter.finish();
+    assert.equal(gate.pop({ url: '/back' }, 0), 'pass');
+});
+
+test('a held step is dropped when the person went somewhere since, so its replay never overwrites a newer entry', () => {
+    // The Navigation API's key, where the browser has it: a replace keeps it, a push changes it.
+    assert.equal(core.stillCurrent({ key: 'k1', pushes: 3 }, { key: 'k1', pushes: 3 }), true);
+    assert.equal(core.stillCurrent({ key: 'k1', pushes: 3 }, { key: 'k2', pushes: 4 }), false);
+    // A late answer replaced the address (same key): the step still goes through.
+    assert.equal(core.stillCurrent({ key: 'k1', pushes: 3 }, { key: 'k1', pushes: 3 }), true);
+    // Without it, the entries the page pushed since the hold.
+    assert.equal(core.stillCurrent({ key: null, pushes: 3 }, { key: null, pushes: 3 }), true);
+    assert.equal(core.stillCurrent({ key: null, pushes: 3 }, { key: null, pushes: 4 }), false);
+    assert.equal(core.stillCurrent(null, { key: 'k1', pushes: 0 }), false);
+});

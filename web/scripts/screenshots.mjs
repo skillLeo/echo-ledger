@@ -304,13 +304,17 @@ async function navChecks(page, width) {
     };
     const filteredRows = await rowsSettled();
     const entries = await page.evaluate(() => history.length);
-    await page.route('**/livewire*/update', async (route) => { await new Promise((r) => setTimeout(r, 1200)); await route.continue(); });
+    // Livewire's update requests: the route must hold some, or the check checks nothing (a pattern that stopped matching).
+    const updates = '**/livewire*/update';
+    let held = 0;
+    await page.route(updates, async (route) => { held += 1; await new Promise((r) => setTimeout(r, 1200)); await route.continue(); });
     await page.keyboard.press(mod + '+BracketLeft');
     await page.waitForTimeout(200);
     await page.keyboard.press(mod + '+BracketRight');
     await page.waitForTimeout(4500);
-    await page.unroute('**/livewire*/update');
+    await page.unroute(updates);
     await settle();
+    if (held === 0) wrong.push(`no Livewire request was held back by ${updates}: the quick ⌘[ ⌘] check proved nothing`);
     const quick = { rows: await rowsSettled(), entries: await page.evaluate(() => history.length) };
     if (!at().includes('f[source]') || quick.rows !== filteredRows) wrong.push(`a quick ⌘[ ⌘] left ${at()} with ${quick.rows} rows (the filtered list has ${filteredRows})`);
     if (quick.entries !== entries) wrong.push(`a quick ⌘[ ⌘] changed the history from ${entries} to ${quick.entries} entries`);
@@ -318,6 +322,65 @@ async function navChecks(page, width) {
     await reach(() => location.search === '');
     await settle();
     if (at() !== '/app/sessions') wrong.push(`⌘[ after the quick ⌘[ ⌘] left ${at()}`);
+    // Requests that end without an answer of their own leave nothing counted as out: after each case a ⌘[ reaches
+    // Livewire at once (its request goes within 2.5 s), where a request still counted would hold it for ten seconds.
+    const backReachesLivewire = async (label) => {
+        await page.evaluate(() => document.activeElement?.blur());
+        const request = page.waitForRequest((r) => /\/livewire[^/]*\/update/.test(r.url()), { timeout: 2500 }).then(() => true).catch(() => false);
+        await page.keyboard.press(mod + '+BracketLeft');
+        if (!(await request)) wrong.push(`⌘[ after ${label} never reached Livewire within 2.5 s (a request still counted as out)`);
+        await settle();
+    };
+    // A poll crossing a filter change: the poll (wire:poll, put on the Library for the check) is out, held back 2 s,
+    // when a source mark is clicked; Livewire cancels the poll for the click.
+    await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await reach(filtered);
+    await settle();
+    let polls = 0;
+    let others = 0;
+    await page.route(updates, async (route) => {
+        const poll = (route.request().postData() || '').includes('v2Poll');
+        if (poll) polls += 1; else others += 1;
+        await new Promise((r) => setTimeout(r, poll ? 2000 : 300));
+        await route.continue();
+    });
+    await page.evaluate(() => {
+        const el = document.createElement('div');
+        el.hidden = true;
+        el.id = 'el-nav-poll';
+        el.setAttribute('wire:poll.750ms', 'v2Poll');
+        document.querySelector('.v2-library')?.appendChild(el);
+    });
+    const pollOut = await page.waitForRequest((r) => (r.postData() || '').includes('v2Poll'), { timeout: 4000 }).then(() => true).catch(() => false);
+    await page.evaluate(() => document.getElementById('el-nav-poll')?.remove());
+    await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await page.waitForTimeout(3000);
+    await page.unroute(updates);
+    await settle();
+    if (!pollOut || polls === 0 || others === 0) wrong.push(`the poll and the filter change did not cross (poll out ${pollOut}, ${polls} poll and ${others} other requests held)`);
+    await backReachesLivewire('a poll crossed a filter change');
+    // Two searches crossing: the first one's answer held back 2.5 s, the second's 0.3 s, so the second's comes first
+    // and the first is superseded (Livewire drops its answer: no success, no failure).
+    await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await reach(filtered);
+    await settle();
+    let searches = 0;
+    await page.route(updates, async (route) => {
+        searches += 1;
+        await new Promise((r) => setTimeout(r, searches === 1 ? 2500 : 300));
+        await route.continue();
+    });
+    await page.locator('.v2-library .fi-ta-search-field input').first().click();
+    await page.keyboard.type('a');
+    await page.waitForTimeout(900);
+    await page.keyboard.type('b');
+    await page.waitForTimeout(3500);
+    await page.unroute(updates);
+    await settle();
+    if (searches < 2) wrong.push(`the two searches did not cross (${searches} requests held)`);
+    await backReachesLivewire('a search superseded another');
+    await page.locator('.v2-library .fi-ta-search-field input').first().fill('');
+    await settle();
     // The Library's rail icon from inside the Library starts it over (All recordings, no filter), at every width.
     await page.click('[data-rail="library"]');
     await settle();
