@@ -65,7 +65,11 @@ function Keys({ children }: { children: string }) {
   return <kbd className="el-kbd" dir="ltr">{children}</kbd>;
 }
 
-export function ShortcutsPageV2({ settings, status, run, onSettings }: { settings: Settings; status: AppStatus; run: Run; onSettings: (s: Settings) => void }) {
+export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels = false }: {
+  settings: Settings; status: AppStatus; run: Run; onSettings: (s: Settings) => void;
+  /** The rail · panel · page layout: its keys in place of the sidebar's "[". */
+  threeLevels?: boolean;
+}) {
   const [listening, setListening] = useState<ShortcutAction | null>(null);
   const platform = status.platform;
   useEffect(() => {
@@ -117,7 +121,7 @@ export function ShortcutsPageV2({ settings, status, run, onSettings }: { setting
         })}
       </Group>
       <Group title="In the app" footer={<p>These work while EchoLedger is in front.</p>}>
-        {appKeys(platform).map(([keys, what]) => <ListRow key={keys} compact anchor={keys === appKeys(platform)[0][0] ? "shortcuts.app" : undefined} title={what} value={<Keys>{keys}</Keys>} />)}
+        {appKeys(platform, threeLevels).map(([keys, what], i) => <ListRow key={keys} compact anchor={i === 0 ? "shortcuts.app" : undefined} title={what} value={<Keys>{keys}</Keys>} />)}
       </Group>
       </div>
       <ResetDefaults page="Keyboard shortcuts" onReset={() => void run(api.resetShortcuts, "Shortcuts reset").then((s) => s && onSettings(s))} />

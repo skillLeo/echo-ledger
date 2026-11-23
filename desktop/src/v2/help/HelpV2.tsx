@@ -35,7 +35,10 @@ export type HelpV2Props = {
   backLabel?: string;
 };
 
-export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings, backLabel = "Settings" }: HelpV2Props) {
+export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings, backLabel = "Settings", threeLevels = false }: HelpV2Props & {
+  /** The rail · panel · page layout: its keys in place of the sidebar's "[". */
+  threeLevels?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>(start?.tab ?? "guides");
   useEffect(() => {
     if (start) setTab(start.tab);
@@ -47,7 +50,7 @@ export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings,
       <Tabs label="Help" value={tab} onChange={setTab}
         tabs={[{ value: "guides", label: "Guides" }, { value: "shortcuts", label: "Shortcuts" }, { value: "whats_new", label: "What's new" }, { value: "contact", label: "Contact support" }]}>
         {tab === "guides" ? <Guides platform={platform} onMacCheck={onMacCheck} />
-          : tab === "shortcuts" ? <Shortcuts platform={platform} onSettings={onSettings} />
+          : tab === "shortcuts" ? <Shortcuts platform={platform} onSettings={onSettings} threeLevels={threeLevels} />
           : tab === "whats_new" ? <WhatsNew /> : <ContactSupport platform={platform} onMacCheck={onMacCheck} />}
       </Tabs>
     </div>
@@ -58,7 +61,7 @@ export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings,
  * Every key of the window (classic's "In this window"), the shortcuts that work anywhere on this computer as set in
  * Settings, and how to get a screenshot of EchoLedger and what to send for support.
  */
-function Shortcuts({ platform, onSettings }: { platform: string; onSettings?: (page: string) => void }) {
+function Shortcuts({ platform, onSettings, threeLevels = false }: { platform: string; onSettings?: (page: string) => void; threeLevels?: boolean }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [unread, setUnread] = useState(false);
   useEffect(() => {
@@ -78,7 +81,7 @@ function Shortcuts({ platform, onSettings }: { platform: string; onSettings?: (p
     <div className="el-help-keys">
       <h2 className="el-title-s">In this window</h2>
       <p className="el-caption el-secondary">They work while EchoLedger is in front, never while you type in a field.</p>
-      {keyList("In this window", windowKeys(platform))}
+      {keyList("In this window", windowKeys(platform, threeLevels))}
       <h2 className="el-title-s">Anywhere on this computer</h2>
       {/* Shortcuts that couldn't be read are said to be so, never shown as "Not set". */}
       {unread && <p className="el-caption el-row__error" role="status" data-testid="shortcuts-unread">Your shortcuts couldn't be read. See them in Keyboard shortcuts.</p>}

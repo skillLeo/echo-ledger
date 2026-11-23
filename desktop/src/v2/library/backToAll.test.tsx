@@ -97,7 +97,7 @@ describe("the way back to all recordings", () => {
     expect(document.body).not.toHaveTextContent(/Inbox/);
   });
 
-  it("from every view, the sidebar's Library and the breadcrumb's Library both go back to All recordings, filters and search cleared", async () => {
+  it("from every view, the panel's All recordings and the breadcrumb's Library both go back to All recordings, filters and search cleared", async () => {
     render(<App />);
     await settle();
     await act(async () => {
@@ -129,7 +129,8 @@ describe("the way back to all recordings", () => {
           await act(() => new Promise((r) => setTimeout(r, 200)));
           expect(screen.getByRole("group", { name: "Filters on" })).toBeInTheDocument();
         }
-        if (way === "sidebar") fireEvent.click(nav().getByRole("button", { name: "Library" }));
+        // The panel's All recordings (the rail's Library pressed again does the same: navShell.test.tsx).
+        if (way === "sidebar") fireEvent.click(nav().getByRole("button", { name: /^All recordings, / }));
         else fireEvent.click(crumbs().getByRole("button", { name: "Library" }));
         await settle();
         atAll();
@@ -283,6 +284,38 @@ describe("the way back to all recordings", () => {
     fireEvent.keyDown(document.body, { key: "]", metaKey: true });
     await settle();
     expect(title()).toHaveTextContent(/^Important/);
+  });
+
+  it("a late fall back (the view shown is deleted then) leaves no step alike or gone: the next Back changes the place", async () => {
+    render(<App />);
+    await settle();
+    const made = await act(async () => viewsStore.create("WhatsApp", { filters: { source: { op: "is", values: ["whatsapp"] } }, search: null, sort: "newest", group: "date" }));
+    await settle();
+    fireEvent.click(nav().getByRole("button", { name: /^Important, / }));
+    await settle();
+    fireEvent.click(within(nav().getByRole("list", { name: "My views" })).getByRole("button", { name: "WhatsApp" }));
+    await settle();
+    fireEvent.click(nav().getByRole("button", { name: /^Unread, / }));
+    await settle();
+    // Back to the view, settled there; then it is deleted on another device and the Library falls back.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(title()).toHaveTextContent(/^WhatsApp/);
+    await act(async () => viewsStore.remove(made.id));
+    await settle();
+    atAll();
+    // One Back: Important (not the gone view, not All recordings again).
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    atAll();
+    // Nothing further back.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    atAll();
   });
 
   it("with a recording open, Back goes back to the list first", async () => {

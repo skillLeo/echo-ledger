@@ -1,6 +1,7 @@
 // Settings › Transcription › Language and Custom words, App › Appearance and Keyboard shortcuts, and Support › Help,
 // About and its Technical details (v1.7 rows).
 import { useEffect, useId, useState } from "react";
+import { navKeys } from "./HelpDialog";
 import { api, type AppStatus, type Settings, type SettingsPatch, type ShortcutAction, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut } from "../../lib/format";
 import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
@@ -115,10 +116,14 @@ const MAC_KEYS: readonly [string, string][] = [
   ["⌘Q", "Quit EchoLedger; a running recording is saved first"],
 ];
 
-/** The keys Settings lists on this platform, with their names as this platform writes them. */
-export function appKeys(platform: string): readonly [string, string][] {
-  if (platform !== "macos") return APP_KEYS;
-  return [...APP_KEYS.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...MAC_KEYS];
+/**
+ * The keys Settings lists on this platform, with their names as this platform writes them; `threeLevels` (the rail ·
+ * panel · page layout): its keys in place of the sidebar's "[".
+ */
+export function appKeys(platform: string, threeLevels = false): readonly [string, string][] {
+  const base = threeLevels ? APP_KEYS.flatMap((row) => (row[0] === "[" ? navKeys(platform) : [row])) : APP_KEYS;
+  if (platform !== "macos") return base;
+  return [...base.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...MAC_KEYS];
 }
 
 /** App › Keyboard shortcuts: the global shortcuts (change or clear each) and the keys inside the app. */

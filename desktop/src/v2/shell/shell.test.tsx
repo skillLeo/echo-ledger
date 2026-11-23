@@ -15,6 +15,8 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
   resetTauriMock();
   resetEntitlementsForTests(null);
   window.localStorage.clear();
@@ -467,7 +469,7 @@ describe("the app with the flags", () => {
     await act(flushAsync);
     await act(flushAsync);
     // The Library on Needs you (the waiting calls' home, PLAN_LIBRARY_FILTERS), its list of waiting calls open.
-    expect(within(nav).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
   });
 

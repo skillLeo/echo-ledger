@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
 import MainApp from "../../views/main/MainApp";
-import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { Shell } from "../shell/Shell";
@@ -48,6 +48,8 @@ const settle = async () => {
 
 describe("the Library's places", () => {
   beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
     resetTauriMock();
     resetSyncClock();
     window.localStorage.clear();
@@ -155,6 +157,115 @@ describe("the Library's places", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
     await settle();
     expect(rows()).toEqual(["call"]);
+  });
+
+  it("in the app, each place comes back as it was left; the Library's rail icon pressed again starts it over (PLAN_NAV_3_LEVELS §6)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await settle();
+    expect(rows()).toEqual(["zoom"]);
+    // Projects, then the Library again: Unread with Source: Zoom, as left.
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // Pressed again while shown: All recordings, nothing filtered.
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
+  });
+
+  it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    // The panel is a flyout: open it, choose Unread, filter.
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    fireEvent.click(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Unread, / }));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    await settle();
+    expect(screen.queryByTestId("nav-panel")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByTestId("nav-panel")).toHaveClass("el-panel--flyout");
+  });
+
+  it("in the app, another sign-in starts every place afresh: no one's Library view, project or Settings page carries over", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    // Signed out, then someone else signs in (the core's id for the sign-in changes each time).
+    await emitEvent("app:status", makeStatus({ paired: false, signIn: null }));
+    await settle();
+    await emitEvent("app:status", makeStatus({ signIn: "sign-in-2" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+  });
+
+  it("in the app, a link opened after another sign-in shows its recording with no one else's filters or search", async () => {
+    respond("projects_list", { data: [] });
+    respond("links_resolve", { kind: "session", session_id: "zoom" });
+    respond("session_detail", { playback_url: null });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    // A: Unread with Source: Zoom and a search, then Projects, then back to the Library from the rail (as left).
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "weekly" } });
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    // Signed out; B signs in and opens a recording from a link (the Library opens on it).
+    await emitEvent("app:status", makeStatus({ paired: false, signIn: null }));
+    await settle();
+    await emitEvent("app:status", makeStatus({ signIn: "sign-in-2" }));
+    await settle();
+    await emitEvent("main:navigate", { link: "echoledger://open/session/zoom" });
+    await settle();
+    await settle();
+    // Its recording open; back to the list: no filters, no search, All recordings.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("");
   });
 
   it("in the app, All after a view shows every recording again", async () => {

@@ -1811,18 +1811,29 @@ span.el-nav-section__title { cursor: default; }
 
 /* The Library: the filter panel (280 px) on the start side of the list, or a drawer over it under 1280 px. */
 .el-lib { display: flex; align-items: flex-start; gap: var(--el-space-24); }
-.el-lib__main { flex: 1; min-inline-size: 0; }
+.el-lib__main { flex: 1; min-inline-size: 0; order: 1; }
+/* The page's tabs: All · Calls · Meetings · Voice notes with their counts. */
+.el-lib-tabs { display: flex; gap: var(--el-space-4); margin-block: var(--el-space-8) var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-lib-tabs__tab {
+  display: inline-flex; align-items: baseline; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer;
+  padding: var(--el-space-8) var(--el-space-12); color: var(--el-role-text-secondary); border-block-end: var(--el-border-strong) solid transparent; margin-block-end: calc(-1 * var(--el-border-hairline));
+}
+.el-lib-tabs__tab:hover { color: var(--el-role-text-primary); }
+.el-lib-tabs__tab[aria-selected="true"] { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); border-block-end-color: var(--el-role-accent-default); }
+.el-lib-tabs__count { font-size: var(--el-text-caption-size); color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
 .el-lib--panel .el-lib__main { margin-inline: 0; }
+/* The filters: a drawer from the end side (the right; the left in right to left), 320 px; from 1440 px it pushes the
+   list (a column at the list's end), below that it slides over it. */
 .el-filter {
-  display: flex; flex-direction: column; flex: none;
-  inline-size: calc(var(--el-space-64) * 4 + var(--el-space-24));
+  display: flex; flex-direction: column; flex: none; order: 2;
+  inline-size: calc(var(--el-space-64) * 5);
   /* As tall as the window leaves it (--el-lib-room: the window's height, set by the Library), its sections scrolling. */
   position: sticky; inset-block-start: 0; max-block-size: calc(var(--el-lib-room, 100%) - var(--el-space-64));
   background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
 }
 .el-filter--drawer {
-  position: absolute; inset-block: 0; inset-inline-start: 0; z-index: var(--el-layer-dialog); max-block-size: none;
-  border-radius: 0; border-block: 0; border-inline-start: 0; box-shadow: var(--el-shadow-2);
+  position: absolute; inset-block: 0; inset-inline-end: 0; z-index: var(--el-layer-dialog); max-block-size: none;
+  border-radius: 0; border-block: 0; border-inline-end: 0; box-shadow: var(--el-shadow-2);
 }
 .el-filter-scrim { position: absolute; inset: 0; z-index: var(--el-layer-dialog); background: var(--el-role-scrim-default); }
 .el-filter__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); padding: var(--el-space-8) var(--el-space-8) var(--el-space-8) var(--el-space-16); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
@@ -1901,3 +1912,96 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-table__row:hover .el-table__pick .el-check-box, .el-table__row:focus-within .el-table__pick .el-check-box, .el-table__row--picking .el-table__pick .el-check-box, .el-table__row--picked .el-table__pick .el-check-box { opacity: 1; }
 .el-check-box > .el-check:indeterminate { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
 .el-check-box:has(> .el-check:indeterminate)::after { content: ""; position: absolute; inset-inline: var(--el-space-4); inset-block-start: 50%; block-size: var(--el-border-strong); margin-block-start: calc(var(--el-border-strong) / -2); background: var(--el-role-text-on-accent); pointer-events: none; }
+
+/* ---- The three levels (PLAN_NAV_3_LEVELS): rail 72 px · panel 260 px · page ------------------------------------ */
+.el-shell--nav { display: grid; grid-template-columns: auto auto minmax(0, 1fr); block-size: 100%; position: relative; }
+.el-shell--nav > .el-shell__main { grid-column: 3; }
+.el-rail {
+  grid-column: 1; display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4);
+  inline-size: calc(var(--el-space-64) + var(--el-space-8)); padding-block: var(--el-space-12); min-block-size: 0; overflow-y: auto;
+  background: var(--el-role-bg-subtle); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+[data-platform="macos"] .el-rail { padding-block-start: var(--el-space-40); }
+.el-rail__home { display: inline-flex; border: 0; padding: var(--el-space-4); background: transparent; border-radius: var(--el-radius-md); cursor: pointer; }
+.el-rail__home:hover { background: var(--el-role-border-default); }
+.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: 0; margin-block: var(--el-space-4) var(--el-space-8); }
+.el-rail__rec {
+  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-40); block-size: var(--el-space-40);
+  border: 0; border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); cursor: pointer;
+}
+.el-rail__rec:hover { background: var(--el-role-accent-hover, var(--el-role-accent-default)); }
+.el-rail__rec--stop { background: var(--el-role-danger-default); }
+.el-rail__record .el-button.el-rail__rec-more { min-block-size: var(--el-space-16); padding: 0 var(--el-space-4); }
+.el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2); inline-size: 100%; }
+.el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-8); }
+.el-rail__item {
+  display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2); inline-size: calc(100% - var(--el-space-8));
+  padding: var(--el-space-4) 0; border: 0; border-radius: var(--el-radius-md); background: transparent; color: var(--el-role-text-secondary); cursor: pointer; font: inherit;
+}
+.el-rail__item:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
+.el-rail__item[aria-current="page"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-default); }
+.el-rail__icon { position: relative; display: inline-flex; }
+.el-rail__label { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+.el-rail__count {
+  position: absolute; inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-end: calc(-1 * var(--el-space-8)); min-inline-size: var(--el-space-16);
+  padding-inline: var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent);
+  font-size: var(--el-text-caption-size); line-height: var(--el-space-16); text-align: center;
+}
+.el-rail__dot {
+  position: absolute; inset-block-start: calc(-1 * var(--el-space-2)); inset-inline-end: calc(-1 * var(--el-space-2)); inline-size: var(--el-space-8); block-size: var(--el-space-8);
+  border-radius: var(--el-radius-full); background: var(--el-role-danger-default);
+}
+.el-rail__me { margin-block-start: var(--el-space-4); }
+.el-rail__me .el-button.el-rail__avatar { padding: var(--el-space-2); border-radius: var(--el-radius-full); }
+
+/* The panel: the place's name, its ⋯ and ⊟; group titles in sentence case; under 1100 px a flyout over the page. */
+.el-panel {
+  grid-column: 2; display: flex; flex-direction: column; min-block-size: 0; inline-size: calc(var(--el-space-64) * 4 + var(--el-space-4));
+  background: var(--el-role-bg-canvas); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+/* Its containing block is the grid's second column, which starts where the rail ends. */
+.el-panel--flyout { position: absolute; inset-block: 0; inset-inline-start: 0; z-index: var(--el-layer-overlay); box-shadow: var(--el-shadow-2); }
+.el-panel__head { display: flex; align-items: center; gap: var(--el-space-4); padding: var(--el-space-12) var(--el-space-8) var(--el-space-8) var(--el-space-16); }
+.el-panel__title { flex: 1; margin: 0; font-size: var(--el-text-title-m-size); font-weight: var(--el-text-body-strong-weight); }
+.el-panel__body { flex: 1 1 auto; min-block-size: 0; overflow-y: auto; padding: 0 var(--el-space-8) var(--el-space-8); display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-panel__foot { flex: none; display: flex; flex-direction: column; gap: var(--el-space-2); padding: var(--el-space-4) var(--el-space-8) var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-panel__search { margin-inline: var(--el-space-4); }
+.el-panel__none { margin: var(--el-space-4) var(--el-space-8); }
+.el-panel .el-nav-section__title, .el-panel .el-nav-section__link { text-transform: none; letter-spacing: normal; color: var(--el-role-text-secondary); }
+.el-panel .el-nav-item__count--quiet { background: transparent; color: var(--el-role-text-secondary); }
+.el-panel-show {
+  grid-column: 2; align-self: start; margin: var(--el-space-12) var(--el-space-4) 0; display: inline-flex; padding: var(--el-space-4);
+  border: 0; border-radius: var(--el-radius-sm); background: transparent; color: var(--el-role-text-secondary); cursor: pointer;
+}
+.el-panel-show:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
+/* Where dragged recordings go, shown only while dragging. */
+.el-panel-drops { display: none; }
+.dragging-recordings .el-panel-drops { display: flex; flex-direction: column; gap: var(--el-space-4); padding-block-start: var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-panel-drops__title { margin: 0 var(--el-space-8); }
+.el-panel-drops .el-nav-drop { display: flex; }
+
+/* Settings with the three levels: the group's sections in an inner list beside the page. */
+.el-settings-split { display: flex; align-items: flex-start; gap: var(--el-space-16); min-block-size: 0; }
+.el-settings-split__list { flex: none; inline-size: calc(var(--el-space-64) * 3); padding: var(--el-space-24) var(--el-space-8) 0 var(--el-space-16); position: sticky; inset-block-start: 0; }
+.el-settings-split__title { margin: 0 var(--el-space-8) var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-settings-split > .el-settings-page { flex: 1; min-inline-size: 0; }
+/* A short window: the rail's icons only (names for assistive tools and in tooltips), so the foot stays on screen. */
+.el-shell--short-rail .el-rail { gap: var(--el-space-2); padding-block: var(--el-space-8); }
+.el-shell--short-rail .el-rail__label {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-shell--short-rail .el-rail__item { padding: var(--el-space-8) 0; }
+.el-shell--short-rail .el-rail__record { margin-block: var(--el-space-2) var(--el-space-4); }
+/* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
+.el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
+.el-project-card {
+  display: flex; flex-direction: column; gap: var(--el-space-8); inline-size: 100%; padding: var(--el-space-16); text-align: start; font: inherit; cursor: pointer;
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md); color: inherit;
+}
+.el-project-card:hover { border-color: var(--el-role-border-strong); }
+.el-project-card__head { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-project-card__name { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
+.el-shell--nav > .el-shell__main:focus { outline: none; }
+.el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
