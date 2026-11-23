@@ -591,16 +591,27 @@ fn a_view_change_that_can_wait_stays_an_error() {
 
 #[test]
 fn each_sign_in_has_its_own_id_and_signing_out_forgets_it() {
-    let commands = include_str!("../commands.rs");
-    let body = |start: &str| {
-        let at = commands.find(start).unwrap_or_else(|| panic!("{start}"));
-        &commands[at..at + commands[at..].find("\n}\n").unwrap()]
-    };
-    assert!(body("async fn adopt_registration(").contains("s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());"), "a new sign-in");
-    assert!(body("pub async fn unpair(").contains("s.sign_in_id = None;"), "sign-out");
-    assert!(body("pub fn status(app: &AppHandle)").contains("sign_in: state.sign_in_id(),"), "the status says it");
-    // Kept with the settings, and none by default.
-    assert_eq!(Settings::default().sign_in_id, None);
-    let kept: Settings = serde_json::from_value(json!({"signInId": "a1"})).unwrap();
-    assert_eq!(kept.sign_in_id.as_deref(), Some("a1"));
+    let dir = tempfile::tempdir().unwrap();
+    let state = crate::AppState::load(dir.path().to_path_buf(), true);
+    // Signed out: no id.
+    assert_eq!(state.sign_in_id(), None);
+    // Signed in: an id, the same for as long as the sign-in lasts.
+    *state.token.lock().unwrap() = Some("token-1".into());
+    state.note_sign_in("https://ledger.example.test", &[], "dev-1", "Work laptop").unwrap();
+    let first = state.sign_in_id().expect("an id while signed in");
+    assert_eq!(state.sign_in_id().as_deref(), Some(first.as_str()));
+    // Kept with the settings on disk.
+    assert_eq!(Settings::load(&dir.path().join("settings.json")).sign_in_id.as_deref(), Some(first.as_str()));
+    // Signed out: gone, and the status says none.
+    *state.token.lock().unwrap() = None;
+    state.note_sign_out().unwrap();
+    assert_eq!(state.sign_in_id(), None);
+    assert_eq!(state.settings().sign_in_id, None);
+    // The next sign-in (the same account or another) has another id.
+    *state.token.lock().unwrap() = Some("token-2".into());
+    state.note_sign_in("https://ledger.example.test", &[], "dev-2", "Work laptop").unwrap();
+    let second = state.sign_in_id().expect("an id again");
+    assert_ne!(first, second);
+    // Never exported with the settings.
+    assert!(portable_settings(&state.settings())["settings"].get("signInId").is_none());
 }

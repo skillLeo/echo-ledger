@@ -434,16 +434,19 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     const timer = window.setTimeout(() => setSearchStep(query), SEARCH_STEP_MS);
     return () => window.clearTimeout(timer);
   }, [query]);
-  const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; walking: Place | null }>({ back: [], forward: [], now: null, walking: null });
-  const placeKey = (p: Place) => JSON.stringify([scopeKey(p.scope), cleanSpec(p.spec), p.query.trim()]);
+  // `settling`: a Back or Forward is under way; whatever the Library settles on meanwhile (a view deleted since falls
+  // back to All recordings, a view saved offline has the server's id now) is where it went, never a new step.
+  const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; settling: number }>({ back: [], forward: [], now: null, settling: 0 });
+  // A view is the same place under the id it had here and the server's (its client_ref).
+  const placeKey = (p: Place) => {
+    const view = p.scope.kind === "saved" ? viewsStore.list().find((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")) : undefined;
+    return JSON.stringify([view?.client_ref ? `saved-ref:${view.client_ref}` : scopeKey(p.scope), cleanSpec(p.spec), p.query.trim()]);
+  };
   useEffect(() => {
     const here: Place = { scope, spec: applied, query: searchStep };
     const h = steps.current;
-    if (h.walking) {
-      // Arrived where Back or Forward went (its search may still be settling).
-      if (placeKey(here) !== placeKey(h.walking)) return;
+    if (h.settling > 0) {
       h.now = here;
-      h.walking = null;
       return;
     }
     if (h.now && placeKey(h.now) === placeKey(here)) return;
@@ -465,7 +468,12 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       h.forward = h.forward.slice(0, -1);
       h.back = [...h.back, h.now];
     }
-    h.walking = to;
+    // Where it goes is the place now, at once: a second press before the Library has settled steps on from there.
+    h.now = to;
+    h.settling++;
+    window.setTimeout(() => {
+      h.settling = Math.max(0, h.settling - 1);
+    }, 0);
     show(to.scope, to.spec, true, { query: to.query });
     setSearchStep(to.query);
     return true;
@@ -881,14 +889,15 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
       return;
     }
-    // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list.
+    if (typing(e.target)) return;
+    // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
+    // (the search, a field, the pill editor) or with a question open.
     if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       back.current(e.key === "[" ? "back" : "forward");
       return;
     }
-    if (typing(e.target)) return;
     // One-letter keys (F, /, J, K, X) answer only while focus is in the Library (WCAG 2.1.4, as the web): never while
     // it is in the sidebar, the player or anywhere else in the window.
     const inside = e.target instanceof Node && !!root.current?.contains(e.target);
@@ -968,6 +977,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     const up = (e: MouseEvent) => {
       if (!side(e)) return;
       e.preventDefault();
+      // Not behind a question or a dialog.
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       back.current(e.button === 3 ? "back" : "forward");
     };
     window.addEventListener("mousedown", down);
