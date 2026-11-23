@@ -72,10 +72,13 @@ pub fn mac_app_problem(answers_quits: bool, main: &crate::mac_check::WindowFacts
 }
 
 /// What is wrong with the windows' capture flags as Windows reads them back (pure): each against the capture policy
-/// under the default setting. `reads`: the window and what `GetWindowDisplayAffinity` says.
-pub fn windows_capture_problem(reads: &[(&str, Option<crate::privacy::share::Read>)]) -> Option<String> {
+/// under the default setting. `reads`: the window and what `GetWindowDisplayAffinity` says. `supported`: this machine can
+/// keep the flag ([`crate::privacy::win::flags_supported`]); where it cannot (before build 19041, or session 0) the windows
+/// the policy hides are not checked, and the ones it shows still are. Anywhere else a flag that did not hold fails.
+pub fn windows_capture_problem(reads: &[(&str, Option<crate::privacy::share::Read>)], supported: bool) -> Option<String> {
     let defaults = crate::privacy::Choice::of(&crate::settings::Settings::default(), false, 0, (false, false));
-    reads.iter().find_map(|(label, read)| crate::privacy::policy_problem(label, *read, &defaults))
+    let hides = |label: &str| crate::privacy::protected(crate::privacy::kind_for(label), &defaults);
+    reads.iter().filter(|(label, _)| supported || !hides(label)).find_map(|(label, read)| crate::privacy::policy_problem(label, *read, &defaults))
 }
 
 /// What is wrong with the main window, if anything (pure). The floating windows are built as panels by swapping NSWindow's
@@ -359,17 +362,14 @@ pub fn drive(app: tauri::AppHandle) {
         {
             let mut labels = vec![MAIN];
             labels.extend(overlay::WINDOWS);
+            use crate::privacy::win::Affinity;
             let reads: Vec<(&str, Option<crate::privacy::share::Read>)> = labels.iter().map(|label| (*label, crate::privacy::read_flag(&app, label))).collect();
-            // A window the policy hides whose flag this machine did not keep (a runner without a composited session) is
-            // the service's own case: it says so and keeps the window off the screen. A window the policy shows is
-            // checked whatever the machine.
-            let defaults = crate::privacy::Choice::of(&crate::settings::Settings::default(), false, 0, (false, false));
-            let hides = |label: &str| crate::privacy::protected(crate::privacy::kind_for(label), &defaults);
-            let (kept, not_held): (Vec<_>, Vec<_>) = reads.iter().copied().partition(|(label, _)| !(hides(label) && crate::privacy::flag_not_held(&app, label)));
-            for (label, _) in &not_held {
-                say(&format!("  not checked here: this machine did not keep the {}'s flag (the window stays off the screen)", crate::privacy::window_name(label)));
+            let (build, session) = (crate::privacy::win::System.build(), crate::privacy::win::session_id());
+            let supported = crate::privacy::win::flags_supported(build, session);
+            if !supported {
+                say(&format!("  this machine cannot keep a capture flag (build {build:?}, session {session:?}): the hidden windows are not checked here"));
             }
-            if let Some(problem) = windows_capture_problem(&kept) {
+            if let Some(problem) = windows_capture_problem(&reads, supported) {
                 say(&format!("failed: {problem}"));
                 finish(&dir, EXIT_CAPTURE_POLICY);
             }
@@ -520,11 +520,16 @@ mod tests {
     fn the_windows_smoke_test_reads_every_window_s_affinity_against_the_capture_policy() {
         use crate::privacy::share::Read::*;
         let good = [(MAIN, Some(Shown)), ("overlay", Some(Hidden)), ("dictation", Some(Shown)), ("pill", Some(Shown)), ("review", Some(Shown)), ("assist", Some(Hidden))];
-        assert_eq!(windows_capture_problem(&good), None);
-        assert_eq!(windows_capture_problem(&[("pill", Some(Hidden))]).unwrap(), "recording controls: hidden from screen shares and screenshots, but the capture policy shows it");
-        assert_eq!(windows_capture_problem(&[("assist", Some(Shown))]).unwrap(), "Live Assist card: in screen shares and screenshots, but the capture policy hides it");
-        assert_eq!(windows_capture_problem(&[("overlay", Some(BlackBox))]), None, "a black box (Windows before 2004) keeps the words out");
-        assert!(windows_capture_problem(&[(MAIN, None)]).unwrap().contains("could not be read"));
+        assert_eq!(windows_capture_problem(&good, true), None);
+        assert_eq!(windows_capture_problem(&[("pill", Some(Hidden))], true).unwrap(), "recording controls: hidden from screen shares and screenshots, but the capture policy shows it");
+        assert_eq!(windows_capture_problem(&[("assist", Some(Shown))], true).unwrap(), "Live Assist card: in screen shares and screenshots, but the capture policy hides it");
+        assert_eq!(windows_capture_problem(&[("overlay", Some(BlackBox))], true), None, "a black box (Windows before 2004) keeps the words out");
+        assert!(windows_capture_problem(&[(MAIN, None)], true).unwrap().contains("could not be read"));
+        // A machine that can keep the flag: a hidden window whose flag did not hold fails (a setter regression).
+        assert!(windows_capture_problem(&[("overlay", Some(Shown))], true).is_some());
+        // One that cannot (before 2004, or session 0): only the windows the policy hides are left out of the check.
+        assert_eq!(windows_capture_problem(&[("overlay", Some(Shown)), ("assist", Some(Shown))], false), None);
+        assert!(windows_capture_problem(&[("overlay", Some(Shown)), ("pill", Some(Hidden))], false).unwrap().starts_with("recording controls"), "the shown ones are still checked");
         assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_MAC_APP, EXIT_STALLED, EXIT_PERMISSIONS_HUNG, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_CAPTURE_POLICY), "its own code");
     }
 

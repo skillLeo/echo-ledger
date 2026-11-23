@@ -780,10 +780,20 @@ pub fn mismatch_line(label: &str, read: String, wanted: u32) -> String {
     format!("The capture flag of the {} read {read} right after EchoLedger set 0x{wanted:x}.", window_name(label))
 }
 
+/// Windows, on the main thread: gives `label` the affinity the capture policy wants for it now, derived here from the
+/// table (`affinity_for`), never passed in, and reads it back; true when it reads as wanted. The one way code outside this
+/// module sets a window's flag (screen moments' shield of the main window).
+#[cfg(windows)]
+pub(crate) fn apply_policy<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    let Some(window) = app.get_webview_window(label) else { return false };
+    let (Ok(hwnd), Some(wanted)) = (window.hwnd(), affinity_for(app, label)) else { return false };
+    set_and_read_back(app, label, hwnd.0 as isize, wanted)
+}
+
 /// Windows, on the main thread: sets one window's affinity and reads it back; records the result and logs a mismatch.
 /// True when it reads as wanted.
 #[cfg(windows)]
-pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isize, wanted: u32) -> bool {
+fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isize, wanted: u32) -> bool {
     let readback = win::apply(&win::System, hwnd, wanted);
     if let win::Readback::Mismatch { read, .. } = readback {
         let read = read.map_or_else(|| "nothing".to_string(), |r| format!("0x{r:x}"));
@@ -800,7 +810,7 @@ pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isiz
 
 /// Windows: the affinity `label` should have now.
 #[cfg(windows)]
-pub fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> {
+fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> {
     use win::Affinity;
     let protect = wanted_for(app, label)?;
     let state = app.try_state::<crate::AppState>()?;
@@ -1125,11 +1135,6 @@ pub fn window_server_sharing(number: i64) -> Option<u64> {
     })
 }
 
-/// The system did not keep the flag EchoLedger set on this window (Windows read it back otherwise, or macOS refused it):
-/// the service knows, says so and keeps a hidden window off the screen.
-pub fn flag_not_held<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
-    app.try_state::<Privacy>().is_some_and(|p| lock(&p.set_failed).contains(label) || matches!(lock(&p.watch).last.get(label), Some(win::Readback::Mismatch { .. })))
-}
 
 /// On the main thread: what the system says of this window in screen shares (macOS `NSWindow.sharingType` none is
 /// hidden; Windows `GetWindowDisplayAffinity`: WDA_EXCLUDEFROMCAPTURE hidden, WDA_MONITOR a black box); none when the
@@ -1861,7 +1866,7 @@ mod tests {
             }
             // The capture policy is set in one place (I-02): no window's flag is set anywhere else, with any API.
             let in_privacy = file.components().any(|c| c.as_os_str() == "privacy");
-            for setter in ["set_content_protected(", "setSharingType(", "SetWindowDisplayAffinity("] {
+            for setter in ["set_content_protected(", "setSharingType(", "setSharingType:", "SetWindowDisplayAffinity("] {
                 assert!(in_privacy || !text.contains(setter), "{}: {setter} outside the privacy service (src/privacy)", file.display());
             }
         }

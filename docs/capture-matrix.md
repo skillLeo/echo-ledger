@@ -5,15 +5,15 @@ policy, how it is enforced, and the manual checks for the device slot, with thei
 
 ## The policy
 
-Only the windows with **live words** are hidden. Everything else shows, in screen shares and in the person's own
-screenshots and screen recordings.
+Only the windows with **live words** are hidden, with one stated exception: the dictation box (decision 8). Everything
+else shows, in screen shares and in the person's own screenshots and screen recordings.
 
 | Window | Default | What changes it | macOS | Windows |
 |---|---|---|---|---|
 | Main window | shown | "Hide for…" (Settings › Screen-share privacy, the tray, the share notice), until the time chosen | `sharingType` read-only; none while hidden | `WDA_NONE`; `WDA_EXCLUDEFROMCAPTURE` while hidden |
 | Recording controls (the pill) | **shown** | nothing | read-only | `WDA_NONE` |
 | After-call card | **shown** | nothing | read-only | `WDA_NONE` |
-| Dictation box (the person's own words as they type) | **shown** | nothing | read-only | `WDA_NONE` |
+| Dictation box (the person's own words as they type) | **shown: the stated exception** (decision 8) | nothing | read-only | `WDA_NONE` |
 | Tray and menu-bar menus, tooltips, the input indicator (windows the system makes for EchoLedger) | **shown** | nothing | read-only | not affected |
 | Captions | **hidden** | only its own window: "Show in screen shares" on the captions, until they close (never kept, never by a setting) | none | `WDA_EXCLUDEFROMCAPTURE` (a black box at least on Windows before 2004) |
 | Live Assist card | **hidden** | only its own window: "Show in screen shares" on the card, until it closes (never kept, never by a setting) | none | `WDA_EXCLUDEFROMCAPTURE` (a black box at least on Windows before 2004) |
@@ -27,8 +27,11 @@ Live Translate) off the screen until it ends; the shown windows stay.
 
 ### Decisions behind it
 
-- **The pill, the after-call card and the dictation box show** (the owner): they carry no one else's words, and they
-  were missing from the owner's own screenshots and recordings (I-02).
+- **The pill and the after-call card show** (the owner): they carry no one else's words, and they were missing from the
+  owner's own screenshots and recordings (I-02).
+- **The dictation box shows: the stated exception among the live words** (PLAN_V2_1_POLISH decision 8). It shows the
+  person's own words as they type them, into an app that is already in the share. It has no privacy badge, and Settings
+  says so on its own row ("Dictation box: Always shown · It shows your own words as you type them").
 - **The tray is a native menu**, not a window of EchoLedger's. It was still missing from screenshots: the privacy
   service gave every window the system makes for EchoLedger (the tray's and the menu bar's menus, tooltips) the floating
   windows' flag. Those windows are shown now (`privacy::others_protected`).
@@ -39,14 +42,23 @@ Live Translate) off the screen until it ends; the shown windows stay.
 
 ### What Settings says
 
-- Settings › Screen-share privacy, first: "Live words (Live Assist, captions, translation) are hidden from screen
-  shares. To show one, use its own window's menu." Then the system's line:
+- Settings › Screen-share privacy: one lead line, "What others see when you share your screen.", then each window's
+  state on its own row:
+  - Main window: Shown in screen shares, with Hide from screen shares (for a while);
+  - Recording controls (and the after-call card): Always shown;
+  - Dictation box: Always shown · It shows your own words as you type them;
+  - Live Assist card: Hidden · Show it from the card's own menu;
+  - Captions: Hidden · Show them from the captions' own menu;
+  - Live Translate: Hidden from screen shares / Shown in screen shares · Also hidden from your own screenshots.
+- One footnote under those rows: "The main window shows in screen shares unless you hide it for a while." and the
+  system's honest line:
   - macOS: "Hidden from screenshots and most screen shares. If you share your entire screen in some apps, it may still
     show. Share a single window to be safe." (On macOS 15 and later ScreenCaptureKit can ignore the flag; Apple has no
     public way to block capture.)
   - Windows: "Hidden from screen shares and recordings (Windows 10 version 2004 or later)."
-  - Then: "The recording controls, the after-call card and the dictation box always show in screen shares and
-    screenshots, like the main window."
+- What the last check saw is the Check row's value ("Hidden, today").
+- Onboarding's privacy step: "Live words (Live Assist, captions, translation) are hidden from screen shares. To show
+  one, use its own window's menu.", the system's line and what the last check saw.
 - The tray: "Hide the EchoLedger window from screen shares for… ›" (the main window only), and "Hide EchoLedger windows".
 - The desktop has no Urdu interface yet; the page is checked right to left.
 
@@ -57,7 +69,8 @@ Live Translate) off the screen until it ends; the shown windows stay.
   window its kind and `protected()` is the rule; `privacy::policy()` is the table above, window by window.
 - **The CI checks** (they run in `cargo test` and `npx vitest run` on both desktop workflows):
   - `every_window_is_built_through_the_privacy_service`: no window built outside `privacy::window`, and no
-    `set_content_protected`, `setSharingType` or `SetWindowDisplayAffinity` outside `src-tauri/src/privacy`;
+    `set_content_protected`, `setSharingType` (or the `setSharingType:` message form) or `SetWindowDisplayAffinity`
+    outside `src-tauri/src/privacy`;
   - `capturePolicyWords.test.tsx`: no page code sets a window's capture flag;
   - `the_capture_policy_table`: the table above.
 - **The smoke test** (`EchoLedger --smoke-test`, run on the built app on both CI runners) opens every window and reads
@@ -65,8 +78,10 @@ Live Translate) off the screen until it ends; the shown windows stay.
   - macOS: each window's `NSWindow.sharingType` and the window server's `kCGWindowSharingState`
     (`CGWindowListCopyWindowInfo`), the main window included, against the table; it fails with exit 7;
   - Windows: each window's `GetWindowDisplayAffinity` against the table; it fails with exit 10. A window the table hides
-    whose flag the runner did not keep is the service's own case (it says so and keeps the window off the screen), and
-    is reported, not failed.
+    is left out of the check only where Windows cannot keep the flag (before build 19041, or session 0 with no
+    interactive desktop), and the run says so; anywhere else a flag that did not hold fails.
+- **Outside the privacy service** only `privacy::apply_policy(app, label)` sets a flag (screen moments' shield of the
+  main window); it derives the affinity from the table itself.
 
 ## Manual checks (device slot)
 

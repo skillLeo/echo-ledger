@@ -214,11 +214,17 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["captions in screen share", "show captions in screen shares"], ru: ["captions dikhao"], ur: ["کیپشن"] },
   // Since 2.0.14 (FIX-01) the setting covers Live Translate only: the recording controls, the after-call card and the
   // dictation box always show; the captions and the Live Assist card are shown only from their own window.
+  // FIX-01: the windows that always show in screen shares and screenshots (the dictation box is decision 8's exception).
+  { id: "share_privacy.always", title: "Recording controls", page: "share_privacy", kind: "info",
+    aliases: ["Recording controls & after-call card", "After-call card"],
+    keywords: ["always shown", "screenshots", "screen recording"], ru: ["hamesha dikhe"], ur: ["ہمیشہ دکھائی دے"] },
+  { id: "share_privacy.dictation", title: "Dictation box", page: "share_privacy", kind: "info",
+    keywords: ["always shown", "dictation", "your own words", "screenshots"], ru: ["dictation hamesha dikhe"], ur: ["ڈکٹیشن"] },
   { id: "share_privacy.hiding", title: "Live Translate", page: "share_privacy", kind: "choice", resettable: true,
     aliases: ["Other floating windows", "Hide live words", "Hide from screen sharing", "Hide EchoLedger from screen sharing"],
     options: opts(["all", "Hidden from screen shares", true], ["off", "Shown in screen shares"]),
     // The help line (the call choice plan, lead decision): the OS has one flag for screen sharing and screenshots.
-    description: "Your computer uses one setting for screen shares and screenshots: a hidden window is missing from your own screenshots too.",
+    description: "Also hidden from your own screenshots",
     keywords: ["live translate", "translation", "live words", "show during screen share", "screenshot", "screen capture"], ru: ["screen share mein chupao", "chupana", "tarjuma"], ur: ["اسکرین شیئر میں چھپائیں", "ترجمہ"] },
   { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge", "black box"], ru: ["haalat", "private"], ur: ["حالت", "نجی"] },
   { id: "share_privacy.old_windows", title: "On this Windows version", page: "share_privacy", kind: "choice", requires: { os: "windows" }, resettable: true,

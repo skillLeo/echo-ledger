@@ -73,6 +73,8 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Registry",
   "Win32_Foundation",
   "Win32_System_Threading",
+  # The smoke test: whether this process runs in an interactive session (`privacy::win::session_id`).
+  "Win32_System_RemoteDesktop",
   "Win32_System_Diagnostics_ToolHelp",
   # The smoke test's stall report: a minidump of every thread (`stall`).
   "Win32_System_Diagnostics_Debug",

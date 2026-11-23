@@ -260,9 +260,9 @@ describe("Settings › Screen-share privacy", () => {
     cleanup();
     respond("privacy_status", makePrivacyStatus({ hiding: "floating" }));
     render(<SharePrivacyPage settings={makeSettings({ hideFromSharing: "floating" })} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
-    // FIX-01: the windows by the names people know, what is hidden and what always shows.
-    expect(await screen.findByText(/Live words \(Live Assist, captions, translation\) are hidden from screen shares/)).toBeInTheDocument();
-    expect(screen.getByText(/The recording controls, the after-call card and the dictation box always show/)).toBeInTheDocument();
+    // FIX-01: the windows by the names people know, with what always shows.
+    expect(await screen.findByText("What others see when you share your screen.")).toBeInTheDocument();
+    expect(screen.getByText("Always shown · and the after-call card")).toBeInTheDocument();
   });
 
   it("labels every button to the system's settings the same way", async () => {

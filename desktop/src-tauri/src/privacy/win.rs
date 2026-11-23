@@ -36,6 +36,24 @@ pub trait Affinity {
     fn exists(&self, hwnd: isize) -> bool;
 }
 
+/// Whether this machine can keep a window's capture flag (pure): Windows 10 version 2004 or later ([`EXCLUDE_BUILD`]), in
+/// an interactive session (not session 0, where services run and nothing is composed). The smoke test skips a window the
+/// policy hides only when it cannot; otherwise a flag that does not hold is a failure.
+pub fn flags_supported(build: Option<u32>, session: Option<u32>) -> bool {
+    build.is_some_and(|b| b >= EXCLUDE_BUILD) && session.is_some_and(|s| s != 0)
+}
+
+/// The session EchoLedger runs in (`ProcessIdToSessionId`); none when Windows did not say.
+#[cfg(windows)]
+pub fn session_id() -> Option<u32> {
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    let mut id = 0u32;
+    // SAFETY: a plain query of this process's session into a local.
+    unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut id) }.ok()?;
+    Some(id)
+}
+
 /// The affinity a window should have (pure).
 pub fn wanted(protect: bool, build: Option<u32>, old: OldWindowsSharing) -> u32 {
     if !protect {
@@ -306,6 +324,15 @@ mod tests {
         fn exists(&self, hwnd: isize) -> bool {
             !self.gone.contains(&hwnd)
         }
+    }
+
+    #[test]
+    fn the_flag_is_kept_only_from_19041_in_an_interactive_session() {
+        assert!(flags_supported(Some(EXCLUDE_BUILD), Some(1)));
+        assert!(flags_supported(Some(26_100), Some(2)));
+        assert!(!flags_supported(Some(18_363), Some(1)), "before Windows 10 version 2004");
+        assert!(!flags_supported(Some(26_100), Some(0)), "session 0: no interactive desktop");
+        assert!(!flags_supported(None, Some(1)) && !flags_supported(Some(26_100), None), "Windows did not say");
     }
 
     #[test]

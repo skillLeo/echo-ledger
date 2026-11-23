@@ -8,7 +8,7 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from ".
 import { makePrivacyStatus, makeSettings } from "../../../test/fixtures";
 import { collectControls, findControls, stale, type ControlRole } from "../../../test/parity";
 import { setting } from "../../../lib/settingsRegistry";
-import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LAST_CHECK_SENTENCE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, SHARE_PRIVACY_INTRO, SHARE_PRIVACY_OFF, ShareCheckPage, SharePrivacyPage } from "../../../views/main/PrivacySettings";
+import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LAST_CHECK_SENTENCE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, SHARE_PRIVACY_INTRO, ShareCheckPage, SharePrivacyPage } from "../../../views/main/PrivacySettings";
 import { ShareCheckPageV2, SharePrivacyPageV2 } from "./SharePrivacyV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../../test/tauri")).coreModule);
@@ -97,7 +97,7 @@ describe("Screen-share privacy v2", () => {
     page(makeSettings({ hideFromSharing: "off" }));
     await act(flushAsync);
     expect(screen.getByRole("button", { name: "Show Live Translate for 10 min" })).toBeDisabled();
-    expect(screen.getByText("Live Translate's words can be seen by people watching your screen share.")).toBeInTheDocument();
+    expect(screen.getByText("Shows in your screen shares and screenshots")).toBeInTheDocument();
   });
 
   it("no Show while the sharing bar is on screen, with the tray's words; Show again once the bar went", async () => {
@@ -166,115 +166,43 @@ describe("the page promises no more than the last check saw", () => {
     expect(SHARE_PRIVACY_INTRO).toBe("Live words (Live Assist, captions, translation) are hidden from screen shares. To show one, use its own window's menu.");
     // One sentence for what EchoLedger does; what the last check saw is said once, in its own sentence.
     expect(SHARE_PRIVACY_INTRO).not.toMatch(/last check/i);
-    expect(SHARE_PRIVACY_OFF).toBe("Live Translate shows in screen shares. Live Assist and the captions stay hidden unless you show one from its own window's menu.");
     const settings = makeSettings({ hideFromSharing: hiding });
     const pages: [string, () => ReactElement][] = [
       ["today's page", () => <SharePrivacyPage settings={settings} patch={async () => true} onCheck={() => undefined} />],
       ["onboarding", () => <OnboardingShareCheck platform="macos" />],
       ["the v2 page", () => <div className="el-root"><SharePrivacyPageV2 settings={settings} patch={async () => true} onCheck={() => undefined} /></div>],
     ];
+    const said = {
+      visible: "The last check saw the live words in the screen share.",
+      not_checked: "not checked yet",
+      black_box: "The last check saw a black box where the live words are.",
+      private: "The last check saw the live words hidden from the screen share.",
+    }[badge];
     for (const [name, make] of pages) {
       respond("privacy_status", makePrivacyStatus({ badge, hiding, platform: "macos" }));
-      render(make());
+      const { unmount } = render(make());
       await act(flushAsync);
       const text = document.body.textContent ?? "";
       for (const old of OLD) expect(text, `${name}: ${old}`).not.toMatch(old);
-      if (hiding === "off") {
-        // Off: that it is off, and no general hiding sentence.
-        expect(text, name).toContain(SHARE_PRIVACY_OFF);
-        expect(text, name).not.toContain(SHARE_PRIVACY_INTRO);
-      } else {
+      // Since FIX-01 "floating" (v1.8.1's choice) reads as hidden, like "all": no main-window line of its own.
+      expect(text, name).not.toContain("The main window is visible in screen share");
+      if (name === "onboarding") {
+        // Onboarding's first lines: what is hidden, and what the last check saw (never with Live Translate shown).
         expect(text, name).toContain(SHARE_PRIVACY_INTRO);
-        expect(text, name).not.toContain(SHARE_PRIVACY_OFF);
-        // What the last check saw, and nothing more.
-        const said = {
-          visible: "The last check saw the live words in the screen share.",
-          not_checked: "not checked yet",
-          black_box: "The last check saw a black box where the live words are.",
-          private: "The last check saw the live words hidden from the screen share.",
-        }[badge];
-        expect(text, `${name}: ${badge}`).toContain(said);
-        // ...and none of the other results.
-        for (const [other, sentence] of Object.entries(LAST_CHECK_SENTENCE)) if (other !== badge) expect(text, `${name}: ${badge}, not ${other}`).not.toContain(sentence);
-        // Since FIX-01 "floating" (v1.8.1's choice) reads as hidden, like "all": the same lines, no main-window one.
-        if (hiding === "floating") expect(text, name).not.toContain("The main window is visible in screen share");
+        if (hiding !== "off") expect(text, `${name}: ${badge}`).toContain(said);
+      } else {
+        // The pages (the visual review): one lead line; the last check is the Check row's value only.
+        expect(text, name).toContain("What others see when you share your screen.");
+        expect(text, name).not.toContain(SHARE_PRIVACY_INTRO);
+        expect(text, `${name}: ${badge}`).not.toContain(said);
       }
-      cleanup();
+      // Never another result than the badge's.
+      for (const [other, sentence] of Object.entries(LAST_CHECK_SENTENCE)) if (other !== badge) expect(text, `${name}: ${badge}, not ${other}`).not.toContain(sentence);
+      unmount();
     }
   });
 });
 
-describe("Check screen-share privacy v2", () => {
-  const check = () => render(<div className="el-root"><ShareCheckPageV2 /></div>);
-
-  it("what you see next to what others see, and the plain line, after a pass; one main button", async () => {
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", system: "macOS 27.3" }));
-    respond("share_check_run", view());
-    respond("share_check_card", null);
-    check();
-    await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
-    await act(flushAsync);
-    expect(screen.getByRole("status")).toHaveTextContent("Hidden in this check. Each meeting app captures differently on a Mac: test yours below. Checked on macOS 27.3, today.");
-    expect(screen.getByText("What you see")).toBeInTheDocument();
-    expect(screen.getByAltText("Your screen as a screen share captured it")).toHaveAttribute("src", PICTURE);
-    expect(callsOf("share_check_run")).toEqual([{ why: "asked" }]);
-    expect(document.querySelectorAll(".el-button--primary")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
-  });
-
-  it("a missing permission before any run and after one, with Open System Settings; a failed capture with Try again", async () => {
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false }));
-    respond("open_privacy_settings", null);
-    check();
-    await act(flushAsync);
-    fireEvent.click(within(screen.getByTestId("permission-first")).getByRole("button", { name: OPEN_SYSTEM_SETTINGS }));
-    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
-    cleanup();
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: true }));
-    respond("share_check_run", view({ result: "error", reason: "capture_failed", picture: null, testArea: null, controlArea: null }));
-    check();
-    await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
-    await act(flushAsync);
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-    expect(screen.queryByText("What others see")).toBeNull();
-  });
-
-  it("keeps Check now off while an automatic run is on", async () => {
-    respond("privacy_status", makePrivacyStatus({ checkRunning: true }));
-    check();
-    await act(flushAsync);
-    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
-  });
-
-  it("asks per meeting app on a Mac and keeps the answer; Cancel leaves no answer", async () => {
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", apps: [
-      { app: "zoom", name: "Zoom", version: "7.1.9", state: "not_checked", line: "Zoom: not checked", needsTest: true },
-      { app: "meet", name: "Meet", version: "142.0", state: "share_tab", line: "Meet: share a tab", needsTest: true },
-    ] }));
-    respond("share_check_card", null);
-    respond("share_check_answer", makePrivacyStatus({ platform: "macos" }));
-    check();
-    await act(flushAsync);
-    expect(screen.getByText("Chrome 142.0")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Test Zoom" }));
-    await act(flushAsync);
-    const question = screen.getByText(/A test card is on your screen now/);
-    await waitFor(() => expect(question).toHaveFocus());
-    expect(screen.getByText(GUIDED_ALONE)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(callsOf("share_check_answer")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Test Zoom" }));
-    await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "I can't see it" }));
-    await act(flushAsync);
-    expect(callsOf("share_check_answer")).toEqual([{ meetingApp: "zoom", visible: false }]);
-    expect(callsOf("share_check_card")).toEqual([{ open: true }, { open: false }, { open: true }]);
-  });
-});
-
-/** Parity: every control today's pages show, in each state, is on the v2 pages. */
 describe("parity with today's Screen-share privacy pages", () => {
   const settings = makeSettings();
   const patch = async () => true;
