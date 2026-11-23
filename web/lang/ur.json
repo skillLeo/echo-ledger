@@ -1090,5 +1090,7 @@
     "Failed · Retry": "ناکام · دوبارہ کوشش کریں",
     "Waiting to upload": "اپ لوڈ کا انتظار",
     "1 audio only|:count audio only": "1 صرف آڈیو|:count صرف آڈیو",
+    "1 transcribing|:count transcribing": "1 کا ٹرانسکرپٹ بن رہا ہے|:count کے ٹرانسکرپٹ بن رہے ہیں",
+    "1 waiting to upload|:count waiting to upload": "1 اپ لوڈ کا انتظار|:count اپ لوڈ کا انتظار",
     "Still audio only": "ابھی صرف آڈیو"
 }

@@ -71,7 +71,8 @@
             "source": "whatsapp",
             "status": "transcribed",
             "language": "en",
-            "kind": "call"
+            "kind": "call",
+            "state": "transcribed"
         },
         "processing_since": "2026-11-23T01:10:29+00:00",
         "updated_at": "2026-11-23T01:10:30+00:00"
