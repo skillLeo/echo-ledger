@@ -2404,7 +2404,10 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
   - `group`: `"upload_failed"` for an upload failure, otherwise `null`;
   - `resolved`: `true` once what the item asked for is done; for now that is an upload failure whose recording has
     since reached the server (it then reads "Uploaded" and is read). Otherwise `false`.
-- Items that were already there before 2.0.0-r are merged once, the same way, keeping the newest.
+- Items that were already there before 2.0.0-r are merged by a one-time migration that runs with the deploy of
+  2.0.0-r, not when the list is read. For each person, recording and kind it keeps the newest item. Its `repeat_count`
+  becomes the number of items merged, and it is unread when any of them was. Running it again changes nothing, and
+  the deploy's check confirms that no two items share a person, a recording and a kind.
 - `GET /api/activity` takes `group` (`upload_failed`) to list only that group's items, newest first.
 - `GET /api/activity/groups` — `library:read`: the groups that hold at least one unresolved item:
   `200 {"data": [{"group": "upload_failed", "count": 3, "unread": 2, "session_ids": ["01JB…", …], "at": "…"}]}`.
@@ -2418,7 +2421,10 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 - `POST /api/activity/retry-all` — `library:read`: takes `{"group": "upload_failed"}` and answers
   `202 {"retry_requested_at": "…", "count": 3}`. Only the devices hold the files, so the server asks them: from then on,
   `GET /api/activity` and `GET /api/activity/groups` carry `"retry_requested_at"` (the person's latest Retry all, or
-  `null`). An app that sees it newer than its own last run retries every failed upload it holds at once. The console's
+  `null`). An app that sees it newer than its own last run retries every failed upload it holds at once, then
+  records the time it ran, so one Retry all runs once on each device. A device with nothing failed does nothing. A
+  recording that is already `ready` on the server is never sent again: an app retries only its own uploads that
+  failed, and the server answers a `complete` for a `ready` recording with `ready` (as since v1.1). The console's
   Retry all sends the same request. `422` for any other `group`.
 - When an upload that had failed reaches the server, its `upload_failed` item becomes `resolved` and read (see 2).
 
