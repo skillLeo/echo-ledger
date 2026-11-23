@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\UploadStatus;
+use App\Exceptions\AssemblyDataFault;
 use App\Models\Recording;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
@@ -13,6 +14,7 @@ use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /** Verifies + encrypts an uploaded recording, then starts the final transcript when the session is complete. */
@@ -31,7 +33,7 @@ final class AssembleRecordingJob implements ShouldQueue
 
     /**
      * On a bucket the tries wait: a few seconds of trouble there are routine, and three tries in a row would end in
-     * failed() with a whole upload thrown away. On the server's own disk a failure tells the device at once, as ever.
+     * failed() and leave the recording to recordings:recover for 15 minutes. On the server's own disk they follow at once.
      *
      * @return list<int>
      */
@@ -59,7 +61,12 @@ final class AssembleRecordingJob implements ShouldQueue
                 return; // deleted meanwhile, or already assembled (idempotent)
             }
 
-            $uploads->assemble($recording);
+            try {
+                $uploads->assemble($recording);
+            } catch (AssemblyDataFault) {
+                // The upload itself is bad: another try cannot help, so the device is asked for the file at once.
+                $uploads->discard($recording, ChunkedUploadService::NOT_FINISHED);
+            }
             $recording->refresh();
         } finally {
             $lock->release();
@@ -82,14 +89,26 @@ final class AssembleRecordingJob implements ShouldQueue
     }
 
     /**
-     * Every attempt failed: discard the parts so the device uploads the file again (docs/API.md). The reason is a
-     * fixed text; the exception itself goes to the log, never to the device.
+     * Every attempt failed. Only a fault of the upload itself (a part missing or not decrypting) discards the parts, so
+     * the device uploads the file again (docs/API.md); the reason is a fixed text and the exception goes to the log,
+     * never to the device. Any other fault is the server's (a missing PHP extension, an error in the code, a disk or
+     * bucket that fails): the parts stay and the recording stays `assembling`, so recordings:recover or a retry of
+     * this job finishes it once the server is fixed, with no new upload (W-INC-1124: a hosting change took sodium out
+     * of PHP, and six recordings were thrown away here).
      */
     public function failed(?Throwable $exception): void
     {
         $recording = Recording::query()->find($this->recordingId);
-        if ($recording !== null && $recording->upload_status === UploadStatus::Assembling) {
-            app(ChunkedUploadService::class)->discard($recording, ChunkedUploadService::NOT_FINISHED);
+        if ($recording === null || $recording->upload_status !== UploadStatus::Assembling) {
+            return;
         }
+        if ($exception instanceof AssemblyDataFault) {
+            app(ChunkedUploadService::class)->discard($recording, ChunkedUploadService::NOT_FINISHED);
+
+            return;
+        }
+        Log::warning('Assembly failed on a server fault; the parts are kept for recordings:recover.', [
+            'recording' => $recording->id, 'fault' => $exception === null ? null : $exception::class,
+        ]);
     }
 }

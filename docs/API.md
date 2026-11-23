@@ -1022,6 +1022,10 @@ SHA-256, encrypts the file at rest, and starts the final transcript when every r
   new chunks arrive.
 - A scheduled recovery (every 5 minutes) finishes recordings left in `assembling` for more than 15 minutes when
   every part is still on disk, and marks them `failed` (upload again) otherwise **(since v1.1)**.
+- Only a fault of the upload itself (the checksum, a part missing or damaged) ends in `failed`. When the server is at
+  fault (its PHP, its storage), the recording stays `assembling` with its parts, and the recovery finishes it once the
+  server is fixed: the client keeps polling and its local audio, and uploads nothing again. No field changes
+  **(since W-INC-1124, 2026-11-24)**.
 
 ### `POST /api/sessions/{id}/transcripts` — `sessions:write`
 Device-supplied transcripts: `kind: "live"` (captions captured during the session) or `kind: "final"` (only when the

@@ -6,8 +6,13 @@ reconciler and the 30-day retention cleanup.
 ## Requirements
 - PHP **≥ 8.4.1** (the lock file enforces it) with `sodium`, `pdo_mysql` (or `pdo_sqlite`), `mbstring`, `intl`,
   `fileinfo`, `zip`, `curl`, `openssl`, and since v1.5 `gd` with WebP (screen moment thumbnails). `sodium` and `openssl`
-  are also what the Claude and ChatGPT connector signs its tokens with (`lcobucci/jwt`): check both with
-  `php -m | grep -E 'sodium|openssl'`.
+  are also what the Claude and ChatGPT connector signs its tokens with (`lcobucci/jwt`). Also `ctype`, `dom`, `filter`,
+  `libxml`, `session`, `tokenizer` and `xmlreader`, which most builds have. Hosts often run the web and the command line
+  on two different PHPs, each with its own extensions: since W-INC-1124 (sodium dropped by a hosting change), check
+  both after each deploy and after any change to the hosting's PHP with
+  `bash deploy/check-php.sh --php <the CLI PHP cron uses> --url https://<console host>` (PASS or FAIL per PHP; exit 1
+  on a FAIL; the script is in the repository's `deploy/` folder, not in `web/`, so copy it to the server and run it in
+  the app folder). `php artisan echoledger:health` and `php artisan about` say the same for one CLI PHP.
 - MySQL 8 / MariaDB 10.6+ (or SQLite for single-user installs).
 - HTTPS on a public domain (providers deliver webhooks to `APP_URL`; devices pin its certificate). Passkeys are tied
   to the host of `APP_URL`: changing the domain later means adding passkeys again (passwords keep working).
@@ -92,6 +97,11 @@ The scheduler (`routes/console.php`) runs:
 - `stt:reconcile` every 5 minutes (recovers missed webhooks, retries provider-side deletes)
 - since B4, `assist:relay-check` every 5 minutes (`withoutOverlapping(5)`): one health check of the Live Assist relay
   (3 s, no retry, public addresses only), kept 7 days for Admin → Usage → Live Assist; nothing when no relay is set
+- since W-INC-1124, `echoledger:health --report` every 5 minutes (`withoutOverlapping(5)`): the PHP extensions above
+  and a round trip through the recordings cipher. A failure writes one critical line to the log, puts a banner on the
+  admin dashboard (which also checks the web PHP on each visit) until a check passes, and emails the super admins
+  once an hour. Meanwhile an upload that cannot be assembled keeps its parts, and `recordings:recover` finishes it
+  once PHP is fixed: nobody uploads again.
 - `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has
   waited 48 hours) and `model:prune` daily (webhook events, old tombstones and other expired rows)
 - `sanctum:prune-expired --hours=24` daily
@@ -218,7 +228,8 @@ RewriteRule ^\.well-known/assetlinks\.json$ public/.well-known/assetlinks.json [
 Check: `curl -s https://<server>/.well-known/assetlinks.json` returns JSON naming `com.echoledger.mobile`.
 
 ## Updating
-Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`. The first
+Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`, then
+`bash deploy/check-php.sh --php <CLI PHP> --url https://<console host>` (both PHPs; see Requirements). The first
 update to v1.5 with the connector also needs its keys, once: see "Claude and ChatGPT connector" above.
 
 **"Transcription failed" notifications in plain words (after the v1.8.1 update).** The migration rewrites the ones

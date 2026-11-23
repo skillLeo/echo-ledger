@@ -8,6 +8,8 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
+use App\Exceptions\AssemblyDataFault;
+use App\Exceptions\RecordingUndecryptable;
 use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
 use App\Models\Device;
@@ -22,6 +24,7 @@ use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 /**
  * Resumable raw-body chunk uploads (docs/API.md "Sessions, recordings, uploads", PLAN.md D4).
@@ -152,7 +155,7 @@ final class ChunkedUploadService
                 hash_update($hash, $buffer);
                 fwrite($out, $buffer);
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             fclose($out);
             @unlink($tmp);
             throw $e;
@@ -237,7 +240,7 @@ final class ChunkedUploadService
             try {
                 Bus::dispatchNow(new AssembleRecordingJob($recording->id));
                 $queued = false;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 report($e); // fall through to the queue so the recording still gets processed
             }
         }
@@ -269,7 +272,13 @@ final class ChunkedUploadService
         $this->files()->eraseFolder($recording->partsDirectory());
     }
 
-    /** Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. */
+    /**
+     * Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. A size or SHA-256
+     * mismatch discards the parts here; a part that is missing or does not decrypt throws AssemblyDataFault (the job
+     * discards them); anything else is the server's fault and leaves the parts for another try.
+     *
+     * @throws AssemblyDataFault
+     */
     public function assemble(Recording $recording): void
     {
         $plainPath = $this->tempPath('assemble');
@@ -280,15 +289,22 @@ final class ChunkedUploadService
         $hash = hash_init('sha256');
         $size = 0;
         try {
-            for ($i = 0; $i < $recording->total_chunks; $i++) {
-                $this->files()->readPart($recording->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
-                    while (! feof($part)) {
-                        $buffer = (string) fread($part, 1024 * 1024);
-                        $size += strlen($buffer);
-                        hash_update($hash, $buffer);
-                        fwrite($out, $buffer);
-                    }
-                });
+            try {
+                for ($i = 0; $i < $recording->total_chunks; $i++) {
+                    $this->files()->readPart($recording->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                        while (! feof($part)) {
+                            $buffer = (string) fread($part, 1024 * 1024);
+                            $size += strlen($buffer);
+                            hash_update($hash, $buffer);
+                            fwrite($out, $buffer);
+                        }
+                    });
+                }
+            } catch (RecordingUndecryptable $e) {
+                throw new AssemblyDataFault('A part of the upload does not decrypt.', 0, $e);
+            } catch (Throwable $e) {
+                // Only a part that is really gone is the upload's fault; a disk or bucket that fails is the server's.
+                throw $this->partsGone($recording) ? new AssemblyDataFault('A part of the upload is missing.', 0, $e) : $e;
             }
             fclose($out);
 
@@ -305,6 +321,16 @@ final class ChunkedUploadService
                 fclose($out);
             }
             @unlink($plainPath);
+        }
+    }
+
+    /** Whether a part is missing, as one listing says; a listing that fails says nothing, so it answers false. */
+    private function partsGone(Recording $recording): bool
+    {
+        try {
+            return $this->missingChunks($recording) !== [];
+        } catch (Throwable) {
+            return false;
         }
     }
 
