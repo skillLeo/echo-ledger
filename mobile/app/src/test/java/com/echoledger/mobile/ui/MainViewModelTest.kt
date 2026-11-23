@@ -731,4 +731,51 @@ class MainViewModelTest : AppTest() {
         assertTrue("no label of the last person", vm.lists.value.isEmpty())
         assertEquals(Unit, first)
     }
+
+    /**
+     * The projects are written after a server call (a new project, a project's language from the after-call question)
+     * on the main thread, where a sign-out clears them: a check and its write never have a sign-out between them. A
+     * flow put in the view model's place records the thread of each write.
+     */
+    @Test
+    fun `a project written after a server call is written on the main thread`() {
+        pairLocally()
+        serveLibrary()
+        syncNow()
+        val writers = java.util.concurrent.CopyOnWriteArrayList<Thread>()
+        val field = MainViewModel::class.java.getDeclaredField("_clients").apply { isAccessible = true }
+
+        @Suppress("UNCHECKED_CAST")
+        val inner = field.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<List<com.echoledger.mobile.data.ClientDto>>
+        field.set(vm, RecordingFlow(inner, writers))
+        server.on("POST", "/api/clients", FakeServer.json(201, """{"data":{"id":"01JNEW","name":"Karachi Cargo"}}"""))
+        server.on("PATCH", "/api/clients/.+", FakeServer.empty(204))
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val made = io.async { vm.createClient("Karachi Cargo") }
+        pumpUntil("the new project") { made.isCompleted && vm.clients.value.any { it.name == "Karachi Cargo" } }
+        val learn = MainViewModel::class.java.getDeclaredField("_learn").apply { isAccessible = true }
+
+        @Suppress("UNCHECKED_CAST")
+        (learn.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<MainViewModel.LearnLanguage?>).value =
+            MainViewModel.LearnLanguage("r-1", "01JNEW", "Always Urdu for Karachi Cargo?", "ur")
+        vm.answerLearn(true)
+        pumpUntil("the project's language") { vm.clients.value.any { it.id == "01JNEW" && it.language == "ur" } }
+        val main = android.os.Looper.getMainLooper().thread
+        assertEquals(2, writers.size)
+        assertTrue("every write on the main thread: ${writers.map { it.name }}", writers.all { it == main })
+    }
+
+    /** A projects flow that records the thread of each write. */
+    @OptIn(kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi::class)
+    private class RecordingFlow<T>(
+        private val inner: kotlinx.coroutines.flow.MutableStateFlow<T>,
+        private val writers: MutableList<Thread>
+    ) : kotlinx.coroutines.flow.MutableStateFlow<T> by inner {
+        override var value: T
+            get() = inner.value
+            set(next) {
+                writers += Thread.currentThread()
+                inner.value = next
+            }
+    }
 }

@@ -160,20 +160,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Signed out: the library, My views, the projects and the lists of the person go, and what a network call still on
-     * its way brings back for them is dropped ([sameAccount]).
+     * its way brings back for them is dropped ([sameAccount]). On the main thread, as every write of the projects and
+     * the lists is, so a check and its write never have a sign-out between them.
      */
-    private fun forgetAccount() {
-        graph.accountEpoch.incrementAndGet()
+    private suspend fun forgetAccount() = withContext(Dispatchers.Main.immediate) {
+        newAccount()
         graph.library.clear()
         graph.views.clear()
+    }
+
+    /** Another account from now on (a sign-out, or a sign-in's start): its projects and lists go. Main thread only. */
+    private fun newAccount() {
+        graph.accountEpoch.incrementAndGet()
         _clients.value = emptyList()
         _lists.value = emptyList()
     }
 
-    /** Runs [write] only when no sign-out or sign-in came since [epoch] (taken before the network call). */
-    private inline fun sameAccount(epoch: Int, write: () -> Unit) {
+    /**
+     * Writes the projects or the lists after a network call: on the main thread, and only when no sign-out or sign-in
+     * came since [epoch] (taken before the call). The check and the write run together there, where every sign-out
+     * runs too ([forgetAccount]), so the last person's project or list never comes back.
+     */
+    private suspend fun sameAccount(epoch: Int, write: () -> Unit) = withContext(Dispatchers.Main.immediate) {
         if (epoch == graph.accountEpoch.get()) write()
     }
+
+    /** Whether the account is still the one of [epoch] (for a read again that guards its own write). */
+    private fun stillAccount(epoch: Int): Boolean = epoch == graph.accountEpoch.get()
 
     /** After a library sync: My views sent and read again when the sync's `views_version` is not the copy's. */
     private suspend fun syncViews() {
@@ -268,9 +281,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.views.use(null)
         graph.settings.update { it.copy(signIns = it.signIns + 1) }
         // No project or list of the last person stays, nor comes back from a read still on its way.
-        graph.accountEpoch.incrementAndGet()
-        _clients.value = emptyList()
-        _lists.value = emptyList()
+        withContext(Dispatchers.Main.immediate) { newAccount() }
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {
@@ -912,7 +923,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             // Another device may have changed or removed it: read the lists again.
-            .onFailure { sameAccount(epoch) { loadLists() } }
+            .onFailure { if (stillAccount(epoch)) loadLists() }
     }
 
     /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
@@ -922,13 +933,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
         }.also { ok ->
-            sameAccount(epoch) {
-                if (ok) {
+            if (ok) {
+                sameAccount(epoch) {
                     _lists.value = _lists.value.filterNot { it.key == key }
                     refreshQuietly()
-                } else {
-                    loadLists()
                 }
+            } else if (stillAccount(epoch)) {
+                loadLists()
             }
         }
     }
@@ -940,7 +951,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ordered = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
-        } ?: return false.also { sameAccount(epoch) { loadLists() } }
+        } ?: return false.also { if (stillAccount(epoch)) loadLists() }
         sameAccount(epoch) { _lists.value = ordered }
         return true
     }
