@@ -12,7 +12,7 @@
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
     {{-- The app's own mark and the device badge (EL-Design's source-logo); a click shows only that source's recordings. --}}
     <button type="button" class="v2-row-tile" title="{{ __('Show only :source recordings', ['source' => $row['quick_source_words']]) }}" style="background-color: transparent"
-        x-on:click.stop="$wire.quickFilter('source', @js($row['quick_source']))" data-quick-source="{{ $row['quick_source'] }}">
+        x-on:click.prevent.stop="$wire.quickFilter('source', @js($row['quick_source']))" data-quick-source="{{ $row['quick_source'] }}">
         @include('filament.v2.components.source-logo', ['app' => $row['app'], 'device' => $row['device_kind'], 'label' => $row['source_words'], 'fallback' => $row['icon']])
     </button>
     <span class="v2-row-main">
@@ -41,7 +41,7 @@
             @foreach ($row['labels'] as $label)
                 {{-- The dot as it was (named for screen readers); the button around it shows only that label's recordings. --}}
                 <button type="button" class="v2-label-quick" aria-label="{{ __('Show only the :label label', ['label' => $label['name']]) }}" title="{{ __('Show only the :label label', ['label' => $label['name']]) }}"
-                    x-on:click.stop="$wire.quickFilter('labels', @js(mb_strtolower($label['name'])))" data-quick-label="{{ mb_strtolower($label['name']) }}"><span class="v2-label-dot {{ $label['class'] }}" role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}"
+                    x-on:click.prevent.stop="$wire.quickFilter('labels', @js(mb_strtolower($label['name'])))" data-quick-label="{{ mb_strtolower($label['name']) }}"><span class="v2-label-dot {{ $label['class'] }}" role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}"
                     data-label-dot="{{ $label['name'] }}" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span></button>
             @endforeach
         </span>

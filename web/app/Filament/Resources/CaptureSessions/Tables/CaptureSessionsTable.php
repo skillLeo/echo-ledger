@@ -256,7 +256,8 @@ final class CaptureSessionsTable
             // The app's and the device's names in the console's language under the new Library (English as before).
             TextColumn::make('source_app')->label(__('App'))->toggleable()
                 ->formatStateUsing(fn (?SourceApp $state): string => ConsoleV2::library() ? __((string) $state?->getLabel()) : (string) $state?->getLabel()),
-            TextColumn::make('client.name')->label(__('Project'))->placeholder(__('Inbox'))->toggleable(),
+            // Since the new Library (docs/PLAN_NAV_3_LEVELS.md section 0) nothing is called the Inbox: a recording has no project.
+            TextColumn::make('client.name')->label(__('Project'))->placeholder(ConsoleV2::library() ? __('No project') : __('Inbox'))->toggleable(),
             TextColumn::make('device.name')->label(__('Device'))->state(fn (CaptureSession $r): string => ConsoleV2::library() ? __(self::deviceLabel($r)) : self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('duration_ms')->label(__('Length'))->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
             TextColumn::make('started_at')->label(__('Date'))->toggleable()

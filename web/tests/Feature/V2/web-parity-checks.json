@@ -9,7 +9,7 @@
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|all"
+  "key": "a|all recordings"
  },
  "WEB-NAV-003": {
   "type": "controls",
@@ -72,7 +72,7 @@
   "page": "library",
   "scope": "sidebar",
   "keys": [
-   "a|all",
+   "a|all recordings",
    "a|needs you",
    "a|unread",
    "a|important",

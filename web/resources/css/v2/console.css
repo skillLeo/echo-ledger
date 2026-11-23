@@ -2219,11 +2219,37 @@ html[dir='rtl'] .v2-row-title {
 }
 
 /* The view's name at the start of the one toolbar row, where the page's heading was. */
-.v2-lib-title {
-    margin: 0;
+/* "Library / Unread": the breadcrumb that leads the toolbar row; Library goes back to All recordings. */
+.v2-lib-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    min-width: 0;
     margin-inline-end: var(--el-space-8);
+}
+
+.v2-lib-crumbs nav {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-lib-crumb:hover,
+.v2-lib-crumb:focus-visible {
+    color: var(--el-role-text-primary);
+    text-decoration: underline;
+}
+
+.v2-lib-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
     font-size: var(--el-text-title-s-size);
     font-weight: var(--el-text-title-s-weight);
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 

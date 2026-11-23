@@ -85,5 +85,30 @@
         return null;
     }
 
-    return { isTyping, isControl, keyAction, clickAction, contextAction, shellKey };
+    /** Whether a key lands in a form field (an input, a text area or a list), not an editor of rich text. */
+    const FIELDS = ['input', 'textarea', 'select'];
+    function isField(target) {
+        return !! target && (FIELDS.includes(String(target.tagName || '').toLowerCase()) || target.field === true);
+    }
+
+    /**
+     * Back and Forward from the keyboard (docs/PLAN_NAV_3_LEVELS.md sections 0 and 6): ⌘[ and ⌘] on a Mac, Ctrl+[ and
+     * Ctrl+] elsewhere, as the apps have them; the browser's own Back, Forward and the mouse's back button keep working
+     * (the Library keeps its place, filters and view in the address). On a Mac ⌘[ and ⌘] are the browser's Back and
+     * Forward too. The page asks after the focused element has had the key (it listens as the key bubbles up): an
+     * editor of rich text that uses ⌘[ / ⌘] (outdent, indent) claims it first (defaultPrevented: null, nothing more);
+     * in any field left over (an input, a text area, a list, an editor that did not claim it) and over a dialog the
+     * key does nothing ('stay': the page and the typing stay). e as keyAction's (with code and shiftKey;
+     * target.editable for contenteditable); s: {mac, modal}. Returns 'back', 'forward', 'stay' or null.
+     */
+    function historyKey(e, s) {
+        if (e.altKey || e.shiftKey) return null;
+        if (s.mac ? ! (e.metaKey && ! e.ctrlKey) : ! (e.ctrlKey && ! e.metaKey)) return null;
+        const way = e.code === 'BracketLeft' || e.key === '[' ? 'back' : (e.code === 'BracketRight' || e.key === ']' ? 'forward' : null);
+        if (! way || e.defaultPrevented) return null;
+        const editor = !! e.target && (e.target.editable === true || e.target.isContentEditable === true);
+        return s.modal || editor || isField(e.target) ? 'stay' : way;
+    }
+
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
 });
