@@ -2,7 +2,7 @@
   "$description": "UX-21 (PLAN_V2_1_POLISH 3b): every command once, for every menu (the Mac menu bar, right-click menus, a row's ⋯, Record's menu, the avatar's menu, ⌘K, the menu-bar and tray menu, the Dock menu, the Windows Jump List). Labels are in sentence case; the Mac's Title Case is made from them (registry.ts, with the words in titleCase). '…' means the command asks for more before it acts. appliesTo: what it works on (none, one, many, oneOrMany). when: the states it needs (registry.ts CONDITIONS); greyed in the menu bar, left out of right-click menus. native: a Tauri predefined menu item (macOS draws and runs it). state: a label or a tick that follows the app (on: the label while the state is on; check: ticked while on). Android uses the same ids and labels.",
   "titleCase": {
     "lower": ["a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "via", "with"],
-    "keep": ["EchoLedger", "Live Assist", "Live Translate", "Urdu", "Roman Urdu", "PDF"]
+    "keep": ["EchoLedger", "Live Assist", "Live Translate", "Urdu", "Roman Urdu", "PDF", "WhatsApp"]
   },
   "actions": [
     { "id": "app.about", "label": "About EchoLedger", "menu": "EchoLedger", "native": "about" },
@@ -28,6 +28,7 @@
     { "id": "file.share", "label": "Share", "menu": "File", "icon": "ShareIcon", "appliesTo": "oneOrMany", "submenu": true },
     { "id": "file.copyLink", "label": "Copy link", "menu": "File", "icon": "LinkIcon", "appliesTo": "one" },
     { "id": "file.shareWithPeople", "label": "Share with people…", "menu": "File", "icon": "UsersIcon", "appliesTo": "oneOrMany" },
+    { "id": "file.sendToWhatsApp", "label": "Send to WhatsApp…", "icon": "SendIcon", "appliesTo": "one" },
     { "id": "file.export", "label": "Export…", "menu": "File", "icon": "DownloadIcon", "appliesTo": "oneOrMany", "mac": "⇧⌘E", "win": "Ctrl+Shift+E" },
     { "id": "file.printTranscript", "label": "Print transcript…", "menu": "File", "appliesTo": "one", "mac": "⌘P", "win": "Ctrl+P", "when": ["hasTranscript"] },
 
