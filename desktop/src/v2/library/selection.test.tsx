@@ -381,6 +381,57 @@ describe("the row ⋮ and the right-click menu", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
   });
 
+  for (const source of ["person", "auto", "app"] as const) {
+    it(`Rename on a title the person didn't choose (${source}) starts empty, the title as its placeholder; empty saves nothing`, async () => {
+      // The row reads "Bilal Qureshi" (UX-06: no "Call with"); the box shows the whole title as its placeholder.
+      const shown = ITEMS.map((i) => (i.id === "bilal" ? { ...i, title: "Call with Bilal Qureshi", title_source: source } : i));
+      respond("library_list", shown);
+      respond("library_refresh", shown);
+      respondWith("session_organise", (args) => ({ data: { ...shown[0], title: (args as { patch: { title: string | null } }).patch.title, title_source: "own" } }));
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+      fireEvent.click(menuItem("Rename…"));
+      let dialog = screen.getByRole("dialog", { name: "Rename" });
+      let field = within(dialog).getByRole("textbox", { name: "Title" });
+      expect(field).toHaveValue("");
+      expect(field).toHaveAttribute("placeholder", "Call with Bilal Qureshi");
+      expect(field).toHaveAccessibleDescription("Type a title of your own, or leave it empty to keep this one.");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+      await act(flushAsync);
+      expect(callsOf("session_organise")).toHaveLength(0);
+      expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+      fireEvent.click(menuItem("Rename…"));
+      dialog = screen.getByRole("dialog", { name: "Rename" });
+      field = within(dialog).getByRole("textbox", { name: "Title" });
+      fireEvent.change(field, { target: { value: "March shipment" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+      await act(flushAsync);
+      expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: "March shipment" } }]);
+    });
+  }
+
+  it("Rename on the person's own title keeps it in the box; clearing it goes back to the title EchoLedger gives it", async () => {
+    const own = ITEMS.map((i) => (i.id === "bilal" ? { ...i, title: "Bilal · March shipment", title_source: "own" as const } : i));
+    respond("library_list", own);
+    respond("library_refresh", own);
+    respondWith("session_organise", () => ({ data: { ...own[0], title: "Call with Bilal Qureshi", title_source: "person" } }));
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Bilal · March shipment" }));
+    fireEvent.click(menuItem("Rename…"));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    const field = within(dialog).getByRole("textbox", { name: "Title" });
+    expect(field).toHaveValue("Bilal · March shipment");
+    expect(field).not.toHaveAttribute("placeholder");
+    expect(field).toHaveAccessibleDescription("Leave it empty for the title EchoLedger gives it.");
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: null } }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Back to the title EchoLedger gives it");
+  });
+
   it("Send to WhatsApp is classic's sheet: Text only copies the text and says when WhatsApp got only its start", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
