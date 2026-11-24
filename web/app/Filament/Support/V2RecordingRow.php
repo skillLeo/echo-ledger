@@ -42,7 +42,7 @@ final class V2RecordingRow
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
      *     time: string, full_time: string, iso: string, app: string, device_kind: string|null, source_words: string, quick_source: string, quick_source_words: string, length: string, status: array{label: string, tone: string, icon: string}|null,
      *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null,
-     *     converting: array{state: string, view: string, label: string, percent: int|null}|null, state: string, project: string|null, label_keys: list<string>}
+     *     converting: array{state: string, view: string, label: string, percent: int|null}|null, state: string, project: string|null, label_keys: list<string>, audio: bool}
      */
     public static function for(CaptureSession $session): array
     {
@@ -89,6 +89,8 @@ final class V2RecordingRow
             'state' => $status['state'] ?? 'ready',
             'project' => $session->client_id !== null ? (string) $session->client_id : null,
             'label_keys' => array_values(array_unique(array_map(fn (string $l): string => mb_strtolower($l), $labels))),
+            // Nothing was heard: no link or WhatsApp to share (the recording page's rule).
+            'audio' => ! $session->hasNoAudio(),
         ];
     }
 

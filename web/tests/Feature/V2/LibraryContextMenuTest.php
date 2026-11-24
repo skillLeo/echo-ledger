@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\TranscriptErrorCode;
+use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Enums\WorkspaceRole;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\CaptureSession;
@@ -11,8 +14,11 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Workspaces\Workspaces;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -147,7 +153,8 @@ it('has no such menu in the classic Library', function () {
 
 it('opens Rename for one recording, Transcribe and the format\'s Export for what it was opened on, and moves it to trash with Undo', function () {
     Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.rename', [$this->a->id])
-        ->assertActionMounted(TestAction::make('rename')->table($this->a));
+        ->assertActionMounted('menuRename')->assertSet('menuRecord', (string) $this->a->id)
+        ->assertMountedActionModalSee('Rename recording');
     // Rename is for one: with several nothing opens.
     Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.rename', [$this->a->id, $this->b->id])->assertActionNotMounted();
 
@@ -220,4 +227,79 @@ it('gives the new Library its menu, with Shift+F10 and the Menu key, and the cla
         app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'off');
     }
     expect((string) $this->get('/app/sessions')->assertOk()->getContent())->not->toContain('ElContextMenuCore')->not->toContain('data-v2-menu-data');
+});
+
+it('shares one recording through the console\'s own actions: Copy link makes a link, Share with people sends it, WhatsApp opens its panel', function () {
+    Fx::readyRecording($this->a, 'audio of call A');
+    $page = Livewire::test(ListCaptureSessions::class);
+
+    $page->call('menuAction', 'file.copyLink', [$this->a->id])->assertActionMounted('menuShare')->assertMountedActionModalSee('Share this recording');
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$this->a->id])->assertActionMounted('menuSend');
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.sendToWhatsApp', [$this->a->id])->assertActionMounted('menuWhatsapp')
+        ->assertMountedActionModalSee('Send to WhatsApp');
+    // One at a time, as the console shares; and only the person's own.
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$this->a->id, $this->b->id])->assertActionNotMounted();
+    $foreign = Fx::session(Fx::user(), null, ['title' => 'Not mine']);
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.sendToWhatsApp', [$foreign->id])->assertActionNotMounted();
+    // Which recording the dialog is for is the server's to say: the browser cannot set it.
+    expect(fn () => Livewire::test(ListCaptureSessions::class)->set('menuRecord', (string) $foreign->id))->toThrow(CannotUpdateLockedPropertyException::class);
+});
+
+it('offers Copy link and WhatsApp only for a recording with audio, as the recording page does', function () {
+    $silent = Fx::session($this->owner, null, ['title' => 'Silent']);
+    $silent->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed,
+        'error_code' => TranscriptErrorCode::NoAudio->value]);
+
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.copyLink', [$silent->id])->assertActionNotMounted();
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.sendToWhatsApp', [$silent->id])->assertActionNotMounted();
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$silent->id])->assertActionMounted('menuSend');
+    expect(Livewire::test(ListCaptureSessions::class)->html())->toContain('data-recording="'.$silent->id.'"')
+        ->and(preg_match('~data-recording="'.$silent->id.'"[^>]*data-audio="0"~', Livewire::test(ListCaptureSessions::class)->html()))->toBe(1);
+});
+
+it('takes no more than 200 at a time: more says how many to unselect and does nothing', function () {
+    $device = Fx::device($this->owner);
+    $ids = collect(range(1, 203))->map(fn (int $i): string => (string) Fx::session($this->owner, $device, ['title' => "Bulk {$i}"])->id)->all();
+
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'recording.pin', $ids)->assertNotified('Up to 200 at a time: unselect 3');
+    expect(CaptureSession::query()->whereIn('id', $ids)->where('pinned', true)->count())->toBe(0);
+});
+
+it('leaves the person\'s own selection as it was after a menu on another row, done or cancelled', function () {
+    $before = ['selectedTableRecords' => [(string) $this->b->id], 'deselectedTableRecords' => [], 'isTrackingDeselectedTableRecords' => false];
+
+    // Done (Move to trash has no question): the row goes, the selection stays, and the browser is not told to clear it.
+    Livewire::test(ListCaptureSessions::class)->set('selectedTableRecords', [(string) $this->b->id])
+        ->call('menuAction', 'recording.moveToTrash', [$this->a->id])
+        ->assertSet('selectedTableRecords', $before['selectedTableRecords'])->assertNotDispatched('deselectAllTableRecords');
+    expect(CaptureSession::query()->find($this->a->id))->toBeNull();
+
+    // Cancelled (Export asks which view): the selection comes back when its dialog closes.
+    Livewire::test(ListCaptureSessions::class)->set('selectedTableRecords', [(string) $this->b->id])
+        ->call('menuAction', 'recording.exportAs', [$this->b->id, Fx::session($this->owner, null, ['title' => 'C'])->id], 'txt')
+        ->assertActionMounted(TestAction::make('exportInMenuTxt')->table()->bulk())
+        ->call('unmountAction')
+        ->assertSet('selectedTableRecords', $before['selectedTableRecords']);
+
+    // The menu of the selection itself ends as the selection bar's actions do: the selection is cleared.
+    Livewire::test(ListCaptureSessions::class)->set('selectedTableRecords', [(string) $this->b->id])
+        ->call('menuAction', 'recording.moveToTrash', [$this->b->id], null, true)
+        ->assertDispatched('deselectAllTableRecords');
+});
+
+it('opens the same menu from the row\'s ⋯ as from a right-click: Filament\'s group is gone from the new Library\'s rows', function () {
+    $page = Livewire::test(ListCaptureSessions::class);
+    $actions = collect($page->instance()->getTable()->getRecordActions());
+    expect($actions->filter(fn ($a): bool => $a instanceof Action)->map(fn (Action $a): string => (string) $a->getName())->values()->all())->toContain('rowMenu')
+        ->and($actions->filter(fn ($a): bool => $a instanceof ActionGroup)->every(fn (ActionGroup $g): bool => $g->isHidden()))->toBeTrue();
+    $html = $page->html();
+    expect($html)->toContain('window.elV2ContextMenu.openFromButton($el, $event)')->toContain('data-row-menu');
+
+    // The classic Library keeps its own.
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'off');
+    }
+    app('auth')->forgetGuards();
+    $this->actingAs($this->owner->fresh(), 'web');
+    expect((string) $this->get('/app/sessions')->assertOk()->getContent())->not->toContain('openFromButton');
 });

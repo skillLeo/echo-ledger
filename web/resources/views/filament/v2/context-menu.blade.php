@@ -8,7 +8,8 @@
 <script type="application/json" data-v2-menu-data>@json($this->menuData())</script>
 <div hidden data-v2-menu-icons>
     @foreach (['TranscriptIcon' => 'transcript', 'PinIcon' => 'star', 'StarIcon' => 'flag', 'MailIcon' => 'inbox', 'LabelIcon' => 'label', 'MoveIcon' => 'move',
-        'RenameIcon' => 'rename', 'DownloadIcon' => 'download', 'TrashIcon' => 'trash', 'PlusIcon' => 'plus', 'check' => 'check', 'more' => 'chevron-end'] as $icon => $glyph)
+        'RenameIcon' => 'rename', 'DownloadIcon' => 'download', 'TrashIcon' => 'trash', 'PlusIcon' => 'plus', 'ShareIcon' => 'share', 'LinkIcon' => 'link',
+        'UsersIcon' => 'users', 'SendIcon' => 'chat', 'check' => 'check', 'more' => 'chevron-end'] as $icon => $glyph)
         <template data-icon="{{ $icon }}"><x-el.v2.icon :name="$glyph" /></template>
     @endforeach
 </div>
