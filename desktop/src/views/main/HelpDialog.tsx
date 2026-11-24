@@ -12,7 +12,7 @@ import { Sheet } from "./ProjectDialogs";
  * The keys of the main window (they work while EchoLedger is in front, never while typing in a field). `threeLevels`:
  * the rail · panel · page layout (ui_v2.library), whose keys replace the sidebar's "[".
  */
-export function windowKeys(platform: string, threeLevels = false): readonly (readonly [string, string])[] {
+export function windowKeys(platform: string, threeLevels = false, zoom = false): readonly (readonly [string, string])[] {
   const mod = platform === "macos" ? "⌘" : "Ctrl+";
   const keys: [string, string][] = [
     [paletteKeys(platform), "Search recordings, transcripts and pages, or run a command"],
@@ -29,6 +29,8 @@ export function windowKeys(platform: string, threeLevels = false): readonly (rea
     ["[", "Collapse or expand the sidebar"],
     ["?", "This list"],
   ];
+  // UX-07: zoom, like Chrome (Ctrl + the mouse wheel too, off a Mac).
+  if (zoom) keys.push([`${mod}+ / ${mod}− / ${mod}0`, platform === "macos" ? "Zoom in, zoom out, or back to 100%" : "Zoom in, zoom out, or back to 100% (Ctrl + the mouse wheel too)"]);
   return threeLevels ? keys.flatMap((row) => (row[0] === "[" ? navKeys(platform) : [row])) : keys;
 }
 
@@ -56,10 +58,12 @@ export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = 
 /** How to get a screenshot of EchoLedger and what to send for support (D-125). */
 export const CAPTURE_HELP = "EchoLedger's windows show in your screenshots; only the live words (Live Assist, captions, translation) are hidden from them. For support, send Copy diagnostics (Settings › Screen-share privacy).";
 
-export function HelpDialog({ platform, onClose, onSettings, threeLevels = false }: {
+export function HelpDialog({ platform, onClose, onSettings, threeLevels = false, zoom = false }: {
   platform: string; onClose: () => void; onSettings: (page: string) => void;
   /** The rail · panel · page layout: its keys in place of the sidebar's "[". */
   threeLevels?: boolean;
+  /** Zoom is on (UX-07): its keys too. */
+  zoom?: boolean;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   useEffect(() => {
@@ -74,7 +78,7 @@ export function HelpDialog({ platform, onClose, onSettings, threeLevels = false 
       <div className="help-body">
         <h3 className="help-head">In this window</h3>
         <dl className="key-list">
-          {windowKeys(platform, threeLevels).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
+          {windowKeys(platform, threeLevels, zoom).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
         </dl>
         <h3 className="help-head">Anywhere on this computer</h3>
         <dl className="key-list">

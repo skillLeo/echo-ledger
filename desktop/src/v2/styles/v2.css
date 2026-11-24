@@ -219,6 +219,15 @@
 .el-menu__label { flex: 1; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
+/* A stepping row (UX-07, "Zoom  [−] 100% [+]"): two small buttons and the value between them, at the row's end. */
+.el-menu__stepper { display: inline-flex; align-items: center; gap: var(--el-space-4); margin-inline-start: var(--el-space-16); }
+.el-menu__step {
+  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); padding: 0;
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: var(--el-role-bg-surface); color: inherit; cursor: pointer;
+}
+.el-menu__step:hover:not(:disabled) { background: color-mix(in srgb, var(--el-role-text-primary) 8%, var(--el-role-bg-surface)); }
+.el-menu__step:disabled { color: var(--el-role-text-disabled); border-color: var(--el-role-border-default); cursor: default; }
+.el-menu__step-value { min-inline-size: var(--el-space-40); text-align: center; }
 .el-menu__option[aria-disabled="true"] { color: var(--el-role-text-disabled); cursor: default; }
 .el-menu--has-sub { overflow: visible; max-block-size: none; }
 .el-menu--sub { inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-start: calc(100% - var(--el-space-4)); min-inline-size: calc(var(--el-space-64) * 3); }
@@ -2368,3 +2377,33 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-shell--nav .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
 .el-shell--nav .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
 .el-shell--nav .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }
+
+/* ---- Zoom, like Chrome (UX-07, v21_zoom; lib/zoom.ts, shell/Zoom.tsx) ------------------------------------------------
+   The title row's chip while the zoom isn't 100%, and the bubble each change shows near the top for 2 s. */
+.el-zoom-chip { font-variant-numeric: tabular-nums; }
+/* Zoomed on a Mac, the window's buttons stay the system's size and place: the rail's top cell, the title row and the
+   panel's head keep the buttons' row (52 points, divided by --el-zoom, the page's pixels per point), never shorter than
+   the row's own controls; the buttons' spot and the 80 points kept clear stay where they are. */
+[data-platform="macos"] .el-rail__top, [data-platform="macos"] .el-titlerow, [data-platform="macos"] .el-panel__head {
+  block-size: max(calc(var(--el-desktop-titlerow-height) / var(--el-zoom, 1)), var(--el-desktop-search-height));
+}
+[data-platform="macos"]:not([data-titlebar]) .el-rail__top { block-size: var(--el-desktop-titlerow-rail-top-fullscreen); }
+[data-platform="macos"] .el-rail__lights {
+  left: calc(var(--el-desktop-titlerow-lights-left) / var(--el-zoom, 1)); top: calc(var(--el-desktop-titlerow-lights-top) / var(--el-zoom, 1));
+  inline-size: calc(var(--el-desktop-titlerow-lights-width) / var(--el-zoom, 1)); block-size: calc(var(--el-desktop-titlerow-lights-height) / var(--el-zoom, 1));
+}
+[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) - var(--el-desktop-rail-width)); }
+/* Zoomed out, the rail stays at least as wide as the buttons' spot, so they never sit over the panel's name. */
+[data-platform="macos"][data-titlebar] .el-rail {
+  inline-size: max(var(--el-desktop-rail-width), calc((var(--el-desktop-titlerow-lights-left) + var(--el-desktop-titlerow-lights-width)) / var(--el-zoom, 1)));
+}
+[data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1)); }
+.el-zoom-bubble {
+  position: fixed; inset-block-start: var(--el-space-64); inset-inline-start: 50%; translate: -50% 0; z-index: var(--el-layer-toast);
+  display: none; align-items: center; gap: var(--el-space-4); padding: var(--el-space-8) var(--el-space-12);
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2); font-size: var(--el-text-body-size);
+}
+.el-zoom-bubble[data-shown] { display: inline-flex; }
+:dir(rtl) .el-zoom-bubble { translate: 50% 0; }
+.el-zoom-bubble__reset { padding: 0; border: 0; background: transparent; color: var(--el-role-accent-text); font: inherit; cursor: pointer; text-decoration: underline; }

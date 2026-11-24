@@ -6,6 +6,7 @@ import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api, listenTo } from "./lib/ipc";
 import { watchTitlebar, watchWinTitlebar } from "./lib/titlebar";
+import { loadZoom, setZoom, ZOOM_DEFAULT } from "./lib/zoom";
 import { installNativeFeel, SYNC_NOW_EVENT } from "./lib/nativeFeel";
 import { watchTitleDoubleClick } from "./lib/titleClick";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -53,6 +54,9 @@ applyTheme(getThemeChoice());
 watchSystemTheme();
 // Account → Preferences (v1.6): the sidebar's style, density and the clock, before anything is drawn.
 applyPreferences(loadPreferences());
+// UX-07: the main window's kept zoom, before it first shows (it is hidden until its page is ready), so it doesn't jump.
+// Kept only while v21_zoom was on; MainApp puts 100% back once the flags say it is off.
+if (label === "main" && loadZoom() !== ZOOM_DEFAULT) setZoom(loadZoom(), false);
 
 // C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
 // accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core

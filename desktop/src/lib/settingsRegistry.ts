@@ -24,6 +24,8 @@ export interface SettingRequires {
   plans?: boolean;
   /** Only in a window with the rail (the rail · panel · page layout). */
   rail?: boolean;
+  /** Only with zoom (UX-07, v21_zoom). */
+  zoom?: boolean;
 }
 
 export interface SettingEntry {
@@ -256,6 +258,9 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "appearance.compact_rail", title: "Compact rail (icons only)", page: "appearance", kind: "switch", requires: { rail: true }, resettable: true,
     description: "The rail shows its icons without their names. Point at an icon to see its name.",
     keywords: ["rail", "icons only", "hide names", "hide labels", "labels", "compact", "smaller"], ru: ["sirf icons", "naam chhupao"], ur: ["صرف آئیکن"] },
+  { id: "appearance.zoom", title: "Zoom", page: "appearance", kind: "slider", requires: { zoom: true }, resettable: true,
+    description: "Shortcut: ⌘+ and ⌘−, ⌘0 to reset (Ctrl on Windows, with Ctrl + the mouse wheel too).",
+    keywords: ["zoom", "zoom in", "zoom out", "bigger", "smaller", "scale", "magnify", "actual size"], ru: ["bara karo", "chhota karo"], ur: ["زوم", "بڑا کریں"] },
   { id: "appearance.clock", title: "Times", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["12", "12-hour", true], ["24", "24-hour"]), keywords: ["clock", "time format", "am pm"], ru: ["waqt", "ghanta"], ur: ["وقت"] },
   { id: "appearance.design", title: "Design", page: "appearance", kind: "action",
