@@ -567,12 +567,7 @@ data class SavedViewDeleted(val id: String? = null, @SerialName("views_version")
  * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds").
  */
 @Serializable
-data class ItemFacetsDto(
-    val source: String? = null,
-    val status: String? = null,
-    val language: String? = null,
-    val kind: String? = null
-)
+data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null, val kind: String? = null)
 
 @Serializable
 data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)

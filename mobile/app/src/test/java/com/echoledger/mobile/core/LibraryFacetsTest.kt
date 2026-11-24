@@ -65,7 +65,9 @@ class LibraryFacetsTest {
             assertEquals(s, listOf(LibraryKind.ALL, want), tabsOf(s))
         }
         // Since 2.0.0-q imported files, `other` and a Source the phone does not know are Other (no longer All only).
-        listOf("imported", "other", "a_new_app", null).forEach { s -> assertEquals("$s", listOf(LibraryKind.ALL, LibraryKind.OTHER), tabsOf(s)) }
+        listOf("imported", "other", "a_new_app", null).forEach { s ->
+            assertEquals("$s", listOf(LibraryKind.ALL, LibraryKind.OTHER), tabsOf(s))
+        }
         assertEquals(listOf("all", "calls", "meetings", "voice_notes", "other"), LibraryKind.entries.map { it.wire })
     }
 
@@ -93,7 +95,19 @@ class LibraryFacetsTest {
         val sources = LibraryFacets.SOURCES + listOf("imported", "other", "a_new_app")
         val items = sources.flatMapIndexed { i, s ->
             listOf(
-                item("%02d".format(i * 2), s, title = "Acme $s", labels = if (i % 2 == 0) listOf("Clients") else emptyList(), opened = i % 3 == 0),
+                item(
+                    "%02d".format(i * 2),
+                    s,
+                    title = "Acme $s",
+                    labels = if (i % 2 ==
+                        0
+                    ) {
+                        listOf("Clients")
+                    } else {
+                        emptyList()
+                    },
+                    opened = i % 3 == 0
+                ),
                 item("%02d".format(i * 2 + 1), s, title = "Family $s", opened = i % 2 == 0)
             )
         }
@@ -104,12 +118,16 @@ class LibraryFacetsTest {
             LibraryFilterSet().toggle(FilterSection.SOURCE, "zoom").toggle(FilterSection.SOURCE, "imported"),
             LibraryFilterSet().toggle(FilterSection.SOURCE, "whatsapp").not(FilterSection.SOURCE, true)
         )
-        for (place in LibraryPlace.entries) for (search in listOf(null, "acme", "family zoom")) for (filters in filterSets) {
-            val placed = facts.filter { it.matches(LibraryFacets.searchWords(search)) && LibraryFacets.inPlace(it, place) }
-            val kept = LibraryFacets.filter(placed, filters, today)
-            val counts = LibraryKind.KINDS.sumOf { k -> kept.count { k.holds(it.kind) } }
-            assertEquals("$place, $search, $filters", kept.size, counts)
-            kept.forEach { f -> assertEquals(f.item.id, 1, LibraryKind.KINDS.count { it.holds(f.kind) }) }
+        for (place in LibraryPlace.entries) {
+            for (search in listOf(null, "acme", "family zoom")) {
+                for (filters in filterSets) {
+                    val placed = facts.filter { it.matches(LibraryFacets.searchWords(search)) && LibraryFacets.inPlace(it, place) }
+                    val kept = LibraryFacets.filter(placed, filters, today)
+                    val counts = LibraryKind.KINDS.sumOf { k -> kept.count { k.holds(it.kind) } }
+                    assertEquals("$place, $search, $filters", kept.size, counts)
+                    kept.forEach { f -> assertEquals(f.item.id, 1, LibraryKind.KINDS.count { it.holds(f.kind) }) }
+                }
+            }
         }
     }
 
