@@ -12,6 +12,10 @@ import { LabelsNav } from "./lists";
 import { nameProblem, useMyViews, VIEW_NAME_MAX, ViewError, viewsStore, type MyView } from "./myViews";
 import type { LibraryScope } from "./scope";
 import { useSyncClock } from "./syncClock";
+import { contextItems, MY_VIEW } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { useActions } from "../actions/useActions";
+import type { MenuItem } from "../components/Menu";
 
 const VIEW_ICONS: Record<LibraryViewId, IconType> = {
   all: Icons.LibraryIcon, needs: Icons.ErrorIcon, unread: Icons.MailIcon, important: Icons.StarIcon, audio_only: Icons.WaveIcon,
@@ -198,6 +202,34 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
   // place it would go before is marked.
   const [over, setOver] = useState<number | null>(null);
   const move = (view: MyView, to: number) => void viewsStore.move(view.id, to).catch((e) => say(e instanceof Error ? e.message : String(e)));
+  // A view's menu (UX-22, 3b), from actions.json: Open | Rename… · Duplicate · Move up · Move down | Delete view….
+  const byId = (c: { targets?: readonly string[] }) => views.find((v) => v.id === c.targets?.[0]);
+  const at = (c: { targets?: readonly string[] }) => views.findIndex((v) => v.id === c.targets?.[0]);
+  useActions("view", {
+    "place.open": (c) => { if (c.targets?.[0]) onOpen(c.targets[0]); },
+    "file.rename": (c) => { const v = byId(c); if (v) setRenaming(v); },
+    "view.duplicate": (c) => {
+      const v = byId(c);
+      if (!v) return;
+      const taken = new Set(views.map((x) => x.name.toLocaleLowerCase()));
+      let name = `${v.name} copy`;
+      for (let n = 2; taken.has(name.toLocaleLowerCase()); n++) name = `${v.name} copy ${n}`;
+      void viewsStore.create(name, v.spec).then(() => say(`Duplicated as ${name}`)).catch((e) => say(e instanceof Error ? e.message : String(e)));
+    },
+    "view.moveUp": (c) => { const v = byId(c); if (v && at(c) > 0) move(v, at(c) - 1); },
+    "view.moveDown": (c) => { const v = byId(c); if (v && at(c) < views.length - 1) move(v, at(c) + 1); },
+    "view.delete": (c) => { const v = byId(c); if (v) setDeleting(v); },
+  });
+  const viewMenu = (view: MyView): MenuItem[] => {
+    const i = views.findIndex((v) => v.id === view.id);
+    return contextItems(MY_VIEW, { platform: currentPlatform(), targets: [view.id], kind: "view" })
+      .filter((item) => !(item.action === "view.moveUp" && i === 0) && !(item.action === "view.moveDown" && i === views.length - 1));
+  };
+  /** The system's menu on a Mac (ours if it can't), ours elsewhere. */
+  const openMenu = (view: MyView, where: { x: number; y: number }) => {
+    if (currentPlatform() !== "macos") return setMenu({ view, at: where });
+    void popupNative(viewMenu(view), where).then((shown) => { if (!shown) setMenu({ view, at: where }); });
+  };
   const remove = async (view: MyView) => {
     setDeleting(null);
     try {
@@ -224,10 +256,10 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
         {views.map((v, i) => (
           <li key={v.id} className={`el-nav-row${over === i ? " el-nav-row--drop" : ""}`} {...{ [REORDER_ATTRIBUTE]: i }}
             onPointerDown={(e) => press(e, v)}
-            onContextMenu={(e) => { e.preventDefault(); setMenu({ view: v, at: { x: e.clientX, y: e.clientY } }); }}>
+            onContextMenu={(e) => { e.preventDefault(); openMenu(v, { x: e.clientX, y: e.clientY }); }}>
             <Row icon={Icons.FilterIcon} label={v.name} current={current === v.id} onClick={() => { if (!dragJustEnded()) onOpen(v.id); }} aria-keyshortcuts={shortcut(v.id)} />
             <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${v.name}`}
-              onClick={(e) => setMenu({ view: v, at: menuPointFor(e.currentTarget) })} />
+              onClick={(e) => openMenu(v, menuPointFor(e.currentTarget))} />
           </li>
         ))}
         <li className={over === views.length ? "el-nav-row--drop" : undefined} {...{ [REORDER_ATTRIBUTE]: views.length }}>
@@ -241,12 +273,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
         const view = views[i];
         if (!view) return null;
         return (
-          <ContextMenu label={view.name} at={menu.at} onClose={() => setMenu(null)} items={[
-            { label: "Rename…", icon: Icons.RenameIcon, onPick: () => setRenaming(view) },
-            ...(i > 0 ? [{ label: "Move up", onPick: () => move(view, i - 1) }] : []),
-            ...(i < views.length - 1 ? [{ label: "Move down", onPick: () => move(view, i + 1) }] : []),
-            { label: "Delete view…", icon: Icons.TrashIcon, danger: true, separator: true, onPick: () => setDeleting(view) },
-          ]} />
+          <ContextMenu label={view.name} at={menu.at} onClose={() => setMenu(null)} items={viewMenu(view)} />
         );
       })()}
       {renaming && <ViewNameDialog title="Rename view" save="Save" start={renaming.name} except={renaming.id} onClose={() => setRenaming(null)}

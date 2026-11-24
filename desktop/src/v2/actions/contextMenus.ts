@@ -52,6 +52,12 @@ export const LIST_SPACE = [
   "-", "view.sortBy", "view.groupBy", "view.asList", "view.asTable", "view.density",
   "-", "edit.selectAll",
 ] as const;
+/** One of My views: Open | Rename… · Edit filters… · Duplicate · Move up · Move down | Delete view…. */
+export const MY_VIEW = ["place.open", "-", "file.rename", "view.editFilters", "view.duplicate", "view.moveUp", "view.moveDown", "-", "view.delete"] as const;
+/** A label: Show recordings | Rename… · Colour › · Move up · Move down | Delete label…. */
+export const LABEL = ["label.showRecordings", "-", "file.rename", "label.colour", "view.moveUp", "view.moveDown", "-", "label.delete"] as const;
+/** A built-in view (All recordings, Needs you, Unread…): Open; Unread's Mark all as read, Audio only's Transcribe all…. */
+export const LIBRARY_VIEW = ["place.open", "view.markAllRead", "view.transcribeAll"] as const;
 /** A recording in Trash: Restore | Delete immediately…; Trash itself: Empty trash…. */
 export const TRASH_ITEM = ["trash.restore", "-", "recording.deleteNow"] as const;
 export const TRASH = ["trash.empty"] as const;
