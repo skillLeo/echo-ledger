@@ -2,10 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\SessionStatus;
+use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -70,9 +76,9 @@ it('keeps classic\'s pages and per-page choice', function () {
 it('keeps how many rows show on the server\'s side (the browser can\'t set it) and grows to 500 at most, then asks to refine', function () {
     loadMoreV2();
     $page = Livewire::test(ListCaptureSessions::class);
-    expect(fn () => $page->set('v2Shown', 5000))->toThrow(\Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException::class);
+    expect(fn () => $page->set('v2Shown', 5000))->toThrow(CannotUpdateLockedPropertyException::class);
 
-    $device = App\Models\Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
     foreach (range(121, 560) as $i) {
         Fx::session($this->owner, $device, ['title' => "Call {$i}", 'started_at' => now()->subHours($i)]);
     }
@@ -96,8 +102,8 @@ it('keeps how many rows show on the server\'s side (the browser can\'t set it) a
 
 it('reads only the row\'s columns of each transcript: its status and the start of its text, never its lines', function () {
     loadMoreV2();
-    $session = App\Models\CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
-    $session->transcripts()->create(['kind' => App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => App\Enums\TranscriptStatus::Completed,
+    $session = CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
+    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed,
         'text' => 'Assalam o alaikum. '.str_repeat('The proforma is ready. ', 200), 'meta' => ['views' => ['status' => 'ready']],
         'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Assalam o alaikum.', 'words' => []]]]);
     $page = Livewire::test(ListCaptureSessions::class);
@@ -111,8 +117,8 @@ it('reads only the row\'s columns of each transcript: its status and the start o
 
 it('polls quietly while a row is moving: the list is drawn again only once that row changed', function () {
     loadMoreV2();
-    $moving = App\Models\CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
-    $moving->forceFill(['status' => App\Enums\SessionStatus::Processing])->save();
+    $moving = CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
+    $moving->forceFill(['status' => SessionStatus::Processing])->save();
     $page = Livewire::test(ListCaptureSessions::class);
     expect($page->get('v2Moving'))->toBe([(string) $moving->id])->and($page->html())->toContain('wire:poll.5s="v2Poll"')
         ->and($page->html())->not->toMatch('~wire:poll\.5s(?!="v2Poll")~');
@@ -123,7 +129,7 @@ it('polls quietly while a row is moving: the list is drawn again only once that 
 
     // It finished: the list is drawn again, and the poll stops.
     Carbon::setTestNow(now()->addSeconds(10));
-    $moving->forceFill(['status' => App\Enums\SessionStatus::Completed])->save();
+    $moving->forceFill(['status' => SessionStatus::Completed])->save();
     $page->call('v2Poll');
     expect($page->effects['html'] ?? null)->not->toBeNull()->and($page->get('v2Moving'))->toBe([])
         ->and($page->html())->not->toContain('v2Poll');

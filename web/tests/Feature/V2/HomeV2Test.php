@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Filament\Support\SettingsContext;
 use App\Filament\Widgets\OnboardingChecklistWidget;
 use App\Filament\Widgets\V2NeedsActionWidget;
+use App\Services\InterfaceFlags;
 use App\Services\OnboardingChecklist;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -78,14 +80,14 @@ it('WEB-HOM-005: works the line out once a page (not once to decide and again to
     [$owner] = webParityWorld();
     webParityDesign(true);
     $this->actingAs($owner->fresh(), 'web');
-    \Illuminate\Support\Facades\DB::enableQueryLog();
+    DB::enableQueryLog();
     expect(V2NeedsActionWidget::canView())->toBeTrue();
-    $first = count(\Illuminate\Support\Facades\DB::getQueryLog());
+    $first = count(DB::getQueryLog());
     $items = V2NeedsActionWidget::items();
-    expect(count(\Illuminate\Support\Facades\DB::getQueryLog()))->toBe($first)->and($items)->not->toBe([]);
+    expect(count(DB::getQueryLog()))->toBe($first)->and($items)->not->toBe([]);
 
     // The new frame without the new Library (ui_v2.library off): no Untranscribed view to point at.
-    app(\App\Services\InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+    app(InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
     app('auth')->forgetGuards();
     SettingsContext::forget();
     $html = (string) $this->actingAs($owner->fresh(), 'web')->get('/app')->assertOk()->getContent();

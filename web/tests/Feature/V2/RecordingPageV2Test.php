@@ -7,9 +7,11 @@ use App\Enums\WorkspaceRole;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Support\SettingsContext;
 use App\Models\CaptureSession;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\CredentialVault;
 use App\Services\Workspaces\Workspaces;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -81,7 +83,7 @@ it('WEB-REC-007: goes to the previous and the next recording in the Library\'s d
     expect(recordingNavHref(recordingPageHtml($this, $newest), 'Previous recording'))->toEndWith('/app/sessions/'.$third->id);
 
     // Only the person's own recordings: a teammate's newer one is never a neighbour.
-    $mate = \App\Models\User::query()->where('email', 'sana@qureshi-textiles.example')->firstOrFail();
+    $mate = User::query()->where('email', 'sana@qureshi-textiles.example')->firstOrFail();
     Fx::session($mate, null, ['title' => 'Sana newest', 'workspace_id' => $this->owner->current_workspace_id, 'started_at' => now()]);
     $third->forceFill(['pinned' => false])->save();
     expect(recordingNavHref(recordingPageHtml($this, $newest), 'Previous recording'))->toBeNull();
@@ -93,13 +95,13 @@ it('WEB-REC-007: works Previous / Next out once when the page opens, not on ever
     [$newest, $second] = $this->recs->values()->all();
     webParityDesign(true);
     $this->actingAs($this->owner->fresh(), 'web');
-    $walks = fn (): int => collect(\Illuminate\Support\Facades\DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], '"pinned" >') || str_contains($q['query'], '`pinned` >'))->count();
-    \Illuminate\Support\Facades\DB::enableQueryLog();
+    $walks = fn (): int => collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], '"pinned" >') || str_contains($q['query'], '`pinned` >'))->count();
+    DB::enableQueryLog();
     $page = Livewire::test(ViewCaptureSession::class, ['record' => $second->id]);
     expect($page->get('v2Neighbours')['previous'])->toEndWith('/app/sessions/'.$newest->id)
         ->and($walks())->toBe(1);
 
-    \Illuminate\Support\Facades\DB::flushQueryLog();
+    DB::flushQueryLog();
     $page->call('refreshWork');
     expect($walks())->toBe(0);
 
@@ -119,7 +121,12 @@ it('WEB-REC-007: mirrors ‹ › right to left, in Urdu', function () {
 
         return recordingPageHtml($this, $second);
     })();
-    $glyph = fn (string $html, string $key): string => (string) preg_replace('/\s+/', ' ', (string) ((new DOMXPath((function () use ($html) { $d = new DOMDocument; @$d->loadHTML('<?xml encoding="utf-8"?>'.$html); return $d; })()))
+    $glyph = fn (string $html, string $key): string => (string) preg_replace('/\s+/', ' ', (string) ((new DOMXPath((function () use ($html) {
+        $d = new DOMDocument;
+        @$d->loadHTML('<?xml encoding="utf-8"?>'.$html);
+
+        return $d;
+    })()))
         ->query('//*[@data-recording-nav-link="'.$key.'"]//svg')->item(0)?->C14N()));
     expect($ur)->toContain('aria-label="پچھلی ریکارڈنگ"')->toContain('aria-label="اگلی ریکارڈنگ"')
         // Previous points to the line's start: left in English, right in Urdu.

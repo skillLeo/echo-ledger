@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Services\InterfaceFlags;
 use Filament\Actions\BulkActionGroup;
 use Filament\Facades\Filament;
@@ -194,7 +197,7 @@ it('starts another place, folder or search of the list with nothing selected', f
 });
 
 it('brings every recording of a big Delete back with Undo, not only the first 200, and changes every one of a big selection', function () {
-    $device = \App\Models\Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
     $ids = collect(range(1, 230))->map(fn (int $i): string => (string) Fx::session($this->owner, $device, ['title' => "Bulk {$i}"])->id)->all();
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
@@ -210,8 +213,8 @@ it('brings every recording of a big Delete back with Undo, not only the first 20
 
     // Export takes the first 200 into its zip and says so.
     foreach (CaptureSession::query()->whereIn('id', $ids)->get() as $session) {
-        $session->transcripts()->create(['kind' => \App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai',
-            'status' => \App\Enums\TranscriptStatus::Completed, 'text' => 'Line', 'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 500, 'text' => 'Line', 'words' => []]]]);
+        $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai',
+            'status' => TranscriptStatus::Completed, 'text' => 'Line', 'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 500, 'text' => 'Line', 'words' => []]]]);
     }
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('exportTxt', $ids, data: ['view' => null]);
     expect(selectionNotices())->toContain('Exported the first 200 of 230');
