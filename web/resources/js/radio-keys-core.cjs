@@ -1,7 +1,8 @@
 // The settings' radio groups (Settings › Profile's colours and language, Appearance's rows): which choice a key takes,
-// as a plain decision with no browser in it (tests/js/radio-keys-core.test.mjs). The arrows move round the group (up
-// and down too), Home and End go to its ends, and right to left ← and → swap so they follow the row as it reads.
-// resources/views/filament/settings/script.blade.php takes the choice and puts the focus on it.
+// and whether the focus goes back to it after a redraw, as plain decisions with no browser in them
+// (tests/js/radio-keys-core.test.mjs). The arrows move round the group (up and down too), Home and End go to its ends,
+// and right to left ← and → swap so they follow the row as it reads. resources/views/filament/settings/script.blade.php
+// takes the choice and puts the focus on it.
 (function (root, factory) {
     const core = factory();
     if (typeof module === 'object' && module.exports) {
@@ -22,5 +23,19 @@
         return null;
     }
 
-    return { next };
+    /**
+     * Whether the focus still goes back to the choice an arrow made, as the page is drawn again: for its 3 s (`refocus`
+     * holds until when), until the person moves on. `event` is what they did meanwhile ({ type, inGroup }, null for a
+     * redraw): any pointer press ends it (a click on something that takes no focus, or on a control the redraw replaced,
+     * is theirs), and so does a key outside that group; another arrow in it keeps it, for the new choice.
+     */
+    function keepsFocus(refocus, event, now) {
+        if (! refocus || now > refocus.until) return false;
+        if (! event) return true;
+        if (event.type === 'pointerdown') return false;
+
+        return event.type !== 'keydown' || event.inGroup === true;
+    }
+
+    return { next, keepsFocus };
 });

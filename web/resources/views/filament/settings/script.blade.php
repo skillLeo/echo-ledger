@@ -3,7 +3,8 @@
     and a 2 px ring until the next click or key, or 8 seconds; with reduced motion, no scrolling animation and no fade.
     ↑ ↓ Enter in the search box move through the results. Since BE-06, under the new design, every radio group marked data-radio-keys (the
     profile's colours and language, Appearance's rows) answers the arrows, Home and End (← and → swapped right to left)
-    and the focus follows the choice (resources/js/radio-keys-core.cjs decides).
+    and the focus follows the choice; as the page is drawn again it comes back to the choice for 3 seconds, unless the
+    person has moved on meanwhile (any click, or a key outside the group). resources/js/radio-keys-core.cjs decides.
 --}}
 {{-- Under the new design only: the classic console's pages stay exactly as they were (ClassicGoldenTest; plain PHP, so
      Livewire adds no block markers around it). --}}
@@ -14,24 +15,33 @@
     (() => {
         if (window.elRadioKeys) return;
         window.elRadioKeys = true;
+        const core = window.ElRadioKeysCore;
+        let refocus = null;
+        // The person moving on ends it at once (keepsFocus): any pointer press, or a key outside the group. In the capture
+        // phase, before anything they reach can redraw the page.
+        const moved = (e) => {
+            if (refocus && ! core.keepsFocus(refocus, { type: e.type, inGroup: e.target instanceof Element && e.target.closest(refocus.group) !== null }, Date.now())) refocus = null;
+        };
+        document.addEventListener('pointerdown', moved, true);
+        document.addEventListener('keydown', moved, true);
         document.addEventListener('keydown', (e) => {
             const radio = e.target instanceof Element ? e.target.closest('[role="radio"]') : null;
             const group = radio ? radio.closest('[role="radiogroup"][data-radio-keys]') : null;
             if (! group || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
             const radios = Array.from(group.querySelectorAll('[role="radio"]'));
-            const to = window.ElRadioKeysCore.next(radios.length, radios.indexOf(radio), e.key, getComputedStyle(group).direction === 'rtl');
+            const to = core.next(radios.length, radios.indexOf(radio), e.key, getComputedStyle(group).direction === 'rtl');
             if (to === null) return;
             e.preventDefault();
             radios[to].click();
             radios[to].focus();
             // The page is drawn again once the choice is saved (a redraw or two): the focus stays on it for a moment.
             const row = group.closest('[id]');
-            refocus = row ? { selector: '#' + CSS.escape(row.id) + ' [role="radiogroup"][data-radio-keys] [role="radio"][aria-checked="true"]', until: Date.now() + 3000 } : null;
+            const within = row ? '#' + CSS.escape(row.id) + ' [role="radiogroup"][data-radio-keys]' : null;
+            refocus = within ? { group: within, selector: within + ' [role="radio"][aria-checked="true"]', until: Date.now() + 3000 } : null;
         });
-        let refocus = null;
         // After each redraw and Alpine's bindings on it (two frames): the focus back on the choice if a redraw took it.
         const watch = () => window.Livewire.hook('commit', ({ succeed }) => succeed(() => requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (! refocus || Date.now() > refocus.until) {
+            if (! core.keepsFocus(refocus, null, Date.now())) {
                 refocus = null;
                 return;
             }
