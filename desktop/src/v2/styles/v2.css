@@ -2036,3 +2036,26 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
 .el-shell--nav > .el-shell__main:focus { outline: none; }
 .el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
+
+/* ---- DES-03: the desktop's base sizes (PLAN_V2_1_POLISH, a proposal for the owner to pick from) ---------------------
+   100% looks like the 90-95% the owner asked for, without a default zoom: in the main window's shell only (the floating
+   windows keep their own sizes). Body 14, secondary 13, small 12; page titles 18, the panel's 15 semibold, rail labels
+   11; panel items 32, rows 56/44, buttons and fields 32 (28 small); icons 16, 20 in the rail. Urdu and Arabic titles keep
+   their own sizes and line heights (Nastaliq and Naskh are taller). */
+.el-shell {
+  --el-component-button-height: var(--el-desktop-control-height);
+  --el-component-field-height: var(--el-desktop-control-height);
+}
+.el-shell h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)),
+.el-shell :is(.el-lib-crumbs__root, .el-lib-crumbs__sep):not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-page-title-size); line-height: var(--el-desktop-text-page-title-line);
+}
+.el-shell h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)) { font-weight: var(--el-desktop-text-page-title-weight); }
+.el-shell .el-panel__title:not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-panel-title-size); line-height: var(--el-desktop-text-panel-title-line); font-weight: var(--el-desktop-text-panel-title-weight);
+}
+.el-shell .el-rail__label { font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); }
+.el-shell .el-row__meta.el-caption:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
+.el-shell .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
+.el-shell .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
+.el-shell .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }

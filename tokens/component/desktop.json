@@ -1,0 +1,28 @@
+{
+  "desktop": {
+    "$description": "DES-03 (PLAN_V2_1_POLISH): the desktop app's and the web console's base sizes, so 100% looks like the owner's 90-95% without a default zoom. Whole pixels only. The phone keeps Material sizes (not generated for it).",
+    "text": {
+      "body": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "14px", "lineHeight": "20px", "fontWeight": 400 } },
+      "secondary": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "13px", "lineHeight": "18px", "fontWeight": 400 } },
+      "small": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "12px", "lineHeight": "16px", "fontWeight": 400 } },
+      "page-title": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "18px", "lineHeight": "24px", "fontWeight": 600 } },
+      "panel-title": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "15px", "lineHeight": "20px", "fontWeight": 600 } },
+      "rail-label": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans}", "fontSize": "11px", "lineHeight": "14px", "fontWeight": 500 } }
+    },
+    "control": {
+      "height": { "$type": "dimension", "$value": "32px" },
+      "height-small": { "$type": "dimension", "$value": "28px" }
+    },
+    "panel-item": {
+      "height": { "$type": "dimension", "$value": "32px" }
+    },
+    "row": {
+      "height": { "$type": "dimension", "$value": "56px" },
+      "height-compact": { "$type": "dimension", "$value": "44px" }
+    },
+    "icon": {
+      "default": { "$type": "dimension", "$value": "16px" },
+      "rail": { "$type": "dimension", "$value": "20px" }
+    }
+  }
+}
