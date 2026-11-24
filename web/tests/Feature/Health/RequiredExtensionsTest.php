@@ -7,8 +7,10 @@ use App\Mail\ServerHealthMail;
 use App\Models\StaffRole;
 use App\Models\User;
 use App\Services\Health\PhpExtensions;
+use App\Services\Health\ServerHealth;
 use App\Services\RecordingCipher;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Process\Process;
@@ -151,6 +153,20 @@ describe('the health check', function () {
             @rmdir($locked.'/tmp');
             rmdir($locked);
         }
+    });
+
+    it('reports a fault in the check itself with its stack trace, and still answers a failed check', function () {
+        Exceptions::fake();
+        app()->instance(PhpExtensions::class, new class extends PhpExtensions
+        {
+            public function loaded(string $extension): bool
+            {
+                throw new LogicException('A bug in the check.');
+            }
+        });
+
+        expect(app(ServerHealth::class)->check())->toBe(['missing' => [], 'cipher' => 'the health check itself failed: A bug in the check.']);
+        Exceptions::assertReported(fn (LogicException $e): bool => $e->getMessage() === 'A bug in the check.');
     });
 
     it('is part of php artisan about', function () {
