@@ -1,13 +1,14 @@
 {
   "about": [
-    "The shared cases of the Library's filters (contract 2.0.0-p, docs/API.md \"Library filters\").",
+    "The shared cases of the Library's filters (contract 2.0.0-p, docs/API.md \"Library filters\"; since 2.0.0-q also \"The Library's kinds\").",
     "The server (web/tests/Feature/Api/LibraryFacetsFixtureTest.php), the desktop and the phone all read this file and must get these counts.",
     "Each recording is a library item as the apps hold it (its facets are what the server sends) plus the stored fields the server derives them from.",
     "The clock stands at `now`; dates are counted in `tz`. A recording that is `deleted` or still `recording` is never in the list or the counts; one still recording does count in Needs you.",
     "Each filter set's `expect.facets` gives, for each section, the count of each option with every other section's filter applied and not its own, in the panel's order.",
     "Search: every word somewhere among the title, the transcript text and the project path (the project's name and the names of the folders above it), ignoring capitals; the words may be in different places. The title, the transcript and the project names are folded alike (docs/API.md: Urdu spelling variants made one).",
     "Needs you's stuck: Status processing for more than 24 hours since `processing_since` (the start of the current upload or transcript attempt, as the library item carries it), else since `ended_at`, else `started_at`. `transcript_attempt_at` and `upload_attempt_at` are what the server stores it from.",
-    "`bookmarks` lists the tag of each bookmark (null for one without a tag): a library item's `marker_count` is how many and its `tags` the tags."
+    "`bookmarks` lists the tag of each bookmark (null for one without a tag): a library item's `marker_count` is how many and its `tags` the tags.",
+    "Since 2.0.0-q: each recording's `facets.kind` is its one kind (`call`, `meeting`, `voice_note` or `other`) from `facets.source`: imported files, `other` and any Source an app does not know are `other`. Each filter set's `expect.kinds` counts what its filters and its search keep by kind; they add up to its `total` (the Library's tabs add up to All)."
   ],
   "now": "2026-11-23T10:00:00+00:00",
   "tz": "Asia/Karachi",
@@ -103,7 +104,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -137,7 +139,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -171,7 +174,8 @@
       "facets": {
         "source": "whatsapp_business",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "call"
       }
     },
     {
@@ -203,7 +207,8 @@
       "facets": {
         "source": "zoom",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -237,7 +242,8 @@
       "facets": {
         "source": "zoom",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -271,7 +277,8 @@
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -303,7 +310,8 @@
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -335,7 +343,8 @@
       "facets": {
         "source": "microsoft_teams",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -369,7 +378,8 @@
       "facets": {
         "source": "phone_call",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -401,7 +411,8 @@
       "facets": {
         "source": "phone_call",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -433,7 +444,8 @@
       "facets": {
         "source": "telegram",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -471,7 +483,8 @@
       "facets": {
         "source": "signal",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -503,7 +516,8 @@
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "voice_note"
       }
     },
     {
@@ -537,7 +551,8 @@
       "facets": {
         "source": "imported",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "other"
       }
     },
     {
@@ -569,7 +584,8 @@
       "facets": {
         "source": "imported",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "other"
       }
     },
     {
@@ -601,7 +617,8 @@
       "facets": {
         "source": "imported",
         "status": "transcribed",
-        "language": "ar"
+        "language": "ar",
+        "kind": "other"
       }
     },
     {
@@ -633,7 +650,8 @@
       "facets": {
         "source": "zoom",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -665,7 +683,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "not_transcribed",
-        "language": "ar"
+        "language": "ar",
+        "kind": "call"
       }
     },
     {
@@ -697,7 +716,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "not_transcribed",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -729,7 +749,8 @@
       "facets": {
         "source": "messenger",
         "status": "not_transcribed",
-        "language": "fr"
+        "language": "fr",
+        "kind": "call"
       }
     },
     {
@@ -763,7 +784,8 @@
       "facets": {
         "source": "instagram",
         "status": "failed",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -795,7 +817,8 @@
       "facets": {
         "source": "skype",
         "status": "failed",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -827,7 +850,8 @@
       "facets": {
         "source": "slack",
         "status": "failed",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -859,7 +883,8 @@
       "facets": {
         "source": "discord",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -891,7 +916,8 @@
       "facets": {
         "source": "zoom",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -925,7 +951,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -957,7 +984,8 @@
       "facets": {
         "source": "microsoft_teams",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -989,7 +1017,8 @@
       "facets": {
         "source": "other",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "other"
       }
     },
     {
@@ -1021,7 +1050,8 @@
       "facets": {
         "source": "other",
         "status": "transcribed",
-        "language": "de"
+        "language": "de",
+        "kind": "other"
       }
     },
     {
@@ -1053,7 +1083,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -1087,7 +1118,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1119,7 +1151,8 @@
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "voice_note"
       }
     },
     {
@@ -1153,7 +1186,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "call"
       }
     },
     {
@@ -1187,7 +1221,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "call"
       }
     },
     {
@@ -1219,7 +1254,8 @@
       "facets": {
         "source": "whatsapp_business",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1253,7 +1289,8 @@
       "facets": {
         "source": "google_meet",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -1285,7 +1322,8 @@
       "facets": {
         "source": "voice_note",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "voice_note"
       }
     },
     {
@@ -1317,7 +1355,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1352,7 +1391,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1386,7 +1426,8 @@
       "facets": {
         "source": "zoom",
         "status": "transcribed",
-        "language": "en"
+        "language": "en",
+        "kind": "meeting"
       }
     },
     {
@@ -1418,7 +1459,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -1450,7 +1492,8 @@
       "facets": {
         "source": "zoom",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -1484,7 +1527,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1516,7 +1560,8 @@
       "facets": {
         "source": "zoom",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -1548,7 +1593,8 @@
       "facets": {
         "source": "phone_call",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "call"
       }
     },
     {
@@ -1580,7 +1626,8 @@
       "facets": {
         "source": "google_meet",
         "status": "processing",
-        "language": "unknown"
+        "language": "unknown",
+        "kind": "meeting"
       }
     },
     {
@@ -1612,7 +1659,8 @@
       "facets": {
         "source": "phone_call",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     },
     {
@@ -1644,7 +1692,8 @@
       "facets": {
         "source": "whatsapp",
         "status": "transcribed",
-        "language": "ur"
+        "language": "ur",
+        "kind": "call"
       }
     }
   ],
@@ -1680,6 +1729,12 @@
       "search": null,
       "expect": {
         "total": 45,
+        "kinds": {
+          "call": 23,
+          "meeting": 14,
+          "voice_note": 3,
+          "other": 5
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -1820,6 +1875,12 @@
       "search": null,
       "expect": {
         "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000002"
@@ -1912,6 +1973,12 @@
       "search": null,
       "expect": {
         "total": 31,
+        "kinds": {
+          "call": 9,
+          "meeting": 14,
+          "voice_note": 3,
+          "other": 5
+        },
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -2032,6 +2099,12 @@
       "search": null,
       "expect": {
         "total": 7,
+        "kinds": {
+          "call": 5,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -2129,6 +2202,12 @@
       "search": null,
       "expect": {
         "total": 36,
+        "kinds": {
+          "call": 16,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 4
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2254,6 +2333,12 @@
       "search": null,
       "expect": {
         "total": 38,
+        "kinds": {
+          "call": 18,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 4
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2382,6 +2467,12 @@
       "search": null,
       "expect": {
         "total": 10,
+        "kinds": {
+          "call": 8,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -2481,6 +2572,12 @@
       "search": null,
       "expect": {
         "total": 38,
+        "kinds": {
+          "call": 17,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 5
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2609,6 +2706,12 @@
       "search": null,
       "expect": {
         "total": 5,
+        "kinds": {
+          "call": 3,
+          "meeting": 1,
+          "voice_note": 1,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000018",
@@ -2703,6 +2806,12 @@
       "search": null,
       "expect": {
         "total": 42,
+        "kinds": {
+          "call": 22,
+          "meeting": 13,
+          "voice_note": 2,
+          "other": 5
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -2834,6 +2943,12 @@
       "search": null,
       "expect": {
         "total": 3,
+        "kinds": {
+          "call": 2,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000023",
           "01JFXR00000000000000000021",
@@ -2926,6 +3041,12 @@
       "search": null,
       "expect": {
         "total": 4,
+        "kinds": {
+          "call": 2,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000040",
@@ -3020,6 +3141,12 @@
       "search": null,
       "expect": {
         "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000012"
@@ -3111,6 +3238,12 @@
       "search": null,
       "expect": {
         "total": 41,
+        "kinds": {
+          "call": 21,
+          "meeting": 12,
+          "voice_note": 3,
+          "other": 5
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -3247,6 +3380,12 @@
       "search": null,
       "expect": {
         "total": 9,
+        "kinds": {
+          "call": 7,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000026",
           "01JFXR00000000000000000023",
@@ -3345,6 +3484,12 @@
       "search": null,
       "expect": {
         "total": 7,
+        "kinds": {
+          "call": 2,
+          "meeting": 5,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -3441,6 +3586,12 @@
       "search": null,
       "expect": {
         "total": 18,
+        "kinds": {
+          "call": 1,
+          "meeting": 12,
+          "voice_note": 1,
+          "other": 4
+        },
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -3548,6 +3699,12 @@
       "search": null,
       "expect": {
         "total": 17,
+        "kinds": {
+          "call": 12,
+          "meeting": 0,
+          "voice_note": 3,
+          "other": 2
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000037",
@@ -3655,6 +3812,12 @@
       "search": null,
       "expect": {
         "total": 21,
+        "kinds": {
+          "call": 14,
+          "meeting": 0,
+          "voice_note": 3,
+          "other": 4
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000037",
@@ -3767,6 +3930,12 @@
       "search": null,
       "expect": {
         "total": 7,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 3
+        },
         "ids": [
           "01JFXR00000000000000000022",
           "01JFXR00000000000000000045",
@@ -3864,6 +4033,12 @@
       "search": null,
       "expect": {
         "total": 15,
+        "kinds": {
+          "call": 7,
+          "meeting": 7,
+          "voice_note": 1,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000027",
@@ -3968,6 +4143,12 @@
       "search": null,
       "expect": {
         "total": 5,
+        "kinds": {
+          "call": 3,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000011",
           "01JFXR00000000000000000009",
@@ -4075,6 +4256,12 @@
       "search": null,
       "expect": {
         "total": 5,
+        "kinds": {
+          "call": 0,
+          "meeting": 5,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000025",
           "01JFXR00000000000000000004",
@@ -4181,6 +4368,12 @@
       "search": null,
       "expect": {
         "total": 3,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000002",
@@ -4273,6 +4466,12 @@
       "search": null,
       "expect": {
         "total": 0,
+        "kinds": {
+          "call": 0,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [],
         "facets": {
           "date": {
@@ -4355,6 +4554,12 @@
       "search": "invoice",
       "expect": {
         "total": 4,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -4441,6 +4646,12 @@
       "search": "acme budget",
       "expect": {
         "total": 2,
+        "kinds": {
+          "call": 1,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000005"
@@ -4525,6 +4736,12 @@
       "search": "acme",
       "expect": {
         "total": 7,
+        "kinds": {
+          "call": 5,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -4614,6 +4831,12 @@
       "search": "acme paid",
       "expect": {
         "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000039"
         ],
@@ -4697,6 +4920,12 @@
       "search": "shopping eggs",
       "expect": {
         "total": 1,
+        "kinds": {
+          "call": 0,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000013"
         ],
@@ -4780,6 +5009,12 @@
       "search": "FAMILY",
       "expect": {
         "total": 3,
+        "kinds": {
+          "call": 2,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000008",
           "01JFXR00000000000000000010",
@@ -4865,6 +5100,12 @@
       "search": "کراچی",
       "expect": {
         "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000048",
           "01JFXR00000000000000000047"
@@ -4949,6 +5190,12 @@
       "search": "قیمت",
       "expect": {
         "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000048"
         ],
@@ -5032,6 +5279,12 @@
       "search": "كي آفس",
       "expect": {
         "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000048"
         ],
@@ -5122,6 +5375,12 @@
       "search": "invoice",
       "expect": {
         "total": 3,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",

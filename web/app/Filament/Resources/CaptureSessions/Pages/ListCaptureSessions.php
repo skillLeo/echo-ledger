@@ -144,8 +144,9 @@ class ListCaptureSessions extends ListRecords
     public ?string $compose = null;
 
     /**
-     * Since docs/PLAN_NAV_3_LEVELS.md section 4: the page's top tab, Calls, Meetings or Voice notes (null: All), in the
-     * address (`kind`); it narrows the place, the filters and the search by Source (LibraryFilters::KINDS).
+     * Since docs/PLAN_NAV_3_LEVELS.md section 4: the page's top tab, Calls, Meetings, Voice notes or (since 2.0.0-q) Other
+     * (null: All), in the address (`kind`, LibraryFilters::KINDS's words); it narrows the place, the filters and the
+     * search to that kind's Sources.
      */
     public ?string $kind = null;
 
@@ -196,8 +197,8 @@ class ListCaptureSessions extends ListRecords
         // An old view's link opens what holds its rows now: Waiting for decision and Failed uploads (Activity's Review, a
         // notice) open Needs you, where both are; Today, This week (Monday to Sunday in the console's time zone, as the
         // old view counted it), Bookmarked and Pinned become their filters (shown as pills, counted by the panel), without
-        // the calls waiting for their decision, which now live only in Needs you; Untranscribed is the place Not
-        // transcribed.
+        // the calls waiting for their decision, which now live only in Needs you; Untranscribed and Not transcribed are
+        // the place Audio only (docs/PLAN_V2_1_POLISH.md section 1: one name, one definition).
         $tab = (string) $this->activeTab;
         $week = Carbon::now(app(SettingsRepository::class)->displayTimezone())->startOfWeek(Carbon::MONDAY);
         $filters += match ($tab) {
@@ -209,7 +210,7 @@ class ListCaptureSessions extends ListRecords
         };
         $this->activeTab = match ($tab) {
             'waiting', 'failed' => 'needs_you',
-            'untranscribed' => 'not_transcribed',
+            'untranscribed', 'not_transcribed' => 'audio_only',
             'today', 'this_week', 'bookmarked', 'pinned' => 'all',
             default => $this->activeTab,
         };
@@ -242,7 +243,11 @@ class ListCaptureSessions extends ListRecords
     /** The place of the sidebar's Library the list is in (LibraryFacets::PLACES). */
     public function libraryPlace(): string
     {
-        return LibraryFacets::place((string) ($this->activeTab ?: 'all'));
+        $tab = (string) ($this->activeTab ?: 'all');
+
+        // Since v2.1 the place Audio only is the glossary's: the recordings whose one Status is "audio kept, no
+        // transcript" (LibraryFilters::state), as their rows say it; the engine counts it as `not_transcribed`.
+        return in_array($tab, ['audio_only', 'not_transcribed', 'untranscribed'], true) ? 'not_transcribed' : LibraryFacets::place($tab);
     }
 
     /**
@@ -263,12 +268,14 @@ class ListCaptureSessions extends ListRecords
      */
     public function kindSources(): ?array
     {
-        return ConsoleV2::frame() && is_string($this->kind) ? (LibraryFilters::KINDS[$this->kind] ?? null) : null;
+        return ConsoleV2::frame() && is_string($this->kind) && isset(LibraryFilters::KINDS[$this->kind])
+            ? LibraryFilters::kindSources(LibraryFilters::KINDS[$this->kind]) : null;
     }
 
     /**
-     * The page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): All · Calls · Meetings · Voice notes, each with how many
-     * the place, the filters and the search keep in it.
+     * The page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4; docs/API.md "The Library's kinds"): All · Calls ·
+     * Meetings · Voice notes · Other (Other only while it has something, or is the open tab), each with how many the
+     * place, the filters and the search keep in it. The kind tabs add up to All.
      *
      * @return list<array{key: string, label: string, count: int, active: bool}>
      */
@@ -283,9 +290,14 @@ class ListCaptureSessions extends ListRecords
         $user = (int) CurrentWorkspace::userId();
         $current = $this->kindSources() !== null ? (string) $this->kind : 'all';
         $tabs = [];
-        foreach (['all' => __('All'), 'calls' => __('Calls'), 'meetings' => __('Meetings'), 'voice_notes' => __('Voice notes')] as $key => $label) {
-            $tabs[] = ['key' => $key, 'label' => $label, 'active' => $current === $key,
-                'count' => $facets->total($ws, $user, $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace(), $key === 'all' ? null : LibraryFilters::KINDS[$key])];
+        foreach (['all' => __('All'), 'calls' => __('Calls'), 'meetings' => __('Meetings'), 'voice_notes' => __('Voice notes'), 'other' => __('Other')] as $key => $label) {
+            $count = $facets->total($ws, $user, $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace(),
+                $key === 'all' ? null : LibraryFilters::kindSources(LibraryFilters::KINDS[$key]));
+            // Since 2.0.0-q: Other shows only while it has something (or is the open tab); the kind tabs add up to All.
+            if ($key === 'other' && $count === 0 && $current !== 'other') {
+                continue;
+            }
+            $tabs[] = ['key' => $key, 'label' => $label, 'active' => $current === $key, 'count' => $count];
         }
 
         return $this->tabsOnce = $tabs;
@@ -341,8 +353,7 @@ class ListCaptureSessions extends ListRecords
             'needs_you' => __('Needs you'),
             'unread' => __('Unread'),
             'important' => __('Important'),
-            'not_transcribed' => __('Not transcribed'),
-            'audio_only' => __('Audio only'),
+            'not_transcribed', 'audio_only' => __('Audio only'),
             default => __('All recordings'),
         };
     }
@@ -659,10 +670,11 @@ class ListCaptureSessions extends ListRecords
                 $tabs[$place] = Tab::make($place);
             }
         }
-        // Since v2.0 (ui_v2.library): the apps' saved view Untranscribed.
+        // Since v2.0 (ui_v2.library): the apps' old saved view Untranscribed; since v2.1 its address opens Audio only
+        // (mountFilters), and it is named so if it ever shows.
         if (ConsoleV2::library()) {
             $untranscribed = $organiser->untranscribedCount((int) CurrentWorkspace::id());
-            $tabs['untranscribed'] = Tab::make(__('Untranscribed'))->badge($untranscribed > 0 ? $untranscribed : null)
+            $tabs['untranscribed'] = Tab::make(__('Audio only'))->badge($untranscribed > 0 ? $untranscribed : null)
                 ->modifyQueryUsing(fn (Builder $query): Builder => $organiser->applyView($query, 'untranscribed'));
         }
 

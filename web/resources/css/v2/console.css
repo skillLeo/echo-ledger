@@ -971,6 +971,16 @@ button.v2-row:hover {
     color: var(--el-role-text-secondary);
 }
 
+/* Audio only and Waiting to upload: plain grey text, no icon (docs/PLAN_V2_1_POLISH.md section 1: no chip). */
+.v2-status.is-quiet {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-status.is-quiet .v2-icon {
+    display: none;
+}
+
 .v2-banner {
     display: flex;
     align-items: flex-start;
@@ -3056,8 +3066,8 @@ button.v2-row-tile:focus-visible,
     font-weight: var(--el-text-body-strong-weight);
 }
 
-/* A page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): the Library's All · Calls · Meetings · Voice notes with
-   their counts, Live Assist's Upcoming · Past reports · Practice. The open one is underlined. */
+/* A page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): the Library's All · Calls · Meetings · Voice notes · Other
+   with their counts, Live Assist's Upcoming · Past reports · Practice. The open one is underlined. */
 .v2-tabs {
     display: flex;
     align-items: stretch;

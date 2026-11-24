@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-p (2026-11-23, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-q (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-q (accepted 2026-11-24 by EL-Lead; the Library's kinds, see "The Library's kinds (since 2.0.0-q)"): every recording has exactly one kind, `call`, `meeting`, `voice_note` or `other`, worked out from its Source, so the Library's tabs always add up to All. Imported files and any Source that is not a call, a meeting or a voice note are `other`, and the tabs gain **Other**, shown only when its count is above 0. A library item's `facets` carries `kind`; `GET /api/library/facets` answers `kinds`, the count of each kind for the filters and the search, which add up to `total`. The console's address takes `kind=other`. The shared test file gives every recording its kind and every filter set its kinds. Only additions, nothing stored: older apps ignore `kind` and `kinds` and keep their four tabs.
 2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q` (the search: every word somewhere among the title, the transcript and the project path), and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language) and `processing_since` (when its current upload or transcript attempt began, for Needs you's "stuck"). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
 2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
 2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
@@ -1087,14 +1088,15 @@ when `status=recording`, `view=waiting` or, since 2.0.0-p, `view=needs_you` is g
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
-    "facets": {"source": "zoom", "status": "transcribed", "language": "en"}, "processing_since": null,
+    "facets": {"source": "zoom", "status": "transcribed", "language": "en", "kind": "meeting"}, "processing_since": null,
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
  "next_cursor": null, "server_time": "2026-10-24T09:05:00+00:00", "views_version": 4}
 ```
 `facets` (since 2.0.0-p): the recording's value in the Library's Source, Status and Language filters, worked out by the
-server as "Library filters" says; the apps count with these instead of working them out again. `processing_since`
+server as "Library filters" says; the apps count with these instead of working them out again. Since 2.0.0-q also `kind`,
+the recording's one kind (`call`, `meeting`, `voice_note` or `other`, see "The Library's kinds"). `processing_since`
 (since 2.0.0-p): when the current upload or transcript attempt began, the later of the two (a retry starts it again), or
 null when none is stored (recordings from before 2.0.0-p); "Needs you" counts a recording stuck from it. `views_version` (since
 2.0.0-p): a number that changes whenever the person's saved views change (0 before the first one); when it differs from
@@ -1241,7 +1243,7 @@ brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
 | `device` (was "Recorded on") | `phone`, `desktop`, `web` | `source_device` |
 | `project` | `none` (no project) and project ids | `client.id`, and every project above it: "Project is Acme" keeps Acme's subfolders too. An id that is not one of the person's projects (gone, or someone else's) matches nothing |
 | `language` | the offered codes (`en`, `ur`, `ar`, `fr`, `de`, `es`, `it`, `pt`, `nl`, `tr`, `ru`) and `unknown` | `facets.language`: the language the final transcript was written in, else the one chosen for the recording (`language`), else `unknown`; old and engine spellings read as the offered codes (`en+ur` and Hindi are `ur`, `ar-EG` is `ar`, a code not offered is passed over) |
-| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript) |
+| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript; shown as "Audio only" since v2.1) |
 | `labels` | label keys (a label in lower case; any capitals are accepted and kept in lower case) | `labels`, capitals ignored as lists are |
 | `marked` | `pinned`, `important`, `keep_forever` | `pinned`, `important`, `keep` (a recording can have several) |
 | `bookmarks` | `any` (any bookmark) and bookmark tags (in lower case; any capitals are accepted) | `any` when `marker_count` > 0, and each of `tags` in lower case (the web's "Has bookmarks" and "Bookmark tag", the apps' Bookmark chip) |
@@ -1276,23 +1278,53 @@ The server knows what reached it. Only the apps know their own: an upload that f
 reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
 those to the server's, never counting one recording twice.
 
-The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
-**Important** (`important=1`, or Marked is Important), **Not transcribed** (Status is Not transcribed), **Audio only**
-(`status=audio_only`) and **Shared** (Shared with me, My links, Request links).
+The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`; failed recordings are
+here), **Unread** (`view=unread`), **Important** (`important=1`, or Marked is Important), **Audio only** (Status is
+`not_transcribed`, counted as `library.not_transcribed`) and **Shared** (Shared with me, My links, Request links).
+Since v2.1 (2.0.0-q) the old Not transcribed view and Audio only are one view, **Audio only**, and every app shows the
+Status value `not_transcribed` as "Audio only".
 
-**The Library's tabs** (UI guidance, no API change; docs/PLAN_NAV_3_LEVELS.md section 4): the page's top tabs split the
-list by `facets.source`, the same on the web, the desktop and the phone. **All** (every source), **Calls**
-(`whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype`), **Meetings**
-(`zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord`) and **Voice notes** (`voice_note`); `imported` and
-`other` are under All only. A tab narrows the place, the filters and the search (AND with them; a Source filter still
-applies inside it), and each tab's count is how many the place, the filters and the search keep in it. The web keeps
-the tab in the address as `kind=calls|meetings|voice_notes`, none for All (any other value is All too), with the
-3-level navigation on (`ui_v2.shell` and `ui_v2.library`).
+### The Library's kinds (since 2.0.0-q)
+Every recording in the Library has exactly one kind, worked out from its Source (`facets.source`), the same on the
+server, the web, the desktop and the phone. Nothing is stored, so there is nothing to backfill: a recording's kind
+follows its Source.
+
+| Kind | Sources |
+|---|---|
+| `call` | `whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype` |
+| `meeting` | `zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord` |
+| `voice_note` | `voice_note` |
+| `other` | every other Source: `imported` (a file that came in as a file, whatever app it names), `other`, and any Source the app does not know (one the server adds later) |
+
+A library item carries it as `facets.kind`. An app that meets a `facets.kind` it does not know, or an item without one
+(cached before 2.0.0-q), works it out from `facets.source` with this table, and a Source it does not know is `other`.
+
+**The Library's tabs** (docs/PLAN_NAV_3_LEVELS.md section 4): **All** · **Calls** (`call`) · **Meetings** (`meeting`) ·
+**Voice notes** (`voice_note`) · **Other** (`other`). Other shows only while its count is above 0; the other tabs always
+show. Every recording is in All and in exactly one other tab, so the kind tabs always add up to All, whatever the place,
+the filters and the search. A tab narrows the place, the filters and the search (AND with them; a Source filter still
+applies inside it), and each tab's count is how many the place, the filters and the search keep in it. On the web,
+`GET /api/library/facets` gives the counts for the filters and the search (`kinds`); the desktop and the phone count
+their synced library with `facets.kind`. The web keeps the tab in the address as
+`kind=calls|meetings|voice_notes|other`, none for All (any other value is All too), with the 3-level navigation on
+(`ui_v2.shell` and `ui_v2.library`); `kind=other` while Other has nothing shows the empty Other list, its tab still
+chosen. The address words map to the kinds: `calls` → `call`, `meetings` → `meeting`, `voice_notes` → `voice_note`,
+`other` → `other`. They stay plural on purpose, because saved links have used them since 2.0.0-p; the API's kinds stay
+singular.
+
+**Older apps** (before 2.0.0-q) ignore `facets.kind` and `kinds`: they keep All · Calls · Meetings · Voice notes, with
+imported files and other Sources under All only, and their kind tabs do not add up to All when the person has such
+recordings (as before). Nothing else changes for them. Apps add the Other tab when they build on 2.0.0-q.
+
+**The shared test file** (`web/tests/Fixtures/library-facets.json`): each recording's `facets.kind`, and each filter
+set's `expect.kinds` (the count of each kind for its filters and its search, adding up to its `total`), with imported
+files, `other` and requested files among the recordings. Each app's tests check that the kinds add up.
 
 ### `GET /api/library/facets` — `library:read` (since 2.0.0-p)
 The filter panel's counts. Query: `filters`, `q`, `tz` as above.
 ```json
 {"total": 23,
+ "kinds": {"call": 14, "meeting": 5, "voice_note": 3, "other": 1},
  "sections": {
    "date": [{"value": "today", "count": 3}, {"value": "last_7_days", "count": 9}, {"value": "this_month", "count": 20}],
    "source": [{"value": "whatsapp", "count": 7}, {"value": "zoom", "count": 3}],
@@ -1312,6 +1344,8 @@ The filter panel's counts. Query: `filters`, `q`, `tz` as above.
  "views_version": 4}
 ```
 - `total`: what the filters and the search keep (what `GET /api/library` with them lists).
+- `kinds` (since 2.0.0-q): of those, how many are of each kind ("The Library's kinds"), every section's filter and the
+  search applied. All four kinds are always there (0 when none), and they add up to `total`: the tabs' counts.
 - **The facet rule:** each section's counts apply the search and every *other* section's filter, never its own, so every
   option stays selectable: with Source is WhatsApp and Device is Desktop, Source counts each app's recordings on the
   desktop and Device counts where the WhatsApp calls were made. A recording counts once in each option it has (in each
@@ -1809,9 +1843,9 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
   engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
   teammate sent (the `shared` folder) it is `null`.
-- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter). Since 2.0.0-p
-  the sidebar's **Audio only** is this list, and the Status filter's **Not transcribed** holds these and the
-  recordings kept without a finished transcript (see "Library filters").
+- `GET /api/library?status=audio_only` lists them. Since v2.1 (2.0.0-q) the Library's one **Audio only** view is the
+  Status filter's `not_transcribed`, shown as "Audio only": these and the recordings kept without a finished
+  transcript (see "Library filters").
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
   "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already

@@ -485,7 +485,7 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
   the phone). Tap the title to rename it or pick a client. On the computer, **Discard** can be undone for a few
   seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. On the computer,
   if you do nothing, the card waits 12 seconds and then saves the audio without transcribing it (**Save audio**; the
-  card says **"Saved as audio"**). The call then waits in the Library's **Not transcribed**, where **Transcribe**
+  card says **"Saved as audio"**). The call then waits in the Library's **Audio only**, where **Transcribe**
   starts its transcript.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than

@@ -133,13 +133,16 @@ describe('the Library', function () {
             ->toContain('data-library-title')->toContain('data-filters-button')->toContain('data-menu="display"')
             ->not->toContain('data-view="untranscribed"')->not->toContain('el-with-col');
 
-        $page->call('openPlace', 'not_transcribed');
-        expect($page->get('activeTab'))->toBe('not_transcribed')->and($page->instance()->libraryHeading())->toBe('Not transcribed');
+        // Since v2.1 Not transcribed is Audio only (docs/PLAN_V2_1_POLISH.md section 1): one name, one definition.
+        $page->call('openPlace', 'audio_only');
+        expect($page->get('activeTab'))->toBe('audio_only')->and($page->instance()->libraryHeading())->toBe('Audio only');
         $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
-        // An old address with Untranscribed still opens it.
-        $page->call('openPlace', 'untranscribed');
-        expect($page->get('activeTab'))->toBe('untranscribed');
-        $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
+        // Old addresses with Not transcribed and Untranscribed still open it.
+        foreach (['not_transcribed', 'untranscribed'] as $old) {
+            $page->call('openPlace', $old);
+            expect($page->instance()->libraryHeading())->toBe('Audio only', $old);
+            $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
+        }
     });
 
     it('keeps the classic Library without ui_v2.library', function () {

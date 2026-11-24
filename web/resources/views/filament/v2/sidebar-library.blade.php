@@ -1,6 +1,6 @@
 {{--
     The Library's part of the v2.0 sidebar (docs/PLAN_LIBRARY_FILTERS.md section 1, contract 2.0.0-p): LIBRARY (All,
-    Needs you, Unread, Important, Not transcribed, Audio only, then Shared, which opens to Shared with me, My links and
+    Needs you, Unread, Important, Audio only, then Shared, which opens to Shared with me, My links and
     Request links), MY VIEWS (the person's saved views and + New view; each one's ⋯ renames, moves or deletes it, and
     a drag reorders them) and LABELS (the person's lists with their colours, + New label). Counts are quiet; only Needs
     you and Unread are strong. The first nine places answer ⌘1…⌘9 (Alt+1…9 where the browser keeps ⌘ for its tabs).

@@ -356,17 +356,21 @@ describe('the sidebar', function () {
         app(SavedViews::class)->create((int) $this->owner->current_workspace_id, $this->owner->id, ['name' => 'Zoom calls', 'filters' => lfIs('source', ['zoom'])]);
         $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
 
-        foreach (['all', 'needs_you', 'unread', 'important', 'not_transcribed', 'audio_only'] as $place) {
+        foreach (['all', 'needs_you', 'unread', 'important', 'audio_only'] as $place) {
             expect($html)->toContain('data-place="'.$place.'"');
         }
+        // Since v2.1 Not transcribed is Audio only (docs/PLAN_V2_1_POLISH.md section 1).
+        expect($html)->not->toContain('data-place="not_transcribed"')->not->toContain('Not transcribed');
         expect($html)->toMatch('~data-place="needs_you".*?<span class="v2-sb-subcount is-strong">2</span>~s')
             ->toContain('data-place="shared"')->toContain('data-place="links"')->toContain('data-place="requests"')
             ->toMatch('~data-view="[0-9A-Za-z]{26}".*?Zoom calls.*?<span class="v2-sb-subcount">1</span>~s')
             ->toContain('data-label="clients"')->toContain('v2-label-dot--red')
             ->toContain('data-place="trash"')->toContain('data-record-menu')->toContain('data-import')->toContain('Import audio files')
             ->toContain('data-new-view')->toContain('data-new-label');
-        // The first nine places answer ⌘1…⌘9: the six Library places, then My views.
-        expect($html)->toContain('data-place="all" data-shortcut="1"')->toMatch('~data-view="[0-9A-Za-z]{26}" data-shortcut="7"~');
+        // The first nine places answer their number: the five Library places (since v2.1 Not transcribed is Audio only),
+        // then My views.
+        expect($html)->toContain('data-place="all" data-shortcut="1"')->toContain('data-place="audio_only" data-shortcut="5"')
+            ->toMatch('~data-view="[0-9A-Za-z]{26}" data-shortcut="6"~');
     });
 
     it('keeps LABELS in the Library\'s panel and PROJECTS in Projects\' panel, with Live and Ask in the rail, the panel scrolling on its own', function () {
