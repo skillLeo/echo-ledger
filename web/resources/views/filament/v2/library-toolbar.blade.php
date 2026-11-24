@@ -2,8 +2,8 @@
     The Library's one toolbar row (docs/PLAN_LIBRARY_FILTERS.md section 1), after the search (titles, transcripts and
     projects, ⌘F / Ctrl+F): [Filters n] opens the filter panel (F), and Sort & display ▾ holds List / Table, the order, Group by
     and Density. The applied filters show as pills on a second row only while some are on (library-pills).
-    With the three levels the row makes room as decision 18 says (filament.v2.header-fit): with no room the two buttons
-    keep only their icons, their names still theirs (the words hidden for the eye only, the tooltip).
+    With the three levels the row makes room as decision 18 says (filament.v2.header-fit): on a short title row the two
+    buttons keep only their icons, their names still theirs (the words hidden for the eye only, the tooltip).
 --}}
 @php
     $sorts = \App\Filament\Support\LibraryView::SORTS;
@@ -70,6 +70,9 @@
     </x-filament::dropdown>
 </div>
 @if (\App\Filament\Support\ConsoleV2::frame())
-    {{-- The row fitted before the first paint (filament.v2.header-fit). --}}
+    {{-- After the search and the toolbar: where the row breaks when it takes two lines (decision 18), then the tabs, on
+         their own row there. Fitted before the first paint (filament.v2.header-fit). --}}
+    <span class="v2-lib-break" aria-hidden="true"></span>
+    @include('filament.v2.library-tabs', ['tabs' => $this->libraryTabs()])
     <script>window.ElHeaderFit?.fit();</script>
 @endif

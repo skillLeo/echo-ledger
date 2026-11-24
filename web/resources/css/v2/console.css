@@ -3480,11 +3480,26 @@ button.v2-row-tile:focus-visible,
     background-color: var(--el-role-accent-soft);
 }
 
-/* The Library's toolbar row with the three levels: [Library / title] [count] [tabs] [empty] [search] [Filters]
+/* The Library's toolbar row with the three levels: [Library / title  count] [tabs] [empty] [search] [Filters]
    [Sort & display]. The title's words are whole; the tabs and the toolbar's buttons never shrink, the tabs' words never
-   wrap (.v2-tab); the search, as the top bar's, takes 180 to 260 px at the row's end, the empty space going first. */
+   wrap (.v2-tab); the search, as the top bar's, takes 180 to 260 px at the row's end, the empty space going first. The
+   count is the title's (inside its group), 24 px before the tabs on one line so it never reads as one of them. */
 .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
     flex-wrap: wrap;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    margin-inline-end: 0;
+}
+
+.v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
+    margin-inline: var(--el-space-4) 0;
+}
+
+/* Every line of a title that takes more than one follows the row's direction (an English name in Urdu too). */
+.v2-lib-shell.is-right .v2-lib-title {
+    text-align: match-parent;
+    text-align: -webkit-match-parent;
 }
 
 .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
@@ -3514,8 +3529,41 @@ button.v2-row-tile:focus-visible,
     position: relative;
 }
 
-/* The toolbar's labels go first: [Filters] and [Sort & display] keep their icons (and a filter count), their words
-   hidden for the eye only, so the buttons keep their names; the tooltips say them too. */
+/* One line, with every word: the tabs 24 px after the title, then the empty space, the search and the toolbar. The
+   markup has the search and the toolbar before the tabs, so that on two lines the keys go as the rows read; only this
+   one-line layout reorders them for the eye. */
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    order: 1;
+    margin-inline-start: var(--el-space-16);
+}
+
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
+    order: 2;
+}
+
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+    order: 3;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-break {
+    display: none;
+}
+
+/* Two lines, as the desktop's title row over its row 2, in the markup's order: [title  count] [empty] [search] [Filters]
+   [Sort & display], then the tabs on a row of their own, which nothing covers. The break (.v2-lib-break, after the
+   toolbar) is a whole line 8 px tall. */
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    row-gap: 0;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-break {
+    display: block;
+    flex-basis: 100%;
+    block-size: var(--el-space-8);
+}
+
+/* On the title row the toolbar's labels go first: [Filters] and [Sort & display] keep their icons (and a filter count),
+   their words hidden for the eye only, so the buttons keep their names; the tooltips say them too. */
 :root[data-lib-labels='off'] .v2-lib-shell.is-right .v2-lib-tools .v2-chip-words {
     position: absolute;
     width: var(--el-border-hairline);
@@ -3525,46 +3573,20 @@ button.v2-row-tile:focus-visible,
     white-space: nowrap;
 }
 
-/* Two lines, as the desktop's title row and row 2: [title] [count] [empty] [search], then [tabs] [empty] [Filters]
-   [Sort & display]. The break between them is the row's own ::after, a whole line 8 px tall. */
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+/* Then the count goes under the title (both still the title's group). */
+:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs {
+    flex-wrap: wrap;
     row-gap: 0;
 }
 
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child::after {
-    content: '';
+:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
     flex-basis: 100%;
-    order: 4;
-    block-size: var(--el-space-8);
+    margin: 0;
 }
 
-/* On the first line the title, its count and the search sit with the row's own gap, leaving the title the most room. */
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
-    order: 1;
-    margin-inline-end: 0;
-}
-
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-total {
-    order: 2;
-    margin-inline-end: 0;
-}
-
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
-    order: 3;
-}
-
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
-    order: 5;
-}
-
-:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
-    order: 6;
-    margin-inline-start: auto;
-}
-
-/* Then the tabs scroll sideways, as the list chips' row does: one line, no scrollbar drawn and no fade (no gradients,
-   DS rule 1); the tab cut at the edge shows there is more. They take what the toolbar leaves (from nothing, so the
-   toolbar never wraps under them). A tab's focus ring is drawn inside it, where the scroller cannot cut it. */
+/* The tabs' row scrolls sideways only when the tabs alone do not fit it, as the list chips' row does: one line, no
+   scrollbar drawn and no fade (no gradients, DS rule 1); the tab cut at the edge shows there is more. A tab's focus ring
+   is drawn inside it, where the scroller cannot cut it. */
 :root[data-lib-tabs='scroll'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
     flex: 1 1 0;
     min-inline-size: 0;
@@ -3578,7 +3600,7 @@ button.v2-row-tile:focus-visible,
 
 /* Only when even the ⌕ button leaves no room (a window under the console's least width, or a very long view name on a
    phone) does the title take more lines: every word kept, a word longer than the line broken where it must. It takes
-   what its count and the button leave (from nothing, so they stay on its line). */
+   what the search and the toolbar leave (from nothing, so they stay on its line). */
 :root[data-lib-title='wraps'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
     flex: 1 1 0;
     min-inline-size: 0;

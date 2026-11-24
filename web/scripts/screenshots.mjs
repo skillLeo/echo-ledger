@@ -110,7 +110,8 @@ async function keepPlace(page, base) {
 
 /**
  * In the page: what in the header loses its words (decision 18, PLAN_V2_1_POLISH). A tab or toolbar label that wraps or
- * is cut (by its own "…", a box that clips it, the window's edge or something drawn over it), a search placeholder wider
+ * is cut (by its own "…", a box that clips it, the window's edge or something drawn over it), a tab that another control
+ * covers even in part, a search placeholder wider
  * than its field, a button with no name, and a title that is cut (more lines keep its words, and only come last).
  * The Library's tabs may scroll sideways (their last step): a tab out of their view is not cut. Answers what went wrong
  * and the steps the rows took.
@@ -190,6 +191,24 @@ function headerProblems() {
     document.querySelectorAll('.v2-lib-crumb, .v2-lib-total').forEach((el) => label(el, 'the title'));
     document.querySelectorAll('.v2-lib-title bdi').forEach((el) => label(el, 'the title', document.documentElement.dataset.libTitle === 'wraps'));
     document.querySelectorAll('.v2-lib-tabs .v2-tab > span').forEach((el) => label(el, 'a tab'));
+    // No control covers a tab, even in part: of a scrolling row, the part of each tab in sight.
+    const strip = document.querySelector('.v2-lib-shell.is-right [data-library-tabs]');
+    const controls = [...document.querySelectorAll('.v2-lib-shell.is-right [data-library-crumbs], .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp, .v2-lib-shell.is-right .v2-lib-tools .v2-chip')].filter(shown);
+    if (strip && shown(strip)) {
+        const s = strip.getBoundingClientRect();
+        strip.querySelectorAll('.v2-tab').forEach((tab) => {
+            const t = tab.getBoundingClientRect();
+            const start = Math.max(t.left, s.left);
+            const end = Math.min(t.right, s.right);
+            if (end - start < 1) return;
+            for (const c of controls) {
+                const r = c.getBoundingClientRect();
+                if (Math.min(end, r.right) - Math.max(start, r.left) > 1 && Math.min(t.bottom, r.bottom) - Math.max(t.top, r.top) > 1) {
+                    problems.push(`a tab "${words(tab)}" is covered by ${c.matches('.v2-chip') ? `"${words(c)}"` : c.matches('[data-library-crumbs]') ? 'the title' : 'the search'}`);
+                }
+            }
+        });
+    }
     document.querySelectorAll('.v2-lib-tools .v2-chip > span:not(.v2-sr)').forEach((el) => label(el, 'a toolbar label'));
     document.querySelectorAll('.v2-lib-tools .v2-chip').forEach((b) => named(b, 'a toolbar button'));
     document.querySelectorAll('.v2-library .fi-ta-search-field input').forEach((i) => { placeholder(i, 'the Library\'s search'); named(i, 'the Library\'s search'); });
