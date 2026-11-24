@@ -552,18 +552,8 @@ describe('bulk Transcribe on the queue (EL-UX\'s finding)', function () {
             'status' => SessionStatus::AudioOnly, 'transcribe' => false, 'duration_ms' => 30_000])->pluck('id')->all();
     });
 
-    it('queues every start of the apps\' bulk Transcribe and runs none inside the request', function () {
-        Queue::fake();
-
-        $answer = $this->postJson('/api/sessions/transcribe', ['ids' => $this->short])->assertStatus(202);
-
-        expect($answer->json('started'))->toHaveCount(50);
-        Queue::assertPushed(TranscribeFinalJob::class, 50);
-        // Nothing was transcribed in the request: every final transcript is still waiting for its job.
-        expect(Transcript::query()->whereIn('capture_session_id', $this->short)->where('kind', 'final')->pluck('status')->unique()->map(fn ($s) => $s->value)->all())
-            ->toBe(['pending']);
-    });
-
+    // The one test that tells the queue from the fast path: in tests the fast path queues too (FastPath::dispatch), and a
+    // faked queue also records a job run at once, so only the bus, as a server runs it, shows the difference.
     it('never takes the fast path for many, as a server would run it, while one start still does', function () {
         Bus::fake([TranscribeFinalJob::class]);
         $later = app(TranscribeLater::class);

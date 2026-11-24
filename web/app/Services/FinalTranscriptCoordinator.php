@@ -113,10 +113,10 @@ final class FinalTranscriptCoordinator
         return ['provider' => $ownKey ? SttProviderKey::Groq : $provider, 'own_key' => $ownKey, 'language' => $language, 'route' => $route];
     }
 
-    /** (Re)starts transcription, e.g. from the admin "Retry" action. */
     /**
-     * [$queued]: always on the queue, never the fast path (since the bulk Transcribe review): many starts in one request
-     * (TranscribeLater's bulk) would otherwise each run after the response, in the same web worker, one after another.
+     * (Re)starts transcription, e.g. from the admin "Retry" action. [$queued]: always on the queue, never the fast path
+     * nor [$sync] (since the bulk Transcribe review): many starts in one request (TranscribeLater's bulk) would otherwise
+     * each run after the response, in the same web worker, one after another.
      */
     public function start(CaptureSession $session, ?Transcript $existing = null, bool $sync = false, bool $queued = false): Transcript
     {
@@ -155,7 +155,7 @@ final class FinalTranscriptCoordinator
             // Marked as queued, so a repeated `complete` does not start it a second time.
             Cache::put(self::queuedKey($transcript), true, now()->addMinutes(self::REQUEUE_WINDOW_MINUTES));
             FastPath::dispatch(new TranscribeFinalJob($transcript->id), true);
-        } elseif ($sync && ! in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true)) {
+        } elseif (! $queued && $sync && ! in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true)) {
             Cache::forget(self::queuedKey($transcript));
             Bus::dispatchNow(new TranscribeFinalJob($transcript->id));
         } else {

@@ -334,9 +334,9 @@ final class TranscribeLater
 
     /**
      * Takes the recording out of audio only in one statement (so two taps never start two transcripts), then starts its
-     * transcript. Null when it was no longer audio only.
+     * transcript. Null when it was no longer audio only. [$queued]: on the queue, never the fast path (the bulk starts,
+     * FinalTranscriptCoordinator::start).
      */
-    /** [$queued]: on the queue, never the fast path (the bulk starts, FinalTranscriptCoordinator::start). */
     private function claimAndStart(CaptureSession $session, bool $queued = false): ?Transcript
     {
         $claimed = CaptureSession::query()->whereKey($session->id)->where('status', SessionStatus::AudioOnly->value)
