@@ -3,6 +3,7 @@
 //   <prefix>-<width>-<lang>-<theme>.png    the list at rest: 1024 and 1280 light, 1280 dark, 1280 Urdu (right to left)
 //   compare-<width>-<lang>-<theme>.png     (after only) before and after side by side, when the before shot exists
 //   after-1280-en-<theme>-hover.png, after-1280-en-<theme>-selecting.png    a row's hover actions; the selection bar
+//   ux25-1280-<lang>-<theme>-last-opened.png, ux25-1280-<lang>-<theme>-back-to-top.png    UX-25, in a short window
 // It also counts the rows wholly on screen at 1470x956 (the 14-inch MacBook's window) and, after, fails the run below 12.
 //   node scripts/libraryV21.mjs before
 //   node scripts/libraryV21.mjs after
@@ -118,6 +119,21 @@ try {
       await page.mouse.move(0, 0);
       await page.waitForTimeout(200);
       await shoot(page, `after-1280-en-${theme}-selecting.png`);
+      await page.close();
+    }
+    // UX-25 in a short window (so the list is more than a screen): back from a recording, its row keeps the tint and
+    // focus; scrolled down, Back to top at the list's bottom end corner. Light, dark and Urdu (right to left).
+    for (const [lang, theme] of [["en", "light"], ["en", "dark"], ["ur", "light"]]) {
+      const page = await open(1280, 400, lang, theme);
+      await page.locator("button[data-row-id]").nth(5).click();
+      await page.getByRole("button", { name: "Library", exact: true }).last().click();
+      await page.locator(".el-rec--last").waitFor();
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(200);
+      await shoot(page, `ux25-1280-${lang}-${theme}-last-opened.png`);
+      await page.evaluate(() => { const box = document.querySelector(".content"); if (box) { box.scrollTop = box.scrollHeight; box.dispatchEvent(new Event("scroll")); } });
+      await page.waitForTimeout(400);
+      await shoot(page, `ux25-1280-${lang}-${theme}-back-to-top.png`);
       await page.close();
     }
   }

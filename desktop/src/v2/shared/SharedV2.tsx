@@ -13,7 +13,7 @@ import { recordingName } from "../../lib/library";
 import { confirmAction } from "../../lib/confirm";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { SHARED_TABS, type SharedTab } from "../../views/main/Sidebar";
-import { Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
+import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
@@ -266,7 +266,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   );
 
   return (
-    <div className="el-page" data-v2="shared">
+    <div className="el-page el-back-top-room" data-v2="shared">
       <header className="el-page__head">
         <div className="el-page__titles">
           <h1 className="el-title-l">Shared</h1>
@@ -293,6 +293,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
         <RequestLinkSheet projects={projects ?? []} notify={notify} onShowLinks={() => onTab("requests")}
           onMade={() => void loadRequests()} onClose={() => { setNewRequest(false); void loadRequests(); }} />
       )}
+      <BackToTop first=".el-row__hit" />
     </div>
   );
 }

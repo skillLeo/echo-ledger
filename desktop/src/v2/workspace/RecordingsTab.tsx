@@ -9,7 +9,7 @@ import { projectRecordings } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
 import { timestamp } from "../../lib/format";
-import { Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
+import { BackToTop, Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
 import { dayGroups, rowModel } from "../library/model";
 import { ScreensMark } from "../library/screens";
 
@@ -68,7 +68,7 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
   };
 
   return (
-    <div className="el-workspace-tab">
+    <div className="el-workspace-tab el-back-top-room">
       {folders.length > 0 && (
         <Card className="el-workspace-folders">
           <List label="Folders" className="el-group__rows">
@@ -117,6 +117,7 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
         <List label="Recordings">{shown.map(row)}</List>
       )}
       {rules}
+      {(shown?.length ?? 0) > 0 && <BackToTop first=".el-row__hit" />}
     </div>
   );
 }

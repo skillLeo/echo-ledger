@@ -1860,6 +1860,10 @@ span.el-nav-section__title { cursor: default; }
 .el-rec--compact { block-size: var(--el-layout-row-compact); }
 .el-rec:hover { background: var(--el-role-bg-subtle); }
 .el-rec--selected { background: var(--el-role-accent-soft); }
+/* UX-25: the recording you came back from keeps a quiet 8% accent tint (Mail's last-opened row), never the selection's
+   colour and never a tick; it goes when another row is opened or pressed, the view changes, or after 60 s. */
+.el-rec--last { background: color-mix(in srgb, var(--el-role-accent-default) 8%, transparent); }
+.el-rec--last:hover { background: color-mix(in srgb, var(--el-role-accent-default) 12%, transparent); }
 .el-rec__hit { position: absolute; inset: 0; border: 0; padding: 0; background: transparent; border-radius: inherit; cursor: pointer; }
 .el-rec__hit:focus-visible { outline-offset: calc(var(--el-focus-offset) * -1); }
 /* The box: on hover and keyboard focus, always while selecting; it takes no room otherwise. */
@@ -2111,3 +2115,20 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
 .el-shell--nav > .el-shell__main:focus { outline: none; }
 .el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
+
+/* ---- Back to top (UX-25) ----------------------------------------------------------------------------------------- */
+/* After a long list, inside the box that scrolls: it sticks 16 px above the window's foot, and its 40 px round button
+   sits 16 px in from the content area's end edge, in the list's end padding (a page with it keeps 12 px more there,
+   .el-back-top-room, so a row's when and how long and its hover actions are never under it). It fades in after one screen down. */
+.el-back-top-room { padding-inline-end: var(--el-space-12); }
+.el-back-top {
+  position: sticky; inset-block-end: var(--el-space-16); block-size: 0; z-index: var(--el-layer-sticky);
+  pointer-events: none;
+}
+.el-back-top__button.el-button {
+  position: absolute; inset-block-end: 0; inset-inline-end: calc(-1 * (var(--el-space-12) + var(--el-space-16)));
+  inline-size: var(--el-space-40); block-size: var(--el-space-40); padding: 0; border-radius: var(--el-radius-full);
+  background: var(--el-role-bg-surface); box-shadow: var(--el-shadow-1);
+  pointer-events: auto; transition: opacity var(--el-motion-fast), visibility var(--el-motion-fast);
+}
+.el-back-top[data-shown="false"] .el-back-top__button { opacity: 0; visibility: hidden; pointer-events: none; }

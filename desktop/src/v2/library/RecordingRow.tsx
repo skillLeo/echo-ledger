@@ -57,14 +57,16 @@ export type RecordingRowProps = {
   onPick: (e: ReactMouseEvent<HTMLElement>) => void;
   /** The hover actions (in place of when and how long), the ⋯ last. */
   actions?: ReactNode;
+  /** The recording you came back from (UX-25): a quiet tint, not the selection's. */
+  last?: boolean;
 };
 
-export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions }: RecordingRowProps) {
+export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions, last = false }: RecordingRowProps) {
   const id = useId();
   // Said with the row, though not all shown: pinned (its section says so), every label (up to three dots show), Recovered.
   const marks = [item.pinned ? "Pinned" : null, ...labels.map((l) => l.name)].filter(Boolean).join(", ");
   const described = [`${id}-meta`, marks && `${id}-marks`, recovered && `${id}-recovered`, `${id}-when`, `${id}-length`].filter(Boolean).join(" ");
-  const cls = ["el-rec", compact && "el-rec--compact", choosing && "el-rec--picking", picked && "el-rec--selected", actions && "el-rec--actions"].filter(Boolean).join(" ");
+  const cls = ["el-rec", compact && "el-rec--compact", choosing && "el-rec--picking", picked && "el-rec--selected", last && !picked && "el-rec--last", actions && "el-rec--actions"].filter(Boolean).join(" ");
   return (
     <li className={cls} onContextMenu={(e) => { e.preventDefault(); onContextMenu(e); }}>
       <button type="button" className="el-rec__hit" aria-labelledby={`${id}-title`} aria-describedby={described}

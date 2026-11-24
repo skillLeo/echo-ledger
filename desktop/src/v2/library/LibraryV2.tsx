@@ -16,7 +16,7 @@ import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
   Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
-  Toast, ToastRegion,
+  Toast, ToastRegion, BackToTop, scrollRootOf,
 } from "../components";
 import { binHours, binSentence, isUntranscribed, rowModel, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
 import { RecordingRow } from "./RecordingRow";
@@ -74,6 +74,15 @@ export const FILTER_DEBOUNCE_MS = 150;
  * test keeps them one). */
 export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
+
+/**
+ * UX-25: where the list was when a recording was opened from it, per place and view (in memory, this run): the scroll,
+ * the recording and its row's place in the list. Back from the recording the list is there again.
+ */
+type KeptPlace = { top: number; rowId: string; index: number };
+const KEPT_PLACES = new Map<string, KeptPlace>();
+/** How long the recording you came back from keeps its tint (the owner's "a bit of highlight" that stays). */
+export const LAST_OPENED_MS = 60_000;
 /** A search is one step of Back and Forward once typing has stopped this long. */
 const SEARCH_STEP_MS = 700;
 /** How many steps Back keeps. */
@@ -186,18 +195,50 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const setOpenId = useCallback((id: string | null) => {
     if (id) {
+      // Opened from the list: keep its place for the way back (UX-25), and the recording starts at its own top.
+      const list = !openIdRef.current ? root.current?.querySelector(".el-lib-list") : null;
+      if (list) {
+        const box = scrollRootOf(root.current);
+        const rows = [...list.querySelectorAll<HTMLElement>("[data-row-id]")];
+        const kept = { top: box?.scrollTop ?? 0, rowId: id, index: Math.max(0, rows.findIndex((r) => r.dataset.rowId === id)) };
+        KEPT_PLACES.set(viewKeyRef.current, kept);
+        returning.current = { key: viewKeyRef.current, ...kept };
+        scrollTopOnOpen.current = true;
+      }
+      setLastOpened(null);
       setOpened(rememberOpened(id));
       setReadHere((r) => (r.has(id) ? r : new Set(r).add(id)));
       // Read on every device (POST /api/sessions/{id}/opened). Offline it stays read here; the dot is only a hint.
       void api.markOpened(id).catch(() => undefined);
     }
+    openIdRef.current = id;
     setOpenIdNow(id);
   }, []);
+  const openIdRef = useRef<string | null>(null);
+  openIdRef.current = openId;
+  /** The place to come back to from the recording open now (UX-25). */
+  const returning = useRef<(KeptPlace & { key: string }) | null>(null);
+  const scrollTopOnOpen = useRef(false);
+  /** The recording you came back from: a quiet tint on its row until another is opened or clicked, the view, tab or
+   * filters change, or 60 s pass (UX-25). Not the selection's colour. */
+  const [lastOpened, setLastOpened] = useState<{ id: string; key: string } | null>(null);
   // The filters: what the panel and the pills show at once (`spec`), and what the list and the counts follow
   // (`applied`), 150 ms after the last tick; a change from elsewhere (a view, Clear all) applies at once.
   const [spec, setSpecNow] = useState<FilterSpec>({});
   const [applied, setApplied] = useState<FilterSpec>({});
   const debounce = useRef(0);
+  /** This place and view: what a kept position belongs to (UX-25). */
+  const viewKey = JSON.stringify([scopeKey(scope), tab, cleanSpec(applied), query.trim()]);
+  const viewKeyRef = useRef(viewKey);
+  viewKeyRef.current = viewKey;
+  useEffect(() => {
+    setLastOpened((l) => (l && l.key !== viewKey ? null : l));
+  }, [viewKey]);
+  useEffect(() => {
+    if (!lastOpened) return;
+    const timer = window.setTimeout(() => setLastOpened(null), LAST_OPENED_MS);
+    return () => window.clearTimeout(timer);
+  }, [lastOpened]);
   const setSpec = useCallback((next: FilterSpec, at: "now" | "soon" = "now") => {
     setSpecNow(next);
     window.clearTimeout(debounce.current);
@@ -258,10 +299,32 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   useEffect(() => {
     if (!focusAfter) return;
     setFocusAfter(null);
+    const el = root.current;
+    const rowOf = (id: string | null) => (id ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`) ?? null : null);
+    // Back from a recording opened here (UX-25): the list where it was; the recording's row tinted, or (gone since) the
+    // row now nearest its place.
+    const back = returning.current;
+    returning.current = null;
+    const here = back && back.key === viewKeyRef.current && !!el?.querySelector(".el-lib-list") ? back : null;
+    const box = here ? scrollRootOf(el) : null;
+    if (box && here) box.scrollTop = here.top;
     const active = document.activeElement;
     if (active && active !== document.body) return;
-    const el = root.current;
-    const row = focusAfter.rowId ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusAfter.rowId)}"]`) : null;
+    let row = rowOf(focusAfter.rowId);
+    if (here) {
+      if (row && focusAfter.rowId === here.rowId) setLastOpened({ id: here.rowId, key: here.key });
+      else if (!row) {
+        const rows = [...(el?.querySelectorAll<HTMLElement>(".el-lib-list [data-row-id]") ?? [])];
+        row = rows[Math.min(here.index, rows.length - 1)] ?? null;
+      }
+    }
+    if (row && here && box) {
+      row.focus({ preventScroll: true });
+      const r = row.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (r.height && (r.top < b.top || r.bottom > b.bottom)) row.scrollIntoView?.({ block: "nearest" });
+      return;
+    }
     (row ?? el?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
   }, [focusAfter]);
   const keepHours = useTrashKeepHours();
@@ -525,6 +588,25 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     restoredId.current = null;
     if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
   }, [items, initialOpen]);
+  // A recording opened from the list starts at its own top (UX-25 keeps the list's place for the way back). In the
+  // Table it opens in a drawer over the list, which stays as it is.
+  useEffect(() => {
+    if (!openId || !scrollTopOnOpen.current) return;
+    scrollTopOnOpen.current = false;
+    if (layout !== "table" || trash) {
+      const box = scrollRootOf(root.current);
+      if (box) box.scrollTop = 0;
+    }
+    // Only when a recording opens: the layout and the place are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+  // The recording opened from the list is gone since (deleted elsewhere, or no longer here): back to the list, where it was.
+  useEffect(() => {
+    if (!openId || !items || returning.current?.rowId !== openId) return;
+    if (items.some((i) => i.id === openId && !i.deleted)) return;
+    setOpenIdNow(null);
+    setFocusAfter({ rowId: null, seq: ++seq.current });
+  }, [items, openId]);
   const reported = useRef<string | null | undefined>(undefined);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
@@ -897,6 +979,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
     // The press that ended a drag never opens or ticks the row.
     if (dragJustEnded()) return;
+    // Another row pressed: the tint of the one you came back from goes (UX-25).
+    if (lastOpened?.id !== item.id) setLastOpened(null);
     if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) pickRange(item.id);
     else if (choosing || e.shiftKey || e.metaKey || e.ctrlKey) toggle(item.id);
     else setOpenId(item.id);
@@ -1155,7 +1239,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts()} drawer={drawer} onClose={() => setPanel(false)}
             onSaveView={() => setSavingView(true)} canSave={canSave} />
         )}
-        <div className="el-page el-page--wide el-lib__main">
+        <div className="el-page el-page--wide el-lib__main el-back-top-room">
           {/* UX-05/UX-20: the window's title row shows the place, its count and the one search (usePageTitle). Without
               it (no title row in this shell) the page keeps a slim header of its own with the same three. */}
           {!inTitleRow && (
@@ -1346,13 +1430,15 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                       onLabel={(key) => quick("labels", key)}
                       recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}
                       onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                      onPick={(e) => pickRow(item, e)}
+                      onPick={(e) => pickRow(item, e)} last={lastOpened?.id === item.id}
                       actions={choosing ? undefined : rowActions(item, r)} />
                   );
                 }),
               ])}
             </List>
           )}
+          {/* UX-25: after one screen down, ↑ at the list's bottom end corner (Home, ⌘↑ and Ctrl+Home too). */}
+          {items && <BackToTop />}
         </div>
       </div>
       <Dialog open={!!erase} alert title="Delete forever?"
