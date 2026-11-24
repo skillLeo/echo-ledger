@@ -16,6 +16,11 @@
     <string name="v2_calls_not_ready">تیار نہیں · ٹھیک کریں</string>
     <string name="v2_calls_off">کالز: بند</string>
     <string name="v2_rs_title">نیا</string>
+    <string name="v2_rs_voice_note">وائس نوٹ</string>
+    <string name="v2_rs_import">آڈیو امپورٹ کریں</string>
+    <string name="v2_rs_start_assist">لائیو اسسٹ شروع کریں</string>
+    <string name="v2_rs_translate_any">گیم یا ویڈیو کا ترجمہ</string>
+    <string name="v2_rs_hint">ریکارڈ کے لیے ٹیپ کریں · مزید کے لیے دبائے رکھیں</string>
     <string name="v2_rs_record_now">ابھی ریکارڈ کریں</string>
     <string name="v2_rs_record_now_help">جاری کال دونوں طرف سے ریکارڈ ہوتی ہے، باقی سب وائس نوٹ کے طور پر۔ روکنے کے لیے درمیانی بٹن دوبارہ دبائیں۔</string>
     <string name="v2_rs_voice">آواز اور فائلیں</string>

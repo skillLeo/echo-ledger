@@ -32,6 +32,8 @@
                 window.addEventListener('el-filters', this.onFilters);
                 window.addEventListener('el-new-view', this.onNewView);
                 if (config && config.compose) this.$nextTick(() => this.$wire.mountAction('saveView'));
+                // A view's menu › Edit filters… (UX-22 3b): the view, its filter panel open (Save changes keeps them).
+                if (config && config.edit) this.$nextTick(() => this.openFilters());
             },
             destroy() {
                 window.removeEventListener('el-filters', this.onFilters);

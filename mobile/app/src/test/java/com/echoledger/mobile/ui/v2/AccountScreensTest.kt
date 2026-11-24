@@ -74,6 +74,11 @@ class AccountScreensTest : ScreenTest() {
 
     private fun sample(name: String) = File("../../docs/api-samples/$name.json").readText()
 
+    /** The address the confirm sample answers with (read from it, so a regenerated sample never breaks the test). */
+    private val confirmedEmail by lazy {
+        ApiJson.parseToJsonElement(sample("account_email_confirm")).jsonObject["email"]!!.jsonPrimitive.content
+    }
+
     private fun answer(code: Int, body: String, retryAfter: String? = null): MockResponse {
         val b = MockResponse.Builder().code(code).addHeader("Content-Type", "application/json").body(body)
         retryAfter?.let { b.addHeader("Retry-After", it) }
@@ -216,7 +221,7 @@ class AccountScreensTest : ScreenTest() {
         assertTrue(seen("We sent a 6-digit code to"))
         type("Code from the email", "123456")
         click("Confirm")
-        pumpUntil("confirmed") { shown.email == "sample.new@example.test" }
+        pumpUntil("confirmed") { shown.email == confirmedEmail }
         assertNull(shown.pendingEmail)
         waitFor("Your email is now")
     }
@@ -230,7 +235,7 @@ class AccountScreensTest : ScreenTest() {
         page { EmailPage(shown, ProofAccount(true, false, shown.email), { shown = it }, onBack = {}) }
         pumpUntil("the account is read") { server.requestsTo("GET", "/api/account").isNotEmpty() }
         pumpUntil("the change is seen") { shown.pendingEmail == null }
-        assertEquals("sample.new@example.test", shown.email)
+        assertEquals(confirmedEmail, shown.email)
     }
 
     @Test

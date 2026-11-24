@@ -980,6 +980,10 @@ class MainActivity : FragmentActivity() {
             // The voice note on the v2 components (Record, Pause, Stop, Discard with Undo, Import files).
             com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote -> com.echoledger.mobile.ui.v2.live.V2VoiceNoteScreen(vm, onBack)
 
+            // The New sheet's Import audio (v2.1): the voice page with its file picker open.
+            com.echoledger.mobile.ui.v2.live.LiveEntry.ImportAudio ->
+                com.echoledger.mobile.ui.v2.live.V2VoiceNoteScreen(vm, onBack, importNow = true)
+
             com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
 

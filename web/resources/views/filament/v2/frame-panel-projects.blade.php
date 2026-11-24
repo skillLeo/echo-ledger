@@ -32,7 +32,8 @@
             @foreach ($panel['projects'] as $project)
                 <li x-bind:hidden="find !== '' && ! @js(mb_strtolower($project['name'])).includes(find.toLowerCase())">
                     <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
-                        @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
+                        @if ($project['active']) aria-current="page" @endif
+                        data-v2-object="project" data-v2-object-id="{{ $project['id'] }}" data-v2-object-pinned="{{ ! empty($project['pinned']) ? '1' : '0' }}" data-project="{{ $project['id'] }}">
                         <span class="v2-sb-label" dir="auto"><bdi>{{ $project['name'] }}</bdi></span>
                         @if ($project['count'] > 0)
                             <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
