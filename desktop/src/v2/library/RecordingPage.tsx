@@ -29,7 +29,12 @@ import { LockedChip, NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
 import { BackupEngineLine, FiledByLineV2, LearnOfferV2, RecordingStepsV2, VocabularyOfferV2 } from "./recordingExtras";
 import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
-import { Menu, type MenuItem } from "../components/Menu";
+import { ContextMenu, Menu, type MenuItem } from "../components/Menu";
+import type { TranscriptMenuEvent } from "../components/media";
+import { contextItems } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { choiceItems, type ActionContext } from "../actions/registry";
+import { useActions } from "../actions/useActions";
 import { SourceAvatar } from "./SourceAvatar";
 import { rowState, STATE_WORDS } from "./model";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
@@ -677,6 +682,102 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     void audio.current?.play().catch(() => undefined);
   };
   playFromRef.current = playFrom;
+
+  // UX-22 (3b): the player's, a line's, a speaker's and selected words' right-click menus, from actions.json. On a Mac
+  // selected words keep the system's own text menu (Look Up, Translate, Copy, Share…); elsewhere ours: Copy · Copy with
+  // time · Play from here · Select all.
+  const [pageMenu, setPageMenu] = useState<{ label: string; at: { x: number; y: number }; items: MenuItem[] } | null>(null);
+  const showPageMenu = (label: string, at: { x: number; y: number }, items: MenuItem[]) => {
+    if (!items.length) return;
+    if (currentPlatform() !== "macos") return setPageMenu({ label, at, items });
+    void popupNative(items, at).then((shown) => { if (!shown) setPageMenu({ label, at, items }); });
+  };
+  const copyWords = (text: string, said = "Copied") => void navigator.clipboard?.writeText(text).then(() => onMessage(said)).catch(() => sayProblem(onMessage, "Couldn't copy."));
+  useActions("transcript", {
+    // From a line's or selected words' start (state.at), or the waveform's moment (value).
+    "player.playFromHere": (c) => {
+      seek(Number(c.state?.at ?? c.value) || 0);
+      void audio.current?.play().catch(() => undefined);
+    },
+    "speaker.rename": () => setTool("speakers"),
+    "speaker.mergeWith": (c) => {
+      const [from, to] = (c.value ?? "").split("\u0000");
+      if (!from || !to) return;
+      const merged = { ...names, [from]: speakerName(names, to) };
+      void api.renameSpeakers(item.id, merged, false).then((r) => {
+        if (mounted.current) setDetail((d) => (d.state === "ready" ? { state: "ready", value: { ...d.value, names: r.speaker_names } } : d));
+        onMessage(`Merged into ${speakerName(names, to)}`);
+      }).catch((e) => sayProblem(onMessage, errorMessage(e)));
+    },
+    "edit.copy": (c) => { if (c.value) copyWords(c.value); },
+    "text.copyWithTime": (c) => {
+      const at = Number(c.state?.at) || 0;
+      if (c.value) copyWords(`[${timestamp(at * 1000)}] ${c.value}`, "Copied with its time");
+    },
+    "edit.selectAll": () => {
+      const list = document.querySelector<HTMLElement>('ol.el-transcript[aria-label="Transcript"]');
+      const selection = window.getSelection?.();
+      if (list && selection) selection.selectAllChildren(list);
+    },
+  });
+  /** A right-click in the transcript: selected words, a speaker's name, or a line. */
+  const transcriptMenu = (e: TranscriptMenuEvent) => {
+    const line = segments[e.index];
+    if (!line) return;
+    const platform = currentPlatform();
+    const ctx: ActionContext = { platform, kind: "transcript", state: { hasAudio: canPlay, hasTranscript: true, at: String(line.start) } };
+    if (e.selected) {
+      if (platform === "macos") return;
+      e.preventDefault();
+      showPageMenu("Selected words", e.at, contextItems(["edit.copy", "text.copyWithTime", "text.ask", "-", "player.playFromHere", "-", "edit.selectAll"],
+        { ...ctx, value: e.selected }));
+      return;
+    }
+    e.preventDefault();
+    if (e.onSpeaker) {
+      const label = rawSegments?.[e.index]?.speaker;
+      const others = speakerLabels(rawSegments ?? []).filter((l) => l !== label);
+      showPageMenu(line.speaker, e.at, contextItems(["speaker.rename", "speaker.mergeWith"], ctx, {
+        "speaker.mergeWith": label ? choiceItems("speaker.mergeWith", others.map((o) => ({ value: `${label}\u0000${o}`, label: speakerName(names, o) })), ctx) : [],
+      }));
+      return;
+    }
+    showPageMenu(`Line at ${timestamp(line.start * 1000)}`, e.at, contextItems(["player.playFromHere"], { ...ctx, value: String(line.start) }));
+  };
+  // The selected-words bar (3b), on every platform: [Play from here] [Ask about this] [Copy with time] [Share] above the
+  // words selected in the transcript (what can't run here is left out).
+  const [picked, setPicked] = useState<{ text: string; at: number; x: number; y: number } | null>(null);
+  useEffect(() => {
+    const changed = () => {
+      const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
+      const list = document.querySelector('ol.el-transcript[aria-label="Transcript"]');
+      const node = selection?.anchorNode ?? null;
+      const text = selection && !selection.isCollapsed ? selection.toString().trim() : "";
+      if (!selection || !text || !list || !node || !list.contains(node)) return setPicked(null);
+      const li = (node instanceof Element ? node : node.parentElement)?.closest("li.el-segment");
+      const index = li ? [...list.querySelectorAll(":scope > li.el-segment")].indexOf(li) : -1;
+      const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+      const box = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
+      setPicked({ text, at: segments[index]?.start ?? 0, x: box ? box.left + box.width / 2 : 0, y: box?.top ?? 0 });
+    };
+    // One update a frame, on a change of the selection and on any scroll (the bar follows the words it is over).
+    let frame = 0;
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; changed(); });
+    };
+    document.addEventListener("selectionchange", soon);
+    window.addEventListener("scroll", soon, true);
+    return () => {
+      document.removeEventListener("selectionchange", soon);
+      window.removeEventListener("scroll", soon, true);
+      cancelAnimationFrame(frame);
+    };
+  }, [segments]);
+  const pickedItems = picked ? contextItems(["player.playFromHere", "text.ask", "text.copyWithTime", "text.share"],
+    { platform: currentPlatform(), kind: "transcript", value: picked.text, state: { hasAudio: canPlay, hasTranscript: true, at: String(picked.at) } }) : [];
+  /** The waveform's right-click: Play from here, at the moment under the pointer. */
+  const waveMenu = (ms: number, at: { x: number; y: number }) =>
+    showPageMenu("Waveform", at, contextItems(["player.playFromHere"], { platform: currentPlatform(), kind: "transcript", value: String(ms / 1000), state: { hasAudio: canPlay } }));
   // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s, as classic; never while typing.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
@@ -819,7 +920,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             )}
             {playbackError && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackError}</Banner>}
             <Waveform bars={waveBars} marks={bookmarks.map((b) => ({ id: b.id, atMs: b.at_ms, title: `${timestamp(b.at_ms)}${b.tag ? ` ${b.tag}` : ""}${b.note ? ` · ${b.note}` : ""}` }))}
-              durationMs={durationS * 1000} nowMs={position * 1000} onSeek={(ms) => seek(ms / 1000)} />
+              durationMs={durationS * 1000} nowMs={position * 1000} onSeek={(ms) => seek(ms / 1000)} onMenu={waveMenu} />
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
               end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
@@ -913,8 +1014,18 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 </p>
               )}
               <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
+                onMenu={transcriptMenu}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => parts[i]?.note} lineTitle={(i) => parts[i]?.title} after={(i) => parts[i]?.after} />
+              {/* The selected words' bar, right after the transcript (Tab reaches it from the words). */}
+              {picked && pickedItems.length > 0 && (
+                // A press here keeps the selection (the words stay chosen while the bar acts on them).
+                <div role="toolbar" aria-label="Selected words" className="el-selection-bar" style={{ left: picked.x, top: picked.y }} onMouseDown={(e) => e.preventDefault()}>
+                  {pickedItems.map((i) => (
+                    <Button key={i.action} size="sm" variant="quiet" icon={i.icon} data-action={i.action} onClick={() => i.onPick?.()}>{i.label}</Button>
+                  ))}
+                </div>
+              )}
             </>
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
@@ -958,6 +1069,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
         <ReplaceDialog transcriptId={transcript.value.id} onClose={() => setTool(null)} say={onMessage}
           onReplaced={showTranscript} />
       )}
+      {pageMenu && <ContextMenu label={pageMenu.label} items={pageMenu.items} at={pageMenu.at} onClose={() => setPageMenu(null)} />}
       {tool === "speakers" && transcript.state === "ready" && transcript.value && (
         <SpeakersDialog sessionId={item.id} labels={speakerLabels(transcript.value.segments)} names={names} hasProject={!!item.client}
           onClose={() => setTool(null)} say={onMessage}

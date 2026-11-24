@@ -27,6 +27,9 @@ export type MenuItem = {
   separator?: boolean;
   /** The command it sends (v2/actions/actions.json, UX-21): its words, keys and what it does come from there. */
   action?: string;
+  /** One of its sub-menu's choices (a label, a project, a format, a sort order): its words are the choice's own, and its
+   * `action` is the sub-menu's (UX-22). */
+  choice?: string;
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
@@ -54,6 +57,8 @@ type ListProps = {
    */
   anchor?: HTMLElement | null;
   align?: "start" | "end";
+  /** A title line on top, not an item ("3 recordings", UX-22). */
+  title?: string;
   /** Shown above the items, not one of them (the account menu's avatar, name, email and plan). */
   header?: ReactNode;
 };
@@ -122,7 +127,7 @@ export function Layer({ from, children }: { from: Element | null; children: Reac
  * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
  * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
  */
-export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", header }: ListProps) {
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", title, header }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const headerId = useId();
@@ -272,6 +277,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
     <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
       aria-describedby={header ? headerId : undefined}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
+      {title && <li role="presentation" className="el-menu__title el-caption el-body-strong">{title}</li>}
       {header && <li role="none" id={headerId} className="el-menu__header">{header}</li>}
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
@@ -387,7 +393,11 @@ export function Menu({ label, items: given, button, chip, header, align }: {
  * The same menu at the pointer (a right-click on a row) or under a focused row (Shift+F10, the context-menu key).
  * It stays inside the window; Esc, a press outside or a pick closes it, and focus goes back to where it was.
  */
-export function ContextMenu({ label, items, at, onClose }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void }) {
+export function ContextMenu({ label, items, at, onClose, title }: {
+  label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void;
+  /** A title line on top, when several things are chosen ("3 recordings", UX-22). */
+  title?: string;
+}) {
   const list = useRef<HTMLUListElement | null>(null);
   const back = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
   const [place, setPlace] = useState(at);
@@ -413,7 +423,7 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
   };
   return (
     <Layer from={back.current}>
-      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
+      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list} title={title}
         style={{ left: place.x, top: place.y }}
         onBack={close} onLeave={close} onPick={(item) => { close(); item.onPick?.(); }} />
     </Layer>
