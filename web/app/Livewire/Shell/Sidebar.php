@@ -6,14 +6,19 @@ namespace App\Livewire\Shell;
 
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\DropsRecordings;
+use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\ObjectMenus;
 use App\Filament\Support\Shell;
 use App\Filament\Support\V2RecordingRow;
+use App\Models\Client;
 use App\Models\User;
 use App\Services\Library\SavedViews;
 use App\Services\Lists\LabelLists;
+use App\Services\Projects\ProjectTree;
+use App\Services\RetentionPolicy;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
@@ -147,6 +152,214 @@ class Sidebar extends FilamentSidebar
                 }
                 Notification::make()->title(__('Label created'))->success()->send();
             });
+    }
+
+    /**
+     * UX-22 3b: what the panel's objects' right-click menus (and a view's or a label's ⋯) can do here: a view (Open,
+     * Rename…, Edit filters…, Duplicate, Move up / down, Delete view…), a label (Show recordings, Rename…, Colour ›,
+     * Delete label…), a project (Open, Pin, Rename…, Delete project…; the web keeps no archive, members or requests from
+     * the panel) and Trash (Empty trash…). Opening is the object's own link.
+     */
+    public const OBJECT_ACTIONS = [
+        'view' => ['place.open', 'file.rename', 'view.editFilters', 'view.duplicate', 'view.moveUp', 'view.moveDown', 'view.delete'],
+        'label' => ['label.showRecordings', 'file.rename', 'label.colour', 'label.delete'],
+        'project' => ['project.open', 'project.pin', 'project.rename', 'project.delete'],
+        'trash' => ['trash.empty'],
+    ];
+
+    /** @return array<string, mixed> */
+    public function objectMenus(): array
+    {
+        return ObjectMenus::data(self::OBJECT_ACTIONS, colours: true);
+    }
+
+    /**
+     * A pick from one of the panel's objects' menus (filament.v2.context-menu-script): only the person's own view, label
+     * or project in this workspace (anything else is not found, and nothing happens).
+     */
+    public function objectAction(string $kind, string $action, string $id, ?string $value = null): void
+    {
+        if (! ObjectMenus::picked(self::OBJECT_ACTIONS, $kind, $action)) {
+            return;
+        }
+        $ws = (int) CurrentWorkspace::id();
+        $user = (int) CurrentWorkspace::userId();
+        if ($kind === 'view') {
+            $view = collect(app(SavedViews::class)->index($ws, $user))->firstWhere('id', $id);
+            if (! is_array($view)) {
+                return;
+            }
+            match ($action) {
+                'file.rename' => $this->mountAction('renameView', ['id' => $id]),
+                'view.delete' => $this->mountAction('deleteView', ['id' => $id]),
+                'view.moveUp' => $this->moveView($id, -1),
+                'view.moveDown' => $this->moveView($id, 1),
+                'view.duplicate' => $this->changeViews(function (SavedViews $views, int $ws, int $user) use ($view): void {
+                    // What the view keeps (its filters, search, order, grouping and density), under a new name.
+                    // The filters as the index sends them (an object) are sections again.
+                    $kept = array_filter(array_intersect_key($view, array_flip(['filters', 'search', 'sort', 'group', 'density'])), fn (mixed $v): bool => $v !== null);
+                    $kept['filters'] = json_decode((string) json_encode($view['filters']), true) ?: [];
+                    $views->create($ws, $user, [...$kept,
+                        'name' => mb_substr(__(':name (copy)', ['name' => $view['name']]), 0, SavedViews::MAX_NAME)]);
+                    Notification::make()->title(__('View duplicated'))->success()->send();
+                }),
+                // The view, its filter panel open (Save changes keeps what is changed there).
+                'view.editFilters' => $this->redirect(CaptureSessionResource::getUrl('index', ['v' => $id, 'compose' => 'filters'])),
+                default => null,
+            };
+
+            return;
+        }
+        if ($kind === 'label') {
+            match ($action) {
+                'file.rename' => $this->mountAction('renameLabel', ['key' => $id]),
+                'label.delete' => $this->mountAction('deleteLabel', ['key' => $id]),
+                'label.colour' => is_string($value) && isset(V2RecordingRow::LABEL_COLOURS[$value])
+                    ? $this->changeLabels(fn (LabelLists $lists) => $lists->update($ws, $user, $id, false, null, true, V2RecordingRow::LABEL_COLOURS[$value])) : null,
+                default => null,
+            };
+
+            return;
+        }
+        if ($kind === 'project') {
+            $project = $this->project(['id' => $id]);
+            if ($project === null) {
+                return;
+            }
+            match ($action) {
+                'project.pin' => $project->update(['pinned' => ! $project->pinned]),
+                'project.rename' => $this->mountAction('renameProject', ['id' => $id]),
+                'project.delete' => $this->mountAction('deleteProject', ['id' => $id]),
+                default => null,
+            };
+
+            return;
+        }
+        if ($kind === 'trash' && $action === 'trash.empty') {
+            $this->mountAction('emptyTrash');
+        }
+    }
+
+    /** UX-22 3b: a label's menu › Rename…: its new name on every recording of the person that has it. */
+    public function renameLabelAction(): Action
+    {
+        return Action::make('renameLabel')->label(__('Rename label'))->modalSubmitActionLabel(__('Rename'))
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(LabelLists::MAX_NAME)->autofocus()])
+            ->fillForm(fn (array $arguments): array => ['name' => $this->labelName((string) ($arguments['key'] ?? ''))])
+            ->action(fn (array $data, array $arguments) => $this->changeLabels(fn (LabelLists $lists) => $lists->update((int) CurrentWorkspace::id(),
+                (int) CurrentWorkspace::userId(), (string) ($arguments['key'] ?? ''), true, $data['name'], false, null)));
+    }
+
+    /** UX-22 3b: a label's menu › Delete label…: the label goes, its recordings stay. */
+    public function deleteLabelAction(): Action
+    {
+        return Action::make('deleteLabel')->label(__('Delete label'))->color('danger')->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => __('Delete the label :name?', ['name' => $this->labelName((string) ($arguments['key'] ?? ''))]))
+            ->modalDescription(__('Delete this label? Its recordings stay; only the label goes.'))
+            ->modalSubmitActionLabel(__('Delete label'))
+            ->action(fn (array $arguments) => $this->changeLabels(fn (LabelLists $lists) => $lists->delete((int) CurrentWorkspace::id(),
+                (int) CurrentWorkspace::userId(), (string) ($arguments['key'] ?? ''))));
+    }
+
+    /** UX-22 3b: a project's menu › Rename… (a name its siblings don't have). */
+    public function renameProjectAction(): Action
+    {
+        return Action::make('renameProject')->label(__('Rename project'))->modalSubmitActionLabel(__('Rename'))
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(120)->autofocus()])
+            ->fillForm(fn (array $arguments): array => ['name' => (string) $this->project($arguments)?->name])
+            ->action(function (array $data, array $arguments): void {
+                $project = $this->project($arguments);
+                $name = trim((string) $data['name']);
+                if ($project === null || $name === '') {
+                    return;
+                }
+                try {
+                    app(ProjectTree::class)->assertNameFree((int) $project->workspace_id, $project->parent_id !== null ? (string) $project->parent_id : null,
+                        $name, (string) $project->getKey(), (int) $project->user_id);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+
+                    return;
+                }
+                $project->update(['name' => $name]);
+                Notification::make()->title(__('Project renamed'))->success()->send();
+            });
+    }
+
+    /**
+     * UX-22 3b: a project's menu › Delete project…, asking as the project's own page does: its recordings stay, with no
+     * project; its subfolders move up a level.
+     */
+    public function deleteProjectAction(): Action
+    {
+        return Action::make('deleteProject')->label(__('Delete project'))->color('danger')->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => __('Delete “:name”?', ['name' => (string) $this->project($arguments)?->name]))
+            ->modalDescription(__('Its recordings are not deleted: they stay in All recordings, with no project. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.'))
+            ->modalSubmitActionLabel(__('Delete project'))
+            ->action(function (array $arguments): void {
+                $project = $this->project($arguments);
+                $user = auth()->user();
+                if ($project === null || ! $user instanceof User || ! app(ProjectTree::class)->canDelete($user, $project)) {
+                    return;
+                }
+                try {
+                    $moved = app(ProjectTree::class)->delete($project, $user);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title(__('Project deleted'))
+                    ->body(trans_choice(':count recording now has no project.|:count recordings now have no project.', $moved['moved_sessions'], ['count' => $moved['moved_sessions']]))
+                    ->success()->send();
+            });
+    }
+
+    /** UX-22 3b: Trash's menu › Empty trash…: every recording of the person in Trash here is erased now. */
+    public function emptyTrashAction(): Action
+    {
+        return Action::make('emptyTrash')->label(__('Empty trash'))->color('danger')->requiresConfirmation()
+            ->modalHeading(__('Empty trash?'))->modalDescription(__('Empty the trash? Its recordings can\'t be brought back.'))
+            ->modalSubmitActionLabel(__('Empty trash'))
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
+            ->action(function (): void {
+                $retention = app(RetentionPolicy::class);
+                $bin = $retention->bin((int) CurrentWorkspace::id());
+                foreach ($bin as $session) {
+                    $retention->deleteNow($session);
+                }
+                Notification::make()->title(trans_choice(':count recording erased|:count recordings erased', $bin->count(), ['count' => $bin->count()]))->success()->send();
+            });
+    }
+
+    /**
+     * The person's own project in this workspace named by an action's arguments (id), else null.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    private function project(array $arguments): ?Client
+    {
+        $id = $arguments['id'] ?? null;
+
+        return is_scalar($id) ? Client::query()->where('workspace_id', (int) CurrentWorkspace::id())->where('user_id', (int) CurrentWorkspace::userId())->find((string) $id) : null;
+    }
+
+    private function labelName(string $key): string
+    {
+        $list = collect(app(LabelLists::class)->index((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId()))->firstWhere('key', $key);
+
+        return is_array($list) ? (string) $list['name'] : '';
+    }
+
+    /** Runs a change of the person's labels and says what went wrong in their words (a label not theirs is not found). */
+    private function changeLabels(\Closure $change): void
+    {
+        abort_unless(auth()->user() instanceof User && CurrentWorkspace::id() !== null, 403);
+        try {
+            $change(app(LabelLists::class));
+        } catch (ApiError $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+        }
     }
 
     /** Runs a change of the person's views and says what went wrong in their words. */

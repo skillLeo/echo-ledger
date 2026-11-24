@@ -121,3 +121,55 @@ test('more than the console takes at a time: one greyed line saying how many to 
     assert.deepEqual(made.items, [{ label: 'Up to 200 at a time: unselect 3', disabled: true }]);
     assert.equal(core.recordingMenu(DATA, rows.slice(0, 200)).items.length > 1, true);
 });
+
+// UX-22 3b: the other objects' menus (ObjectMenus::data gives what the page can run, in the console's language).
+const objects = {
+    actions: JSON.parse(readFileSync(new URL('../../resources/js/actions.json', import.meta.url))).actions,
+    runnable: {
+        view: ['place.open', 'file.rename', 'view.editFilters', 'view.duplicate', 'view.moveUp', 'view.moveDown', 'view.delete'],
+        label: ['label.showRecordings', 'file.rename', 'label.colour', 'label.delete'],
+        project: ['project.open', 'project.pin', 'project.rename', 'project.delete'],
+        activity: ['place.open', 'activity.markRead', 'activity.retry'],
+        trashItem: ['trash.restore', 'recording.deleteNow'],
+        trash: ['trash.empty'],
+    },
+    colours: [{ value: 'red', label: 'Red' }, { value: 'blue', label: 'Blue' }],
+    say: { 'Delete view…': 'ویو حذف کریں…' },
+};
+const shown = (made) => made.items.map((i) => (i.separator ? '| ' : '') + i.label);
+
+test('a view: Open | Rename… · Edit filters… · Duplicate · Move up · Move down | Delete view…, without what does not fit it', () => {
+    assert.deepEqual(shown(core.objectMenu({ ...objects, say: {} }, 'view', { id: 'v1', not: ['view.moveUp'] })),
+        ['Open', '| Rename…', 'Edit filters…', 'Duplicate', 'Move down', '| Delete view…']);
+    // In Urdu, the words the console has.
+    const made = core.objectMenu(objects, 'view', { id: 'v1', not: ['view.moveUp', 'view.moveDown'] });
+    assert.deepEqual(made.targets, ['v1']);
+    assert.equal(made.items.at(-1).label, 'ویو حذف کریں…');
+    assert.equal(made.items.at(-1).danger, true);
+});
+
+test('a label: Show recordings | Rename… · Colour › (its own ticked) | Delete label…', () => {
+    const made = core.objectMenu(objects, 'label', { id: 'clients', colour: 'blue' });
+    assert.deepEqual(shown(made), ['Show recordings', '| Rename…', 'Colour', '| Delete label…']);
+    const colour = made.items.find((i) => i.action === 'label.colour');
+    assert.deepEqual(colour.items.map((c) => [c.choice, c.checked]), [['red', false], ['blue', true]]);
+});
+
+test('a project: Open · Pin (Unpin while pinned) | Rename… | Delete project…; what the web lacks is left out', () => {
+    assert.deepEqual(shown(core.objectMenu(objects, 'project', { id: '7' })), ['Open', 'Pin', '| Rename…', '| Delete project…']);
+    assert.deepEqual(shown(core.objectMenu(objects, 'project', { id: '7', state: { pinned: true } })), ['Open', 'Unpin', '| Rename…', '| Delete project…']);
+});
+
+test('an Activity item: Open · Mark as read | Retry, each only where it fits', () => {
+    assert.deepEqual(shown(core.objectMenu(objects, 'activity', { id: 'n1' })), ['Open', 'Mark as read', '| Retry']);
+    // Read, about nothing to open, not an upload that failed: no menu at all.
+    assert.deepEqual(shown(core.objectMenu(objects, 'activity', { id: 'n2', not: ['place.open', 'activity.markRead', 'activity.retry'] })), []);
+});
+
+test('Trash: a recording there Restore | Delete immediately…; Trash itself Empty trash…; an unknown kind nothing', () => {
+    assert.deepEqual(shown(core.objectMenu(objects, 'trashItem', { id: '12' })), ['Restore', '| Delete immediately…']);
+    assert.deepEqual(shown(core.objectMenu(objects, 'trash', { id: 'trash' })), ['Empty trash…']);
+    assert.deepEqual(core.objectMenu(objects, 'nothing', { id: 'x' }).items, []);
+    // A read-only console runs none of them.
+    assert.deepEqual(core.objectMenu({ ...objects, runnable: {} }, 'view', { id: 'v1' }).items, []);
+});

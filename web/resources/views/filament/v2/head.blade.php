@@ -54,8 +54,8 @@
     });
 </script>
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
-{{-- UX-22: a Library row's right-click menu (and Shift+F10, the Menu key). --}}
-@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.context-menu-script')
+{{-- UX-22: a Library row's right-click menu (and Shift+F10, the Menu key); since 3b the other objects' too. --}}
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::any(), 'filament.v2.context-menu-script')
 {{-- The three levels of navigation (docs/PLAN_NAV_3_LEVELS.md): the rail, the panels, the flyout, the memory and their keys. --}}
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::frame(), 'filament.v2.frame-script')
 {{-- Since 2.0.0-p: the filter panel (open, closed, a drawer) and the keys F, ⌘F / Ctrl+F, Esc and ⌘1…⌘9. --}}
