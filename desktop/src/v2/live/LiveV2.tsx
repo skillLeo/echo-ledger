@@ -1,12 +1,11 @@
-// The Live tab in the new look (ui_v2.live, IA 3): everything during a call or session from one place. Record (now,
-// or a voice note), Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate,
-// Dictation and Captions; each opens its feature or its one settings home.
+// The Live tab in the new look (ui_v2.live, IA 3; UX-10 "Live page = live tools"): the tools for a call or session in one
+// place — Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate, Dictation and
+// Captions — with one status line for automatic recording. Record itself lives in the rail's Record button only.
 import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type Settings } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
-import { Button, Card, Icons, List, ListRow, Status } from "../components";
-import { shellStatus } from "../shell/status";
+import { Button, Card, Icons, List, ListRow } from "../components";
 import type { Prep } from "../assist/adapter";
 import { PrepScreen } from "../assist/PrepScreen";
 import { LiveAssistSection } from "./LiveAssistSection";
@@ -19,6 +18,7 @@ export type LiveV2Props = {
   /** Live Assist is on for this person (live_assist). */
   assistOn: boolean;
   projects: { id: string; name: string }[];
+  /** Not shown here any more (UX-10: no second Record button); kept so the window can pass them unchanged. */
   onRecord?: () => void;
   onVoiceNote?: () => void;
   onCaptions: () => void;
@@ -28,7 +28,7 @@ export type LiveV2Props = {
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 };
 
-export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, run }: LiveV2Props) {
+export function LiveV2({ status, assistOn, projects, onCaptions, onSettings, run }: LiveV2Props) {
   const [prep, setPrep] = useState<Prep | "new" | null>(null);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -49,7 +49,6 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
     return <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} />;
   }
 
-  const strip = shellStatus(status);
   const key = (action: "dictation" | "toggle_captions" | "voice_note") => {
     const k = settings?.shortcuts?.[action];
     return k ? prettyShortcut(k, status.platform) : null;
@@ -59,22 +58,11 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
     <div className="el-page el-page--narrow" data-v2="live">
       <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Live</h1></header>
 
-      <section className="el-group" aria-label="Record">
-        <h2 className="el-caption el-body-strong el-group__title">Record</h2>
-        <Card className="el-home-strip">
-          <Status kind={strip.kind} live>{strip.text}</Status>
-          <span className="el-page__actions">
-            {onVoiceNote && !status.recording && <Button onClick={onVoiceNote} icon={Icons.MicIcon}>Voice note</Button>}
-            {onRecord && <Button variant={status.recording ? "danger" : "primary"} icon={Icons.RecordIcon} onClick={onRecord}>{status.recording ? "Stop and save" : "Record"}</Button>}
-          </span>
-        </Card>
-        <Card>
-          <List label="Recording" className="el-group__rows">
-            <ListRow compact icon={Icons.PhoneIcon} iconStyle="plain" title="Calls and meetings record by themselves"
-              value={status.autoMode ? "On" : "Off"} chevron onClick={() => onSettings("calls")} />
-          </List>
-        </Card>
-      </section>
+      {/* One status line: whether calls and meetings are recorded without asking, and where to change it. */}
+      <p className="el-secondary" data-testid="live-auto-record">
+        Auto-record calls &amp; meetings: <span className="el-body-strong">{status.autoMode ? "On" : "Off"}</span>{" · "}
+        <Button variant="quiet" size="sm" onClick={() => onSettings("calls")} aria-label="Change auto-record calls and meetings">Change</Button>
+      </p>
 
       {assistOn && <LiveAssistSection onPrep={setPrep} />}
 

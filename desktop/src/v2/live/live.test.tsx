@@ -211,17 +211,21 @@ describe("ending the running session from the prep", () => {
 describe("the Live tab", () => {
   const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn(), run: <T,>(fn: () => Promise<T>) => fn() });
 
-  it("has Record, Live Assist (when on), Live Translate, Dictation and Captions", async () => {
+  it("holds the live tools (Live Assist when on, Live Translate, Dictation, Captions) and one auto-record line, never a second Record", async () => {
     respond("assist_preps_list", [PREP]);
     const p = props();
     respond("translate_apps", [{ pid: 4242, name: "Valorant" }]);
     respond("translate_status", null);
-    render(<LiveV2 status={makeStatus({ plan: { ...makeStatus().plan, liveTranslate: true } })} assistOn projects={[]} {...p} />);
+    render(<LiveV2 status={makeStatus({ autoMode: true, plan: { ...makeStatus().plan, liveTranslate: true } })} assistOn projects={[]} {...p} />);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
-    expect(p.onRecord).toHaveBeenCalled();
-    expect(p.onVoiceNote).toHaveBeenCalled();
+    // UX-10: Record lives in the rail only; this page has no Record, Voice note or "record by themselves" line.
+    expect(screen.queryByRole("button", { name: /^(Record|Voice note|Stop and save)$/ })).toBeNull();
+    expect(document.body).not.toHaveTextContent(/by themselves/i);
+    const line = screen.getByTestId("live-auto-record");
+    expect(line).toHaveTextContent("Auto-record calls & meetings: On · Change");
+    fireEvent.click(within(line).getByRole("button", { name: "Change auto-record calls and meetings" }));
+    expect(p.onSettings).toHaveBeenCalledWith("calls");
+    expect(p.onRecord).not.toHaveBeenCalled();
     expect(callsOf("assist_preps_list")).toEqual([{ status: "scheduled" }]);
     const upcoming = screen.getByRole("list", { name: "Upcoming sessions" });
     fireEvent.click(within(upcoming).getByRole("button", { name: "March order with Qureshi Textiles" }));
@@ -246,12 +250,20 @@ describe("the Live tab", () => {
     expect(callsOf("assist_preps_list")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
     expect(p.onCaptions).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Stop and save" })).toBeInTheDocument();
+    // Stopping is the rail's Record (and the pill's), not a second button here.
+    expect(screen.queryByRole("button", { name: "Stop and save" })).toBeNull();
+    expect(screen.getByTestId("live-auto-record")).toHaveTextContent("Auto-record calls & meetings: On · Change");
   });
 });
 
 describe("the Live tab's and the prep's states", () => {
   const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn(), run: <T,>(fn: () => Promise<T>) => fn() });
+
+  it("the auto-record line says Off when calls and meetings aren't recorded by themselves", async () => {
+    render(<LiveV2 status={makeStatus({ autoMode: false })} assistOn={false} projects={[]} {...props()} />);
+    await act(flushAsync);
+    expect(screen.getByTestId("live-auto-record")).toHaveTextContent("Auto-record calls & meetings: Off · Change");
+  });
 
   it("sessions: loading, then an error with Try again, never a false 'none scheduled'", async () => {
     let answer: (v: unknown) => void = () => undefined;

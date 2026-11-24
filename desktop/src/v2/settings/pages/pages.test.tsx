@@ -492,6 +492,23 @@ describe("Screen moments v2", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Never capture these apps" })).toBeInTheDocument();
   });
 
+  it("UX-10: one line per setting, and Learn more (closed) keeps what screen moments are and this platform's notes", async () => {
+    resetEntitlementsForTests(sampleEntitlements("pro"));
+    await show("screen");
+    const card = screen.getByTestId("screen-moments-card");
+    expect(within(card).getByText("Keeps what a meeting shows on screen, so the transcript knows what was there.")).toBeInTheDocument();
+    expect(within(card).getByText("Pause it any time from the recording controls.")).toBeInTheDocument();
+    expect(within(card).getByText("Nothing else on your screen is kept.")).toBeInTheDocument();
+    expect(within(card).getByText("Never kept, even when they're on screen.")).toBeInTheDocument();
+    const more = screen.getByTestId("screen-learn-more");
+    expect(more.tagName).toBe("DETAILS");
+    expect(more).not.toHaveAttribute("open");
+    expect(within(more).getByText("Learn more").tagName).toBe("SUMMARY");
+    expect(more).toHaveTextContent("Screens are stored encrypted on this computer until they reach your server");
+    expect(more).toHaveTextContent(TARGET_HINT.meeting_window);
+    expect(more).toHaveTextContent("Windows 10 draws a yellow border around the meeting window while screens are on.");
+  });
+
   it("on a Mac: Allow Screen Recording, and after a refusal Open System Settings", async () => {
     respond("screens_status", { supported: true, platform: "macos", borderless: false, permission: false, inPlan: true, onServer: true });
     resetEntitlementsForTests(sampleEntitlements("pro"));
