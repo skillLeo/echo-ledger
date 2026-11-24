@@ -330,6 +330,8 @@ function isoApiCases(array $b): array
         'api.activity.read' => ['POST', '/api/activity/read', [], 'list'],
         // Since 2.0.0-r: the badge counts the person's own only (tests/Feature/Api/BadgeTest.php).
         'api.badge' => ['GET', '/api/badge', [], 'list'],
+        // Since 2.0.0-r: the Activity's groups, the person's own (tests/Feature/Api/ActivityDedupeTest.php).
+        'api.activity.groups' => ['GET', '/api/activity/groups', [], 'list'],
         'api.sessions.export' => ['POST', '/api/sessions/export', ['ids' => [$s], 'format' => 'txt'],
             // Same answer as for unknown ids: nothing of the workspace matched.
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],

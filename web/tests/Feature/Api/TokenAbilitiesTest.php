@@ -121,6 +121,8 @@ function abilityRoutes(): array
         'mark activity read' => ['POST', '/api/activity/read', 'library:read'],
         // Since 2.0.0-r (BE-04).
         'the badge' => ['GET', '/api/badge', 'library:read'],
+        // Since 2.0.0-r (BE-02).
+        'activity groups' => ['GET', '/api/activity/groups', 'library:read'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],
