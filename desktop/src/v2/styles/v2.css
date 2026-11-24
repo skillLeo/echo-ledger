@@ -192,9 +192,11 @@
   border-radius: var(--el-component-menu-radius);
   box-shadow: var(--el-shadow-1);
 }
+/* Windows 11's menus (UX-22): 8 px corners, 32 px rows, 16 px icons, shortcuts at the end; a Mac's right-click menus are
+   the system's own (actions/popup.ts). */
 .el-menu__option {
   display: flex; align-items: center; gap: var(--el-space-8);
-  min-block-size: var(--el-component-field-height);
+  min-block-size: var(--el-space-32);
   padding-block: var(--el-space-4);
   padding-inline: var(--el-space-8);
   border-radius: var(--el-radius-sm);
@@ -1474,6 +1476,8 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-colour-picker__option[aria-checked="true"] .el-colour-picker__dot { outline: var(--el-border-strong) solid var(--el-role-text-primary); outline-offset: var(--el-space-2); }
 
 .el-newlist { display: flex; flex-direction: column; gap: var(--el-space-16); }
+/* A several-things menu's title ("3 recordings"): not an item. */
+.el-menu__title { list-style: none; padding: var(--el-space-4) var(--el-space-8); color: var(--el-role-text-secondary); }
 .el-menu__separator {
   list-style: none; block-size: 0;
   margin-block: var(--el-space-4); margin-inline: calc(-1 * var(--el-space-4));
@@ -2279,6 +2283,15 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   pointer-events: auto; transition: opacity var(--el-motion-fast), visibility var(--el-motion-fast);
 }
 .el-back-top[data-shown="false"] .el-back-top__button { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- The selected-words bar (UX-22) --------------------------------------------------------------------------- */
+/* Above the words selected in a transcript, centred on them: Play from here, Ask about this, Copy with time, Share. */
+.el-selection-bar {
+  position: fixed; z-index: var(--el-layer-menu); transform: translate(-50%, calc(-100% - var(--el-space-8)));
+  display: flex; gap: var(--el-space-2); padding: var(--el-space-4);
+  background: var(--el-role-bg-overlay); border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-menu-radius); box-shadow: var(--el-shadow-1);
+}
 
 /* ---- DES-03: the desktop's base sizes (PLAN_V2_1_POLISH, a proposal for the owner to pick from) ---------------------
    100% looks like the 90-95% the owner asked for, without a default zoom: in the three levels' shell only (the floating

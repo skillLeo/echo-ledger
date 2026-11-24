@@ -12,7 +12,7 @@ export function scrollRootOf(el: Element | null): HTMLElement | null {
     const y = getComputedStyle(at).overflowY;
     if (y === "auto" || y === "scroll") return at;
   }
-  return (document.scrollingElement as HTMLElement | null) ?? null;
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
 }
 
 /** Keys a field, a dialog, a menu, a tab list or a toolbar keeps for itself (Home there is its first item). */

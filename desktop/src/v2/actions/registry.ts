@@ -165,10 +165,6 @@ const handlers = new Map<string, Handler[]>();
 /** The newest handler for an id that takes this kind of thing (one registered without a kind takes any). */
 const handlerFor = (id: string, kind?: string): Handler | undefined =>
   [...(handlers.get(id) ?? [])].reverse().find((h) => !h.kind || h.kind === kind);
-/** Whether something here does `id` now, for this kind of thing (a screen registered it): what can't is greyed or left out. */
-export function canRun(id: string, kind?: string): boolean {
-  return !!handlerFor(id, kind);
-}
 /**
  * What an id does here (the screen that can do it); the newest registration runs. With a `kind` it runs only for that
  * kind of thing (ActionContext.kind): the Library's Rename… is a recording's, the sidebar's a view's. Returns what
@@ -234,10 +230,32 @@ export function menuItems(ids: readonly string[], ctx: ActionContext): (MenuItem
   return out;
 }
 
+/**
+ * A sub-menu's choices (UX-22): a label's name, a project, a format, a sort order. Each sends the sub-menu's action with
+ * its value; their words are the choices' own, so checkMenu takes them only under that sub-menu.
+ */
+export function choiceItems(action: string, choices: readonly { value: string; label: string; checked?: boolean; disabled?: boolean; icon?: MenuItem["icon"] }[],
+  ctx: ActionContext): MenuItem[] {
+  need(action);
+  return choices.map((c) => ({
+    action, choice: c.value, label: c.label, icon: c.icon, checked: c.checked, disabled: c.disabled || undefined,
+    onPick: () => void runAction(action, { ...ctx, value: c.value }),
+  }));
+}
+
+/** Whether something here does `id` now (a screen registered it): a right-click menu shows only what can run. */
+export function canRun(id: string, kind?: string): boolean {
+  return !!handlerFor(id, kind);
+}
+
 /** What is wrong with a menu (the test's check): an item with no action, an unknown one, other words or keys. */
-export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform): string[] {
+export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform, parent?: string): string[] {
   const out: string[] = [];
   for (const item of items) {
+    if (item.choice !== undefined) {
+      if (!parent || item.action !== parent) out.push(`"${item.label}": a choice outside its sub-menu (${item.action ?? "no action"})`);
+      continue;
+    }
     if (!item.action) {
       out.push(`"${item.label}": no action in actions.json`);
     } else {
@@ -252,7 +270,7 @@ export function checkMenu(items: readonly (MenuItem & { action?: string })[], pl
         if (item.shortcut && !keys.includes(item.shortcut)) out.push(`"${item.label}": shortcut ${item.shortcut}, actions.json says ${keys[0] ?? "none"}`);
       }
     }
-    if (item.items) out.push(...checkMenu(item.items, platform));
+    if (item.items) out.push(...checkMenu(item.items, platform, item.action));
   }
   return out;
 }
@@ -269,11 +287,24 @@ export function accelerator(shortcut: string): string {
 }
 
 /** A menu made by menuItems() as a native menu's lines (native_menu.rs): a line apart becomes a separator before it. */
-export function nativeItems(items: readonly (MenuItem & { action: string })[]): NativeMenuItem[] {
-  return items.flatMap((i) => [
-    ...(i.separator ? [{ action: null }] : []),
-    { action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null },
-  ]);
+export function nativeItems(items: readonly MenuItem[], title?: string, depth = 0): NativeMenuItem[] {
+  // A title line (several chosen, UX-22), greyed, with a hairline under it.
+  const out: NativeMenuItem[] = title ? [{ action: null, label: title, enabled: false }, { action: null }] : [];
+  for (const i of items) {
+    if (i.separator && out.length && out[out.length - 1].action !== null) out.push({ action: null });
+    // A note, not a command ("Up to 200 at a time…"): greyed.
+    if (!i.action) out.push({ action: null, label: i.label, enabled: false });
+    // A sub-menu, one level deep (3b): its choices come back with their values.
+    else if (i.items?.length) {
+      if (depth === 0) out.push({ action: i.action, label: i.label, enabled: !i.disabled, items: nativeItems(i.items, undefined, 1) });
+    } else {
+      out.push({
+        action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null,
+        ...(i.choice !== undefined ? { value: i.choice } : {}),
+      });
+    }
+  }
+  return out;
 }
 
 /** Whether a key press is this shortcut ("⇧⌘N" on a Mac, "Ctrl+Shift+N" on Windows): the same keys, no others. */

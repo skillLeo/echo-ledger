@@ -3,11 +3,15 @@
 //! v2/actions/actions.json), and where to open it; the system draws it, with its own keys, ticks and greyed items. A
 //! pick reaches the menus' handler (tray.rs, Tauri hands it every menu's events), which tells the main window the action
 //! id (`menu:action`); the page's registry runs it. Every item the system draws for the page (here and the menu bar,
-//! app_menu.rs) has its id from [`item_id`] and is read back by [`parse_item_id`]: one form everywhere.
+//! app_menu.rs) has its id from [`item_id`] and is read back by [`parse_item_id`]: one form everywhere,
+//! `action:<id>[@<target>][=<value>][~<n>]`. `@<target>` is what it acts on when that isn't the selection; `=<value>` a
+//! sub-menu's choice; `~<n>` the number of the right-click menu it came from (UX-22, v2/actions/popup.ts), read off the
+//! end first: such a pick belongs to that menu alone. A pick with no number (Record's menu, the menu bar, the tree's
+//! project menu) goes to the registry.
 
 use serde::Deserialize;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, LogicalPosition, Manager, Window};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, LogicalPosition, Manager, Window, Wry};
 
 /// What a native item's id starts with: the rest is the action id.
 pub const PREFIX: &str = "action:";
@@ -24,7 +28,7 @@ pub const MENU: char = '~';
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeItem {
-    /// The action it sends (none: a line between groups).
+    /// The action it sends (none: a line between groups, or with a label a greyed title line, "3 recordings").
     pub action: Option<String>,
     #[serde(default)]
     pub label: String,
@@ -37,12 +41,12 @@ pub struct NativeItem {
     /// What it acts on, when that isn't the selection (the project right-clicked in the panel's tree).
     #[serde(default)]
     pub target: Option<String>,
-    /// A sub-menu's choice, sent with its action.
+    /// A sub-menu's choice (a label, a project, a format, UX-22): sent with its action as `<action>=<value>`.
     #[serde(default)]
     pub value: Option<String>,
-    /// The context menu it is in (the page numbers each it shows, popup.ts): answered by that menu only.
+    /// A sub-menu's items (one level, 3b).
     #[serde(default)]
-    pub menu: Option<u32>,
+    pub items: Option<Vec<NativeItem>>,
 }
 
 fn yes() -> bool {
@@ -55,7 +59,7 @@ pub struct Pick<'a> {
     pub action: &'a str,
     pub target: Option<&'a str>,
     pub value: Option<&'a str>,
-    pub menu: Option<u32>,
+    pub menu: Option<u64>,
 }
 
 impl<'a> Pick<'a> {
@@ -71,7 +75,7 @@ pub struct Picked {
     pub action: String,
     pub target: Option<String>,
     pub value: Option<String>,
-    pub menu: Option<u32>,
+    pub menu: Option<u64>,
 }
 
 /// An action id ("view.sortBy"): words of letters and digits joined by dots, its group first.
@@ -224,28 +228,46 @@ pub fn picked(app: &AppHandle, id: &str) {
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, EVENT, payload);
 }
 
-/// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system.
-#[tauri::command]
-pub async fn native_menu_popup(window: Window, items: Vec<NativeItem>, x: f64, y: f64) -> Result<(), String> {
-    let app = window.app_handle().clone();
-    let menu = Menu::new(&app).map_err(|e| e.to_string())?;
-    for item in &items {
-        let Some(action) = &item.action else {
-            menu.append(&PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-            continue;
-        };
-        // A target or value that isn't one of our ids: the item isn't drawn (and can't send a pick nobody reads).
-        let pick = Pick { action, target: item.target.as_deref(), value: item.value.as_deref(), menu: item.menu };
-        let Some(id) = item_id(&pick) else { continue };
-        match item.checked {
-            Some(checked) => menu.append(
-                &CheckMenuItem::with_id(&app, id, &item.label, item.enabled, checked, item.accelerator.as_deref()).map_err(|e| e.to_string())?,
-            ),
-            None => menu.append(&MenuItem::with_id(&app, id, &item.label, item.enabled, item.accelerator.as_deref()).map_err(|e| e.to_string())?),
+/// One line as the system draws it: a hairline, a greyed title, a sub-menu (one level), a tick or a plain item. An item
+/// whose target or value has no id (empty) isn't drawn.
+fn native_line(app: &AppHandle, item: &NativeItem, depth: usize, menu: Option<u64>) -> Result<Option<Box<dyn IsMenuItem<Wry>>>, String> {
+    let e = |e: tauri::Error| e.to_string();
+    let id = |action| item_id(&Pick { action, target: item.target.as_deref(), value: item.value.as_deref(), menu });
+    Ok(Some(match (&item.action, &item.items, item.checked) {
+        (None, _, _) if item.label.is_empty() => Box::new(PredefinedMenuItem::separator(app).map_err(e)?),
+        (None, _, _) => Box::new(MenuItem::new(app, &item.label, false, None::<&str>).map_err(e)?),
+        (Some(_), Some(items), _) if depth == 0 => {
+            let sub = Submenu::new(app, &item.label, item.enabled).map_err(e)?;
+            for child in items {
+                if let Some(line) = native_line(app, child, depth + 1, menu)? {
+                    sub.append(line.as_ref()).map_err(e)?;
+                }
+            }
+            Box::new(sub)
         }
-        .map_err(|e| e.to_string())?;
+        (Some(action), _, checked) => {
+            let Some(id) = id(action.as_str()) else { return Ok(None) };
+            match checked {
+                Some(checked) => Box::new(CheckMenuItem::with_id(app, id, &item.label, item.enabled, checked, item.accelerator.as_deref()).map_err(e)?),
+                None => Box::new(MenuItem::with_id(app, id, &item.label, item.enabled, item.accelerator.as_deref()).map_err(e)?),
+            }
+        }
+    }))
+}
+
+/// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system. Nothing of it stays
+/// on the page's side: a pick comes back as `menu:action` with its id after the prefix, and with `menu` (a right-click
+/// menu's number) its every pick carries `~<menu>`.
+#[tauri::command]
+pub async fn native_menu_popup(window: Window, items: Vec<NativeItem>, x: f64, y: f64, menu: Option<u64>) -> Result<(), String> {
+    let app = window.app_handle().clone();
+    let lines = Menu::new(&app).map_err(|e| e.to_string())?;
+    for item in &items {
+        if let Some(line) = native_line(&app, item, 0, menu)? {
+            lines.append(line.as_ref()).map_err(|e| e.to_string())?;
+        }
     }
-    window.popup_menu_at(&menu, LogicalPosition::new(x, y)).map_err(|e| e.to_string())
+    window.popup_menu_at(&lines, LogicalPosition::new(x, y)).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -263,7 +285,7 @@ mod tests {
     }
 
     /// What a pick reads back as.
-    fn picked(action: &str, target: Option<&str>, value: Option<&str>, menu: Option<u32>) -> Picked {
+    fn picked(action: &str, target: Option<&str>, value: Option<&str>, menu: Option<u64>) -> Picked {
         Picked { action: action.into(), target: target.map(Into::into), value: value.map(Into::into), menu }
     }
 
@@ -294,6 +316,10 @@ mod tests {
             let on = item_id(&Pick { target: Some(raw), value: Some(raw), menu: Some(3), ..Pick::of("recording.labels") }).unwrap();
             assert_eq!(parse_item_id(&on), Some(picked("recording.labels", Some(raw), Some(raw), Some(3))), "{raw}");
         }
+        // UX-22's case: a value's own "~" before the menu's number.
+        let id = item_id(&Pick { value: Some("a~b"), menu: Some(12), ..Pick::of("recording.labels") }).unwrap();
+        assert_eq!(id, "action:recording.labels=a%7Eb~12");
+        assert_eq!(parse_item_id(&id), Some(picked("recording.labels", None, Some("a~b"), Some(12))));
         // A value ending in "~12" is a value, never menu 12.
         let id = item_id(&Pick { value: Some("Clients~12"), ..Pick::of("recording.labels") }).unwrap();
         assert_eq!(parse_item_id(&id).unwrap().menu, None);
@@ -377,9 +403,28 @@ mod tests {
         assert_eq!(items[1].action, None);
         assert!(items[2].enabled);
         assert_eq!(items[2].checked, Some(true));
-        assert_eq!(items[0].menu, None);
-        let numbered: NativeItem = serde_json::from_str(r#"{"action":"recording.pin","label":"Pin","menu":4}"#).unwrap();
-        assert_eq!(numbered.menu, Some(4));
+        assert_eq!(items[0].value, None);
+        assert_eq!(items[0].items, None);
+    }
+
+    #[test]
+    fn a_title_line_a_choice_and_a_sub_menu_of_choices() {
+        let items: Vec<NativeItem> = serde_json::from_str(
+            r#"[{"action":null,"label":"3 Recordings","enabled":false},
+                {"action":null},
+                {"action":"recording.moveToProject","label":"Move to Project","items":[
+                    {"action":"recording.moveToProject","label":"No project","value":"none","checked":true},
+                    {"action":"recording.moveToProject","label":"Acme","value":"c1","checked":false}]}]"#,
+        )
+        .unwrap();
+        assert_eq!(items[0].label, "3 Recordings");
+        assert!(!items[0].enabled);
+        assert_eq!(items[1].label, "");
+        let sub = items[2].items.as_ref().unwrap();
+        assert_eq!(sub.len(), 2);
+        assert_eq!(sub[1].value.as_deref(), Some("c1"));
+        let pick = Pick { value: sub[1].value.as_deref(), menu: Some(3), ..Pick::of(sub[1].action.as_deref().unwrap()) };
+        assert_eq!(item_id(&pick).as_deref(), Some("action:recording.moveToProject=c1~3"));
     }
 
     #[test]
@@ -387,6 +432,6 @@ mod tests {
         let tray = include_str!("tray.rs");
         assert!(tray.contains("id if crate::native_menu::picked_action(id).is_some() => {"));
         assert!(include_str!("lib.rs").contains("native_menu::native_menu_popup,"));
-        assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("native_menu_popup", { items, x, y })"#));
+        assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null })"#));
     }
 }
