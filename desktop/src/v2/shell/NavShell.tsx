@@ -7,6 +7,7 @@ import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { BrandMark } from "../../components/BrandMark";
 import { initials } from "../settings/initials";
+import { lastAccountHere } from "../library/myViews";
 import { PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
 import type { ShellStatus } from "./status";
 
@@ -18,27 +19,38 @@ const PANEL_KEY = "echoledger-nav-panels";
 /** Whether the panel is pinned beside the page in a small window (UX-02). */
 const PIN_KEY = "echoledger-nav-pinned-small";
 /**
- * Where a layout choice is kept on this computer: each account's own (`for`: the server, the email and the workspace, as
- * for My views), else (the account not known yet) the computer's, as before accounts had their own. An account's first
- * start reads the computer's, so nothing chosen before is lost.
+ * A layout choice is each account's own on this computer (`account`: the server, the email and the workspace, as for My
+ * views). While the account isn't known it is kept in memory only: nothing is read or written. What an earlier version
+ * kept for the whole computer (`key` alone) moves, once, to the account that used this computer last (My views' record
+ * of it); any other account starts from the defaults.
  */
-const keyFor = (key: string, account: string | null | undefined) => (account ? `${key}:${account}` : key);
 function readKept(key: string, account: string | null | undefined): string | null {
+  if (!account) return null;
   try {
-    return localStorage.getItem(keyFor(key, account)) ?? (account ? localStorage.getItem(key) : null);
+    const own = localStorage.getItem(`${key}:${account}`);
+    if (own !== null) return own;
+    const old = localStorage.getItem(key);
+    if (old === null || lastAccountHere() !== account) return null;
+    localStorage.setItem(`${key}:${account}`, old);
+    localStorage.removeItem(key);
+    return old;
   } catch {
     return null;
+  }
+}
+function writeKept(key: string, account: string | null | undefined, value: string) {
+  if (!account) return;
+  try {
+    localStorage.setItem(`${key}:${account}`, value);
+  } catch {
+    // Kept for this session only.
   }
 }
 function loadPinned(account: string | null | undefined): boolean {
   return readKept(PIN_KEY, account) === "1";
 }
 function savePinned(account: string | null | undefined, pinned: boolean) {
-  try {
-    localStorage.setItem(keyFor(PIN_KEY, account), pinned ? "1" : "0");
-  } catch {
-    // Kept for this session only.
-  }
+  writeKept(PIN_KEY, account, pinned ? "1" : "0");
 }
 /** Below this window height the rail shows its icons only. */
 export const SHORT_RAIL_BELOW = 820;
@@ -54,11 +66,7 @@ function loadHidden(account: string | null | undefined): Set<Place> {
   }
 }
 function saveHidden(account: string | null | undefined, hidden: ReadonlySet<Place>) {
-  try {
-    localStorage.setItem(keyFor(PANEL_KEY, account), JSON.stringify([...hidden]));
-  } catch {
-    // Kept for this session only.
-  }
+  writeKept(PANEL_KEY, account, JSON.stringify([...hidden]));
 }
 
 const typing = (target: EventTarget | null) =>
@@ -179,6 +187,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     });
   }, [place, panels, narrow, flyout, closeFlyout, hidden, layoutFor]);
   // Another place: the flyout closes (it opens again from the rail).
+  // Wide again: a flyout left open there is closed (it would open by itself when the window narrows).
+  if (flyout && !narrow) setFlyout(false);
   const [lastPlace, setLastPlace] = useState(place);
   if (place !== lastPlace) {
     setLastPlace(place);
