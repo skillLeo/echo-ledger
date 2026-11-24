@@ -217,11 +217,50 @@ pub fn page_gone(app: &AppHandle) {
 /// waiting for the window lifecycle's lock (`lifecycle::main_phase_now`), so no caller of the status can be holding it.
 #[cfg(target_os = "macos")]
 pub fn core_follow(app: &AppHandle) {
+    post_follow(app, 0);
+}
+
+/// How many times the core's look is tried again while the lifecycle's lock is busy (a recording's caption and pill
+/// events take it for each event), and how long apart.
+pub const FOLLOW_TRIES: u8 = 5;
+pub const FOLLOW_RETRY_MS: u64 = 40;
+
+/// What one look at the main window decides for the core's own commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FollowStep {
+    /// No page: the core keeps its commands in step.
+    Follow,
+    /// The page draws the bar, or the lock stayed busy every try: nothing to do now (the next status looks again).
+    Skip,
+    /// The lifecycle's lock was busy: look again a moment later.
+    Retry,
+}
+
+/// The decision (pure): `phase` as read without waiting (none: the lock was busy), `tries` the looks before this one.
+pub fn follow_step(phase: Option<crate::lifecycle::Phase>, tries: u8) -> FollowStep {
+    use crate::lifecycle::Phase;
+    match phase {
+        Some(Phase::Absent | Phase::Closing) => FollowStep::Follow,
+        Some(Phase::Creating | Phase::Ready) => FollowStep::Skip,
+        None if tries + 1 < FOLLOW_TRIES => FollowStep::Retry,
+        None => FollowStep::Skip,
+    }
+}
+
+/// Posts a look to the main thread (never waited for); a busy lock is looked at again a moment later, from off the main
+/// thread, so the main thread never sleeps and never takes the lock it might itself be holding.
+#[cfg(target_os = "macos")]
+fn post_follow(app: &AppHandle, tries: u8) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        use crate::lifecycle::Phase;
-        if matches!(crate::lifecycle::main_phase_now(&handle), Some(Phase::Absent | Phase::Closing)) {
-            mac::follow(&handle);
+    let _ = app.run_on_main_thread(move || match follow_step(crate::lifecycle::main_phase_now(&handle), tries) {
+        FollowStep::Follow => mac::follow(&handle),
+        FollowStep::Skip => {}
+        FollowStep::Retry => {
+            let again = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(FOLLOW_RETRY_MS));
+                post_follow(&again, tries + 1);
+            });
         }
     });
 }
@@ -674,6 +713,29 @@ mod tests {
     }
 
     #[test]
+    fn a_busy_lifecycle_lock_is_looked_at_again_a_few_times_then_left_to_the_next_status() {
+        use crate::lifecycle::Phase;
+        // No page: follow; a page: nothing to do, whatever the try.
+        for tries in [0, 3, FOLLOW_TRIES] {
+            assert_eq!(follow_step(Some(Phase::Absent), tries), FollowStep::Follow);
+            assert_eq!(follow_step(Some(Phase::Closing), tries), FollowStep::Follow);
+            assert_eq!(follow_step(Some(Phase::Ready), tries), FollowStep::Skip);
+            assert_eq!(follow_step(Some(Phase::Creating), tries), FollowStep::Skip);
+        }
+        // The lock busy (a caption or pill event holds it): tried again, FOLLOW_TRIES looks in all, then left.
+        let looks = (0..=FOLLOW_TRIES).take_while(|&tries| follow_step(None, tries) == FollowStep::Retry).count() + 1;
+        assert_eq!(looks, usize::from(FOLLOW_TRIES));
+        assert_eq!(follow_step(None, FOLLOW_TRIES - 1), FollowStep::Skip);
+        // A busy lock found on the next look: followed then.
+        assert_eq!(follow_step(Some(Phase::Absent), 2), FollowStep::Follow);
+        // The retry waits off the main thread, then posts again.
+        let code = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
+        let post = &code[code.find("fn post_follow(app: &AppHandle, tries: u8)").unwrap()..];
+        let post = &post[..post.find("\n}\n").unwrap()];
+        assert!(post.contains("std::thread::spawn") && post.contains("post_follow(&again, tries + 1)"));
+    }
+
+    #[test]
     fn a_core_command_s_words_change_in_place_with_the_language() {
         let bar = |off: &str, on: &str| -> MenuBar {
             serde_json::from_str(&format!(
@@ -744,11 +806,13 @@ mod tests {
         assert!(include_str!("commands.rs").contains("crate::app_menu::core_follow(app);"));
         // The status path takes no lock of the lifecycle's: the phase is read on the main thread, without waiting.
         let source = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
-        let follow_now = &source[source.find("pub fn core_follow(app: &AppHandle)").unwrap()..];
+        let follow_now = &source[source.find("fn post_follow(app: &AppHandle, tries: u8)").unwrap()..];
         let follow_now = &follow_now[..follow_now.find("\n}\n").unwrap()];
         let posted = follow_now.find("run_on_main_thread").unwrap();
         assert!(!follow_now[..posted].contains("phases(") && !follow_now[..posted].contains("slots("));
         assert!(follow_now[posted..].contains("main_phase_now(&handle)"));
+        let start = &source[source.find("pub fn core_follow(app: &AppHandle)").unwrap()..];
+        assert!(start[..start.find("\n}\n").unwrap()].contains("post_follow(app, 0)"));
         let lifecycle = include_str!("lifecycle.rs");
         let now = &lifecycle[lifecycle.find("pub fn main_phase_now(").unwrap()..];
         assert!(now[..now.find("\n}\n").unwrap()].contains("try_lock()"), "never waits for the lock");
