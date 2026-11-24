@@ -66,6 +66,8 @@ export type ActionContext = {
   targets?: readonly string[];
   /** A right-click menu: what doesn't apply is left out, and on a Mac there are no shortcuts. */
   context?: boolean;
+  /** A sub-menu's choice it was picked with (a label, a project, a format, a sort order: choiceItems). */
+  value?: string;
 };
 
 /** The conditions `when` names. Left unsaid, a state that is usually so (can record, has audio) holds. */
@@ -206,9 +208,17 @@ export function menuItems(ids: readonly string[], ctx: ActionContext): (MenuItem
  * its value; their words are the choices' own, so checkMenu takes them only under that sub-menu.
  */
 export function choiceItems(action: string, choices: readonly { value: string; label: string; checked?: boolean; disabled?: boolean; icon?: MenuItem["icon"] }[],
-  pick: (value: string) => void): MenuItem[] {
+  ctx: ActionContext): MenuItem[] {
   need(action);
-  return choices.map((c) => ({ action, choice: c.value, label: c.label, icon: c.icon, checked: c.checked, disabled: c.disabled || undefined, onPick: () => pick(c.value) }));
+  return choices.map((c) => ({
+    action, choice: c.value, label: c.label, icon: c.icon, checked: c.checked, disabled: c.disabled || undefined,
+    onPick: () => void runAction(action, { ...ctx, value: c.value }),
+  }));
+}
+
+/** Whether something here does `id` now (a screen registered it): a right-click menu shows only what can run. */
+export function canRun(id: string): boolean {
+  return (handlers.get(id)?.length ?? 0) > 0;
 }
 
 /** What is wrong with a menu (the test's check): an item with no action, an unknown one, other words or keys. */
