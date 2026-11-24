@@ -95,8 +95,16 @@ object Notifications {
             setSound(null, null)
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        } + AfterCallNotice.channel(words)
+        }
         manager.createNotificationChannels(channels)
+        // "After a call" (v2.1) only while its flag is on: it never shows in Android's settings for anyone else. Before
+        // the settings have been read once it is left as it is; the first after-call notification makes it if needed.
+        val flags = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings?.value
+        when {
+            flags == null -> Unit
+            com.echoledger.mobile.calls.CallChoice.notifies(flags) -> manager.createNotificationChannel(AfterCallNotice.channel(words))
+            else -> manager.deleteNotificationChannel(AfterCallNotice.CHANNEL)
+        }
     }
 
     /** Whether Android shows [category] (the person may have switched its channel off in Android's own settings). */

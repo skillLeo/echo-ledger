@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-s (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-t (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
 2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
 2.0.0-r (accepted 2026-11-24 by EL-Lead; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
 2.0.0-q (accepted 2026-11-24 by EL-Lead; the Library's kinds, see "The Library's kinds (since 2.0.0-q)"): every recording has exactly one kind, `call`, `meeting`, `voice_note` or `other`, worked out from its Source, so the Library's tabs always add up to All. Imported files and any Source that is not a call, a meeting or a voice note are `other`, and the tabs gain **Other**, shown only when its count is above 0. A library item's `facets` carries `kind`; `GET /api/library/facets` answers `kinds`, the count of each kind for the filters and the search, which add up to `total`. The console's address takes `kind=other`. The shared test file gives every recording its kind and every filter set its kinds. Only additions, nothing stored: older apps ignore `kind` and `kinds` and keep their four tabs.
@@ -1761,6 +1762,14 @@ The device's user has opened this recording: `204`. Idempotent (opening again on
 the recording, so it does not reorder or re-sync the library. Library items carry `"opened"` for the asking user
 (`false` until then), which the apps show as a dot; the console counts viewing a recording's page as opening it.
 Another workspace's id → `404`.
+
+### `DELETE /api/sessions/{id}/opened` — `library:read` (since 2.0.0-t)
+The device's user marks this recording unread again (the apps' Mark as unread, UX-22): `204`. It takes back only the
+asking person's own open, never anyone else's, and it is idempotent (a recording they have not opened, or already
+marked unread: `204`). Like opening, it never changes the recording (no `updated_at`, no reorder, no re-sync of the
+library). From then on library items carry `"opened": false` for them, the recording is in Unread (`view=unread`)
+and counted in `library.unread`, until it is opened again. The same recordings as `POST …/opened`: one the person
+cannot see (another workspace's, or another person's they were not given) → `404`.
 
 ### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
 `200 {"data": [ShareLink]}`, newest first. The URL is not shown again.

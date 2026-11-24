@@ -435,6 +435,8 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let builder = if cfg!(target_os = "macos") { builder.initialization_script(TITLEBAR_START) } else { builder };
     let window = crate::privacy::window(app, builder, MAIN, crate::privacy::Kind::Main, |b| if shielded { b.content_protected(true) } else { b })?;
     crate::material::apply(&window);
+    // FIX-10: no browser keys, autofill or password saving (WebView2), before the window first shows.
+    crate::native_feel::quiet_browser(&window);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;

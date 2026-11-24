@@ -170,6 +170,26 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--bg); overflow: hidden; }
+
+/* FIX-10: an app, not a web page (every window; lib/nativeFeel.ts takes the web view's menu and keys).
+   - The window's own background follows the theme (no white flash behind the page; the window shows after its first
+     paint, tauri.conf.json visible: false). A floating window's transparent background, below, still wins.
+   - No rubber-band bounce of the whole window; a list that scrolls keeps its own.
+   - The arrow cursor on everything one presses, as native apps have; the hand only on a real link. !important inside
+     :where(), so a page's own cursor rule gives way, but a drag's grabbing cursor (also !important, more specific)
+     doesn't.
+   - UI text (buttons, menus, headers, the rail and sidebars, toasts) can't be selected; content (transcripts, notes,
+     what one types, a message's own words, to copy an error) can.
+   - Pictures, icons and links can't be dragged out of the window by accident.
+   - Focus rings for the keyboard only, never after a click. */
+html { background: var(--bg); }
+html, body { overscroll-behavior: none; }
+:where(button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="switch"], [role="checkbox"], [role="radio"], label, summary, select) { cursor: default !important; }
+a[href] { cursor: pointer; }
+:where(button, [role="button"], [role="tab"], [role="menu"], [role="menuitem"], label, nav, header, .el-rail, .el-panel__head, .el-toast, .el-page__head, .sidebar, .topbar) { -webkit-user-select: none; user-select: none; }
+:where(input, textarea, [contenteditable="true"], .el-toast__message) { -webkit-user-select: text; user-select: text; }
+:where(img, svg, a) { -webkit-user-drag: none; }
+:focus:not(:focus-visible) { outline: none; }
 html[data-window="overlay"] body, html[data-window="dictation"] body,
 html[data-window="pill"] body, html[data-window="review"] body, html[data-window="translate"] body,
 html[data-window="overlay"], html[data-window="dictation"],

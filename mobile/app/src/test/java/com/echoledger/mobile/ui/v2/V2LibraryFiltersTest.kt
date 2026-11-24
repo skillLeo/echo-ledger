@@ -102,7 +102,7 @@ class V2LibraryFiltersTest : ScreenTest() {
         pumpUntil("the account's views") {
             vm.savedViewsReady.value && vm.library.value.size == rows.size - waiting && vm.libraryWaiting.value.size == waiting
         }
-        show {
+        val page: @androidx.compose.runtime.Composable () -> Unit = {
             EchoV2Theme(darkTheme = false, language = language) {
                 val toasts = rememberEchoToastState()
                 androidx.compose.runtime.CompositionLocalProvider(LocalEchoToasts provides toasts) {
@@ -122,6 +122,7 @@ class V2LibraryFiltersTest : ScreenTest() {
                 }
             }
         }
+        show(page)
         pumpUntil("the library") { compose.onAllNodesWithText("Rec ", substring = true).fetchSemanticsNodes().size >= 5 }
     }
 
