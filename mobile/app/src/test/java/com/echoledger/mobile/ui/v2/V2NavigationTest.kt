@@ -139,6 +139,33 @@ class V2NavigationTest : ScreenTest() {
         compose.onNodeWithContentDescription("Account and settings").assertExists()
     }
 
+    /** v2.1 FIX-03: the app's messages (an after-call choice's line too) sit just above the bottom bar, never on it. */
+    @Test
+    fun aMessageSitsJustAboveTheBottomBar() {
+        seed()
+        shell()
+        com.echoledger.mobile.testsupport.pumpUntil("the shell takes the after-call lines") {
+            com.echoledger.mobile.calls.CallLines.host !=
+                null
+        }
+        compose.runOnIdle {
+            com.echoledger.mobile.calls.CallLines.host!!.show(
+                com.echoledger.mobile.calls.CallLines.Line("call-1", com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE),
+                com.echoledger.mobile.calls.CallLines.LONG_MS,
+                com.echoledger.mobile.calls.CallLines.Actions(action = {})
+            )
+        }
+        val message = compose.onNodeWithText("Transcribing…").fetchSemanticsNode().boundsInRoot
+        val barTop = compose.onAllNodes(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.Role,
+                androidx.compose.ui.semantics.Role.Tab
+            )
+        ).fetchSemanticsNodes().minOf { it.boundsInRoot.top }
+        assertTrue("above the bar: ${message.bottom} <= $barTop", message.bottom <= barTop)
+        assertTrue("just above it: ${barTop - message.bottom}", barTop - message.bottom < 64f)
+    }
+
     @Test
     fun recordTapRecordsAVoiceNoteNowAndWithoutTheMicrophoneOpensTheVoicePage() {
         seed()

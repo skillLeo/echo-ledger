@@ -52,3 +52,7 @@ Confirmations (one line at a time, 5 s, never two at once, never on top of the c
 - after Transcribe: `done_transcribing` + `undo`;
 - after the 8 s or a swipe: `done_audio` + `transcribe` + `undo`;
 - after Delete: `done_deleted` + `undo`.
+
+On the phone since v2.1 (FIX-03) a confirmation is never a floating window: inside the app it is the app's snackbar
+(Undo for 10 s, a swipe left or right closes it), outside the app it takes the call's notification in place, and only
+when neither can show it does it stay on the card. Back-to-back calls: `grouped_audio` + `grouped_review`.

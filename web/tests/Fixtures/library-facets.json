@@ -1,6 +1,6 @@
 {
   "about": [
-    "The shared cases of the Library's filters (contract 2.0.0-p, docs/API.md \"Library filters\"; since 2.0.0-q also \"The Library's kinds\").",
+    "The shared cases of the Library's filters (contract 2.0.0-p, docs/API.md \"Library filters\"; since 2.0.0-q also \"The Library's kinds\", since 2.0.0-r each recording's state, \"The glossary's states\").",
     "The server (web/tests/Feature/Api/LibraryFacetsFixtureTest.php), the desktop and the phone all read this file and must get these counts.",
     "Each recording is a library item as the apps hold it (its facets are what the server sends) plus the stored fields the server derives them from.",
     "The clock stands at `now`; dates are counted in `tz`. A recording that is `deleted` or still `recording` is never in the list or the counts; one still recording does count in Needs you.",
@@ -105,7 +105,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -140,7 +141,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -175,7 +177,8 @@
         "source": "whatsapp_business",
         "status": "transcribed",
         "language": "en",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -208,7 +211,8 @@
         "source": "zoom",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -243,7 +247,8 @@
         "source": "zoom",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -278,7 +283,8 @@
         "source": "google_meet",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -311,7 +317,8 @@
         "source": "google_meet",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -344,7 +351,8 @@
         "source": "microsoft_teams",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -379,7 +387,8 @@
         "source": "phone_call",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -412,7 +421,8 @@
         "source": "phone_call",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -445,7 +455,8 @@
         "source": "telegram",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -484,7 +495,8 @@
         "source": "signal",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -517,7 +529,8 @@
         "source": "voice_note",
         "status": "transcribed",
         "language": "ur",
-        "kind": "voice_note"
+        "kind": "voice_note",
+        "state": "transcribed"
       }
     },
     {
@@ -552,7 +565,8 @@
         "source": "imported",
         "status": "transcribed",
         "language": "en",
-        "kind": "other"
+        "kind": "other",
+        "state": "transcribed"
       }
     },
     {
@@ -585,7 +599,8 @@
         "source": "imported",
         "status": "transcribed",
         "language": "ur",
-        "kind": "other"
+        "kind": "other",
+        "state": "transcribed"
       }
     },
     {
@@ -618,7 +633,8 @@
         "source": "imported",
         "status": "transcribed",
         "language": "ar",
-        "kind": "other"
+        "kind": "other",
+        "state": "transcribed"
       }
     },
     {
@@ -651,7 +667,8 @@
         "source": "zoom",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -684,7 +701,8 @@
         "source": "whatsapp",
         "status": "not_transcribed",
         "language": "ar",
-        "kind": "call"
+        "kind": "call",
+        "state": "audio_only"
       }
     },
     {
@@ -717,7 +735,8 @@
         "source": "whatsapp",
         "status": "not_transcribed",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "audio_only"
       }
     },
     {
@@ -750,7 +769,8 @@
         "source": "messenger",
         "status": "not_transcribed",
         "language": "fr",
-        "kind": "call"
+        "kind": "call",
+        "state": "audio_only"
       }
     },
     {
@@ -785,7 +805,8 @@
         "source": "instagram",
         "status": "failed",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "failed"
       }
     },
     {
@@ -818,7 +839,8 @@
         "source": "skype",
         "status": "failed",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "failed"
       }
     },
     {
@@ -851,7 +873,8 @@
         "source": "slack",
         "status": "failed",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "failed"
       }
     },
     {
@@ -884,7 +907,8 @@
         "source": "discord",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "waiting_to_upload"
       }
     },
     {
@@ -917,7 +941,8 @@
         "source": "zoom",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribing"
       }
     },
     {
@@ -952,7 +977,8 @@
         "source": "whatsapp",
         "status": "processing",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribing"
       }
     },
     {
@@ -985,7 +1011,8 @@
         "source": "microsoft_teams",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribing"
       }
     },
     {
@@ -1018,7 +1045,8 @@
         "source": "other",
         "status": "transcribed",
         "language": "ur",
-        "kind": "other"
+        "kind": "other",
+        "state": "transcribed"
       }
     },
     {
@@ -1051,7 +1079,8 @@
         "source": "other",
         "status": "transcribed",
         "language": "de",
-        "kind": "other"
+        "kind": "other",
+        "state": "transcribed"
       }
     },
     {
@@ -1084,7 +1113,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1119,7 +1149,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1152,7 +1183,8 @@
         "source": "voice_note",
         "status": "transcribed",
         "language": "ur",
-        "kind": "voice_note"
+        "kind": "voice_note",
+        "state": "transcribed"
       }
     },
     {
@@ -1187,7 +1219,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "en",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1222,7 +1255,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "en",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1255,7 +1289,8 @@
         "source": "whatsapp_business",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1290,7 +1325,8 @@
         "source": "google_meet",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -1323,7 +1359,8 @@
         "source": "voice_note",
         "status": "transcribed",
         "language": "ur",
-        "kind": "voice_note"
+        "kind": "voice_note",
+        "state": "transcribed"
       }
     },
     {
@@ -1356,7 +1393,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1392,7 +1430,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1427,7 +1466,8 @@
         "source": "zoom",
         "status": "transcribed",
         "language": "en",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribed"
       }
     },
     {
@@ -1460,7 +1500,8 @@
         "source": "whatsapp",
         "status": "processing",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "waiting"
       }
     },
     {
@@ -1493,7 +1534,8 @@
         "source": "zoom",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "waiting"
       }
     },
     {
@@ -1528,7 +1570,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1561,7 +1604,8 @@
         "source": "zoom",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribing"
       }
     },
     {
@@ -1594,7 +1638,8 @@
         "source": "phone_call",
         "status": "processing",
         "language": "unknown",
-        "kind": "call"
+        "kind": "call",
+        "state": "waiting_to_upload"
       }
     },
     {
@@ -1627,7 +1672,8 @@
         "source": "google_meet",
         "status": "processing",
         "language": "unknown",
-        "kind": "meeting"
+        "kind": "meeting",
+        "state": "transcribing"
       }
     },
     {
@@ -1660,7 +1706,8 @@
         "source": "phone_call",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     },
     {
@@ -1693,7 +1740,8 @@
         "source": "whatsapp",
         "status": "transcribed",
         "language": "ur",
-        "kind": "call"
+        "kind": "call",
+        "state": "transcribed"
       }
     }
   ],
@@ -1734,6 +1782,14 @@
           "meeting": 14,
           "voice_note": 3,
           "other": 5
+        },
+        "states": {
+          "transcribed": 32,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -1881,6 +1937,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000002"
@@ -1978,6 +2042,14 @@
           "meeting": 14,
           "voice_note": 3,
           "other": 5
+        },
+        "states": {
+          "transcribed": 21,
+          "audio_only": 1,
+          "transcribing": 4,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000027",
@@ -2105,6 +2177,14 @@
           "voice_note": 0,
           "other": 1
         },
+        "states": {
+          "transcribed": 7,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -2207,6 +2287,14 @@
           "meeting": 13,
           "voice_note": 3,
           "other": 4
+        },
+        "states": {
+          "transcribed": 23,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -2338,6 +2426,14 @@
           "meeting": 13,
           "voice_note": 3,
           "other": 4
+        },
+        "states": {
+          "transcribed": 25,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -2473,6 +2569,14 @@
           "voice_note": 0,
           "other": 1
         },
+        "states": {
+          "transcribed": 8,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 1,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000003",
           "01JFXR00000000000000000001",
@@ -2577,6 +2681,14 @@
           "meeting": 13,
           "voice_note": 3,
           "other": 5
+        },
+        "states": {
+          "transcribed": 26,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 2,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -2712,6 +2824,14 @@
           "voice_note": 1,
           "other": 0
         },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 1,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000018",
@@ -2811,6 +2931,14 @@
           "meeting": 13,
           "voice_note": 2,
           "other": 5
+        },
+        "states": {
+          "transcribed": 29,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -2949,6 +3077,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 3,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000023",
           "01JFXR00000000000000000021",
@@ -3046,6 +3182,14 @@
           "meeting": 2,
           "voice_note": 0,
           "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000001",
@@ -3147,6 +3291,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000012"
@@ -3243,6 +3395,14 @@
           "meeting": 12,
           "voice_note": 3,
           "other": 5
+        },
+        "states": {
+          "transcribed": 28,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -3386,6 +3546,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 3,
+          "transcribing": 1,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000026",
           "01JFXR00000000000000000023",
@@ -3490,6 +3658,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000027",
           "01JFXR00000000000000000025",
@@ -3591,6 +3767,14 @@
           "meeting": 12,
           "voice_note": 1,
           "other": 4
+        },
+        "states": {
+          "transcribed": 14,
+          "audio_only": 0,
+          "transcribing": 4,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000027",
@@ -3705,6 +3889,14 @@
           "voice_note": 3,
           "other": 2
         },
+        "states": {
+          "transcribed": 17,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000038",
           "01JFXR00000000000000000037",
@@ -3817,6 +4009,14 @@
           "meeting": 0,
           "voice_note": 3,
           "other": 4
+        },
+        "states": {
+          "transcribed": 19,
+          "audio_only": 2,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -3936,6 +4136,14 @@
           "voice_note": 1,
           "other": 3
         },
+        "states": {
+          "transcribed": 5,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 1,
+          "failed": 1,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000022",
           "01JFXR00000000000000000045",
@@ -4038,6 +4246,14 @@
           "meeting": 7,
           "voice_note": 1,
           "other": 0
+        },
+        "states": {
+          "transcribed": 9,
+          "audio_only": 1,
+          "transcribing": 3,
+          "waiting_to_upload": 1,
+          "failed": 1,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000038",
@@ -4148,6 +4364,14 @@
           "meeting": 2,
           "voice_note": 0,
           "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000011",
@@ -4262,6 +4486,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000025",
           "01JFXR00000000000000000004",
@@ -4374,6 +4606,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000002",
@@ -4472,6 +4712,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [],
         "facets": {
           "date": {
@@ -4559,6 +4807,14 @@
           "meeting": 0,
           "voice_note": 1,
           "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000003",
@@ -4652,6 +4908,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000001",
           "01JFXR00000000000000000005"
@@ -4741,6 +5005,14 @@
           "meeting": 1,
           "voice_note": 0,
           "other": 1
+        },
+        "states": {
+          "transcribed": 7,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000003",
@@ -4837,6 +5109,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000039"
         ],
@@ -4926,6 +5206,14 @@
           "voice_note": 1,
           "other": 0
         },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000013"
         ],
@@ -5014,6 +5302,14 @@
           "meeting": 1,
           "voice_note": 0,
           "other": 0
+        },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000008",
@@ -5106,6 +5402,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000048",
           "01JFXR00000000000000000047"
@@ -5196,6 +5500,14 @@
           "voice_note": 0,
           "other": 0
         },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
         "ids": [
           "01JFXR00000000000000000048"
         ],
@@ -5284,6 +5596,14 @@
           "meeting": 0,
           "voice_note": 0,
           "other": 0
+        },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000048"
@@ -5380,6 +5700,14 @@
           "meeting": 0,
           "voice_note": 0,
           "other": 0
+        },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
         },
         "ids": [
           "01JFXR00000000000000000003",

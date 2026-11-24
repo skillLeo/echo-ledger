@@ -828,6 +828,9 @@
     "Failed uploads (:count)": "ناکام اپ لوڈز (:count)",
     "See why": "وجہ دیکھیں",
     "Uploaded": "اپ لوڈ ہو گئی",
+    ":title is on the server now.": ":title اب سرور پر ہے۔",
+    "Retry all uploads": "تمام اپ لوڈ دوبارہ کریں",
+    "Your devices will send 1 recording again.|Your devices will send :count recordings again.": "آپ کے آلات 1 ریکارڈنگ دوبارہ بھیجیں گے۔|آپ کے آلات :count ریکارڈنگز دوبارہ بھیجیں گے۔",
     "Improve": "بہتری",
     "Improving": "بہتر ہو رہا ہے",
     "Improved": "بہتر ہو گیا",
@@ -1090,5 +1093,7 @@
     "Failed · Retry": "ناکام · دوبارہ کوشش کریں",
     "Waiting to upload": "اپ لوڈ کا انتظار",
     "1 audio only|:count audio only": "1 صرف آڈیو|:count صرف آڈیو",
+    "1 transcribing|:count transcribing": "1 کا ٹرانسکرپٹ بن رہا ہے|:count کے ٹرانسکرپٹ بن رہے ہیں",
+    "1 waiting to upload|:count waiting to upload": "1 اپ لوڈ کا انتظار|:count اپ لوڈ کا انتظار",
     "Still audio only": "ابھی صرف آڈیو"
 }

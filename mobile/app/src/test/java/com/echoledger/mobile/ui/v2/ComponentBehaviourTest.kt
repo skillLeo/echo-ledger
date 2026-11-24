@@ -29,7 +29,11 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -114,6 +118,49 @@ class ComponentBehaviourTest {
         compose.onNodeWithText("Moved to Shaheen Pharma").assertDoesNotExist()
         assertEquals(0, undone)
         assertEquals(EchoToastResult.Dismissed, result)
+    }
+
+    /** v2.1 FIX-03: a message is a Material 3 snackbar a swipe left or right closes, as its time running out does. */
+    @Test
+    fun aSwipeLeftOrRightClosesTheSnackbarAndRunsNoUndo() {
+        var undone = 0
+        val results = mutableListOf<EchoToastResult>()
+        var next by mutableStateOf(0)
+        show {
+            val toasts = rememberEchoToastState()
+            LaunchedEffect(next) { if (next > 0) results += toasts.showUndo("Deleted $next", "Undo") { undone++ } }
+            EchoToastHost(toasts)
+        }
+        // From the middle of the message across the screen's width (measured once it shows), left then right.
+        var wide = 0f
+        val swipes = listOf<androidx.compose.ui.test.TouchInjectionScope.() -> Unit>(
+            { swipeLeft(startX = centerX, endX = centerX - wide) },
+            { swipeRight(startX = centerX, endX = centerX + wide) }
+        )
+        swipes.forEachIndexed { i, swipe ->
+            next = i + 1
+            compose.onNodeWithText("Deleted ${i + 1}").assertExists()
+            wide = compose.onRoot().fetchSemanticsNode().size.width.toFloat()
+            compose.onNodeWithText("Deleted ${i + 1}").performTouchInput(swipe)
+            compose.waitForIdle()
+            compose.onNodeWithText("Deleted ${i + 1}").assertDoesNotExist()
+            assertEquals(i + 1, results.size)
+        }
+        assertEquals(listOf(EchoToastResult.Dismissed, EchoToastResult.Dismissed), results)
+        assertEquals("a swipe is not Undo", 0, undone)
+    }
+
+    @Test
+    fun twoQuickMessagesNeverShowAtOnce() {
+        show {
+            val toasts = rememberEchoToastState()
+            LaunchedEffect(Unit) { toasts.show("Moved to Shaheen Pharma") }
+            LaunchedEffect(Unit) { toasts.showUndo("Deleted 3 recordings", "Undo") {} }
+            EchoToastHost(toasts)
+        }
+        val onScreen = listOf("Moved to Shaheen Pharma", "Deleted 3 recordings")
+            .filter { compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("one message at a time: $onScreen", 1, onScreen.size)
     }
 
     @Test

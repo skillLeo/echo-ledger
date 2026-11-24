@@ -23,10 +23,13 @@ import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.calls.CallChoice
 import com.echoledger.mobile.calls.CallChoice.Pick
+import com.echoledger.mobile.calls.CallLines
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LocalRecording
+import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.ui.v2.live.CallCardScreen
 import com.echoledger.mobile.ui.v2.live.CallChoiceCard
 import com.echoledger.mobile.ui.v2.live.callCardTitle
@@ -46,14 +49,19 @@ import kotlinx.coroutines.withTimeoutOrNull
  * whatever app is open (SYSTEM_ALERT_WINDOW), above the navigation bar and inside the safe area. It never takes focus,
  * leaves the screen around it alone, and makes no sound.
  *
- * One window for one call at a time ([Mode]): the question ([Mode.ASK]: Delete, Transcribe, a swipe or 8 s for audio
- * only), then one line with Undo for 5 s ([Mode.TRANSCRIBING], [Mode.AUDIO] with Transcribe, [Mode.DELETED]). Undo
- * puts the question back with nothing decided: a kept call's upload waits for the line ([Decisions.keepFor]) and a
- * deleted call's file waits for it ([Decisions.discardLater]). Calls that end while the question is still asked are all
- * kept as audio only on one line ([Mode.GROUPED], "3 calls saved as audio · Review"), never a stack of cards. A
- * "Deleted · Undo" line is never replaced: a call that ends meanwhile is asked about once that line is over, so a Delete
- * is never applied while its Undo is out of reach. Every step the card asks of the store runs in order on one queue.
- * The times follow the phone's accessibility timeout (Settings › Accessibility › Time to take action).
+ * One window for one call at a time: the question ([Mode.ASK]: Delete, Transcribe, a swipe or 8 s for audio only).
+ * Since v2.1 (I-05) a choice closes the window at once, and its confirmation with Undo ("Transcribing…", "Saved as
+ * audio", "Deleted") is never a floating window: inside the app it is a snackbar ([CallLines]: one at a time, above the
+ * bottom bar, 10 s, a swipe dismisses it), outside the app the after-call notification, updated in place. Undo puts the
+ * question back with nothing decided: a kept call's upload waits for its line ([Decisions.keepFor]) and a deleted call's
+ * file waits for it ([Decisions.discardLater]). Calls that end while the question is still asked are all kept as audio
+ * only on one line ("3 calls saved as audio · Review"), never a stack of cards. Only when neither the app nor a
+ * notification can carry the line (the app not on screen and notifications not allowed) does it stay on the card for
+ * 5 s ([Mode.TRANSCRIBING], [Mode.AUDIO] with Transcribe, [Mode.DELETED], [Mode.GROUPED]), and a swipe dismisses it
+ * there too. A "Deleted · Undo" line on the card is never replaced: a call that ends meanwhile is asked about once that
+ * line is over, so a Delete is never applied while its Undo is out of reach. Every step the card asks of the store runs
+ * in order on one queue. The times follow the phone's accessibility timeout (Settings › Accessibility › Time to take
+ * action).
  */
 object DecisionPopup {
     enum class Mode { ASK, TRANSCRIBING, AUDIO, DELETED, GROUPED }
@@ -83,8 +91,33 @@ object DecisionPopup {
     /** Calls that ended while a Deleted line was showing, in order: asked about when that line is over. */
     private val waiting = java.util.concurrent.CopyOnWriteArrayList<Held>()
 
-    /** A call held behind the line on screen: its question, or ([deleteLineMs]) its own "Deleted · Undo" line. */
-    private class Held(val rec: LocalRecording, val themeMode: String, val deleteLineMs: Long? = null)
+    /**
+     * A call held behind the line on screen: its question, or ([deleteLineMs]) its own "Deleted · Undo" line. [again]: a
+     * question put back by Undo, which is asked, never folded into the grouped line.
+     */
+    private class Held(val rec: LocalRecording, val themeMode: String, val deleteLineMs: Long? = null, val again: Boolean = false)
+
+    /** Where a choice's confirmation goes: the app's snackbar, the after-call notification, or (neither) the card. */
+    private enum class Home { APP, NOTIFICATION, CARD }
+
+    private fun home(app: Context): Home = when {
+        CallLines.host != null -> Home.APP
+        Notifications.decisionsShow(app) -> Home.NOTIFICATION
+        else -> Home.CARD
+    }
+
+    /** One choice made on the card whose line is out of it (in the app or in a notification). */
+    private class Chosen(val pick: Pick)
+
+    /**
+     * The choices whose line is out of the card, by call: each counts toward "Always do this?" once its line is over
+     * without Undo, never after an Undo.
+     */
+    private val choices = java.util.concurrent.ConcurrentHashMap<String, Chosen>()
+
+    /** Back-to-back calls kept together while their line is out of the card, and until when another call joins them. */
+    private val groupedOut = mutableListOf<String>()
+    private var groupOpenUntil = 0L
 
     /** When the line or question on screen ends ([SystemClock.uptimeMillis]). */
     private var endsAt = 0L
@@ -137,18 +170,35 @@ object DecisionPopup {
      * kept as audio only on the grouped line. False when the card could not be added (the caller then asks in a
      * notification).
      */
-    fun ask(context: Context, rec: LocalRecording, themeMode: String): Boolean {
+    fun ask(context: Context, rec: LocalRecording, themeMode: String, again: Boolean = false): Boolean {
         val app = context.applicationContext
         if (isShowing && showingMode == Mode.DELETED) {
             // Another call's Delete can still be undone: this call waits for its line to end (its backstop waits too,
             // [answersFor], so it is never kept before it was asked).
-            waiting += Held(rec, themeMode)
+            waiting += Held(rec, themeMode, again = again)
             return true
         }
-        if (isShowing && (showingMode == Mode.ASK || showingMode == Mode.GROUPED)) {
-            val before = current?.takeIf { showingMode == Mode.ASK }
+        val asking = isShowing && showingMode == Mode.ASK
+        if (again && asking && showingFor != rec.id) {
+            // Put back by Undo while another call is asked about: asked once that question is answered, never folded
+            // into the grouped line.
+            waiting += Held(rec, themeMode, again = true)
+            return true
+        }
+        if (android.os.SystemClock.uptimeMillis() >= groupOpenUntil) groupedOut.clear()
+        val joinsOut = !again && !isShowing && groupedOut.isNotEmpty()
+        if (asking || joinsOut || (isShowing && showingMode == Mode.GROUPED)) {
+            val before = current?.takeIf { asking }
             before?.let { keepQuietly(app, it.id) }
             keepQuietly(app, rec.id)
+            if (showingMode != Mode.GROUPED && home(app) != Home.CARD) {
+                // Their line out of the card too: the card goes, and the group's line says how many.
+                if (before != null) groupedOut += before.id
+                groupedOut += rec.id
+                if (isShowing) close(app)
+                groupedLine(app)
+                return true
+            }
             if (before != null) grouped += before.id
             grouped += rec.id
             current = null
@@ -177,17 +227,39 @@ object DecisionPopup {
     /**
      * "Deleted · Undo" for [rec] for [lineMs] (the pill's Stop and delete still counting down when the call ended): its
      * Undo asks about the call again. A Delete is never applied without an Undo the person can see:
-     * - the card free: the line on the card;
+     * - the app on screen: the line is its snackbar (v2.1), never a floating window;
      * - else, notifications allowed: the Undo in a notification, which outlives the process;
+     * - else, the card free: the line on the card (a swipe dismisses it);
      * - else, the card busy: the line waits behind the one on screen, as a held question does;
      * - else (no overlay, no notification): the call is left to the person to choose again, nothing deleted.
+     * True when the line is on a screen of this process (the app's or the card).
      */
     fun deleted(context: Context, rec: LocalRecording, themeMode: String, lineMs: Long): Boolean {
         val app = context.applicationContext
+        val host = CallLines.host
+        if (host != null) {
+            // In the app: "Deleted · Undo" as its snackbar for the time that was left; the file waits for it.
+            val leftMs = host.show(
+                CallLines.Line(rec.id, Pick.DELETE),
+                lineMs,
+                CallLines.Actions(
+                    action = { undoOut(app, rec, Pick.DELETE) },
+                    away = { left -> step(app, { moveOut(app, rec.id, Pick.DELETE, left) }, widget = false) }
+                )
+            )
+            step(app, {
+                Decisions.discardLater(app, rec.id, afterMs = leftMs + Decisions.DISCARD_GRACE_MS, undoHere = true, widget = false)
+            }) { gone ->
+                if (gone == null) handler.post { host.cancel(rec.id) }
+            }
+            return true
+        }
         // Never over another call's question or Deleted line.
         val busy = isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)
-        if (!busy) commitPick(app)
-        val shown = !busy && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
+        // Outside the app the Undo goes in a notification whenever one can be posted: never a floating line then.
+        val notify = Notifications.decisionsShow(app)
+        if (!busy && !notify) commitPick(app)
+        val shown = !busy && !notify && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
         if (shown) {
             go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), lineMs)
             step(app, {
@@ -195,7 +267,7 @@ object DecisionPopup {
             }) { gone ->
                 if (gone == null) handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
             }
-        } else if (com.echoledger.mobile.notify.Notifications.canPost(app)) {
+        } else if (notify) {
             // The Undo notification goes out in the same uncancellable step as the delete it can take back, before
             // anything that can wait (the widget), so the delete is never due without its Undo.
             step(app, { deleteWithNotification(app, rec.id) })
@@ -275,6 +347,7 @@ object DecisionPopup {
                         onUndo = { undo(app) },
                         onAlwaysYes = { always(app) },
                         onReview = { review(app) },
+                        onDismiss = { dismissLine(app) },
                         still = com.echoledger.mobile.ui.reduceMotion(),
                         askMs = askMs,
                         modifier = Modifier.padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s8)
@@ -380,7 +453,7 @@ object DecisionPopup {
                             // Its own line now, with a whole line's time for the Undo.
                             deleted(app, rec, held.themeMode, maxOf(lineMs, doneMs))
                         } else {
-                            ask(app, rec, held.themeMode)
+                            ask(app, rec, held.themeMode, again = held.again)
                             com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id, backstopMs(rec.id))
                         }
                     }
@@ -404,11 +477,14 @@ object DecisionPopup {
         if (waiting.isNotEmpty()) handler.post { if (!isShowing && waiting.isNotEmpty()) showHeld(app) }
     }
 
-    /** Everything back as without a card (tests): held lines too. */
+    /** Everything back as without a card (tests): held lines, choices and the grouped line out of the card too. */
     @androidx.annotation.VisibleForTesting
     internal fun resetForTest() {
         teardown()
         waiting.clear()
+        choices.clear()
+        groupedOut.clear()
+        groupOpenUntil = 0L
     }
 
     /** The card goes; held questions go with it (their backstop decides), held Deleted lines stay. */
@@ -431,13 +507,16 @@ object DecisionPopup {
 
     internal fun transcribe(app: Context) {
         val rec = current ?: return
-        picked = if (showingMode == Mode.ASK) Pick.TRANSCRIBE else null
+        val counted = showingMode == Mode.ASK
+        if (home(app) != Home.CARD) return out(app, rec, Pick.TRANSCRIBE, counted)
+        picked = if (counted) Pick.TRANSCRIBE else null
         go(app, Mode.TRANSCRIBING, CallCardScreen.Done(Pick.TRANSCRIBE))
         step(app, { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = doneMs, widget = false) })
     }
 
     internal fun audio(app: Context, chosen: Boolean) {
         val rec = current ?: return
+        if (home(app) != Home.CARD) return out(app, rec, Pick.AUDIO, counted = chosen)
         picked = if (chosen) Pick.AUDIO else null
         go(app, Mode.AUDIO, CallCardScreen.Done(Pick.AUDIO))
         step(app, { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = doneMs, widget = false) })
@@ -445,6 +524,7 @@ object DecisionPopup {
 
     internal fun delete(app: Context) {
         val rec = current ?: return
+        if (home(app) != Home.CARD) return out(app, rec, Pick.DELETE, counted = true)
         picked = Pick.DELETE
         go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE))
         // The file waits for the line and a little longer; this process applies it only while its Undo is reachable.
@@ -460,6 +540,8 @@ object DecisionPopup {
         val rec = current ?: return
         val was = showingMode
         picked = null
+        // A moved line's choice (the rest of an app's Deleted line on the card) no longer counts either.
+        choices.remove(rec.id)
         val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
         go(app, Mode.ASK, question)
         step(app, {
@@ -468,6 +550,164 @@ object DecisionPopup {
             // Too late (sent already, or gone): the question has nothing left to ask.
             if (back == null) handler.post { if (showingFor == rec.id && showingMode == Mode.ASK) hide() }
         }
+    }
+
+    /**
+     * [pick] made for [rec] on the card, confirmed out of it (v2.1, I-05): the card goes at once (a call held behind it
+     * is asked about next), and "Transcribing…", "Saved as audio" or "Deleted" with Undo goes to the app's snackbar when
+     * the app is on screen, else in place of the after-call notification. The call's upload or delete waits for that
+     * line, so its Undo always finds the call. [counted]: the person chose it (not the 8 s), so it counts toward
+     * "Always do this?" once the line is over without Undo.
+     */
+    private fun out(app: Context, rec: LocalRecording, pick: Pick, counted: Boolean) {
+        close(app)
+        val chosen = Chosen(pick).takeIf { counted }
+        if (chosen != null) choices[rec.id] = chosen else choices.remove(rec.id)
+        val host = CallLines.host
+        if (host == null) return notified(app, rec, pick, chosen)
+        val lineMs = recommended(app, CallLines.LONG_MS)
+        val leftMs = host.show(
+            CallLines.Line(rec.id, pick),
+            lineMs,
+            CallLines.Actions(
+                action = { undoOut(app, rec, pick) },
+                ended = { count(app, rec.id, chosen) },
+                // The app left the screen: the rest of the line in the notification, then the choice counts.
+                away = { left ->
+                    step(app, { moveOut(app, rec.id, pick, left) }, widget = false)
+                    countAfter(app, rec.id, chosen, left)
+                }
+            )
+        )
+        step(app, { store(app, rec.id, pick, leftMs) }) { done ->
+            // Decided meanwhile (a notification, the app): nothing was kept or deleted here, so the line does not say so.
+            if (done == null) handler.post { host.cancel(rec.id) }
+        }
+    }
+
+    /** The call kept, or on its way out, for a line of [lineMs] whose Undo is this process's. */
+    private suspend fun store(app: Context, id: String, pick: Pick, lineMs: Long): LocalRecording? = when (pick) {
+        Pick.DELETE -> Decisions.discardLater(app, id, afterMs = lineMs + Decisions.DISCARD_GRACE_MS, undoHere = true, widget = false)
+        else -> Decisions.keepFor(app, id, transcribe = pick == Pick.TRANSCRIBE, uploadAfterMs = lineMs, widget = false)
+    }
+
+    /** [pick]'s line in place of the after-call notification. */
+    private fun notified(app: Context, rec: LocalRecording, pick: Pick, chosen: Chosen?) {
+        if (pick == Pick.DELETE) {
+            // "Deleted · Undo" posted first, then the store, in one uncancellable step: never deleted without its Undo.
+            step(app, { deleteWithNotification(app, rec.id) })
+            countAfter(app, rec.id, chosen, DISCARDED_MS)
+            return
+        }
+        val transcribe = pick == Pick.TRANSCRIBE
+        step(app, {
+            Decisions.keepFor(app, rec.id, transcribe = transcribe, uploadAfterMs = doneMs, widget = false)
+                ?.also { Notifications.choiceLine(app, it, transcribe, timeoutMs = doneMs) }
+        })
+        countAfter(app, rec.id, chosen, doneMs)
+    }
+
+    /**
+     * An app line still running when the app left the screen: the rest of it in the after-call notification. A Delete's
+     * Undo must stay reachable all the while ([deleted]'s rule):
+     * - posted: its Undo is in the shade, which outlives the process, so the call no longer names this process
+     *   ([LocalRecording.undoIn]) and the delete is applied at its time even if EchoLedger is closed meanwhile;
+     * - not posted (notifications not allowed, switched off, or their channel blocked): the rest of the line on the card
+     *   when it can show it;
+     * - else the delete is taken back and the call is left to the person to choose again, nothing deleted unseen; with
+     *   the card busy, its line shows on the card once the one there is over.
+     * A kept call's line that cannot be posted just ends: the call stays kept, as chosen.
+     */
+    private suspend fun moveOut(app: Context, id: String, pick: Pick, leftMs: Long) {
+        val graph = (app as? EchoLedgerApp)?.graph ?: return
+        val rec = graph.recordings.get(id) ?: return
+        when {
+            pick == Pick.DELETE && rec.state == Decisions.DISCARDING -> {
+                if (Notifications.discardedWithUndo(app, rec, leftMs)) {
+                    graph.recordings.update(id) { if (it.state == Decisions.DISCARDING) it.copy(undoIn = null) else it }
+                    return
+                }
+                val onCard = withContext(Dispatchers.Main) { deletedOnCard(app, rec, leftMs) }
+                if (onCard) return
+                choices.remove(id)
+                // Not deleted meanwhile: the call waits for the person ("Not deleted yet"); with the card busy (another
+                // call's question or line), its own "Deleted · Undo" shows once that one is over, as [deleted] holds one.
+                // Taken back and left to the person in one write: no "kept after 10 s" ever runs for it, so a process death
+                // at any point can never keep or send a call the person chose to delete.
+                // Whatever it was before, it waits on the phone until the person chooses: nothing is sent.
+                val back = Decisions.undoDiscard(app, id, widget = false, leftToPerson = true) ?: return
+                withContext(Dispatchers.Main) {
+                    if (isShowing && android.provider.Settings.canDrawOverlays(app)) {
+                        waiting += Held(back, settings(app).themeMode, deleteLineMs = leftMs)
+                    }
+                }
+            }
+
+            pick != Pick.DELETE && rec.state == "queued" -> Notifications.choiceLine(app, rec, pick == Pick.TRANSCRIBE, leftMs)
+        }
+    }
+
+    /**
+     * The rest of an app's "Deleted · Undo" line on the card, for [leftMs] (main thread): the call is already on its way
+     * out, with its file kept until after that time, and the card's Undo takes it back ([undo]). False when the card
+     * cannot show it (no overlay permission, or another call's question or line on it).
+     */
+    private fun deletedOnCard(app: Context, rec: LocalRecording, leftMs: Long): Boolean {
+        if (isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)) return false
+        commitPick(app)
+        if (!open(app, rec, settings(app).themeMode, CallCardScreen.Done(Pick.DELETE))) return false
+        go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), leftMs)
+        return true
+    }
+
+    /** Undo on a line out of the card: nothing decided, and the question again (after one already on the card). */
+    private fun undoOut(app: Context, rec: LocalRecording, pick: Pick) {
+        choices.remove(rec.id)
+        step(app, {
+            if (pick == Pick.DELETE) Decisions.undoDiscard(app, rec.id, widget = false) else Decisions.undoKeep(app, rec.id, widget = false)
+        }) { back ->
+            // Too late (sent already, or gone): there is nothing left to ask.
+            if (back != null) handler.post { PostCallPrompt.again(app, back, settings(app).themeMode) }
+        }
+    }
+
+    /** The choice [chosen] for [id] counts now, unless it was taken back or made again since. */
+    private fun count(app: Context, id: String, chosen: Chosen?) {
+        if (chosen == null || !choices.remove(id, chosen)) return
+        update(app) { CallChoice.afterPick(it, chosen.pick) }
+    }
+
+    private fun countAfter(app: Context, id: String, chosen: Chosen?, ms: Long) {
+        if (chosen != null) handler.postDelayed({ count(app, id, chosen) }, ms)
+    }
+
+    /** An Undo in the notification ([com.echoledger.mobile.calls.SaveDecisionReceiver]): the choice no longer counts. */
+    fun forgetChoice(id: String) {
+        choices.remove(id)
+    }
+
+    /** "3 calls saved as audio · Review" out of the card; another call that ends within the question's time joins it. */
+    private fun groupedLine(app: Context) {
+        val count = groupedOut.size
+        groupOpenUntil = android.os.SystemClock.uptimeMillis() + askMs
+        val host = CallLines.host
+        if (host == null) {
+            Notifications.groupedLine(app, count, askMs)
+            return
+        }
+        host.show(
+            CallLines.Line(null, null, count),
+            askMs,
+            CallLines.Actions(action = { review(app) }, away = { left -> Notifications.groupedLine(app, count, left) })
+        )
+    }
+
+    /** A swipe on a line on the card: it goes now, as when its time is over (its choice stands). */
+    internal fun dismissLine(app: Context) {
+        if (!isShowing || showingMode == Mode.ASK) return
+        val end = timeout ?: return
+        handler.removeCallbacks(end)
+        end.run()
     }
 
     /** "Always do this? Yes": After each call becomes that choice, and this call gets it too. */

@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,7 +26,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
@@ -166,11 +170,14 @@ fun EchoV2Shell(
     EchoV2Theme(darkTheme = darkTheme, language = shown, phoneFont = settings.phoneFont, wallpaperColours = settings.dynamicColour) {
         AppLook.TextSize(settings.textSize) {
             val toasts = remember { EchoToastState(clock) }
+            // The bottom bar's height (0 on a page without it): toasts sit just above it.
+            val bar = remember { mutableIntStateOf(0) }
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
+                CallLinesHost(toasts)
                 Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity, openLibrary)
-                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity, openLibrary, bar)
+                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter).aboveBar(bar.intValue))
                 }
             }
         }
@@ -194,14 +201,20 @@ fun EchoV2Frame(vm: MainViewModel, darkTheme: Boolean, language: EchoLanguage = 
             val toasts = remember { EchoToastState(System::currentTimeMillis) }
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
+                CallLinesHost(toasts)
                 Box(Modifier.fillMaxSize().background(EchoV2.colors.bgCanvas).statusBarsPadding()) {
                     content()
-                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
                 }
             }
         }
     }
 }
+
+/** Just above the bottom bar of [barPx] pixels; above the navigation bar on a page without it. */
+@Composable
+private fun Modifier.aboveBar(barPx: Int): Modifier =
+    if (barPx > 0) padding(bottom = with(LocalDensity.current) { barPx.toDp() }) else navigationBarsPadding()
 
 /** The view model's one-line messages ("Restored", "Offline …") become toasts, so there is one feedback system. */
 @Composable
@@ -228,7 +241,9 @@ private fun ShellBody(
     onReadyCheck: (Boolean) -> Unit,
     clock: () -> Long,
     openActivity: Int = 0,
-    openLibrary: Int = 0
+    openLibrary: Int = 0,
+    /** Set to the bottom bar's height while it shows, 0 while it doesn't. */
+    bar: MutableIntState = mutableIntStateOf(0)
 ) {
     val text = v2Text
     val context = LocalContext.current
@@ -598,21 +613,24 @@ private fun ShellBody(
                 }
             }
         }
+        if (route != V2Route.Tabs) SideEffect { bar.intValue = 0 }
         if (route == V2Route.Tabs) {
-            // While recording: the time and Stop above the bar, as classic's strip; a tap opens the voice page.
-            if (recording) RecordingStrip(onStop = ::recordNow, onOpen = { open(LiveEntry.VoiceNote) })
-            EchoBottomBar(
-                destinations = listOf(
-                    EchoDestination(V2Tab.Library.name, text.library, EchoIcons.Library),
-                    EchoDestination(V2Tab.Projects.name, stringResource(R.string.v2_nav_projects), EchoIcons.Projects),
-                    EchoDestination(V2Tab.Live.name, text.live, EchoIcons.Live),
-                    EchoDestination(V2Tab.Ask.name, text.ask, EchoIcons.Ask)
-                ),
-                selectedKey = tab.name,
-                onSelect = { tab = V2Tab.valueOf(it) },
-                onReselect = { reselected++ },
-                centre = { EchoRecordButton(recording, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
-            )
+            Column(Modifier.onSizeChanged { bar.intValue = it.height }) {
+                // While recording: the time and Stop above the bar, as classic's strip; a tap opens the voice page.
+                if (recording) RecordingStrip(onStop = ::recordNow, onOpen = { open(LiveEntry.VoiceNote) })
+                EchoBottomBar(
+                    destinations = listOf(
+                        EchoDestination(V2Tab.Library.name, text.library, EchoIcons.Library),
+                        EchoDestination(V2Tab.Projects.name, stringResource(R.string.v2_nav_projects), EchoIcons.Projects),
+                        EchoDestination(V2Tab.Live.name, text.live, EchoIcons.Live),
+                        EchoDestination(V2Tab.Ask.name, text.ask, EchoIcons.Ask)
+                    ),
+                    selectedKey = tab.name,
+                    onSelect = { tab = V2Tab.valueOf(it) },
+                    onReselect = { reselected++ },
+                    centre = { EchoRecordButton(recording, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
+                )
+            }
         }
     }
 }

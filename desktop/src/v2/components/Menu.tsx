@@ -25,6 +25,8 @@ export type MenuItem = {
   count?: number;
   /** A hairline above this item, setting it and those after it apart without a header (Delete list…, New list…). */
   separator?: boolean;
+  /** The command it sends (v2/actions/actions.json, UX-21): its words, keys and what it does come from there. */
+  action?: string;
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';

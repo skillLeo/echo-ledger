@@ -44,13 +44,16 @@ object PostCallPrompt {
         return rec.copy(state = state, transcribe = transcribe ?: rec.transcribe)
     }
 
-    /** Asks about a waiting call, or sends a kept one. [themeMode]: the card's light or dark look. */
-    fun show(context: Context, rec: LocalRecording, themeMode: String) {
+    /**
+     * Asks about a waiting call, or sends a kept one. [themeMode]: the card's light or dark look. [again]: put back by
+     * Undo, so it is asked about after a question already on the card, never folded into the grouped line.
+     */
+    fun show(context: Context, rec: LocalRecording, themeMode: String, again: Boolean = false) {
         if (rec.state != "pending_decision") {
             UploadWorker.enqueue(context, rec.id)
             return
         }
-        val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode)
+        val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode, again)
         // One question at a time: the notification only when the card cannot be drawn.
         if (!shown) Notifications.showSaveDecision(context, rec, clientName = null)
         // The card's own time (and the line it waits behind) first; 10 s for the notification.
@@ -58,8 +61,8 @@ object PostCallPrompt {
         DecisionTimeoutWorker.schedule(context, rec.id, backstopMs)
     }
 
-    /** A call back from "Deleted · Undo" in a notification: asked again if it waited, sent if it was kept. */
-    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(context, rec, themeMode)
+    /** A call back from an Undo (a notification, the app's snackbar): asked again if it waited, sent if it was kept. */
+    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(context, rec, themeMode, again = true)
 
     /**
      * The recording follows After each call with nothing on the screen (since v1.8 0.3: a call or a recording is live,
