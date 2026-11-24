@@ -14,6 +14,7 @@ import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
+import type { NoticeTarget, Notify } from "../../lib/notice";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
   Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
@@ -120,6 +121,17 @@ const typing = (target: EventTarget | null) =>
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
+
+/**
+ * A notice of the queue's (classic's Notify) in the Library's toast. A fix done in place ("Deleted · Undo", its target
+ * an action) becomes the toast's own button: "Deleted" with Undo, which runs it; the queue's other targets are places
+ * this Library already is.
+ */
+export function queueNotice(say: (text: string, action?: Message["action"], error?: boolean) => void, text: string, error?: boolean, target?: NoticeTarget): void {
+  if (target?.kind !== "action") return say(text, undefined, error);
+  const tail = / · ([^·]+)$/.exec(text);
+  say(tail ? text.slice(0, tail.index) : text, { label: tail ? tail[1] : "Undo", run: target.run }, error);
+}
 
 const readPanel = () => {
   try {
@@ -351,7 +363,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const say = useCallback((text: string, action?: Message["action"], error?: boolean) => setMessage({ id: ++seq.current, text, action, error }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
   // the list is away (Trash, a selection, a recording open).
-  const queue = useLibraryQueue(useCallback((text: string, error?: boolean) => say(text, undefined, error), [say]));
+  const queue = useLibraryQueue(useCallback<Notify>((text, error, target) => queueNotice(say, text, error, target), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -824,8 +836,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         // When the list can't be read, Undo tries every picked one (those still in the Library just stay).
         const text = `${gone} of ${ids.length} moved to Trash · ${kept}`;
         const now = await api.library().catch(() => null);
+        // Some stayed: a problem, said as one (never pushed off by a newer message), with Undo for those that went.
         if (!now) {
-          say(text, { label: "Undo", run: () => void restoreMany(ids) });
+          say(text, { label: "Undo", run: () => void restoreMany(ids) }, true);
           return;
         }
         const still = new Set(now.filter((i) => !i.deleted).map((i) => i.id));
@@ -835,7 +848,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ?? order.find((i) => still.has(i.id)) ?? null;
         setItems(now);
         setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined);
+        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined, true);
         return;
       }
       const order = listOf(items).rows;
