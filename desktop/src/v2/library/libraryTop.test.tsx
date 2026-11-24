@@ -96,10 +96,15 @@ describe("the top of the Library", () => {
   it("nothing in the Library's toolbar or top says what needs you: no banner, no button; the sidebar's Needs you does", async () => {
     await show(makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 }));
     expect(screen.queryByTestId("needs-action")).toBeNull();
+    // The title (the shell's title row's, or this header without one) and row 2 (UX-05): nothing else.
     const toolbar = document.querySelector(".el-lib-toolbar") as HTMLElement;
-    expect(within(toolbar).queryByRole("button", { name: /need you|not transcribed|waiting|didn't upload/ })).toBeNull();
-    // One toolbar row: Select all, Library / the view's name, Search, Filters and Sort & display; nothing else.
-    expect(within(toolbar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Library", "Filters", "Sort & display"]);
+    const row2 = document.querySelector(".el-lib-row2") as HTMLElement;
+    for (const top of [toolbar, row2]) expect(within(top).queryByRole("button", { name: /need you|not transcribed|audio only|waiting|didn't upload/i })).toBeNull();
+    expect(within(toolbar).queryAllByRole("button")).toEqual([]);
+    expect(within(toolbar).getByRole("searchbox", { name: "Search recordings" })).toBeInTheDocument();
+    // Row 2: the kinds on the start side, Filters and Sort & display on the end; nothing else.
+    expect(within(row2).getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual(["All", "Calls", "Meetings", "Voice notes"]);
+    expect(within(row2).getAllByRole("button").map((b) => b.textContent)).toEqual(["Filters", "Sort & display"]);
   });
 
   it("an old needs-action dismissal is cleared once (every account's); other settings stay", async () => {

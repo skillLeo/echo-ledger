@@ -6,7 +6,7 @@
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
 // reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
 // a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { PanelToggle } from "../shell/NavRail";
+import { PanelToggle, usePageHistory } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
@@ -16,14 +16,15 @@ import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Button, Card, Dialog, Icon, LabelDot, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
-  Toast, ToastRegion,
+  Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Toast, ToastRegion, BackToTop, scrollRootOf,
 } from "../components";
-import { ScreensMark } from "./screens";
-import { binHours, binSentence, isUntranscribed, rowModel, type SavedView } from "./model";
+import { binHours, binSentence, isUntranscribed, rowModel, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
+import { RecordingRow } from "./RecordingRow";
+import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, LIBRARY_TABS, matchesSearch, prepare, searchWords, sourceOf, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
@@ -38,7 +39,6 @@ import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove
 import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
-import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
 import { QueueV2 } from "./QueueV2";
 import { useLibraryQueue } from "../../views/main/LibraryQueue";
@@ -75,6 +75,14 @@ export const FILTER_DEBOUNCE_MS = 150;
  * test keeps them one). */
 export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
+
+/**
+ * UX-25: where the list was when a recording was opened from it: the place and view, the scroll, the recording and its
+ * row's place in the list. Back from the recording the list is there again.
+ */
+type KeptPlace = { key: string; top: number; rowId: string; index: number };
+/** How long the recording you came back from keeps its tint (the owner's "a bit of highlight" that stays). */
+export const LAST_OPENED_MS = 60_000;
 /** A search is one step of Back and Forward once typing has stopped this long. */
 const SEARCH_STEP_MS = 700;
 /** How many steps Back keeps. */
@@ -83,17 +91,17 @@ const HISTORY_MAX = 50;
 export type LibraryPlaceState = { scope: LibraryScope; spec: FilterSpec; query: string; tab: LibraryTab };
 /** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
 type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
-/** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
- * --el-breakpoint-medium. */
-const WIDE = 1440;
-/** …and with the filters pushing the list (the rail and the place's panel take their room too). */
+/** The search box names its place where it has room: from --el-breakpoint-medium, and with the filters pushing the
+ * list (the rail and the place's panel take their room too) from this width. */
 const WIDE_WITH_PANEL = 1800;
 const NARROW = 1024;
-/** The search's placeholder for the room its box has. */
-function placeholderFor(width: number, filtersBeside: boolean): string {
-  if (width >= (filtersBeside ? WIDE_WITH_PANEL : WIDE)) return `Search titles, transcripts and projects (${MOD}F)`;
-  if (width >= NARROW && !filtersBeside) return `Search recordings (${MOD}F)`;
-  return `Search (${MOD}F)`;
+/**
+ * The search's placeholder (UX-20: it names what it searches): "Search recordings ⌘F"; "Search ⌘F" where its box is
+ * narrow (under 1024 px, or with the filters beside it below WIDE_WITH_PANEL).
+ */
+export function placeholderFor(width: number, filtersBeside: boolean): string {
+  if (width >= (filtersBeside ? WIDE_WITH_PANEL : NARROW)) return `Search recordings ${MOD}F`;
+  return `Search ${MOD}F`;
 }
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -134,8 +142,8 @@ const EMPTY_VIEW: Partial<Record<LibraryViewId, { title: string; body: string }>
   needs: { title: "Nothing needs you", body: "Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here." },
   unread: { title: "You've opened every recording", body: "New recordings show here until you open them." },
   important: { title: "Nothing marked important yet", body: "Recordings you mark important show here." },
-  not_transcribed: { title: "Everything is transcribed", body: "Recordings without a transcript show here." },
-  audio_only: { title: "No audio-only recordings", body: "Calls saved as audio only show here, to transcribe later." },
+  // Since v2.1 one view (Not transcribed merged into it): every recording kept without a transcript.
+  audio_only: { title: "No audio-only recordings", body: "Recordings kept as audio, without a transcript, show here to transcribe later." },
 };
 
 export type LibraryV2Props = {
@@ -187,18 +195,48 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const setOpenId = useCallback((id: string | null) => {
     if (id) {
+      // Opened from the list: keep its place for the way back (UX-25), and the recording starts at its own top.
+      const list = !openIdRef.current ? root.current?.querySelector(".el-lib-list") : null;
+      if (list) {
+        const box = scrollRootOf(root.current);
+        const rows = [...list.querySelectorAll<HTMLElement>("[data-row-id]")];
+        returning.current = { key: viewKeyRef.current, top: box?.scrollTop ?? 0, rowId: id, index: Math.max(0, rows.findIndex((r) => r.dataset.rowId === id)) };
+        scrollTopOnOpen.current = true;
+      }
+      setLastOpened(null);
       setOpened(rememberOpened(id));
       setReadHere((r) => (r.has(id) ? r : new Set(r).add(id)));
       // Read on every device (POST /api/sessions/{id}/opened). Offline it stays read here; the dot is only a hint.
       void api.markOpened(id).catch(() => undefined);
     }
+    openIdRef.current = id;
     setOpenIdNow(id);
   }, []);
+  const openIdRef = useRef<string | null>(null);
+  openIdRef.current = openId;
+  /** The place to come back to from the recording open now (UX-25). */
+  const returning = useRef<KeptPlace | null>(null);
+  const scrollTopOnOpen = useRef(false);
+  /** The recording you came back from: a quiet tint on its row until another is opened or clicked, the view, tab or
+   * filters change, or 60 s pass (UX-25). Not the selection's colour. */
+  const [lastOpened, setLastOpened] = useState<{ id: string; key: string } | null>(null);
   // The filters: what the panel and the pills show at once (`spec`), and what the list and the counts follow
   // (`applied`), 150 ms after the last tick; a change from elsewhere (a view, Clear all) applies at once.
   const [spec, setSpecNow] = useState<FilterSpec>({});
   const [applied, setApplied] = useState<FilterSpec>({});
   const debounce = useRef(0);
+  /** This place and view: what a kept position belongs to (UX-25). */
+  const viewKey = JSON.stringify([scopeKey(scope), tab, cleanSpec(applied), query.trim()]);
+  const viewKeyRef = useRef(viewKey);
+  viewKeyRef.current = viewKey;
+  useEffect(() => {
+    setLastOpened((l) => (l && l.key !== viewKey ? null : l));
+  }, [viewKey]);
+  useEffect(() => {
+    if (!lastOpened) return;
+    const timer = window.setTimeout(() => setLastOpened(null), LAST_OPENED_MS);
+    return () => window.clearTimeout(timer);
+  }, [lastOpened]);
   const setSpec = useCallback((next: FilterSpec, at: "now" | "soon" = "now") => {
     setSpecNow(next);
     window.clearTimeout(debounce.current);
@@ -259,10 +297,32 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   useEffect(() => {
     if (!focusAfter) return;
     setFocusAfter(null);
+    const el = root.current;
+    const rowOf = (id: string | null) => (id ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`) ?? null : null);
+    // Back from a recording opened here (UX-25): the list where it was; the recording's row tinted, or (gone since) the
+    // row now nearest its place.
+    const back = returning.current;
+    returning.current = null;
+    const here = back && back.key === viewKeyRef.current && !!el?.querySelector(".el-lib-list") ? back : null;
+    const box = here ? scrollRootOf(el) : null;
+    if (box && here) box.scrollTop = here.top;
     const active = document.activeElement;
     if (active && active !== document.body) return;
-    const el = root.current;
-    const row = focusAfter.rowId ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusAfter.rowId)}"]`) : null;
+    let row = rowOf(focusAfter.rowId);
+    if (here) {
+      if (row && focusAfter.rowId === here.rowId) setLastOpened({ id: here.rowId, key: here.key });
+      else if (!row) {
+        const rows = [...(el?.querySelectorAll<HTMLElement>(".el-lib-list [data-row-id]") ?? [])];
+        row = rows[Math.min(here.index, rows.length - 1)] ?? null;
+      }
+    }
+    if (row && here && box) {
+      row.focus({ preventScroll: true });
+      const r = row.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (r.height && (r.top < b.top || r.bottom > b.bottom)) row.scrollIntoView?.({ block: "nearest" });
+      return;
+    }
     (row ?? el?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
   }, [focusAfter]);
   const keepHours = useTrashKeepHours();
@@ -456,6 +516,12 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // `settling`: a Back or Forward is under way; whatever the Library settles on meanwhile (a view deleted since falls
   // back to All recordings, a view saved offline has the server's id now) is where it went, never a new step.
   const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; settling: number }>({ back: [], forward: [], now: null, settling: 0 });
+  /** How many steps each way, as state: the title row's ← → (usePageHistory) are drawn from it, lit when there are some. */
+  const [stepCounts, setStepCounts] = useState({ back: 0, forward: 0 });
+  const countSteps = useCallback(() => {
+    const h = steps.current;
+    setStepCounts((c) => (c.back === h.back.length && c.forward === h.forward.length ? c : { back: h.back.length, forward: h.forward.length }));
+  }, []);
   // A place that can't be shown any more: a view or a label deleted since.
   const goneFrom = (p: Place) => (p.scope.kind === "saved" && !viewsStore.list().some((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")))
     || (p.scope.kind === "label" && !!lists && !lists.some((l) => l.key === (p.scope.kind === "label" ? p.scope.key : "")));
@@ -475,6 +541,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (h.settling > 0) {
       h.now = here;
       tidy();
+      countSteps();
       return;
     }
     if (h.now && placeKey(h.now) === key) return;
@@ -486,6 +553,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     }
     h.now = here;
     tidy();
+    countSteps();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, applied, searchStep]);
   const walk = useCallback((way: "back" | "forward") => {
@@ -507,8 +575,9 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     }, 0);
     show(to.scope, to.spec, true, { query: to.query });
     setSearchStep(to.query);
+    countSteps();
     return true;
-  }, [show]);
+  }, [show, countSteps]);
 
   // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
   const restored = useRef(false);
@@ -526,6 +595,61 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     restoredId.current = null;
     if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
   }, [items, initialOpen]);
+  /** Marks what is stuck again (set by the effect below; a change that moves things without a scroll calls it). */
+  const remark = useRef<() => void>(() => undefined);
+  // A stuck group heading also covers the scrolling box's top padding (UX-25 review): mark the stuck ones, and give
+  // the cover the padding's height, as the list scrolls.
+  useEffect(() => {
+    const box = scrollRootOf(root.current);
+    if (!box) return;
+    let frame = 0;
+    const mark = () => {
+      frame = 0;
+      const el = root.current;
+      if (!el) return;
+      const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
+      // On the Library's root: the stuck headings and the stuck selection bar both cover the padding band.
+      el.style.setProperty("--el-sticky-cover", `${pad}px`);
+      const top = box.getBoundingClientRect().top + pad;
+      const stuck = (h: HTMLElement) => box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1;
+      for (const h of el.querySelectorAll<HTMLElement>(".el-lib-list > .el-list-section, .el-selectbar")) h.toggleAttribute("data-stuck", stuck(h));
+    };
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(mark);
+    };
+    remark.current = soon;
+    box.addEventListener("scroll", soon, { passive: true });
+    // A tab, a filter, a sort, a delete or a resize moves the headings without a scroll: marked again then too.
+    window.addEventListener("resize", soon);
+    const resized = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
+    if (resized && root.current) resized.observe(root.current);
+    return () => {
+      box.removeEventListener("scroll", soon);
+      window.removeEventListener("resize", soon);
+      resized?.disconnect();
+      cancelAnimationFrame(frame);
+      remark.current = () => undefined;
+    };
+  }, []);
+  // A recording opened from the list starts at its own top (UX-25 keeps the list's place for the way back). In the
+  // Table it opens in a drawer over the list, which stays as it is.
+  useEffect(() => {
+    if (!openId || !scrollTopOnOpen.current) return;
+    scrollTopOnOpen.current = false;
+    if (layout !== "table" || trash) {
+      const box = scrollRootOf(root.current);
+      if (box) box.scrollTop = 0;
+    }
+    // Only when a recording opens: the layout and the place are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+  // The recording opened from the list is gone since (deleted elsewhere, or no longer here): back to the list, where it was.
+  useEffect(() => {
+    if (!openId || !items || returning.current?.rowId !== openId) return;
+    if (items.some((i) => i.id === openId && !i.deleted)) return;
+    setOpenIdNow(null);
+    setFocusAfter({ rowId: null, seq: ++seq.current });
+  }, [items, openId]);
   const reported = useRef<string | null | undefined>(undefined);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
@@ -596,6 +720,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // place, the filters and the search.
   const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
   const tabCount = useMemo(() => tabCounts(filtered), [filtered]);
+  // Other only while it has recordings, or is open (contract 2.0.0-q: the tabs add up to All).
+  const tabsShown = useMemo(() => shownTabs(tabCount, tab), [tabCount, tab]);
   const shownItems = useMemo(() => [...waitingHere, ...filtered.filter((f) => inTab(f, tab)).map((f) => f.item)], [waitingHere, filtered, tab]);
   // Kept by the window while another place is shown, to come back to as it was.
   const placeNow = useRef(onPlace);
@@ -781,6 +907,28 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     return list.map(({ key: _key, ...item }) => item);
   };
 
+  /**
+   * A row's actions on hover and keyboard focus (UX-06), in place of when and how long: Transcribe for Audio only, Pin or
+   * Unpin, Label, then ⋯ (the whole menu, as a right-click).
+   */
+  const rowActions = (item: LibraryItem, r: RowModel): ReactNode => (
+    <>
+      {r.state?.key === "audio_only" && (
+        <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} aria-label={`Transcribe ${r.title}`} title="Transcribe"
+          onClick={() => setOrganise({ kind: "transcribe", ids: [item.id] })}>Transcribe</Button>
+      )}
+      <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={`${item.pinned ? "Unpin" : "Pin"} ${r.title}`} title={item.pinned ? "Unpin" : "Pin"}
+        onClick={() => void bulk([item.id], item.pinned ? "unpin" : "pin", item.pinned ? "Unpinned" : "Pinned")} />
+      {lists ? (
+        <Menu label={`Label ${r.title}`} button={{ variant: "quiet", size: "sm", icon: Icons.LabelIcon, title: "Label" }}
+          items={() => addToListMenu({ lists, chosen: [item], onToggle: (list, on) => void putInList([item.id], list, on), onNew: () => setNewLabel({ ids: [item.id] }) }).items ?? []} />
+      ) : (
+        <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={`Label ${r.title}`} title="Label" onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
+      )}
+      <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+    </>
+  );
+
   const restore = async (b: BinItem) => {
     try {
       await api.restoreSession(b.id);
@@ -814,6 +962,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   shownCount.current = shownIds.length;
   // Picking turns the toolbar into the selection bar; it stays until Esc, Cancel, or nothing is picked.
   const choosing = selecting || pickedIds.length > 0;
+  // Picking (the selection bar takes the tabs row's place), a tab or the filters change what is stuck without a scroll.
+  useEffect(() => {
+    remark.current();
+  }, [choosing, tab, applied]);
   // More picked than the core takes at once: the actions wait and the bar says why.
   const tooMany = pickedIds.length > MAX_BULK;
   const toggle = (id: string) => {
@@ -875,6 +1027,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
     // The press that ended a drag never opens or ticks the row.
     if (dragJustEnded()) return;
+    // Another row pressed: the tint of the one you came back from goes (UX-25).
+    if (lastOpened?.id !== item.id) setLastOpened(null);
     if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) pickRange(item.id);
     else if (choosing || e.shiftKey || e.metaKey || e.ctrlKey) toggle(item.id);
     else setOpenId(item.id);
@@ -884,7 +1038,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setContext({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
   };
   /** A row's checkbox: ticks it (Shift: the range from the last one ticked). */
-  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLInputElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
+  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
 
   /** A row's source logo or label: the list shows only that source, or that label, too (it adds to the section). */
   const quick = (section: Exclude<SectionKey, "date">, value: string) => {
@@ -899,8 +1053,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   };
   /**
    * What Save as view keeps (contract 2.0.0-p: filters, search, sort, group, density). Where the list started from a
-   * label, Important or Not transcribed, that is kept as its filter; Needs you, Unread and Audio only have none, so a
-   * view saved there keeps the filters and the search (the dialog says so).
+   * label, Important or Audio only (Status is not transcribed), that is kept as its filter; Needs you and Unread have
+   * none, so a view saved there keeps the filters and the search (the dialog says so).
    */
   const viewSpec = (): ViewSpec => {
     let filters = spec;
@@ -909,10 +1063,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     };
     if (labelKey) add("labels", labelKey);
     if (baseView === "important") add("marked", "important");
-    if (baseView === "not_transcribed") add("status", "not_transcribed");
+    if (baseView === "audio_only") add("status", "not_transcribed");
     return { filters, search: query.trim() || null, sort: choice.sort, group: choice.group, density };
   };
-  const unsaved = baseView === "needs" || baseView === "unread" || baseView === "audio_only";
+  const unsaved = baseView === "needs" || baseView === "unread";
   const canSave = filtersOn > 0 || !!query.trim() || (baseView !== "all" && !unsaved) || !!labelKey;
   const changed = !!savedView && JSON.stringify([cleanSpec(spec), query.trim() || null, choice.sort, choice.group])
     !== JSON.stringify([cleanSpec(savedView.spec.filters), savedView.spec.search ?? null, savedView.spec.sort, savedView.spec.group]);
@@ -921,11 +1075,15 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // else closes the filters; J and K move between rows, Enter opens one, X ticks it; ⌘A / Ctrl+A picks every row shown;
   // Delete sends the picked (or the focused) ones to Trash with Undo.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  /** Inside the shell (its title row has ← → and the one search): set where usePageHistory and usePageTitle answer. */
+  const inShellRef = useRef(false);
+  const inTitleRowRef = useRef(false);
   keys.current = (e: KeyboardEvent) => {
     if (organise || context || savingView || newLabel) return;
     const mod = e.metaKey || e.ctrlKey;
     // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
-    if (!open && !trash && items && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+    // In the shell's title row (inTitleRow) ⌘F is the row's: it searches this view and says so ("In: All recordings").
+    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -934,7 +1092,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (typing(e.target)) return;
     // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
     // (the search, a field, the pill editor) or with a question open.
-    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+    // In the shell the title row answers them (usePageHistory), asking the Library first: nothing moves twice.
+    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       back.current(e.key === "[" ? "back" : "forward");
@@ -1014,7 +1173,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     // The mouse's back (button 3) and forward (4): never the web view's own page history. Heard first (the capture phase),
     // so the Library answers before the shell's title row, which walks the places, however often it is drawn again; a
     // press something else took is left alone.
-    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    // In the shell its title row hears them (usePageHistory) and asks the Library first.
+    const side = (e: MouseEvent) => !inShellRef.current && (e.button === 3 || e.button === 4);
     const down = (e: MouseEvent) => {
       if (side(e)) e.preventDefault();
     };
@@ -1077,11 +1237,45 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     </ToastRegion>
   );
 
+  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
+  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
+  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
+  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
+  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
+    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
+  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
+  // The window's title row (UX-20) shows the list's place, its count and the search; a recording opened as its own
+  // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
+  const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
+    : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
+  /** A toolbar's keys (the selection bar, as the shared SelectionBar): ← → between its controls, Home and End to the ends. */
+  const toolbarKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const next = rtl ? "ArrowLeft" : "ArrowRight";
+    const prev = rtl ? "ArrowRight" : "ArrowLeft";
+    if (![next, prev, "Home", "End"].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+    const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [role="checkbox"]')]
+      .filter((c) => !c.closest('[role="menu"]'));
+    const at = controls.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const to = e.key === "Home" ? 0 : e.key === "End" ? controls.length - 1 : e.key === next ? Math.min(at + 1, controls.length - 1) : Math.max(at - 1, 0);
+    controls[to].focus();
+  };
   const closeOpen = () => {
     const id = open?.id ?? null;
     setOpenId(null);
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
+  // The title row's ← → (⌘[ ⌘], Alt+← →, the mouse's side buttons) ask the Library first (UX-20): an open recording
+  // goes back to the list where it was (UX-25's kept place is this step); else the Library's own steps (a view, a
+  // filter, a search); then the places visited. Outside the shell the Library hears those keys itself.
+  const inShell = usePageHistory({
+    back: open ? closeOpen : stepCounts.back ? () => void walk("back") : null,
+    forward: !open && stepCounts.forward ? () => void walk("forward") : null,
+  });
+  inShellRef.current = inShell;
+  inTitleRowRef.current = inTitleRow;
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
@@ -1114,13 +1308,6 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
-  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
-  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
-  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
-  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
-  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
-    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
-  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
   const viewEmpty = scope.kind === "view" ? EMPTY_VIEW[scope.view] : undefined;
   const panelShown = panel && !trash && !choosing;
 
@@ -1131,80 +1318,82 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts()} drawer={drawer} onClose={() => setPanel(false)}
             onSaveView={() => setSavingView(true)} canSave={canSave} />
         )}
-        <div className="el-page el-page--wide el-lib__main">
-          {choosing ? (
-            <header className="el-lib-toolbar el-selectbar" role="toolbar" aria-label="Selected recordings">
-              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
-                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h1 className="el-title-m el-lib-toolbar__title" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
-              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
-              <div className="el-page__actions el-lib-toolbar__end">
-                <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
-                <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
-                )}
-                <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
-                  onClick={() => deleteOrAsk(pickedIds)} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
-                )}
-                <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
-              </div>
-            </header>
-          ) : (
+        <div className="el-page el-page--wide el-lib__main el-back-top-room">
+          {/* UX-05/UX-20: the window's title row shows the place, its count and the one search (usePageTitle). Without
+              it (no title row in this shell) the page keeps a slim header of its own with the same three. */}
+          {!inTitleRow && (
             <header className="el-lib-toolbar">
               <PanelToggle />
-              {!trash && layout === "list" && shownIds.length > 0 && (
-                <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
-              )}
-              {/* Library / <the place>: "Library" goes back to All recordings, its filters and search cleared. */}
-              <nav className="el-lib-crumbs" aria-label="Breadcrumbs">
-                <button type="button" className="el-lib-crumbs__root" onClick={() => show(ALL_SCOPE, {}, true)}
-                  title="All recordings, nothing filtered">Library</button>
-                <span className="el-lib-crumbs__sep" aria-hidden="true">/</span>
-              </nav>
               <h1 className="el-title-m el-lib-toolbar__title">
                 <span dir="auto">{title}</span>
                 {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
               </h1>
               {!trash && (
-                <>
-                  <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={placeholderFor(width, panelShown && !drawer)}
-                    className="el-lib-toolbar__search" />
-                  <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
-                    title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
-                    Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
-                  </Button>
-                  <Menu label="Sort & display" items={displayMenu}
-                    button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
-                </>
+                <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
+                  placeholder={placeholderFor(width, panelShown && !drawer)} className="el-lib-toolbar__search" />
               )}
             </header>
           )}
-          {!trash && !choosing && (
-            <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
-              {LIBRARY_TABS.map((t) => (
-                <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
-                  onClick={() => setTab(t)} onKeyDown={(e) => {
-                    const at = LIBRARY_TABS.indexOf(t);
-                    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
-                    const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
-                    if (!step) return;
-                    e.preventDefault();
-                    const next = LIBRARY_TABS[(at + step + LIBRARY_TABS.length) % LIBRARY_TABS.length];
-                    setTab(next);
-                    (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[LIBRARY_TABS.indexOf(next)])?.focus();
-                  }}>
-                  {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
-                </button>
-              ))}
+          {choosing ? (
+            // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
+              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
+                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
+              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
+                  onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>
+                  {pickedIds.length > MAX_TRANSCRIBE && !tooMany ? `Transcribe (${MAX_TRANSCRIBE} at a time)` : "Transcribe"}
+                </Button>
+                <Button size="sm" variant="quiet" icon={Icons.MoveIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })}>Move to project</Button>
+                <Button size="sm" variant="quiet" icon={Icons.LabelIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })}>Label</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="Share or export" button={{ variant: "quiet", size: "sm", icon: Icons.ShareIcon, text: "Export", "aria-label": "Share or export", title: "Share or export" }}
+                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title="Delete (Del)" aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                  onClick={() => deleteOrAsk(pickedIds)}>Delete</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="More actions" button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
+                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "transcribe", "export", "ai", "delete"]))} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
+              </div>
+            </div>
+          ) : !trash && (
+            // Row 2 (40 px): the kinds on the start side (Other only while it has recordings), the list's controls on the end.
+            <div className="el-lib-row2">
+              <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
+                {tabsShown.map((t) => (
+                  <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
+                    onClick={() => setTab(t)} onKeyDown={(e) => {
+                      const at = tabsShown.indexOf(t);
+                      const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+                      const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
+                      // Home and End: the first and the last tab (Back to top leaves keys in a tab list alone).
+                      const to = e.key === "Home" ? 0 : e.key === "End" ? tabsShown.length - 1 : step ? (at + step + tabsShown.length) % tabsShown.length : -1;
+                      if (to < 0) return;
+                      e.preventDefault();
+                      const next = tabsShown[to];
+                      setTab(next);
+                      (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
+                    }}>
+                    {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
+                  title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
+                  Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                </Button>
+                <Menu label="Sort & display" items={displayMenu}
+                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+              </div>
             </div>
           )}
           {!trash && !choosing && (filtersOn > 0 || changed) && (
@@ -1303,7 +1492,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
               rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
-            <List label="Recordings">
+            <List label="Recordings" className="el-lib-list">
               {groups.map((g) => [
                 g.label ? (
                   <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
@@ -1315,40 +1504,23 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                     } : undefined} />
                 ) : null,
                 ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                  const r = rowModel(item, undefined, rowViews.summaryFor(item));
-                  const source = sourceOf(item);
+                  // In a date group (Today, Yesterday, This week) a row says only the time: its heading says the day.
+                  const r = rowModel(item, undefined, rowViews.summaryFor(item), TIME_ONLY_GROUPS.has(g.key));
                   return (
-                    <ListRow key={item.id} strong title={r.title} compact={density === "compact"}
-                      leading={
-                        <button type="button" className="el-row__source" aria-label={`Show only ${source.label}`} title={`Show only ${source.label}`}
-                          onClick={() => quick("source", source.value)}>
-                          <SourceAvatar item={item} />
-                        </button>
-                      }
-                      meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
-                      badge={r.badge || recovered.has(item.id) ? <>
-                        {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
-                        {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
-                      </> : undefined}
-                      mark={item.pinned || r.screens || item.labels?.length ? <>
-                        {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
-                        {r.screens ? <ScreensMark count={r.screens} /> : null}
-                        {(item.labels ?? []).slice(0, 3).map((l) => [
-                          <button key={l} type="button" className="el-row__label" title={`Show only ${l}`} aria-label={`Show only label ${l}`}
-                            onClick={() => quick("labels", listKey(l))}>
-                            <LabelDot name={l} colour={labelColour(item, l)} decorative /><span dir="auto">{l}</span>
-                          </button>, " "])}
-                      </> : undefined}
-                      endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                      rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                      pick={{ checked: picked.has(item.id), label: `Select ${r.title}`, onToggle: (e) => pickRow(item, e), shown: choosing }}
-                      checked={choosing ? picked.has(item.id) : undefined}
-                      actions={choosing ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+                    <RecordingRow key={item.id} item={item} r={r} compact={density === "compact"} choosing={choosing} picked={picked.has(item.id)}
+                      labels={(item.labels ?? []).map((l) => ({ name: l, key: listKey(l), colour: labelColour(item, l) }))}
+                      onLabel={(key) => quick("labels", key)}
+                      recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}
+                      onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                      onPick={(e) => pickRow(item, e)} last={lastOpened?.id === item.id}
+                      actions={choosing ? undefined : rowActions(item, r)} />
                   );
                 }),
               ])}
             </List>
           )}
+          {/* UX-25: after one screen down, ↑ at the list's bottom end corner (Home, ⌘↑ and Ctrl+Home too). */}
+          {items && <BackToTop />}
         </div>
       </div>
       <Dialog open={!!erase} alert title="Delete forever?"

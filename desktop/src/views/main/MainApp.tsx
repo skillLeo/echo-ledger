@@ -107,7 +107,7 @@ const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Librar
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
 
-const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept but not transcribed.";
+const BUDGET_REACHED = "Monthly transcription limit reached. New recordings are kept as audio only.";
 const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
 
 /**

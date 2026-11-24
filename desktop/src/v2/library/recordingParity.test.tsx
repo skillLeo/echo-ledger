@@ -108,10 +108,10 @@ describe("the recording page (parity batch 1)", () => {
 });
 
 describe("a Library row (parity batch 1)", () => {
-  it("DT-LIB-069: the sub-line has the project and the bookmarks after the first words", () => {
+  it("DT-LIB-069: since v2.1 (UX-06) line 2 is only the first words and how long; the project and the bookmarks are the Table's", () => {
     const row = rowModel(item({ client: { id: "c1", name: "Qureshi Textiles" } as LibraryItem["client"], marker_count: 2 }), NOW);
-    expect(row.meta).toBe("Payment terms · Qureshi Textiles · 2 bookmarks");
-    expect(rowModel(item({ marker_count: 1 }), NOW).meta).toBe("Payment terms · 1 bookmark");
-    expect(rowModel(item(), NOW).duration).toBe("18:24");
+    expect(row.meta).toBe("Payment terms");
+    expect(rowModel(item({ marker_count: 1 }), NOW).meta).toBe("Payment terms");
+    expect(rowModel(item(), NOW).duration).toBe("18m 24s");
   });
 });

@@ -42,9 +42,10 @@ beforeEach(() => {
 });
 
 describe("the title row's search in the app (UX-20)", () => {
-  it("the row's field opens it in its groups; \"Show all in the list\" makes the Library the results", async () => {
+  it("⌘K opens it in its groups (the Library's row field searches the Library); \"Show all in the list\" makes the Library the results", async () => {
     await app();
-    fireEvent.click(within(screen.getByTestId("title-row")).getByRole("button", { name: /^Search/ }));
+    // The Library's title row holds its own search ("Search recordings"); ⌘K opens the search of everything.
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
     await settle();
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "invoice" } });
@@ -55,6 +56,19 @@ describe("the title row's search in the app (UX-20)", () => {
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("heading", { level: 1, name: /^All recordings/ })).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("invoice");
+  });
+
+  it("from the Library's title row: ⌘F, typed words, then Search everything instead opens the grouped search with them", async () => {
+    await app();
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = within(screen.getByTestId("title-row")).getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    fireEvent.change(field, { target: { value: "invoice" } });
+    fireEvent.click(within(screen.getByTestId("title-row")).getByRole("button", { name: "Search everything instead" }));
+    await settle();
+    expect(screen.getByRole("combobox")).toHaveValue("invoice");
+    expect(await screen.findByRole("option", { name: "Show all in the list" })).toBeInTheDocument();
   });
 
   it("Ask about \"…\" opens Ask with the question in it", async () => {
