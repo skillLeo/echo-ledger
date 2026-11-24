@@ -199,7 +199,7 @@ pub mod mac {
 
     use objc2::MainThreadMarker;
     use objc2::runtime::{AnyClass, AnyObject, Imp, NSObjectProtocol, Sel};
-    use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSAlertStyle, NSApplication, NSApplicationTerminateReply, NSWindowSharingType};
+    use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSAlertStyle, NSApplication, NSApplicationTerminateReply};
     use objc2_foundation::{NSAppleEventManager, NSString};
     use tauri::{AppHandle, Manager};
 
@@ -227,7 +227,7 @@ pub mod mac {
         alert.setInformativeText(&NSString::from_str(body));
         alert.addButtonWithTitle(&NSString::from_str(stop));
         alert.addButtonWithTitle(&NSString::from_str(cancel));
-        alert.window().setSharingType(NSWindowSharingType::None);
+        crate::privacy::hide_question(&alert.window());
         alert.runModal() == NSAlertFirstButtonReturn
     }
 
@@ -347,7 +347,7 @@ mod tests {
         let ask = mac.find("TerminatePlan::Ask =>").unwrap();
         assert!(ask < mac.find("dispatch2::DispatchQueue::main().after(when, reply_once)").unwrap(), "the backstop after the question");
         // The question is the app's own alert, hidden from screen shares.
-        assert!(mac.contains("alert.window().setSharingType(NSWindowSharingType::None);"));
+        assert!(mac.contains("crate::privacy::hide_question(&alert.window());"), "hidden by the privacy service, as every window is");
     }
 
     #[test]

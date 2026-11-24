@@ -1260,6 +1260,14 @@ pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
+/// A question the app asks in a window of its own (FIX-11: "Stop the recording and quit?"): hidden from screen shares
+/// before it shows, whatever the settings, as a question about the person's recording is theirs alone. Set here, as
+/// every window's flag is (I-02).
+#[cfg(target_os = "macos")]
+pub fn hide_question(window: &objc2_app_kit::NSWindow) {
+    window.setSharingType(objc2_app_kit::NSWindowSharingType::None);
+}
+
 /// macOS: every NSWindow of this process that is not one of EchoLedger's registered windows (made by the system, see
 /// [`others_protected`]) gets the sharing type the floating windows have. Public NSApplication and NSWindow API only,
 /// and only this process's windows. Run whenever the setting or the demo changes, and every few seconds by the safety
