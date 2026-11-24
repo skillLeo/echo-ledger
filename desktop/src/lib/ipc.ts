@@ -396,8 +396,10 @@ export interface NativeMenuItem {
   accelerator?: string | null;
   enabled?: boolean;
   checked?: boolean | null;
-  /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree). */
+  /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree): "action:<id>@<target>". */
   target?: string;
+  /** A sub-menu's choice, sent with its action: "action:<id>=<value>". A target or value is an id, never holding "@" or "=". */
+  value?: string;
 }
 
 export interface UpdateStatus {

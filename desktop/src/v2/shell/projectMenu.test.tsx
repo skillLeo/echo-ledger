@@ -1,18 +1,20 @@
 // The project's menu in the panel's tree (3b): right-click, Shift+F10 or the menu key; every item from actions.json;
 // what nothing here can run yet greyed, never hidden; on a Mac the system's own menu, carrying the project it is for.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { Shell, type SidebarProject } from "./Shell";
 import { registerAction } from "../actions/registry";
-import { useMenuPicks } from "../actions/menuState";
+import { listenToMenuPicks } from "../actions/menuState";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const PROJECTS: SidebarProject[] = [{ id: "m", name: "Mehran Foods" }, { id: "q", name: "Qureshi Textiles", pinned: true }];
+/** The window's one listener for the system's menus (MainApp mounts it, useMenuBar). */
 function Picks() {
-  useMenuPicks("macos");
+  useEffect(() => listenToMenuPicks("macos"), []);
   return null;
 }
 const show = () => render(

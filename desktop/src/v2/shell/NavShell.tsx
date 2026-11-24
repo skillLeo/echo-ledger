@@ -9,7 +9,7 @@ import { Avatar, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
-import { useMenuPart, useMenuPicks } from "../actions/menuState";
+import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
 import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
@@ -403,8 +403,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     ];
     return () => offs.forEach((off) => off());
   }, []);
-  // Record's menu is the system's on a Mac: its picks run here too (one listener for the window, menuState.ts).
-  useMenuPicks(mac ? "macos" : "windows");
+  // Record's menu is the system's on a Mac: its picks come back through the window's one listener (MainApp's,
+  // menuState.ts) to the actions registered here.
   useMenuPart({ state: {
     canGoBack: canWalk("back"), canGoForward: canWalk("forward"), sidebarHidden: hasPanel && !shown,
     canRecord: !!onRecord, recording: !!recording, autoRecord: !!callRecording?.on,

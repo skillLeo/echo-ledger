@@ -114,15 +114,13 @@ pub struct MenuBar {
 }
 
 /// The id a picked item comes back with (pure): Settings… and Quit are answered by the core itself (with or without
-/// the page; Quit keeps a running recording first); every other item is an action for the page, with its choice.
-pub fn bar_item_id(action: &str, value: Option<&str>) -> String {
+/// the page; Quit keeps a running recording first); every other item is an action for the page, with its choice, in
+/// the one form every menu uses (`native_menu::item_id`). None: not well formed, and not drawn.
+pub fn bar_item_id(action: &str, value: Option<&str>) -> Option<String> {
     match action {
-        "app.settings" => SETTINGS.to_string(),
-        "app.quit" => QUIT.to_string(),
-        _ => match value {
-            Some(value) => format!("{}{}{}", crate::native_menu::item_id(action), crate::native_menu::CHOICE, value),
-            None => crate::native_menu::item_id(action),
-        },
+        "app.settings" => Some(SETTINGS.to_string()),
+        "app.quit" => Some(QUIT.to_string()),
+        _ => crate::native_menu::item_id(action, None, value),
     }
 }
 
@@ -177,7 +175,8 @@ fn draw<R: tauri::Runtime>(app: &tauri::AppHandle<R>, bar: &MenuBar) -> tauri::R
                     out.push(Box::new(made?));
                 }
                 BarEntry::Item { action, value, label, accelerator, enabled, checked } => {
-                    let id = bar_item_id(action, value.as_deref());
+                    // A choice whose value isn't one of our ids isn't drawn (its pick would be read as something else).
+                    let Some(id) = bar_item_id(action, value.as_deref()) else { continue };
                     // A key the menu can't take is left off rather than losing the item.
                     out.push(match checked {
                         Some(checked) => Box::new(
@@ -250,10 +249,15 @@ mod tests {
         assert_eq!(bar.menus[1].role.as_deref(), Some("window"));
         assert!(matches!(&bar.menus[0].items[2], BarEntry::Native { native, .. } if native == "closeWindow"));
         // Settings… and Quit are the core's own; the rest go to the page with their choice.
-        assert_eq!(bar_item_id("app.quit", None), QUIT);
-        assert_eq!(bar_item_id("app.settings", None), SETTINGS);
-        assert_eq!(bar_item_id("file.newRecording", None), "action:file.newRecording");
-        assert_eq!(bar_item_id("file.openRecent", Some("r1")), "action:file.openRecent#r1");
+        assert_eq!(bar_item_id("app.quit", None).as_deref(), Some(QUIT));
+        assert_eq!(bar_item_id("app.settings", None).as_deref(), Some(SETTINGS));
+        assert_eq!(bar_item_id("file.newRecording", None).as_deref(), Some("action:file.newRecording"));
+        // The one form every menu uses: a choice after "=".
+        assert_eq!(bar_item_id("file.openRecent", Some("r1")).as_deref(), Some("action:file.openRecent=r1"));
+        assert_eq!(bar_item_id("file.openRecent", Some("r=1")), None);
+        // The page reads back what the core built.
+        let page = include_str!("../../src/v2/actions/menuState.ts");
+        assert!(page.contains("export function parsePick(payload: string): MenuPick | null {"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { NavShell } from "./NavShell";
 import type { Place } from "./NavRail";
 import { checkMenu } from "../actions/registry";
+import { listenToMenuPicks } from "../actions/menuState";
 import { callsOf, emitEvent, respond, resetTauriMock } from "../../test/tauri";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -112,8 +113,11 @@ describe("Record, a split button (DES-02)", () => {
       { action: "go.recordPage", label: "Record Page", accelerator: null, enabled: true, checked: null },
     ]);
     expect(typeof call.x).toBe("number");
+    // The pick comes back through the window's one listener (MainApp's, menuState.ts) to the action the shell registered.
+    const stop = listenToMenuPicks("macos");
     await emitEvent("menu:action", "file.importAudio");
-    expect(p.onUpload).toHaveBeenCalled();
+    stop();
+    expect(p.onUpload).toHaveBeenCalledTimes(1);
   });
 
   it("while recording: red, ■ and the time; a press or ⌘. stops; New recording is greyed", () => {

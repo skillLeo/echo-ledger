@@ -4,7 +4,10 @@ import { act, render } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { registerAction } from "./registry";
 import { MENU_BAR_SETTLE_MS, useMenuBar } from "./useMenuBar";
-import { parsePick, setMenuPart, useMenuPart } from "./menuState";
+import { parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NativeMenuBar } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -20,6 +23,18 @@ const lastBar = () => callsOf("app_menu_set").at(-1)?.bar as NativeMenuBar;
 const item = (bar: NativeMenuBar, title: string, action: string) =>
   bar.menus.find((m) => m.title === title)!.items.find((e) => (e.kind === "item" || e.kind === "native") && e.action === action) as Record<string, unknown>;
 const offs: (() => void)[] = [];
+/** The app's own source (no tests), read from disk, sorted. */
+function sourceFiles(): Record<string, string> {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const out: Record<string, string> = {};
+  const walk = (dir: string) => readdirSync(dir).sort().forEach((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path);
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name) && !path.includes(`${join("src", "test")}`)) out[relative(root, path)] = readFileSync(path, "utf8");
+  });
+  walk(join(root, "src"));
+  return out;
+}
 
 beforeEach(() => {
   resetTauriMock();
@@ -76,16 +91,66 @@ describe("the menu bar in step with the app (FIX-05)", () => {
     expect(callsOf("app_menu_set")).toHaveLength(0);
   });
 
-  it("a pick from the system's menus runs its action once, with its choice", async () => {
+  it("a pick from the system's menus runs its action once, with its choice or its thing", async () => {
     const sort = vi.fn();
     const library = vi.fn();
-    offs.push(registerAction("view.sortBy", sort), registerAction("go.library", library));
-    // Two parts of the window ask for the picks: one listener all the same.
+    const rename = vi.fn();
+    offs.push(registerAction("view.sortBy", sort), registerAction("go.library", library), registerAction("project.rename", rename));
+    // Two parts of the window ask for the picks: one listener all the same, so each pick runs once.
     render(<><App platform="macos" /><App platform="macos" /></>);
     await act(() => emitEvent("menu:action", "go.library"));
     expect(library).toHaveBeenCalledTimes(1);
-    await act(() => emitEvent("menu:action", "view.sortBy#oldest"));
+    await act(() => emitEvent("menu:action", "view.sortBy=oldest"));
+    expect(sort).toHaveBeenCalledTimes(1);
     expect(sort).toHaveBeenCalledWith(expect.objectContaining({ value: "oldest", platform: "macos" }));
-    expect(parsePick("recording.labels#Clients #2")).toEqual({ id: "recording.labels", value: "Clients #2" });
+    await act(() => emitEvent("menu:action", "project.rename@p1"));
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(rename).toHaveBeenCalledWith(expect.objectContaining({ targets: ["p1"] }));
+    // Not well formed: nothing runs.
+    await act(() => emitEvent("menu:action", "view.sortBy=a=b"));
+    await act(() => emitEvent("menu:action", "project.rename@p@1"));
+    expect(sort).toHaveBeenCalledTimes(1);
+    expect(rename).toHaveBeenCalledTimes(1);
+  });
+
+  it("the open context menu has the first say over a pick; what it leaves runs through the registry", async () => {
+    const labels = vi.fn();
+    offs.push(registerAction("recording.labels", labels));
+    const taken: unknown[] = [];
+    offs.push(setPickedHandler((pick, payload) => {
+      taken.push([pick, payload]);
+      return pick.value === "mine";
+    }));
+    render(<App platform="macos" />);
+    await act(() => emitEvent("menu:action", "recording.labels@r1=mine"));
+    expect(taken).toEqual([[{ id: "recording.labels", target: "r1", value: "mine" }, "recording.labels@r1=mine"]]);
+    expect(labels).not.toHaveBeenCalled();
+    await act(() => emitEvent("menu:action", "recording.labels@r1=clients"));
+    expect(labels).toHaveBeenCalledTimes(1);
+    expect(labels).toHaveBeenCalledWith(expect.objectContaining({ value: "clients", targets: ["r1"] }));
+  });
+
+  it("one form for every pick: the choice after =, the thing after @, both together; the core's own prefix read too", () => {
+    expect(parsePick("go.library")).toEqual({ id: "go.library" });
+    expect(parsePick("view.sortBy=newest")).toEqual({ id: "view.sortBy", value: "newest" });
+    expect(parsePick("project.rename@p1")).toEqual({ id: "project.rename", target: "p1" });
+    expect(parsePick("recording.labels@r1=clients")).toEqual({ id: "recording.labels", target: "r1", value: "clients" });
+    expect(parsePick("action:view.sortBy=newest")).toEqual({ id: "view.sortBy", value: "newest" });
+    // A target or value holding a separator, or an empty part, is refused (they are ids we build, never text).
+    for (const bad of ["view.sortBy=a=b", "view.sortBy=a@b", "project.rename@p@1", "project.rename@=x", "view.sortBy=", "project.rename@", "=x", "library", "go..library", "go.library#x"]) {
+      expect(parsePick(bad), bad).toBeNull();
+    }
+  });
+
+  it("nothing else listens to the system's menus: one listener, so a pick runs once", () => {
+    // The code only, not what the comments say about the event.
+    const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const files = sourceFiles();
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(["src/lib/ipc.ts", "src/v2/actions/menuState.ts", "src/v2/shell/NavShell.tsx", "src/views/main/MainApp.tsx"]));
+    const naming = Object.entries(files).filter(([, text]) => /["'`]menu:action["'`]/.test(code(text))).map(([path]) => path);
+    expect(naming).toEqual(["src/lib/ipc.ts", "src/v2/actions/menuState.ts"]);
+    // ipc.ts only names the event's payload; menuState.ts listens once.
+    expect(code(files["src/lib/ipc.ts"]).match(/["'`]menu:action["'`]/g)).toHaveLength(1);
+    expect(code(files["src/v2/actions/menuState.ts"]).match(/listenTo\(\s*["'`]menu:action["'`]/g)).toHaveLength(1);
   });
 });
