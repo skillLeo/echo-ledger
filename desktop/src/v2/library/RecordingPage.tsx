@@ -590,6 +590,29 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       sayProblem(onMessage, "Could not access the clipboard");
     }
   };
+  // ⌘P on a Mac, Ctrl+P elsewhere: print the transcript (its print page, where Save as PDF is too), not the window
+  // (FIX-10). Heard on the document, before the window's guard; never while typing (a field keeps its keys; Ctrl+P
+  // moves up a line on a Mac) or behind a dialog.
+  const printNow = useRef<() => void>(() => undefined);
+  printNow.current = () => void exportAs("html");
+  useEffect(() => {
+    const mac = /mac/i.test(navigator.platform || navigator.userAgent);
+    const onKey = (e: KeyboardEvent) => {
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      // The P key whatever the layout types with it (Urdu, Arabic: e.code), as LibraryNav does.
+      const p = e.key.toLowerCase() === "p" || (e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key) && e.code === "KeyP");
+      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || !p) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      // Held down, it repeats: printed once.
+      if (e.repeat) return;
+      printNow.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const exportAs = async (format: ExportFormat) => {
     if (!tDetail) return;
     try {

@@ -24,6 +24,7 @@ pub mod lock;
 pub mod mac_check;
 mod main_thread;
 pub mod material;
+pub mod native_feel;
 pub mod native_menu;
 pub mod my_account;
 pub mod net;

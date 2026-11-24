@@ -29,8 +29,10 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 // Read from disk when the test runs (not import.meta.glob: Vitest's module cache keeps a glob's list of files from a run
 // before a fixture was added). Keyed as the glob did.
 const fixturesAt = join(dirname(fileURLToPath(import.meta.url)), "../../src-tauri/tests/fixtures/server");
-const files: Record<string, Json> = Object.fromEntries(readdirSync(fixturesAt).filter((name) => name.endsWith(".json"))
+const files: Record<string, Json> = Object.fromEntries(readdirSync(fixturesAt).sort().filter((name) => name.endsWith(".json"))
   .map((name) => [`../../src-tauri/tests/fixtures/server/${name}`, JSON.parse(readFileSync(join(fixturesAt, name), "utf8")) as Json]));
+// An empty or moved folder must not pass in silence.
+if (!("../../src-tauri/tests/fixtures/server/chunks_200_last.json" in files)) throw new Error("the server fixtures were not all read: chunks_200_last.json is missing");
 const fx = (name: string): Json => {
   const found = files[`../../src-tauri/tests/fixtures/server/${name}.json`];
   if (!found) throw new Error(`fixture ${name} not found`);

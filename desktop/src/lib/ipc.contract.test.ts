@@ -37,7 +37,8 @@ import captionsRs from "../../src-tauri/src/stt/captions.rs?raw";
  */
 const here = dirname(fileURLToPath(import.meta.url));
 function readTree(dir: string, keep: (path: string) => boolean): Record<string, string> {
-  const walk = (at: string): string[] => readdirSync(at).flatMap((name) => {
+  // Sorted, so a lookup that takes the first match finds the same file on every system.
+  const walk = (at: string): string[] => readdirSync(at).sort().flatMap((name) => {
     const path = join(at, name);
     return statSync(path).isDirectory() ? walk(path) : [path];
   });
@@ -49,6 +50,10 @@ function readTree(dir: string, keep: (path: string) => boolean): Record<string, 
 
 // Every Rust source, for types whose module may move: a struct or enum is looked up by name across all files.
 const allRustSources = readTree(join(here, "../../src-tauri/src"), (path) => path.endsWith(".rs"));
+// An empty or moved folder must not pass in silence: two sources only a full walk finds.
+for (const known of ["../../src-tauri/src/title_click.rs", "../../src-tauri/src/native_menu.rs", "../../src-tauri/src/net/models.rs"]) {
+  if (!(known in allRustSources)) throw new Error(`the Rust sources were not all read: ${known} is missing`);
+}
 
 /** The Rust source declaring `pub struct|enum <name>` (fails with the name when no file declares it). */
 function rustSourceDeclaring(kind: "struct" | "enum", name: string): string {
@@ -193,6 +198,10 @@ const appSources = Object.fromEntries(
     // Globbed from src/lib: "../v2/live/LiveV2.tsx" and "./ipc.ts" become "v2/live/LiveV2.tsx" and "lib/ipc.ts".
     .map(([path, text]) => [path.startsWith("./") ? `lib/${path.slice(2)}` : path.replace(/^\.\.\//, ""), text]),
 );
+// An empty or moved folder must not pass in silence.
+for (const known of ["views/main/MainApp.tsx", "lib/ipc.ts", "v2/shell/NavShell.tsx"]) {
+  if (!(known in appSources)) throw new Error(`the app's sources were not all read: ${known} is missing`);
+}
 
 /** The api wrappers in ipc.ts that invoke `command` ("liveTranslateStatus" for live_translate_status). */
 function wrappersOf(command: string, ipc: string = ipcTs): string[] {

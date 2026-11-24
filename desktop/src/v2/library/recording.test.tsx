@@ -64,6 +64,61 @@ describe("the recording page", () => {
     ]);
   });
 
+  it("⌘P (Ctrl+P on Windows) prints the open transcript: its print page; never from a text field, never Ctrl+P on a Mac (FIX-10)", async () => {
+    respond("transcript_views", VIEWS);
+    respond("export_transcript", null);
+    const platform = Object.getOwnPropertyDescriptor(Navigator.prototype, "platform");
+    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+    try {
+      await open();
+      const before = callsOf("export_transcript").length;
+      // A Mac's Ctrl+P moves up a line: not printing.
+      expect(fireEvent.keyDown(document.body, { key: "p", ctrlKey: true })).toBe(true);
+      expect(callsOf("export_transcript")).toHaveLength(before);
+      // From a field: the field's.
+      const field = document.createElement("input");
+      document.body.append(field);
+      fireEvent.keyDown(field, { key: "p", metaKey: true });
+      field.remove();
+      expect(callsOf("export_transcript")).toHaveLength(before);
+      expect(fireEvent.keyDown(document.body, { key: "p", metaKey: true })).toBe(false);
+      await act(flushAsync);
+      expect(callsOf("export_transcript").at(-1)).toMatchObject({ id: "tr-bilal", format: "html" });
+      // Held down: printed once.
+      const printed = callsOf("export_transcript").length;
+      expect(fireEvent.keyDown(document.body, { key: "p", metaKey: true, repeat: true })).toBe(false);
+      await act(flushAsync);
+      expect(callsOf("export_transcript")).toHaveLength(printed);
+      // An Urdu keyboard's P key (e.code).
+      fireEvent.keyDown(document.body, { key: "پ", code: "KeyP", metaKey: true });
+      await act(flushAsync);
+      expect(callsOf("export_transcript")).toHaveLength(printed + 1);
+    } finally {
+      delete (navigator as unknown as { platform?: string }).platform;
+      if (platform) Object.defineProperty(Navigator.prototype, "platform", platform);
+    }
+  });
+
+  it("on Windows Ctrl+P prints the open transcript, and the Windows key with P doesn't (FIX-10)", async () => {
+    respond("transcript_views", VIEWS);
+    respond("export_transcript", null);
+    const platform = Object.getOwnPropertyDescriptor(Navigator.prototype, "platform");
+    Object.defineProperty(navigator, "platform", { value: "Win32", configurable: true });
+    try {
+      await open();
+      const before = callsOf("export_transcript").length;
+      expect(fireEvent.keyDown(document.body, { key: "p", metaKey: true })).toBe(true);
+      await act(flushAsync);
+      expect(callsOf("export_transcript")).toHaveLength(before);
+      expect(fireEvent.keyDown(document.body, { key: "p", ctrlKey: true })).toBe(false);
+      await act(flushAsync);
+      expect(callsOf("export_transcript").at(-1)).toMatchObject({ id: "tr-bilal", format: "html" });
+    } finally {
+      delete (navigator as unknown as { platform?: string }).platform;
+      if (platform) Object.defineProperty(Navigator.prototype, "platform", platform);
+    }
+  });
+
   it("Export under the player: each format in the view on screen; PDF opens the print page; meeting packs", async () => {
     respond("transcript_views", VIEWS);
     respond("export_transcript", "/Users/me/Downloads/Bilal.docx");
