@@ -261,9 +261,14 @@ fun V2LibraryScreen(
     val placed = remember(searched, target) { LibraryScreenState.inTarget(searched, target) }
     val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
     val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.kind) } } }
-    // Other chosen while it has nothing any more (the filters, the search or a sync took its last one): back to All.
-    LaunchedEffect(kind, kindCounts) {
-        if (kind == LibraryKind.OTHER && (kindCounts[LibraryKind.OTHER] ?: 0) == 0) kindKey = LibraryKind.ALL.name
+    // Other chosen while it has nothing any more (the filters, the search or a sync took its last one): back to All. Only
+    // once it had something here, or the library has synced: a first frame before the cache is read (back from the
+    // background, the process made again) keeps the Other the person chose.
+    val otherCount = kindCounts[LibraryKind.OTHER] ?: 0
+    var otherHad by remember { mutableStateOf(false) }
+    LaunchedEffect(kind, otherCount) {
+        if (otherCount > 0) otherHad = true
+        if (LibraryKind.backToAll(kind, otherCount, otherHad, vm.hasSynced())) kindKey = LibraryKind.ALL.name
     }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.kind) } }
     val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
