@@ -40,7 +40,60 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
     expect($flags)->toBe(flagsWith())->and(array_keys($flags))->toBe([
         'ui_v2.shell', 'ui_v2.home', 'ui_v2.library', 'ui_v2.recording_controls', 'ui_v2.after_call', 'ui_v2.live',
         'ui_v2.ask', 'ui_v2.settings', 'ui_v2.setup_health', 'ui_v2.admin', 'ui_v2.website', 'live_assist',
+        // Since 2.0.0-r: v2.1's five.
+        'v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane',
     ])->and($classic)->toBeFalse();
+});
+
+describe('the v2.1 flags (contract 2.0.0-r)', function () {
+    it('starts each off with empty lists, so it is off for everyone until the admin lists someone', function () {
+        foreach (InterfaceFlags::V21 as $flag) {
+            expect(InterfaceFlag::query()->where('flag', $flag)->exists())->toBeFalse($flag);
+        }
+        $user = Fx::user();
+        foreach (InterfaceFlags::V21 as $flag) {
+            expect(uiFlagsOf($user)[0][$flag])->toBeFalse($flag);
+        }
+    });
+
+    it('turns each on for the people, the workspaces or the share the admin lists, and for nobody else', function () {
+        [$owner, $teammate, $other] = [Fx::user(), Fx::user(), Fx::user()];
+        foreach (InterfaceFlags::V21 as $i => $flag) {
+            app(InterfaceFlags::class)->set($flag, false, 0, $i === 0 ? [$teammate->current_workspace_id] : [], [$owner->id]);
+        }
+
+        expect(uiFlagsOf($owner)[0])->toBe(flagsWith(InterfaceFlags::V21))
+            ->and(uiFlagsOf($teammate)[0])->toBe(flagsWith(['v21_aftercall_notify']))
+            ->and(uiFlagsOf($other)[0])->toBe(flagsWith());
+        app(InterfaceFlags::class)->set('v21_zoom', true, 0, [], []);
+        expect(uiFlagsOf($other)[0])->toBe(flagsWith(['v21_zoom']));
+    });
+
+    it('has no opt-in, and the person\'s design choice neither turns one on nor off', function () {
+        $flags = app(InterfaceFlags::class);
+        foreach (InterfaceFlags::UI_V2 as $flag) {
+            $flags->set($flag, false, 0, [], [], 'opt_in');
+        }
+        $flags->set('v21_preview_pane', false, 0, [], [], 'opt_in');
+        expect(InterfaceFlag::query()->where('flag', 'v21_preview_pane')->value('availability'))->toBe('off');
+
+        $tries = Fx::user();
+        $flags->setDesign($tries, 'v2');
+        expect($flags->for($tries->fresh()))->toMatchArray(['ui_v2.home' => true, 'v21_preview_pane' => false]);
+
+        $listed = Fx::user();
+        $flags->set('v21_panel_flyout', false, 0, [], [$listed->id]);
+        $flags->setDesign($listed, 'classic');
+        expect($flags->for($listed->fresh()))->toMatchArray(['ui_v2.home' => false, 'v21_panel_flyout' => true]);
+    });
+
+    it('is in GET /api/account/ui as in GET /api/config', function () {
+        $owner = Fx::user();
+        app(InterfaceFlags::class)->set('v21_aftercall_card', false, 0, [], [$owner->id]);
+        $ui = test()->api(Fx::token(Fx::device($owner, ['workspace_id' => $owner->current_workspace_id])))->getJson('/api/account/ui')->assertOk()->json('ui_flags');
+
+        expect($ui)->toBe(flagsWith(['v21_aftercall_card']))->and($ui['v21_aftercall_card'] ?? null)->toBeTrue();
+    });
 });
 
 it('turns a flag on for everyone', function () {
@@ -88,7 +141,7 @@ it('turns a flag on for a share of accounts, the same accounts every time', func
     expect($people->contains(fn (User $p): bool => $flags->active('ui_v2.ask', $p)))->toBeFalse();
 });
 
-it('turns every ui_v2 flag off with Switch back to classic, but not live_assist, and back on', function () {
+it('turns every ui_v2 flag off with Switch back to classic, but not live_assist or the v2.1 flags, and back on', function () {
     $user = Fx::user();
     $flags = app(InterfaceFlags::class);
     foreach (InterfaceFlags::names() as $name) {
@@ -97,10 +150,11 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist,
     $api = $this->api(Fx::token(Fx::device($user, ['workspace_id' => $user->current_workspace_id])));
 
     $api->putJson('/api/account/ui', ['classic' => true])->assertOk()
-        ->assertExactJson(['ui_flags' => flagsWith(['live_assist']), 'ui_classic' => true,
+        // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them.
+        ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21]), 'ui_classic' => true,
             // A person who went back to classic can try the new design again.
             'ui_design' => ['choice' => 'classic', 'current' => 'classic', 'can_try' => true, 'can_switch_back' => false]]);
-    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist']))
+    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist', ...InterfaceFlags::V21]))
         ->and($user->fresh()->ui_classic)->toBeTrue();
 
     $api->putJson('/api/account/ui', ['classic' => false])->assertOk()->assertJsonPath('ui_classic', false);
@@ -192,6 +246,15 @@ describe('the admin panel', function () {
         expect(InterfaceFlag::query()->where('flag', 'ui_v2.home')->value('everyone'))->toBeTrue()
             ->and(InterfaceFlag::query()->where('flag', 'ui_v2.library')->value('percent'))->toBe(25)
             ->and(app(InterfaceFlags::class)->for($sana))->toMatchArray(['ui_v2.home' => true, 'live_assist' => true]);
+
+        // Since 2.0.0-r v2.1's five flags are there too (off or everyone, like Live Assist), set here for one person.
+        $page = Livewire::test(InterfaceFlagsPage::class);
+        foreach (InterfaceFlags::V21 as $flag) {
+            $page->assertSee($flag)->assertSee(InterfaceFlags::LABELS[$flag]);
+        }
+        $page->set('data.v21_panel_flyout.people', [$sana->id])->call('save')->assertHasNoErrors();
+        expect(app(InterfaceFlags::class)->for($sana))->toMatchArray(['v21_panel_flyout' => true, 'v21_zoom' => false])
+            ->and(app(InterfaceFlags::class)->for(Fx::user()))->toMatchArray(['v21_panel_flyout' => false]);
 
         $this->actingAs(Fx::user(), 'web');
         expect(InterfaceFlagsPage::canAccess())->toBeFalse();
