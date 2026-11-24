@@ -39,10 +39,10 @@
     },
     "search": {
       "height": { "$type": "dimension", "$value": "28px" },
-      "min-width": { "$type": "dimension", "$value": "280px" },
-      "max-width": { "$type": "dimension", "$value": "400px" },
-      "least-width": { "$type": "dimension", "$value": "200px", "$description": "Below this (plus the drag room on each side) the field becomes a search button" },
-      "drag-room": { "$type": "dimension", "$value": "64px", "$description": "Free space kept on each side of the field for dragging the window" },
+      "min-width": { "$type": "dimension", "$value": "180px", "$description": "The field at the row's end shrinks to this; below it (with the least drag room) it becomes a search button" },
+      "max-width": { "$type": "dimension", "$value": "260px", "$description": "The field's width at the row's end, as Mail, Notes and Finder have it" },
+      "preferred-width": { "$type": "dimension", "$value": "22vw", "$description": "Between min-width and max-width, with the window" },
+      "drag-room": { "$type": "dimension", "$value": "16px", "$description": "The least free space kept between the title and the field for dragging the window" },
       "results-width": { "$type": "dimension", "$value": "560px" }
     },
     "rail": {

@@ -349,7 +349,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   lists_get: () => (empty ? [] : [
     { key: "kick-off", name: "Kick-off", color: LABEL_COLOURS.teal, position: 0, count: 1 },
     { key: "invoice", name: "Invoice", color: LABEL_COLOURS.amber, position: 1, count: 1 },
-    { key: "follow up", name: "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
+    // ?longtitle=1: a long label (the title row keeps its name whole, scripts/titleRowSearch.mjs).
+    { key: "follow up", name: params.get("longtitle") === "1" ? "Follow up with Qureshi Textiles & Garments International" : "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
   ]),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
   client_rules: ({ id }) => ({ data: RULES[id as string] ?? [] }),
