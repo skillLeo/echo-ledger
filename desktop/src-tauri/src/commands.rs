@@ -2267,6 +2267,24 @@ pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
     Ok(())
 }
 
+/// Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t): the person's own open taken back, on every
+/// device. The saved Library says so at once, as the server doesn't send the recording again for it. A server before
+/// 2.0.0-t has the route for opening only (405): it says it needs a newer server.
+#[tauri::command]
+pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_unopen(&id).await {
+        Err(AppError::Server { status: 405, .. }) => return Err(needs_newer_server("Mark as unread")),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_unopened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
 /// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps
 /// a copy and works offline (v2/library/myViews.ts); these send its changes and read the server's list. The server
 /// checks every field; the core passes the JSON through. `None` from `views_get` on a server without saved views yet.

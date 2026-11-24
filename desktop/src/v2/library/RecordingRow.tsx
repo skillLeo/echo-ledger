@@ -59,13 +59,15 @@ export type RecordingRowProps = {
   actions?: ReactNode;
   /** The recording you came back from (UX-25): a quiet tint, not the selection's. */
   last?: boolean;
+  /** Not opened yet by this person: the dot before its title (the web's and the phone's). */
+  unread?: boolean;
 };
 
-export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions, last = false }: RecordingRowProps) {
+export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions, last = false, unread = false }: RecordingRowProps) {
   const id = useId();
   // Said with the row, though not all shown: pinned (its section says so), every label (up to three dots show), Recovered.
   const marks = [item.pinned ? "Pinned" : null, ...labels.map((l) => l.name)].filter(Boolean).join(", ");
-  const described = [`${id}-meta`, marks && `${id}-marks`, recovered && `${id}-recovered`, `${id}-when`, `${id}-length`].filter(Boolean).join(" ");
+  const described = [unread && `${id}-unread`, `${id}-meta`, marks && `${id}-marks`, recovered && `${id}-recovered`, `${id}-when`, `${id}-length`].filter(Boolean).join(" ");
   const cls = ["el-rec", compact && "el-rec--compact", choosing && "el-rec--picking", picked && "el-rec--selected", last && !picked && "el-rec--last", actions && "el-rec--actions"].filter(Boolean).join(" ");
   return (
     <li className={cls} onContextMenu={(e) => { e.preventDefault(); onContextMenu(e); }}>
@@ -79,6 +81,8 @@ export function RecordingRow({ item, r, compact, choosing, picked, labels, onLab
       <span className="el-rec__mark"><RowAvatar item={item} r={r} /></span>
       <span className="el-rec__main">
         <span className="el-rec__line">
+          {/* Not opened yet by this person (the server's `opened`, contract v1.3; Mark as unread brings it back, 2.0.0-t). */}
+          {unread && <span className="el-rec__unread" id={`${id}-unread`} role="img" aria-label="Not opened yet" title="Not opened yet" />}
           <span className="el-rec__title" id={`${id}-title`} dir="auto">{r.title}</span>
           {labels.slice(0, 3).map((l) => (
             <button key={l.key} type="button" className="el-rec__label" title={`Show only ${l.name}`} aria-label={`Show only label ${l.name}`} onClick={() => onLabel(l.key)}>
