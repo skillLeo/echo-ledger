@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\TranscriptErrorCode;
+use App\Models\User;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use Illuminate\Database\Connection;
@@ -1477,4 +1478,33 @@ it('maps classic to the design choice, opens the new screens on opt-in, and goes
 
     cycleArtisan('migrate', ['--step' => 1]);
     expect($db->getSchemaBuilder()->hasColumn('users', 'ui_design'))->toBeTrue();
+});
+
+/** Migrations after the initials' colour (BE-06, 2.0.0-r §6); add later ones here. */
+const AFTER_AVATAR_COLOR = 0;
+
+it('adds the initials\' colour with every earlier person left null and coloured by their id, and takes it away again', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_AVATAR_COLOR]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'avatar_color'))->toBeFalse();
+    $now = now();
+    $ids = collect(range(1, 9))->map(fn (int $i): int => (int) $db->table('users')->insertGetId(['name' => "Person {$i}", 'email' => "person{$i}@example.test", 'password' => 'x',
+        'created_at' => $now, 'updated_at' => $now]))->all();
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'avatar_color'))->toBeTrue();
+    foreach ($ids as $id) {
+        $row = (array) $db->table('users')->where('id', $id)->first();
+        // Nothing is filled in: each earlier person's colour is their id's, the same on every device.
+        expect($row['avatar_color'])->toBeNull()
+            ->and((new User)->newFromBuilder($row)->avatarColor())->toBe($id % 8);
+    }
+
+    // Down drops the column; up again brings it back, empty.
+    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'avatar_color'))->toBeFalse();
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'avatar_color'))->toBeTrue()
+        ->and($db->table('users')->whereNotNull('avatar_color')->count())->toBe(0);
 });

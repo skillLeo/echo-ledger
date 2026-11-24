@@ -40,6 +40,7 @@ use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -133,7 +134,7 @@ trait ManagesAccountPages
             ->schema([FileUpload::make('photo')->label(__('Picture'))->image()->storeFiles(false)->required()->maxSize(Avatars::MAX_BYTES / 1024)])
             ->action(function (array $data): void {
                 $file = $data['photo'] ?? null;
-                if (! $file instanceof UploadedFile) {
+                if (! $file instanceof UploadedFile || ! $this->photoChangeAllowed()) {
                     return;
                 }
                 try {
@@ -148,6 +149,29 @@ trait ManagesAccountPages
             });
     }
 
+    /** The apps' photo changes an hour per person (the `account-avatar` limit of POST and DELETE /api/account/avatar). */
+    public const PHOTO_CHANGES_AN_HOUR = 10;
+
+    /**
+     * One more photo change, within the apps' limit, which the console shares: the throttle's own key for the person
+     * (ThrottleRequests' named limiter: md5 of the limiter's name and its key, `account-avatar:u<id>`, AppServiceProvider).
+     * Over it, it says so and nothing changes.
+     */
+    private function photoChangeAllowed(): bool
+    {
+        $key = md5('account-avatar'.'account-avatar:u'.$this->account()->id);
+        if (RateLimiter::tooManyAttempts($key, self::PHOTO_CHANGES_AN_HOUR)) {
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+            Notification::make()->title(__('You have changed your photo :count times this hour. Try again in :minutes min.', ['count' => self::PHOTO_CHANGES_AN_HOUR, 'minutes' => $minutes]))
+                ->warning()->send();
+
+            return false;
+        }
+        RateLimiter::hit($key, 3600);
+
+        return true;
+    }
+
     /** Profile › Remove photo: the initials come back (DELETE /api/account/avatar). */
     public function removePhotoAction(): Action
     {
@@ -156,6 +180,9 @@ trait ManagesAccountPages
             ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Remove your photo?'))
             ->modalDescription(__('Your initials show in its place, on every device.'))->modalSubmitActionLabel(__('Remove'))
             ->action(function (): void {
+                if (! $this->photoChangeAllowed()) {
+                    return;
+                }
                 app(Avatars::class)->remove($this->account());
                 SettingsContext::forget();
                 Notification::make()->title(__('Photo removed'))->success()->send();

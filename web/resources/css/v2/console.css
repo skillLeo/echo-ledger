@@ -172,6 +172,15 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     font-size: var(--el-text-body-strong-size);
 }
 
+/* BE-06: the person's initials on their colour (the background is set beside it), or their photo. */
+.v2-avatar.is-coloured {
+    color: var(--el-role-avatar-text);
+}
+
+.v2-avatar.is-photo {
+    object-fit: cover;
+}
+
 @media (min-width: 1024px) {
     .v2-sb .v2-sb-close {
         display: none;

@@ -10,7 +10,7 @@
         <span class="el-set-text"><span class="el-set-title" id="el-pref-theme">{{ __('Theme') }}</span></span>
         <span class="el-set-control" style="align-items:center;gap:8px">
             <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-theme">
+            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-theme" data-radio-keys>
                 @foreach (['system' => 'System', 'light' => 'Light', 'dark' => 'Dark'] as $value => $label)
                     <button type="button" role="radio" x-bind:aria-checked="theme === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="theme === '{{ $value }}' ? 0 : -1"
                         x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>
@@ -25,7 +25,7 @@
             <span class="el-set-text"><span class="el-set-title" id="el-pref-{{ $key }}">{{ __($entry['title']) }}</span></span>
             <span class="el-set-control" style="align-items:center;gap:8px">
                 <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-                <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-{{ $key }}">
+                <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-{{ $key }}" data-radio-keys>
                     @foreach ($options as $value => $label)
                         <button type="button" role="radio" x-bind:aria-checked="value === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="value === '{{ $value }}' ? 0 : -1"
                             x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>

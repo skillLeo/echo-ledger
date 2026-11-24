@@ -1,8 +1,29 @@
 {{--
     Arriving from search (?highlight=id): the row is scrolled to the middle, focused, and drawn with a 16 % brand fill
     and a 2 px ring until the next click or key, or 8 seconds; with reduced motion, no scrolling animation and no fade.
-    ↑ ↓ Enter in the search box move through the results.
+    ↑ ↓ Enter in the search box move through the results. Since BE-06 every radio group marked data-radio-keys (the
+    profile's colours and language, Appearance's rows) answers the arrows, Home and End (← and → swapped right to left)
+    and the focus follows the choice (resources/js/radio-keys-core.cjs decides).
 --}}
+<script>
+    {!! file_get_contents(resource_path('js/radio-keys-core.cjs')) !!}
+
+    (() => {
+        if (window.elRadioKeys) return;
+        window.elRadioKeys = true;
+        document.addEventListener('keydown', (e) => {
+            const radio = e.target instanceof Element ? e.target.closest('[role="radio"]') : null;
+            const group = radio ? radio.closest('[role="radiogroup"][data-radio-keys]') : null;
+            if (! group || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+            const radios = Array.from(group.querySelectorAll('[role="radio"]'));
+            const to = window.ElRadioKeysCore.next(radios.length, radios.indexOf(radio), e.key, getComputedStyle(group).direction === 'rtl');
+            if (to === null) return;
+            e.preventDefault();
+            radios[to].click();
+            radios[to].focus();
+        });
+    })();
+</script>
 <script>
     (() => {
         if (window.elSettings) {

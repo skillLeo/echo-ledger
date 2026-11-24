@@ -31,14 +31,12 @@
             </span>
             <span class="el-set-control el-profile-colors-row">
                 <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-                <span class="el-profile-colors" role="radiogroup" aria-labelledby="el-profile-color">
+                <span class="el-profile-colors" role="radiogroup" aria-labelledby="el-profile-color" data-radio-keys>
                     @foreach ($colors as $i => $colorName)
                         <button type="button" role="radio" class="el-profile-swatch" aria-label="{{ __($colorName) }}" title="{{ __($colorName) }}"
                             style="background-color: var(--el-role-avatar-{{ $i }})"
                             x-bind:aria-checked="value === {{ $i }} ? 'true' : 'false'" x-bind:tabindex="value === {{ $i }} ? 0 : -1"
-                            x-on:click="pick({{ $i }})"
-                            x-on:keydown.arrow-right.prevent="pick(({{ $i }} + 1) % {{ count($colors) }}); $nextTick(() => $el.parentElement.querySelector('[aria-checked=true]')?.focus())"
-                            x-on:keydown.arrow-left.prevent="pick(({{ $i }} + {{ count($colors) - 1 }}) % {{ count($colors) }}); $nextTick(() => $el.parentElement.querySelector('[aria-checked=true]')?.focus())">{{ $initials }}</button>
+                            x-on:click="pick({{ $i }})">{{ $initials }}</button>
                     @endforeach
                 </span>
             </span>
@@ -53,7 +51,7 @@
             </span>
             <span class="el-set-control el-profile-colors-row">
                 <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-                <span class="el-segmented" role="radiogroup" aria-labelledby="el-profile-language">
+                <span class="el-segmented" role="radiogroup" aria-labelledby="el-profile-language" data-radio-keys>
                     @foreach ($appLanguages as $value => $label)
                         <button type="button" role="radio" lang="{{ $value }}" x-bind:aria-checked="value === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="value === '{{ $value }}' ? 0 : -1"
                             x-on:click="pick('{{ $value }}')">{{ $label }}</button>

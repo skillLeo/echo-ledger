@@ -11,7 +11,10 @@ use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
 use Illuminate\Http\UploadedFile;
 use Livewire\Livewire;
+use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+
+uses(InteractsWithDeviceApi::class);
 
 /*
  * BE-06 in the console: Settings › Profile has what the apps' profile has (contract 2.0.0-r §6, the colours' names since
@@ -109,4 +112,56 @@ it('changes nothing of anyone else', function () {
     $other->refresh();
     expect($other->avatar_color)->toBeNull()->and(Shell::preferences($other)['app_language'])->toBe('en')
         ->and(User::query()->whereNotNull('avatar_color')->pluck('id')->all())->toBe([$this->user->id]);
+});
+
+it('draws the rail\'s avatar and its menu in the person\'s colour, or their photo', function () {
+    $this->user->forceFill(['avatar_color' => 2])->save();
+    SettingsContext::forget();
+    $html = (string) $this->get('/app/settings')->assertOk()->getContent();
+    expect(substr_count($html, 'class="v2-avatar is-coloured" data-avatar-color="2" style="background-color: var(--el-role-avatar-2)"'))->toBe(1)
+        ->and(substr_count($html, 'class="v2-avatar is-large is-coloured" data-avatar-color="2" style="background-color: var(--el-role-avatar-2)"'))->toBe(1);
+
+    app(Avatars::class)->store($this->user->fresh(), UploadedFile::fake()->createWithContent('me.png', profileScreenPicture()));
+    // A new request reads the person again.
+    $this->actingAs($this->user->fresh(), 'web');
+    SettingsContext::forget();
+    $html = (string) $this->get('/app/settings')->assertOk()->getContent();
+    expect($html)->toContain('<img class="v2-avatar is-photo"')->toContain('<img class="v2-avatar is-large is-photo"')
+        ->not->toContain('class="v2-avatar is-coloured"');
+});
+
+it('shares the apps\' limit of 10 photo changes an hour, whichever side asks, and says so', function () {
+    [, $token] = $this->enroll($this->user);
+    foreach (range(1, 10) as $i) {
+        $this->asToken($token)->deleteJson('/api/account/avatar')->assertSuccessful();
+    }
+    $this->actingAs($this->user->fresh(), 'web');
+    Livewire::test(EditProfile::class, ['subpage' => 'profile'])
+        ->callAction('changePhoto', ['photo' => UploadedFile::fake()->createWithContent('me.png', profileScreenPicture())])
+        ->assertNotified('You have changed your photo 10 times this hour. Try again in 60 min.');
+    expect($this->user->fresh()->avatar_version)->toBeNull();
+
+    // And the other way round: the console's changes count for the apps.
+    $someone = Fx::user();
+    $this->actingAs($someone, 'web');
+    foreach (range(1, 10) as $i) {
+        Livewire::test(EditProfile::class, ['subpage' => 'profile'])
+            ->callAction('changePhoto', ['photo' => UploadedFile::fake()->createWithContent('me.png', profileScreenPicture())]);
+    }
+    [, $theirs] = $this->enroll($someone->fresh());
+    $this->asToken($theirs)->deleteJson('/api/account/avatar')->assertStatus(429)->assertJsonPath('code', 'rate_limited');
+});
+
+it('answers the arrows, Home and End on every radio group of Profile and Appearance, from one helper', function () {
+    foreach (['/app/settings/profile', '/app/settings/appearance'] as $path) {
+        SettingsContext::forget();
+        $html = (string) $this->get($path)->assertOk()->getContent();
+        // The settings page's own groups (the avatar menu's theme is the frame's).
+        preg_match_all('/<[^>]*role="radiogroup" aria-labelledby="el-[^>]*>/', $html, $groups);
+        expect($groups[0])->not->toBeEmpty($path);
+        foreach ($groups[0] as $group) {
+            expect($group)->toContain('data-radio-keys');
+        }
+        expect($html)->toContain('window.ElRadioKeysCore')->toContain("closest('[role=\"radiogroup\"][data-radio-keys]')")->not->toContain('x-on:keydown.arrow-right');
+    }
 });
