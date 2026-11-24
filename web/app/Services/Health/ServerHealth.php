@@ -30,6 +30,15 @@ final class ServerHealth
     /** Set for an hour by each email to the super admins, so a fault that lasts mails once an hour. */
     public const MAILED = 'server-health:mailed';
 
+    /** Kept while a fault was mailed and not yet reported fixed (W-INC-1125): the next passing check mails "fixed". */
+    public const MAILED_FAULT = 'server-health:mailed-fault';
+
+    /** Kept while the super admins have an open Activity item about it (W-INC-1125): the next pass resolves it. */
+    public const ACTIVITY_OPEN = 'server-health:activity-open';
+
+    /** The web PHP's last failed check (/health/php), for the scheduled run's email: what it lacks. An hour. */
+    public const WEB = 'server-health:web';
+
     public function __construct(private readonly PhpExtensions $extensions) {}
 
     /** @return list<string> */
@@ -87,6 +96,39 @@ final class ServerHealth
         }
 
         return $parts === [] ? 'all well' : implode('; ', $parts);
+    }
+
+    /**
+     * The command that turns [$missing] back on, on the hosting's CloudLinux PHP selector (W-INC-1124 and W-INC-1125:
+     * twice it dropped sodium from PHP 8.4, and this line brought it back for the CLI and the web PHP). Null when
+     * nothing is missing.
+     *
+     * @param  list<string>  $missing
+     */
+    public static function fixCommand(array $missing): ?string
+    {
+        $names = array_values(array_unique(array_map(fn (string $name): string => $name === 'gd with WebP' ? 'gd' : $name, $missing)));
+
+        return $names === [] ? null
+            : 'selectorctl --interpreter=php --version='.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION.' --enable-user-extensions='.implode(',', $names);
+    }
+
+    /**
+     * The Activity item's words for a failed check (W-INC-1125): what breaks, what is missing, and the fix.
+     *
+     * @param  list<string>  $missing  what either PHP lacks
+     * @return array{0: string, 1: string} title, body
+     */
+    public static function alertText(array $missing, ?string $cipher): array
+    {
+        $names = array_values(array_unique($missing));
+        $title = $names !== [] ? 'Uploads are failing: the server\'s PHP is missing '.implode(', ', $names)
+            : 'Uploads are failing: the server cannot encrypt recordings';
+        $fix = self::fixCommand($names);
+        $body = $fix !== null ? 'To fix it, run on the server: '.$fix.' Then check both PHPs with bash deploy/check-php.sh.'
+            : 'The recordings cipher fails: '.Str::limit((string) $cipher, 200).' See the admin dashboard.';
+
+        return [$title, $body];
     }
 
     /** @return array{missing: list<string>, cipher: string|null, php: string, checked_at: string}|null */

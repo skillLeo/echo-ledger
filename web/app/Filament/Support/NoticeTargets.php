@@ -6,6 +6,7 @@ namespace App\Filament\Support;
 
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Dashboard;
 use App\Filament\Admin\Pages\ServerUsage;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
 use App\Filament\Admin\Resources\Customers\CustomerResource;
@@ -52,6 +53,8 @@ final class NoticeTargets
             'upgrade_requested' => $staff('upgrades.manage') ? UpgradeRequestsPage::getUrl(panel: 'admin') : null,
             'unusual_usage' => $staff('customers.view') ? ($stored ?? CustomerResource::getUrl('index', panel: 'admin')) : null,
             'cost_alert' => $staff('usage.view') ? ServerUsage::getUrl(panel: 'admin') : null,
+            // Since W-INC-1125: the admin dashboard, whose banner says what the server's PHP lacks.
+            'server_problem' => $viewer->is_super_admin ? Dashboard::getUrl(panel: 'admin') : null,
             default => $stored !== null && ! str_contains($stored, '/admin') ? $stored : null,
         };
     }
