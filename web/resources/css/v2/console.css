@@ -3573,14 +3573,17 @@ button.v2-row-tile:focus-visible,
     white-space: nowrap;
 }
 
-/* Then the count goes under the title (both still the title's group). */
+/* Then the count goes under the title (both still the title's group, as wide as the wider of them). */
 :root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--el-space-4);
     row-gap: 0;
 }
 
 :root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
-    flex-basis: 100%;
+    grid-column: 1 / -1;
     margin: 0;
 }
 
