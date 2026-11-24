@@ -78,6 +78,29 @@ describe("the v2 Activity page", () => {
     expect(screen.queryByRole("button", { name: "Mark all read" })).toBeNull();
   });
 
+  it("an item's right-click menu (UX-22, 3b): Open · Mark as read | Retry for a failure; only what fits it", async () => {
+    respond("activity_read", { unread_count: 1 });
+    const { onOpenRecording, onFailed } = await show();
+    const words = () => [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    fireEvent.contextMenu(screen.getAllByText("Transcription failed")[0].closest(".el-row") ?? row("Transcription failed"), { clientX: 20, clientY: 30 });
+    expect(words()).toEqual(["Open", "Mark as read", "Retry"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Retry" }));
+    expect(onFailed).toHaveBeenCalled();
+    fireEvent.contextMenu(row("Transcript ready"), { clientX: 20, clientY: 30 });
+    expect(words()).toEqual(["Open", "Mark as read"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark as read" }));
+    await act(flushAsync);
+    expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]);
+    fireEvent.contextMenu(row("Transcript ready"), { clientX: 20, clientY: 30 });
+    expect(words()).toEqual(["Open"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
+    await act(flushAsync);
+    expect(onOpenRecording).toHaveBeenCalledWith("s1");
+    // A read item with nothing to open: no menu at all.
+    fireEvent.contextMenu(row("Pixel 9 paired"), { clientX: 20, clientY: 30 });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("groups the rest by Today and Earlier, the time today and the day before; a recovered recording says Recovered", async () => {
     respond("recovered_sessions", ["s1"]);
     await show();
