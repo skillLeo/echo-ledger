@@ -203,7 +203,7 @@ fun V2LibraryScreen(
     var asking by remember { mutableStateOf<TranscribeAsk?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     // Where Library is (the title menu: a view, one of My views or a label), its filters (the contract's filter set) and
-    // its tab (All · Calls · Meetings · Voice notes), each kept across a rotation.
+    // its tab (All · Calls · Meetings · Voice notes · Other), each kept across a rotation.
     var targetKey by rememberSaveable(initialViews) { mutableStateOf(LibraryScreenState.initialTarget(initialViews).key) }
     var filtersJson by rememberSaveable(initialViews) {
         mutableStateOf(LibraryScreenState.json(LibraryScreenState.initialFilters(initialViews)))
@@ -260,12 +260,16 @@ fun V2LibraryScreen(
     val searched = remember(facts, words) { facts.filter { it.matches(words) } }
     val placed = remember(searched, target) { LibraryScreenState.inTarget(searched, target) }
     val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
-    val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.source) } } }
-    val counted = remember(placed, kind) { placed.filter { kind.holds(it.source) } }
+    val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.kind) } } }
+    // Other chosen while it has nothing any more (the filters, the search or a sync took its last one): back to All.
+    LaunchedEffect(kind, kindCounts) {
+        if (kind == LibraryKind.OTHER && (kindCounts[LibraryKind.OTHER] ?: 0) == 0) kindKey = LibraryKind.ALL.name
+    }
+    val counted = remember(placed, kind) { placed.filter { kind.holds(it.kind) } }
     val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
     val visible = remember(filtered, kind, choice, settings.libraryOpened, waiting) {
         com.echoledger.mobile.core.LibraryQuery.apply(
-            (filtered.filter { kind.holds(it.source) } + waiting).map { it.item },
+            (filtered.filter { kind.holds(it.kind) } + waiting).map { it.item },
             com.echoledger.mobile.core.LibraryFilters(),
             "",
             choice.sortBy,
@@ -812,7 +816,7 @@ class LibraryTools(
     val onToggle: (V2Row) -> Unit,
     val onSelectGroup: (RowGroup) -> Unit,
     val selectionBar: @Composable () -> Unit,
-    /** Under the search: [Filters n] and the tabs All · Calls · Meetings · Voice notes, then the pills while filters are on. */
+    /** Under the search: [Filters n], the tabs All · Calls · Meetings · Voice notes (· Other), the pills while filters are on. */
     val filterRow: @Composable () -> Unit,
     val filtered: Boolean,
     val onClearFilters: () -> Unit,

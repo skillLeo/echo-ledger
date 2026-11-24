@@ -24,7 +24,9 @@ import { ShareDefaultNotice } from "./ShareDefaultNotice";
 import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
-import { UpdateBanner } from "./UpdateSettings";
+import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
+import { useAvatar } from "./AccountFlows";
+import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
@@ -179,6 +181,8 @@ export default function MainApp() {
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
+  // The person's photo for the rail's avatar (DES-08), kept on this computer by its version; the initials without one.
+  const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
@@ -255,6 +259,8 @@ export default function MainApp() {
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
   const [palette, setPalette] = useState(false);
+  // What was typed in the title row before searching everything (UX-20: the scope chip's ✕).
+  const [paletteFrom, setPaletteFrom] = useState("");
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
@@ -1133,7 +1139,7 @@ export default function MainApp() {
   const overlays = (
     <>
     {palette && (
-        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"}
+        <CommandPalette status={status} onClose={() => { setPalette(false); setPaletteFrom(""); }} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"} initialQuery={paletteFrom}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet({ projectId: null }),
@@ -1172,10 +1178,11 @@ export default function MainApp() {
   if (ui.flags["ui_v2.shell"]) {
     return (
       <>
-        {/* macOS, a normal window: the empty strip for the window's own buttons, which drags and zooms the window (D-214,
-            lib/titlebar.ts); in full screen it is not drawn and the classic strip below keeps 2.0.12's window. */}
-        <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />
-        <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
+        {/* macOS, a normal window, the classic sidebar: the empty strip for the window's own buttons, which drags and zooms
+            the window (D-214, lib/titlebar.ts); in full screen it is not drawn and the classic strip below keeps 2.0.12's
+            window. The three levels have their title row instead (UX-20): the buttons sit in the rail's top cell. */}
+        {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
+        {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
@@ -1184,7 +1191,7 @@ export default function MainApp() {
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
-            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
+            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={(typed?: string) => { setPaletteFrom(typed ?? ""); setPalette(true); }} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
             library={ui.flags["ui_v2.library"] ? (
               <Suspense fallback={null}>
                 <LibraryNavV2 current={tab === "library" ? scopeKey(libraryScope) : tab === "shared" ? `shared:${sharedTab}` : null}
@@ -1198,6 +1205,7 @@ export default function MainApp() {
             nav={{
               panelFlyout: ui.flags.v21_panel_flyout,
               layoutFor: liveViews ?? lastViews,
+              titleEnd: <RestartToUpdate appStatus={status} notify={notify} />,
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
@@ -1205,7 +1213,7 @@ export default function MainApp() {
               setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on") } : undefined,
               account: account ? [
-                { label: `${account.name || account.email}`, group: account.email, disabled: true },
+                // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).
                 { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
                 { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
                 { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
@@ -1240,7 +1248,8 @@ export default function MainApp() {
               open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },
             }}
             onAdmin={account?.super_admin === true ? () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) : undefined}
-            me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
+            me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null,
+              usage: minutesLine(entitlements?.limits.monthly_minutes?.used, entitlements?.limits.monthly_minutes?.limit), color: account.avatar_color ?? null, photo: avatarPhoto } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
               <ShareDefaultNotice text={status.shareNotice} />

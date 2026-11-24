@@ -58,6 +58,16 @@ object EchoTokens {
         val labelPinkFill = Color(0xFFF9E7F0)
         val labelPinkText = Color(0xFFBC2F75)
         val labelPinkDot = Color(0xFFD7609C)
+        val avatar0 = Color(0xFF0F766E)
+        val avatar1 = Color(0xFF1D5FB4)
+        val avatar2 = Color(0xFF0E7490)
+        val avatar3 = Color(0xFF4D7C0F)
+        val avatar4 = Color(0xFFBE185D)
+        val avatar5 = Color(0xFFC2410C)
+        val avatar6 = Color(0xFF15803D)
+        val avatar7 = Color(0xFF475569)
+        val avatarText = Color(0xFFFFFFFF)
+        val avatarRing = Color(0x14000000)
     }
 
     object Dark {
@@ -109,6 +119,16 @@ object EchoTokens {
         val labelPinkFill = Color(0xFF3A1D2B)
         val labelPinkText = Color(0xFFD968A1)
         val labelPinkDot = Color(0xFFC4317A)
+        val avatar0 = Color(0xFF0F766E)
+        val avatar1 = Color(0xFF1D5FB4)
+        val avatar2 = Color(0xFF0E7490)
+        val avatar3 = Color(0xFF4D7C0F)
+        val avatar4 = Color(0xFFBE185D)
+        val avatar5 = Color(0xFFC2410C)
+        val avatar6 = Color(0xFF15803D)
+        val avatar7 = Color(0xFF475569)
+        val avatarText = Color(0xFFFFFFFF)
+        val avatarRing = Color(0x1FFFFFFF)
     }
 
     object Space {
@@ -143,7 +163,7 @@ object EchoTokens {
         val controlHeight = 36.dp
         val controlHeightMobile = 48.dp
         val controlTouchMin = 48.dp
-        val titlebarMacos = 38.dp
+        val titlebarMacos = 40.dp
     }
 
     object Border {

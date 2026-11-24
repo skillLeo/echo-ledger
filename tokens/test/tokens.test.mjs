@@ -39,6 +39,25 @@ for (const theme of ['light', 'dark']) {
   test(`${theme}: text on the accent and on the record button reaches 4.5:1`, () => {
     assert.ok(ratio(v('text', 'on-accent'), v('accent', 'default')) >= 4.5);
   });
+  test(`${theme}: the 8 avatar colours each carry white initials at 4.5:1 or more, and none is purple, indigo or violet`, () => {
+    const a = r.avatar;
+    const colours = Object.keys(a).filter((k) => /^\d$/.test(k));
+    assert.deepEqual(colours, ['0', '1', '2', '3', '4', '5', '6', '7'], 'avatar_color 0-7, in order');
+    assert.equal(a.text.$value.toUpperCase(), '#FFFFFF');
+    for (const k of colours) {
+      const h = a[k].$value;
+      assert.ok(ratio(a.text.$value, h) >= 4.5, `avatar.${k} (${a[k].$description}): ${ratio(a.text.$value, h).toFixed(2)}`);
+      const [R, G, B] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+      const max = Math.max(R, G, B), min = Math.min(R, G, B), l = (max + min) / 2;
+      const sat = max === min ? 0 : (max - min) / (1 - Math.abs(2 * l - 1));
+      let hue = 0;
+      if (max !== min) hue = max === R ? 60 * (((G - B) / (max - min)) % 6) : max === G ? 60 * ((B - R) / (max - min) + 2) : 60 * ((R - G) / (max - min) + 4);
+      hue = (hue + 360) % 360;
+      assert.ok(!(hue >= 225 && hue <= 300 && sat >= 0.15), `avatar.${k} hue ${hue.toFixed(0)}`);
+    }
+    // The inner ring: black at 8% in light, white at 12% in dark.
+    assert.equal(a.ring.$value.toUpperCase(), theme === 'light' ? '#00000014' : '#FFFFFF1F');
+  });
   test(`${theme}: the accent is not purple, indigo or violet`, () => {
     const h = v('accent', 'default'); const [R, G, B] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     const max = Math.max(R, G, B), min = Math.min(R, G, B); let hue = 0;

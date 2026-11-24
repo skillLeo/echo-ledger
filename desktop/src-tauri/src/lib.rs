@@ -25,6 +25,7 @@ pub mod mac_check;
 mod main_thread;
 pub mod material;
 pub mod native_feel;
+pub mod native_menu;
 pub mod my_account;
 pub mod net;
 pub mod notifications;
@@ -51,6 +52,7 @@ pub mod smoke;
 pub mod stall;
 pub mod spaces;
 pub mod stt;
+pub mod title_click;
 pub mod translate;
 pub mod tray;
 pub mod ui_flags;
@@ -633,6 +635,8 @@ pub fn run() {
             commands::translate_stop,
             commands::translate_toggle_lock,
             commands::window_appearance,
+            title_click::title_double_click,
+            native_menu::native_menu_popup,
             commands::set_window_theme,
             commands::pair_device,
             commands::sign_in_password,
