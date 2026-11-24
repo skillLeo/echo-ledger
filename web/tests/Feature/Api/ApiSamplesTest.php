@@ -270,6 +270,8 @@ it('keeps the shape of every answer the apps read', function () {
     $record('search', $api()->getJson('/api/search?q=retainer'));
     $record('clients', $api()->getJson('/api/clients'));
     $record('activity', $api()->getJson('/api/activity?limit=20'));
+    // Since 2.0.0-r (BE-04): the one number on the Activity icon.
+    $record('badge', $api()->getJson('/api/badge'));
 
     $session = unscoped(fn () => CaptureSession::query()->whereHas('transcripts')->firstOrFail());
     $transcript = unscoped(fn () => Transcript::query()->where('capture_session_id', $session->id)->firstOrFail());

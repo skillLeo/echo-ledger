@@ -69,7 +69,7 @@ class Activity extends Page
         return __('Activity');
     }
 
-    /** Since v1.6 (P6): only what needs the person, "9+" above nine, as the bell and the apps count it. */
+    /** Since v1.6 (P6): only what needs the person, as the bell and the apps count it ("99+" above 99 since 2.0.0-r). */
     public static function getNavigationBadge(): ?string
     {
         $user = auth()->user();
