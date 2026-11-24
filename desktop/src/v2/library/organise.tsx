@@ -266,12 +266,16 @@ export function LabelDialog({ ids, known, onClose, say }: { ids: readonly string
 
 /** Renames a recording; an empty title asks the server for its automatic one again. */
 export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryItem; onClose: () => void; say: Say; onRenamed?: (item: LibraryItem) => void }) {
-  const [title, setTitle] = useState(item.title ?? "");
+  // Only a title the person chose is theirs to edit (2.0.0-k): "Call with …", an automatic title or the app's name start
+  // the box empty, with that title shown as its placeholder. An older server (no title_source) keeps the title in the box.
+  const own = item.title_source === undefined || item.title_source === "own";
+  const [title, setTitle] = useState(own ? item.title ?? "" : "");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const save = async () => {
     const text = title.trim();
-    if (text === (item.title ?? "").trim()) {
+    // Unchanged, or left empty over a title the person didn't choose: nothing to save.
+    if (text === (own ? item.title ?? "" : "").trim()) {
       onClose();
       return;
     }
@@ -279,7 +283,7 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
     try {
       const answer = await api.organiseSession(item.id, { title: text || null });
       if (answer?.data) onRenamed?.(answer.data);
-      say(text ? "Renamed" : "The automatic title will be used");
+      say(text ? "Renamed" : "Back to the title EchoLedger gives it");
       onClose();
     } catch (e) {
       sayProblem(say, errorMessage(e));
@@ -291,7 +295,9 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
       actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => void save()}>Save</Button></>}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <TextField ref={input} label="Title" maxLength={MAX_TITLE_CHARS} value={title} onChange={(e) => setTitle(e.target.value)}
-          onFocus={(e) => e.currentTarget.select()} hint="Leave it empty for an automatic title from what was said." />
+          placeholder={own ? undefined : item.title ?? undefined}
+          onFocus={(e) => e.currentTarget.select()}
+          hint={own ? "Leave it empty for the title EchoLedger gives it." : "Type a title of your own, or leave it empty to keep this one."} />
       </form>
     </Dialog>
   );
