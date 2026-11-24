@@ -272,7 +272,7 @@ describe("Help & shortcuts in the new design", () => {
     fireEvent.keyDown(document.body, { key: "?" });
     await act(flushAsync);
     await act(flushAsync);
-    expect(await screen.findByTestId("capture-help")).toHaveTextContent("turn on Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support");
+    expect(await screen.findByTestId("capture-help")).toHaveTextContent("only the live words (Live Assist, captions, translation) are hidden from them. For support, send Copy diagnostics");
     fireEvent.click(screen.getByRole("button", { name: "Open Screen-share privacy" }));
     await act(flushAsync);
     await act(flushAsync);

@@ -17,34 +17,50 @@ import { AlertIcon } from "../../components/Icons";
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
-/** What the page says first: what EchoLedger does (the last check's own sentence follows; never a promise beyond it). */
-export const SHARE_PRIVACY_INTRO = "EchoLedger hides the Live Assist card, the captions and its other floating windows from screen sharing and checks on this computer whether it works.";
-/** The first line while the other floating windows are shown: only the card and the captions stay hidden. */
-export const SHARE_PRIVACY_OFF = "EchoLedger's other floating windows show in a screen share. The Live Assist card and the captions stay hidden unless you show them.";
+/** The page's one lead line (FIX-01 visual review): each fact goes on the row it belongs to. */
+export const SHARE_PRIVACY_LEAD = "What others see when you share your screen.";
+/** Onboarding's first line: only the live words are hidden, and how to show one (the captions and the Live Assist card
+ * are shown only from their own window, never by a setting; Live Translate follows its switch in Settings). */
+export const SHARE_PRIVACY_INTRO = "Live words (Live Assist, captions, translation) are hidden from screen shares. To show one, use its own window's menu.";
+/** How far "hidden" goes on each system (FIX-01b): on macOS 15 and later ScreenCaptureKit can ignore the flag. */
+export const HONEST_LINE: Record<"macos" | "windows", string> = {
+  macos: "Hidden from screenshots and most screen shares. If you share your entire screen in some apps, it may still show. Share a single window to be safe.",
+  windows: "Hidden from screen shares and recordings (Windows 10 version 2004 or later).",
+};
 /** The main window's own line (since v2.0). */
 export const SHARE_PRIVACY_MAIN = "The main window shows in screen shares unless you hide it for a while.";
-/** With only the floating windows hidden: what shows and what doesn't. */
-export const SHARE_PRIVACY_FLOATING = "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden.";
+/** The footnote under the windows' rows: the main window's line, then this system's honest line, once. */
+export function shareFootnote(platform: string | null | undefined): string {
+  return platform === "macos" || platform === "windows" ? `${SHARE_PRIVACY_MAIN} ${HONEST_LINE[platform]}` : SHARE_PRIVACY_MAIN;
+}
+/** The rows for the windows that are never hidden (I-02: they are in the person's own screenshots and recordings). The
+ * dictation box is the stated exception among the live words (decision 8): it shows the person's own words, typed into
+ * an app that is in the share anyway. */
+export const ALWAYS_SHOWN_VALUE = "Always shown";
+export const ALWAYS_SHOWN = {
+  controls: { id: "share_privacy.always", subtitle: "And the after-call card" },
+  dictation: { id: "share_privacy.dictation", subtitle: "It shows your own words as you type them" },
+} as const;
+/** The Live Translate row's subtitle, by its choice. */
+export const LIVE_TRANSLATE_SUBTITLE = { hidden: "Also hidden from your own screenshots", shown: "Shows in your screen shares and screenshots" } as const;
 /** What the last check saw, by the badge it left (never more than that). */
 export const LAST_CHECK_SENTENCE: Record<PrivacyBadge, string> = {
-  private: "The last check saw EchoLedger's windows hidden from the screen share.",
-  visible: "The last check saw EchoLedger's windows in the screen share.",
-  black_box: "The last check saw a black box where EchoLedger's windows are.",
+  private: "The last check saw the live words hidden from the screen share.",
+  visible: "The last check saw the live words in the screen share.",
+  black_box: "The last check saw a black box where the live words are.",
   not_checked: "Screen-share privacy is not checked yet on this computer.",
 };
 
-/**
- * The page's first lines for the hiding choice and the last check: with hiding off, only that it is off; otherwise
- * what EchoLedger does, what the last check saw, and with only the floating windows hidden, that the main window shows.
- */
-export function sharePrivacyTop(hiding: ShareHiding | null | undefined, badge: PrivacyBadge | null | undefined): string[] {
-  if (hiding === "off") return [SHARE_PRIVACY_OFF];
-  return [SHARE_PRIVACY_INTRO, ...(badge ? [LAST_CHECK_SENTENCE[badge]] : []), ...(hiding === "floating" ? [SHARE_PRIVACY_FLOATING] : [])];
+/** Onboarding's lines (pure): what is hidden, how far that goes on this system, and what the last check saw. */
+export function sharePrivacyTop(hiding: ShareHiding | null | undefined, badge: PrivacyBadge | null | undefined, platform?: string | null): string[] {
+  const honest = platform === "macos" || platform === "windows" ? [HONEST_LINE[platform]] : [];
+  return [SHARE_PRIVACY_INTRO, ...honest, ...(hiding !== "off" && badge ? [LAST_CHECK_SENTENCE[badge]] : [])];
 }
 
 /** "Hide EchoLedger from screen sharing"'s help line: the system hides a window from screen sharing and from
  * screenshots with one flag, on macOS and on Windows alike (the call choice plan, lead decision). Nothing else changes. */
 export const HIDES_SCREENSHOTS_TOO = setting("share_privacy.hiding").description ?? "";
+
 
 /** The one-window tip and the limits, in the words the plan gives them. */
 export const ONE_WINDOW_TIP = "Share one window or a tab for the strongest privacy.";
@@ -168,10 +184,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   const hidden = hiddenValue(status);
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? <span className="kbd">{prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows")}</span> : "No shortcut";
-  const footer = [
-    HIDES_SCREENSHOTS_TOO,
-    status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
-  ].filter(Boolean) as string[];
+  const footer = [LIVE_TRANSLATE_SUBTITLE[settings.hideFromSharing === "off" ? "shown" : "hidden"]];
   const lines = status?.lines ?? [];
   const act = (done: Promise<unknown>, after?: () => void) => {
     setProblem(null);
@@ -179,9 +192,10 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   };
   return (
     <div data-testid="share-privacy">
-      {sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="set-intro">{l}</p>)}
-      <Section footer={<p>{SHARE_PRIVACY_MAIN}</p>}>
+      <p className="set-intro"><bdi>{SHARE_PRIVACY_LEAD}</bdi></p>
+      <Section footer={<p data-testid="share-privacy-footnote"><bdi>{shareFootnote(status?.platform)}</bdi></p>}>
         <InfoRow id="share_privacy.main" value={mainShareValue(status)}><MainShareControl status={status} /></InfoRow>
+        {Object.values(ALWAYS_SHOWN).map((row) => <InfoRow key={row.id} id={row.id} value={`${ALWAYS_SHOWN_VALUE} · ${row.subtitle.toLowerCase()}`} />)}
         <InfoRow id="share_privacy.card"><PinnedShareControl which="card" /></InfoRow>
         <InfoRow id="share_privacy.captions"><PinnedShareControl which="captions" /></InfoRow>
       </Section>
@@ -434,7 +448,7 @@ export function OnboardingShareCheck({ platform }: { platform: string }) {
   return (
     <div className="onboarding-privacy" data-testid="onboarding-share-check">
       <h2 className="settings-group-title">Private notes</h2>
-      {sharePrivacyTop(status?.hiding, status?.badge).map((l) => <p key={l} className="small muted">{l}</p>)}
+      {sharePrivacyTop(status?.hiding, status?.badge, status?.platform).map((l) => <p key={l} className="small muted">{l}</p>)}
       <p className="small muted">{PATTERN_FLASH}</p>
       <button type="button" className="btn" onClick={() => void run()} disabled={busy}>{busy ? "Checking…" : view ? "Check again" : "Check screen-share privacy"}</button>
       {line && (

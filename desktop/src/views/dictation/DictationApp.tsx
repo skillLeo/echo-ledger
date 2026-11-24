@@ -7,7 +7,6 @@ import { useHitRegions } from "../../lib/hitRegions";
 import { fillWidth } from "../../lib/motion";
 import { playTone } from "../../lib/sounds";
 import { useConcealed } from "../../lib/privacy";
-import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { CloseIcon } from "../../components/Icons";
 
 /**
@@ -121,7 +120,7 @@ export default function DictationApp() {
     <div className={`overlay-root ${visible && !concealed ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
       <div className="overlay-card dictation-card">
         <div className="overlay-head">
-          <PrivacyBadge compact interactive={false} />
+          {/* No privacy badge (FIX-01, decision 8): the box is shown in screen shares, so a lock here would say the opposite. */}
           {!ended && <span className="listening"><span /><span /><span /></span>}
           <span>{ended ? "Dictation did not start" : holding ? "Dictating — let go of the shortcut to insert" : "Dictating — press the shortcut again to insert"}</span>
           {visible && refused && <RefusedActions permission={refused} onClose={() => setVisible(false)} />}

@@ -212,11 +212,20 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["assist card", "answer card", "show this card in screen shares"], ru: ["card dikhao"], ur: ["کارڈ"] },
   { id: "share_privacy.captions", title: "Captions", page: "share_privacy", kind: "info",
     keywords: ["captions in screen share", "show captions in screen shares"], ru: ["captions dikhao"], ur: ["کیپشن"] },
-  { id: "share_privacy.hiding", title: "Other floating windows", page: "share_privacy", kind: "choice", resettable: true, aliases: ["Hide from screen sharing", "Hide EchoLedger from screen sharing"],
+  // Since 2.0.14 (FIX-01) the setting covers Live Translate only: the recording controls, the after-call card and the
+  // dictation box always show; the captions and the Live Assist card are shown only from their own window.
+  // FIX-01: the windows that always show in screen shares and screenshots (the dictation box is decision 8's exception).
+  { id: "share_privacy.always", title: "Recording controls", page: "share_privacy", kind: "info",
+    aliases: ["Recording controls & after-call card", "After-call card"],
+    keywords: ["always shown", "screenshots", "screen recording"], ru: ["hamesha dikhe"], ur: ["ہمیشہ دکھائی دے"] },
+  { id: "share_privacy.dictation", title: "Dictation box", page: "share_privacy", kind: "info",
+    keywords: ["always shown", "dictation", "your own words", "screenshots"], ru: ["dictation hamesha dikhe"], ur: ["ڈکٹیشن"] },
+  { id: "share_privacy.hiding", title: "Live Translate", page: "share_privacy", kind: "choice", resettable: true,
+    aliases: ["Other floating windows", "Hide live words", "Hide from screen sharing", "Hide EchoLedger from screen sharing"],
     options: opts(["all", "Hidden from screen shares", true], ["off", "Shown in screen shares"]),
     // The help line (the call choice plan, lead decision): the OS has one flag for screen sharing and screenshots.
-    description: "Hiding from screen sharing also hides EchoLedger from your screenshots: your computer uses one setting for both.",
-    keywords: ["show during screen share", "hide overlays", "recording controls", "dictation box", "screenshot", "screen capture"], ru: ["screen share mein chupao", "chupana"], ur: ["اسکرین شیئر میں چھپائیں"] },
+    description: "Also hidden from your own screenshots",
+    keywords: ["live translate", "translation", "live words", "show during screen share", "screenshot", "screen capture"], ru: ["screen share mein chupao", "chupana", "tarjuma"], ur: ["اسکرین شیئر میں چھپائیں", "ترجمہ"] },
   { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge", "black box"], ru: ["haalat", "private"], ur: ["حالت", "نجی"] },
   { id: "share_privacy.old_windows", title: "On this Windows version", page: "share_privacy", kind: "choice", requires: { os: "windows" }, resettable: true,
     options: opts(["black_box", "Black box", true], ["show", "Show normally"]), keywords: ["black box", "older windows", "windows 10"], ru: ["purani windows", "kala dabba"], ur: ["پرانی ونڈوز"] },
@@ -227,7 +236,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "share_privacy.one_window", title: "I share one window or a tab", page: "share_privacy", section: "Meeting apps", kind: "switch", requires: { os: "macos" }, resettable: true,
     description: "EchoLedger stays on screen when you share your whole screen.",
     keywords: ["one window", "tab", "whole screen", "safety net"], ru: ["ek window", "tab"], ur: ["ایک ونڈو", "ٹیب"] },
-  { id: "share_privacy.demo", title: "Show in screen share for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
+  { id: "share_privacy.demo", title: "Show Live Translate for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
   { id: "share_privacy.hide_all", title: "Hide EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info",
     keywords: ["shortcut", "hide windows", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao"], ur: ["ونڈوز چھپائیں", "چھپائیں"] },
   { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"], ru: ["doosri screen"], ur: ["دوسری اسکرین"] },

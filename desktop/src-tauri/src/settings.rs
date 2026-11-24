@@ -285,8 +285,9 @@ pub struct Settings {
     pub auto_record_apps: HashMap<String, bool>,
     /// Which EchoLedger windows are left out of screen shares (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone); replaces
     /// v1.8's `contentProtection` (floating windows only), see [`Settings::from_value`].
-    /// Since v2.0 it covers only the other floating windows (recording controls, dictation box, after-call card, Live
-    /// Translate): the main window, the Live Assist card and the captions have their own choices below.
+    /// Since v2.0 it covers only the other floating windows, and since 2.0.14 (the capture policy) only Live Translate:
+    /// the recording controls, the after-call card and the dictation box are always shown; the main window, the Live
+    /// Assist card and the captions have their own choices below.
     pub hide_from_sharing: ShareHiding,
     /// The main window is hidden from screen shares, and until when (v2.0); none: shown in screen shares (the default).
     pub main_share_hide: Option<crate::privacy::share::MainHide>,

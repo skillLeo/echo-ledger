@@ -129,7 +129,7 @@ pub fn gather(app: &tauri::AppHandle) -> DiagnosticInputs {
         })
         .collect();
     let protection = if settings.hide_from_sharing == crate::settings::ShareHiding::Off {
-        "off for the other floating windows (the Live Assist card and the captions stay hidden unless shown)".to_string()
+        "off for Live Translate (the Live Assist card and the captions stay hidden unless shown)".to_string()
     } else {
         crate::privacy::check::badge_now(app).label().to_lowercase()
     };

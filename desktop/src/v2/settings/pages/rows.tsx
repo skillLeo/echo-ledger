@@ -91,16 +91,18 @@ export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string
   );
 }
 
-export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled }: {
+export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled, meta }: {
   id: string;
   value: T;
   options?: { value: T; label: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** The row's subtitle when it depends on the choice (else the setting's description). */
+  meta?: string;
 }) {
   const s = setting(id);
   return (
-    <ListRow compact anchor={id} title={s.title} meta={s.description}
+    <ListRow compact anchor={id} title={s.title} meta={meta ?? s.description}
       control={<Select label={s.title} hideLabel value={value} options={options} disabled={disabled} onChange={(v) => onChange(v as T)} className="el-setting__select" />} />
   );
 }
