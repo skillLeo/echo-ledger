@@ -108,6 +108,16 @@ it('takes back only the asking person\'s own opens, and never touches a recordin
         ->and(CaptureSession::query()->whereKey($this->mine)->pluck('updated_at', 'id')->map(fn ($at) => (string) $at)->all())->toBe($updated);
 });
 
+it('takes an id in any case, answers it as sent, and counts it once', function () {
+    $upper = strtoupper($this->mine[0]);
+
+    $this->postJson('/api/sessions/opened', ['ids' => [$upper, $this->mine[0]]])->assertOk()->assertExactJson(['done' => [$upper], 'not_found' => []]);
+    expect(SessionOpen::query()->where('user_id', $this->person->id)->pluck('capture_session_id')->all())->toBe([$this->mine[0]]);
+
+    $this->deleteJson('/api/sessions/opened', ['ids' => [$upper]])->assertOk()->assertExactJson(['done' => [$upper], 'not_found' => []]);
+    expect(SessionOpen::query()->where('user_id', $this->person->id)->count())->toBe(0);
+});
+
 it('writes one query each way, however many ids', function () {
     $many = CaptureSession::factory()->count(40)->create(['user_id' => $this->person->id, 'workspace_id' => $this->device->workspace_id])->pluck('id')->all();
     $writes = function (callable $call): int {

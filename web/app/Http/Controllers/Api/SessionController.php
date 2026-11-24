@@ -341,11 +341,11 @@ final class SessionController extends Controller
      */
     public function openedMany(Request $request): JsonResponse
     {
-        [$person, $done, $missing] = $this->readableMany($request);
-        if ($done !== []) {
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
             $now = now();
             SessionOpen::query()->upsert(
-                array_map(fn (string $id): array => ['capture_session_id' => $id, 'user_id' => $person, 'opened_at' => $now], $done),
+                array_map(fn (string $id): array => ['capture_session_id' => $id, 'user_id' => $person, 'opened_at' => $now], $stored),
                 ['capture_session_id', 'user_id'], ['opened_at'],
             );
         }
@@ -359,9 +359,9 @@ final class SessionController extends Controller
      */
     public function unopenedMany(Request $request): JsonResponse
     {
-        [$person, $done, $missing] = $this->readableMany($request);
-        if ($done !== []) {
-            SessionOpen::query()->where('user_id', $person)->whereIn('capture_session_id', $done)->delete();
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
+            SessionOpen::query()->where('user_id', $person)->whereIn('capture_session_id', $stored)->delete();
         }
 
         return response()->json(['done' => $done, 'not_found' => $missing]);
@@ -370,9 +370,10 @@ final class SessionController extends Controller
     /**
      * The ids of a bulk request (1 to 200, an id sent twice counts once) split into those the person can read, as
      * readableSession() decides for one (their own in this workspace, or one sent to them), and the rest, both in the
-     * order they were sent.
+     * order they were sent. An id is a ULID, kept in lower case and the same in any case (a database compares it with
+     * or without regard to case): the answer gives each id back as it was sent, the writes use the stored one.
      *
-     * @return array{0: int, 1: list<string>, 2: list<string>}
+     * @return array{0: int, 1: list<string>, 2: list<string>, 3: list<string>} person, done and not found as sent, the stored ids of done
      */
     private function readableMany(Request $request): array
     {
@@ -382,17 +383,25 @@ final class SessionController extends Controller
             'ids' => ['required', 'array', 'min:1', 'max:200'],
             'ids.*' => ['required', 'string', 'max:64'],
         ]);
-        $ids = array_values(array_unique(array_map('strval', $data['ids'])));
+        // The ids as sent, once each whatever their case (the first form is kept), by the lower case the database keeps.
+        $sent = [];
+        foreach (array_map('strval', $data['ids']) as $id) {
+            $sent[mb_strtolower($id)] ??= $id;
+        }
+        $keys = array_keys($sent);
         $readable = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)
-            ->whereIn('id', $ids)->pluck('id')->map(fn ($id): string => (string) $id)->all();
-        $left = array_values(array_diff($ids, $readable));
+            ->whereIn('id', $keys)->pluck('id')->map(fn ($id): string => mb_strtolower((string) $id))->all();
+        $left = array_values(array_diff($keys, $readable));
         if ($left !== []) {
             $readable = [...$readable, ...app(Teammates::class)->sharedSessions($device->user)->whereIn('id', $left)->pluck('id')
-                ->map(fn ($id): string => (string) $id)->all()];
+                ->map(fn ($id): string => mb_strtolower((string) $id))->all()];
         }
-        $done = array_values(array_filter($ids, fn (string $id): bool => in_array($id, $readable, true)));
+        $found = array_flip($readable);
+        $stored = array_values(array_filter($keys, fn (string $key): bool => isset($found[$key])));
+        $done = array_map(fn (string $key): string => $sent[$key], $stored);
+        $missing = array_values(array_map(fn (string $key): string => $sent[$key], array_filter($keys, fn (string $key): bool => ! isset($found[$key]))));
 
-        return [(int) $device->user_id, $done, array_values(array_diff($ids, $done))];
+        return [(int) $device->user_id, $done, $missing, $stored];
     }
 
     public function show(Request $request, string $id): JsonResponse
