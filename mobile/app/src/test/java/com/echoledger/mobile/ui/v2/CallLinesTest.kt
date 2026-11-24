@@ -63,11 +63,16 @@ class CallLinesTest : ScreenTest() {
         DecisionPopup.resetForTest()
     }
 
-    /** The app on screen: its snackbar host, at the bottom, as the shell has it. */
+    /**
+     * The app on screen: its snackbar host, at the bottom, as the shell has it. Its clock is the test's (the shell gives
+     * its own the same way): a line's end time and the snackbar's wait are then counted on one clock, so what the test
+     * says about 10 s never depends on how long the phone took between the choice and the first frame.
+     */
     private fun inApp() {
+        val start = System.currentTimeMillis()
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                val toasts = remember { EchoToastState() }
+                val toasts = remember { EchoToastState { start + compose.mainClock.currentTime } }
                 CallLinesHost(toasts)
                 Box(Modifier.fillMaxSize()) { EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter)) }
             }

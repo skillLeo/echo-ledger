@@ -56,7 +56,8 @@ export type ShellProps = {
   onGo: (tab: MainTab) => void;
   status: ShellStatus;
   /** Who is signed in: the profile at the sidebar's foot, which opens Settings. */
-  me?: { name: string; email: string; plan: string | null } | null;
+  /** The person: the plan's line, their avatar colour (avatar_color) and photo for the avatar (DES-08). */
+  me?: { name: string; email: string; plan: string | null; usage?: string | null; color?: number | null; photo?: string | null } | null;
   /** The Live module's page (ui_v2.live); without it Live says where to find its features meanwhile. */
   live?: ReactNode;
   /** The Ask module's page (ui_v2.ask); without it Ask says where to ask meanwhile. */
@@ -79,7 +80,8 @@ export type ShellProps = {
   /** New project and Request link (classic's + menu), in Record's menu. */
   onNewProject?: () => void;
   onRequestLink?: () => void;
-  onSearch?: () => void;
+  /** Search everything (⌘K); the three levels' title row gives what was typed there. */
+  onSearch?: (typed?: string) => void;
   searchKeys?: string;
   onHelp?: () => void;
   /** The super admin's Admin panel on the website (classic's avatar menu); none for everyone else. */
@@ -132,6 +134,8 @@ export type ShellProps = {
     panelFlyout?: boolean;
     /** Whose layout the panels keep (the server, the email and the workspace); null until known. */
     layoutFor?: string | null;
+    /** The title row's status items (UX-20): Restart to update, the share badge, the zoom chip. */
+    titleEnd?: ReactNode;
     panels?: Partial<Record<Place, ReactNode>>;
     feet?: Partial<Record<Place, ReactNode>>;
     onPlace?: (place: Place, again: boolean) => void;
@@ -342,7 +346,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
       tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
   );
   return (
-    <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor}
+    <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
       libraryCount={nav?.libraryCount} activityCount={activity} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
@@ -390,7 +394,7 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   const hint = searchHint(searchKeys);
-  const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={onSearch} />;
+  const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={() => onSearch()} />;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // With the Library's sections, a short window keeps more of the middle: the foot's rows pack tighter (Activity and

@@ -1141,23 +1141,25 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     walk(way);
   };
   useEffect(() => {
-    // The mouse's back (button 3) and forward (4): never the web view's own page history.
+    // The mouse's back (button 3) and forward (4): never the web view's own page history. Heard first (the capture phase),
+    // so the Library answers before the shell's title row, which walks the places, however often it is drawn again; a
+    // press something else took is left alone.
     const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
     const down = (e: MouseEvent) => {
       if (side(e)) e.preventDefault();
     };
     const up = (e: MouseEvent) => {
-      if (!side(e)) return;
+      if (!side(e) || e.defaultPrevented) return;
       e.preventDefault();
       // Not behind a question or a dialog.
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       back.current(e.button === 3 ? "back" : "forward");
     };
-    window.addEventListener("mousedown", down);
-    window.addEventListener("mouseup", up);
+    window.addEventListener("mousedown", down, true);
+    window.addEventListener("mouseup", up, true);
     return () => {
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("mouseup", up);
+      window.removeEventListener("mousedown", down, true);
+      window.removeEventListener("mouseup", up, true);
     };
   }, []);
   useEffect(() => {

@@ -6,6 +6,7 @@ import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
 import { watchTitlebar } from "./lib/titlebar";
+import { watchTitleDoubleClick } from "./lib/titleClick";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WindowErrorBoundary } from "./components/WindowErrorBoundary";
 
@@ -63,13 +64,18 @@ let watchingTitlebar = false;
 if (label === "main" && document.documentElement.dataset.platform === "macos") {
   watchingTitlebar = true;
   watchTitlebar("macos", isFullscreen);
+  // A double click on the title row does what the Mac's setting says (UX-20), not always zoom.
+  watchTitleDoubleClick("macos");
 }
 api
   .windowAppearance()
   .then((a) => {
     document.documentElement.dataset.platform = a.platform;
     if (label === "main" && a.material !== "none") document.documentElement.dataset.material = a.material;
-    if (label === "main" && !watchingTitlebar) watchTitlebar(a.platform, isFullscreen);
+    if (label === "main" && !watchingTitlebar) {
+      watchTitlebar(a.platform, isFullscreen);
+      watchTitleDoubleClick(a.platform);
+    }
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

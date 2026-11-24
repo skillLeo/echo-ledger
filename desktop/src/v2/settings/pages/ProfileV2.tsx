@@ -40,7 +40,7 @@ export function ProfilePageV2({ account: given, status, run }: { account: Accoun
         : <p>Your name and email are changed on the website.</p>}>
         {native && (
           <ListRow compact anchor="profile.picture" title={setting("profile.picture").title} label={ROWS.picture} chevron onClick={() => void picture()}
-            leading={avatar ? <img className="el-avatar el-avatar--img" src={avatar} alt="" /> : <Avatar initials={initials(account.name, account.email)} size="sm" />} />
+            leading={<Avatar initials={initials(account.name, account.email)} size="list" photo={avatar} color={account.avatar_color} seed={account.email} />} />
         )}
         {native && account.avatar_version != null && (
           <ListRow compact title={ROWS.removePicture} label={ROWS.removePicture} onClick={() => flows.open({ kind: "remove_picture" })} />
