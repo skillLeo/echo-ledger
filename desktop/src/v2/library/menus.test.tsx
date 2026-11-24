@@ -144,9 +144,23 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
     const again = screen.getByRole("menu", { name: "List actions" });
     expect(within(again).getByRole("menuitemcheckbox", { name: "As list" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(within(again).getByRole("menuitemcheckbox", { name: "As table" }));
+    // Only the list's area under row 2: not the title, row 2 itself or above it.
+    fireEvent.keyDown(again, { key: "Escape" });
+    fireEvent.contextMenu(screen.getByRole("heading", { level: 1 }), { clientX: 400, clientY: 20 });
+    fireEvent.contextMenu(document.querySelector(".el-lib-row2") as HTMLElement, { clientX: 400, clientY: 60 });
+    expect(screen.queryByRole("menu", { name: "List actions" })).toBeNull();
+    fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
+    fireEvent.click(within(screen.getByRole("menu", { name: "List actions" })).getByRole("menuitemcheckbox", { name: "As table" }));
     await act(flushAsync);
     expect(document.querySelector(".el-lib-list")).toBeNull();
+  });
+
+  it("an empty Library (its empty state) has no list-space menu", async () => {
+    respond("library_list", []);
+    respond("library_refresh", []);
+    await show();
+    fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
+    expect(screen.queryByRole("menu", { name: "List actions" })).toBeNull();
   });
 
   it("Mark as important is in the selection bar's ⋮ and the recording page's menu too, not only a right-click", async () => {

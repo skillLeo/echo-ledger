@@ -1250,7 +1250,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   spaceMenu.current = (e: MouseEvent) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
     if (!target || e.defaultPrevented || open || (!trash && (layout === "table" || !items))) return;
-    if (target.closest("li, a, button, input, textarea, select, [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
+    if (target.closest("li, a, button, input, textarea, select, header, .el-lib-row2, .el-banner, .el-empty, [role='status'], [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
+    // Only the list's area, under row 2 (or Trash's list): not the title, the count, a banner or an empty state.
+    const el = root.current;
+    const list = el?.querySelector<HTMLElement>(trash ? '[aria-label="Deleted recordings"]' : ".el-lib-list");
+    if (!list) return;
+    const from = trash ? list.getBoundingClientRect().top : el?.querySelector(".el-lib-row2")?.getBoundingClientRect().bottom ?? list.getBoundingClientRect().top;
+    if (e.clientY < from) return;
     // In Trash its own: Empty trash… (only while it holds something).
     if (trash && !bin?.length) return;
     e.preventDefault();
