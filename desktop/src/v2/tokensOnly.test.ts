@@ -117,6 +117,8 @@ describe("scaled fills", () => {
   it("text that finds its own direction lines up with its column, in the form Chromium and WebKit read too", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
     expect(css).toMatch(/\.el-row__title, [^{]*\{\s*text-align: match-parent;\s*text-align: -webkit-match-parent;\s*\}/);
-    expect(css).toMatch(/\.el-screens-strip__title \{\s*text-align: match-parent;/);
+    expect(css).toMatch(/\.el-screens-strip__title, \.el-nav-item__label \{\s*text-align: match-parent;/);
+    // The Library sidebar's names ("All recordings", a label's own name) sit beside their icon right to left too.
+    expect(readFileSync(join(here, "library", "LibraryNav.tsx"), "utf8")).toMatch(/className="el-nav-item__label" dir="auto"/);
   });
 });
