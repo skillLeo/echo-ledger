@@ -1,6 +1,9 @@
 // FIX-03: a problem said in a toast is flagged as one, so a newer message never pushes it off the screen (Toast's
-// `error`). Every say(…), onMessage(…) or notify(…) in src/v2 whose words are a problem (errorMessage(…), "couldn't",
-// "Could not", "didn't") passes the flag: say and onMessage through sayProblem(say, text), notify as its second argument.
+// `error`). Every say(…), onMessage(…) or notify(…) in src/v2 (say?.(…) too) whose words are a problem
+// (errorMessage(…), "couldn't", "Could not", "didn't", "can't", "Try again"), or that is said in a `catch` block or a
+// `.catch(…)`, passes the flag: say and onMessage through sayProblem(say, text) or `true` after the text, notify as its
+// second argument. A wrapper that takes only the text (`const tell = (t) => say(t)`, `say={(t) => notify(t)}`) can't
+// pass it: its problems are found as the wrapper's.
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -44,28 +47,116 @@ function argsAt(text: string, open: number): string[] {
   return out;
 }
 
-const PROBLEM = /errorMessage\(|couldn['’]t|could not|didn['’]t/i;
+const PROBLEM = /errorMessage\(|couldn['’]t|could not|didn['’]t|can['’]t|try again/i;
+const SAYERS = ["say", "onMessage", "notify"];
+
+/** The index of the closer that matches the opener at `open` ("(", "{"), skipping strings; -1 when there is none. */
+function closeOf(text: string, open: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c) && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Where a problem is being handled: every `catch (…) { … }` block and `.catch(…)` call, as [from, to]. */
+function catchSpans(text: string): [number, number][] {
+  const spans: [number, number][] = [];
+  for (const m of text.matchAll(/\bcatch\s*(?:\([^)]*\))?\s*\{/g)) spans.push([m.index!, closeOf(text, m.index! + m[0].length - 1)]);
+  for (const m of text.matchAll(/\.catch\(/g)) spans.push([m.index!, closeOf(text, m.index! + m[0].length - 1)]);
+  return spans;
+}
+
+/**
+ * The single-argument wrappers in a source that drop the flag: `const tell = (text) => say(text)` or
+ * `function tell(text) { say(text); }`, the text passed on with nothing after it that could say it is a problem.
+ */
+function droppingWrappers(text: string): string[] {
+  const out: string[] = [];
+  const defs = [
+    ...text.matchAll(/\b(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(\s*(\w+)\s*(?::\s*[^,()]+)?\)\s*(?::\s*[\w<>]+\s*)?=>/g),
+    ...text.matchAll(/\bfunction\s+(\w+)\s*\(\s*(\w+)\s*(?::\s*[^,()]+)?\)\s*(?::\s*[\w<>]+\s*)?(?=\{)/g),
+  ];
+  for (const m of defs) {
+    const [, name, param] = m;
+    // The wrapper's body: its block, or its expression up to the end of the line.
+    const from = m.index! + m[0].length;
+    const brace = text.slice(from).match(/^\s*\{/);
+    const body = brace ? text.slice(from, closeOf(text, from + brace[0].length - 1) + 1) : text.slice(from, text.indexOf("\n", from) >>> 0);
+    for (const call of body.matchAll(new RegExp(`\\b(${SAYERS.join("|")})(?:\\?\\.)?\\(`, "g"))) {
+      const args = argsAt(body, call.index! + call[0].length - 1);
+      if (args[0] === param && !args.slice(1).includes("true")) out.push(name);
+    }
+  }
+  return [...new Set(out)].filter((name) => !SAYERS.includes(name));
+}
 
 /** Each unflagged problem in a source: "say at line n". */
 export function unflagged(text: string): string[] {
   const found: string[] = [];
-  for (const m of text.matchAll(/\b(say|onMessage|notify)\(/g)) {
+  const line = (at: number) => text.slice(0, at).split("\n").length;
+  const spans = catchSpans(text);
+  const inCatch = (at: number) => spans.some(([from, to]) => at > from && (to < 0 || at < to));
+  const wrappers = droppingWrappers(text);
+  const names = [...SAYERS, ...wrappers];
+  for (const m of text.matchAll(new RegExp(`(?<![\\w.])(${names.join("|")})(\\?\\.)?\\(`, "g"))) {
+    const before = text.slice(Math.max(0, m.index! - 40), m.index!);
+    // A wrapper's own definition is not a call of it.
+    if (/\b(?:const|let|function)\s+$/.test(before)) continue;
     const args = argsAt(text, m.index! + m[0].length - 1);
-    if (!args[0] || !PROBLEM.test(args[0])) continue;
-    const flagged = m[1] === "notify" ? args[1] === "true" : args[2] === "true";
-    if (!flagged) found.push(`${m[1]} at line ${text.slice(0, m.index).split("\n").length}`);
+    if (!args[0]) continue;
+    if (!PROBLEM.test(args[0]) && !inCatch(m.index!)) continue;
+    const wrapper = wrappers.includes(m[1]);
+    // A later argument `true` is the flag: notify's second, say's third (or second where it takes only the flag).
+    const flagged = !wrapper && args.slice(1).includes("true");
+    if (!flagged) found.push(`${m[1]} at line ${line(m.index!)}`);
+  }
+  // A one-argument function given as a say, onMessage or notify prop: every problem said through it loses its flag.
+  for (const m of text.matchAll(new RegExp(`\\b(${SAYERS.join("|")})=\\{\\s*(?:\\(\\s*\\w+\\s*(?::[^,()]+)?\\)|\\w+)\\s*=>`, "g"))) {
+    found.push(`${m[1]} prop at line ${line(m.index!)}`);
   }
   return found;
 }
 
-const sources = files(here)
+// The pages and the window that hands them its say (MainApp's notify): src/v2 and src/views.
+const sources = [...files(here), ...files(join(here, "..", "views"))]
   .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
-  .map((f) => [relative(here, f).split("\\").join("/"), readFileSync(f, "utf8")] as const);
+  .map((f) => [relative(join(here, ".."), f).split("\\").join("/"), readFileSync(f, "utf8")] as const);
 
 describe("problems are said as problems (FIX-03)", () => {
   it("finds an unflagged problem and passes a flagged one", () => {
     expect(unflagged('say(errorMessage(e));\nsay("Saved");\nsayProblem(say, errorMessage(e));\nnotify(errorMessage(e), true);')).toEqual(["say at line 1"]);
     expect(unflagged('onMessage("The audio didn\'t play.");\nnotify(`Couldn\'t ${x}`, false);\nsay(errorMessage(e), undefined, true);')).toEqual(["onMessage at line 1", "notify at line 2"]);
+  });
+
+  it("finds problems said through say?.(, in a catch or .catch(, with \"can't\" or \"Try again\", or through a wrapper that drops the flag", () => {
+    expect(unflagged('say?.(errorMessage(e));\nsay?.(errorMessage(e), true);')).toEqual(["say at line 1"]);
+    expect(unflagged('notify("Can\'t reach the server.", false);\nsay("Something went wrong. Try again.");\nnotify("Can\'t reach the server.", true);')).toEqual(["notify at line 1", "say at line 2"]);
+    // In a catch, whatever the words: a problem.
+    expect(unflagged('try { a(); } catch (e) {\n  say(String(e));\n}\nsay(String(x));')).toEqual(["say at line 2"]);
+    expect(unflagged('load().catch((e) =>\n  notify(String(e)));\nload().catch((e) => notify(String(e), true));\nload().then(() => say("Loaded"));')).toEqual(["notify at line 2"]);
+    // A wrapper that takes only the text drops the flag, whatever it is called with; one that flags is fine.
+    expect(unflagged('const tell = (text: string) => say(text);\ntell(errorMessage(e));\ntell("Saved");')).toEqual(["tell at line 2"]);
+    expect(unflagged('function warn(t: string) {\n  notify(t);\n}\nwarn("Couldn\'t save");')).toEqual(["warn at line 4"]);
+    expect(unflagged('const fail = (text: string) => say(text, undefined, true);\nfail(errorMessage(e));')).toEqual([]);
+    expect(unflagged('<Sheet say={(t) => notify(t)} />\n<Sheet say={(text, error) => notify(text, error)} />\n<Sheet notify={notify} />')).toEqual(["say prop at line 1"]);
+    // Not a problem, nowhere near a catch: nothing.
+    expect(unflagged('say("Saved");\nnotify("Library synced");')).toEqual([]);
+  });
+
+  it("reads every page and the window (src/v2 and src/views), each by name", () => {
+    const names = sources.map(([name]) => name);
+    expect(names).toEqual(expect.arrayContaining(["v2/library/LibraryV2.tsx", "v2/activity/ActivityV2.tsx", "views/main/MainApp.tsx"]));
+    expect(names.length).toBeGreaterThan(100);
   });
 
   it.each(sources)("%s flags every problem it says", (_name, text) => {
