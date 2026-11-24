@@ -9,7 +9,7 @@ import { setting } from "../../../lib/settingsRegistry";
 import { PERMISSION_TEXT, testVerdict } from "../../../views/main/CaptureSettings";
 import { MONTHLY_NOTE, TARGET_HINT, WINDOWS_WHOLE_SCREEN, comparableApp, screensBlocked } from "../../../views/main/ScreenSettings";
 import { PlanBadge, useLocked, useLockedTag } from "../../../views/main/Upgrade";
-import { Button, Card, EmptyState, Icons, List, ListRow, TextField } from "../../components";
+import { Button, Card, EmptyState, Icon, Icons, List, ListRow, TextField } from "../../components";
 import { Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
 
 /** A level from 0 to 1 as a bar. */
@@ -173,7 +173,7 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
       </Group>
       {/* Learn more: what screen moments are, and this platform's notes, in full. */}
       <details className="el-group__note el-caption el-secondary" data-testid="screen-learn-more">
-        <summary>Learn more</summary>
+        <summary><Icon icon={Icons.ChevronEndIcon} directional />Learn more</summary>
         <p>
           During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at
           this page”, so the transcript knows what was on screen. Screens are stored encrypted on this computer until they
