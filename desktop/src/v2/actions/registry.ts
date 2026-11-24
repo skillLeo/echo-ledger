@@ -2,7 +2,7 @@
 // and sends the action's id: the Mac menu bar, right-click menus, a row's ⋯, Record's menu, the avatar's menu, ⌘K,
 // the menu-bar and tray menu, the Dock menu, the Windows Jump List. A screen registers what an id does where it can
 // (registerAction) and the registry runs it (runAction) when its conditions hold. Labels follow the app's state
-// ("Pin" ↔ "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
+// ("Pin" or "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
 // with a label, a shortcut or an action that isn't in the file fails.
 import list from "./actions.json";
 import * as Icons from "../components/icons";
@@ -123,7 +123,7 @@ export function shortcutOf(id: string, platform: Platform): string | null {
 }
 
 const MAC_KEYS: Record<string, string> = { "⌃": "Control", "⌥": "Alt", "⇧": "Shift", "⌘": "Meta" };
-const KEY_NAMES: Record<string, string> = { "⌫": "Backspace", "↩": "Enter", "←": "ArrowLeft", "→": "ArrowRight", "−": "-", Ctrl: "Control", Del: "Delete" };
+const KEY_NAMES: Record<string, string> = { "⌫": "Backspace", "\u21A9": "Enter", "←": "ArrowLeft", "→": "ArrowRight", "−": "-", Ctrl: "Control", Del: "Delete" };
 /** A shortcut as aria-keyshortcuts says it: "⇧⌘N" → "Shift+Meta+N", "Ctrl+Shift+E" → "Control+Shift+E". */
 export function ariaKeys(shortcut: string): string {
   if (/^[⌃⌥⇧⌘]/.test(shortcut)) {
