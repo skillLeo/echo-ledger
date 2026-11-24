@@ -6,7 +6,7 @@ import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffe
 import { folderLabel, inFolderHere, LIBRARY_VIEWS, type LibraryView as LibraryViewKey } from "../../lib/folders";
 import { PageHeader } from "../../components/Page";
 import { Menu } from "../../components/Menu";
-import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
+import { changePreferences, DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { WhatsAppSheet } from "./WhatsAppSheet";
 import { StateBanner } from "../../components/StateBanner";
@@ -226,10 +226,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return () => window.removeEventListener(PREFERENCES_EVENT, follow);
   }, []);
   const chooseDensity = (next: Density) => {
-    const prefs = { ...loadPreferences(), density: next };
-    savePreferences(prefs);
+    changePreferences({ density: next });
     setDensity(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
   };
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   useEffect(() => {

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clampSidebar, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
   SIDEBAR_DEFAULT, stepIndex } from "./shell";
 import { libraryPlaces } from "./folders";
-import { applyPreferences, DEFAULT_PREFERENCES, savePreferences } from "./shell";
+import { applyPreferences, changePreferences, DEFAULT_PREFERENCES, loadPreferences, PREFERENCES_EVENT, savePreferences } from "./shell";
 import { formatWhen } from "./format";
 import { rowTime } from "../views/main/LibraryView";
 import { workspacesOf } from "../views/main/TopBar";
@@ -40,10 +40,30 @@ describe("the sidebar's width and groups (v1.6, P4.1)", () => {
 
 describe("Preferences kept on this computer (v1.6, P4.5)", () => {
   it("reads the saved choices and falls back to the defaults for anything else", () => {
-    expect(parsePreferences(null)).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
-    expect(parsePreferences('{"sidebarStyle":"grey","density":"compact","clock":"24"}')).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
-    expect(parsePreferences('{"sidebarStyle":"purple","clock":12}')).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
-    expect(parsePreferences("{broken")).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+    expect(parsePreferences(null)).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false });
+    expect(parsePreferences('{"sidebarStyle":"grey","density":"compact","clock":"24"}')).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24", compactRail: false });
+    expect(parsePreferences('{"sidebarStyle":"purple","clock":12}')).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false });
+    expect(parsePreferences("{broken")).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false });
+  });
+
+  it("the compact rail is off unless it was turned on; a change is saved and told to every part at once", () => {
+    expect(parsePreferences('{"compactRail":true}').compactRail).toBe(true);
+    expect(parsePreferences('{"compactRail":"yes"}').compactRail).toBe(false);
+    localStorage.clear();
+    const told = vi.fn();
+    const listen = (e: Event) => told((e as CustomEvent).detail);
+    window.addEventListener(PREFERENCES_EVENT, listen);
+    try {
+      savePreferences({ ...DEFAULT_PREFERENCES, clock: "24" });
+      const next = changePreferences({ compactRail: true });
+      expect(next).toEqual({ ...DEFAULT_PREFERENCES, clock: "24", compactRail: true });
+      expect(loadPreferences()).toEqual(next);
+      expect(told).toHaveBeenCalledWith(next);
+    } finally {
+      window.removeEventListener(PREFERENCES_EVENT, listen);
+      localStorage.clear();
+      applyPreferences(DEFAULT_PREFERENCES);
+    }
   });
 });
 
