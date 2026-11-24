@@ -42,7 +42,7 @@ import { ViewNameDialog } from "./LibraryNav";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { recordingName, type SortKey } from "../../lib/library";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
-import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
+import { changePreferences, DENSITIES, loadPreferences, PREFERENCES_EVENT, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
@@ -289,10 +289,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     return () => window.removeEventListener(PREFERENCES_EVENT, follow);
   }, []);
   const setDensity = (next: Density) => {
-    const prefs = { ...loadPreferences(), density: next };
-    savePreferences(prefs);
+    changePreferences({ density: next });
     setDensityNow(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
   };
   // Sort and group, remembered on this computer (classic's View menu); a saved view keeps its own.
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));

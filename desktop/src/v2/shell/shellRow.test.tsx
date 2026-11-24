@@ -8,6 +8,7 @@ import { NavShell, RAIL_FULL_FROM, RAIL_FULL_FROM_COMPACT } from "./NavShell";
 import { changePreferences, loadPreferences } from "../../lib/shell";
 import { runAction } from "../actions/registry";
 import { menuSnapshot } from "../actions/menuState";
+import { AppearancePageV2 } from "../settings/pages/AppV2";
 import { PanelToggle, usePageHistory, type Place } from "./NavRail";
 import { usePageTitle } from "../pageTitle";
 import { installNativeFeel } from "../../lib/nativeFeel";
@@ -346,6 +347,27 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     expect(nav).toHaveClass("el-rail--compact");
     expect(loadPreferences().compactRail).toBe(true);
     act(() => void changePreferences({ compactRail: false }));
+  });
+
+  it("with Appearance open, View › Theme › Compact rail turns its switch on, and the page's next change keeps it", () => {
+    localStorage.clear();
+    setSize(1440, 900);
+    render(<App page={() => <AppearancePageV2 theme="system" onTheme={() => undefined} rail />} />);
+    const toggle = () => screen.getByRole("switch", { name: "Compact rail (icons only)" });
+    expect(toggle()).not.toBeChecked();
+    act(() => void runAction("view.compactRail", { platform: "macos" }));
+    expect(toggle()).toBeChecked();
+    expect(screen.getByRole("navigation", { name: "Main" })).toHaveClass("el-rail--compact");
+    // A change made on the page afterwards is made on what is saved: the compact rail stays on.
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Times" })).getByRole("radio", { name: "24-hour" }));
+    expect(loadPreferences()).toMatchObject({ clock: "24", compactRail: true });
+    expect(toggle()).toBeChecked();
+    // And the other way: the switch, then the menu's tick and the rail follow.
+    fireEvent.click(toggle());
+    expect(loadPreferences().compactRail).toBe(false);
+    expect(menuSnapshot().state.compactRail).toBe(false);
+    expect(screen.getByRole("navigation", { name: "Main" })).not.toHaveClass("el-rail--compact");
+    act(() => void changePreferences({ clock: "12" }));
   });
 
   it("a compact rail fits a shorter window: Help and Setup stay in it down to 554 px", () => {

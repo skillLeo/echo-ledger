@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type Settings, type ShortcutAction } from "../../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut } from "../../../lib/format";
-import { DEFAULT_PREFERENCES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Preferences } from "../../../lib/shell";
+import { changePreferences, DEFAULT_PREFERENCES, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../../lib/shell";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../../lib/theme";
 import { conflictFor } from "../../../lib/shortcutConflicts";
 import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
@@ -31,13 +31,15 @@ export function AppearancePageV2({ theme, onTheme, rail = false }: {
   /** The window has the rail (the rail · panel · page layout): its compact form can be chosen here. */
   rail?: boolean;
 }) {
+  // What is saved, followed as it changes anywhere (View › Theme › Compact rail, the Library's density); a change is
+  // made on the saved choices, never on this page's copy of them.
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
-  const setPref = (change: Partial<Preferences>) => {
-    const next = { ...prefs, ...change };
-    setPrefs(next);
-    savePreferences(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: next }));
-  };
+  useEffect(() => {
+    const follow = (e: Event) => setPrefs((e as CustomEvent<Preferences>).detail ?? loadPreferences());
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
+  const setPref = (change: Partial<Preferences>) => setPrefs(changePreferences(change));
   return (
     <>
       <Group footer={<p>Kept on this computer. Times follow your choice everywhere in the app.</p>}>

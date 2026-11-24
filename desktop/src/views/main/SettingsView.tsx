@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { api, listenTo, type Account, type AppStatus, type Entitlements, type InputDevice, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
-import { loadPreferences, PREFERENCES_EVENT, savePreferences, type Preferences } from "../../lib/shell";
+import { changePreferences, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../lib/shell";
 import { isLocked, lowestPlan, openRequest, openUpgradeSheet, planName, plansAbove, requestStage, useEntitlements } from "../../lib/entitlements";
 import { breadcrumbOf, entriesOn, findSetting, optionLabel, pageFor, ROOT_SECTIONS, SETTINGS, setting, type SettingEntry } from "../../lib/settingsRegistry";
 import { searchSettings, type SettingResult } from "../../lib/settingsIndex";
@@ -136,6 +136,12 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsFailed, setSettingsFailed] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
+  // Followed as they change anywhere (the Library's density, View › Theme › Compact rail).
+  useEffect(() => {
+    const follow = (e: Event) => setPrefs((e as CustomEvent<Preferences>).detail ?? loadPreferences());
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [page, setPage] = useState<string | null>(null);
   const [target, setTarget] = useState<{ id: string; seq: number } | null>(null);
@@ -225,11 +231,9 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     }
     setSavedAt(Date.now());
   };
+  // Made on the saved choices, never on this page's copy (another part may have changed one since).
   const setPref = (change: Partial<Preferences>) => {
-    const next = { ...prefs, ...change };
-    setPrefs(next);
-    savePreferences(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: next }));
+    setPrefs(changePreferences(change));
     setSavedAt(Date.now());
   };
   const signOut = async () => {
