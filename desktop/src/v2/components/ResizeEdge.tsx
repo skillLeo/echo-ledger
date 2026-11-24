@@ -4,7 +4,7 @@
 // `closeBelow` and the panel snaps closed, keeping the width it had. From the keyboard (it takes focus): ←/→ 8 px,
 // Shift 32 px, Home and End the least and the most, Enter the usual width; a double click puts the usual width back too.
 // Right to left the arrows mirror with the page.
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 /** A width in its range (pure). */
 export function clampWidth(width: number, min: number, max: number): number {
@@ -36,6 +36,11 @@ export function ResizeEdge({ label, width, min, max, closeBelow, side, cssVar, o
   onReset: () => void;
   onClose?: () => void;
 }) {
+  // A drag running now: how to end it. A drag can end without the pointer's up or cancel: the capture lost (the window
+  // left with Alt+Tab or ⌘Tab), the window losing focus, or the edge going away (another place, a narrower window).
+  // Each ends it as a cancel, so nothing of it stays (the resize cursor, no text selection, the listeners).
+  const running = useRef<((keep: boolean) => void) | null>(null);
+  useEffect(() => () => running.current?.(false), []);
   // Wider is the way the edge faces: outward for the end, inward for the start; right to left mirrors both.
   const outward = (el: Element) => (getComputedStyle(el).direction === "rtl" ? -1 : 1) * (side === "end" ? 1 : -1);
   const start = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -64,9 +69,12 @@ export function ResizeEdge({ label, width, min, max, closeBelow, side, cssVar, o
       show(clampWidth(raw, min, max), closeBelow !== undefined && raw < closeBelow);
     };
     const end = (keep: boolean) => {
+      running.current = null;
       edge.removeEventListener("pointermove", move);
       edge.removeEventListener("pointerup", up);
       edge.removeEventListener("pointercancel", cancel);
+      edge.removeEventListener("lostpointercapture", cancel);
+      window.removeEventListener("blur", cancel);
       document.body.classList.remove("el-resizing");
       // The panel's own width goes back to what the app keeps; the app then sets the new one (or closes it).
       if (before) panel?.style.setProperty(cssVar, before);
@@ -80,10 +88,14 @@ export function ResizeEdge({ label, width, min, max, closeBelow, side, cssVar, o
     };
     const up = () => end(true);
     const cancel = () => end(false);
+    running.current?.(false);
+    running.current = end;
     document.body.classList.add("el-resizing");
     edge.addEventListener("pointermove", move);
     edge.addEventListener("pointerup", up);
     edge.addEventListener("pointercancel", cancel);
+    edge.addEventListener("lostpointercapture", cancel);
+    window.addEventListener("blur", cancel);
   };
   const key = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const sign = outward(e.currentTarget);

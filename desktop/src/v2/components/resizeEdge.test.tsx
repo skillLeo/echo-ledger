@@ -94,6 +94,38 @@ describe("a panel's edge (UX-03)", () => {
     expect(panel().style.getPropertyValue("--el-test-width")).toBe("260px");
   });
 
+  it("a drag that ends with no up or cancel (the capture lost, the window left) is a cancel: nothing of it stays", () => {
+    const onWidth = vi.fn();
+    for (const end of [() => fireEvent(edge(), new Event("lostpointercapture")), () => fireEvent(window, new Event("blur"))]) {
+      render(<Panel width={260} saved={260} onWidth={onWidth} />);
+      fireEvent.pointerDown(edge(), { button: 0, clientX: 300 });
+      fireEvent.pointerMove(edge(), { clientX: 340 });
+      expect(document.body).toHaveClass("el-resizing");
+      end();
+      expect(document.body).not.toHaveClass("el-resizing");
+      expect(panel().style.getPropertyValue("--el-test-width")).toBe("260px");
+      fireEvent.pointerMove(edge(), { clientX: 400 });
+      fireEvent.pointerUp(edge(), { clientX: 400 });
+      expect(panel().style.getPropertyValue("--el-test-width")).toBe("260px", "its listeners are gone");
+      cleanup();
+    }
+    expect(onWidth).not.toHaveBeenCalled();
+  });
+
+  it("an edge that goes away mid-drag (another place, a narrower window) ends its drag", () => {
+    const onWidth = vi.fn();
+    const view = render(<Panel width={260} onWidth={onWidth} />);
+    const gone = edge();
+    fireEvent.pointerDown(gone, { button: 0, clientX: 300 });
+    fireEvent.pointerMove(gone, { clientX: 340 });
+    expect(document.body).toHaveClass("el-resizing");
+    view.unmount();
+    expect(document.body).not.toHaveClass("el-resizing");
+    fireEvent.pointerUp(gone, { clientX: 340 });
+    fireEvent(window, new Event("blur"));
+    expect(onWidth).not.toHaveBeenCalled();
+  });
+
   it("from the keyboard: ←/→ 8 px, Shift 32 px, Home and End the ends, Enter or a double click the usual width", () => {
     const onWidth = vi.fn();
     const onReset = vi.fn();

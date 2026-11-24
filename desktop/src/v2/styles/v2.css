@@ -1647,8 +1647,7 @@ body.resizing-sidebar { cursor: col-resize; user-select: none; }
 .el-resize-edge:hover, .el-resize-edge:focus-visible { background: var(--el-role-accent-soft); }
 .el-resize-edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
 body.el-resizing { cursor: col-resize; user-select: none; }
-[data-closing="true"] { opacity: var(--el-resize-closing-opacity); }
-:root { --el-resize-closing-opacity: 0.5; }
+.el-panel[data-closing="true"], .el-filter[data-closing="true"] { opacity: var(--el-desktop-resize-closing-opacity); }
 .el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
 .el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
 @media (width < 780px) {

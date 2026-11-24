@@ -239,6 +239,7 @@
   --el-desktop-search-preferred-width: 22vw;
   --el-desktop-search-drag-room: 16px;
   --el-desktop-search-results-width: 560px;
+  --el-desktop-resize-closing-opacity: 0.5;
   --el-desktop-rail-width: 72px;
   --el-desktop-rail-item-height: 56px;
   --el-desktop-rail-pill-width: 48px;

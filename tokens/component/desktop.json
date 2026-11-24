@@ -45,6 +45,9 @@
       "drag-room": { "$type": "dimension", "$value": "16px", "$description": "The least free space kept between the title and the field for dragging the window" },
       "results-width": { "$type": "dimension", "$value": "560px" }
     },
+    "resize": {
+      "closing-opacity": { "$type": "number", "$value": 0.5, "$description": "UX-03: a panel dragged below its closing width fades to this; let go and it closes" }
+    },
     "rail": {
       "width": { "$type": "dimension", "$value": "72px" },
       "item-height": { "$type": "dimension", "$value": "56px" },

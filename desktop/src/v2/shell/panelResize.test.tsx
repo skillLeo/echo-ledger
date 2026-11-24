@@ -103,6 +103,9 @@ describe("resizable panels (UX-03)", () => {
     expect(css).toContain("inline-size: var(--el-filter-width, calc(var(--el-space-64) * 5));");
     expect(css).toContain(".el-resize-edge--end { inset-inline-end: calc(-1 * var(--el-space-4)); }");
     expect(css).toContain(".el-resize-edge--start { inset-inline-start: calc(-1 * var(--el-space-4)); }");
+    // The fade while closing: the panel's and the filters' only, from the tokens.
+    expect(css).toContain('.el-panel[data-closing="true"], .el-filter[data-closing="true"] { opacity: var(--el-desktop-resize-closing-opacity); }');
+    expect(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8")).toContain("--el-desktop-resize-closing-opacity: 0.5;");
     await act(async () => undefined);
   });
 });
