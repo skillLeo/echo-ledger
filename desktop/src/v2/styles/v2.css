@@ -1853,14 +1853,26 @@ span.el-nav-section__title { cursor: default; }
   min-block-size: var(--el-space-40);
   border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
-.el-lib-row2__end { display: flex; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
+.el-lib-row2__end { display: flex; flex: none; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
 .el-lib-row2.el-selectbar { padding-inline-start: var(--el-space-16); }
 .el-lib-row2.el-selectbar .el-lib-toolbar__all { margin: 0; }
 .el-lib-row2__selected { margin-block: 0; margin-inline-start: var(--el-space-4); font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 /* The page's tabs: All · Calls · Meetings · Voice notes (· Other) with their counts, grey with tabular figures. */
-.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); }
+/* A tab's words never wrap or get cut: with no room the end's labels go first (fitRow.ts), then the tabs scroll sideways
+   as the list chips' row does: one line, no fade (no gradients, DS rule 1), no scrollbar drawn; the tab at the edge
+   shows there is more. */
+.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); flex: 0 1 auto; min-inline-size: 0; }
+/* While they scroll the scroller reaches over the row's hairline, so the chosen tab's line still sits on it, and a
+   tab's focus ring is drawn inside it, where the scroller cannot cut it. */
+.el-lib-tabs--scrolls {
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
+  margin-block-end: calc(-1 * var(--el-border-hairline));
+}
+.el-lib-tabs--scrolls::-webkit-scrollbar { display: none; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab { margin-block-end: 0; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab:focus-visible { outline-offset: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset))); }
 .el-lib-tabs__tab {
-  display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer;
+  display: inline-flex; flex: none; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer; white-space: nowrap;
   padding-block: 0; padding-inline: var(--el-space-12); color: var(--el-role-text-secondary); border-block-end: var(--el-border-strong) solid transparent; margin-block-end: calc(-1 * var(--el-border-hairline));
 }
 .el-lib-tabs__tab:hover { color: var(--el-role-text-primary); }
@@ -2151,18 +2163,23 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 
 /* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
-   52 px: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in grey; the one
-   search field centred in the column (28 px, 280–400 px wide, the place in its placeholder, ⌘K at its end); the status
-   items at the end. No line under it until the page has scrolled. */
+   52 px, start to end: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in
+   grey, empty space (it drags the window), the search field at the row's end (28 px, 180–260 px wide, 22 % of the
+   window between, the place in its placeholder, ⌘K at its end), then the status items. Right to left it is mirrored:
+   the field at the left end. As the window narrows the empty space goes first, then the field shrinks to 180 px, then it
+   becomes a ⌕ button; the title's words are never given to the field. No line under it until the page has scrolled. */
 .el-titlerow {
-  flex: none; display: grid; align-items: center; gap: var(--el-space-8);
-  grid-template-columns: minmax(0, 1fr) minmax(var(--el-desktop-search-min-width), var(--el-desktop-search-max-width)) minmax(0, 1fr);
+  flex: none; display: flex; align-items: center; gap: var(--el-space-8);
   block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
   border-block-end: var(--el-border-hairline) solid transparent;
 }
 .el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
 .el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
-.el-titlerow__end { justify-content: flex-end; }
+/* The title's group keeps its whole width beside the field; only beside the ⌕ button (a window under the least width)
+   may it give some, its words cut last. */
+.el-titlerow__start { flex: none; }
+.el-titlerow--compact .el-titlerow__start { flex: 0 1 auto; }
+.el-titlerow__end { flex: none; justify-content: flex-end; }
 .el-titlerow__history { display: inline-flex; flex: none; }
 .el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
 .el-titlerow__name {
@@ -2170,9 +2187,14 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
 }
 .el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
-.el-titlerow__middle { display: flex; justify-content: center; min-inline-size: 0; }
-/* No room for the field: a ⌕ button, and its column gives its width back. */
-.el-titlerow--compact { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+/* The field at the row's end: the empty space before it takes what is left (and drags the window). */
+.el-titlerow__middle {
+  display: flex; justify-content: flex-end; margin-inline-start: auto;
+  flex: 0 1 clamp(var(--el-desktop-search-min-width), var(--el-desktop-search-preferred-width), var(--el-desktop-search-max-width));
+  min-inline-size: var(--el-desktop-search-min-width);
+}
+/* No room for the field: a ⌕ button at the row's end. */
+.el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; }
 .el-titlerow__search {
   display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
   inline-size: 100%; block-size: var(--el-desktop-search-height);

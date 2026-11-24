@@ -234,10 +234,10 @@
   --el-desktop-titlerow-lights-width: 60px;
   --el-desktop-titlerow-lights-height: 20px;
   --el-desktop-search-height: 28px;
-  --el-desktop-search-min-width: 280px;
-  --el-desktop-search-max-width: 400px;
-  --el-desktop-search-least-width: 200px;
-  --el-desktop-search-drag-room: 64px;
+  --el-desktop-search-min-width: 180px;
+  --el-desktop-search-max-width: 260px;
+  --el-desktop-search-preferred-width: 22vw;
+  --el-desktop-search-drag-room: 16px;
   --el-desktop-search-results-width: 560px;
   --el-desktop-rail-width: 72px;
   --el-desktop-rail-item-height: 56px;
