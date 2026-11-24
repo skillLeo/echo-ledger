@@ -1,6 +1,11 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -118,6 +123,10 @@ class CompactHeaderTest : ScreenTest() {
             compose.onAllNodesWithText("Calls: ", substring = true).fetchSemanticsNodes().isEmpty() &&
                 compose.onAllNodesWithText("Not ready", substring = true).fetchSemanticsNodes().isEmpty()
         )
+        // Review of UX-14: TalkBack hears that it opens a menu.
+        compose.onNodeWithContentDescription("Account and settings")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.DropdownList))
+            .assert(SemanticsMatcher("opens its choices") { it.config[SemanticsActions.OnClick].label == "Show choices" })
         compose.onNodeWithContentDescription("Account and settings").performClick()
         listOf("Select", "Sync now", "Settings").forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("Select").performClick()

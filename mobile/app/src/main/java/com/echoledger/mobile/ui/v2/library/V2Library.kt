@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,7 @@ import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -573,21 +575,27 @@ fun V2LibraryScreen(
     }
     // The recording opened last (UX-25): back from it, the list shows it with a light tint, focused, where it was. The
     // tint stays until another row is opened or tapped, the view, tab or filters change, or 60 s pass.
+    // The row and when its tint ends (SystemClock.elapsedRealtime) are saved, so a rotation or the process made again
+    // right after coming back keeps it for the time it has left.
     var openedLast by rememberSaveable { mutableStateOf<String?>(null) }
-    var returnedTo by remember { mutableStateOf<String?>(null) }
+    var returnedTo by rememberSaveable { mutableStateOf<String?>(null) }
+    var tintEnds by rememberSaveable { androidx.compose.runtime.mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
-        returnedTo = openedLast
-        openedLast = null
+        openedLast?.let {
+            returnedTo = it
+            tintEnds = android.os.SystemClock.elapsedRealtime() + RETURN_TINT_MS
+            openedLast = null
+        }
     }
     LaunchedEffect(returnedTo) {
         if (returnedTo != null) {
-            kotlinx.coroutines.delay(RETURN_TINT_MS)
+            kotlinx.coroutines.delay((tintEnds - android.os.SystemClock.elapsedRealtime()).coerceIn(0L, RETURN_TINT_MS))
             returnedTo = null
         }
     }
     // The view, its filters and its tab: each such list keeps its own scroll position; a change ends the tint.
     val place = "$viewKey|${filtersJson.hashCode()}|${kind.name}"
-    var tintedIn by remember { mutableStateOf(place) }
+    var tintedIn by rememberSaveable { mutableStateOf(place) }
     if (tintedIn != place) {
         tintedIn = place
         returnedTo = null
@@ -942,10 +950,26 @@ fun V2LibraryContent(
     val listState = rememberSaveable(tools?.place ?: "", saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
         androidx.compose.foundation.lazy.LazyListState()
     }
-    // Back from a recording: its row has focus (screen readers start there) and a light tint while it lasts.
+    // Back from a recording: its row is where it was on screen (recordings that came in above it meanwhile would move the
+    // saved place by as many rows), with focus (screen readers start there) and a light tint while it lasts.
     val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    var openedAt by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    var broughtBack by rememberSaveable { mutableStateOf<String?>(null) }
+    val openRow: (V2Row) -> Unit = { row ->
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == row.id }?.let { openedAt = it.offset }
+        broughtBack = null
+        onOpen(row)
+    }
     LaunchedEffect(tools?.returnedTo) {
-        if (tools?.returnedTo != null) runCatching { returnFocus.requestFocus() }
+        val t = tools ?: return@LaunchedEffect
+        val id = t.returnedTo ?: return@LaunchedEffect
+        if (broughtBack != id) {
+            val searching = query.trim().length >= 2
+            val shown = t.groups.filter { g -> !(g.name.isNotEmpty() && !searching) || g.key !in t.folded }
+            listState.bringBack(id, shown.flatMap { g -> g.rows.map { it.id } }, openedAt)
+            broughtBack = id
+        }
+        runCatching { returnFocus.requestFocus() }
     }
     val scrollToTop = extras?.scrollToTop ?: 0
     LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
@@ -1014,7 +1038,19 @@ fun V2LibraryContent(
                         Box(
                             Modifier
                                 .size(EchoTokens.Layout.controlTouchMin)
-                                .clickable(onClickLabel = text.accountAndSettings, onClick = onAvatar)
+                                .then(
+                                    // The full Library's avatar opens a menu: TalkBack says so ("drop-down list, double tap
+                                    // to show choices"); the simple page's opens Settings.
+                                    if (compactHeader) {
+                                        Modifier.clickable(
+                                            onClickLabel = stringResource(R.string.v2_open_menu),
+                                            role = androidx.compose.ui.semantics.Role.DropdownList,
+                                            onClick = onAvatar
+                                        )
+                                    } else {
+                                        Modifier.clickable(onClickLabel = text.accountAndSettings, onClick = onAvatar)
+                                    }
+                                )
                                 .semantics { contentDescription = text.accountAndSettings },
                             contentAlignment = Alignment.Center
                         ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
@@ -1184,7 +1220,7 @@ fun V2LibraryContent(
                                                 row,
                                                 selected = if (selecting) row.id in tools.selected else null,
                                                 compact = tools.compact,
-                                                onOpen = { onOpen(row) },
+                                                onOpen = { openRow(row) },
                                                 onLongClick = { tools.onToggle(row) },
                                                 returned = back,
                                                 modifier = if (back) Modifier.focusRequester(returnFocus) else Modifier
@@ -1386,7 +1422,7 @@ private fun LibraryRow(
     compact: Boolean,
     onOpen: () -> Unit,
     onLongClick: () -> Unit,
-    /** The row come back to from its recording (UX-25): the accent at 8 %, not the selection's tint. */
+    /** The row come back to from its recording (UX-25): a neutral grey ([returnedTint]), not the selection's tint. */
     returned: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -1410,11 +1446,11 @@ private fun LibraryRow(
     val important = stringResource(R.string.v2_lib_important_mark)
     EchoListRow(
         title = row.title,
-        // A selected row is tinted all across, as classic's is; the row come back to has a lighter tint of its own.
+        // A selected row is tinted all across, as classic's is; the row come back to is a light neutral grey.
         modifier = modifier.then(
             when {
                 selected == true -> Modifier.background(c.accentSoft)
-                returned -> Modifier.background(c.accent.copy(alpha = EchoTokens.Tint.returned)).semantics { this[ReturnedRow] = true }
+                returned -> Modifier.background(returnedTint(c)).semantics { this[ReturnedRow] = true }
                 else -> Modifier
             }
         ),
@@ -1540,8 +1576,35 @@ private fun statusBadge(status: RowStatus, text: V2Text): (@Composable () -> Uni
 /** How often the Library asks again while something is on its way (classic's LIVE_REFRESH_MS). */
 private const val LIVE_REFRESH_MS = 5_000L
 
+/**
+ * Puts the row [key] back at [offset] from the list's top (UX-25). The saved place is an index, off by as many rows as
+ * came in above it while its recording was open. A row off screen is found through [order], the rows' keys in the
+ * list's order: the headers between them make a first guess a little off, and the next look corrects it.
+ */
+private suspend fun androidx.compose.foundation.lazy.LazyListState.bringBack(key: Any, order: List<Any>, offset: Int) {
+    val target = order.indexOf(key)
+    if (target < 0) return
+    // The first layout after coming back.
+    androidx.compose.runtime.snapshotFlow { layoutInfo.totalItemsCount }.first { it > 0 }
+    repeat(BRING_BACK_LOOKS) {
+        val visible = layoutInfo.visibleItemsInfo
+        visible.firstOrNull { it.key == key }?.let { item ->
+            if (item.offset != offset) scrollBy((item.offset - offset).toFloat())
+            return
+        }
+        val seen = visible.firstNotNullOfOrNull { v -> order.indexOf(v.key).takeIf { it >= 0 }?.let { v.index to it } } ?: return
+        scrollToItem((seen.first + target - seen.second).coerceAtLeast(0))
+    }
+}
+
+private const val BRING_BACK_LOOKS = 5
+
 /** How long the row come back to stays tinted at most (UX-25). */
 private const val RETURN_TINT_MS = 60_000L
+
+/** The row come back to (UX-25): the text colour over the page, as the desktop's, never the accent. */
+fun returnedTint(c: com.echoledger.mobile.ui.v2.theme.EchoV2Colors): androidx.compose.ui.graphics.Color =
+    c.textPrimary.copy(alpha = if (c.isDark) EchoTokens.Tint.returnedDark else EchoTokens.Tint.returnedLight)
 
 /** Marks the row come back to (tests read it; screen readers get its focus). */
 val ReturnedRow = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("ReturnedRow")

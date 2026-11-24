@@ -156,8 +156,12 @@ object EchoTokens {
 
     /** Tints laid over a surface. */
     object Tint {
-        /** The row you came back to (v2.1 UX-25): "a bit of highlight", the accent at 8 %, never the selection's tint. */
-        const val returned = 0.08f
+        /**
+         * The row you came back to (v2.1 UX-25): a neutral grey, the text colour over the page as the desktop mixes it,
+         * 6 % in light and 9 % in dark; never the accent, so it never reads as selected.
+         */
+        const val returnedLight = 0.06f
+        const val returnedDark = 0.09f
     }
 
     object Layout {
