@@ -88,7 +88,17 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
       handledFocus.current = null;
       return;
     }
-    if (!data.withMe || handledFocus.current === focusId) return;
+    if (handledFocus.current === focusId) return;
+    // A link to one of the person's request links (Request links tab): that row is selected and brought into view.
+    if (tab === "requests") {
+      if (!data.requests) return;
+      handledFocus.current = focusId;
+      setFocused(focusId);
+      if (/^[\w-]+$/.test(focusId)) document.querySelector(`[data-row-id="${focusId}"]`)?.scrollIntoView?.({ block: "nearest" });
+      onFocusHandled?.();
+      return;
+    }
+    if (!data.withMe) return;
     handledFocus.current = focusId;
     setFocused(focusId);
     const item = data.withMe.find((i) => i.id === focusId);
@@ -96,7 +106,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     else if (/^[\w-]+$/.test(focusId)) document.querySelector(`[data-row-id="${focusId}"]`)?.scrollIntoView?.({ block: "nearest" });
     onFocusHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusId, data.withMe]);
+  }, [focusId, data.withMe, data.requests, tab]);
 
   const titleOf = useMemo(() => {
     const recordings = new Map(library.map((i) => [i.id, recordingName(i.title)]));
@@ -248,7 +258,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     const title = link.title || "Request link";
     const items = requestMenu(link);
     return (
-      <ListRow key={link.id} rowId={link.id} icon={Icons.RequestFilesIcon} title={title} actionsShown="always" metaLines={2}
+      <ListRow key={link.id} rowId={link.id} icon={Icons.RequestFilesIcon} title={title} actionsShown="always" metaLines={2} selected={link.id === focused}
         meta={[projectName(link.client_id) ? `Into ${projectName(link.client_id)}` : "Into no project", receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
         endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
         badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}

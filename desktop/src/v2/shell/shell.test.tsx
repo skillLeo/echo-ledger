@@ -534,6 +534,28 @@ describe("the app with the flags", () => {
     });
   }
 
+  it("in the app, a link to a request link opens Shared › Request links with that link selected, not the classic sheet", async () => {
+    backend({ "ui_v2.shell": true });
+    respond("links_resolve", { kind: "request", request_link_id: "rq1" });
+    respond("shared_with_me", { data: [] });
+    respond("shares_of", { data: [] });
+    respond("request_links", { data: [{ id: "rq1", title: "Voice notes for Acme", client_id: null, expires_at: null, max_files: null, max_mb: null, received: 2, revoked_at: null }] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    await act(async () => emitEvent("main:navigate", makeNavigate({ link: "https://ledger.example.test/r/tok" })));
+    await act(flushAsync);
+    await act(flushAsync);
+    await act(flushAsync);
+    const page = document.querySelector("[data-v2=shared]") as HTMLElement;
+    expect(page).not.toBeNull();
+    expect(within(page).getByRole("tab", { name: /^Request links/ })).toHaveAttribute("aria-selected", "true");
+    expect(within(page).getByText("Voice notes for Acme").closest("li")).toHaveClass("el-row--selected");
+    expect(screen.queryByRole("dialog", { name: "Request files" })).toBeNull();
+    expect(callsOf("link_open")).toHaveLength(0);
+  });
+
   it("in the app, two quick presses on the sidebar's Record send one record_now", async () => {
     backend({ "ui_v2.shell": true });
     respond("record_now", null);

@@ -254,6 +254,13 @@ describe("the v2 Shared page", () => {
     expect(screen.queryByRole("heading", { level: 1, name: "Call a" })).toBeNull();
   });
 
+  it("a link to one of your request links shows it selected in Request links, once", async () => {
+    const props = await show("requests", "r1");
+    expect(row("Send me your voice notes")).toHaveClass("el-row--selected");
+    expect(row("Old drop")).not.toHaveClass("el-row--selected");
+    expect(props.onFocusHandled).toHaveBeenCalledTimes(1);
+  });
+
   it("a link to a project sent to you shows it selected in With me", async () => {
     await show("with-me", "p");
     expect(row("Acme").className).toMatch(/el-row--selected/);

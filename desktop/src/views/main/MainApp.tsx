@@ -706,6 +706,11 @@ export default function MainApp() {
           setSharedFocus(target.shared_id);
           break;
         case "request":
+          if (ui.flags["ui_v2.shell"]) {
+            openShared("requests");
+            setSharedFocus(target.request_link_id);
+            break;
+          }
           setTab("projects");
           setProjectId(null);
           setRequestFocus({ id: target.request_link_id, seq: ++navigations.current });
