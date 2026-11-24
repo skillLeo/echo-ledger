@@ -78,6 +78,8 @@ final class ActivityFeed
         Transcript::updated(fn (Transcript $t) => $feed()->transcriptChanged($t, false));
         // Since 2.0.0-r (BE-02 review): a deleted recording's upload failure is over.
         CaptureSession::deleted(fn (CaptureSession $session) => $feed()->uploadGone($session));
+        // …and one restored from the bin whose upload is still failed needs the person again (BE-02 review).
+        CaptureSession::restored(fn (CaptureSession $session) => $feed()->uploadBack($session));
         Recording::updated(function (Recording $r) use ($feed): void {
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Failed) {
                 $feed()->uploadFailed($r);
@@ -189,7 +191,7 @@ final class ActivityFeed
                 $user->notifyNow($notification->toDatabase());
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A missed recording\'s Activity item was not written');
         }
     }
 
@@ -206,7 +208,7 @@ final class ActivityFeed
                 $user->notifications()->whereIn('data->viewData->missed_recording_id', $chunk)->delete();
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'Missed recordings\' Activity items were not deleted');
         }
     }
 
@@ -279,7 +281,7 @@ final class ActivityFeed
                 }
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A monthly limit\'s Activity item was not written');
         }
     }
 
@@ -391,6 +393,23 @@ final class ActivityFeed
             }
         } catch (Throwable $e) {
             self::reportSafely($e, 'An upload failure was not resolved');
+        }
+    }
+
+    /**
+     * A recording back from the undo bin: when one of its uploads is still failed, its upload failure is unresolved and
+     * unread again, so it is back in the group and on the badge.
+     */
+    public function uploadBack(CaptureSession $session): void
+    {
+        try {
+            if (! Recording::query()->where('capture_session_id', $session->id)->where('upload_status', UploadStatus::Failed->value)->exists()) {
+                return;
+            }
+            DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())->where('notifiable_id', $session->user_id)
+                ->where('dedupe_key', 'upload_failed:'.$session->id)->whereNotNull('resolved_at')->update(['resolved_at' => null, 'read_at' => null]);
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not brought back');
         }
     }
 

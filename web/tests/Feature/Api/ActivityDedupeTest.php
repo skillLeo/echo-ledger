@@ -215,6 +215,45 @@ it('resolves the upload failures the migration finds already over, and leaves a 
         ->and(activityOf($me, '/api/activity/groups')['data'][0]['session_ids'])->toBe([$failing->id]);
 });
 
+it('resolves every finished upload failure across pages, by id (more than one chunk)', function () {
+    $me = Fx::user();
+    $live = Fx::session($me, null, ['title' => 'Still failing']);
+    DB::table('recordings')->where('id', Fx::pendingRecording($live, 'audio')->id)->update(['upload_status' => 'failed']);
+    DB::table('notifications')->delete();
+    $sessions = [...collect(range(1, 7))->map(fn (int $i) => (string) Str::ulid())->all(), $live->id];
+    foreach ($sessions as $i => $session) {
+        DB::table('notifications')->insert(['id' => sprintf('00000000-0000-4000-8000-%012d', $i), 'type' => DatabaseNotification::class,
+            'notifiable_type' => $me->getMorphClass(), 'notifiable_id' => $me->id, 'read_at' => null, 'created_at' => now(), 'updated_at' => now(),
+            'data' => json_encode(['title' => 't', 'body' => 'b', 'viewData' => ['kind' => 'upload_failed', 'session_id' => $session]])]);
+    }
+
+    $migration = require database_path('migrations/2026_12_30_000001_add_activity_dedupe_to_notifications.php');
+    $migration->chunk = 2;
+    $migration->up();
+
+    expect(DB::table('notifications')->whereNull('resolved_at')->pluck('dedupe_key')->all())->toBe(['upload_failed:'.$live->id])
+        ->and(DB::table('notifications')->whereNotNull('resolved_at')->count())->toBe(7);
+});
+
+it('brings an upload failure back when its recording returns from the bin with its upload still failed', function () {
+    $me = Fx::user();
+    $recording = failingUpload($me, 'Back from the bin');
+    $session = $recording->captureSession;
+    $session->delete();
+    expect(collect(activityOf($me)['data'])->firstWhere('session_id', $session->id))->toMatchArray(['resolved' => true, 'read' => true]);
+
+    $session->restore();
+    expect(collect(activityOf($me)['data'])->firstWhere('session_id', $session->id))->toMatchArray(['resolved' => false, 'read' => false])
+        ->and(activityOf($me, '/api/activity/groups')['data'][0]['session_ids'])->toBe([$session->id]);
+
+    // One whose upload went through meanwhile stays resolved.
+    $done = failingUpload($me, 'Uploaded while away');
+    $done->captureSession->delete();
+    DB::table('recordings')->where('id', $done->id)->update(['upload_status' => 'ready']);
+    $done->captureSession->restore();
+    expect(collect(activityOf($me)['data'])->firstWhere('session_id', $done->capture_session_id)['resolved'])->toBeTrue();
+});
+
 it('resolves an upload failure when its recording is deleted, and only once no upload of it is still failed', function () {
     $me = Fx::user();
     $deleted = failingUpload($me, 'Deleted after');

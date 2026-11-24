@@ -20,6 +20,9 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /** How many items are read at a time (a test passes a small one to cross a page). */
+    public int $chunk = 500;
+
     public function up(): void
     {
         Schema::table('notifications', function (Blueprint $table): void {
@@ -62,7 +65,7 @@ return new class extends Migration
         $groups = [];
         DB::table('notifications')->orderByDesc('created_at')->orderByDesc('id')
             ->select(['id', 'notifiable_type', 'notifiable_id', 'read_at', 'repeat_count', 'dedupe_key', 'data->viewData->kind as kind', 'data->viewData->session_id as session_id'])
-            ->chunk(500, function ($rows) use (&$groups): void {
+            ->chunk($this->chunk, function ($rows) use (&$groups): void {
                 foreach ($rows as $row) {
                     $kind = is_string($row->kind) ? $row->kind : '';
                     $session = is_string($row->session_id) ? $row->session_id : '';
@@ -106,9 +109,11 @@ return new class extends Migration
     private function resolveFinished(): void
     {
         $now = now();
+        // By id, not by offset: resolving a page takes its items out of `resolved_at is null`, and an offset would then
+        // skip the next page's first ones (BE-02 review).
         DB::table('notifications')->where('dedupe_key', 'like', 'upload_failed:%')->whereNull('resolved_at')
-            ->select(['id', 'dedupe_key', 'read_at'])->orderBy('id')
-            ->chunk(500, function ($rows) use ($now): void {
+            ->select(['id', 'dedupe_key', 'read_at'])
+            ->chunkById($this->chunk, function ($rows) use ($now): void {
                 $sessions = $rows->map(fn ($row): string => substr((string) $row->dedupe_key, strlen('upload_failed:')))->unique()->values()->all();
                 $live = DB::table('capture_sessions')->whereIn('id', $sessions)->whereNull('deleted_at')->pluck('id')->flip();
                 $failing = DB::table('recordings')->whereIn('capture_session_id', $sessions)->where('upload_status', 'failed')
@@ -120,6 +125,6 @@ return new class extends Migration
                     }
                     DB::table('notifications')->where('id', $row->id)->update(['resolved_at' => $now, 'read_at' => $row->read_at ?? $now]);
                 }
-            });
+            }, 'id');
     }
 };
