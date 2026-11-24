@@ -45,7 +45,7 @@ function sharedPage(object $test): string
 const SHARED_WORDS = [
     'Shared with me' => 'میرے ساتھ شیئر شدہ',
     'Recordings and projects others sent you. Save one to keep your own copy in this workspace.' => 'وہ ریکارڈنگز اور پروجیکٹس جو دوسروں نے آپ کو بھیجے۔ اس ورک اسپیس میں اپنی کاپی رکھنے کے لیے انہیں محفوظ کریں۔',
-    'Title' => 'عنوان', 'From' => 'ماخذ', 'Note' => 'نوٹ', 'Sent' => 'بھیجا گیا', 'Saved' => 'محفوظ کیا', 'Not yet' => 'ابھی نہیں',
+    'Title' => 'عنوان', 'From' => 'منجانب', 'Note' => 'نوٹ', 'Sent' => 'بھیجا گیا', 'Saved' => 'محفوظ کیا', 'Not yet' => 'ابھی نہیں',
     'Recording' => 'ریکارڈنگ', 'Open' => 'کھولیں', 'Save to my library' => 'میری لائبریری میں محفوظ کریں', 'Remove' => 'ہٹائیں',
 ];
 
@@ -93,4 +93,23 @@ it('keeps every word in English, in the new frame and in classic', function () {
     // The notices too.
     sharedUrdu(false, 'en', $this->me);
     Livewire::test(SharedWithMe::class)->callAction(TestAction::make('remove')->table($this->item))->assertNotified('Removed from Shared with me');
+});
+
+it('says From as the person who shared it, from a group file of its own, with English as it was', function () {
+    $en = require lang_path('en/shared_context.php');
+    $ur = require lang_path('ur/shared_context.php');
+    expect(array_keys($en))->toBe(array_keys($ur))
+        ->and($en['col_from'])->toBe('From')
+        ->and($ur['col_from'])->toBe('منجانب')
+        ->and(__('shared_context.col_from', [], 'en'))->toBe('From')
+        ->and(__('shared_context.col_from', [], 'ur'))->toBe('منجانب')
+        // ur.json's "From" (a source) stays as it is for the words that mean that.
+        ->and(__('From', [], 'ur'))->toBe('ماخذ');
+
+    sharedUrdu(true, 'ur', $this->me);
+    expect(sharedPage($this))->toContain('>منجانب<')->not->toContain('>ماخذ<');
+    foreach ([true, false] as $v2) {
+        sharedUrdu($v2, 'en', $this->me);
+        expect(sharedPage($this))->toContain('>From<')->not->toContain('shared_context');
+    }
 });

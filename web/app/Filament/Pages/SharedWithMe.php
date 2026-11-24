@@ -87,10 +87,11 @@ class SharedWithMe extends Page implements HasTable
             ->columns([
                 TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()
                     ->description(fn (SentItem $item): string => $item->kind === 'project' ? __('Project') : __('Recording')),
-                // DES-08: in the new console the sender's avatar is beside their name, their email under it.
+                // DES-08: in the new console the sender's avatar is beside their name, their email under it. "From" is the
+                // person who shared it, a word of its own (lang/*/shared_context.php), not ur.json's "From" (a source).
                 ConsoleV2::any()
-                    ? TextColumn::make('sender.name')->label(__('From'))->formatStateUsing(fn (SentItem $item): HtmlString => PersonAvatar::cell($item->sender, $item->sender->email))
-                    : TextColumn::make('sender.name')->label(__('From'))->description(fn (SentItem $item): string => $item->sender->email),
+                    ? TextColumn::make('sender.name')->label(__('shared_context.col_from'))->formatStateUsing(fn (SentItem $item): HtmlString => PersonAvatar::cell($item->sender, $item->sender->email))
+                    : TextColumn::make('sender.name')->label(__('shared_context.col_from'))->description(fn (SentItem $item): string => $item->sender->email),
                 TextColumn::make('note')->label(__('Note'))->placeholder('—')->limit(80)->wrap(),
                 TextColumn::make('sent_at')->label(__('Sent'))->since()->sortable(),
                 TextColumn::make('saved_at')->label(__('Saved'))->since()->placeholder(__('Not yet')),
