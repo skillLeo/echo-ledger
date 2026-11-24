@@ -77,11 +77,10 @@ export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
 
 /**
- * UX-25: where the list was when a recording was opened from it, per place and view (in memory, this run): the scroll,
- * the recording and its row's place in the list. Back from the recording the list is there again.
+ * UX-25: where the list was when a recording was opened from it: the place and view, the scroll, the recording and its
+ * row's place in the list. Back from the recording the list is there again.
  */
-type KeptPlace = { top: number; rowId: string; index: number };
-const KEPT_PLACES = new Map<string, KeptPlace>();
+type KeptPlace = { key: string; top: number; rowId: string; index: number };
 /** How long the recording you came back from keeps its tint (the owner's "a bit of highlight" that stays). */
 export const LAST_OPENED_MS = 60_000;
 /** A search is one step of Back and Forward once typing has stopped this long. */
@@ -201,9 +200,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       if (list) {
         const box = scrollRootOf(root.current);
         const rows = [...list.querySelectorAll<HTMLElement>("[data-row-id]")];
-        const kept = { top: box?.scrollTop ?? 0, rowId: id, index: Math.max(0, rows.findIndex((r) => r.dataset.rowId === id)) };
-        KEPT_PLACES.set(viewKeyRef.current, kept);
-        returning.current = { key: viewKeyRef.current, ...kept };
+        returning.current = { key: viewKeyRef.current, top: box?.scrollTop ?? 0, rowId: id, index: Math.max(0, rows.findIndex((r) => r.dataset.rowId === id)) };
         scrollTopOnOpen.current = true;
       }
       setLastOpened(null);
@@ -218,7 +215,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const openIdRef = useRef<string | null>(null);
   openIdRef.current = openId;
   /** The place to come back to from the recording open now (UX-25). */
-  const returning = useRef<(KeptPlace & { key: string }) | null>(null);
+  const returning = useRef<KeptPlace | null>(null);
   const scrollTopOnOpen = useRef(false);
   /** The recording you came back from: a quiet tint on its row until another is opened or clicked, the view, tab or
    * filters change, or 60 s pass (UX-25). Not the selection's colour. */
@@ -589,6 +586,32 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     restoredId.current = null;
     if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
   }, [items, initialOpen]);
+  // A stuck group heading also covers the scrolling box's top padding (UX-25 review): mark the stuck ones, and give
+  // the cover the padding's height, as the list scrolls.
+  useEffect(() => {
+    const box = scrollRootOf(root.current);
+    if (!box) return;
+    let frame = 0;
+    const mark = () => {
+      frame = 0;
+      const list = root.current?.querySelector<HTMLElement>(".el-lib-list");
+      if (!list) return;
+      const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
+      list.style.setProperty("--el-sticky-cover", `${pad}px`);
+      const top = box.getBoundingClientRect().top + pad;
+      for (const h of list.querySelectorAll<HTMLElement>(":scope > .el-list-section")) {
+        h.toggleAttribute("data-stuck", box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1);
+      }
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(mark);
+    };
+    box.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      box.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
   // A recording opened from the list starts at its own top (UX-25 keeps the list's place for the way back). In the
   // Table it opens in a drawer over the list, which stays as it is.
   useEffect(() => {
@@ -1296,9 +1319,11 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                       const at = tabsShown.indexOf(t);
                       const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
                       const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
-                      if (!step) return;
+                      // Home and End: the first and the last tab (Back to top leaves keys in a tab list alone).
+                      const to = e.key === "Home" ? 0 : e.key === "End" ? tabsShown.length - 1 : step ? (at + step + tabsShown.length) % tabsShown.length : -1;
+                      if (to < 0) return;
                       e.preventDefault();
-                      const next = tabsShown[(at + step + tabsShown.length) % tabsShown.length];
+                      const next = tabsShown[to];
                       setTab(next);
                       (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
                     }}>

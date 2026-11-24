@@ -121,16 +121,20 @@ try {
       await shoot(page, `after-1280-en-${theme}-selecting.png`);
       await page.close();
     }
-    // UX-25 in a short window (so the list is more than a screen): back from a recording, its row keeps the tint and
-    // focus; scrolled down, Back to top at the list's bottom end corner. Light, dark and Urdu (right to left).
+    // UX-25 in a short window (so the list is more than a screen): back from a recording, its row keeps the grey tint
+    // (beside a picked row's accent); scrolled down, Back to top at the list's bottom end corner. Light, dark and Urdu.
     for (const [lang, theme] of [["en", "light"], ["en", "dark"], ["ur", "light"]]) {
       const page = await open(1280, 400, lang, theme);
       await page.locator("button[data-row-id]").nth(5).click();
       await page.getByRole("button", { name: "Library", exact: true }).last().click();
       await page.locator(".el-rec--last").waitFor();
+      // The next row picked (J, then X): the selection's accent beside the last-opened row's neutral grey.
+      await page.keyboard.press("j");
+      await page.keyboard.press("x");
       await page.mouse.move(0, 0);
       await page.waitForTimeout(200);
       await shoot(page, `ux25-1280-${lang}-${theme}-last-opened.png`);
+      await page.keyboard.press("Escape");
       await page.evaluate(() => { const box = document.querySelector(".content"); if (box) { box.scrollTop = box.scrollHeight; box.dispatchEvent(new Event("scroll")); } });
       await page.waitForTimeout(400);
       await shoot(page, `ux25-1280-${lang}-${theme}-back-to-top.png`);

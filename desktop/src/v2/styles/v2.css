@@ -1654,6 +1654,11 @@ body.resizing-sidebar { cursor: col-resize; user-select: none; }
 [data-v2="library"]:not(:has(.el-selectbar)) .el-list > .el-list-section {
   position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas);
 }
+/* Stuck, it covers the content area's top padding above it too (its height is set from the box that scrolls), so no
+   row shows over the heading while the list scrolls under it (UX-25 review). */
+[data-v2="library"]:not(:has(.el-selectbar)) .el-lib-list > .el-list-section[data-stuck]::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--el-sticky-cover, 0); background: var(--el-role-bg-canvas);
+}
 
 /* The import sheet's files, and the hint over the window while files are dragged over it. */
 .el-import__files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-8); max-block-size: calc(var(--el-space-64) * 3); overflow-y: auto; }
@@ -1860,10 +1865,11 @@ span.el-nav-section__title { cursor: default; }
 .el-rec--compact { block-size: var(--el-layout-row-compact); }
 .el-rec:hover { background: var(--el-role-bg-subtle); }
 .el-rec--selected { background: var(--el-role-accent-soft); }
-/* UX-25: the recording you came back from keeps a quiet 8% accent tint (Mail's last-opened row), never the selection's
-   colour and never a tick; it goes when another row is opened or pressed, the view changes, or after 60 s. */
-.el-rec--last { background: color-mix(in srgb, var(--el-role-accent-default) 8%, transparent); }
-.el-rec--last:hover { background: color-mix(in srgb, var(--el-role-accent-default) 12%, transparent); }
+/* UX-25: the recording you came back from keeps a quiet neutral grey (Mail's last-viewed row): the text colour at 6%, so
+   it is never the accent of a selection and never a tick; it goes when another row is opened or pressed, the view
+   changes, or after 60 s. */
+.el-rec--last { background: color-mix(in srgb, var(--el-role-text-primary) 6%, transparent); }
+.el-rec--last:hover { background: color-mix(in srgb, var(--el-role-text-primary) 9%, transparent); }
 .el-rec__hit { position: absolute; inset: 0; border: 0; padding: 0; background: transparent; border-radius: inherit; cursor: pointer; }
 .el-rec__hit:focus-visible { outline-offset: calc(var(--el-focus-offset) * -1); }
 /* The box: on hover and keyboard focus, always while selecting; it takes no room otherwise. */

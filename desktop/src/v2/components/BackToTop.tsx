@@ -15,9 +15,10 @@ export function scrollRootOf(el: Element | null): HTMLElement | null {
   return (document.scrollingElement as HTMLElement | null) ?? null;
 }
 
-/** Keys a field, a dialog or a menu keeps for itself. */
+/** Keys a field, a dialog, a menu, a tab list or a toolbar keeps for itself (Home there is its first item). */
 const typing = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
+  target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)
+    || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tablist"], [role="toolbar"]'));
 
 export type BackToTopProps = {
   /** The first row, focused at the top (within the box that scrolls). */

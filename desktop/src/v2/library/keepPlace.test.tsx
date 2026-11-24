@@ -3,6 +3,9 @@
 // from keeps a quiet tint ("last opened", not the selection's colour) and keyboard focus until another row is opened
 // or clicked, the view, tab or filters change, or 60 s pass. Back to top shows after one screen, and its click, Home
 // and ⌘↑ (Ctrl+Home) all reach the top with focus on the first row.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
@@ -155,5 +158,69 @@ describe("Back to top (UX-25)", () => {
     scrollTo(scroller, 3000);
     fireEvent.keyDown(screen.getByRole("searchbox", { name: "Search recordings" }), { key: "Home" });
     expect(scroller.scrollTop).toBe(3000);
+  });
+});
+
+describe("Home where it means the first item (UX-25 review)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    window.localStorage.clear();
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+  });
+
+  it("in the kind tabs Home and End go to the first and last tab, in the selection bar Home stays there; neither scrolls the list", async () => {
+    const { scroller } = await show();
+    const tabs = within(screen.getByRole("tablist", { name: "Kinds of recording" }));
+    fireEvent.click(tabs.getByRole("tab", { name: /^Meetings/ }));
+    act(() => tabs.getByRole("tab", { name: /^Meetings/ }).focus());
+    scrollTo(scroller, 3000);
+    fireEvent.keyDown(tabs.getByRole("tab", { name: /^Meetings/ }), { key: "Home" });
+    expect(scroller.scrollTop).toBe(3000);
+    expect(tabs.getByRole("tab", { name: /^All/ })).toHaveFocus();
+    expect(tabs.getByRole("tab", { name: /^All/ })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(tabs.getByRole("tab", { name: /^All/ }), { key: "End" });
+    expect(tabs.getAllByRole("tab").at(-1)).toHaveFocus();
+    expect(scroller.scrollTop).toBe(3000);
+    // The selection bar (row 2 while picking): Home is the toolbar's, not Back to top's.
+    fireEvent.click(tabs.getByRole("tab", { name: /^All/ }));
+    fireEvent.click(row("Call 1"), { metaKey: true });
+    const bar = within(screen.getByRole("toolbar", { name: "Selected recordings" }));
+    act(() => bar.getByRole("button", { name: "Move to project" }).focus());
+    fireEvent.keyDown(bar.getByRole("button", { name: "Move to project" }), { key: "Home" });
+    expect(scroller.scrollTop).toBe(3000);
+  });
+});
+
+describe("a stuck group heading (UX-25 review)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    window.localStorage.clear();
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+  });
+
+  it("covers the content area's top padding above it too, so no row shows over it; opaque in light and dark", async () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\[data-v2="library"\]:not\(:has\(\.el-selectbar\)\) \.el-lib-list > \.el-list-section\[data-stuck\]::before \{[^}]*block-size: var\(--el-sticky-cover, 0\); background: var\(--el-role-bg-canvas\);/);
+    const { scroller } = await show();
+    scroller.style.paddingTop = "24px";
+    const headings = () => [...document.querySelectorAll<HTMLElement>(".el-lib-list > .el-list-section")];
+    // The first heading sits where a stuck one does (24 px from the box's top), the second further down.
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const top = this === scroller ? 0 : this === headings()[0] ? 24 : 400;
+      return { top, bottom: top + 28, left: 0, right: 800, width: 800, height: 28, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    scrollTo(scroller, 900);
+    await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    expect(headings().map((h) => h.hasAttribute("data-stuck"))).toEqual([true, ...headings().slice(1).map(() => false)]);
+    expect(screen.getByRole("list", { name: "Recordings" }).style.getPropertyValue("--el-sticky-cover")).toBe("24px");
+    // Back at the top nothing is stuck.
+    scrollTo(scroller, 0);
+    await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    expect(headings().some((h) => h.hasAttribute("data-stuck"))).toBe(false);
+    spy.mockRestore();
   });
 });
