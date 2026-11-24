@@ -58,4 +58,14 @@ describe("the Activity badge counts only what needs the person (v1.6, P6)", () =
     expect(badgeSpoken(1)).toBe("1 needs you");
     expect(badgeSpoken(3)).toBe("3 need you");
   });
+
+  it("2.0.0-v: the server's own problem (super admins only) is a problem on the badge until it is resolved", () => {
+    expect(isProblem("server_problem")).toBe(true);
+    expect(needsAction({ kind: "server_problem", read: false })).toBe(true);
+    // "Fixed: uploads work again": the same item, resolved; a resolved problem of any kind no longer needs the person.
+    expect(needsAction({ kind: "server_problem", read: false, resolved: true })).toBe(false);
+    expect(needsAction({ kind: "upload_failed", read: false, resolved: true })).toBe(false);
+    expect(actionCount([{ kind: "server_problem", read: false }, { kind: "server_problem", read: false, resolved: true }], 1)).toBe(2);
+  });
 });
+

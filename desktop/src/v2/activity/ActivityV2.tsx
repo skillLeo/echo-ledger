@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem, type SkippedItem } from "../../lib/ipc";
 import { dayGroup } from "../../lib/library";
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
-import { actionCount, isProblem, needsAction as asksForAction } from "../../lib/badge";
+import { actionCount, isProblem, needsAction as asksForAction, SERVER_PROBLEM } from "../../lib/badge";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { activitySubtitle, shortWhen, useInProgress } from "../../views/main/ActivityCentre";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
@@ -26,8 +26,11 @@ const ACTIVITY_ITEM = ["place.open", "activity.markRead", "-", "activity.retry"]
  */
 const retries = (i: Pick<ActivityItem, "kind">) => i.kind === "upload_failed";
 
-const iconOf = (kind: string | null): IconType =>
-  isProblem(kind) ? Icons.ErrorIcon : kind === "transcript_ready" ? Icons.CheckIcon : kind === "device_paired" ? Icons.LaptopIcon : Icons.BellIcon;
+/** An item's icon: a problem that is over is done; the server's own (server_problem) is a server; other problems the error. */
+const iconOf = (i: Pick<ActivityItem, "kind" | "resolved">): IconType =>
+  i.resolved && isProblem(i.kind) ? Icons.ReadyIcon
+    : i.kind === SERVER_PROBLEM ? Icons.ServerIcon
+      : isProblem(i.kind) ? Icons.ErrorIcon : i.kind === "transcript_ready" ? Icons.CheckIcon : i.kind === "device_paired" ? Icons.LaptopIcon : Icons.BellIcon;
 
 export function ActivityV2({ status, show = "all", onOpenRecording, onReview, onFailed, onItems, say }: {
   status: AppStatus;
@@ -147,7 +150,7 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
   };
 
   const row = (i: ActivityItem) => (
-    <ListRow key={i.id} icon={iconOf(i.kind)} title={i.title ?? ""} strong={!i.read}
+    <ListRow key={i.id} icon={iconOf(i)} title={i.title ?? ""} strong={!i.read}
       meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body].filter(Boolean).join(" · ")}
       badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
       endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)}

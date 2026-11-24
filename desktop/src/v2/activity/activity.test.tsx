@@ -150,6 +150,25 @@ describe("the v2 Activity page", () => {
     expect(say).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.");
   });
 
+  it("2.0.0-v: the server's own problem (super admins only) shows its words as they are, with the server's icon; fixed, it is done", async () => {
+    respond("activity_list", { data: [
+      { id: "s1", kind: "server_problem", title: "Uploads are failing: the server's PHP is missing sodium", body: "sudo apt install php8.3-sodium", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: NOW.toISOString(), resolved: true },
+    ], unread_count: 2 });
+    const { onItems } = await show();
+    const open = row("Uploads are failing: the server's PHP is missing sodium");
+    expect(open).toHaveTextContent("sudo apt install php8.3-sodium");
+    // The server's icon (Lucide server: its two racks' dots), not the bell or the generic error.
+    expect(open.querySelector('svg path[d="M6 6h.01"]')).not.toBeNull();
+    const fixed = row("Fixed: uploads work again");
+    expect(fixed.querySelector('svg path[d="M6 6h.01"]')).toBeNull();
+    expect(fixed.querySelector('svg path[d="m9 12 2 2 4-4"]'), "done: the ready check").not.toBeNull();
+    // Only the open one needs the person.
+    const counted = (onItems.mock.calls.at(-1)?.[0] ?? []) as { id: string }[];
+    expect(counted.map((i) => i.id)).toEqual(["s1", "s2"]);
+    expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
+  });
+
   it("loading, a load error with Retry, and All caught up", async () => {
     fail("activity_list", "The server is unreachable.");
     render(<ActivityV2 status={makeStatus()} onOpenRecording={vi.fn()} onReview={vi.fn()} onFailed={vi.fn()} />);
