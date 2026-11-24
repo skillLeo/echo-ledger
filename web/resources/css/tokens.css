@@ -149,6 +149,7 @@
   --el-text-body-mobile-weight: 400;
   --el-layout-page-padding-desktop: 24px;
   --el-layout-page-padding-mobile: 16px;
+  --el-layout-page-padding-phone: 24px;
   --el-layout-row-comfortable: 56px;
   --el-layout-row-compact: 44px;
   --el-layout-row-mobile: 64px;
@@ -156,6 +157,8 @@
   --el-layout-control-height-mobile: 48px;
   --el-layout-control-touch-min: 48px;
   --el-layout-titlebar-macos: 40px;
+  --el-tint-returned-light: 0.06;
+  --el-tint-returned-dark: 0.09;
   --el-component-button-radius: 4px;
   --el-component-button-height: 36px;
   --el-component-button-padding-x: 12px;
@@ -171,6 +174,7 @@
   --el-component-list-row-height-compact: 44px;
   --el-component-list-row-height-mobile: 64px;
   --el-component-list-row-height-mobile-tall: 72px;
+  --el-component-big-button-height: 56px;
   --el-component-record-button: 56px;
   --el-component-toast-duration: 6000ms;
   --el-component-recording-dot-pulse: 1500ms;
