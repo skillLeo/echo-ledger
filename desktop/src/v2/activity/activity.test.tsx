@@ -115,6 +115,17 @@ describe("the v2 Activity page", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("an upload that has since reached the server (resolved) offers no Retry: only Open", async () => {
+    respond("activity_list", { data: [
+      { id: "n6", kind: "upload_failed", title: "Uploaded", body: "Voice note", session_id: "s6", read: true, resolved: true, at: new Date(2026, 9, 28, 8, 0).toISOString() }], unread_count: 0 });
+    const { onFailed } = await show();
+    fireEvent.contextMenu(row("Uploaded"), { clientX: 20, clientY: 30 });
+    const words = [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    expect(words).toEqual(["Open"]);
+    expect(screen.queryByRole("menuitem", { name: "Retry" })).toBeNull();
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
   it("groups the rest by Today and Earlier, the time today and the day before; a recovered recording says Recovered", async () => {
     respond("recovered_sessions", ["s1"]);
     await show();

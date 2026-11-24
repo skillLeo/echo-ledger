@@ -21,10 +21,11 @@ import { useActions } from "../actions/useActions";
 const ACTIVITY_ITEM = ["place.open", "activity.markRead", "-", "activity.retry"] as const;
 
 /**
- * Retry only where it retries something: an upload that stopped, in failed uploads. A transcription that failed is tried
- * again on its recording's page (Open), and minutes used up have nothing to retry.
+ * Retry only where it retries something: an upload that stopped, in failed uploads, until it has reached the server
+ * (resolved: "Uploaded"). A transcription that failed is tried again on its recording's page (Open), and minutes used up
+ * have nothing to retry.
  */
-const retries = (i: Pick<ActivityItem, "kind">) => i.kind === "upload_failed";
+const retries = (i: Pick<ActivityItem, "kind" | "resolved">) => i.kind === "upload_failed" && !i.resolved;
 
 /** An item's icon: a problem that is over is done; the server's own (server_problem) is a server; other problems the error. */
 const iconOf = (i: Pick<ActivityItem, "kind" | "resolved">): IconType =>
