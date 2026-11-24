@@ -1523,10 +1523,12 @@ it('adds the call rules table and the settings column empty, and takes both away
 
     cycleArtisan('migrate', ['--step' => 1]);
     expect($db->getSchemaBuilder()->hasTable('call_rules'))->toBeTrue()
+        ->and($db->getSchemaBuilder()->hasTable('call_declined_offers'))->toBeTrue()
         ->and($db->table('users')->where('id', $id)->value('call_settings'))->toBeNull()
         ->and($db->table('call_rules')->count())->toBe(0);
 
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_CALL_RULES]);
     expect($db->getSchemaBuilder()->hasTable('call_rules'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasTable('call_declined_offers'))->toBeFalse()
         ->and($db->table('users')->where('id', $id)->value('name'))->toBe('Person');
 });

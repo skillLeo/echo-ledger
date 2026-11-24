@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
+use App\Models\CallDeclinedOffer;
 use App\Models\CallRule;
 use App\Models\User;
 use App\Support\Api\FieldErrors;
@@ -107,11 +108,8 @@ final class CallRules
             ...$this->settings($user),
             'updated_at' => is_string($saved['updated_at'] ?? null) ? $saved['updated_at'] : null,
             'rules' => $this->rules($user)->map(fn (CallRule $rule): array => $rule->toApi())->all(),
-            // Since 2.0.0-x (CC5): newest first, without the matching key the server keeps beside each.
-            'declined' => array_map(fn (array $entry): array => array_filter([
-                'kind' => $entry['kind'] ?? null, 'number' => $entry['number'] ?? null, 'name' => $entry['name'] ?? null,
-                'source_app' => $entry['source_app'] ?? null,
-            ], fn ($value): bool => $value !== null), is_array($saved['declined'] ?? null) ? array_values($saved['declined']) : []),
+            // Since 2.0.0-x (CC5): newest first.
+            'declined' => $this->declined($user),
         ];
     }
 
@@ -153,7 +151,8 @@ final class CallRules
 
     /**
      * `POST /api/call-rules/declined` (since 2.0.0-x): a contact or Source whose "Always …?" offer was turned down,
-     * newest first; one already there moves to the front. At most MAX_DECLINED, the oldest going.
+     * newest first; one already there moves to the front. At most MAX_DECLINED, the oldest going. Kept in its own
+     * table (call_declined_offers), not in users.call_settings, which every request reads (B5 + CC5 review).
      *
      * @param  array<string, mixed>  $input
      * @return bool whether it is new
@@ -167,22 +166,31 @@ final class CallRules
             'source_app' => ['required_if:kind,source', 'nullable', 'string', Rule::in(self::sources())],
         ]);
         $fields = $this->fields([...$data, 'action' => 'ask']);
-        $entry = array_filter(['kind' => $fields['kind'], 'number' => $fields['number'], 'name' => $fields['name'],
-            'source_app' => $fields['source_app'], 'match_key' => $fields['match_key']], fn ($v): bool => $v !== null);
 
-        return $this->changed($user, function (array $settings) use ($entry): array {
-            $list = is_array($settings['declined'] ?? null) ? array_values($settings['declined']) : [];
-            foreach ($list as $old) {
-                // The same person, already kept with the country code: keep that form, as rules do.
-                if (self::sameTarget($old, $entry) && isset($old['number'], $entry['number']) && str_starts_with((string) $old['number'], '+')
-                    && ! str_starts_with((string) $entry['number'], '+')) {
-                    $entry['number'] = $old['number'];
-                    $entry['match_key'] = $old['number'];
-                }
+        return $this->changed($user, function (array $settings) use ($user, $fields): array {
+            $offers = CallDeclinedOffer::query()->where('user_id', $user->id)->where('kind', $fields['kind']);
+            $old = (clone $offers)->where('match_key', $fields['match_key'])->first();
+            if ($old === null && $fields['number'] !== null) {
+                // The same person in another form: the exact number first, else the one with the same last 10 digits.
+                $near = (clone $offers)->whereNotNull('number')->get()->filter(fn (CallDeclinedOffer $o): bool => self::sameNumber((string) $o->number, (string) $fields['number']));
+                $old = $near->count() === 1 ? $near->first() : null;
             }
-            $kept = array_values(array_filter($list, fn (array $old): bool => ! self::sameTarget($old, $entry)));
-            $new = count($kept) === count($list);
-            $settings['declined'] = array_slice([$entry, ...$kept], 0, self::MAX_DECLINED);
+            $new = $old === null;
+            // A number kept with its country code keeps that form.
+            $keepForm = $old?->number !== null && $fields['number'] !== null && str_starts_with((string) $old->number, '+')
+                && ! str_starts_with($fields['number'], '+');
+            $number = $keepForm ? $old->number : $fields['number'];
+            $matchKey = $keepForm ? $old->match_key : $fields['match_key'];
+            // Made again rather than changed, so it is the newest even within the same second (ordered by time, then id).
+            $old?->delete();
+            CallDeclinedOffer::query()->create(['user_id' => $user->id, 'kind' => $fields['kind'], 'match_key' => $matchKey, 'number' => $number,
+                'name' => $fields['name'], 'source_app' => $fields['source_app'], 'declined_at' => now()]);
+            // Past the most there can be, the oldest go.
+            $extra = CallDeclinedOffer::query()->where('user_id', $user->id)->orderByDesc('declined_at')->orderByDesc('id')
+                ->skip(self::MAX_DECLINED)->take(PHP_INT_MAX)->pluck('id');
+            if ($extra->isNotEmpty()) {
+                CallDeclinedOffer::query()->whereIn('id', $extra)->delete();
+            }
 
             return [$settings, $new];
         });
@@ -191,30 +199,18 @@ final class CallRules
     /** `DELETE /api/call-rules/declined` (since 2.0.0-x): every turned-down offer forgotten. */
     public function forgetDeclined(User $user): void
     {
-        $this->changed($user, function (array $settings): array {
-            $settings['declined'] = [];
+        $this->changed($user, function (array $settings) use ($user): array {
+            CallDeclinedOffer::query()->where('user_id', $user->id)->delete();
 
             return [$settings, null];
         });
     }
 
-    /**
-     * Whether two declined entries are the same contact or Source: the same Source, the same number (with or without
-     * its country code), or, without numbers, the same name.
-     *
-     * @param  array<string, mixed>  $a
-     * @param  array<string, mixed>  $b
-     */
-    private static function sameTarget(array $a, array $b): bool
+    /** @return list<array<string, string>> the person's turned-down offers, newest first */
+    public function declined(User $user): array
     {
-        if (($a['kind'] ?? null) !== ($b['kind'] ?? null)) {
-            return false;
-        }
-        if (isset($a['number'], $b['number'])) {
-            return self::sameNumber((string) $a['number'], (string) $b['number']);
-        }
-
-        return ($a['match_key'] ?? null) === ($b['match_key'] ?? null);
+        return CallDeclinedOffer::query()->where('user_id', $user->id)->orderByDesc('declined_at')->orderByDesc('id')->get()
+            ->map(fn (CallDeclinedOffer $offer): array => $offer->toApi())->values()->all();
     }
 
     /** @return Collection<int, CallRule> contact, then group, then Source; by name within each */

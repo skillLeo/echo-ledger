@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
+use App\Models\CallDeclinedOffer;
 use App\Models\CallRule;
 use App\Models\LabelList;
 use App\Models\MissedRecording;
@@ -191,8 +192,8 @@ function isoWorld(bool $sameWorkspace = false): array
     $bobRule = CallRule::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'match_key' => '+923009990001', 'number' => '+923009990001',
         'name' => 'BOB-SECRET-CLIENT contact', 'action' => 'dont_record']);
     // Since 2.0.0-x: an offer Bob turned down, naming the same person.
-    $bob->forceFill(['call_settings' => ['declined' => [['kind' => 'contact', 'number' => '+923009990001', 'name' => 'BOB-SECRET-CLIENT declined',
-        'match_key' => '+923009990001']]]])->save();
+    CallDeclinedOffer::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'number' => '+923009990001', 'name' => 'BOB-SECRET-CLIENT declined',
+        'match_key' => '+923009990001', 'declined_at' => now()]);
     app('auth')->forgetGuards();
 
     return compact('bobRule', 'bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');

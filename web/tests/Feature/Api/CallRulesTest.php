@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\CallDeclinedOffer;
 use App\Models\CallRule;
 use App\Models\User;
 use App\Models\Workspace;
@@ -399,8 +400,10 @@ describe('choices that follow the account (2.0.0-x, CC5)', function () {
     });
 
     it('keeps at most 500 turned-down offers, the oldest going', function () {
-        $this->person->forceFill(['call_settings' => ['declined' => array_map(fn (int $i): array => ['kind' => 'contact',
-            'number' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT), 'match_key' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT)], range(1, 500))]])->save();
+        // 500 already, number 500 the oldest.
+        CallDeclinedOffer::query()->insert(array_map(fn (int $i): array => ['user_id' => $this->person->id, 'kind' => 'contact',
+            'number' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT), 'match_key' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT),
+            'declined_at' => now()->subMinutes($i)], range(1, 500)));
 
         $this->postJson('/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'])->assertCreated();
 
@@ -435,7 +438,14 @@ describe('choices that follow the account (2.0.0-x, CC5)', function () {
         $this->travel(7)->days();
         $this->travel(1)->minutes();
         expect(Artisan::call('echoledger:erase-accounts'))->toBe(0)
-            ->and(DB::table('users')->where('call_settings', 'like', '%DECLINED-SECRET-NAME%')->exists())->toBeFalse();
+            ->and(DB::table('call_declined_offers')->where('name', 'DECLINED-SECRET-NAME')->exists())->toBeFalse();
+    });
+
+    it('keeps the offers in their own table, never in the settings every request reads', function () {
+        $this->postJson('/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'])->assertCreated();
+
+        expect(DB::table('call_declined_offers')->where('user_id', $this->person->id)->count())->toBe(1)
+            ->and(json_encode($this->person->fresh()->call_settings))->not->toContain('zoom');
     });
 
     it('never takes "preferences" or "declined" for a rule\'s id', function () {
