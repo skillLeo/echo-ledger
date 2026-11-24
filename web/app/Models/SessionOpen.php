@@ -26,6 +26,12 @@ final class SessionOpen extends Model
         return ['opened_at' => 'datetime'];
     }
 
+    /** Takes back [$userId]'s open of [$sessionId] (Mark as unread, 2.0.0-t); nobody else's, and nothing if none. */
+    public static function unmark(string $sessionId, int $userId): void
+    {
+        self::query()->where('capture_session_id', $sessionId)->where('user_id', $userId)->delete();
+    }
+
     /** Records that [$userId] opened [$sessionId] now (opening again only moves the time). */
     public static function mark(string $sessionId, int $userId): void
     {
