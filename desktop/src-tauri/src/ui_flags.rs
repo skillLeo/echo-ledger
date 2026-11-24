@@ -17,7 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The flags this app knows, as the contract names them.
-pub const KNOWN: [&str; 12] = [
+pub const KNOWN: [&str; 13] = [
     "ui_v2.shell",
     "ui_v2.home",
     "ui_v2.library",
@@ -30,6 +30,8 @@ pub const KNOWN: [&str; 12] = [
     "ui_v2.admin",
     "ui_v2.website",
     "live_assist",
+    // UX-02 (PLAN_V2_1_POLISH): the panel docked from 1200 px, a flyout below (contract 2.0.0-r).
+    "v21_panel_flyout",
 ];
 
 /// The event the window hears when the cached flags change.

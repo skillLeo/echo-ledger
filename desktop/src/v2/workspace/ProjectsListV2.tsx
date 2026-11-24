@@ -2,6 +2,7 @@
 // with its recordings and last call, folders under their project (shown or hidden, kept on this computer); Request
 // files and New project at the top; an error with Retry, still shapes while loading, and the empty state. The name
 // dialog (New project, New folder inside, Rename) is the new design's too.
+import { PanelToggle } from "../shell/NavRail";
 import { useMemo, useState } from "react";
 import type { ClientFolder, LibraryItem } from "../../lib/ipc";
 import { nestedCount, projectRecordings, projectTree, visibleRows } from "../../lib/projects";
@@ -42,6 +43,7 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
   return (
     <div className="el-page el-page--narrow" data-v2="projects">
       <header className="el-page__head">
+        <PanelToggle />
         <div className="el-page__titles">
           <h1 className="el-title-l">Projects</h1>
           <p className="el-secondary">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in All recordings, under Project › No project.</p>

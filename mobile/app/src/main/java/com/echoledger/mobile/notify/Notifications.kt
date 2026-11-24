@@ -95,7 +95,7 @@ object Notifications {
             setSound(null, null)
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        }
+        } + AfterCallNotice.channel(words)
         manager.createNotificationChannels(channels)
     }
 
@@ -121,11 +121,11 @@ object Notifications {
      * (Android 13+), the app's notifications not switched off (any version), and its channel not blocked. Only then may
      * an Undo live there; otherwise it belongs on a screen of this process.
      */
-    fun decisionsShow(context: Context): Boolean {
+    fun decisionsShow(context: Context, channel: String = CHANNEL_DECISIONS): Boolean {
         if (!canPost(context)) return false
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         if (!manager.areNotificationsEnabled()) return false
-        return manager.getNotificationChannel(CHANNEL_DECISIONS)?.importance != NotificationManager.IMPORTANCE_NONE
+        return manager.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
@@ -524,9 +524,11 @@ object Notifications {
         context: Context,
         rec: LocalRecording,
         /** How long it stays: the time its file waits, less the delete's slack. */
-        timeoutMs: Long = com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS
+        timeoutMs: Long = com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS,
+        /** The channel of the notification it replaces (v2.1: "After a call" for the after-call notification's Delete). */
+        channel: String = CHANNEL_DECISIONS
     ): Boolean {
-        if (!decisionsShow(context)) return false
+        if (!decisionsShow(context, channel)) return false
         val undo = PendingIntent.getBroadcast(
             context,
             rec.id.hashCode() + 3,
@@ -536,7 +538,7 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
-        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_stat_rec)
             // The title as the person named it, or the app's words for the call, in the app language.
             .setContentTitle(
@@ -553,7 +555,7 @@ object Notifications {
             .setPublicVersion(
                 NotificationCompat.Builder(
                     context,
-                    CHANNEL_DECISIONS
+                    channel
                 ).setSmallIcon(
                     R.drawable.ic_stat_rec
                 ).setContentTitle(

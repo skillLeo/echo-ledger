@@ -1,6 +1,7 @@
 // The Live tab in the new look (ui_v2.live, IA 3): everything during a call or session from one place. Record (now,
 // or a voice note), Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate,
 // Dictation and Captions; each opens its feature or its one settings home.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type Settings } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
@@ -56,7 +57,7 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
 
   return (
     <div className="el-page el-page--narrow" data-v2="live">
-      <header className="el-page__head"><h1 className="el-title-l">Live</h1></header>
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Live</h1></header>
 
       <section className="el-group" aria-label="Record">
         <h2 className="el-caption el-body-strong el-group__title">Record</h2>

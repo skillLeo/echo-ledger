@@ -2,6 +2,7 @@
 // your own words, get the answer with the recordings and files it comes from (a recording opens at its moment). The
 // server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project. "All
 // recordings" isn't offered or mentioned at all until the server can ask across them.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { notifyWhenAway } from "../../lib/notify";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
@@ -74,7 +75,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   if (projects.length === 0) {
     return (
       <div className="el-page el-page--narrow" data-v2="ask">
-        <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>
+        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Ask</h1></header>
         <EmptyState icon={Icons.FolderIcon} title="No projects yet"
           body="Ask works on a project's recordings. Put recordings in a project from Library first."
           action={<Button onClick={onLibrary}>Open Library</Button>} />
@@ -99,7 +100,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
 
   return (
     <div className={embedded ? "el-ask el-ask--embedded" : "el-page el-page--narrow"} data-v2="ask">
-      {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
+      {!embedded && <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
         {!embedded && <div className="el-field">
           {/* Projects only: asking across all recordings comes when the server can; until then it isn't offered at all. */}

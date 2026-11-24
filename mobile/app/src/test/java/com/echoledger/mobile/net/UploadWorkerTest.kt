@@ -341,6 +341,32 @@ class UploadWorkerTest : AppTest() {
         assertNull("sent, so the phone's copy goes", recording())
     }
 
+    @Test
+    fun `a take-back nobody saw, then a keep before the server delete ran, finishes against the same session`() {
+        discardDuringUpload()
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id, leftToPerson = true) }!!
+        // Offline: the server's delete is still queued when the person keeps the call.
+        assertEquals(androidx.work.WorkInfo.State.ENQUEUED, discardWork().single().state)
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+        )
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+        runBlocking { com.echoledger.mobile.calls.Decisions.apply(app, id, keep = true, transcribe = false) }
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        assertTrue("the queued delete never ran", server.requestsTo("DELETE", "/api/sessions/$serverSession").isEmpty())
+        assertEquals(androidx.work.WorkInfo.State.CANCELLED, discardWork().single().state)
+        assertEquals(
+            "the restore tried once: not in the bin, the session still there",
+            1,
+            server.requestsTo("POST", "/api/sessions/$serverSession/restore").size
+        )
+        assertEquals("the same session, found by its reference", listOf(id, id), clientRefs())
+        assertNull("the server has it, so the phone's copy goes", recording())
+    }
+
     /** Undo after a delete that may have run (it started, so the phone can't know whether it landed). */
     private fun undoAfterAMaybeDelete() {
         discardDuringUpload()
