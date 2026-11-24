@@ -4,10 +4,11 @@
 // what its picks do. On Windows, in the browser and in the tests the menu is ours in Windows 11's style
 // (components/Menu.tsx ContextMenu), which the caller shows when popupNative answers false.
 //
-// Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>", or "<id>=<value>" for a choice), heard by
-// the window's one listener, which offers it to runPicked first. One of these menus' picks carries the menu's number in
-// its value ("<id>=<value>#<n>") and runs through the item it came from (whose pick goes through the registry); any other
-// (Record's menu, the menu bar, or an earlier menu's) is not caught here.
+// Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>[=<value>][~<n>]"), heard by the window's
+// one listener, which offers it to runPicked first. Each of these menus' picks carries the menu's number last ("~<n>",
+// read off first): runPicked claims every such pick, running it through the item it came from (whose pick goes through
+// the registry) while its menu is the open one, and dropping it once it is not, so a numbered pick never reaches the
+// registry by its bare id. A pick with no number (Record's menu, the menu bar) is not caught here.
 import { api, type NativeMenuItem } from "../../lib/ipc";
 import type { MenuItem } from "../components/Menu";
 import { macTitle, nativeItems, type Platform } from "./registry";
@@ -30,15 +31,21 @@ export function forgetPicks(): void {
   picks = new Map();
 }
 
+/** A numbered pick's menu number ("recording.pin~5" → 5), read off its end; null for a pick with none. */
+export function menuNumberOf(picked: string): number | null {
+  const m = /~(\d+)$/.exec(picked);
+  return m ? Number(m[1]) : null;
+}
+
+/** What an item of menu `n` comes back as (native_menu.rs item_id): "<id>[=<value>]~<n>". */
+const pickOf = (action: string, choice: string | undefined, n: number) => `${action}${choice !== undefined ? `=${choice}` : ""}~${n}`;
+
 /** Each item's pick, by what it comes back as: its action, its choice, and this menu's number. */
-function withNumber(items: readonly MenuItem[], n: number, into: Map<string, () => void>): MenuItem[] {
-  return items.map((item) => {
-    if (item.items?.length) return { ...item, items: withNumber(item.items, n, into) };
-    if (!item.action || !item.onPick) return item;
-    const value = `${item.choice ?? ""}#${n}`;
-    into.set(`${item.action}=${value}`, item.onPick);
-    return { ...item, choice: value };
-  });
+function collectPicks(items: readonly MenuItem[], n: number, into: Map<string, () => void>): void {
+  for (const item of items) {
+    if (item.items?.length) collectPicks(item.items, n, into);
+    else if (item.action && item.onPick) into.set(pickOf(item.action, item.choice, n), item.onPick);
+  }
 }
 
 /**
@@ -50,11 +57,11 @@ export async function popupNative(items: readonly MenuItem[], at: { x: number; y
   forgetPicks();
   const n = ++menuNumber;
   const into = new Map<string, () => void>();
-  const numbered = withNumber(items, n, into);
+  collectPicks(items, n, into);
   picks = into;
   try {
-    const lines: NativeMenuItem[] = nativeItems(numbered, title ? appWords(title, "macos") : undefined);
-    await api.nativeMenuPopup(lines, at.x, at.y);
+    const lines: NativeMenuItem[] = nativeItems(items, title ? appWords(title, "macos") : undefined);
+    await api.nativeMenuPopup(lines, at.x, at.y, n);
     // The pick may come just after the menu closes; a moment later this menu's picks are let go.
     forget = window.setTimeout(() => { picks = new Map(); }, 1000);
     return true;
@@ -64,11 +71,16 @@ export async function popupNative(items: readonly MenuItem[], at: { x: number; y
   }
 }
 
-/** A pick from a system menu one of these showed: runs it (true), else false (another menu's, or let go). */
+/**
+ * A pick from a system menu: one of these menus' (it carries "~<n>") is claimed (true), run while its menu is the open
+ * one and dropped once it is not (let go, or an earlier menu's); one with no number is another menu's (false).
+ */
 export function runPicked(picked: string): boolean {
+  if (menuNumberOf(picked) === null) return false;
   const run = picks.get(picked);
-  if (!run) return false;
-  forgetPicks();
-  run();
+  if (run) {
+    forgetPicks();
+    run();
+  }
   return true;
 }

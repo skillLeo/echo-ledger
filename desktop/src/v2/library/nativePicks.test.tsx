@@ -1,7 +1,7 @@
 // UX-22's system menus on a Mac, in the app: a pick comes back as a real `menu:action` event, heard by the window's one
 // listener (the shell's; FIX-05's menu bar moves it to MainApp, for the classic shell too). A page's right-click menu
-// runs its own picks; a moment after it closes they are let go; and Record's menu is never caught by a list menu's
-// leftover picks (each menu's picks carry its number).
+// runs its own picks; a moment after it closes they are let go; Record's menu is never caught by a list menu's leftover
+// picks; and a pick of a menu let go (it carries the menu's number, "~<n>") runs nothing, not even its bare id.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
@@ -21,11 +21,11 @@ type Line = { action: string | null; label?: string; value?: string; items?: Lin
 const setPlatform = (platform: string) => Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
 const settle = () => act(flushAsync);
 const row = (title: string) => within(screen.getByRole("list", { name: "Recordings" })).getByRole("button", { name: title });
-/** What an item of the last system menu comes back as when picked. */
+/** What an item of the last system menu comes back as when picked (native_menu.rs: "<id>[=<value>]~<menu>"). */
 const pickOf = (label: string) => {
-  const items = (callsOf("native_menu_popup").at(-1) as { items: Line[] }).items;
-  const item = items.find((i) => i.label === label)!;
-  return item.value ? `${item.action}=${item.value}` : item.action!;
+  const call = callsOf("native_menu_popup").at(-1) as { items: Line[]; menu: number | null };
+  const item = call.items.find((i) => i.label === label)!;
+  return `${item.action}${item.value !== undefined ? `=${item.value}` : ""}${call.menu !== null ? `~${call.menu}` : ""}`;
 };
 
 function inTheApp(flags: Record<string, boolean>) {
@@ -86,5 +86,26 @@ describe("the system menus' picks in the app (UX-22)", () => {
     await settle();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
     expect(callsOf("toggle_mic_note")).toHaveLength(callsBefore);
+  });
+
+  it("a pick of a menu let go is dropped: a stale \"~n\" runs nothing, never its bare id through the registry", async () => {
+    inTheApp({ "ui_v2.library": true, "ui_v2.shell": true });
+    respond("toggle_mic_note", makeStatus());
+    await settle();
+    await screen.findByRole("list", { name: "Recordings" });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fireEvent.contextMenu(screen.getByRole("list", { name: "Recordings" }).parentElement as HTMLElement, { clientX: 300, clientY: 600 });
+    await settle();
+    const stale = pickOf("New Voice Note");
+    expect(stale).toMatch(/^file\.newVoiceNote~\d+$/);
+    act(() => vi.advanceTimersByTime(1000));
+    vi.useRealTimers();
+    await emitEvent("menu:action", stale);
+    await settle();
+    expect(callsOf("toggle_mic_note")).toHaveLength(0);
+    // The same action with no number (the menu bar's, Record's menu) is the registry's, and runs.
+    await emitEvent("menu:action", "file.newVoiceNote");
+    await settle();
+    expect(callsOf("toggle_mic_note")).toHaveLength(1);
   });
 });

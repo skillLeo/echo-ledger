@@ -3,6 +3,12 @@
 //! v2/actions/actions.json), and where to open it; the system draws it, with its own keys, ticks and greyed items. A
 //! pick reaches the menus' handler (tray.rs, Tauri hands it every menu's events), which tells the main window the action
 //! id (`menu:action`); the page's registry runs it.
+//!
+//! A pick's id, after the prefix: `<id>[=<value>][~<n>]`, the shared format of the window's menus (the menu bar's,
+//! FIX-05, adds `@<target>` before the value). `=<value>` is a sub-menu's choice; `~<n>` is the number of the
+//! right-click menu it came from (UX-22, v2/actions/popup.ts), read off the end first: such a pick belongs to that menu
+//! alone, which runs it while it is the open one and drops it once it is not. A pick with no number (Record's menu, the
+//! menu bar) goes to the registry.
 
 use serde::Deserialize;
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -39,12 +45,18 @@ fn yes() -> bool {
     true
 }
 
-/// The item's id (pure): the prefix and the action id, and a choice's value after "=" (ids have none).
-pub fn item_id(action: &str, value: Option<&str>) -> String {
-    match value {
-        Some(value) => format!("{PREFIX}{action}={value}"),
-        None => format!("{PREFIX}{action}"),
+/// The item's id (pure): the prefix and the action id, a choice's value after "=" (ids have none), and last the
+/// number of the right-click menu it is in after "~".
+pub fn item_id(action: &str, value: Option<&str>, menu: Option<u64>) -> String {
+    let mut id = format!("{PREFIX}{action}");
+    if let Some(value) = value {
+        id.push('=');
+        id.push_str(value);
     }
+    if let Some(menu) = menu {
+        id.push_str(&format!("~{menu}"));
+    }
+    id
 }
 
 /// The action id of a picked item, or none when the item is not one of ours (pure).
@@ -60,7 +72,7 @@ pub fn picked(app: &AppHandle, id: &str) {
 }
 
 /// One line as the system draws it: a hairline, a greyed title, a sub-menu (one level), a tick or a plain item.
-fn native_line(app: &AppHandle, item: &NativeItem, depth: usize) -> Result<Box<dyn IsMenuItem<Wry>>, String> {
+fn native_line(app: &AppHandle, item: &NativeItem, depth: usize, menu: Option<u64>) -> Result<Box<dyn IsMenuItem<Wry>>, String> {
     let e = |e: tauri::Error| e.to_string();
     Ok(match (&item.action, &item.items, item.checked) {
         (None, _, _) if item.label.is_empty() => Box::new(PredefinedMenuItem::separator(app).map_err(e)?),
@@ -68,30 +80,31 @@ fn native_line(app: &AppHandle, item: &NativeItem, depth: usize) -> Result<Box<d
         (Some(_), Some(items), _) if depth == 0 => {
             let sub = Submenu::new(app, &item.label, item.enabled).map_err(e)?;
             for child in items {
-                sub.append(native_line(app, child, depth + 1)?.as_ref()).map_err(e)?;
+                sub.append(native_line(app, child, depth + 1, menu)?.as_ref()).map_err(e)?;
             }
             Box::new(sub)
         }
         (Some(action), _, Some(checked)) => Box::new(
-            CheckMenuItem::with_id(app, item_id(action, item.value.as_deref()), &item.label, item.enabled, checked, item.accelerator.as_deref())
+            CheckMenuItem::with_id(app, item_id(action, item.value.as_deref(), menu), &item.label, item.enabled, checked, item.accelerator.as_deref())
                 .map_err(e)?,
         ),
         (Some(action), _, None) => {
-            Box::new(MenuItem::with_id(app, item_id(action, item.value.as_deref()), &item.label, item.enabled, item.accelerator.as_deref()).map_err(e)?)
+            Box::new(MenuItem::with_id(app, item_id(action, item.value.as_deref(), menu), &item.label, item.enabled, item.accelerator.as_deref()).map_err(e)?)
         }
     })
 }
 
 /// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system. Nothing of it stays
-/// on the page's side: a pick comes back as `menu:action` with its action id (and a choice's value).
+/// on the page's side: a pick comes back as `menu:action` with its action id (and a choice's value), and with `menu`
+/// (a right-click menu's number) its every pick carries `~<menu>`.
 #[tauri::command]
-pub async fn native_menu_popup(window: Window, items: Vec<NativeItem>, x: f64, y: f64) -> Result<(), String> {
+pub async fn native_menu_popup(window: Window, items: Vec<NativeItem>, x: f64, y: f64, menu: Option<u64>) -> Result<(), String> {
     let app = window.app_handle().clone();
-    let menu = Menu::new(&app).map_err(|e| e.to_string())?;
+    let lines = Menu::new(&app).map_err(|e| e.to_string())?;
     for item in &items {
-        menu.append(native_line(&app, item, 0)?.as_ref()).map_err(|e| e.to_string())?;
+        lines.append(native_line(&app, item, 0, menu)?.as_ref()).map_err(|e| e.to_string())?;
     }
-    window.popup_menu_at(&menu, LogicalPosition::new(x, y)).map_err(|e| e.to_string())
+    window.popup_menu_at(&lines, LogicalPosition::new(x, y)).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -100,9 +113,13 @@ mod tests {
 
     #[test]
     fn a_native_items_id_carries_its_action_and_only_ours_are_answered() {
-        assert_eq!(item_id("file.newRecording", None), "action:file.newRecording");
+        assert_eq!(item_id("file.newRecording", None, None), "action:file.newRecording");
         // A sub-menu's choice carries its value: the page splits it at the first "=".
-        assert_eq!(item_id("recording.labels", Some("clients")), "action:recording.labels=clients");
+        assert_eq!(item_id("recording.labels", Some("clients"), None), "action:recording.labels=clients");
+        // A right-click menu's pick carries its number last, read off first ("~5"), the value's own "~" kept.
+        assert_eq!(item_id("recording.pin", None, Some(5)), "action:recording.pin~5");
+        assert_eq!(item_id("recording.labels", Some("a~b"), Some(12)), "action:recording.labels=a~b~12");
+        assert_eq!(picked_action("action:recording.labels=a~b~12"), Some("recording.labels=a~b~12"));
         assert_eq!(picked_action("action:recording.labels=clients"), Some("recording.labels=clients"));
         assert_eq!(picked_action("action:file.newRecording"), Some("file.newRecording"));
         assert_eq!(picked_action("action:"), None);
@@ -143,7 +160,7 @@ mod tests {
         let sub = items[2].items.as_ref().unwrap();
         assert_eq!(sub.len(), 2);
         assert_eq!(sub[1].value.as_deref(), Some("c1"));
-        assert_eq!(item_id(sub[1].action.as_deref().unwrap(), sub[1].value.as_deref()), "action:recording.moveToProject=c1");
+        assert_eq!(item_id(sub[1].action.as_deref().unwrap(), sub[1].value.as_deref(), Some(3)), "action:recording.moveToProject=c1~3");
     }
 
     #[test]
@@ -151,6 +168,6 @@ mod tests {
         let tray = include_str!("tray.rs");
         assert!(tray.contains("id if crate::native_menu::picked_action(id).is_some() => {"));
         assert!(include_str!("lib.rs").contains("native_menu::native_menu_popup,"));
-        assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("native_menu_popup", { items, x, y })"#));
+        assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null })"#));
     }
 }

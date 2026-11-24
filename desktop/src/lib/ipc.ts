@@ -1904,7 +1904,8 @@ export const api = {
   /** A double click on the title row (UX-20): zoom, minimize or nothing, as the Mac's setting says (lib/titleClick.ts). */
   titleDoubleClick: () => invoke<void>("title_double_click"),
   /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
-  nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number) => invoke<void>("native_menu_popup", { items, x, y }),
+  /** `menu`: a right-click menu's number (UX-22), which each of its picks carries as `~<menu>`. */
+  nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number, menu?: number) => invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),
