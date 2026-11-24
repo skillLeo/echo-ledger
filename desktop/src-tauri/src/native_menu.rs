@@ -5,8 +5,8 @@
 //! id (`menu:action`); the page's registry runs it.
 
 use serde::Deserialize;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Window};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Window, Wry};
 
 /// What a native item's id starts with: the rest is the action id.
 pub const PREFIX: &str = "action:";
@@ -17,7 +17,7 @@ pub const EVENT: &str = "menu:action";
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeItem {
-    /// The action it sends (none: a line between groups).
+    /// The action it sends (none: a line between groups, or with a label a greyed title line, "3 recordings").
     pub action: Option<String>,
     #[serde(default)]
     pub label: String,
@@ -27,15 +27,24 @@ pub struct NativeItem {
     pub enabled: bool,
     /// A tick (a check item); none: a plain item.
     pub checked: Option<bool>,
+    /// A sub-menu's choice (a label, a project, a format, UX-22): sent with its action as `<action>=<value>`.
+    #[serde(default)]
+    pub value: Option<String>,
+    /// A sub-menu's items (one level, 3b).
+    #[serde(default)]
+    pub items: Option<Vec<NativeItem>>,
 }
 
 fn yes() -> bool {
     true
 }
 
-/// The item's id (pure): the prefix and the action id.
-pub fn item_id(action: &str) -> String {
-    format!("{PREFIX}{action}")
+/// The item's id (pure): the prefix and the action id, and a choice's value after "=" (ids have none).
+pub fn item_id(action: &str, value: Option<&str>) -> String {
+    match value {
+        Some(value) => format!("{PREFIX}{action}={value}"),
+        None => format!("{PREFIX}{action}"),
+    }
 }
 
 /// The action id of a picked item, or none when the item is not one of ours (pure).
@@ -50,22 +59,37 @@ pub fn picked(app: &AppHandle, id: &str) {
     }
 }
 
-/// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system.
+/// One line as the system draws it: a hairline, a greyed title, a sub-menu (one level), a tick or a plain item.
+fn native_line(app: &AppHandle, item: &NativeItem, depth: usize) -> Result<Box<dyn IsMenuItem<Wry>>, String> {
+    let e = |e: tauri::Error| e.to_string();
+    Ok(match (&item.action, &item.items, item.checked) {
+        (None, _, _) if item.label.is_empty() => Box::new(PredefinedMenuItem::separator(app).map_err(e)?),
+        (None, _, _) => Box::new(MenuItem::new(app, &item.label, false, None::<&str>).map_err(e)?),
+        (Some(_), Some(items), _) if depth == 0 => {
+            let sub = Submenu::new(app, &item.label, item.enabled).map_err(e)?;
+            for child in items {
+                sub.append(native_line(app, child, depth + 1)?.as_ref()).map_err(e)?;
+            }
+            Box::new(sub)
+        }
+        (Some(action), _, Some(checked)) => Box::new(
+            CheckMenuItem::with_id(app, item_id(action, item.value.as_deref()), &item.label, item.enabled, checked, item.accelerator.as_deref())
+                .map_err(e)?,
+        ),
+        (Some(action), _, None) => {
+            Box::new(MenuItem::with_id(app, item_id(action, item.value.as_deref()), &item.label, item.enabled, item.accelerator.as_deref()).map_err(e)?)
+        }
+    })
+}
+
+/// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system. Nothing of it stays
+/// on the page's side: a pick comes back as `menu:action` with its action id (and a choice's value).
 #[tauri::command]
 pub async fn native_menu_popup(window: Window, items: Vec<NativeItem>, x: f64, y: f64) -> Result<(), String> {
     let app = window.app_handle().clone();
     let menu = Menu::new(&app).map_err(|e| e.to_string())?;
     for item in &items {
-        match (&item.action, item.checked) {
-            (None, _) => menu.append(&PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?),
-            (Some(action), Some(checked)) => menu.append(
-                &CheckMenuItem::with_id(&app, item_id(action), &item.label, item.enabled, checked, item.accelerator.as_deref()).map_err(|e| e.to_string())?,
-            ),
-            (Some(action), None) => {
-                menu.append(&MenuItem::with_id(&app, item_id(action), &item.label, item.enabled, item.accelerator.as_deref()).map_err(|e| e.to_string())?)
-            }
-        }
-        .map_err(|e| e.to_string())?;
+        menu.append(native_line(&app, item, 0)?.as_ref()).map_err(|e| e.to_string())?;
     }
     window.popup_menu_at(&menu, LogicalPosition::new(x, y)).map_err(|e| e.to_string())
 }
@@ -76,7 +100,10 @@ mod tests {
 
     #[test]
     fn a_native_items_id_carries_its_action_and_only_ours_are_answered() {
-        assert_eq!(item_id("file.newRecording"), "action:file.newRecording");
+        assert_eq!(item_id("file.newRecording", None), "action:file.newRecording");
+        // A sub-menu's choice carries its value: the page splits it at the first "=".
+        assert_eq!(item_id("recording.labels", Some("clients")), "action:recording.labels=clients");
+        assert_eq!(picked_action("action:recording.labels=clients"), Some("recording.labels=clients"));
         assert_eq!(picked_action("action:file.newRecording"), Some("file.newRecording"));
         assert_eq!(picked_action("action:"), None);
         assert_eq!(picked_action("quit"), None);
@@ -96,6 +123,27 @@ mod tests {
         assert_eq!(items[1].action, None);
         assert!(items[2].enabled);
         assert_eq!(items[2].checked, Some(true));
+        assert_eq!(items[0].value, None);
+        assert_eq!(items[0].items, None);
+    }
+
+    #[test]
+    fn a_title_line_a_choice_and_a_sub_menu_of_choices() {
+        let items: Vec<NativeItem> = serde_json::from_str(
+            r#"[{"action":null,"label":"3 Recordings","enabled":false},
+                {"action":null},
+                {"action":"recording.moveToProject","label":"Move to Project","items":[
+                    {"action":"recording.moveToProject","label":"No project","value":"none","checked":true},
+                    {"action":"recording.moveToProject","label":"Acme","value":"c1","checked":false}]}]"#,
+        )
+        .unwrap();
+        assert_eq!(items[0].label, "3 Recordings");
+        assert!(!items[0].enabled);
+        assert_eq!(items[1].label, "");
+        let sub = items[2].items.as_ref().unwrap();
+        assert_eq!(sub.len(), 2);
+        assert_eq!(sub[1].value.as_deref(), Some("c1"));
+        assert_eq!(item_id(sub[1].action.as_deref().unwrap(), sub[1].value.as_deref()), "action:recording.moveToProject=c1");
     }
 
     #[test]

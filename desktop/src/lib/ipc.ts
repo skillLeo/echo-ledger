@@ -382,12 +382,17 @@ export interface Account {
 export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
 /** One line of a native menu (native_menu.rs): the action it sends (none: a line), its words, keys, tick. */
 export interface NativeMenuItem {
+  /** The action it sends; none: a hairline, or with a label a greyed title line ("3 Recordings"). */
   action: string | null;
   label?: string;
   /** Tauri's accelerator ("CmdOrCtrl+Shift+N"). */
   accelerator?: string | null;
   enabled?: boolean;
   checked?: boolean | null;
+  /** A sub-menu's choice (UX-22): picked, it comes back as `<action>=<value>`. */
+  value?: string | null;
+  /** A sub-menu's items (one level). */
+  items?: NativeMenuItem[] | null;
 }
 
 export interface UpdateStatus {

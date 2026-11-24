@@ -271,11 +271,24 @@ export function accelerator(shortcut: string): string {
 }
 
 /** A menu made by menuItems() as a native menu's lines (native_menu.rs): a line apart becomes a separator before it. */
-export function nativeItems(items: readonly (MenuItem & { action: string })[]): NativeMenuItem[] {
-  return items.flatMap((i) => [
-    ...(i.separator ? [{ action: null }] : []),
-    { action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null },
-  ]);
+export function nativeItems(items: readonly MenuItem[], title?: string, depth = 0): NativeMenuItem[] {
+  // A title line (several chosen, UX-22), greyed, with a hairline under it.
+  const out: NativeMenuItem[] = title ? [{ action: null, label: title, enabled: false }, { action: null }] : [];
+  for (const i of items) {
+    if (i.separator && out.length && out[out.length - 1].action !== null) out.push({ action: null });
+    // A note, not a command ("Up to 200 at a time…"): greyed.
+    if (!i.action) out.push({ action: null, label: i.label, enabled: false });
+    // A sub-menu, one level deep (3b): its choices come back with their values.
+    else if (i.items?.length) {
+      if (depth === 0) out.push({ action: i.action, label: i.label, enabled: !i.disabled, items: nativeItems(i.items, undefined, 1) });
+    } else {
+      out.push({
+        action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null,
+        ...(i.choice !== undefined ? { value: i.choice } : {}),
+      });
+    }
+  }
+  return out;
 }
 
 /** Whether a key press is this shortcut ("⇧⌘N" on a Mac, "Ctrl+Shift+N" on Windows): the same keys, no others. */

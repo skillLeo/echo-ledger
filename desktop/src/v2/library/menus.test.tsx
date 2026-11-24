@@ -9,15 +9,11 @@ import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../..
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { checkMenu, runAction } from "../actions/registry";
+import { runPicked } from "../actions/popup";
 import { answerConfirmForTests } from "../../lib/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
-const native = vi.hoisted(() => ({ menus: [] as unknown[], popups: [] as unknown[] }));
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: { new: async (opts: { items: unknown[] }) => { native.menus.push(opts.items); return { popup: async (at: unknown) => { native.popups.push(at); } }; } },
-}));
-vi.mock("@tauri-apps/api/dpi", () => ({ LogicalPosition: class { constructor(public x: number, public y: number) {} } }));
 
 const NOW = new Date(2026, 10, 24, 15, 0);
 const done = (preview: string, id: string) => ({ final_status: "completed", final_transcript_id: id, live_available: false, preview });
@@ -52,8 +48,6 @@ describe("the Library's right-click menus (UX-22)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
     setPlatform("Win32");
-    native.menus.length = 0;
-    native.popups.length = 0;
     respond("library_list", ITEMS);
     respond("library_refresh", ITEMS);
     respond("bin_list", { data: [] });
@@ -274,24 +268,35 @@ describe("the Library's right-click menus (UX-22)", () => {
     answerConfirmForTests(null);
   });
 
-  it("on a Mac: the system's menu at the pointer, in Title Case, with no icons or shortcuts; a title line for several", async () => {
+  it("on a Mac: the system's menu (native_menu_popup) at the pointer, in Title Case, with no shortcuts; a title line for several; a pick runs it", async () => {
     setPlatform("MacIntel");
+    respond("native_menu_popup", null);
+    respond("session_organise", { data: ITEMS[0] });
     await show();
     fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 40, clientY: 60 });
     await act(flushAsync);
     expect(screen.queryByRole("menu", { name: "Recording actions" })).toBeNull();
-    const items = native.menus[0] as { text?: string; item?: string; items?: unknown[]; checked?: boolean; enabled?: boolean }[];
-    expect(items.map((i) => i.text ?? i.item)).toEqual([
-      "Open", "Separator", "Pin", "Mark as Important", "Labels", "Move to Project", "Separator", "Rename…", "Export", "Separator", "Move to Trash",
+    type Line = { action: string | null; label?: string; accelerator?: string | null; checked?: boolean | null; value?: string; items?: Line[] };
+    const [call] = callsOf("native_menu_popup") as { items: Line[]; x: number; y: number }[];
+    expect([call.x, call.y]).toEqual([40, 60]);
+    expect(call.items.map((i) => (i.action === null && !i.label ? "—" : i.label))).toEqual([
+      "Open", "—", "Pin", "Mark as Important", "Labels", "Move to Project", "—", "Rename…", "Export", "—", "Move to Trash",
     ]);
-    expect(JSON.stringify(items)).not.toMatch(/accelerator|icon/);
-    expect(items.find((i) => i.text === "Mark as Important")).toMatchObject({ checked: false, enabled: true });
-    expect(native.popups[0]).toMatchObject({ x: 40, y: 60 });
+    expect(call.items.every((i) => !i.accelerator)).toBe(true);
+    expect(call.items.find((i) => i.label === "Mark as Important")).toMatchObject({ checked: false });
+    const move = call.items.find((i) => i.label === "Move to Project")!;
+    expect(move.items!.map((i) => [i.label, i.value, i.checked])).toEqual([["No project", "none", true], ["Qureshi Textiles", "c1", false]]);
+    // A pick comes back as "<id>=<value>" (menu:action) and runs through the item it came from.
+    expect(runPicked("recording.moveToProject=c1")).toBe(true);
+    await act(flushAsync);
+    expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { client_id: "c1" } }]);
     // Several: a greyed title line first.
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
     fireEvent.click(row("Voice note"), { metaKey: true });
     fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
     await act(flushAsync);
-    expect((native.menus[1] as { text?: string; item?: string; enabled?: boolean }[]).slice(0, 2)).toEqual([{ text: "2 recordings", enabled: false }, { item: "Separator" }]);
+    expect((callsOf("native_menu_popup")[1] as { items: Line[] }).items.slice(0, 2)).toEqual([{ action: null, label: "2 recordings", enabled: false }, { action: null }]);
+    // A pick of something this menu didn't show is left to the shell (Record's menu).
+    expect(runPicked("file.newRecording")).toBe(false);
   });
 });

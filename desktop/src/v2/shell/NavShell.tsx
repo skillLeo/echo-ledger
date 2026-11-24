@@ -15,6 +15,7 @@ import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_P
 import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
+import { runPicked } from "../actions/popup";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
@@ -385,7 +386,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       registerAction("go.recordPage", () => r.current.onHome()),
     ];
     // A pick in a menu the system drew (native_menu.rs).
-    const unlisten = listenTo("menu:action", (id) => { runAction(id, r.current.ctx); });
+    // A right-click menu of a page (UX-22, actions/popup.ts) runs its own picks (with what it was opened on); any other
+    // (Record's menu) runs here.
+    const unlisten = listenTo("menu:action", (id) => { if (!runPicked(id)) runAction(id, r.current.ctx); });
     return () => {
       offs.forEach((off) => off());
       void unlisten.then((off) => off()).catch(() => undefined);
