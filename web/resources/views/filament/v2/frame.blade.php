@@ -132,6 +132,7 @@
         </div>
     </div>
     {{-- format-ignore-end --}}
+    @include('filament.v2.object-menus', ['menus' => $this->objectMenus()])
 
     <x-filament-actions::modals />
 </div>

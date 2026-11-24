@@ -276,7 +276,9 @@ final class LibraryFilterBar
             }
             $labels[] = ['key' => $option['value'], 'label' => (string) ($option['name'] ?? $option['value']), 'count' => (int) $option['count'],
                 'url' => $library.'?'.http_build_query(['f' => ['labels' => ['op' => 'is', 'values' => [$option['value']]]]]),
-                'active' => is_array($onlyLabel) && $onlyLabel === [$option['value']], ...self::dot($option['color'] ?? null)];
+                'active' => is_array($onlyLabel) && $onlyLabel === [$option['value']], ...self::dot($option['color'] ?? null),
+                // The colour's name when it is one of the eight (Colour › in the label's menu ticks it), else null.
+                'colour' => V2RecordingRow::colourName($option['color'] ?? null)];
         }
 
         $trash = RecentlyDeleted::canAccess() ? ['label' => __('Trash'), 'url' => RecentlyDeleted::getUrl(),

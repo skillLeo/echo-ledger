@@ -2496,7 +2496,8 @@ html[dir='rtl'] .v2-row-title {
     z-index: var(--el-layer-menu);
 }
 
-.v2-sb-view > .fi-dropdown {
+.v2-sb-view > .fi-dropdown,
+.v2-sb-view > .v2-sb-more {
     position: absolute;
     inset-inline-end: var(--el-space-4);
     top: 50%;

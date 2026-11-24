@@ -10,6 +10,7 @@ use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\ObjectMenus;
 use App\Filament\Support\Shell;
 use App\Models\User;
 use App\Services\ActionBadge;
@@ -120,6 +121,34 @@ class Activity extends Page
         }
     }
 
+    /** UX-22 3b: an Activity item's right-click menu: Open · Mark as read | Retry (an upload that failed). */
+    public const OBJECT_ACTIONS = ['activity' => ['place.open', 'activity.markRead', 'activity.retry']];
+
+    /** @return array<string, mixed> */
+    public function objectMenus(): array
+    {
+        return ObjectMenus::data(self::OBJECT_ACTIONS);
+    }
+
+    /** A pick from an item's menu (filament.v2.context-menu-script): only the person's own notifications. */
+    public function objectAction(string $kind, string $action, string $id, ?string $value = null): void
+    {
+        $user = $this->user();
+        $notification = $user?->notifications()->find($id);
+        if (! $user instanceof User || ! $notification instanceof DatabaseNotification || ! ObjectMenus::picked(self::OBJECT_ACTIONS, $kind, $action)) {
+            return;
+        }
+        match ($action) {
+            'place.open' => $this->open($id),
+            'activity.markRead' => $notification->markAsRead(),
+            // The devices hold the files: Retry asks them for every upload that failed, as Retry all uploads does.
+            'activity.retry' => ActivityFeed::payload($notification)['kind'] === 'upload_failed'
+                ? Notification::make()->title(trans_choice('Your devices will send 1 recording again.|Your devices will send :count recordings again.',
+                    $count = app(UploadRetries::class)->requestAll($user)['count'], ['count' => $count]))->success()->send() : null,
+            default => null,
+        };
+    }
+
     /** @return array<string, mixed> */
     protected function getViewData(): array
     {
@@ -137,6 +166,13 @@ class Activity extends Page
                 'full_time' => $at !== null ? ConsoleDates::dateTime($at, Shell::timeFormat()) : '',
                 'tone' => self::tone($item['kind']),
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
+                // UX-22 3b: what its menu leaves out (Open with nothing to open, Mark as read once read, Retry but for a
+                // failed upload).
+                'not' => implode(' ', array_keys(array_filter([
+                    'place.open' => $this->user() instanceof User && NoticeTargets::forNotification($notification, $this->user()) === null,
+                    'activity.markRead' => (bool) $item['read'],
+                    'activity.retry' => $item['kind'] !== 'upload_failed',
+                ]))),
             ];
             $group = ! $item['read'] && in_array($item['kind'], self::NEEDS_ACTION, true) ? 'needs'
                 : ($at !== null && $at->gte($today) ? 'today' : 'earlier');
