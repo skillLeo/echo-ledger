@@ -99,8 +99,8 @@ it('words the actions, their windows and their notices in Urdu', function () {
 it('words the Download window in Urdu', function () {
     recordingUrduAs($this, 'ur');
     expect(recordingUrduDownload($this))
-        ->toContain('<h3 class="el-download-heading">آواز</h3>')
-        ->toContain('آواز (.')
+        ->toContain('<h3 class="el-download-heading">آڈیو</h3>')
+        ->toContain('آڈیو (.')
         ->toContain('متن (.txt)')
         ->toContain('میٹنگ پیک (پرنٹ)')
         ->toContain('PDF (پرنٹ) ایک صفحہ کھولتا ہے جسے براؤزر کے پرنٹ ڈائیلاگ سے PDF کے طور پر محفوظ کیا جا سکتا ہے۔')
