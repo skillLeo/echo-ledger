@@ -23,7 +23,8 @@ import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_G
 import { RecordingRow } from "./RecordingRow";
 import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
-import { contextItems, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE } from "../actions/contextMenus";
+import { contextItems, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
+import { confirmAction } from "../../lib/confirm";
 import { currentPlatform, popupNative } from "../actions/popup";
 import { choiceItems, registerAction, type ActionContext } from "../actions/registry";
 import {
@@ -334,7 +335,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
   /** Our right-click menu (Windows; a Mac shows the system's): a recording's or the picked ones', or the list's space. */
-  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[]; space?: true } | null>(null);
+  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[]; space?: true; trash?: true } | null>(null);
   const [organise, setOrganise] = useState<Organise | null>(null);
   const endSelection = useCallback(() => {
     setSelecting(false);
@@ -1221,6 +1222,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       }),
     };
   };
+  /** A recording in Trash: Restore | Delete immediately…; Trash itself (its empty space): Empty trash…. */
+  const trashMenu = (ids: readonly string[]): MenuItem[] =>
+    contextItems(ids.length ? TRASH_ITEM : TRASH, { platform: currentPlatform(), targets: [...ids], kind: "trash" });
   const listSpaceMenu = (): MenuItem[] => {
     const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
@@ -1230,22 +1234,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     });
   };
   /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
-  const showMenu = (next: { at: { x: number; y: number }; ids: string[]; space?: true }) => {
+  const showMenu = (next: { at: { x: number; y: number }; ids: string[]; space?: true; trash?: true }) => {
     if (currentPlatform() !== "macos") {
       setContext(next);
       return;
     }
-    const menu = next.space ? { title: undefined, items: listSpaceMenu() } : recordingMenu(next.ids);
+    const menu = next.trash ? { title: undefined, items: trashMenu(next.ids) } : next.space ? { title: undefined, items: listSpaceMenu() } : recordingMenu(next.ids);
     void popupNative(menu.items, next.at, menu.title).then((shown) => { if (!shown) setContext(next); });
   };
   /** The list's empty space (below or beside the rows, in the box that scrolls; not a row, a field or a menu): its own menu. */
   const spaceMenu = useRef<(e: MouseEvent) => void>(() => undefined);
   spaceMenu.current = (e: MouseEvent) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
-    if (!target || e.defaultPrevented || open || trash || layout === "table" || !items) return;
+    if (!target || e.defaultPrevented || open || (!trash && (layout === "table" || !items))) return;
     if (target.closest("li, a, button, input, textarea, select, [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
+    // In Trash its own: Empty trash… (only while it holds something).
+    if (trash && !bin?.length) return;
     e.preventDefault();
-    showMenu({ at: { x: e.clientX, y: e.clientY }, ids: [], space: true });
+    showMenu({ at: { x: e.clientX, y: e.clientY }, ids: [], ...(trash ? { trash: true as const } : { space: true as const }) });
   };
   useEffect(() => {
     const box = scrollRootOf(root.current);
@@ -1254,6 +1260,25 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     box.addEventListener("contextmenu", on);
     return () => box.removeEventListener("contextmenu", on);
   }, []);
+  /** Empty trash…: asks, then erases every recording in Trash (their audio and transcripts), and says how many. */
+  const emptyTrash = async () => {
+    const all = bin ?? [];
+    if (!all.length) return;
+    const ok = await confirmAction({ title: "Empty the trash?", body: `${recordingsWord(all.length)} and their transcripts are erased from the server. This can't be undone.`, confirm: "Empty trash", tone: "danger" });
+    if (!ok) return;
+    let erased = 0;
+    for (const b of all) {
+      try {
+        await api.eraseFromBin(b.id);
+        erased++;
+      } catch {
+        // Counted below: what is left stays in Trash.
+      }
+    }
+    setBin((list) => list?.filter((x) => !all.some((b) => b.id === x.id)) ?? list);
+    await loadBin();
+    say(erased === all.length ? `Trash emptied · ${recordingsWord(erased)}` : `Erased ${erased} of ${all.length}; the rest stay in Trash`);
+  };
   /** Move to project › a project (or No project), as Move to project… does. */
   const moveTo = async (ids: readonly string[], projectId: string | null) => {
     const title = ids.length === 1 ? (items ?? []).find((i) => i.id === ids[0])?.title ?? null : null;
@@ -1299,19 +1324,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     "view.asTable": () => setLayout("table"),
     "view.density": (c) => { if (c.value) setDensity(c.value as Density); },
     "edit.selectAll": () => pickAll(),
+    "trash.restore": (c) => { for (const b of (bin ?? []).filter((x) => c.targets?.includes(x.id))) void restore(b); },
+    "recording.deleteNow": (c) => { const b = (bin ?? []).find((x) => x.id === c.targets?.[0]); if (b) setErase(b); },
+    "trash.empty": () => void emptyTrash(),
   };
   const runsRef = useRef(runs);
   runsRef.current = runs;
   const runnable = Object.keys(runs).filter((id) => runs[id]).join(" ");
   useEffect(() => {
     // Each for its kind of thing: the list's space, else a recording (the sidebar's Rename… of a view is its own).
-    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx), (LIST_SPACE as readonly string[]).includes(id) ? "list" : "recording"));
+    const kindOf = (id: string) => ((LIST_SPACE as readonly string[]).includes(id) ? "list" : ([...TRASH, ...TRASH_ITEM] as readonly string[]).includes(id) ? "trash" : "recording");
+    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx), kindOf(id)));
     return () => offs.forEach((off) => off());
   }, [runnable]);
 
   const dialogs = (
     <>
-      {context && (context.space
+      {context?.trash && <ContextMenu label={context.ids.length ? "Deleted recording actions" : "Trash actions"} items={trashMenu(context.ids)} at={context.at} onClose={() => setContext(null)} />}
+      {context && !context.trash && (context.space
         ? <ContextMenu label="List actions" items={listSpaceMenu()} at={context.at} onClose={() => setContext(null)} />
         : <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`} title={manyTitle(context.ids.length)}
           items={recordingMenu(context.ids).items} at={context.at} onClose={() => setContext(null)} />)}
@@ -1541,6 +1571,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                   {bin.map((b) => (
                     <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
                       meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
+                        showMenu({ at, ids: [b.id], trash: true });
+                      }}
                       control={
                         <span className="el-row__buttons">
                           <Button size="sm" onClick={() => void restore(b)}>Restore</Button>

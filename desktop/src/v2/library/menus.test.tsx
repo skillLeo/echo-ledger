@@ -9,6 +9,7 @@ import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../..
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { checkMenu } from "../actions/registry";
+import { answerConfirmForTests } from "../../lib/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -146,6 +147,39 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.click(within(again).getByRole("menuitemcheckbox", { name: "As table" }));
     await act(flushAsync);
     expect(document.querySelector(".el-lib-list")).toBeNull();
+  });
+
+  it("Trash: a deleted recording's Restore | Delete immediately…; Trash's own Empty trash… asks, then erases every one", async () => {
+    const BIN = [
+      { id: "old1", title: "Old call", deleted_at: "2026-11-23T09:00:00Z", erase_at: "2026-11-25T09:00:00Z", duration_ms: 60_000 },
+      { id: "old2", title: "Older call", deleted_at: "2026-11-23T08:00:00Z", erase_at: "2026-11-25T08:00:00Z", duration_ms: 60_000 },
+    ];
+    respond("bin_list", { data: BIN });
+    respond("session_restore", { data: ITEMS[0] });
+    respond("bin_erase", null);
+    answerConfirmForTests(() => true);
+    const view = render(<LibraryV2 />);
+    await act(flushAsync);
+    view.rerender(<LibraryV2 scopeRequest={{ scope: { kind: "trash" }, seq: 1 }} />);
+    await act(flushAsync);
+    const list = screen.getByRole("list", { name: "Deleted recordings" });
+    fireEvent.contextMenu(within(list).getByText("Old call"), { clientX: 30, clientY: 40 });
+    const menu = screen.getByRole("menu", { name: "Deleted recording actions" });
+    expect(groups(menu)).toEqual([["Restore"], ["Delete immediately…"]]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Restore" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "old1" }]);
+    // Trash's empty space: Empty trash…, which asks first.
+    fireEvent.contextMenu(screen.getByRole("heading", { level: 1, name: /^Trash/ }).closest(".el-lib__main") as HTMLElement, { clientX: 300, clientY: 600 });
+    const trash = screen.getByRole("menu", { name: "Trash actions" });
+    expect(groups(trash)).toEqual([["Empty trash…"]]);
+    expect(within(trash).getByRole("menuitem", { name: "Empty trash…" })).toHaveClass("el-menu__option--danger");
+    fireEvent.click(within(trash).getByRole("menuitem", { name: "Empty trash…" }));
+    await act(flushAsync);
+    // Old call was restored: the trash held only Older call.
+    expect(callsOf("bin_erase")).toEqual([{ id: "old2" }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Trash emptied · 1 recording");
+    answerConfirmForTests(null);
   });
 
   it("on a Mac: the system's menu at the pointer, in Title Case, with no icons or shortcuts; a title line for several", async () => {
