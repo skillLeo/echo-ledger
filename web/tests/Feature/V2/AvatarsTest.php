@@ -184,3 +184,27 @@ it('keeps an email left to right and a name in its own direction in Urdu', funct
     expect($html)->toContain('dir="rtl"')->toMatch(avatarPerson(avatarInitials("ف\u{200C}خ", 4), 'فرح خان'))
         ->toContain('<bdi dir="ltr">farah@example.com</bdi>');
 });
+
+it('escapes a hostile name and address in every avatar and person it draws', function () {
+    $hostile = Fx::user(['name' => '<img src=x onerror=1>', 'email' => 'o"neil@example.com']);
+    // With a photo, the initials go into an attribute (data-initials).
+    $hostile->forceFill(['avatar_color' => 2, 'avatar_version' => 1_700_000_002])->save();
+    avatarsV2(true);
+
+    $cell = PersonAvatar::cell($hostile, $hostile->email)->toHtml();
+    $photo = Blade::render('<x-el.avatar :person="$p" />', ['p' => $hostile]);
+    $invite = PersonAvatar::cell(null, null, null, 'x"><script>alert(1)</script>@example.com')->toHtml();
+    foreach ([$cell, $photo, $invite] as $html) {
+        expect($html)->not->toContain('<img src=x')->not->toContain('onerror=1>')->not->toContain('<script>')->not->toContain('o"neil');
+    }
+    expect($cell)->toContain('<bdi>&lt;img src=x onerror=1&gt;</bdi>')->toContain('<bdi dir="ltr">o&quot;neil@example.com</bdi>')
+        ->and($photo)->toContain('data-initials="IO"')
+        ->and($invite)->toContain('<bdi>x&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;@example.com</bdi>');
+
+    // Without a photo the letters are text, and the workspace's people list keeps the name as text too.
+    $hostile->forceFill(['avatar_version' => null])->save();
+    expect(Blade::render('<x-el.avatar :person="$p" />', ['p' => $hostile->fresh()]))->toContain('aria-hidden="true">IO</span>');
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->ws), $hostile, WorkspaceRole::Member);
+    $html = (string) $this->get('/app/workspace')->assertOk()->getContent();
+    expect($html)->toContain('<bdi>&lt;img src=x onerror=1&gt;</bdi>')->not->toContain('<img src=x onerror=1>');
+});
