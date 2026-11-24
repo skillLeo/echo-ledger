@@ -1051,6 +1051,35 @@ class PostCallPromptTest : AppTest() {
         assertTrue(noUpload("call-1"))
     }
 
+    /** Review of FIX-03: the person's last choice was Delete, so a take-back never sends anything. */
+    @Test
+    fun `a kept call whose Delete could not show its Undo waits on the phone, and nothing is sent`() {
+        val kept = call("call-1", state = "queued")
+        val lines = inApp()
+        assertTrue(DecisionPopup.deleted(app, kept, "dark", 5_000))
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        cardOnly()
+        ShadowSettings.setCanDrawOverlays(false)
+        val timersBefore = timeoutWork("call-1").map { it.id }.toSet()
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("left to choose again") {
+            app.peekRecording("call-1")?.let { it.state == "pending_decision" && it.restoredDelete && it.notDeletedYet } == true
+        }
+        DecisionPopup.drainForTest()
+        assertTrue("nothing sent", noUpload("call-1"))
+        assertTrue(
+            "no upload work at all",
+            uploadWork("call-1").none {
+                it.state == WorkInfo.State.ENQUEUED ||
+                    it.state == WorkInfo.State.RUNNING
+            }
+        )
+        assertEquals("no keep timer started", timersBefore, timeoutWork("call-1").map { it.id }.toSet())
+        assertNull("nothing decided", app.peekRecording("call-1")?.transcribe)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
     /** Blocks the calls' decision channel in Android's settings (the permission itself stays granted). */
     private fun blockDecisions() {
         val nm = app.getSystemService(NotificationManager::class.java)

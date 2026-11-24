@@ -634,12 +634,8 @@ object DecisionPopup {
                 // call's question or line), its own "Deleted · Undo" shows once that one is over, as [deleted] holds one.
                 // Taken back and left to the person in one write: no "kept after 10 s" ever runs for it, so a process death
                 // at any point can never keep or send a call the person chose to delete.
+                // Whatever it was before, it waits on the phone until the person chooses: nothing is sent.
                 val back = Decisions.undoDiscard(app, id, widget = false, leftToPerson = true) ?: return
-                if (back.state != "pending_decision") {
-                    // Kept before its Delete: kept again, and sent.
-                    com.echoledger.mobile.net.UploadWorker.enqueue(app, id)
-                    return
-                }
                 withContext(Dispatchers.Main) {
                     if (isShowing && android.provider.Settings.canDrawOverlays(app)) {
                         waiting += Held(back, settings(app).themeMode, deleteLineMs = leftMs)

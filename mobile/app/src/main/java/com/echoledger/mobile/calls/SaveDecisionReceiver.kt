@@ -274,8 +274,10 @@ object Decisions {
         recordingId: String,
         widget: Boolean = true,
         /**
-         * True: nobody saw an Undo for it, so a call that waited goes back to the person ("Not deleted yet. Choose
-         * again.") in the same write, with no "kept after 10 s" ever started: no process death can keep or send it.
+         * True: nobody saw an Undo for it, so it goes back to the person ("Not deleted yet. Choose again.") in the same
+         * write, whatever it was before its Delete: waiting on the phone, with no "kept after 10 s" ever started and
+         * nothing sent until they choose (the person's last choice was Delete). A copy the server already had stays as
+         * it is there: its delete is stopped if it has not run, and nothing is sent again.
          */
         leftToPerson: Boolean = false
     ): LocalRecording? {
@@ -286,18 +288,27 @@ object Decisions {
         val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
             when {
-                it.state == DISCARDING -> {
-                    val waits = (it.discardedFrom ?: WAITING) == WAITING
-                    it.copy(
-                        state = it.discardedFrom ?: WAITING,
-                        discardAt = null,
-                        discardedFrom = null,
-                        undoIn = null,
-                        restoredDelete = leftToPerson && waits,
-                        notDeletedYet = leftToPerson && waits,
-                        restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
-                    )
-                }
+                it.state == DISCARDING && leftToPerson -> it.copy(
+                    state = WAITING,
+                    transcribe = null,
+                    discardAt = null,
+                    discardedFrom = null,
+                    undoIn = null,
+                    restoredDelete = true,
+                    notDeletedYet = true,
+                    // Only for a later keep the person chooses: a server copy whose delete may have run comes back first.
+                    restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
+                )
+
+                it.state == DISCARDING -> it.copy(
+                    state = it.discardedFrom ?: WAITING,
+                    discardAt = null,
+                    discardedFrom = null,
+                    undoIn = null,
+                    restoredDelete = false,
+                    notDeletedYet = false,
+                    restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
+                )
 
                 // A delete whose store was never written (the process died after its Undo was posted): taken back too.
                 it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false, notDeletedYet = false)
@@ -306,8 +317,12 @@ object Decisions {
             }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
         // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one;
-        // left to the person, nothing keeps it by itself.
-        if (back.state == WAITING && !leftToPerson) DecisionTimeoutWorker.schedule(context, recordingId)
+        // left to the person, nothing keeps or sends it by itself.
+        if (leftToPerson) {
+            UploadWorker.cancel(context, recordingId)
+        } else if (back.state == WAITING) {
+            DecisionTimeoutWorker.schedule(context, recordingId)
+        }
         if (widget) WidgetStateStore.refresh(context)
         return back
     }
