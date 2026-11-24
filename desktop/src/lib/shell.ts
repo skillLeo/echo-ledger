@@ -90,8 +90,10 @@ export interface Preferences {
   sidebarStyle: SidebarStyle;
   density: Density;
   clock: Clock;
+  /** The rail's icons only, without the names under them (Settings › Appearance, View › Theme); off by default. */
+  compactRail: boolean;
 }
-export const DEFAULT_PREFERENCES: Preferences = { sidebarStyle: "light", density: "comfortable", clock: "12" };
+export const DEFAULT_PREFERENCES: Preferences = { sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false };
 
 /** The saved preferences; anything missing or not one of the choices is the default. */
 export function parsePreferences(text: string | null | undefined): Preferences {
@@ -108,6 +110,7 @@ export function parsePreferences(text: string | null | undefined): Preferences {
     sidebarStyle: pick(value.sidebarStyle, SIDEBAR_STYLES, DEFAULT_PREFERENCES.sidebarStyle),
     density: pick(value.density, DENSITIES, DEFAULT_PREFERENCES.density),
     clock: pick(value.clock, CLOCKS, DEFAULT_PREFERENCES.clock),
+    compactRail: value.compactRail === true,
   };
 }
 export function loadPreferences(): Preferences {
@@ -126,6 +129,13 @@ export function applyPreferences(prefs: Preferences): void {
 }
 /** Event the shell sends when Preferences change, so every part follows at once. */
 export const PREFERENCES_EVENT = "echoledger:preferences";
+/** Changes some of them: saved, applied and told to every part (the Appearance page's way, for the menu bar's ticks). */
+export function changePreferences(change: Partial<Preferences>): Preferences {
+  const next = { ...loadPreferences(), ...change };
+  savePreferences(next);
+  window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: next }));
+  return next;
+}
 
 /** A page the window's search (the palette) can open: its name, where it sits ("Library", "Account") and the words it answers to. */
 export interface PageEntry {

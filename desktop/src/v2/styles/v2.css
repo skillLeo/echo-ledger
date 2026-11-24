@@ -2110,6 +2110,11 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); font-weight: var(--el-desktop-text-rail-label-weight);
 }
 .el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+/* The compact rail (Settings › Appearance, View › Theme): icons only, 44 px items (the 28 px pill and 8 px above and
+   below it), and still 72 px wide, since a Mac's window buttons sit in its top cell. Every item keeps its name for
+   assistive tools and in its tooltip; Record keeps its time while recording. */
+.el-rail--compact .el-rail__item, .el-rail--compact .el-rail__me .el-button.el-rail__item { min-block-size: calc(var(--el-desktop-rail-pill-height) + var(--el-space-16)); }
+.el-rail--compact .el-rail__item .el-rail__label, .el-rail--compact .el-rail__record:not(.el-rail__record--on) .el-rail__label { display: none; }
 /* Badges: on the icon's top-right corner, cut out of it by a ring in the rail's colour. The number (Activity's only):
    16 px tall, 10 px semibold tabular figures, the accent with its text colour; a dot: 8 px (Live's red, recording). */
 .el-rail__count {
