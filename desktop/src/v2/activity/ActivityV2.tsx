@@ -11,6 +11,20 @@ import { actionCount, isProblem, needsAction as asksForAction } from "../../lib/
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { activitySubtitle, shortWhen, useInProgress } from "../../views/main/ActivityCentre";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
+import { ContextMenu, menuPointFor, type MenuItem } from "../components/Menu";
+import { contextItems } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import type { ActionContext } from "../actions/registry";
+import { useActions } from "../actions/useActions";
+
+/** An Activity item's menu (UX-22, 3b): Open · Mark as read | Retry (an upload that stopped). */
+const ACTIVITY_ITEM = ["place.open", "activity.markRead", "-", "activity.retry"] as const;
+
+/**
+ * Retry only where it retries something: an upload that stopped, in failed uploads. A transcription that failed is tried
+ * again on its recording's page (Open), and minutes used up have nothing to retry.
+ */
+const retries = (i: Pick<ActivityItem, "kind">) => i.kind === "upload_failed";
 
 const iconOf = (kind: string | null): IconType =>
   isProblem(kind) ? Icons.ErrorIcon : kind === "transcript_ready" ? Icons.CheckIcon : kind === "device_paired" ? Icons.LaptopIcon : Icons.BellIcon;
@@ -107,11 +121,37 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
   const waiting = pending.length > 0 || status.pendingDecisions > 0;
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
+  // An item's right-click menu (UX-22), from actions.json: only what fits it (Open a recording's; Mark as read while
+  // unread; Retry an upload that stopped, where failed uploads are retried). Notification settings… and Remove wait for
+  // their way in.
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; label: string; items: MenuItem[] } | null>(null);
+  const itemOf = (c: ActionContext) => (items ?? []).find((i) => i.id === c.targets?.[0]);
+  useActions("activity", {
+    "place.open": (c) => { const i = itemOf(c); if (i) void choose(i); },
+    "activity.markRead": (c) => {
+      const i = itemOf(c);
+      if (!i || i.read) return;
+      void api.markActivityRead([i.id]).catch(() => null);
+      setItems((list) => list?.map((x) => (x.id === i.id ? { ...x, read: true } : x)) ?? null);
+    },
+    "activity.retry": () => onFailed(),
+  });
+  const itemMenu = (i: ActivityItem): MenuItem[] =>
+    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity" })
+      .filter((m) => (m.action !== "place.open" || !!i.session_id) && (m.action !== "activity.markRead" || !i.read) && (m.action !== "activity.retry" || retries(i)));
+  const openMenu = (i: ActivityItem, at: { x: number; y: number }) => {
+    const shown = itemMenu(i);
+    if (!shown.length) return;
+    if (currentPlatform() !== "macos") return setMenu({ at, label: i.title || "Activity", items: shown });
+    void popupNative(shown, at).then((ok) => { if (!ok) setMenu({ at, label: i.title || "Activity", items: shown }); });
+  };
+
   const row = (i: ActivityItem) => (
     <ListRow key={i.id} icon={iconOf(i.kind)} title={i.title ?? ""} strong={!i.read}
       meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body].filter(Boolean).join(" · ")}
       badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
-      endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)} />
+      endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)}
+      onContextMenu={(e) => openMenu(i, "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget))} />
   );
 
   return (
@@ -208,6 +248,7 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
         </section>
       ))}
       <BackToTop first=".el-row__hit" />
+      {menu && <ContextMenu label={menu.label} items={menu.items} at={menu.at} onClose={() => setMenu(null)} />}
     </div>
   );
 }

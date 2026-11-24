@@ -8,6 +8,7 @@ import { fireEvent } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserKey, installNativeFeel } from "./nativeFeel";
+import { ACTIONS } from "../v2/actions/registry";
 
 const read = (...path: string[]) => readFileSync(join(__dirname, ...path), "utf8");
 let stop: (() => void) | null = null;
@@ -100,6 +101,38 @@ describe("browser keys (FIX-10)", () => {
     expect(key("r", { metaKey: true, repeat: true })).toBe(false);
     expect(key("F5", { repeat: true })).toBe(false);
     expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("no key of the app's own commands is a browser key, but Sync Now's and Print Transcript's (answered here)", () => {
+    // A shortcut as actions.json writes it, pressed: a Mac's "⌥⌘I", Windows's "Ctrl+Shift+I", "F5".
+    const NAMES: Record<string, string> = { "⌫": "Backspace", "⌦": "Delete", "←": "ArrowLeft", "→": "ArrowRight", "↑": "ArrowUp", "↓": "ArrowDown", Esc: "Escape", Del: "Delete", Space: " " };
+    const press = (shortcut: string, mac: boolean) => {
+      const mods = { metaKey: false, ctrlKey: false, altKey: false, shiftKey: false };
+      let rest = shortcut;
+      if (mac) {
+        const marks: Record<string, keyof typeof mods> = { "⌃": "ctrlKey", "⌥": "altKey", "⇧": "shiftKey", "⌘": "metaKey" };
+        while (marks[rest[0]]) { mods[marks[rest[0]]] = true; rest = rest.slice(1); }
+      } else {
+        const parts = shortcut.split("+");
+        rest = parts.pop() || "+";
+        for (const part of parts) mods[({ Ctrl: "ctrlKey", Alt: "altKey", Shift: "shiftKey" } as const)[part as "Ctrl"]] = true;
+      }
+      const named = NAMES[rest] ?? rest;
+      return { key: named.length === 1 ? named.toLowerCase() : named, ...mods };
+    };
+    const taken: string[] = [];
+    for (const a of ACTIONS) {
+      for (const [mac, keys] of [[true, [a.mac, ...a.macAlso]], [false, [a.win, ...a.winAlso]]] as const) {
+        for (const shortcut of keys) {
+          if (!shortcut) continue;
+          const what = browserKey(press(shortcut, mac) as KeyboardEvent, mac);
+          if (what) taken.push(`${a.id} ${shortcut}: ${what}`);
+        }
+      }
+    }
+    expect(taken.sort()).toEqual(["file.printTranscript Ctrl+P: print", "file.printTranscript ⌘P: print", "file.syncNow Ctrl+R: reload", "file.syncNow F5: reload", "file.syncNow ⌘R: reload"]);
+    // The guard needs nothing of the app's: it runs before the app.
+    expect(read("nativeFeel.ts")).not.toMatch(/^import /m);
   });
 
   it("never a key the app's own commands have (⌥⌘C and Ctrl+Shift+C copy the transcript)", () => {
@@ -201,6 +234,56 @@ describe("the right-click (FIX-10)", () => {
       // Nothing selected (a collapsed selection): nothing.
       window.getSelection()!.collapse(words, 0);
       expect(fireEvent.contextMenu(words, { clientX: 150, clientY: 50 })).toBe(false);
+    } finally {
+      if (had) Object.defineProperty(Range.prototype, "getClientRects", had);
+      else delete (Range.prototype as unknown as { getClientRects?: unknown }).getClientRects;
+      window.getSelection()!.removeAllRanges();
+    }
+  });
+
+  it("after Select All only a press on drawn text keeps the system's menu, not one on the boxes that hold it", () => {
+    stop = installNativeFeel({ release: true, onSyncNow: () => undefined });
+    document.body.innerHTML = `<ol id="list"><li id="line"><span id="words">Assalam o alaikum</span> <span id="more">the invoice is due</span></li></ol>`;
+    // As a web view draws them: each text where it is, and each element inside a range as its whole box.
+    const boxes = new Map<Node, { left: number; right: number; top: number; bottom: number }>([
+      [document.getElementById("words")!.firstChild!, { left: 100, right: 220, top: 40, bottom: 60 }],
+      [document.getElementById("more")!.firstChild!, { left: 230, right: 380, top: 40, bottom: 60 }],
+      [document.getElementById("list")!, { left: 0, right: 800, top: 0, bottom: 400 }],
+      [document.getElementById("line")!, { left: 0, right: 800, top: 30, bottom: 70 }],
+    ]);
+    const had = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value(this: Range) {
+        const out: unknown[] = [];
+        for (const [node, box] of boxes) {
+          const inside = node.nodeType === Node.TEXT_NODE
+            ? this.intersectsNode(node)
+            : this.comparePoint(node, 0) === 0 && this.comparePoint(node, node.childNodes.length) === 0;
+          if (inside) out.push(box);
+        }
+        return out as unknown as DOMRectList;
+      },
+    });
+    try {
+      const all = document.createRange();
+      all.selectNodeContents(document.body);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(all);
+      // The whole range's rects cover the list and the line: a press on their blank space is still no text.
+      expect([...(all.getClientRects() as unknown as unknown[])]).toHaveLength(4);
+      expect(fireEvent.contextMenu(document.getElementById("list")!, { clientX: 600, clientY: 300 })).toBe(false);
+      expect(fireEvent.contextMenu(document.getElementById("line")!, { clientX: 500, clientY: 50 })).toBe(false);
+      // On either text: the system's menu.
+      expect(fireEvent.contextMenu(document.getElementById("words")!, { clientX: 150, clientY: 50 })).toBe(true);
+      expect(fireEvent.contextMenu(document.getElementById("more")!, { clientX: 300, clientY: 50 })).toBe(true);
+      // A selection inside one text (part of the words): still found.
+      const part = document.createRange();
+      part.setStart(document.getElementById("more")!.firstChild!, 4);
+      part.setEnd(document.getElementById("more")!.firstChild!, 11);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(part);
+      expect(fireEvent.contextMenu(document.getElementById("more")!, { clientX: 300, clientY: 50 })).toBe(true);
     } finally {
       if (had) Object.defineProperty(Range.prototype, "getClientRects", had);
       else delete (Range.prototype as unknown as { getClientRects?: unknown }).getClientRects;

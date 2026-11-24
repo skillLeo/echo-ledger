@@ -283,6 +283,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
             Route::post('sessions/{id}/opened', [SessionController::class, 'opened'])->name('api.sessions.opened');
+            // Since 2.0.0-t (UX-22): Mark as unread, the asking person's open taken back.
+            Route::delete('sessions/{id}/opened', [SessionController::class, 'unopened'])->name('api.sessions.unopened');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');

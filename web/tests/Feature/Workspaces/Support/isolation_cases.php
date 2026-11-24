@@ -342,6 +342,7 @@ function isoApiCases(array $b): array
         'api.search' => ['GET', '/api/search?q=BOBSECRETTRANSCRIPT', [], 'list'],
         'api.sessions.show' => ['GET', "/api/sessions/{$s}", [], 404],
         'api.sessions.opened' => ['POST', "/api/sessions/{$s}/opened", [], 404],
+        'api.sessions.unopened' => ['DELETE', "/api/sessions/{$s}/opened", [], 404],
         // Live Translate holds no workspace data; without a Soniox key it says so and leaks nothing of the other one.
         'api.live-translate.token' => ['POST', '/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'],
             fn (TestResponse $r): bool => $r->status() === 503 && $r->json('code') === 'provider_not_configured'],

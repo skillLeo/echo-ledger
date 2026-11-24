@@ -257,7 +257,7 @@ fun EchoTopBar(
     val padded = modifier
         .fillMaxWidth()
         .background(c.bgCanvas)
-        .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Space.s4)
+        .padding(start = if (onBack != null) EchoTokens.Space.s4 else LocalPageMargin.current, end = EchoTokens.Space.s4)
     // A page without a title (a recording, whose name is in its header) keeps one row at any text size.
     if (!largeText() || title.isBlank()) {
         Row(padded.defaultMinSize(minHeight = EchoTokens.Space.s64), verticalAlignment = Alignment.CenterVertically) {

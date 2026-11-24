@@ -297,7 +297,11 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
 }
 
 /** Transcribe: the minutes it will use and the minutes left this month first, then it starts. */
-export function TranscribeDialog({ ids, onClose, say }: { ids: readonly string[]; onClose: () => void; say: Say }) {
+export function TranscribeDialog({ ids, onClose, say, of }: {
+  ids: readonly string[]; onClose: () => void; say: Say;
+  /** How many there are in all, when only the first ones go now (Transcribe all…, up to 50 at a time). */
+  of?: number;
+}) {
   const [estimate, setEstimate] = useState<TranscribeEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -318,9 +322,10 @@ export function TranscribeDialog({ ids, onClose, say }: { ids: readonly string[]
     }
   };
   const minutes = (n: number) => (n === 1 ? "1 minute" : `${n} minutes`);
+  const first = of && of > ids.length ? `The first ${ids.length} of ${of} now. ` : "";
   const description = error
     ?? (!estimate ? "Working out the minutes…"
-      : `About ${minutes(estimate.minutes)}${estimate.minutes_left === null ? "." : ` of the ${minutes(estimate.minutes_left)} left this month.`}`
+      : `${first}About ${minutes(estimate.minutes)}${estimate.minutes_left === null ? "." : ` of the ${minutes(estimate.minutes_left)} left this month.`}`
         + (over ? " That is more than is left, so nothing will start. Pick fewer recordings." : ""));
   return (
     <Dialog open title={ids.length === 1 ? "Transcribe this recording?" : `Transcribe ${recordingsWord(ids.length)}?`} description={description} onClose={onClose}

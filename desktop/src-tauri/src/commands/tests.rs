@@ -209,6 +209,10 @@ fn bulk_requests_are_checked_first() {
         assert!(check_bulk(&ids, action, label).is_ok(), "{action}");
     }
     assert!(check_bulk(&ids, "explode", None).is_err());
+    // Mark as important (UX-22): the server's bulk takes important and unimportant (contract 2.0.0-i).
+    for action in ["important", "unimportant"] {
+        assert!(check_bulk(&ids, action, None).is_ok(), "{action}");
+    }
     assert!(check_bulk(&[], "pin", None).is_err());
     assert!(check_bulk(&vec!["01JB8Q4C1D2E3F4G5H6J7K8M9N".to_string(); 201], "pin", None).is_err());
     assert!(check_bulk(&ids, "label", Some("  ")).is_err());

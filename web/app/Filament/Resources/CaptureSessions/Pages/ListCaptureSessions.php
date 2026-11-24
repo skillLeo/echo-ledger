@@ -23,6 +23,7 @@ use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\SessionOpen;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\Library\LibraryFacets;
@@ -54,6 +55,7 @@ use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -969,6 +971,8 @@ class ListCaptureSessions extends ListRecords
                         RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                         EmbeddedTable::make(),
                         RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+                        // UX-22: what a row's right-click menu needs (filament.v2.context-menu-script opens it).
+                        View::make('filament.v2.context-menu'),
                     ])->extraAttributes(['class' => 'v2-library el-library']),
                     // Since docs/PLAN_NAV_3_LEVELS.md section 4 (the three levels): the filters come from the right, 320 wide,
                     // beside the list from --el-breakpoint-wide (1440) and over it below.
@@ -1036,6 +1040,142 @@ class ListCaptureSessions extends ListRecords
         }
         app(LibraryOrganiser::class)->update($session, ['pinned' => ! $session->pinned]);
         $this->flushCachedTableRecords();
+    }
+
+    /** UX-22 (PLAN_V2_1_POLISH 3b): what a row's right-click menu can do here, by its ids in the one action list (resources/js/actions.json). */
+    public const MENU_ACTIONS = ['recording.open', 'recording.transcribe', 'recording.pin', 'recording.important', 'recording.unread', 'recording.labels', 'label.new',
+        'recording.moveToProject', 'file.rename', 'recording.exportAs', 'recording.moveToTrash'];
+
+    /**
+     * UX-22: a pick in a row's right-click menu (filament.v2.context-menu) for the recordings it was opened on. Pin, Mark
+     * as important and a label of Labels › are toggles decided here from what the recordings are now (on for all unless
+     * every one is, the menu's own rule); Mark as unread takes back the person's own opens (contract 2.0.0-t), and once
+     * every one is unread it is Mark as read; Move to project › moves them (value "none": out of any). Rename… (one), New
+     * label…, Export › a format, Transcribe and Move to trash open, or run, the console's own actions for them (the
+     * selection bar's, with their questions, checks and Undo). Only the person's own recordings of this workspace (the
+     * Library's query, read from the database; the browser's ids are only asked about), never from a read-only console
+     * or the classic Library. Open is the browser's (the row's own click).
+     *
+     * @param  array<int, mixed>  $ids
+     */
+    public function menuAction(string $action, array $ids, ?string $value = null): mixed
+    {
+        if (! ConsoleV2::library() || ConsoleAccess::readOnly() || ! in_array($action, self::MENU_ACTIONS, true)) {
+            return null;
+        }
+        $asked = array_slice(array_values(array_unique(array_filter(array_map(fn (mixed $id): string => is_scalar($id) ? (string) $id : '', $ids),
+            fn (string $id): bool => $id !== ''))), 0, LibraryOrganiser::MAX_BULK);
+        /** @var EloquentCollection<int, CaptureSession> $records */
+        $records = $asked === [] ? new EloquentCollection : CaptureSessionResource::getEloquentQuery()->whereIn('id', $asked)->with('labels')->get();
+        if ($records->isEmpty()) {
+            return null;
+        }
+        $keys = $records->map(fn (CaptureSession $r): string => (string) $r->getKey())->values()->all();
+        $value = is_string($value) ? trim($value) : null;
+        $label = $value !== null ? mb_strtolower($value) : null;
+
+        return match ($action) {
+            'recording.pin' => $this->organise($keys, $records->every(fn (CaptureSession $r): bool => (bool) $r->pinned) ? 'unpin' : 'pin'),
+            'recording.important' => $this->organise($keys, $records->every(fn (CaptureSession $r): bool => (bool) $r->important) ? 'unimportant' : 'important'),
+            'recording.unread' => $this->markUnread($keys),
+            'recording.labels' => $label === null || $label === '' ? null : $this->organise($keys,
+                $records->every(fn (CaptureSession $r): bool => $r->labels->contains(fn ($l): bool => mb_strtolower((string) $l->label) === $label)) ? 'unlabel' : 'label', null, $value),
+            'recording.moveToProject' => $value === null || $value === '' ? null : $this->organise($keys, 'move', $value === 'none' ? null : $value),
+            'file.rename' => count($keys) === 1 ? $this->mountAction('rename', [], ['table' => true, 'recordKey' => $keys[0]]) : null,
+            'label.new' => $this->mountForMenu('labelInMenu', $keys),
+            'recording.exportAs' => $value !== null && array_key_exists($value, CaptureSessionsTable::V2_EXPORT_FORMATS) ? $this->mountForMenu('exportInMenu'.ucfirst($value), $keys) : null,
+            'recording.transcribe' => $this->mountForMenu('transcribeInMenu', $keys),
+            'recording.moveToTrash' => $this->mountForMenu('trashFromMenu', $keys),
+            default => null,
+        };
+    }
+
+    /**
+     * The menu's change of [$ids] through the API's bulk path (LibraryOrganiser::bulk: this workspace, the person's own),
+     * quietly as the row's star; only a refusal says so.
+     *
+     * @param  list<string>  $ids
+     */
+    private function organise(array $ids, string $action, ?string $client = null, ?string $label = null): null
+    {
+        try {
+            app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), $ids, $action, $client, $label, auth()->user());
+        } catch (ApiError $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+        }
+        $this->flushCachedTableRecords();
+
+        return null;
+    }
+
+    /**
+     * Mark as unread (contract 2.0.0-t, as DELETE /api/sessions/{id}/opened): only the person's own opens go, and
+     * nobody else's; when none of [$ids] is opened it is Mark as read. The recordings themselves are not touched.
+     *
+     * @param  list<string>  $ids
+     */
+    private function markUnread(array $ids): null
+    {
+        $me = (int) auth()->id();
+        $anyOpened = SessionOpen::query()->where('user_id', $me)->whereIn('capture_session_id', $ids)->exists();
+        foreach ($ids as $id) {
+            $anyOpened ? SessionOpen::unmark($id, $me) : SessionOpen::mark($id, $me);
+        }
+        $this->flushCachedTableRecords();
+
+        return null;
+    }
+
+    /**
+     * One of the selection bar's actions for what the menu was opened on: [$ids] become the table's selection for it
+     * (its records are read through the table's own query), and it opens with its question, or runs when it has none.
+     *
+     * @param  list<string>  $ids
+     */
+    private function mountForMenu(string $name, array $ids): mixed
+    {
+        $this->selectedTableRecords = $ids;
+        $this->deselectedTableRecords = [];
+        $this->isTrackingDeselectedTableRecords = false;
+
+        return $this->mountAction($name, [], ['table' => true, 'bulk' => true]);
+    }
+
+    /**
+     * UX-22: what a row's right-click menu needs from the page (filament.v2.context-menu, read by
+     * resources/js/context-menu-core.cjs): its actions from the one action list in the console's language, what can run
+     * here, the person's labels and projects, the export formats and its own words.
+     *
+     * @return array{actions: list<array<string, mixed>>, runnable: list<string>, say: array<string, string>, labels: list<array{value: string, label: string}>,
+     *     projects: list<array{value: string, label: string}>, formats: list<array{value: string, label: string}>, words: array<string, string>}
+     */
+    public function menuData(): array
+    {
+        $workspaceId = (int) CurrentWorkspace::id();
+        /** @var array{actions: list<array<string, mixed>>} $list */
+        $list = json_decode((string) file_get_contents(resource_path('js/actions.json')), true);
+        $actions = array_values(array_filter($list['actions'], fn (array $a): bool => in_array($a['id'] ?? null, self::MENU_ACTIONS, true)));
+        $say = [];
+        foreach ($actions as $a) {
+            foreach ([$a['label'] ?? null, $a['state']['on'] ?? null] as $words) {
+                if (is_string($words) && trans()->has($words)) {
+                    $say[$words] = __($words);
+                }
+            }
+        }
+        $readOnly = ConsoleAccess::readOnly();
+
+        return [
+            'actions' => $actions,
+            'runnable' => $readOnly ? ['recording.open'] : self::MENU_ACTIONS,
+            'say' => $say,
+            'labels' => $readOnly ? [] : array_map(fn (array $l): array => ['value' => $l['label'], 'label' => $l['label']], app(LibraryOrganiser::class)->labels($workspaceId)),
+            'projects' => $readOnly ? [] : Client::query()->where('workspace_id', $workspaceId)->where('user_id', CurrentWorkspace::userId())->orderBy('name')->get(['id', 'name'])
+                ->map(fn (Client $c): array => ['value' => (string) $c->id, 'label' => (string) $c->name])->values()->all(),
+            'formats' => array_map(fn (string $format, string $label): array => ['value' => $format, 'label' => __($label)],
+                array_keys(CaptureSessionsTable::V2_EXPORT_FORMATS), array_values(CaptureSessionsTable::V2_EXPORT_FORMATS)),
+            'words' => ['many' => __(':count recordings'), 'noProject' => __('No project'), 'menu' => __('Recording actions')],
+        ];
     }
 
     /**

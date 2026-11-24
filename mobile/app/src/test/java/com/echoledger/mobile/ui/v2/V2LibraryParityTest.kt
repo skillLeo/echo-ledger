@@ -159,9 +159,16 @@ class V2LibraryParityTest : ScreenTest() {
         compose.onAllNodes(hasContentDescription("Remove Status: Not transcribed")).assertCountEquals(0)
     }
 
+    /** Search is the ⌕ in the title row (v2.1 UX-14): it opens over the page. */
+    private fun openSearch() {
+        compose.onNodeWithContentDescription("Search recordings").performClick()
+        compose.waitForIdle()
+    }
+
     @Test
     fun aSearchIsKeptOnThisPhoneAndATapSearchesAgain() {
         twoRows()
+        openSearch()
         val field = compose.onNode(hasSetTextAction())
         field.performClick()
         field.performTextInput("basmati")
@@ -170,6 +177,7 @@ class V2LibraryParityTest : ScreenTest() {
         // Back leaves search: the words go, the list comes back, and they wait under Recent searches.
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertExists()
+        openSearch()
         field.performClick()
         compose.onNodeWithText("Recent searches").assertExists()
         compose.onNode(hasText("basmati") and hasClickAction()).performClick()
@@ -180,6 +188,7 @@ class V2LibraryParityTest : ScreenTest() {
     @Test
     fun onlyTheLastFiveSearchesAreKeptAndNeverInASettingsExport() {
         twoRows()
+        openSearch()
         val field = compose.onNode(hasSetTextAction())
         listOf("one", "two", "three", "four", "five", "six", "Four").forEach { words ->
             field.performTextReplacement(words)
@@ -194,6 +203,7 @@ class V2LibraryParityTest : ScreenTest() {
     @Test
     fun backLeavesSearchAndKeepsTheWords() {
         twoRows()
+        openSearch()
         val field = compose.onNode(hasSetTextAction())
         field.performClick()
         field.performTextInput("Rehman")
@@ -202,6 +212,9 @@ class V2LibraryParityTest : ScreenTest() {
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
         pumpUntil("kept") { vm.settings.value.recentSearches == listOf("Rehman") }
+        // Search is closed (v2.1 UX-14); opened again, it is empty.
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        openSearch()
         compose.onNode(hasSetTextAction()).assert(hasText("Rehman", substring = true).not())
     }
 

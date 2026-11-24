@@ -4,11 +4,13 @@
     "Audio · N days left" and a snippet of what was said; the flag when it is important; the star pins it to the top;
     at the end the time above the length. From 1024 px a plain click opens the recording beside the list, as in the
     classic Library (Ctrl, Cmd, Shift and middle clicks open its page). data-important feeds the selection's Mark /
-    Unmark important. Since 2.0.0-p a click on the source's mark or a label's dot filters the Library by it (another
+    Unmark important; with data-pinned, data-opened, data-state, data-project and data-labels it is what the row's right-click menu
+    shows (UX-22, filament.v2.context-menu). Since 2.0.0-p a click on the source's mark or a label's dot filters the Library by it (another
     click takes it away), and the select box has its own place before the mark, shown on the row's hover.
 --}}
 @php($row = \App\Filament\Support\V2RecordingRow::for($getRecord()))
-<div class="v2-lib-row" data-recording="{{ $row['id'] }}" data-important="{{ $row['important'] ? '1' : '0' }}"
+<div class="v2-lib-row" data-recording="{{ $row['id'] }}" data-important="{{ $row['important'] ? '1' : '0' }}" data-pinned="{{ $row['pinned'] ? '1' : '0' }}" data-opened="{{ $row['unread'] ? '0' : '1' }}"
+    data-state="{{ $row['state'] }}" data-project="{{ $row['project'] ?? '' }}" data-labels="{{ json_encode($row['label_keys'], JSON_UNESCAPED_UNICODE) }}"
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
     {{-- The app's own mark and the device badge (EL-Design's source-logo); a click shows only that source's recordings. --}}
     <button type="button" class="v2-row-tile" title="{{ __('Show only :source recordings', ['source' => $row['quick_source_words']]) }}" style="background-color: transparent"

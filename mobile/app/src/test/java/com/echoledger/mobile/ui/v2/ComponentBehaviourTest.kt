@@ -383,6 +383,28 @@ class ComponentBehaviourTest {
         assertFalse("the title is not cut", layouts.first().hasVisualOverflow)
     }
 
+    /** Seen in UX-14's shots: at the largest text a banner's words were one per line beside Fix and ×. */
+    @Test
+    fun atTwiceTheTextSizeABannersActionIsUnderItsWords() {
+        show {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale = 2f)) {
+                com.echoledger.mobile.ui.v2.components.EchoBanner(
+                    "Calls won't record: call capture isn't set up yet",
+                    com.echoledger.mobile.ui.v2.components.EchoBannerKind.Warning,
+                    actionLabel = "Fix",
+                    onClose = {},
+                    closeLabel = "Close"
+                )
+            }
+        }
+        val words = compose.onNodeWithText("Calls won't record", substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val fix = compose.onNodeWithText("Fix", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val banner = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue("Fix is under the words", fix.top >= words.bottom)
+        assertTrue("the words take most of the width", words.width >= banner.width * 0.6f)
+    }
+
     @Test
     fun wallpaperColoursKeepTheBrandAccentOnTheRedesignedScreens() {
         var accent: androidx.compose.ui.graphics.Color? = null

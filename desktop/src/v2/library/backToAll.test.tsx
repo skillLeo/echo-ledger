@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import type { LibraryItem, ListItem } from "../../lib/ipc";
-import { flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { LibraryFoot, LibraryNav } from "./LibraryNav";
@@ -134,6 +134,33 @@ describe("the way back to all recordings", () => {
         atAll();
       }
     }
+  });
+
+  it("a built-in view's menu (UX-22): Open; Unread's Mark all as read; Audio only's Transcribe all…", async () => {
+    respond("session_opened", null);
+    respond("sessions_transcribe_estimate", { minutes: 5, minutes_left: 300, items: [] });
+    render(<App />);
+    await settle();
+    const words = () => [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    fireEvent.contextMenu(nav().getByRole("button", { name: /^All recordings, / }));
+    expect(words()).toEqual(["Open"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.contextMenu(nav().getByRole("button", { name: /^Unread, / }));
+    expect(words()).toEqual(["Open", "Mark all as read"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read" }));
+    await settle();
+    expect(callsOf("session_opened")).toEqual([{ id: "wa" }]);
+    expect(nav().getByRole("button", { name: /^Unread, / })).toHaveAccessibleName("Unread, 0");
+    fireEvent.contextMenu(nav().getByRole("button", { name: /^Audio only, / }));
+    expect(words()).toEqual(["Open", "Transcribe all…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Transcribe all…" }));
+    await settle();
+    expect(screen.getByRole("dialog", { name: /^Transcribe/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /^Transcribe/ }), { key: "Escape" });
+    fireEvent.contextMenu(nav().getByRole("button", { name: /^Important, / }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
+    await settle();
+    expect(title()).toHaveTextContent(/^Important/);
   });
 
   it("Clear all shows whenever a filter is on, and clears every one", async () => {

@@ -61,7 +61,7 @@ object AfterCallActions {
      * Only a swipe or a Clear all within the hour (posted at [postedAt]) is the person's choice and counts toward
      * "Always audio only"; the hour running out is nobody choosing, as the backstop is.
      */
-    suspend fun swiped(context: Context, ids: List<String>, postedAt: Long? = null, now: Long = System.currentTimeMillis()) {
+    suspend fun swiped(context: Context, ids: List<String>, postedAt: Long? = null, now: Long = android.os.SystemClock.elapsedRealtime()) {
         val waiting = ids.mapNotNull { graph(context).recordings.get(it) }.filter { it.state == WAITING }
         if (waiting.isEmpty()) return
         waiting.forEach { Decisions.apply(context, it.id, keep = true, transcribe = false) }

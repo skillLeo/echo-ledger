@@ -13,14 +13,17 @@ use App\Filament\Support\V2CopyForAi;
 use App\Models\CaptureSession;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Services\Entitlements\Entitlements;
 use App\Services\InterfaceFlags;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
 use Filament\Notifications\NotificationMailbox;
+use Illuminate\Bus\Dispatcher;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Queue\CallQueuedClosure;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -63,7 +66,7 @@ function selectionPlan(object $test, string $plan, ?int $minutes): void
     Plan::query()->where('key', $plan)->update(['monthly_minutes' => $minutes]);
     Workspace::query()->whereKey($test->owner->current_workspace_id)->update(['plan_id' => Plan::query()->where('key', $plan)->value('id'),
         'plan_expires_at' => $plan === 'free' ? null : now()->addDays(30)]);
-    app(\App\Services\Entitlements\Entitlements::class)->forget();
+    app(Entitlements::class)->forget();
 }
 
 /** Runs the starts Transcribe… put on the queue (Queue::fake holds them), as a worker would. */
@@ -271,7 +274,7 @@ it('starts each one on its own and says honestly how many could not start', func
     Fx::readyRecording($second, 'audio of the second call');
     Queue::fake();
     // The queue refuses the second start (it is down for a moment): that one alone fails, and the first still starts.
-    $this->app->extend(\Illuminate\Bus\Dispatcher::class, fn ($bus, $app) => new class($app, fn ($connection = null) => $app['queue']->connection($connection)) extends \Illuminate\Bus\Dispatcher
+    $this->app->extend(Dispatcher::class, fn ($bus, $app) => new class($app, fn ($connection = null) => $app['queue']->connection($connection)) extends Dispatcher
     {
         private int $closures = 0;
 
@@ -306,9 +309,9 @@ it('copies 200 recordings for AI in a few queries, not a few for each recording'
         return (string) $s->id;
     });
     $sessions = CaptureSession::query()->whereIn('id', $ids)->get();
-    \Illuminate\Support\Facades\DB::enableQueryLog();
+    DB::enableQueryLog();
     $result = V2CopyForAi::forMany($sessions);
-    $queries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+    $queries = count(DB::getQueryLog());
     expect($result['copied'])->toBe(40)->and($queries)->toBeLessThan(10);
 });
 

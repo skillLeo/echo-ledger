@@ -61,7 +61,8 @@ const labelRows = () => labels().getAllByRole("button").filter((b) => !b.classNa
 const label = (name: string) => labels().getByRole("button", { name: new RegExp(`^${name}, `) });
 const rowTitles = () => [...screen.getByRole("list", { name: "Recordings" }).querySelectorAll<HTMLButtonElement>("button[data-row-id]")].map((b) => b.dataset.rowId);
 const menuItem = (name: string | RegExp) => screen.getByRole("menuitem", { name });
-const menuItems = () => within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent);
+/** A menu's items as drawn (the first level; a sub-menu's are its own menu). */
+const menuItems = () => [...screen.getAllByRole("menu")[0].querySelectorAll(':scope > li [role^="menuitem"]')].map((i) => i.querySelector(".el-menu__label")?.textContent ?? i.textContent);
 const title = () => screen.getByRole("heading", { level: 1 });
 
 describe("labels in the sidebar and the Library", () => {
@@ -251,7 +252,8 @@ describe("labels in the sidebar and the Library", () => {
     fireEvent.click(label("Clients"));
     await act(flushAsync);
     fireEvent.click(labels().getByRole("button", { name: "More for Clients" }));
-    expect(menuItems()).toEqual(["Rename…", "Change colour…", "Move down", "Delete label…"]);
+    // 3b (UX-22): Show recordings | Rename… · Colour › · Move down | Delete label…, from actions.json.
+    expect(menuItems()).toEqual(["Show recordings", "Rename…", "Colour", "Move down", "Delete label…"]);
     fireEvent.click(menuItem("Rename…"));
     const dialog = screen.getByRole("dialog", { name: "Rename label" });
     const field = within(dialog).getByLabelText("Label name");
@@ -278,15 +280,15 @@ describe("labels in the sidebar and the Library", () => {
     expect(labelRows()).toContain("Family, 0");
   });
 
-  it("Change colour… sends one of the eight colours", async () => {
+  it("Colour › sends one of the eight colours (UX-22: a choice, set at once)", async () => {
     respond("list_update", { ...LISTS[1], color: "#d7609c" });
     await show();
     fireEvent.contextMenu(label("Home"));
-    fireEvent.click(menuItem("Change colour…"));
-    const dialog = screen.getByRole("dialog", { name: "Change colour" });
-    expect(within(dialog).getByRole("radio", { name: "Amber" })).toBeChecked();
-    fireEvent.click(within(dialog).getByRole("radio", { name: "Pink" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    fireEvent.click(menuItem("Colour"));
+    const colours = screen.getByRole("menu", { name: "Colour" });
+    expect(within(colours).getAllByRole("menuitemradio")).toHaveLength(8);
+    expect(within(colours).getByRole("menuitemradio", { name: "Amber" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(colours).getByRole("menuitemradio", { name: "Pink" }));
     await act(flushAsync);
     expect(callsOf("list_update")).toEqual([{ key: "home", name: null, color: "#d7609c" }]);
   });
@@ -295,13 +297,13 @@ describe("labels in the sidebar and the Library", () => {
     respondWith("lists_order", (args) => (args as { keys: string[] }).keys.map((key, position) => ({ ...LISTS.find((l) => l.key === key)!, position })));
     await show();
     fireEvent.contextMenu(label("Home"));
-    expect(menuItems()).toEqual(["Rename…", "Change colour…", "Move up", "Move down", "Delete label…"]);
+    expect(menuItems()).toEqual(["Show recordings", "Rename…", "Colour", "Move up", "Move down", "Delete label…"]);
     fireEvent.click(menuItem("Move up"));
     await act(flushAsync);
     expect(callsOf("lists_order")).toEqual([{ keys: ["home", "clients", "family"] }]);
     expect(labelRows().slice(0, 3).map((r) => r?.split(",")[0])).toEqual(["Home", "Clients", "Family"]);
     fireEvent.contextMenu(label("Family"));
-    expect(menuItems()).toEqual(["Rename…", "Change colour…", "Move up", "Delete label…"]);
+    expect(menuItems()).toEqual(["Show recordings", "Rename…", "Colour", "Move up", "Delete label…"]);
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     document.documentElement.dir = "rtl";
     fireEvent.contextMenu(label("Clients"));
@@ -331,13 +333,15 @@ describe("labels in the sidebar and the Library", () => {
     expect(rowTitles()).toEqual(["bilal", "ayesha", "usman"]);
   });
 
-  it("a server without labels shows no LABELS section, and Label… stays in the menu", async () => {
+  it("a server without labels shows no LABELS section; the menu's Labels › New label… opens the Label dialog", async () => {
     respond("lists_get", null);
     await show();
     expect(nav().queryByRole("list", { name: "Labels" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
-    expect(screen.queryByRole("menuitem", { name: "Labels" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Label…" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Labels" }));
+    expect([...screen.getByRole("menu", { name: "Labels" }).querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(["New label…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "New label…" }));
+    expect(screen.getByRole("dialog", { name: /^Label/ })).toBeInTheDocument();
   });
 
   it("a label shown and deleted on another device gives way to All, and the labels are read again", async () => {
@@ -359,8 +363,8 @@ describe("labels in the sidebar and the Library", () => {
     fail("list_update", "List not found.");
     respond("lists_get", [LISTS[0], LISTS[2]]);
     fireEvent.contextMenu(label("Home"));
-    fireEvent.click(menuItem("Change colour…"));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Change colour" })).getByRole("button", { name: "Save" }));
+    fireEvent.click(menuItem("Colour"));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Colour" })).getByRole("menuitemradio", { name: "Pink" }));
     await act(flushAsync);
     expect(screen.getByRole("status", { name: "Sidebar notices" })).toHaveTextContent("List not found.");
     expect(labelRows().some((r) => r?.startsWith("Home"))).toBe(false);

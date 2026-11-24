@@ -46,6 +46,14 @@ import kotlinx.coroutines.withTimeout
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val id = inputData.getString(KEY_ID) ?: return Result.failure()
+        val result = send(id)
+        // One of back-to-back calls sent with Transcribe all that will never reach the server (v2.1): done, not ready,
+        // so their one notification never waits the hour for it.
+        if (result is Result.Failure) com.echoledger.mobile.notify.AfterCallNotice.groupMemberDone(applicationContext, id, ready = false)
+        return result
+    }
+
+    private suspend fun send(id: String): Result {
         val graph = (applicationContext as EchoLedgerApp).graph
         val rec = graph.recordings.get(id) ?: return Result.success()
         // Discarded after a call (since v1.8.1): nothing of it is sent, and its delete is the Discard's to make.

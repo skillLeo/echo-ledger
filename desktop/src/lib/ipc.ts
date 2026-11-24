@@ -382,12 +382,17 @@ export interface Account {
 export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
 /** One line of a native menu (native_menu.rs): the action it sends (none: a line), its words, keys, tick. */
 export interface NativeMenuItem {
+  /** The action it sends; none: a hairline, or with a label a greyed title line ("3 Recordings"). */
   action: string | null;
   label?: string;
   /** Tauri's accelerator ("CmdOrCtrl+Shift+N"). */
   accelerator?: string | null;
   enabled?: boolean;
   checked?: boolean | null;
+  /** A sub-menu's choice (UX-22): picked, it comes back as `<action>=<value>`. */
+  value?: string | null;
+  /** A sub-menu's items (one level). */
+  items?: NativeMenuItem[] | null;
 }
 
 export interface UpdateStatus {
@@ -1129,7 +1134,7 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
-export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
+export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
   id: string;
@@ -1899,7 +1904,8 @@ export const api = {
   /** A double click on the title row (UX-20): zoom, minimize or nothing, as the Mac's setting says (lib/titleClick.ts). */
   titleDoubleClick: () => invoke<void>("title_double_click"),
   /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
-  nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number) => invoke<void>("native_menu_popup", { items, x, y }),
+  /** `menu`: a right-click menu's number (UX-22), which each of its picks carries as `~<menu>`. */
+  nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number, menu?: number) => invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),

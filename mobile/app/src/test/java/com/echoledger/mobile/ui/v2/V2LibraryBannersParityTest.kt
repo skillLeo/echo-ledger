@@ -35,7 +35,7 @@ import org.junit.Test
 
 /**
  * The top of v2 Library says what classic's says (parity.csv PH-LIB-059, 060): the server's banners (an app update
- * with Update, maintenance, the admin's announcement with ×, remembered), and "Calls are not being recorded" with the
+ * with Update, maintenance, the admin's announcement with ×, remembered), and "Calls won't record" (since v2.1) with the
  * Ready check's reason, Fix, and ×.
  */
 class V2LibraryBannersParityTest : ScreenTest() {
@@ -147,12 +147,12 @@ class V2LibraryBannersParityTest : ScreenTest() {
                 V2LibraryTop(emptyList(), setupHidden = true, banner = banner, actions = actions())
             }
         }
-        compose.onNodeWithText("Calls are not being recorded: the helper stopped when the phone restarted").assertExists()
+        compose.onNodeWithText("Calls won't record: the helper stopped when the phone restarted").assertExists()
         compose.onNode(hasText("Fix") and hasClickAction()).performClick()
         assertEquals(1, fixes)
         compose.onNode(hasContentDescription("Close") and hasClickAction()).performClick()
         compose.waitForIdle()
-        assertTrue(!seen("Calls are not being recorded"))
+        assertTrue(!seen("Calls won't record"))
     }
 
     @Test
@@ -172,6 +172,6 @@ class V2LibraryBannersParityTest : ScreenTest() {
         val reason = app.getString(com.echoledger.mobile.ui.v2.setup.HealthChecks.failWords(blocking.key)!!).replaceFirstChar {
             it.lowercase()
         }
-        pumpUntil("the reason") { compose.onAllNodesWithText("Calls are not being recorded: $reason").fetchSemanticsNodes().isNotEmpty() }
+        pumpUntil("the reason") { compose.onAllNodesWithText("Calls won't record: $reason").fetchSemanticsNodes().isNotEmpty() }
     }
 }

@@ -128,7 +128,9 @@ describe("copies in the view shown (U19)", () => {
     respond("transcript_detail", urduTranscript({ status: "ready" }));
     render(<LibraryV2 />);
     await act(flushAsync);
-    fireEvent.contextMenu(screen.getByRole("button", { name: "Bilal Qureshi" }));
+    // From the selection bar's ⋮ (UX-22: Send to WhatsApp… left the row menu).
+    fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi" }), { metaKey: true });
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Selected recordings" })).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "Send to WhatsApp" });
