@@ -169,7 +169,9 @@ fun V2LibraryScreen(
     onSharedWithMe: () -> Unit = {},
     onRequests: () -> Unit = {},
     /** A call waiting for Transcribe or Delete, listed in Needs you: where the choice is made (Activity). */
-    onReviewWaiting: () -> Unit = {}
+    onReviewWaiting: () -> Unit = {},
+    /** The tab it opens on, as one kept from before (tests); the person's own choice is kept across a rotation anyway. */
+    initialKind: LibraryKind = LibraryKind.ALL
 ) {
     val text = v2Text
     // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
@@ -221,7 +223,7 @@ fun V2LibraryScreen(
     fun setFilters(next: LibraryFilterSet) {
         filtersJson = LibraryScreenState.json(next)
     }
-    var kindKey by rememberSaveable { mutableStateOf(LibraryKind.ALL.name) }
+    var kindKey by rememberSaveable { mutableStateOf(initialKind.name) }
     val kind = LibraryKind.entries.firstOrNull { it.name == kindKey } ?: LibraryKind.ALL
     // A list or a view that is gone (deleted here or elsewhere) goes back to All recordings.
     val target = LibraryScreenState.resolve(LibraryTarget.parse(targetKey), lists, savedViews, viewsReady)
@@ -275,9 +277,12 @@ fun V2LibraryScreen(
     // background, the process made again) keeps the Other the person chose.
     val otherCount = kindCounts[LibraryKind.OTHER] ?: 0
     var otherHad by remember { mutableStateOf(false) }
-    LaunchedEffect(kind, otherCount) {
+    // Synced as of the list this frame shows, never mid-sync: read with the list (a sync sets its point just before its
+    // items), so a synced library without any Other goes back to All once its sync ends, and only then.
+    val synced = remember(library, syncing) { !syncing && vm.hasSynced() }
+    LaunchedEffect(kind, otherCount, synced) {
         if (otherCount > 0) otherHad = true
-        if (LibraryKind.backToAll(kind, otherCount, otherHad, vm.hasSynced())) kindKey = LibraryKind.ALL.name
+        if (LibraryKind.backToAll(kind, otherCount, otherHad, synced)) kindKey = LibraryKind.ALL.name
     }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.kind) } }
     val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
