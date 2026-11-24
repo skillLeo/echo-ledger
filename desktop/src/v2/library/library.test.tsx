@@ -7,6 +7,11 @@ import { answerConfirm } from "../../test/confirm";
 import { forgetPictures } from "../../lib/screens";
 import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowDuration, rowModel, rowWhen, TIME_ONLY_GROUPS, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
+import { NEEDS_TRANSCRIPTION_KEY_TEXT } from "./organise";
+import { OPEN_SECTION_EVENT } from "../../lib/entitlements";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { LibraryScope } from "./scope";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -334,6 +339,36 @@ describe("LibraryV2", () => {
     await act(flushAsync);
     expect(callsOf("sessions_transcribe")).toEqual([{ ids: ["voice"] }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing 1 recording");
+  });
+
+  it("Transcribe on a plan that needs the person's own key says so and offers Add my Groq key", async () => {
+    respond("session_detail", { playback_url: null });
+    fail("sessions_transcribe_estimate", NEEDS_TRANSCRIPTION_KEY_TEXT);
+    const opened: string[] = [];
+    const listen = (e: Event) => opened.push((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_SECTION_EVENT, listen);
+    try {
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
+      await act(flushAsync);
+      fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
+      await act(flushAsync);
+      const dialog = screen.getByRole("dialog", { name: "Transcribe this recording?" });
+      expect(dialog).toHaveAccessibleDescription(NEEDS_TRANSCRIPTION_KEY_TEXT);
+      expect(within(dialog).queryByRole("button", { name: "Transcribe" })).toBeNull();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Add my Groq key" }));
+      expect(opened).toEqual(["transcription-key"]);
+      expect(screen.queryByRole("dialog", { name: "Transcribe this recording?" })).toBeNull();
+      expect(callsOf("sessions_transcribe")).toHaveLength(0);
+    } finally {
+      window.removeEventListener(OPEN_SECTION_EVENT, listen);
+    }
+  });
+
+  it("the words for a missing own key are the core's (error.rs CODE_TEXT), so the dialog can never miss them", () => {
+    const rust = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../src-tauri/src/error.rs"), "utf8");
+    const entry = rust.match(/\("needs_transcription_key",\s*"([^"]+)"\)/);
+    expect(entry?.[1]).toBe(NEEDS_TRANSCRIPTION_KEY_TEXT);
   });
 
   it("Delete moves the recording to Trash and Undo brings it back", async () => {

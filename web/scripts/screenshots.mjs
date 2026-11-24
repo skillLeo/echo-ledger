@@ -45,6 +45,10 @@ const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 const menuOn = (at) => `(() => { const row = document.querySelectorAll('.v2-library .v2-lib-row')[${at}]; const r = row.getBoundingClientRect();`
     + ` row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height / 2 })); })()`;
 
+/** JavaScript that right-clicks the first `selector` a little in from its start (UX-22 3b: an object's menu). */
+const objectMenuOn = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (! el) return; const r = el.getBoundingClientRect();`
+    + ` el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(40, r.width / 2), clientY: r.top + r.height / 2 })); })()`;
+
 /**
  * UX-25: the Library keeps your place, in a short window so that a few recordings already scroll. Back to top shows a
  * screen down, goes to the top and puts the focus on the first row; typing in the search while the list comes back from
@@ -338,6 +342,14 @@ const pages = {
     // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
     'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
     'library-menu-sub': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `${menuOn(1)};document.querySelector('.v2-ctx [aria-haspopup=menu]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`, full: false, wide: true },
+    // UX-22 3b: the other objects' menus: a view, a label and Trash in the Library's panel, a project in the Projects
+    // panel, an Activity item, a recording in Trash.
+    'menu-view': { path: '/app/sessions', waitFor: '[data-v2-object="view"]', run: objectMenuOn('[data-v2-object="view"] a'), full: false, wide: true },
+    'menu-label': { path: '/app/sessions', waitFor: '[data-v2-object="label"]', run: objectMenuOn('[data-v2-object="label"] a'), full: false, wide: true },
+    'menu-trash': { path: '/app/sessions', waitFor: '[data-v2-object="trash"]', run: objectMenuOn('[data-v2-object="trash"]'), full: false, wide: true },
+    'menu-project': { path: '/app/clients', waitFor: '[data-v2-object="project"]', run: objectMenuOn('[data-v2-object="project"]'), full: false, wide: true },
+    'menu-activity': { path: '/app/activity', waitFor: '[data-v2-object="activity"]', run: objectMenuOn('[data-v2-object="activity"]'), full: false, wide: true },
+    'menu-trash-row': { path: '/app/recently-deleted', waitFor: '[data-v2-object="trashItem"]', run: objectMenuOn('[data-v2-object="trashItem"]'), full: false, wide: true },
     'library-menu-many': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `[...document.querySelectorAll('.v2-library input.fi-ta-record-checkbox')].slice(0, 2).forEach((b) => b.click());${menuOn(0)}`, full: false, wide: true },
     'library-folder': { path: '/app/sessions?folder=whatsapp' },
     'library-failed': { path: '/app/sessions?tab=failed' },

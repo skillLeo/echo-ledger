@@ -152,6 +152,14 @@ final class V2RecordingRow
         return $dots;
     }
 
+    /** A stored colour's name when it is one of the eight (matched ignoring case), else null. */
+    public static function colourName(?string $stored): ?string
+    {
+        $name = array_search(strtolower(trim((string) $stored)), self::LABEL_COLOURS, true);
+
+        return is_string($name) ? $name : null;
+    }
+
     /**
      * A stored colour's dot: "v2-label-dot--<name>" for one of the eight (matched ignoring case), else
      * "v2-label-dot--other" with the colour as --label-own when it is a valid #rrggbb, or none.
@@ -160,11 +168,11 @@ final class V2RecordingRow
      */
     public static function dotLook(?string $stored): array
     {
-        $value = strtolower(trim((string) $stored));
-        $name = array_search($value, self::LABEL_COLOURS, true);
-        if (is_string($name)) {
+        $name = self::colourName($stored);
+        if ($name !== null) {
             return ['class' => 'v2-label-dot--'.$name, 'own' => null];
         }
+        $value = strtolower(trim((string) $stored));
 
         return ['class' => 'v2-label-dot--other', 'own' => preg_match('/^#[0-9a-f]{6}$/', $value) === 1 ? $value : null];
     }
