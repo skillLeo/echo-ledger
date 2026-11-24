@@ -88,6 +88,7 @@ class Sidebar extends FilamentSidebar
     public function renameViewAction(): Action
     {
         return Action::make('renameView')->label(__('Rename view'))->modalSubmitActionLabel(__('Rename'))
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(SavedViews::MAX_NAME)->autofocus()])
             ->fillForm(fn (array $arguments): array => ['name' => $this->viewName((string) ($arguments['id'] ?? ''))])
             ->action(fn (array $data, array $arguments) => $this->changeViews(fn (SavedViews $views, int $ws, int $user) => $views->update($ws, $user, (string) ($arguments['id'] ?? ''), ['name' => $data['name']])));
@@ -97,6 +98,7 @@ class Sidebar extends FilamentSidebar
     public function deleteViewAction(): Action
     {
         return Action::make('deleteView')->label(__('Delete view'))->color('danger')->requiresConfirmation()
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->modalHeading(fn (array $arguments): string => __('Delete the view :name?', ['name' => $this->viewName((string) ($arguments['id'] ?? ''))]))
             ->modalDescription(__('The view goes from My views on every device. No recording is deleted.'))
             ->modalSubmitActionLabel(__('Delete view'))
@@ -104,18 +106,25 @@ class Sidebar extends FilamentSidebar
     }
 
     /**
-     * Since 2.0.0-p: a saved view dragged to another place in My views.
+     * Since 2.0.0-p: a saved view dragged to another place in My views (never in a read-only console, like every
+     * change from the panel: the actions below are hidden there, so Filament refuses to mount or run them).
      *
      * @param  list<mixed>  $ids
      */
     public function orderViews(array $ids): void
     {
+        if (ConsoleAccess::readOnly()) {
+            return;
+        }
         $this->changeViews(fn (SavedViews $views, int $ws, int $user) => $views->order($ws, $user, $ids));
     }
 
-    /** Since 2.0.0-p: a saved view's ⋯ › Move up / Move down (the keyboard's way to reorder). */
+    /** Since 2.0.0-p: a saved view's ⋯ › Move up / Move down (the keyboard's way to reorder); not in a read-only console. */
     public function moveView(string $id, int $by): void
     {
+        if (ConsoleAccess::readOnly()) {
+            return;
+        }
         $ws = (int) CurrentWorkspace::id();
         $user = (int) CurrentWorkspace::userId();
         $ids = array_column(app(SavedViews::class)->index($ws, $user), 'id');
@@ -244,6 +253,7 @@ class Sidebar extends FilamentSidebar
     public function renameLabelAction(): Action
     {
         return Action::make('renameLabel')->label(__('Rename label'))->modalSubmitActionLabel(__('Rename'))
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(LabelLists::MAX_NAME)->autofocus()])
             ->fillForm(fn (array $arguments): array => ['name' => $this->labelName((string) ($arguments['key'] ?? ''))])
             ->action(fn (array $data, array $arguments) => $this->changeLabels(fn (LabelLists $lists) => $lists->update((int) CurrentWorkspace::id(),
@@ -254,6 +264,7 @@ class Sidebar extends FilamentSidebar
     public function deleteLabelAction(): Action
     {
         return Action::make('deleteLabel')->label(__('Delete label'))->color('danger')->requiresConfirmation()
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->modalHeading(fn (array $arguments): string => __('Delete the label :name?', ['name' => $this->labelName((string) ($arguments['key'] ?? ''))]))
             ->modalDescription(__('Delete this label? Its recordings stay; only the label goes.'))
             ->modalSubmitActionLabel(__('Delete label'))
@@ -265,6 +276,7 @@ class Sidebar extends FilamentSidebar
     public function renameProjectAction(): Action
     {
         return Action::make('renameProject')->label(__('Rename project'))->modalSubmitActionLabel(__('Rename'))
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(120)->autofocus()])
             ->fillForm(fn (array $arguments): array => ['name' => (string) $this->project($arguments)?->name])
             ->action(function (array $data, array $arguments): void {
@@ -293,6 +305,7 @@ class Sidebar extends FilamentSidebar
     public function deleteProjectAction(): Action
     {
         return Action::make('deleteProject')->label(__('Delete project'))->color('danger')->requiresConfirmation()
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
             ->modalHeading(fn (array $arguments): string => __('Delete “:name”?', ['name' => (string) $this->project($arguments)?->name]))
             ->modalDescription(__('Its recordings are not deleted: they stay in All recordings, with no project. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.'))
             ->modalSubmitActionLabel(__('Delete project'))

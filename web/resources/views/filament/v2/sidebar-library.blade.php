@@ -65,7 +65,7 @@
                         const from = ids.indexOf(this.dragging); ids.splice(from, 1); ids.splice(ids.indexOf(target) + (from <= ids.indexOf(target) ? 1 : 0), 0, this.dragging); $wire.orderViews(ids); this.dragging = null } }">
                 @forelse ($nav['views'] as $i => $view)
                     {{-- UX-22 3b: its right-click menu, its ⋯ and Shift+F10 open the same menu (filament.v2.context-menu-script). --}}
-                    <li class="v2-sb-view" data-view-id="{{ $view['id'] }}" draggable="true" x-on:dragstart="dragging = @js($view['id'])" x-on:dragover.prevent x-on:drop.prevent="drop(@js($view['id']))"
+                    <li class="v2-sb-view" data-view-id="{{ $view['id'] }}" draggable="{{ $readOnly ? 'false' : 'true' }}" x-on:dragstart="dragging = @js($view['id'])" x-on:dragover.prevent x-on:drop.prevent="drop(@js($view['id']))"
                         data-v2-object="view" data-v2-object-id="{{ $view['id'] }}" data-v2-object-not="{{ trim(($i === 0 ? 'view.moveUp' : '').' '.($i === count($nav['views']) - 1 ? 'view.moveDown' : '')) }}">
                         <a href="{{ $view['url'] }}" @class(['v2-sb-subitem', 'is-on' => $view['active']]) @if ($view['active']) aria-current="page" @endif
                             data-view="{{ $view['id'] }}" data-shortcut="{{ $view['shortcut'] ?? '' }}">
@@ -75,10 +75,13 @@
                                 <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($view['count']) }}</span>
                             @endif
                         </a>
-                        <button type="button" class="v2-icon-btn v2-sb-more" aria-label="{{ __('More for :name', ['name' => $view['label']]) }}" aria-haspopup="menu" aria-expanded="false"
-                            data-view-menu="{{ $view['id'] }}" x-on:click="window.elV2ContextMenu && window.elV2ContextMenu.openObjectFromButton($el, $event)">
-                            <x-el.v2.icon name="dots" />
-                        </button>
+                        {{-- A read-only console changes no view, so the ⋯ would open an empty menu. --}}
+                        @unless ($readOnly)
+                            <button type="button" class="v2-icon-btn v2-sb-more" aria-label="{{ __('More for :name', ['name' => $view['label']]) }}" aria-haspopup="menu" aria-expanded="false"
+                                data-view-menu="{{ $view['id'] }}" x-on:click="window.elV2ContextMenu && window.elV2ContextMenu.openObjectFromButton($el, $event)">
+                                <x-el.v2.icon name="dots" />
+                            </button>
+                        @endunless
                     </li>
                 @empty
                     <li class="v2-sb-empty">{{ __('Save filters as a view to keep them here.') }}</li>
@@ -97,7 +100,8 @@
                 <summary class="v2-sb-group-title">{{ __('Labels') }}</summary>
                 <ul class="v2-sb-sub" id="v2-sb-labels" aria-label="{{ __('Labels') }}">
                 @forelse ($nav['labels'] as $label)
-                    <li class="v2-sb-view" data-v2-object="label" data-v2-object-id="{{ $label['key'] }}">
+                    {{-- Its colour's name (one of the eight, else none), for Colour › to tick the one it has. --}}
+                    <li class="v2-sb-view" data-v2-object="label" data-v2-object-id="{{ $label['key'] }}" data-v2-object-colour="{{ $label['colour'] ?? '' }}">
                         <a href="{{ $label['url'] }}" @class(['v2-sb-subitem', 'is-on' => $label['active']]) @if ($label['active']) aria-current="page" @endif data-label="{{ $label['key'] }}">
                             <span class="v2-label-dot {{ $label['dot'] }}" aria-hidden="true" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span>
                             <span class="v2-sb-label" dir="auto"><bdi>{{ $label['label'] }}</bdi></span>

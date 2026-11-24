@@ -2,15 +2,19 @@
 
 declare(strict_types=1);
 
+use App\Enums\WorkspaceRole;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\LabelList;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Library\SavedViews;
 use App\Services\Lists\LabelLists;
+use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Str;
@@ -124,6 +128,62 @@ it('recolours, renames and deletes a label from its menu (its recordings stay); 
     expect($lists->index($this->ws, $this->owner->id))->toBe([])
         ->and(CaptureSession::query()->whereKey($session->id)->exists())->toBeTrue()
         ->and($lists->index((int) $this->other->current_workspace_id, $this->other->id))->toHaveCount(1);
+});
+
+it('marks a label with its colour, so Colour › ticks the one it has (none for a colour not among the eight)', function () {
+    $lists = app(LabelLists::class);
+    $lists->create($this->ws, $this->owner->id, 'Clients', '#26978f');
+    // A colour from before the eight (kept as it was): no choice is ticked.
+    $lists->create($this->ws, $this->owner->id, 'Odd', null);
+    LabelList::query()->where('workspace_id', $this->ws)->where('label_key', 'odd')->update(['color' => '#123456']);
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toContain('data-v2-object="label" data-v2-object-id="clients" data-v2-object-colour="teal"')
+        ->toContain('data-v2-object="label" data-v2-object-id="odd" data-v2-object-colour=""')
+        // The menu reads it from the row: core.objectMenu ticks the choice whose value is target.colour.
+        ->toContain('colour: d.v2ObjectColour || null');
+});
+
+it('changes no view, label or project from a read-only console, by its menu or by mounting the action itself', function () {
+    $workspace = Workspace::query()->findOrFail($this->ws);
+    $member = Fx::user();
+    app(Workspaces::class)->addMember($workspace, $member, WorkspaceRole::Member);
+    $member->forceFill(['current_workspace_id' => $this->ws])->save();
+    $views = app(SavedViews::class);
+    $first = $views->create($this->ws, $member->id, ['name' => 'Calls'])['view'];
+    $second = $views->create($this->ws, $member->id, ['name' => 'Meetings'])['view'];
+    $lists = app(LabelLists::class);
+    $lists->create($this->ws, $member->id, 'Clients', '#26978f');
+    $project = Client::query()->create(['workspace_id' => $this->ws, 'user_id' => $member->id, 'name' => 'Acme']);
+    $this->owner = $member;
+    $this->actingAs($member->fresh(), 'web');
+
+    // Neither the view's ⋯ nor the label's shows, a view does not drag, and the menus run nothing.
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->not->toContain('data-view-menu=')->not->toContain('data-label-menu=')->not->toContain('draggable="true"');
+    preg_match('~<script type="application/json" data-v2-object-menus>(.*?)</script>~s', $html, $m);
+    expect(json_decode($m[1], true)['runnable'])->toBe([]);
+
+    // Each pick from a menu, sent anyway.
+    objectSidebarCall($this, [
+        objectCall('view', 'view.duplicate', $first['id']), objectCall('view', 'view.moveUp', $second['id']),
+        objectCall('view', 'file.rename', $first['id']), objectCall('view', 'view.delete', $first['id']),
+        objectCall('label', 'label.colour', 'clients', 'red'), objectCall('label', 'file.rename', 'clients'), objectCall('label', 'label.delete', 'clients'),
+        objectCall('project', 'project.pin', (string) $project->id), objectCall('project', 'project.rename', (string) $project->id),
+        objectCall('project', 'project.delete', (string) $project->id),
+        ['path' => '', 'method' => 'moveView', 'params' => [$second['id'], -1]],
+        ['path' => '', 'method' => 'orderViews', 'params' => [[$second['id'], $first['id']]]],
+    ]);
+    // Each action mounted and run directly, past objectAction's check.
+    foreach ([['renameView', ['id' => $first['id']]], ['deleteView', ['id' => $first['id']]], ['renameLabel', ['key' => 'clients']],
+        ['deleteLabel', ['key' => 'clients']], ['renameProject', ['id' => (string) $project->id]], ['deleteProject', ['id' => (string) $project->id]]] as [$name, $arguments]) {
+        Livewire::test(Sidebar::class)->call('mountAction', $name, $arguments)->assertActionNotMounted()
+            ->set('mountedActions.0', ['name' => $name, 'arguments' => $arguments, 'context' => [], 'data' => ['name' => 'Changed']])
+            ->call('callMountedAction');
+    }
+
+    expect(collect($views->index($this->ws, $member->id))->pluck('name')->all())->toBe(['Calls', 'Meetings'])
+        ->and(collect($lists->index($this->ws, $member->id))->map(fn (array $l): array => [$l['name'], $l['color']])->all())->toBe([['Clients', '#26978f']])
+        ->and($project->fresh()?->only(['name', 'pinned']))->toBe(['name' => 'Acme', 'pinned' => false]);
 });
 
 it('pins, renames and deletes a project from its menu; another person\'s project is never touched', function () {

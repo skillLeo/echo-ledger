@@ -248,9 +248,10 @@
 
         /*
          * UX-22 3b, the other objects: a view, a label, a project, Trash (the panel), an Activity item, a recording in
-         * Trash. Each is marked data-v2-object="<kind>" with its id, what of its menu does not fit it (-not) and its
-         * state (-pinned); its menu's words are the Livewire component's around it (data-v2-object-menus) and a pick goes
-         * to that component (objectAction). Open, Show recordings and a project's Open follow the object's own link.
+         * Trash. Each is marked data-v2-object="<kind>" with its id, what of its menu does not fit it (-not), its
+         * state (-pinned) and a label's colour (-colour, ticked under Colour ›); its menu's words are the Livewire
+         * component's around it (data-v2-object-menus) and a pick goes to that component (objectAction). Open, Show
+         * recordings and a project's Open follow the object's own link.
          */
         const objectOf = (el) => {
             if (! (el instanceof Element)) return null;
@@ -267,7 +268,8 @@
             if (! data || ! window.Livewire) return false;
             const d = el.dataset;
             const kind = d.v2Object;
-            const made = core.objectMenu(data, kind, { id: d.v2ObjectId, not: (d.v2ObjectNot || '').split(' ').filter(Boolean), state: { pinned: d.v2ObjectPinned === '1' } });
+            const made = core.objectMenu(data, kind, { id: d.v2ObjectId, not: (d.v2ObjectNot || '').split(' ').filter(Boolean), state: { pinned: d.v2ObjectPinned === '1' },
+                colour: d.v2ObjectColour || null });
             const wire = window.Livewire.find(host.getAttribute('wire:id'));
             const link = el.matches('a[href]') ? el : el.querySelector('a[href]');
             const send = (item) => {
