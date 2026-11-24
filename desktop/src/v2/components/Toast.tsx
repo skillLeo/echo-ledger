@@ -36,14 +36,21 @@ export type ToastProps = {
 /** A key typed into a field or editable text belongs to the field (its own undo), never to the toast. */
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-/** Toasts on screen, newest last: only the newest one answers F6 and Cmd/Ctrl+Z. */
-const onScreen: object[] = [];
+/**
+ * The toast on screen (FIX-03: one message at a time in the whole window, whichever part of it shows one). A new toast
+ * closes the one before it; only the one on screen answers F6, Cmd/Ctrl+Z and Esc.
+ */
+const onScreen: { close: () => void }[] = [];
+/** Something else on screen answers Esc first: a dialog, a sheet, a menu or a list that pops up. */
+const takesEsc = () => !!document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"]');
 const isMac = () => typeof navigator !== "undefined" && /mac/i.test(navigator.platform || navigator.userAgent);
 
 /**
- * A short message with at most one action. It closes by itself after the token's duration, but never while the
- * pointer or keyboard focus is on it; Esc closes it when focus is inside. From the keyboard, F6 moves focus to it (and
- * F6 again back to where it was), and an Undo toast's action also runs with Cmd+Z (Ctrl+Z on Windows).
+ * A short message with at most one action, and its ✕. It closes by itself after the token's duration, but never while
+ * the pointer or keyboard focus is on it; Esc closes it, from anywhere in the window, when nothing else there takes Esc
+ * (a dialog or a menu open, or the page's own Esc: an open recording, the filters). A new toast takes its place: one at
+ * a time. From the keyboard, F6 moves focus to it (and F6 again back to where it was), and an Undo toast's action also
+ * runs with Cmd+Z (Ctrl+Z on Windows).
  */
 export function Toast({ message, actionLabel = "Undo", onAction, onClose, closeLabel = "Dismiss", duration, undo = actionLabel === "Undo" }: ToastProps) {
   const [held, setHeld] = useState(false);
@@ -57,11 +64,19 @@ export function Toast({ message, actionLabel = "Undo", onAction, onClose, closeL
   const canUndo = undo && !!onAction;
 
   useEffect(() => {
-    const me = {};
+    const me = { close: () => close.current() };
+    // One at a time: the message on screen goes (its own onClose), this one takes its place.
+    for (const before of onScreen.splice(0)) before.close();
     onScreen.push(me);
     const onKey = (e: KeyboardEvent) => {
       const el = box.current;
       if (!el || e.defaultPrevented || onScreen[onScreen.length - 1] !== me) return;
+      if (e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey && !el.contains(e.target as Node)) {
+        if (takesEsc()) return;
+        e.preventDefault();
+        close.current();
+        return;
+      }
       if (e.key === "F6" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         if (el.contains(document.activeElement)) {
@@ -85,7 +100,7 @@ export function Toast({ message, actionLabel = "Undo", onAction, onClose, closeL
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      onScreen.splice(onScreen.indexOf(me), 1);
+      if (onScreen.includes(me)) onScreen.splice(onScreen.indexOf(me), 1);
     };
   }, [canUndo]);
 
