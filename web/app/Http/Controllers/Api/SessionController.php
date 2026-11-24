@@ -320,6 +320,20 @@ final class SessionController extends Controller
         return response()->noContent();
     }
 
+    /**
+     * Mark as unread (contract 2.0.0-t): takes back only the asking person's own open of a recording they can read (the
+     * same recordings as opened(), through readableSession), idempotently. Like opening, it never touches the
+     * recording: no updated_at, no re-sync of the library.
+     */
+    public function unopened(Request $request, string $id): Response
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        SessionOpen::unmark($this->readableSession($request, $id)->id, $device->user_id);
+
+        return response()->noContent();
+    }
+
     public function show(Request $request, string $id): JsonResponse
     {
         $session = $this->readableSession($request, $id)->loadMissing(['device', 'client'])->load(['transcripts', 'recordings', 'markers'])->loadCount('screens');
