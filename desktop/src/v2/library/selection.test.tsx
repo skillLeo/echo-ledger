@@ -289,9 +289,10 @@ describe("the row ⋮ and the right-click menu", () => {
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
     const words = () => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
     expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
-    // Hairlines between 3b's groups, no group headers; every item has its icon but a tick item.
+    // Hairlines between 3b's groups, no group headers; every item without a tick has its icon.
     expect(menu.querySelectorAll(".el-menu__separator")).toHaveLength(3);
     expect(menu.querySelectorAll(".el-menu__group")).toHaveLength(0);
+    expect([...menu.querySelectorAll('[role="menuitem"]')].filter((m) => !m.querySelector("svg")).map((m) => m.textContent)).toEqual([]);
     expect(menuItem("Move to trash")).toHaveClass("el-menu__option--danger");
     expect(menuItem("Move to trash")).toHaveAttribute("aria-keyshortcuts", "Delete");
     fireEvent.click(menuItem("Unpin"));
