@@ -57,10 +57,10 @@ const DATA = {
     words: { many: ':count recordings', noProject: 'No project' },
     say: { Pin: 'پن کریں', Unpin: 'پن ہٹائیں' },
 };
-const rowOf = (id, more = {}) => ({ id, pinned: false, important: false, state: 'ready', client: null, labels: [], ...more });
+const rowOf = (id, more = {}) => ({ id, pinned: false, important: false, state: 'ready', project: null, labels: [], ...more });
 
 test('a row\'s menu from what it shows: Transcribe only while Audio only, its labels and project ticked, the words in the console\'s language', () => {
-    const { items, title, targets } = core.recordingMenu(DATA, [rowOf('a', { pinned: true, state: 'audio_only', client: 'c1', labels: ['q4'] })]);
+    const { items, title, targets } = core.recordingMenu(DATA, [rowOf('a', { pinned: true, state: 'audio_only', project: 'c1', labels: ['q4'] })]);
     assert.equal(title, null);
     assert.deepEqual(targets, ['a']);
     assert.deepEqual(words(items), ['Open', 'Transcribe', '| پن ہٹائیں', 'Mark as important', 'Labels', 'Move to project', '| Rename…', 'Export', '| Move to trash']);
@@ -84,7 +84,7 @@ test('several rows: titled with the count; Unpin and a tick only when every one 
     assert.deepEqual(labels.slice(0, 2).map((i) => i.checked), [true, false]);
     // Neither in a project: No project is ticked; one in Acme and one not: nothing is.
     assert.equal(items.find((i) => i.label === 'Move to project').items[0].checked, true);
-    const mixed = core.recordingMenu(DATA, [rowOf('a', { client: 'c1' }), rowOf('b')]).items.find((i) => i.label === 'Move to project').items;
+    const mixed = core.recordingMenu(DATA, [rowOf('a', { project: 'c1' }), rowOf('b')]).items.find((i) => i.label === 'Move to project').items;
     assert.deepEqual(mixed.map((i) => i.checked), [false, false]);
 });
 

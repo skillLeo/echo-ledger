@@ -195,7 +195,7 @@ it('draws each row with what its menu needs: pinned, important, its state, its p
     Livewire::test(ListCaptureSessions::class)
         ->assertSeeHtml('data-recording="'.$this->a->id.'" data-important="0" data-pinned="1"')
         ->assertSeeHtml('data-opened="0"')
-        ->assertSeeHtml('data-client="'.$acme->id.'"')
+        ->assertSeeHtml('data-project="'.$acme->id.'"')
         ->assertSeeHtml('data-labels="[&quot;q4&quot;]"')
         ->assertSeeHtml('data-v2-menu-data');
 });

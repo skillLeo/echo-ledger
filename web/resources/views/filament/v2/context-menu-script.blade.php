@@ -25,7 +25,7 @@
         };
         const rowOf = (el) => ({
             id: el.dataset.recording, pinned: el.dataset.pinned === '1', important: el.dataset.important === '1', opened: el.dataset.opened !== '0',
-            state: el.dataset.state || 'ready', client: el.dataset.client || null,
+            state: el.dataset.state || 'ready', project: el.dataset.project || null,
             labels: (() => { try { return JSON.parse(el.dataset.labels || '[]'); } catch (e) { return []; } })(),
         });
         // The menu now open: its lists (the menu, then its open sub-menu), what it was opened on, and where focus goes back.

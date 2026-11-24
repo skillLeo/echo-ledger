@@ -96,7 +96,7 @@
     }
 
     /**
-     * The menu of the rows it was opened on (each as the page draws it: {id, pinned, important, opened, state, client,
+     * The menu of the rows it was opened on (each as the page draws it: {id, pinned, important, opened, state, project,
      * labels}) with the page's choices (data: ListCaptureSessions::menuData). Pin says Unpin, Mark as unread says Mark as
      * read, and a tick shows, only when every one is so; Transcribe is there while one of them is Audio only; Labels › ticks each label every one has, then
      * New label…; Move to project › ticks where every one is (No project when none is in one); Export › lists the
@@ -115,8 +115,8 @@
         const children = {
             'recording.labels': [...labels, ...fresh],
             'recording.moveToProject': choices('recording.moveToProject', [
-                { value: 'none', label: words.noProject || 'No project', checked: every((r) => ! r.client) },
-                ...(data.projects || []).map((p) => ({ value: p.value, label: p.label, checked: every((r) => String(r.client) === String(p.value)) })),
+                { value: 'none', label: words.noProject || 'No project', checked: every((r) => ! r.project) },
+                ...(data.projects || []).map((p) => ({ value: p.value, label: p.label, checked: every((r) => String(r.project) === String(p.value)) })),
             ]),
             'recording.exportAs': choices('recording.exportAs', data.formats || []),
         };
