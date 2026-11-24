@@ -8,7 +8,7 @@ import type { LibraryItem } from "../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { checkMenu } from "../actions/registry";
+import { checkMenu, runAction } from "../actions/registry";
 import { answerConfirmForTests } from "../../lib/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -208,6 +208,19 @@ describe("the Library's right-click menus (UX-22)", () => {
     await show();
     fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
     expect(screen.queryByRole("menu", { name: "List actions" })).toBeNull();
+  });
+
+  it("Transcribe all… (Audio only's menu, through the registry) says the count, the minutes and the minutes left; over 50, the first 50 now", async () => {
+    const many = Array.from({ length: 53 }, (_, i) => makeItem(`a${i}`, { title: `Note ${i}`, source_app: "voice_note", status: "uploaded", transcript: none }));
+    respond("library_list", many);
+    respond("library_refresh", many);
+    respond("sessions_transcribe_estimate", { minutes: 120, minutes_left: 310, items: [] });
+    await show();
+    act(() => void runAction("view.transcribeAll", { platform: "windows", kind: "place" }));
+    await act(flushAsync);
+    const dialog = screen.getByRole("dialog", { name: "Transcribe 50 recordings?" });
+    expect(dialog).toHaveAccessibleDescription("The first 50 of 53 now. About 120 minutes of the 310 minutes left this month.");
+    expect(callsOf("sessions_transcribe_estimate").at(-1)).toMatchObject({ ids: many.slice(0, 50).map((i) => i.id) });
   });
 
   it("Mark as important is in the selection bar's ⋮ and the recording page's menu too, not only a right-click", async () => {

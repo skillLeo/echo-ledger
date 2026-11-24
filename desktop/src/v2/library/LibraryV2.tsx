@@ -59,7 +59,7 @@ import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
 
 type Organise =
-  | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
+  | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null; of?: number }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
 
 /** How often the list syncs while something uploads or is transcribed (classic's)… */
@@ -1363,7 +1363,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     },
     "view.transcribeAll": () => {
       const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
-      if (audioOnly.length) setOrganise({ kind: "transcribe", ids: audioOnly.slice(0, MAX_TRANSCRIBE) });
+      if (audioOnly.length) setOrganise({ kind: "transcribe", ids: audioOnly.slice(0, MAX_TRANSCRIBE), of: audioOnly.length });
     },
   };
   const placeRunsRef = useRef(placeRuns);
@@ -1391,7 +1391,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           items={recordingMenu(context.ids).items} at={context.at} onClose={() => setContext(null)} />)}
       {organise?.kind === "move" && <MoveDialog ids={organise.ids} title={organise.title} current={organise.current} onClose={closeOrganise} say={say} />}
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
-      {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} onClose={closeOrganise} say={say} />}
+      {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} of={organise.of} onClose={closeOrganise} say={say} />}
       {organise?.kind === "whatsapp" && <WhatsAppDialog item={organise.item} onClose={() => setOrganise(null)} say={say} />}
       {newLabel && <NewLabelFor ids={newLabel.ids} onClose={() => setNewLabel(null)} onMade={(list, ids) => void putInList(ids, list, true)} />}
       {savingView && (
