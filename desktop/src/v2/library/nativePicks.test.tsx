@@ -28,7 +28,7 @@ const pickOf = (label: string) => {
   return `${item.action}${item.value !== undefined ? `=${item.value}` : ""}${call.menu !== null ? `~${call.menu}` : ""}`;
 };
 
-function inTheApp(flags: Record<string, boolean>) {
+function inTheApp(flags: Record<string, boolean>, lists: unknown[] = []) {
   respond("app_status", makeStatus({ platform: "macos" }));
   respond("library_list", ITEMS);
   respond("library_refresh", ITEMS);
@@ -37,7 +37,7 @@ function inTheApp(flags: Record<string, boolean>) {
   respond("mic_users", []);
   respond("session_detail", {});
   respond("bin_list", { data: [] });
-  respond("lists_get", []);
+  respond("lists_get", lists);
   respond("library_views", { views: {}, labels: [], folders: { inbox: 2, shared: 0 } });
   respond("library_folder", []);
   respond("native_menu_popup", null);
@@ -82,10 +82,48 @@ describe("the system menus' picks in the app (UX-22)", () => {
     fireEvent.contextMenu(screen.getByRole("list", { name: "Recordings" }).parentElement as HTMLElement, { clientX: 300, clientY: 600 });
     await settle();
     const callsBefore = callsOf("toggle_mic_note").length;
+    // A plain pick (the menu bar's View › As Table) isn't the closed list menu's: the registry runs it, for the
+    // Library's list (FIX-05: the Library says its kinds), and nothing of the list menu's leftovers runs.
     await emitEvent("menu:action", "view.asTable");
     await settle();
-    expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "Recordings" })).toBeInTheDocument();
     expect(callsOf("toggle_mic_note")).toHaveLength(callsBefore);
+  });
+
+  it("a label whose id holds \"=\" or ends in \"~12\" is picked as itself: the core encodes it, the one listener decodes it", async () => {
+    inTheApp({ "ui_v2.library": true, "ui_v2.shell": true }, [{ key: "a=b~12", name: "Clients", color: null, position: 0, count: 0 }]);
+    await settle();
+    await screen.findByRole("list", { name: "Recordings" });
+    fireEvent.contextMenu(row("Bilal on WhatsApp"), { clientX: 30, clientY: 40 });
+    await settle();
+    const call = callsOf("native_menu_popup").at(-1) as { items: Line[]; menu: number };
+    const labels = call.items.find((i) => i.label === "Labels")!;
+    expect(labels.items!.find((i) => i.label === "Clients")).toMatchObject({ action: "recording.labels", value: "a=b~12" });
+    // What native_menu.rs builds for it: the value's "=" and "~" percent-encoded, the menu's number last.
+    await emitEvent("menu:action", `recording.labels=a%3Db%7E12~${call.menu}`);
+    await settle();
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["wa"], action: "label", clientId: null, label: "Clients" }]);
+  });
+
+  it("the menu bar's Recording menu greys and runs for the Library's open recording, as a recording's (FIX-05)", async () => {
+    respond("app_menu_set", null);
+    inTheApp({ "ui_v2.library": true, "ui_v2.shell": true });
+    await settle();
+    await screen.findByRole("list", { name: "Recordings" });
+    const pin = async () => {
+      await act(() => new Promise((done) => setTimeout(done, 80)));
+      const bar = callsOf("app_menu_set").at(-1)?.bar as { menus: { title: string; items: { kind: string; action?: string; enabled?: boolean; label?: string }[] }[] };
+      return bar.menus.find((m) => m.title === "Recording")!.items.find((i) => i.kind === "item" && i.action === "recording.pin")!;
+    };
+    // Nothing chosen: greyed.
+    expect(await pin()).toMatchObject({ enabled: false });
+    // A recording open: Pin is the Library's, for it.
+    fireEvent.click(row("Bilal on WhatsApp"));
+    await settle();
+    expect(await pin()).toMatchObject({ enabled: true, label: "Pin" });
+    await emitEvent("menu:action", "recording.pin");
+    await settle();
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["wa"], action: "pin", clientId: null, label: null }]);
   });
 
   it("a pick of a menu let go is dropped: a stale \"~n\" runs nothing, never its bare id through the registry", async () => {

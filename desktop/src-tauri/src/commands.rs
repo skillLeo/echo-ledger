@@ -96,6 +96,9 @@ pub fn status(app: &AppHandle) -> AppStatus {
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
+    // With the main window closed, the menu bar's own commands follow the status too (Pause or Resume Recording…).
+    #[cfg(target_os = "macos")]
+    crate::app_menu::core_follow(app);
     AppStatus {
         paired: state.is_paired(),
         sign_in: state.sign_in_id(),

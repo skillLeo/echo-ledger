@@ -100,8 +100,8 @@
     { "id": "recording.copyTranscript", "label": "Copy transcript", "menu": "Recording", "icon": "CopyIcon", "appliesTo": "one", "mac": "⌥⌘C", "win": "Ctrl+Shift+C", "when": ["hasTranscript"] },
     { "id": "recording.saveAudioOnly", "label": "Save audio only", "appliesTo": "oneOrMany" },
     { "id": "recording.select", "label": "Select", "icon": "SelectIcon", "appliesTo": "one" },
-    { "id": "recording.moveToTrash", "label": "Move to trash", "menu": "Recording", "icon": "TrashIcon", "appliesTo": "oneOrMany", "mac": "⌘⌫", "win": "Delete", "destructive": true },
-    { "id": "recording.deleteNow", "label": "Delete immediately…", "menu": "Recording", "appliesTo": "oneOrMany", "mac": "⌥⌘⌫", "win": "Shift+Delete", "destructive": true, "confirm": "Delete immediately? It can't be brought back from the trash." },
+    { "id": "recording.moveToTrash", "label": "Move to trash", "menu": "Recording", "icon": "TrashIcon", "appliesTo": "oneOrMany", "mac": "⌘⌫", "win": "Delete", "when": ["notTyping"], "destructive": true },
+    { "id": "recording.deleteNow", "label": "Delete immediately…", "menu": "Recording", "appliesTo": "oneOrMany", "mac": "⌥⌘⌫", "win": "Shift+Delete", "when": ["notTyping"], "destructive": true, "confirm": "Delete immediately? It can't be brought back from the trash." },
     { "id": "recording.exportAs", "label": "Export", "icon": "DownloadIcon", "appliesTo": "oneOrMany", "submenu": true },
     { "id": "label.new", "label": "New label…", "icon": "PlusIcon", "appliesTo": "oneOrMany" },
 
@@ -143,7 +143,8 @@
     { "id": "live.hide60", "label": "For 1 hour", "menu": "Live" },
     { "id": "live.hideUntilQuit", "label": "Until I quit", "menu": "Live" },
     { "id": "live.stopHiding", "label": "Stop hiding", "menu": "Live", "when": ["hiding"] },
-    { "id": "live.hideWordsNow", "label": "Hide live words now", "menu": "Live", "global": true },
+    { "id": "live.hideWindowsNow", "label": "Hide EchoLedger windows now", "menu": "Live", "global": true },
+    { "id": "live.showWindows", "label": "Show EchoLedger windows", "menu": "Live", "when": ["windowsHidden"] },
     { "id": "live.shareCheck", "label": "Share check…", "menu": "Live", "icon": "ScreenIcon" },
     { "id": "live.toggleRecording", "label": "Start or stop recording", "global": true, "mac": "⌃⌥⌘R", "win": "Ctrl+Alt+Shift+R" },
 
@@ -160,6 +161,15 @@
     { "id": "help.tour", "label": "Getting started tour", "menu": "Help" },
     { "id": "help.setupHealth", "label": "Setup & health…", "menu": "Help", "icon": "ReadyIcon" },
     { "id": "help.reportProblem", "label": "Report a problem…", "menu": "Help", "icon": "LifeBuoyIcon" },
+
+    { "id": "project.open", "label": "Open", "appliesTo": "one" },
+    { "id": "project.pin", "label": "Pin", "icon": "PinIcon", "appliesTo": "one", "state": { "key": "pinned", "on": "Unpin" } },
+    { "id": "project.rename", "label": "Rename…", "icon": "RenameIcon", "appliesTo": "one" },
+    { "id": "project.instructions", "label": "Instructions & memory…", "appliesTo": "one" },
+    { "id": "project.requestFiles", "label": "Request files…", "icon": "RequestFilesIcon", "appliesTo": "one" },
+    { "id": "project.members", "label": "Members…", "icon": "UsersIcon", "appliesTo": "one" },
+    { "id": "project.archive", "label": "Archive", "appliesTo": "one" },
+    { "id": "project.delete", "label": "Delete project…", "icon": "TrashIcon", "appliesTo": "one", "destructive": true, "confirm": "Delete this project? Its recordings stay in the Library, in no project." },
 
     { "id": "account.photo", "label": "Add photo", "icon": "UserIcon", "when": ["noPhoto"] },
     { "id": "account.editProfile", "label": "Edit profile", "icon": "UserRoundPenIcon" },

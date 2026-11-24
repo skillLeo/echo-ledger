@@ -26,6 +26,7 @@ import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./fi
 import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
 import { appWords, currentPlatform, popupNative } from "../actions/popup";
+import { useMenuPart } from "../actions/menuState";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
@@ -1413,6 +1414,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx), kindOf(id)));
     return () => offs.forEach((off) => off());
   }, [runnable]);
+  // FIX-05: the Mac menu bar's Recording menu greys and runs for the selection (else the open recording), as a
+  // recording's; its View items (As List, As Table…) for the list's space.
+  const menuTargets = pickedIds.length ? pickedIds : openId ? [openId] : [];
+  useMenuPart({
+    targets: menuTargets, kind: ["recording", "list"],
+    state: { ...recordingContext(menuTargets).state, layoutList: layout === "list", layoutTable: layout === "table" },
+  });
 
   const dialogs = (
     <>
