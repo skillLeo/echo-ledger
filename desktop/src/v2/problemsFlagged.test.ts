@@ -15,7 +15,24 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => {
   return statSync(path).isDirectory() ? files(path) : [path];
 });
 
-/** The arguments of the call whose "(" is at `open`, split at the top level. */
+/**
+ * Where the comment that starts at `i` ends (the index after it), or -1 when none starts there: a `//` comment runs to
+ * the end of its line, a `/* … *\/` one to its close. An apostrophe in a comment ("can't be captured") is no quote.
+ */
+function commentEnd(text: string, i: number): number {
+  if (text[i] !== "/") return -1;
+  if (text[i + 1] === "/") {
+    const end = text.indexOf("\n", i);
+    return end < 0 ? text.length : end;
+  }
+  if (text[i + 1] === "*") {
+    const end = text.indexOf("*/", i + 2);
+    return end < 0 ? text.length : end + 2;
+  }
+  return -1;
+}
+
+/** The arguments of the call whose "(" is at `open`, split at the top level (comments left out). */
 function argsAt(text: string, open: number): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -23,6 +40,11 @@ function argsAt(text: string, open: number): string[] {
   let current = "";
   for (let i = open + 1; i < text.length; i++) {
     const c = text[i];
+    const skip = quote ? -1 : commentEnd(text, i);
+    if (skip >= 0) {
+      i = skip - 1;
+      continue;
+    }
     if (quote) {
       current += c;
       if (c === "\\") current += text[++i] ?? "";
@@ -47,7 +69,7 @@ function argsAt(text: string, open: number): string[] {
   return out;
 }
 
-const PROBLEM = /errorMessage\(|couldn['’]t|could not|didn['’]t|can['’]t|try again/i;
+const PROBLEM = /errorMessage\(|couldn['’]t|could not|didn['’]t|can['’]t|try again|failed|went wrong|unable/i;
 const SAYERS = ["say", "onMessage", "notify"];
 
 /** The index of the closer that matches the opener at `open` ("(", "{"), skipping strings; -1 when there is none. */
@@ -56,6 +78,11 @@ function closeOf(text: string, open: number): number {
   let quote: string | null = null;
   for (let i = open; i < text.length; i++) {
     const c = text[i];
+    const skip = quote ? -1 : commentEnd(text, i);
+    if (skip >= 0) {
+      i = skip - 1;
+      continue;
+    }
     if (quote) {
       if (c === "\\") i++;
       else if (c === quote) quote = null;
@@ -66,6 +93,36 @@ function closeOf(text: string, open: number): number {
     else if (")]}".includes(c) && --depth === 0) return i;
   }
   return -1;
+}
+
+/**
+ * Where an arrow's expression body that starts at `from` ends (pure): at its `;`, or at the end of the line once its
+ * brackets are closed, Prettier's wrapped lines included (`=>` then the call on the next line).
+ */
+function statementEnd(text: string, from: number): number {
+  let i = from;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  let depth = 0;
+  let quote: string | null = null;
+  for (; i < text.length; i++) {
+    const c = text[i];
+    const skip = quote ? -1 : commentEnd(text, i);
+    if (skip >= 0) {
+      i = skip - 1;
+      continue;
+    }
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) {
+      if (--depth < 0) return i;
+    } else if ((c === ";" || c === "\n") && depth === 0) return i;
+  }
+  return text.length;
 }
 
 /** Where a problem is being handled: every `catch (…) { … }` block and `.catch(…)` call, as [from, to]. */
@@ -91,7 +148,7 @@ function droppingWrappers(text: string): string[] {
     // The wrapper's body: its block, or its expression up to the end of the line.
     const from = m.index! + m[0].length;
     const brace = text.slice(from).match(/^\s*\{/);
-    const body = brace ? text.slice(from, closeOf(text, from + brace[0].length - 1) + 1) : text.slice(from, text.indexOf("\n", from) >>> 0);
+    const body = brace ? text.slice(from, closeOf(text, from + brace[0].length - 1) + 1) : text.slice(from, statementEnd(text, from));
     for (const call of body.matchAll(new RegExp(`\\b(${SAYERS.join("|")})(?:\\?\\.)?\\(`, "g"))) {
       const args = argsAt(body, call.index! + call[0].length - 1);
       if (args[0] === param && !args.slice(1).includes("true")) out.push(name);
@@ -108,7 +165,8 @@ export function unflagged(text: string): string[] {
   const inCatch = (at: number) => spans.some(([from, to]) => at > from && (to < 0 || at < to));
   const wrappers = droppingWrappers(text);
   const names = [...SAYERS, ...wrappers];
-  for (const m of text.matchAll(new RegExp(`(?<![\\w.])(${names.join("|")})(\\?\\.)?\\(`, "g"))) {
+  // Dotted too: props.say(…), ref.current.notify(…).
+  for (const m of text.matchAll(new RegExp(`(?<![\\w$])(${names.join("|")})(\\?\\.)?\\(`, "g"))) {
     const before = text.slice(Math.max(0, m.index! - 40), m.index!);
     // A wrapper's own definition is not a call of it.
     if (/\b(?:const|let|function)\s+$/.test(before)) continue;
@@ -151,6 +209,18 @@ describe("problems are said as problems (FIX-03)", () => {
     expect(unflagged('<Sheet say={(t) => notify(t)} />\n<Sheet say={(text, error) => notify(text, error)} />\n<Sheet notify={notify} />')).toEqual(["say prop at line 1"]);
     // Not a problem, nowhere near a catch: nothing.
     expect(unflagged('say("Saved");\nnotify("Library synced");')).toEqual([]);
+  });
+
+  it("skips comments, reads dotted calls and wrapped wrappers, and knows \"failed\", \"went wrong\" and \"unable\"", () => {
+    // An apostrophe in a comment opens no string: the catch ends where it ends, and what follows is read as code.
+    expect(unflagged('try { a(); } catch {\n  // The window can\'t be captured.\n  return;\n}\nsay("Saved");')).toEqual([]);
+    expect(unflagged('try { a(); } catch {\n  /* it can\'t */ say(String(e));\n}')).toEqual(["say at line 2"]);
+    // Dotted calls.
+    expect(unflagged('props.say(errorMessage(e));\nref.current.notify("Upload failed", false);\nprops.say(errorMessage(e), undefined, true);')).toEqual(["say at line 1", "notify at line 2"]);
+    // An arrow wrapper Prettier wrapped onto the next line.
+    expect(unflagged('const tell = (text: string) =>\n  say(text);\ntell(errorMessage(e));')).toEqual(["tell at line 3"]);
+    // The words.
+    expect(unflagged('say("The upload failed.");\nsay("Something went wrong.");\nsay("Unable to reach the server.");')).toEqual(["say at line 1", "say at line 2", "say at line 3"]);
   });
 
   it("reads every page and the window (src/v2 and src/views), each by name", () => {
