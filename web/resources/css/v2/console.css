@@ -1399,6 +1399,35 @@ html.dark .v2-library .fi-ta-record.is-last-opened {
     height: var(--el-icon-sm);
 }
 
+/*
+ * × on Home's needs-action line (U13): drawn at the chip's size, with its hit area still reaching the touch minimum.
+ * The words wrap beside it and × never sits alone on a line: it stays at the end edge, level with the first line.
+ */
+[data-needs-action]:has(> [data-dismiss]) {
+    position: relative;
+    padding-inline-end: calc(var(--el-component-chip-height) + var(--el-space-8));
+}
+
+[data-needs-action] > [data-dismiss] {
+    position: absolute;
+    inset-block-start: calc((1lh - var(--el-component-chip-height)) / 2);
+    inset-inline-end: 0;
+    width: var(--el-component-chip-height);
+    height: var(--el-component-chip-height);
+}
+
+[data-needs-action] > [data-dismiss]::after {
+    content: '';
+    position: absolute;
+    inset: calc((var(--el-component-chip-height) - var(--el-layout-control-touch-min)) / 2);
+}
+
+/* A widget that draws nothing (Home's line once closed) takes no place in the grid, so no gap is left behind. */
+.fi-wi-widget:not(:has(*)),
+.fi-grid-col:has(> .fi-sc-component > .fi-wi-widget:not(:has(*))) {
+    display: none;
+}
+
 /* A section's count after its name: "Pinned · 4 recordings". */
 .v2-library .fi-ta-group-header .fi-ta-group-header-text,
 .v2-library .fi-ta-group-header > div:has(.fi-ta-group-heading) {
