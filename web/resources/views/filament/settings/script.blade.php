@@ -1,10 +1,13 @@
 {{--
     Arriving from search (?highlight=id): the row is scrolled to the middle, focused, and drawn with a 16 % brand fill
     and a 2 px ring until the next click or key, or 8 seconds; with reduced motion, no scrolling animation and no fade.
-    ↑ ↓ Enter in the search box move through the results. Since BE-06 every radio group marked data-radio-keys (the
+    ↑ ↓ Enter in the search box move through the results. Since BE-06, under the new design, every radio group marked data-radio-keys (the
     profile's colours and language, Appearance's rows) answers the arrows, Home and End (← and → swapped right to left)
     and the focus follows the choice (resources/js/radio-keys-core.cjs decides).
 --}}
+{{-- Under the new design only: the classic console's pages stay exactly as they were (ClassicGoldenTest; plain PHP, so
+     Livewire adds no block markers around it). --}}
+<?php if (\App\Filament\Support\ConsoleV2::any()): ?>
 <script>
     {!! file_get_contents(resource_path('js/radio-keys-core.cjs')) !!}
 
@@ -21,9 +24,24 @@
             e.preventDefault();
             radios[to].click();
             radios[to].focus();
+            // The page is drawn again once the choice is saved (a redraw or two): the focus stays on it for a moment.
+            const row = group.closest('[id]');
+            refocus = row ? { selector: '#' + CSS.escape(row.id) + ' [role="radiogroup"][data-radio-keys] [role="radio"][aria-checked="true"]', until: Date.now() + 3000 } : null;
         });
+        let refocus = null;
+        // After each redraw and Alpine's bindings on it (two frames): the focus back on the choice if a redraw took it.
+        const watch = () => window.Livewire.hook('commit', ({ succeed }) => succeed(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (! refocus || Date.now() > refocus.until) {
+                refocus = null;
+                return;
+            }
+            if (! document.activeElement || document.activeElement === document.body) document.querySelector(refocus.selector)?.focus({ preventScroll: true });
+        }))));
+        if (window.Livewire) watch();
+        else document.addEventListener('livewire:init', watch, { once: true });
     })();
 </script>
+<?php endif; ?>
 <script>
     (() => {
         if (window.elSettings) {

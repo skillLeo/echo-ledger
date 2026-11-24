@@ -7,7 +7,7 @@
         </span>
         <span class="el-set-control" style="align-items:center;gap:8px">
             <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-app_language" data-radio-keys>
+            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-app_language"{!! \App\Filament\Support\ConsoleV2::any() ? ' data-radio-keys' : '' !!}>
                 @foreach ($appLanguages as $value => $label)
                     <button type="button" role="radio" lang="{{ $value }}" x-bind:aria-checked="value === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="value === '{{ $value }}' ? 0 : -1"
                         x-on:click="pick('{{ $value }}')">{{ $label }}</button>
