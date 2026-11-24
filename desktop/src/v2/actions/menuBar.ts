@@ -95,6 +95,7 @@ export const CORE_ACTIONS: ReadonlySet<string> = new Set(["app.settings", "app.q
  * so they are enabled by their conditions alone; with no page the core keeps their words, greying and ticks in step.
  */
 export const CORE_RUNS: readonly string[] = [
+  "file.newRecording", "file.newVoiceNote", "live.startAssist",
   "live.stopRecording", "live.pauseRecording", "live.captions", "live.autoRecord", "live.hideFromShares", "live.hide15",
   "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWindowsNow", "live.showWindows", "window.pill",
 ];

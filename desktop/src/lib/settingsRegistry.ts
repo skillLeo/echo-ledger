@@ -285,6 +285,13 @@ export const SETTINGS: readonly SettingEntry[] = [
   ...SHORTCUT_ACTIONS.map(([action, title]): SettingEntry => ({ id: `shortcuts.global.${action}`, title, page: "shortcuts", section: "Global shortcuts", kind: "action", resettable: true, keywords: ["shortcut", "hotkey"] })),
   { id: "shortcuts.app", title: "In the app", page: "shortcuts", section: "In the app", kind: "list", keywords: ["keys", "search", "play pause", "find"] },
   { id: "app.autostart", title: "Start when I sign in", page: null, root: "App", kind: "switch", resettable: true, keywords: ["launch at login", "startup", "autostart", "open at login"] },
+  // FIX-11: the Mac's menu bar icon, its timer, and the Dock icon's number.
+  { id: "app.menu_bar_icon", title: "Show EchoLedger in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "status bar", "icon", "tray"], ru: ["menu bar icon"], ur: ["مینو بار"] },
+  { id: "app.menu_bar_timer", title: "Show timer in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "timer", "recording time", "clock"], ru: ["timer"], ur: ["ٹائمر"] },
+  { id: "app.dock_badge", title: "Show count on the app icon", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["dock", "badge", "count", "number", "app icon"], ru: ["dock ginti"], ur: ["ڈاک", "گنتی"] },
 
   // ---- Account ------------------------------------------------------------------------------------------------------
   { id: "profile", title: "Profile", page: null, root: "Account", kind: "page", requires: { account: true }, keywords: ["name", "email", "account", "me"], ru: ["naam", "mera account"], ur: ["پروفائل", "نام"] },

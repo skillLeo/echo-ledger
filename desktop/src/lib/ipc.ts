@@ -452,6 +452,9 @@ export interface Settings {
   sendDiagnostics: boolean; // Share Check results to the server, off until turned on
   overlayCorner: Corner;
   autostart: boolean;
+  menuBarIcon: boolean; // FIX-11: EchoLedger's icon in the Mac menu bar
+  menuBarTimer: boolean; // FIX-11: the recording's time beside it
+  dockBadge: boolean; // FIX-11: the Activity number on the Dock icon
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
@@ -586,6 +589,9 @@ export interface SettingsPatch {
   shareOneWindow?: boolean;
   sendDiagnostics?: boolean;
   autostart?: boolean;
+  menuBarIcon?: boolean;
+  menuBarTimer?: boolean;
+  dockBadge?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
   consentAcknowledged?: boolean;
@@ -1927,6 +1933,8 @@ export const api = {
    * The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. Null puts
    * classic's own bar back (the new design's shell turned off).
    */
+  /** The Dock icon's number (FIX-11): the page's Activity part; the core adds the calls waiting. */
+  dockActivitySet: (count: number) => invoke<void>("dock_activity_set", { count }),
   appMenuSet: (bar: NativeMenuBar | null) => invoke<void>("app_menu_set", { bar }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),

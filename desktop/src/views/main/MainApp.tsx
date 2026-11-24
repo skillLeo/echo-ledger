@@ -196,6 +196,11 @@ export default function MainApp() {
   const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting, so only Activity's part is sent.
+  const activityPart = actionCount(activityItems, 0);
+  useEffect(() => {
+    void api.dockActivitySet(activityPart).catch(() => undefined);
+  }, [activityPart]);
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
   const [projects, setProjects] = useState<ClientFolder[] | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);

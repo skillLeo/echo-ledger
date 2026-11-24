@@ -62,6 +62,8 @@ qrcodegen = "1.8.0"
 # The native open and save dialogs, used from the core only (the webview never picks a path). Not through
 # tauri-plugin-dialog: its page script swaps window.confirm for an asynchronous one, which every "Delete?" relies on.
 rfd = { version = "0.17.2", default-features = false }
+# The Dock's menu (FIX-11, dock.rs): the menu library Tauri itself draws with, at the version it uses (Cargo.lock).
+muda = { version = "=0.20.0", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
@@ -134,7 +136,7 @@ objc2-local-authentication = { version = "0.3.2", features = ["LAContext", "LAEr
 # own windows in this process (NSApplication's window list, left out of screen share with EchoLedger's), the Dock icon
 # while another app is full screen (spaces.rs; already in the tree through tao and wry); WhatsApp's share and the
 # pasteboard for Send to WhatsApp → Text and voice (share_sheet).
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSEvent", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace", "NSGraphics", "block2", "NSSharingService", "NSPasteboard"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSDockTile", "NSEvent", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace", "NSGraphics", "block2", "NSSharingService", "NSPasteboard"] }
 # Screen moments (v1.5): screenshots of the meeting window or display, and the Screen Recording permission.
 objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "libc", "objc2-core-foundation", "objc2-core-graphics", "SCShareableContent", "SCStream", "SCScreenshotManager"] }
 objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage", "CGDataProvider", "CGDirectDisplay", "CGWindow", "CGColorSpace"] }

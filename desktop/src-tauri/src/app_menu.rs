@@ -156,11 +156,13 @@ pub struct CoreState {
     pub hiding: bool,
     /// The person's Hide EchoLedger windows is on.
     pub windows_hidden: bool,
+    /// This computer records (not a viewer's).
+    pub can_record: bool,
 }
 
 /// The state and condition names the core follows (the same as the page's, v2/actions/registry.ts CONDITIONS and the
 /// menus' state).
-pub const CORE_KEYS: [&str; 8] = ["recording", "notRecording", "paused", "captionsShown", "pillShown", "autoRecord", "hiding", "windowsHidden"];
+pub const CORE_KEYS: [&str; 9] = ["recording", "notRecording", "paused", "captionsShown", "pillShown", "autoRecord", "hiding", "windowsHidden", "canRecord"];
 
 impl CoreState {
     /// Whether a condition or a state holds now (pure); one it doesn't know never does.
@@ -174,6 +176,7 @@ impl CoreState {
             "autoRecord" => self.auto_record,
             "hiding" => self.hiding,
             "windowsHidden" => self.windows_hidden,
+            "canRecord" => self.can_record,
             _ => false,
         }
     }
@@ -482,6 +485,7 @@ mod mac {
             auto_record: settings.auto_mode,
             hiding: crate::privacy::share::main_hidden(settings.main_share_hide.as_ref(), crate::privacy::now_ms()),
             windows_hidden: app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.hidden_for(crate::privacy::HideReason::Person)),
+            can_record: state.viewer_refusal().is_none(),
         }
     }
 
@@ -796,7 +800,7 @@ mod tests {
         assert!(!pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", true, None), &idle).enabled);
         assert!(pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", false, None), &CoreState { hiding: true, ..idle }).enabled);
         // Every key the core follows holds when its state does; one it doesn't know never does.
-        let all = CoreState { recording: true, paused: true, captions: true, pill_shown: true, auto_record: true, hiding: true, windows_hidden: true };
+        let all = CoreState { recording: true, paused: true, captions: true, pill_shown: true, auto_record: true, hiding: true, windows_hidden: true, can_record: true };
         for key in CORE_KEYS {
             assert_eq!(all.holds(key), key != "notRecording", "{key}");
         }

@@ -28,7 +28,8 @@ export const GOAL_GROUPS: readonly { title: string; icon: IconType; description:
   { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
   { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
   { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
-  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
+  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, opening EchoLedger when you sign in, and its icons.",
+    ids: ["shortcuts", "app.autostart", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] },
   { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
 ];
 
@@ -169,6 +170,18 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
               setAutostartError(null);
               void api.updateSettings({ autostart: on }).then(setSettings, (e) => setAutostartError(errorMessage(e)));
             }} /> : undefined} />
+      );
+    }
+    // FIX-11: the Mac's menu bar icon, its timer and the Dock's number, switched here.
+    const ICON_SWITCHES: Record<string, "menuBarIcon" | "menuBarTimer" | "dockBadge"> = {
+      "app.menu_bar_icon": "menuBarIcon", "app.menu_bar_timer": "menuBarTimer", "app.dock_badge": "dockBadge",
+    };
+    const key = ICON_SWITCHES[id];
+    if (key) {
+      return (
+        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
+          control={settings ? <Toggle label={entry.title} hideLabel checked={settings[key] !== false}
+            onChange={(on) => void api.updateSettings({ [key]: on }).then(setSettings, () => undefined)} /> : undefined} />
       );
     }
     return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;

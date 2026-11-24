@@ -303,6 +303,12 @@ pub struct Settings {
     pub send_diagnostics: bool,
     pub overlay_corner: Corner,
     pub autostart: bool,
+    /// FIX-11: EchoLedger's icon in the Mac menu bar (asked in setup; recommended).
+    pub menu_bar_icon: bool,
+    /// FIX-11: the recording's time beside the menu bar icon while it runs.
+    pub menu_bar_timer: bool,
+    /// FIX-11: the Activity number on the app's icon in the Dock (the rail's).
+    pub dock_badge: bool,
     /// "type" (keystrokes into the focused app) | "clipboard"
     pub dictation_output: String,
     /// Default client whose keyterms boost accuracy.
@@ -401,6 +407,9 @@ impl Default for Settings {
             send_diagnostics: false,
             overlay_corner: Corner::BottomRight,
             autostart: false,
+            menu_bar_icon: true,
+            menu_bar_timer: true,
+            dock_badge: true,
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,

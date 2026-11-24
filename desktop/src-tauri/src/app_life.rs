@@ -74,6 +74,39 @@ impl QuitSave {
     }
 }
 
+/// The question before a quit while recording (FIX-11): its words and buttons.
+pub const QUIT_WHILE_RECORDING: (&str, &str, &str, &str) = (
+    "Stop the recording and quit?",
+    "The recording is saved first.",
+    "Stop and Quit",
+    "Cancel",
+);
+
+/// Whether the person's own Quit (⌘Q, the menu bar icon's) goes on (pure on the answer): nothing to ask when nothing
+/// records or a quit already keeps it; else only Stop and Quit does.
+pub fn quit_goes_on(recording: bool, saving: bool, answer: Option<bool>) -> bool {
+    !recording || saving || answer == Some(true)
+}
+
+/// Asks before the person's own Quit while a recording runs: Stop and Quit, or Cancel. A quit from outside (the Dock's
+/// Quit, logging out) never asks: macOS waits while the recording is kept (`mac`).
+pub async fn may_quit(app: &tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    let recording = app.try_state::<crate::AppState>().is_some_and(|s| s.capture.is_recording());
+    if quit_goes_on(recording, quit_save().saving(), None) {
+        return true;
+    }
+    let (title, body, stop, cancel) = QUIT_WHILE_RECORDING;
+    let answer = rfd::AsyncMessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title(title)
+        .set_description(body)
+        .set_buttons(rfd::MessageButtons::OkCancelCustom(stop.into(), cancel.into()))
+        .show()
+        .await;
+    quit_goes_on(recording, false, Some(answer == rfd::MessageDialogResult::Custom(stop.into())))
+}
+
 /// The app's one [`QuitSave`].
 pub fn quit_save() -> &'static QuitSave {
     static SAVE: OnceLock<QuitSave> = OnceLock::new();
@@ -223,6 +256,20 @@ mod tests {
     fn code(file: &str) -> String {
         let text = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file)).unwrap();
         text.split("\n#[cfg(test)]\nmod tests").next().unwrap().to_string()
+    }
+
+    #[test]
+    fn quitting_while_recording_asks_first_and_only_stop_and_quit_goes_on() {
+        assert!(quit_goes_on(false, false, None), "nothing records: quits at once, no question");
+        assert!(quit_goes_on(true, true, None), "a quit is already keeping the recording");
+        assert!(!quit_goes_on(true, false, None), "recording: asked first");
+        assert!(quit_goes_on(true, false, Some(true)), "Stop and Quit");
+        assert!(!quit_goes_on(true, false, Some(false)), "Cancel: the recording goes on");
+        assert_eq!(QUIT_WHILE_RECORDING.0, "Stop the recording and quit?");
+        assert_eq!((QUIT_WHILE_RECORDING.2, QUIT_WHILE_RECORDING.3), ("Stop and Quit", "Cancel"));
+        // ⌘Q and the menu bar icon's Quit ask; the Dock's Quit and logging out (applicationShouldTerminate:) never do.
+        assert!(include_str!("tray.rs").contains("\"quit\" if !crate::app_life::may_quit(&app).await => Ok(()),"));
+        assert!(!code("app_life.rs").split("pub mod mac").nth(1).unwrap().contains("may_quit"));
     }
 
     #[test]

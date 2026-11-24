@@ -1603,6 +1603,8 @@ fn start_ticker(app: &AppHandle) {
                 break;
             }
             ticks = ticks.wrapping_add(1);
+            // The menu bar icon's time and its menu's status line (FIX-11).
+            crate::tray::tick(&app);
             if ticks.is_multiple_of(READ_PERMISSIONS_EVERY) {
                 read_recording_permissions(&app);
             }

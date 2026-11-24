@@ -95,7 +95,9 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pending_decisions, switches.clone(), state.viewer_refusal());
+    // The Dock icon's number follows the calls waiting (FIX-11).
+    crate::dock::follow_with(app, pending_decisions);
     // With the main window closed, the menu bar's own commands follow the status too (Pause or Resume Recording…).
     #[cfg(target_os = "macos")]
     crate::app_menu::core_follow(app);
@@ -891,6 +893,9 @@ pub struct SettingsPatch {
     share_one_window: Option<bool>,
     send_diagnostics: Option<bool>,
     autostart: Option<bool>,
+    menu_bar_icon: Option<bool>,
+    menu_bar_timer: Option<bool>,
+    dock_badge: Option<bool>,
     dictation_output: Option<String>,
     /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
     #[serde(default, deserialize_with = "double_option")]
@@ -960,6 +965,9 @@ impl SettingsPatch {
         if let Some(v) = self.share_one_window { s.share_one_window = v; }
         if let Some(v) = self.send_diagnostics { s.send_diagnostics = v; }
         if let Some(v) = self.autostart { s.autostart = v; }
+        if let Some(v) = self.menu_bar_icon { s.menu_bar_icon = v; }
+        if let Some(v) = self.menu_bar_timer { s.menu_bar_timer = v; }
+        if let Some(v) = self.dock_badge { s.dock_badge = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &self.client_id { s.client_id = v.clone(); }
         if let Some(v) = self.consent_acknowledged { s.consent_acknowledged = v; }
@@ -1053,6 +1061,10 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
+    // FIX-11: the menu bar icon shown or not, its timer, the Dock's number.
+    if patch.menu_bar_icon.is_some() || patch.menu_bar_timer.is_some() || patch.dock_badge.is_some() {
+        crate::tray::follow_settings(&app);
+    }
     crate::readiness::wake(&app);
     if patch.hide_from_sharing.is_some() || patch.old_windows_sharing.is_some() {
         crate::privacy::apply_all(&app);

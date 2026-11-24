@@ -193,7 +193,10 @@ pub fn acts_outside_main(action: &str) -> bool {
 /// recording's, the captions', the pill's, Auto-record, hiding from screen shares (Hide from Screen Shares is its
 /// times' sub-menu), and the person's Hide EchoLedger Windows and Show EchoLedger Windows. The page enables them by
 /// their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
-pub const CORE_RUNS: [&str; 12] = [
+pub const CORE_RUNS: [&str; 15] = [
+    "file.newRecording",
+    "file.newVoiceNote",
+    "live.startAssist",
     "live.stopRecording",
     "live.pauseRecording",
     "live.captions",
@@ -211,6 +214,12 @@ pub const CORE_RUNS: [&str; 12] = [
 /// What the core does for one of [`CORE_RUNS`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreStep {
+    /// Records now, as the tray's New Recording (a meeting or call on screen with both sides, else a voice note).
+    NewRecording,
+    /// A voice note into the microphone, or its stop.
+    NewVoiceNote,
+    /// The main window on Live, opened quietly (what keeps it off still does), as an in-window command is.
+    OpenLive,
     StopRecording,
     TogglePause,
     ToggleCaptions,
@@ -230,6 +239,9 @@ pub enum CoreStep {
 pub fn core_step(action: &str) -> Option<CoreStep> {
     use crate::privacy::share::HideFor;
     Some(match action {
+        "file.newRecording" => CoreStep::NewRecording,
+        "file.newVoiceNote" => CoreStep::NewVoiceNote,
+        "live.startAssist" => CoreStep::OpenLive,
         "live.stopRecording" => CoreStep::StopRecording,
         "live.pauseRecording" => CoreStep::TogglePause,
         "live.captions" => CoreStep::ToggleCaptions,
@@ -249,6 +261,15 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
 async fn run_core(app: &AppHandle, step: CoreStep) -> crate::error::AppResult<()> {
     let state = app.state::<crate::AppState>();
     match step {
+        CoreStep::NewRecording if state.capture.is_recording() => Ok(()),
+        CoreStep::NewRecording => crate::actions::record_now(app).await,
+        CoreStep::NewVoiceNote => crate::actions::toggle_mic_note(app).await,
+        CoreStep::OpenLive => {
+            crate::lifecycle::show_main_quietly(app);
+            let payload = crate::commands::NavigatePayload { view: "live".into(), pending_id: None, rename: false, recording_id: None, link: None, section: None };
+            crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
+            Ok(())
+        }
         CoreStep::StopRecording if state.capture.is_recording() => crate::actions::stop_recording(app, false).await,
         CoreStep::StopRecording => Ok(()),
         CoreStep::TogglePause => crate::actions::toggle_pause(app).await,
@@ -462,7 +483,7 @@ mod tests {
         // No page: an in-window command opens it quietly; one that acts outside it, which the core can't do, is let go
         // (and greyed: app_menu::pageless_look).
         for phase in [Phase::Absent, Phase::Closing] {
-            for action in ["go.library", "file.newRecording", "view.sidebar", "live.startAssist", "live.pastReports"] {
+            for action in ["go.library", "file.importAudio", "view.sidebar", "live.practice", "live.pastReports"] {
                 assert_eq!(route(action, phase), Route::OpenQuietly, "{action} {phase:?}");
             }
             for action in ["window.captions", "window.assistCard", "live.translate", "live.dictation"] {
