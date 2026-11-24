@@ -54,7 +54,11 @@ class SaveDecisionReceiver : BroadcastReceiver() {
 
                     ACTION_AC_TRANSCRIBE_ALL -> AfterCallActions.transcribe(context, ids(intent, id))
 
-                    ACTION_AC_SWIPED -> AfterCallActions.swiped(context, ids(intent, id))
+                    ACTION_AC_SWIPED -> AfterCallActions.swiped(
+                        context,
+                        ids(intent, id),
+                        postedAt = intent.getLongExtra(EXTRA_POSTED_AT, 0L).takeIf { it > 0 }
+                    )
 
                     ACTION_AC_ALWAYS -> CallChoice.Pick.of(intent.getStringExtra(EXTRA_PICK))?.let {
                         AfterCallActions.always(context, id, it)
@@ -133,6 +137,9 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         /** The calls one notification is about (back-to-back calls share one). */
         const val EXTRA_IDS = "recording_ids"
         const val EXTRA_PICK = "pick"
+
+        /** With [ACTION_AC_SWIPED]: when its notification was posted (its hour running out is not a choice). */
+        const val EXTRA_POSTED_AT = "posted_at"
     }
 }
 

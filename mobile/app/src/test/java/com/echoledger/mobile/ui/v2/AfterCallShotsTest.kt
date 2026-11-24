@@ -30,6 +30,7 @@ import com.echoledger.mobile.notify.AfterCallNotice
 import com.echoledger.mobile.overlay.AfterCallBarContent
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.installWhatsAppStandIn
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
@@ -56,7 +57,8 @@ import org.robolectric.shadows.ShadowSettings
  * v2.1 UX-13 on the narrowest phone (360 dp), light and dark, English and Urdu, at the phone's text size and the
  * largest: before, the big after-call card over the app (before-card-*.png); after, the after-call notification as
  * Android draws it, expanded with the first-time hint (after-notice-*), back-to-back calls in one (after-grouped-*),
- * and the small bar the person can turn on (after-bar-*). Written to docs/design/screens/phone/after-call when
+ * and the small bar the person can turn on (after-bar-*), with the call's app's own icon. Written to
+ * docs/design/screens/phone/after-call when
  * recording, otherwise only drawn.
  */
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -90,6 +92,8 @@ class AfterCallShotsTest : ScreenTest() {
         ShadowSettings.setCanDrawOverlays(true)
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         com.echoledger.mobile.notify.Notifications.createChannels(app)
+        // The call's app on the phone, so the card, the bar and the notification show its own icon (DES-07).
+        app.installWhatsAppStandIn()
     }
 
     @After
@@ -97,6 +101,9 @@ class AfterCallShotsTest : ScreenTest() {
         DecisionPopup.resetForTest()
         AfterCallNotice.resetForTest(app)
     }
+
+    /** The part drawn shows the app's own logo (the card, the bar): its icon is waited for. */
+    private var logo = false
 
     /** Draws [part] in every variant, on the app's canvas colour; saves `<name>-<variant>.png`. */
     private fun shoot(
@@ -126,6 +133,12 @@ class AfterCallShotsTest : ScreenTest() {
             before(d, l == EchoLanguage.Urdu, s)
             round++
             compose.waitForIdle()
+            // The app's icon on the card and the bar is loaded off the main thread: in the picture before it is taken.
+            if (logo) {
+                val px = with(compose.density) { EchoTokens.Component.avatarSize.roundToPx() }
+                compose.waitUntil(5_000) { com.echoledger.mobile.ui.design.AppIcons.cached("v2-source:WHATSAPP:$px") != null }
+                compose.waitForIdle()
+            }
             val variant = "${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}${if (s > 1f) "-200" else ""}"
             if (record) compose.onRoot().captureRoboImage(File(out, "$name-$variant.png").path)
             drawn += variant
@@ -182,6 +195,7 @@ class AfterCallShotsTest : ScreenTest() {
     fun beforeTheCard() = assertEquals(
         all,
         shoot("before-card") { _, urdu, _ ->
+            logo = true
             language(urdu)
             val rec = call("card", "Ali")
             val title = callCardTitle(app.resources, rec)
@@ -241,6 +255,7 @@ class AfterCallShotsTest : ScreenTest() {
     fun afterTheSmallBar() = assertEquals(
         all,
         shoot("after-bar") { _, urdu, _ ->
+            logo = true
             language(urdu)
             val rec = call("bar", "Ali")
             val shown = if (urdu) rec.copy(callerName = "علی") else rec

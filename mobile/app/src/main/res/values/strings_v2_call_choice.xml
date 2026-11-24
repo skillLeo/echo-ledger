@@ -53,4 +53,8 @@
     <string name="cc_ac_bar">Show a small bar on screen</string>
     <string name="cc_ac_bar_help">One small line at the top of the screen for 6 seconds, as well as the notification. Needs the permission to display over other apps.</string>
     <string name="cc_ac_setting_ask_help">A quiet notification after each call.</string>
+    <plurals name="cc_ac_ready_many">
+        <item quantity="one">%1$d transcript ready</item>
+        <item quantity="other">%1$d transcripts ready</item>
+    </plurals>
 </resources>

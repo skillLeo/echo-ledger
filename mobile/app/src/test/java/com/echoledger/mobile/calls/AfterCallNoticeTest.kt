@@ -13,6 +13,7 @@ import com.echoledger.mobile.overlay.FloatingWindow
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.installWhatsAppStandIn
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
@@ -202,6 +203,84 @@ class AfterCallNoticeTest : AppTest() {
         pumpUntil("Transcript ready in its place") { title(noticeOf()) == "Transcript ready" }
         assertEquals("one notification for the call", 1, notifications().size)
         pumpUntil("no longer watched") { !AfterCallNotice.isTranscribing(app, "call-1") }
+    }
+
+    /** Review of UX-13: Android sends the swipe's answer when the hour is over too; that is nobody choosing. */
+    @Test
+    fun `the hour running out keeps the audio only but never counts toward Always audio only`() {
+        notifying(true) { it.copy(callChoiceHintShown = true) }
+        asked()
+        fun gone(id: String, postedAt: Long) = app.sendBroadcast(
+            android.content.Intent(app, SaveDecisionReceiver::class.java)
+                .setAction(SaveDecisionReceiver.ACTION_AC_SWIPED)
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, id)
+                .putExtra(SaveDecisionReceiver.EXTRA_IDS, arrayOf(id))
+                .putExtra(SaveDecisionReceiver.EXTRA_POSTED_AT, postedAt)
+        )
+        gone("call-1", System.currentTimeMillis() - CallChoice.NOTICE_MS)
+        pumpUntil("kept as audio only") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == false } == true }
+        AfterCallActions.drainForTest()
+        assertEquals("nobody chose", 0, app.graph.liveSettings.value?.callChoiceStreakCount)
+
+        // A swipe within the hour is the person's choice.
+        asked("call-2")
+        assertNotNull("the swipe carries when it was posted", noticeOf("call-2")!!.deleteIntent)
+        gone("call-2", System.currentTimeMillis() - 5_000)
+        pumpUntil("counted") { app.graph.liveSettings.value?.callChoiceStreakCount == 1 }
+        assertEquals(CallChoice.Pick.AUDIO.wire, app.graph.liveSettings.value?.callChoiceStreak)
+    }
+
+    @Test
+    fun `the After a call channel exists only while the flag is on`() {
+        val nm = app.getSystemService(NotificationManager::class.java)
+        notifying(false)
+        com.echoledger.mobile.notify.Notifications.createChannels(app)
+        assertNull("not in Android's settings for anyone else", nm.getNotificationChannel(AfterCallNotice.CHANNEL))
+        notifying(true)
+        // The flag came on before the channels were made again: the first notification makes it.
+        val notice = asked()
+        assertEquals(AfterCallNotice.CHANNEL, notice.channelId)
+        assertNotNull(nm.getNotificationChannel(AfterCallNotice.CHANNEL))
+        com.echoledger.mobile.notify.Notifications.createChannels(app)
+        assertNotNull("kept while the flag is on", nm.getNotificationChannel(AfterCallNotice.CHANNEL))
+    }
+
+    @Test
+    fun `the notification shows the call's app's own icon, and none when the app is not on the phone`() {
+        assertNull("no placeholder", asked("call-1").getLargeIcon())
+        app.installWhatsAppStandIn()
+        AfterCallNotice.resetForTest(app)
+        tap(noticeOf("call-1"), "Transcribe")
+        pumpUntil("decided") { app.peekRecording("call-1")?.state == "queued" }
+        assertNotNull("WhatsApp's own icon", asked("call-2").getLargeIcon())
+    }
+
+    @Test
+    fun `after Transcribe all the one notification says 3 transcripts ready once the last one is, never left Transcribing…`() {
+        (1..3).forEach { PostCallPrompt.show(app, call("call-$it"), "dark") }
+        pumpUntil("grouped") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "3 calls saved" }
+        tap(manager().getNotification(AfterCallNotice.GROUPED_ID), "Transcribe all")
+        pumpUntil("Transcribing…") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "Transcribing…" }
+
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/library.*",
+            FakeServer.json(200, ServerFixtures.libraryPage((1..3).map { ServerFixtures.libraryItem("01JS$it", title = null) }))
+        )
+        val driver = androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!
+        (1..3).forEach { i ->
+            AfterCallNotice.uploaded(app, "call-$i", "01JS$i")
+            val watch = work("ready-watch:01JS$i").single()
+            driver.setAllConstraintsMet(watch.id)
+            driver.setInitialDelayMet(watch.id)
+            pumpUntil("call-$i's transcript seen") { work("ready-watch:01JS$i").single().state == WorkInfo.State.SUCCEEDED }
+            if (i < 3) {
+                assertEquals("still working on the rest", "Transcribing…", title(manager().getNotification(AfterCallNotice.GROUPED_ID)))
+            }
+        }
+        pumpUntil("3 transcripts ready") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "3 transcripts ready" }
+        assertEquals("one notification for them all", 1, notifications().size)
     }
 
     @Test
