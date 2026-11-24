@@ -1133,6 +1133,7 @@ export default function MainApp() {
     {palette && (
         <CommandPalette status={status} onClose={() => { setPalette(false); setPaletteFrom(""); }} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"} initialQuery={paletteFrom}
           inRow={ui.flags["ui_v2.shell"] && ui.flags["ui_v2.library"]}
+          actionState={{ canRecord, recording: !!status.recording, autoRecord: status.autoMode }}
           onShowAll={(q) => {
             // The Library becomes the results: All recordings, nothing filtered, searched for what was typed.
             setTab("library");

@@ -106,6 +106,104 @@ describe("the title row's search of everything (UX-20)", () => {
     expect(p.onClose).toHaveBeenCalled();
   });
 
+  it("the row chosen with the arrows stays chosen when recordings arrive above it", async () => {
+    const p = search();
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "acme" } });
+    // Before the recordings' answer: Acme Holdings (best), then Ask.
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Acme Holdings");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(/^Ask about/);
+    // The recordings come in above (the first group): the same row stays chosen, and Enter runs it.
+    await screen.findByRole("option", { name: /Acme kickoff/ });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(/^Ask about/);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(p.onAsk).toHaveBeenCalledWith("acme");
+    expect(p.onOpenRecording).not.toHaveBeenCalled();
+  });
+
+  it("a chosen row that goes away gives the choice back to the best match", () => {
+    search();
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "acme" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.change(input, { target: { value: "activity" } });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(/Activity/);
+  });
+
+  it("focus goes back to the field it was opened from on Esc or a press outside, not after a choice that goes somewhere", () => {
+    const field = document.createElement("button");
+    field.className = "el-titlerow__search";
+    field.textContent = "Search recordings";
+    document.body.append(field);
+    try {
+      field.focus();
+      const first = search();
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+      expect(first.onClose).toHaveBeenCalled();
+      expect(field).toHaveFocus();
+      document.body.querySelector(".palette-backdrop")?.parentElement?.remove();
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("from the ⌕ button too, and a press outside closes it there; a choice leaves focus to where it went", () => {
+    const button = document.createElement("button");
+    button.className = "el-button";
+    const cell = document.createElement("div");
+    cell.className = "el-titlerow__middle";
+    cell.append(button);
+    document.body.append(cell);
+    try {
+      // WebKit leaves focus on the page when a button is clicked: the row's search is the opener anyway.
+      (document.activeElement as HTMLElement | null)?.blur();
+      const p = search();
+      fireEvent.mouseDown(document.querySelector(".palette-backdrop")!);
+      expect(p.onClose).toHaveBeenCalled();
+      expect(button).toHaveFocus();
+    } finally {
+      cell.remove();
+    }
+  });
+
+  it("a choice doesn't send focus back to the field", () => {
+    const field = document.createElement("button");
+    field.className = "el-titlerow__search";
+    document.body.append(field);
+    try {
+      field.focus();
+      const p = search();
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "activity" } });
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(p.onGo).toHaveBeenCalledWith("activity");
+      expect(field).not.toHaveFocus();
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("the action list's commands follow the window: no New recording where recording can't start; a tick's state is said", () => {
+    const record = vi.fn();
+    const auto = vi.fn();
+    offs.push(registerAction("file.newRecording", record), registerAction("live.autoRecord", auto));
+    search({ actionState: { canRecord: false, autoRecord: true } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "new recording" } });
+    expect(screen.queryByRole("option", { name: /^New recording/ })).toBeNull();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "auto-record" } });
+    const tick = group("Commands").getByRole("option", { name: /Auto-record calls & meetings/ });
+    expect(tick).toHaveTextContent("On");
+  });
+
+  it("the field and the question keep their own direction (Urdu typed in an English window)", () => {
+    search();
+    const input = screen.getByRole("combobox");
+    expect(input).toHaveAttribute("dir", "auto");
+    fireEvent.change(input, { target: { value: "قرض کی قسطیں" } });
+    const ask = group("Ask").getByRole("option", { name: "Ask about “قرض کی قسطیں”" });
+    expect(ask.querySelector("bdi")!.textContent).toBe("قرض کی قسطیں");
+  });
+
   it("drops down 560 px wide under the row's field", () => {
     const css = readFileSync(join(__dirname, "../../v2/styles/v2.css"), "utf8");
     expect(css).toContain("inline-size: min(var(--el-desktop-search-results-width), calc(100% - var(--el-space-16)))");

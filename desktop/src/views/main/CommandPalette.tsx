@@ -13,7 +13,7 @@ import type { NoticeTarget } from "../../lib/notice";
 import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { BadgeMark } from "./Upgrade";
 import { LucideSearchIcon, LucideXIcon } from "../../components/Icons";
-import { ACTIONS, available, hasHandler, runAction, type ActionContext } from "../../v2/actions/registry";
+import { ACTIONS, actionLabel, available, hasHandler, runAction, type ActionContext } from "../../v2/actions/registry";
 
 export interface PaletteCommand {
   id: string;
@@ -23,6 +23,10 @@ export interface PaletteCommand {
   /** A paid feature (v1.6.2): while the plan leaves it out the row wears its badge and opens the upgrade sheet instead. */
   feature?: string;
   run: () => void;
+  /** How the row reads when its words need more than text (a question set apart in a <bdi>); `label` stays its name. */
+  view?: ReactNode;
+  /** A word after the row's name (a command's tick: On or Off). */
+  detail?: string;
 }
 
 /** A text's words for matching (pure): lower case, split at whatever is not a letter, a combining mark or a digit. What
@@ -155,7 +159,7 @@ export function paletteCommands(status: AppStatus, actions: {
   return list;
 }
 
-export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "", inRow = false, onShowAll, onAsk }: {
+export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "", inRow = false, onShowAll, onAsk, actionState }: {
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
@@ -182,11 +186,26 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   onShowAll?: (query: string) => void;
   /** Ask the projects what was typed. */
   onAsk?: (question: string) => void;
+  /** The window's state for the action list's commands (UX-21): can record, recording, the ticks' states. */
+  actionState?: ActionContext["state"];
 }) {
   const [query, setQuery] = useState(initialQuery);
   const entitlements = useEntitlements();
-  // The row the arrows moved to; none: the best match (Enter runs it).
-  const [index, setIndex] = useState<number | null>(null);
+  // The row the arrows or the pointer chose, by its id (rows arriving later never move the choice to another row);
+  // none, or gone: the best match (Enter runs it).
+  const [chosenId, setChosen] = useState<string | null>(null);
+  // Where focus goes back on Esc or a press outside: what had it when the search opened, else the title row's search
+  // (WebKit leaves focus on the page when a button is clicked). A choice that goes somewhere keeps focus there.
+  const opener = useRef<HTMLElement | null>(null);
+  if (opener.current === null && typeof document !== "undefined") {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active
+      : document.querySelector<HTMLElement>(".el-titlerow__search, .el-titlerow__middle .el-button");
+  }
+  const dismiss = () => {
+    onClose();
+    if (opener.current?.isConnected) opener.current.focus();
+  };
   const [found, setFound] = useState<SearchResult["data"]>([]);
   // The recordings' search is still out: "Nothing matches" waits for it.
   const [lookingUp, setLookingUp] = useState(false);
@@ -253,13 +272,21 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const isProject = (id: string) => id.startsWith("project-");
     const projectRows = pageRows.filter((p) => isProject(p.row.id));
     const otherPages = pageRows.filter((p) => !isProject(p.row.id));
-    const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording } };
+    // The window's own state (can it record, the ticks), so a command shows only where it can run, in its state's words.
+    // The search list speaks in sentence case (3b: only the Mac's menus use Title Case).
+    const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording, ...actionState } };
+    const words = (id: string) => actionLabel(id, { ...ctx, platform: "windows" });
     const taken = new Set(matching.map((c) => c.label.toLowerCase()));
-    const registry = ranked(ACTIONS.filter((a) => hasHandler(a.id) && available(a.id, ctx) && !taken.has(a.label.toLowerCase())),
-      (a) => (q ? paletteScore(query, { label: a.label, keywords: a.menu ?? "" }) : 0))
-      .map(({ row: a, score }) => ({ row: { id: `action-${a.id}`, label: a.label, run: () => void runAction(a.id, ctx) } as PaletteCommand, score }));
+    const registry = ranked(ACTIONS.filter((a) => hasHandler(a.id) && available(a.id, ctx) && !taken.has(words(a.id).toLowerCase())),
+      (a) => (q ? paletteScore(query, { label: words(a.id), keywords: `${a.label} ${a.menu ?? ""}` }) : 0))
+      .map(({ row: a, score }) => ({
+        row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? "On" : "Off") : undefined,
+          run: () => void runAction(a.id, ctx) } as PaletteCommand,
+        score,
+      }));
     const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: "Show all in the list", run: () => onShowAll(q) }] : [];
-    const ask: PaletteCommand[] = onAsk && q.length >= 2 ? [{ id: "ask", label: `Ask about “${q}”`, run: () => onAsk(q) }] : [];
+    const ask: PaletteCommand[] = onAsk && q.length >= 2
+      ? [{ id: "ask", label: `Ask about “${q}”`, view: <>Ask about “<bdi>{q}</bdi>”</>, run: () => onAsk(q) }] : [];
     const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
     return [
       ["Recordings", [...recordings, ...showAll], [...recordings.map((r) => nameScore(r.label)), ...showAll.map(() => 0)]],
@@ -286,14 +313,16 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const settled = options.map((o, i) => (late(o) ? -1 : scores[i]));
   const pool = settled.some((s) => s >= 0) ? settled : scores;
   const best = pool.reduce((at, s, i) => (s > pool[at] ? i : at), 0);
-  const selected = Math.min(index ?? best, Math.max(0, options.length - 1));
+  const chosenAt = chosenId === null ? -1 : options.findIndex((o) => o.id === chosenId);
+  const selected = chosenAt >= 0 ? chosenAt : Math.min(best, Math.max(0, options.length - 1));
+  const choice = (at: number) => setChosen(options[at]?.id ?? null);
 
   // The pointer chooses a row only by moving: rows re-ranked or arriving under a still pointer (recordings coming in, a
   // group appearing) leave what Enter runs alone, so a mouse entering a row or a move event in place chooses nothing.
   const pointed = (e: React.MouseEvent, i: number) => {
     const last = pointer.current;
     pointer.current = { x: e.clientX, y: e.clientY };
-    if (last && (last.x !== e.clientX || last.y !== e.clientY) && i !== selected) setIndex(i);
+    if (last && (last.x !== e.clientX || last.y !== e.clientY) && i !== selected) choice(i);
   };
 
   const choose = (option: PaletteCommand | undefined) => {
@@ -307,13 +336,13 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault();
-      onClose();
+      dismiss();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setIndex((selected + 1) % Math.max(1, options.length));
+      choice((selected + 1) % Math.max(1, options.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setIndex((selected - 1 + options.length) % Math.max(1, options.length));
+      choice((selected - 1 + options.length) % Math.max(1, options.length));
     } else if (e.key === "Enter") {
       e.preventDefault();
       choose(options[selected]);
@@ -321,14 +350,14 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   };
 
   return (
-    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${inRow && look === "v2" ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${inRow && look === "v2" ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
           <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder="Search recordings, settings, pages… or type a command"
             role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={options[selected] ? `${listId}-${options[selected].id}` : undefined}
-            onChange={(e) => { setQuery(e.target.value); setIndex(null); }} />
-          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setIndex(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
+            dir="auto" onChange={(e) => { setQuery(e.target.value); setChosen(null); }} />
+          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setChosen(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
         <div id={listId} className="palette-list" role="listbox" aria-label="Results">
           {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
@@ -343,7 +372,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
                 return (
                   <div key={o.id} id={`${listId}-${o.id}`} role="option" aria-selected={i === selected} className={`palette-item ${i === selected ? "active" : ""}`}
                     onMouseMove={(e) => pointed(e, i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
-                    <span className="palette-label">{record && inRow ? marked(o.label, query) : o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
+                    <span className="palette-label">{record && inRow ? marked(o.label, query) : o.view ?? o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
+                    {o.detail && <span className="palette-detail small muted">{o.detail}</span>}
                     {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in {lowestPlan(entitlements, o.feature)?.name ?? "a paid plan"}</span>}
                     {crumb && <span className="palette-detail small muted">{crumb}</span>}
                     {hit && (

@@ -157,7 +157,11 @@ export function shortcutClashes(items: readonly { id: string; mac?: string | nul
 }
 
 const handlers = new Map<string, ((ctx: ActionContext) => void)[]>();
-/** Whether something in this window can run the command now (a screen registered it). */
+/**
+ * Whether something in this window can run the command now (a screen registered it).
+ * The web builder's `canRun` (fix/D-menus-v21, UX-22) does the same: when the two branches meet, keep `canRun` and drop
+ * this one.
+ */
 export function hasHandler(id: string): boolean {
   return (handlers.get(id) ?? []).length > 0;
 }
