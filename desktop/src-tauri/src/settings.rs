@@ -303,6 +303,12 @@ pub struct Settings {
     pub send_diagnostics: bool,
     pub overlay_corner: Corner,
     pub autostart: bool,
+    /// FIX-11: EchoLedger's icon in the Mac menu bar (asked in setup; recommended).
+    pub menu_bar_icon: bool,
+    /// FIX-11: the recording's time beside the menu bar icon while it runs.
+    pub menu_bar_timer: bool,
+    /// FIX-11: the Activity number on the app's icon in the Dock (the rail's).
+    pub dock_badge: bool,
     /// "type" (keystrokes into the focused app) | "clipboard"
     pub dictation_output: String,
     /// Default client whose keyterms boost accuracy.
@@ -401,6 +407,9 @@ impl Default for Settings {
             send_diagnostics: false,
             overlay_corner: Corner::BottomRight,
             autostart: false,
+            menu_bar_icon: true,
+            menu_bar_timer: true,
+            dock_badge: true,
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,
@@ -544,6 +553,8 @@ impl Settings {
             settings.main_share_hide = None;
             settings.share_notice = true;
         }
+        // "Until I quit" ended when the last run did: this launch starts with the main window shown in screen shares.
+        settings.main_share_hide = crate::privacy::share::at_launch(settings.main_share_hide);
         for action in crate::shortcuts::ADDED_LATER {
             if let Some(accelerator) = action.default_accelerator() {
                 settings.shortcuts.entry(action).or_insert_with(|| accelerator.to_string());

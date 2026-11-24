@@ -85,6 +85,8 @@ export const CONDITIONS: Readonly<Record<string, (c: ActionContext) => boolean>>
   canGoBack: (c) => !!c.state?.canGoBack,
   canGoForward: (c) => !!c.state?.canGoForward,
   hiding: (c) => !!c.state?.hiding,
+  /** The person's Hide EchoLedger windows is on (the panic hide: the shortcut, the tray, Settings, the menu bar). */
+  windowsHidden: (c) => !!c.state?.windowsHidden,
   noPhoto: (c) => !c.state?.photo,
 };
 
@@ -174,8 +176,24 @@ export function registerAction(id: string, run: (ctx: ActionContext) => void, ki
   need(id);
   const handler: Handler = { run, kind };
   handlers.set(id, [...(handlers.get(id) ?? []), handler]);
-  return () => handlers.set(id, (handlers.get(id) ?? []).filter((h) => h !== handler));
+  handlersChanged();
+  return () => {
+    handlers.set(id, (handlers.get(id) ?? []).filter((h) => h !== handler));
+    handlersChanged();
+  };
 }
+/** Told when something registers or takes back a command (the menu bar greys what nothing here can run). */
+const watchers = new Set<() => void>();
+let handlersChangedAt = 0;
+function handlersChanged() {
+  handlersChangedAt++;
+  watchers.forEach((notify) => notify());
+}
+export function watchHandlers(notify: () => void): () => void {
+  watchers.add(notify);
+  return () => watchers.delete(notify);
+}
+export const handlersVersion = () => handlersChangedAt;
 /** Runs the command if something here can and its conditions hold. True when it ran. */
 export function runAction(id: string, ctx: ActionContext): boolean {
   const handler = handlerFor(id, ctx.kind);

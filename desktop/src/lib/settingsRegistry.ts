@@ -238,7 +238,7 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["one window", "tab", "whole screen", "safety net"], ru: ["ek window", "tab"], ur: ["ایک ونڈو", "ٹیب"] },
   { id: "share_privacy.demo", title: "Show Live Translate for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
   { id: "share_privacy.hide_all", title: "Hide EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info",
-    keywords: ["shortcut", "hide windows", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao"], ur: ["ونڈوز چھپائیں", "چھپائیں"] },
+    keywords: ["shortcut", "hide windows", "hide echoledger windows now", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao", "windows dikhao"], ur: ["ونڈوز چھپائیں", "چھپائیں", "ونڈوز دکھائیں"] },
   { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"], ru: ["doosri screen"], ur: ["دوسری اسکرین"] },
   { id: "share_privacy.diagnostics", title: "Send diagnostics", page: "share_privacy", section: "Diagnostics", kind: "switch", resettable: true,
     description: "Sends each check's result with your system and app version to EchoLedger, never a picture or a window title.",
@@ -285,6 +285,13 @@ export const SETTINGS: readonly SettingEntry[] = [
   ...SHORTCUT_ACTIONS.map(([action, title]): SettingEntry => ({ id: `shortcuts.global.${action}`, title, page: "shortcuts", section: "Global shortcuts", kind: "action", resettable: true, keywords: ["shortcut", "hotkey"] })),
   { id: "shortcuts.app", title: "In the app", page: "shortcuts", section: "In the app", kind: "list", keywords: ["keys", "search", "play pause", "find"] },
   { id: "app.autostart", title: "Start when I sign in", page: null, root: "App", kind: "switch", resettable: true, keywords: ["launch at login", "startup", "autostart", "open at login"] },
+  // FIX-11: the Mac's menu bar icon, its timer, and the Dock icon's number.
+  { id: "app.menu_bar_icon", title: "Show EchoLedger in the menu bar", description: "Shown while recording", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "status bar", "icon", "tray"], ru: ["menu bar icon"], ur: ["مینو بار"] },
+  { id: "app.menu_bar_timer", title: "Show timer in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "timer", "recording time", "clock"], ru: ["timer"], ur: ["ٹائمر"] },
+  { id: "app.dock_badge", title: "Show count on the app icon", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["dock", "badge", "count", "number", "app icon"], ru: ["dock ginti"], ur: ["ڈاک", "گنتی"] },
 
   // ---- Account ------------------------------------------------------------------------------------------------------
   { id: "profile", title: "Profile", page: null, root: "Account", kind: "page", requires: { account: true }, keywords: ["name", "email", "account", "me"], ru: ["naam", "mera account"], ur: ["پروفائل", "نام"] },

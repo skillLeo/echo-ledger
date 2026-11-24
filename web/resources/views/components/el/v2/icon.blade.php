@@ -49,6 +49,8 @@
         'chevron-end' => '<path d="m9 6 6 6-6 6"/>',
         'chevron-start' => '<path d="m14.5 6-6 6 6 6"/>',
         'chevron-down' => '<path d="m7 10 5 5 5-5"/>',
+        // Back to top (UX-25).
+        'arrow-up' => '<path d="M12 19.5v-15M5.5 11 12 4.5l6.5 6.5"/>',
         'play' => '<path d="M8 5.8v12.4a1 1 0 0 0 1.5.86l10-6.2a1 1 0 0 0 0-1.72l-10-6.2A1 1 0 0 0 8 5.8z" fill="currentColor" stroke="none"/>',
         'pin' => '<path d="M9 4h6M10 4v5.5L7 13v1.5h10V13l-3-3.5V4M12 14.5V20"/>',
         'tune' => '<path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"/>',

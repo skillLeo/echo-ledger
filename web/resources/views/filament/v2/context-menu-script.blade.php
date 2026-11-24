@@ -1,8 +1,8 @@
 {{--
     UX-22 (PLAN_V2_1_POLISH 3b) on the web console, only under ui_v2.library: a Library row's right-click menu, in
     Windows 11's style (8 px corners, 32 px rows, 16 px glyphs, light and dark), the desktop's on Windows. A right-click
-    on a row opens it at the pointer, and Shift+F10 or the Menu key opens it for the row in hand (the focused one, else
-    the one J / K is on). A row that is part of the selection opens the menu of the selection, titled "3 recordings".
+    on a row opens it at the pointer, the row's ⋯ below the button, and Shift+F10 or the Menu key for the row in hand
+    (the focused one, else the one J / K is on): one menu, the same items. A row that is part of the selection opens the menu of the selection, titled "3 recordings".
     Only what fits is in it (resources/js/context-menu-core.cjs decides, from the page's
     filament.v2.context-menu); sub-menus are one level deep. Arrows, Home and End move, Enter or Space picks, → opens
     a sub-menu and ← closes it (the other way round right to left), Esc and Tab close. A pick goes to the page
@@ -25,17 +25,19 @@
         };
         const rowOf = (el) => ({
             id: el.dataset.recording, pinned: el.dataset.pinned === '1', important: el.dataset.important === '1', opened: el.dataset.opened !== '0',
-            state: el.dataset.state || 'ready', project: el.dataset.project || null,
+            state: el.dataset.state || 'ready', project: el.dataset.project || null, audio: el.dataset.audio !== '0',
             labels: (() => { try { return JSON.parse(el.dataset.labels || '[]'); } catch (e) { return []; } })(),
         });
         // The menu now open: its lists (the menu, then its open sub-menu), what it was opened on, and where focus goes back.
         let open = null;
+        let subNumber = 0;
 
         function close(back = true) {
             if (! open) return;
             const was = open;
             open = null;
             was.layer.remove();
+            if (was.onClose) was.onClose();
             window.removeEventListener('resize', onAway, true);
             window.removeEventListener('blur', onAway);
             document.removeEventListener('scroll', onAway, true);
@@ -56,6 +58,7 @@
                 open.sub.remove();
                 open.sub = null;
                 parent.setAttribute('aria-expanded', 'false');
+                parent.removeAttribute('aria-controls');
                 return parent;
             }
             return null;
@@ -91,8 +94,10 @@
                 row.className = 'v2-ctx-item' + (item.danger ? ' is-danger' : '');
                 row.setAttribute('role', checkable && ! item.items ? 'menuitemcheckbox' : 'menuitem');
                 if (checkable && ! item.items) row.setAttribute('aria-checked', item.checked ? 'true' : 'false');
+                // A greyed line (more than the console takes at a time): read, never picked.
+                if (item.disabled) row.setAttribute('aria-disabled', 'true');
                 row.tabIndex = -1;
-                row.dataset.action = item.action;
+                if (item.action) row.dataset.action = item.action;
                 if (item.choice !== undefined) row.dataset.choice = item.choice;
                 const icon = document.createElement('span');
                 icon.className = 'v2-ctx-icon';
@@ -135,9 +140,12 @@
             const sub = list(row.elItem.items, row.elItem.label, null);
             sub.parentItem = row;
             sub.classList.add('is-sub');
+            // The sub-menu is its item's: linked both ways for a screen reader.
+            sub.id = 'el-ctx-sub-' + (++subNumber);
             open.layer.append(sub);
             open.sub = sub;
             row.setAttribute('aria-expanded', 'true');
+            row.setAttribute('aria-controls', sub.id);
             // Beside its item, on the reading side, turned over when there is no room; never off the window.
             const r = row.getBoundingClientRect();
             const w = sub.getBoundingClientRect().width;
@@ -149,7 +157,7 @@
 
         function pick(row) {
             const item = row.elItem;
-            if (! item) return;
+            if (! item || item.disabled) return;
             if (item.items) { openSub(row, true); return; }
             const was = open;
             close(true);
@@ -159,7 +167,7 @@
                 else window.location.href = window.location.pathname.replace(/\/$/, '') + '/' + encodeURIComponent(ids[0]);
                 return;
             }
-            was.wire.menuAction(item.action, ids, item.choice === undefined ? null : item.choice);
+            was.wire.menuAction(item.action, ids, item.choice === undefined ? null : item.choice, was.selection);
         }
 
         function onKey(e) {
@@ -195,7 +203,7 @@
          * no menu (the caller keeps the browser's). From the keyboard its first item has the focus; from the pointer the
          * menu has it, and nothing is lit until the pointer or an arrow moves.
          */
-        function openFor(rows, at, wire, byKeyboard = false) {
+        function openFor(rows, at, wire, byKeyboard = false, selection = false) {
             const data = dataOf();
             if (! data || ! wire || ! rows.length) return false;
             const made = core.recordingMenu(data, rows.map(rowOf));
@@ -207,7 +215,7 @@
             const menu = list(made.items, (data.words || {}).menu || 'Recording actions', made.title);
             layer.append(menu);
             document.body.append(layer);
-            open = { layer, menu, sub: null, targets: made.targets, wire, back };
+            open = { layer, menu, sub: null, targets: made.targets, wire, back, selection };
             placeAt(menu, at.x, at.y);
             layer.addEventListener('keydown', onKey);
             layer.addEventListener('click', (e) => {
@@ -247,7 +255,7 @@
             if (! row) return;
             const rows = window.elV2ContextMenu.rowsFor(row);
             const r = row.getBoundingClientRect();
-            if (openFor(rows, { x: rtl() ? r.right - 24 : r.left + 24, y: r.top + r.height / 2 }, window.Livewire.find(host.getAttribute('wire:id')), true)) {
+            if (openFor(rows, { x: rtl() ? r.right - 24 : r.left + 24, y: r.top + r.height / 2 }, window.Livewire.find(host.getAttribute('wire:id')), true, window.elV2ContextMenu.picked(row))) {
                 e.preventDefault();
                 byKey = Date.now();
             }
@@ -259,6 +267,34 @@
         window.elV2ContextMenu = {
             openFor,
             close,
+            /**
+             * The row's ⋯: the same menu as a right-click on its row, below the button (on its reading side); from the
+             * keyboard (Enter or Space on it) its first item has the focus.
+             */
+            openFromButton(button, e) {
+                const record = button.closest('.fi-ta-record, .fi-ta-row');
+                const row = record ? record.querySelector('.v2-lib-row[data-recording]') : null;
+                const lib = document.querySelector('.v2-library');
+                const host = lib ? lib.closest('[wire\\:id]') : null;
+                if (! row || ! host || ! window.Livewire) return;
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                if (open && open.from === button) { close(true); return; }
+                const rows = this.rowsFor(row);
+                const r = button.getBoundingClientRect();
+                if (openFor(rows, { x: rtl() ? r.right : r.left, y: r.bottom + 4 }, window.Livewire.find(host.getAttribute('wire:id')), ! e || e.detail === 0, this.picked(row))) {
+                    open.from = button;
+                    button.setAttribute('aria-expanded', 'true');
+                    open.onClose = () => button.setAttribute('aria-expanded', 'false');
+                }
+            },
+            /**
+             * Whether the row's own box is ticked: its menu is then the selection's (one row or more), which its actions
+             * clear when they end, as the selection bar's do.
+             */
+            picked(row) {
+                const mine = (row.closest('.fi-ta-record, .fi-ta-row') || row).querySelector('input.fi-ta-record-checkbox');
+                return !! (mine && mine.checked);
+            },
             /** What a row's menu is for: the selection when the row is part of it (two or more), else the row. */
             rowsFor(row) {
                 const box = (el) => (el.closest('.fi-ta-record, .fi-ta-row') || el).querySelector('input.fi-ta-record-checkbox');

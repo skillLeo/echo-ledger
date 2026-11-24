@@ -92,7 +92,7 @@ final class Shell
     /**
      * The person's shell choices, each checked, or its default.
      *
-     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string, layout: string, language: string}
+     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string, layout: string, language: string, app_language: string}
      */
     public static function preferences(?User $user = null): array
     {

@@ -55,7 +55,8 @@ const windows: [string, () => ReactElement, string[], boolean][] = [
   ["pill", () => <PillApp />, ["pill:visibility", "recording:state"], false],
   ["review", () => <ReviewApp />, ["aftercall:state", "ask:show", "ask:hide"], false],
   ["dictation", () => <DictationApp />, ["overlay:visibility", "dictation:state", "dictation:level"], true],
-  ["main", () => <MainApp />, ["main:navigate", "app:status"], false],
+  // The menus' one listener too (FIX-05): a pick the core kept while the window was built reaches it.
+  ["main", () => <MainApp />, ["main:navigate", "app:status", "menu:action"], false],
   // Live Assist's card: with its flags off it draws nothing, and still says it listens.
   ["assist", () => <AssistApp />, ["assist:message"], false],
 ];

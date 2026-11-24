@@ -455,3 +455,58 @@ group), never to a client. Before you start, note what is in Downloads.
     with the voice and the caption.
 16. Turn on Airplane mode, then Text and voice again. Pass: the app says "The audio could not be downloaded…" and
     WhatsApp does not open. Turn Airplane mode off.
+
+## Tonight 20:00–21:30 PKT (2026-11-24) — Mac 2.0.14, phone 2.0.12, Windows 2.0.14, about 70 minutes
+
+Each part stands alone: run whichever device is free. Write "pass" or what you saw next to each step; a photo helps
+for anything that looks wrong. The lead installs the builds; you only use the apps.
+
+Builds:
+- **Mac 2.0.14**: installed in /Applications at 18:41 (signature checked; 2.0.13 kept in ~/EchoLedger-backups).
+- **Phone 2.0.12** (code 32): installed with `pm install -r` at 18:3x (data kept, nothing opened; auto-record came
+  back by itself).
+- **Windows 2.0.14**: `EchoLedger_2.0.14_x64-setup.exe` on the GitHub release v2.0.14; run it over the existing
+  install.
+- Not tonight: the after-call notification (v21_aftercall_notify) switches on for you after tomorrow's web deploy.
+  Known and already being fixed for 2.0.15: in a narrow Mac window the page title, "Voice notes" and "Sort & display"
+  get cut.
+
+### 1. Mac 2.0.14 — the new title row and Library, 30 min
+1. Drag any empty part of the top row (between the title and search). Pass: the window moves. Double-click the same
+   place. Pass: it zooms (or minimises, as System Settings › Desktop & Dock says). The traffic lights sit in their own
+   strip above the sidebar, never over the logo.
+2. Full screen (green button), then out again. Pass: as before; the title row stays one row.
+3. Sidebar: every icon has its label under it; Record has its ▾; your initials sit at the bottom.
+4. Library: scroll well down, open a recording, then press ← in the top row. Pass: the list is where you left it and
+   the recording you opened has a quiet grey band (not teal, not purple). Repeat with ⌘[ and with the mouse's back
+   button.
+5. Scroll down more than a screen. Pass: a round ↑ shows at the bottom right; click it: smooth back to the top, the
+   first row focused.
+6. ⌘K in the top row: type a client's name. Pass: results grouped under the field (recordings, projects, commands).
+7. Delete two recordings one after the other. Pass: one message at a time at the bottom, each with ✕; Esc closes it;
+   Undo works.
+8. Press ⌘R and ⌘P on the Library (not in a text field). Pass: no page reload, no print dialog. Select a few words in a
+   transcript and right-click them. Pass: the normal Mac menu (Copy, Look Up…). Right-click empty space. Pass: no
+   "Reload" or "Back" menu.
+
+### 2. Phone S25 2.0.12 — keep your place and the compact header, 20 min
+1. Open the app (new design). Pass: a smaller header: title with ▾, ⌕, the bell and your initials; the chips row under
+   it. Tap your initials. Pass: a menu with Select, Sync now and Settings.
+2. Scroll far down, open a recording, press Back. Pass: the same place, the opened row in light grey, a ↑ at the
+   bottom right. Tap ↑: back to the top.
+3. Open a recording, turn the phone sideways and back, press Back. Pass: still the same place and the grey row.
+4. If you have an imported file: the Other tab shows, and tapping it stays on Other after closing and reopening the app.
+5. Make a short WhatsApp test call. Pass: it records as before (the new after-call notification comes after tomorrow's
+   deploy).
+
+### 3. Windows laptop 2.0.14 — native feel, 20 min
+1. Run the installer over the existing install. Pass: it starts, sign-in kept.
+2. The window has Windows' own title bar (the custom row is off for now). Library: steps 4–7 of the Mac part with
+   Alt+← and the mouse's back button.
+3. Press F5, Ctrl+R, Ctrl+P and F12 on the Library. Pass: nothing happens.
+4. Right-click selected transcript words. Pass: a short menu: Cut, Copy, Paste, Select all only (no Print, no Share).
+   Right-click inside the search field. Pass: Cut, Copy, Paste, Select all (Undo and spelling come in 2.0.15).
+
+After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour). Pending
+approvals you can give from tonight's devices: VISUAL-OK (the look), rows OK (the Library rows), NAV-OK (the sidebar
+and title row).

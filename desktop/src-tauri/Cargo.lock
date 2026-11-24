@@ -1163,6 +1163,7 @@ dependencies = [
  "hound",
  "image",
  "keyring",
+ "muda",
  "objc2",
  "objc2-app-kit",
  "objc2-core-audio",

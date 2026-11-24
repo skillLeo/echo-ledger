@@ -20,6 +20,9 @@ fn customised() -> Settings {
         ],
         device_id: Some("01JB8Q3R0Z5V1K7M9N2P4S6T8W".into()),
         device_name: Some("Büro-PC 🖥️".into()),
+        menu_bar_icon: false,
+        menu_bar_timer: false,
+        dock_badge: false,
         sign_in_id: Some("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b".into()),
         install_id: Some("3f1c5e0b7a9d2c4e6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e".into()),
         shortcuts,
@@ -189,12 +192,15 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "dictationReplacements",
             "dictationSnippets",
             "dictationSounds",
+            "dockBadge",
             "farSideWarning",
             "hideFromSharing",
             "inputDevice",
             "installId",
             "lockAfterMinutes",
             "mainShareHide",
+            "menuBarIcon",
+            "menuBarTimer",
             "notificationCategories",
             "notificationSounds",
             "oldWindowsSharing",
@@ -219,7 +225,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 55, "section 4.7 of the IPC contract, with the call choice's four keys and the sign-in id");
+    assert_eq!(keys.len(), 58, "section 4.7 of the IPC contract, with the call choice's four keys, the sign-in id and FIX-11's three (the menu bar icon, its timer, the Dock's number)");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
@@ -529,6 +535,36 @@ fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
     let again = Settings::load(&path);
     assert!(!again.share_notice, "shown once, remembered");
     assert_eq!(again.main_share_hide, s.main_share_hide);
+}
+
+#[test]
+fn hidden_from_screen_shares_until_i_quit_lasts_the_run_and_the_next_launch_starts_shown() {
+    use crate::privacy::share::{HideFor, HideUntil, MainHideTimer, hide_until, main_hidden};
+    let now = chrono::Local::now();
+    let hide = hide_until(HideFor::UntilQuit, now, false).unwrap();
+    assert_eq!(hide.until, HideUntil::UntilQuit);
+    // While EchoLedger runs: hidden, and nothing ends it by itself (a week later, no call) until Stop Hiding clears it.
+    let mut timer = MainHideTimer::default();
+    for later in [0, 60_000, 7 * 24 * 60 * 60_000] {
+        assert!(main_hidden(Some(&hide), now.timestamp_millis() + later));
+        assert!(!timer.tick(Some(&hide), now.timestamp_millis() + later, false));
+    }
+    assert!(!main_hidden(None, now.timestamp_millis()), "Stop Hiding: shown");
+    // Quit, then launch again: the settings file still says it, but the new run starts shown.
+    let dir = dir();
+    let path = dir.path().join("settings.json");
+    let mut s = Settings { main_share_hide: Some(hide), ..Settings::default() };
+    s.save(&path).unwrap();
+    let relaunched = Settings::load(&path);
+    assert_eq!(relaunched.main_share_hide, None);
+    assert!(!main_hidden(relaunched.main_share_hide.as_ref(), now.timestamp_millis()));
+    // The tray's "until I turn it off" is kept as before.
+    s.main_share_hide = Some(hide_until(HideFor::UntilOff, now, false).unwrap());
+    s.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).main_share_hide.map(|h| h.until), Some(HideUntil::UntilOff));
+    // Its words, and the menu bar's Until I Quit is this hide.
+    assert_eq!(crate::privacy::share::until_words(&hide, now), "until you quit EchoLedger");
+    assert_eq!(crate::native_menu::core_step("live.hideUntilQuit"), Some(crate::native_menu::CoreStep::HideFromShares(HideFor::UntilQuit)));
 }
 
 #[test]

@@ -87,15 +87,20 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
-        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::tray_line(&hide, chrono::Local::now())),
-        None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
+        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::menu_line(&hide, chrono::Local::now())),
+        None => crate::tray::MainShare::Shown,
     });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
     let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pending_decisions, switches.clone(), state.viewer_refusal());
+    // The Dock icon's number follows the calls waiting (FIX-11).
+    crate::dock::follow_with(app, pending_decisions);
+    // With the main window closed, the menu bar's own commands follow the status too (Pause or Resume Recording…).
+    #[cfg(target_os = "macos")]
+    crate::app_menu::core_follow(app);
     AppStatus {
         paired: state.is_paired(),
         sign_in: state.sign_in_id(),
@@ -888,6 +893,9 @@ pub struct SettingsPatch {
     share_one_window: Option<bool>,
     send_diagnostics: Option<bool>,
     autostart: Option<bool>,
+    menu_bar_icon: Option<bool>,
+    menu_bar_timer: Option<bool>,
+    dock_badge: Option<bool>,
     dictation_output: Option<String>,
     /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
     #[serde(default, deserialize_with = "double_option")]
@@ -957,6 +965,9 @@ impl SettingsPatch {
         if let Some(v) = self.share_one_window { s.share_one_window = v; }
         if let Some(v) = self.send_diagnostics { s.send_diagnostics = v; }
         if let Some(v) = self.autostart { s.autostart = v; }
+        if let Some(v) = self.menu_bar_icon { s.menu_bar_icon = v; }
+        if let Some(v) = self.menu_bar_timer { s.menu_bar_timer = v; }
+        if let Some(v) = self.dock_badge { s.dock_badge = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &self.client_id { s.client_id = v.clone(); }
         if let Some(v) = self.consent_acknowledged { s.consent_acknowledged = v; }
@@ -1050,6 +1061,10 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
+    // FIX-11: the menu bar icon shown or not, its timer, the Dock's number.
+    if patch.menu_bar_icon.is_some() || patch.menu_bar_timer.is_some() || patch.dock_badge.is_some() {
+        crate::tray::follow_settings(&app);
+    }
     crate::readiness::wake(&app);
     if patch.hide_from_sharing.is_some() || patch.old_windows_sharing.is_some() {
         crate::privacy::apply_all(&app);
@@ -1247,10 +1262,7 @@ pub fn hide_captions(app: AppHandle) -> AppStatus {
 /// with the batch's client and language (none = automatic). Hashing and copying run off the main thread.
 #[tauri::command]
 pub async fn import_voice_notes(app: AppHandle, paths_list: Vec<String>, client_id: Option<String>, language: Option<String>) -> AppResult<crate::files::ImportSummary> {
-    ensure_unlocked(&app.state::<AppState>())?;
-    if let Some(refusal) = app.state::<AppState>().viewer_refusal() {
-        return Err(AppError::Message(refusal));
-    }
+    may_import(&app.state::<AppState>())?;
     let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
     let language = crate::settings::language_or_none(language.as_deref());
     let sources: Vec<std::path::PathBuf> = paths_list.iter().map(std::path::PathBuf::from).collect();
@@ -1832,6 +1844,20 @@ pub fn lock_status_of(state: &AppState) -> LockStatus {
 }
 
 /// Library, transcript and export commands refuse to answer while the app is locked.
+/// What stops an import (pure): a locked EchoLedger ("EchoLedger is locked."), or a viewer's computer (its sentence).
+pub fn import_refusal(locked: bool, viewer: Option<String>) -> Option<String> {
+    if locked { Some("EchoLedger is locked.".into()) } else { viewer }
+}
+
+/// Every import's guard, one for all (the Import button and a drop on the window; Open With and a drop on the Dock icon,
+/// dock::opened): nothing is uploaded on the person's account while EchoLedger is locked, nor from a viewer's computer.
+pub fn may_import(state: &AppState) -> AppResult<()> {
+    match import_refusal(state.lock.is_locked(), state.viewer_refusal()) {
+        Some(refusal) => Err(AppError::Message(refusal)),
+        None => Ok(()),
+    }
+}
+
 pub fn ensure_unlocked(state: &AppState) -> AppResult<()> {
     if state.lock.is_locked() { Err(AppError::msg("EchoLedger is locked.")) } else { Ok(()) }
 }
@@ -2262,6 +2288,24 @@ pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
     }
     let mut cache = state.library.lock().await;
     if cache.mark_opened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
+/// Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t): the person's own open taken back, on every
+/// device. The saved Library says so at once, as the server doesn't send the recording again for it. A server before
+/// 2.0.0-t has the route for opening only (405): it says it needs a newer server.
+#[tauri::command]
+pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_unopen(&id).await {
+        Err(AppError::Server { status: 405, .. }) => return Err(needs_newer_server("Mark as unread")),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_unopened(&id) {
         cache.save(&paths::library(&state.data_dir))?;
     }
     Ok(())

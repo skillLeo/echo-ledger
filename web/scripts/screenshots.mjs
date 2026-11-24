@@ -45,6 +45,69 @@ const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 const menuOn = (at) => `(() => { const row = document.querySelectorAll('.v2-library .v2-lib-row')[${at}]; const r = row.getBoundingClientRect();`
     + ` row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height / 2 })); })()`;
 
+/**
+ * UX-25: the Library keeps your place, in a short window so that a few recordings already scroll. Back to top shows a
+ * screen down, goes to the top and puts the focus on the first row; typing in the search while the list comes back from
+ * a recording keeps the focus in the search; down the list, a recording opened and the browser's Back bring the same
+ * place, the opened row's grey tint and the focus on it (left so for the picture). Answers what went wrong.
+ */
+async function keepPlace(page, base) {
+    const wrong = [];
+    // A busy machine answers slowly, and a row still moving keeps the list's quiet poll going: no wait for "network idle".
+    page.setDefaultTimeout(90000);
+    const open = async (url) => { await page.goto(url, { waitUntil: 'load' }); await page.waitForTimeout(1500); };
+    const back = async () => { await page.goBack({ waitUntil: 'load' }); await page.waitForTimeout(3000); };
+    await page.setViewportSize({ width: page.viewportSize().width, height: 600 });
+    const list = `${base}/app/sessions`;
+    await open(list);
+    await page.waitForSelector('.v2-lib-row');
+    const maxY = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    if (maxY < 200) return ['the list is too short to scroll even in a short window: seed more recordings'];
+    // Back to top.
+    await page.evaluate((y) => window.scrollTo(0, y), maxY);
+    await page.waitForTimeout(800);
+    if (! await page.evaluate(() => document.querySelector('[data-back-top]')?.classList.contains('is-shown'))) wrong.push('Back to top did not show a screen down');
+    await page.click('[data-back-top]');
+    await page.waitForTimeout(1500);
+    const top = await page.evaluate(() => ({ y: Math.round(window.scrollY), first: document.activeElement?.closest('.fi-ta-record') === document.querySelector('.v2-library .fi-ta-record') }));
+    if (top.y !== 0) wrong.push(`Back to top left the list at ${top.y} px`);
+    if (! top.first) wrong.push('Back to top did not put the focus on the first row');
+    // Down the list: the row a third of the way down the window is the one opened.
+    await page.evaluate((y) => window.scrollTo(0, y), Math.round(maxY / 2));
+    await page.waitForTimeout(800);
+    const before = await page.evaluate(() => {
+        const row = [...document.querySelectorAll('.v2-library .v2-lib-row')].find((r) => r.getBoundingClientRect().top > window.innerHeight / 3);
+        return { y: Math.round(window.scrollY), id: row.dataset.recording, top: Math.round(row.getBoundingClientRect().top) };
+    });
+    // Typing in the search while the list comes back: the letters stay in the search, the focus too.
+    await open(`${list}/${before.id}`);
+    await page.goBack({ waitUntil: 'commit' });
+    const search = '.v2-library .fi-ta-search-field input';
+    await page.waitForSelector(search, { timeout: 15000 });
+    await page.click(search);
+    await page.keyboard.type('zq', { delay: 40 });
+    await page.waitForTimeout(4000);
+    const kept = await page.evaluate((sel) => ({ focus: document.activeElement?.matches(sel) === true, value: document.querySelector(sel)?.value ?? '' }), search);
+    if (! kept.focus || ! kept.value.includes('zq')) wrong.push(`typing in the search while the list came back lost the focus (${JSON.stringify(kept)})`);
+    // Back to the same place, the tint and the focus.
+    await open(list);
+    await page.waitForSelector('.v2-lib-row');
+    await page.evaluate((y) => window.scrollTo(0, y), before.y);
+    await page.waitForTimeout(800);
+    await open(`${list}/${before.id}`);
+    await back();
+    await page.mouse.move(2, 2);
+    const after = await page.evaluate((id) => {
+        const record = document.querySelector(`.v2-lib-row[data-recording="${id}"]`)?.closest('.fi-ta-record');
+        return { y: Math.round(window.scrollY), tinted: !! record?.classList.contains('is-last-opened'), focus: !! record?.contains(document.activeElement) };
+    }, before.id);
+    if (Math.abs(after.y - before.y) > 2) wrong.push(`came back at ${after.y} px, not ${before.y}`);
+    if (! after.tinted) wrong.push('the opened row has no tint');
+    if (! after.focus) wrong.push('the focus is not on the opened row');
+
+    return wrong;
+}
+
 // Pages by name. A function gets the page and resolves its path (for records whose ids change per database). `run`
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
 const pages = {
@@ -53,11 +116,11 @@ const pages = {
     // `steps` are run one after another as a guest; `link` reads a signed address from AUTH_LINKS (a JSON file the
     // tour's tinker step writes: reset, invitation, device). Turnstile's test keys make the check pass by itself.
     register: { path: '/app/register', guest: true },
-    'login-password': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }] },
+    'login-password': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[autocomplete=current-password]' }] },
     'login-check': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', 'new.person@example.com'] }, { click: 'button[type=submit]', wait: '[data-turnstile]' }] },
     'register-code': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'new.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
     'register-profile': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'profile.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]' }, { code: 'input[autocomplete=one-time-code]' }, { click: 'button[type=submit]', wait: 'input[autocomplete=name]' }] },
-    'two-step': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }, { fill: ['input[type=password]', password] }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
+    'two-step': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[autocomplete=current-password]' }, { fill: ['input[autocomplete=current-password]', password] }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
     'password-reset': { path: '/app/password-reset/request', guest: true },
     'password-reset-new': { link: 'reset', guest: true },
     invitation: { link: 'invitation' },
@@ -66,6 +129,8 @@ const pages = {
     home: { path: '/app' },
     library: { path: '/app/sessions' },
     'library-drawer': { path: '/app/sessions', waitFor: '.el-row', run: "document.querySelector('.el-row')?.click()", full: false, wide: true },
+    // UX-25: the place kept coming back from a recording, the opened row's tint, Back to top (keepPlace's checks).
+    'library-keep-place': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, wide: true, scenario: keepPlace, settle: 300 },
     'library-table': { path: '/app/sessions', run: "document.querySelector('[data-layout=table]')?.click()", after: "document.querySelector('[data-layout=list]')?.click()", wide: true },
     // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
     'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
@@ -450,8 +515,8 @@ for (const theme of themes) {
             // Since v1.6 the sign-in asks for the email first, then the password.
             await page.fill('input[type=email]', email);
             await page.click('button[type=submit]');
-            await page.waitForSelector('input[type=password]');
-            await page.fill('input[type=password]', password);
+            await page.waitForSelector('input[autocomplete=current-password]');
+            await page.fill('input[autocomplete=current-password]', password);
             await page.click('button[type=submit]');
             // Staff with two-step sign-in are asked for the code next.
             const otp = 'input[autocomplete=one-time-code]:visible';
@@ -611,6 +676,16 @@ for (const theme of themes) {
                         console.log(`${name} ${width} ${theme}: checks passed`);
                     }
                     await page.goto(base + path, { waitUntil: 'networkidle' });
+                }
+                // A scenario of its own (keepPlace): what went wrong, and the page is pictured as it leaves it.
+                if (spec.scenario) {
+                    const wrong = await spec.scenario(page, base).catch((e) => [`threw: ${e.message.split('\n').slice(0, 3).join(' | ')}`]);
+                    if (wrong.length > 0) {
+                        console.error(`${name} ${width} ${theme}: ${wrong.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: scenario passed`);
+                    }
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(spec.settle ?? 900);

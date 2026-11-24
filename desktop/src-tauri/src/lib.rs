@@ -26,6 +26,7 @@ mod main_thread;
 pub mod material;
 pub mod native_feel;
 pub mod native_menu;
+pub mod dock;
 pub mod my_account;
 pub mod net;
 pub mod notifications;
@@ -497,6 +498,9 @@ pub fn run() {
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
         .setup(move |app| {
+            // No window tabs on a Mac (FIX-05): macOS would add Show Tab Bar and Show All Tabs to the View menu.
+            #[cfg(target_os = "macos")]
+            app_menu::no_window_tabs();
             let smoke_test = smoke_dir.is_some();
             let data_dir = match smoke_dir {
                 Some(dir) => dir,
@@ -534,6 +538,8 @@ pub fn run() {
             updates::install_kept(&handle);
 
             tray::create(&handle)?;
+            // FIX-11: the menu bar icon as the settings say (shown or not), and the Dock's number.
+            tray::follow_settings(&handle);
             // C9: no window is built here. The main window and the overlays are built when first needed
             // (lifecycle.rs), so an idle app (in the Dock and the menu bar, or the notification area) runs no web view.
             audio::platform::set_preferred_mic(settings.input_device.clone());
@@ -637,6 +643,8 @@ pub fn run() {
             commands::window_appearance,
             title_click::title_double_click,
             native_menu::native_menu_popup,
+            dock::dock_activity_set,
+            app_menu::app_menu_set,
             commands::set_window_theme,
             commands::pair_device,
             commands::sign_in_password,
@@ -795,6 +803,7 @@ pub fn run() {
             commands::sessions_transcribe_estimate,
             commands::client_create,
             commands::session_opened,
+            commands::session_unopen,
             commands::lists_get,
             commands::list_create,
             commands::list_update,
@@ -901,6 +910,11 @@ pub fn run() {
     if !app_life::mac::answer_quits_from_outside(app.handle()) {
         eprintln!("[echoledger] a quit from the Dock would not keep a running recording first");
     }
+    // FIX-11: the Dock icon's menu, taught to the delegate the same way.
+    #[cfg(target_os = "macos")]
+    if !dock::mac::install(app.handle()) {
+        eprintln!("[echoledger] the Dock icon has no menu of EchoLedger's");
+    }
     // Its menu bar menu opens over another app's full-screen window (`spaces`).
     #[cfg(target_os = "macos")]
     spaces::mac::install();
@@ -910,8 +924,10 @@ pub fn run() {
         // registers the scheme).
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls, .. } = &event {
-            let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
-            actions::handle_links(handle, &urls);
+            // Audio files opened with EchoLedger (Finder's Open With, a drop on the Dock icon) are imported (FIX-11).
+            dock::opened(handle, dock::opened_files(urls));
+            let links: Vec<String> = urls.iter().filter(|u| u.scheme() != "file").map(|u| u.to_string()).collect();
+            actions::handle_links(handle, &links);
         }
         // A click on the Dock icon, or opening the app again from Finder, Launchpad or Spotlight, starts no second copy on
         // a Mac (the single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the

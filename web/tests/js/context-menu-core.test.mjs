@@ -13,7 +13,8 @@ const core = require('../../resources/js/context-menu-core.cjs');
 const here = dirname(fileURLToPath(import.meta.url));
 const { actions } = JSON.parse(readFileSync(join(here, '..', '..', 'resources', 'js', 'actions.json'), 'utf8'));
 const ALL = ['recording.open', 'recording.transcribe', 'recording.pin', 'recording.important', 'recording.unread', 'recording.labels',
-    'recording.moveToProject', 'file.rename', 'recording.exportAs', 'recording.moveToTrash'];
+    'recording.moveToProject', 'file.rename', 'file.share', 'file.copyLink', 'file.shareWithPeople', 'file.sendToWhatsApp', 'recording.exportAs',
+    'recording.moveToTrash'];
 const words = (items) => items.map((i) => (i.separator ? `| ${i.label}` : i.label));
 
 test('one recording: only what fits and runs, in 3b\'s groups, in the file\'s words', () => {
@@ -54,16 +55,17 @@ const DATA = {
     labels: [{ value: 'Q4', label: 'Q4' }, { value: 'Clients', label: 'Clients' }],
     projects: [{ value: 'c1', label: 'Acme' }],
     formats: [{ value: 'docx', label: 'Word (.docx)' }, { value: 'txt', label: 'Text (.txt)' }],
-    words: { many: ':count recordings', noProject: 'No project' },
+    words: { many: ':count recordings', noProject: 'No project', limit: 'Up to :max at a time: unselect :count' },
+    max: 200,
     say: { Pin: 'پن کریں', Unpin: 'پن ہٹائیں' },
 };
-const rowOf = (id, more = {}) => ({ id, pinned: false, important: false, state: 'ready', project: null, labels: [], ...more });
+const rowOf = (id, more = {}) => ({ id, pinned: false, important: false, state: 'ready', project: null, labels: [], audio: true, ...more });
 
 test('a row\'s menu from what it shows: Transcribe only while Audio only, its labels and project ticked, the words in the console\'s language', () => {
     const { items, title, targets } = core.recordingMenu(DATA, [rowOf('a', { pinned: true, state: 'audio_only', project: 'c1', labels: ['q4'] })]);
     assert.equal(title, null);
     assert.deepEqual(targets, ['a']);
-    assert.deepEqual(words(items), ['Open', 'Transcribe', '| پن ہٹائیں', 'Mark as important', 'Labels', 'Move to project', '| Rename…', 'Export', '| Move to trash']);
+    assert.deepEqual(words(items), ['Open', 'Transcribe', '| پن ہٹائیں', 'Mark as important', 'Labels', 'Move to project', '| Rename…', 'Share', 'Export', '| Move to trash']);
     const sub = (label) => items.find((i) => i.label === label).items;
     assert.deepEqual(sub('Labels').map((i) => [i.label, i.checked, !! i.separator]), [['Q4', true, false], ['Clients', false, false], ['New label…', undefined, true]]);
     assert.equal(sub('Labels')[2].action, 'label.new');
@@ -99,4 +101,23 @@ test('Mark as unread while any is read, Mark as read once every one is unread', 
     assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: true })]).items).includes('Mark as unread'));
     assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: false })]).items).includes('Mark as read'));
     assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: false }), rowOf('b', { opened: true })]).items).includes('Mark as unread'));
+});
+
+test('Share › for one recording: Copy link, Share with people…, Send to WhatsApp…; a recording with no audio has only Share with people…', () => {
+    const share = (row) => core.recordingMenu(DATA, [row]).items.find((i) => i.action === 'file.share');
+    assert.deepEqual(share(rowOf('a')).items.map((i) => [i.action, i.label]),
+        [['file.copyLink', 'Copy link'], ['file.shareWithPeople', 'Share with people…'], ['file.sendToWhatsApp', 'Send to WhatsApp…']]);
+    assert.deepEqual(share(rowOf('a', { audio: false })).items.map((i) => i.action), ['file.shareWithPeople']);
+    // Several: the console shares one recording at a time.
+    assert.ok(! core.recordingMenu(DATA, [rowOf('a'), rowOf('b')]).items.some((i) => i.action === 'file.share'));
+    // A read-only console: none of it.
+    assert.ok(! core.recordingMenu({ ...DATA, runnable: ['recording.open'] }, [rowOf('a')]).items.some((i) => i.action === 'file.share'));
+});
+
+test('more than the console takes at a time: one greyed line saying how many to unselect, and nothing to pick', () => {
+    const rows = Array.from({ length: 203 }, (_, i) => rowOf(`r${i}`));
+    const made = core.recordingMenu(DATA, rows);
+    assert.equal(made.title, '203 recordings');
+    assert.deepEqual(made.items, [{ label: 'Up to 200 at a time: unselect 3', disabled: true }]);
+    assert.equal(core.recordingMenu(DATA, rows.slice(0, 200)).items.length > 1, true);
 });

@@ -380,6 +380,18 @@ export interface Account {
 
 /** Signed updates from the server (since v1.5). */
 export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
+/** The Mac menu bar the page draws (app_menu.rs app_menu_set; built by v2/actions/menuBar.ts). */
+export type NativeMenuBar = { menus: { title: string; role?: "window" | "help"; items: NativeBarEntry[] }[] };
+export type NativeBarEntry =
+  | {
+    kind: "item"; action: string; value?: string; label: string; accelerator: string | null; enabled: boolean; checked: boolean | null;
+    /** One of the core's own commands: what its look follows while there is no page (app_menu.rs CoreItem). */
+    core?: { when: string[]; state: string | null; off: string | null; on: string | null; check: string | null };
+  }
+  | { kind: "native"; action: string; native: string }
+  | { kind: "separator" }
+  | { kind: "submenu"; action?: string; label: string; enabled: boolean; items: NativeBarEntry[] };
+
 /** One line of a native menu (native_menu.rs): the action it sends (none: a line), its words, keys, tick. */
 export interface NativeMenuItem {
   /** The action it sends; none: a hairline, or with a label a greyed title line ("3 Recordings"). */
@@ -389,7 +401,12 @@ export interface NativeMenuItem {
   accelerator?: string | null;
   enabled?: boolean;
   checked?: boolean | null;
-  /** A sub-menu's choice (UX-22): picked, it comes back as `<action>=<value>`. */
+  /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree): "action:<id>@<target>". */
+  target?: string | null;
+  /**
+   * A sub-menu's choice (UX-22): picked, it comes back as `<action>=<value>`. A target or value is an id we build (a
+   * project's, a label's, a sort key), never a display name; the core percent-encodes any "%", "=", "@" or "~" in it.
+   */
   value?: string | null;
   /** A sub-menu's items (one level). */
   items?: NativeMenuItem[] | null;
@@ -435,6 +452,9 @@ export interface Settings {
   sendDiagnostics: boolean; // Share Check results to the server, off until turned on
   overlayCorner: Corner;
   autostart: boolean;
+  menuBarIcon: boolean; // FIX-11: EchoLedger's icon in the Mac menu bar
+  menuBarTimer: boolean; // FIX-11: the recording's time beside it
+  dockBadge: boolean; // FIX-11: the Activity number on the Dock icon
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
@@ -569,6 +589,9 @@ export interface SettingsPatch {
   shareOneWindow?: boolean;
   sendDiagnostics?: boolean;
   autostart?: boolean;
+  menuBarIcon?: boolean;
+  menuBarTimer?: boolean;
+  dockBadge?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
   consentAcknowledged?: boolean;
@@ -1690,14 +1713,14 @@ export interface ShareSeen {
 }
 
 /** Until when the main window is hidden from screen shares (v2.0). */
-export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" };
+export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" } | { kind: "until_quit" };
 export interface MainShareHide {
   until: HideUntil;
   sinceMs: number;
 }
 /** What the person picks under "Hide from screen shares". */
 export type HideFor =
-  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" }
+  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" } | { kind: "until_quit" }
   | { kind: "custom"; minutes: number };
 /** The two windows hidden from screen shares unless the person shows them, each on its own. */
 export type PinnedWindow = "card" | "captions";
@@ -1906,6 +1929,13 @@ export const api = {
   /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
   /** `menu`: a right-click menu's number (UX-22), which each of its picks carries as `~<menu>`. */
   nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number, menu?: number) => invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null }),
+  /**
+   * The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. Null puts
+   * classic's own bar back (the new design's shell turned off).
+   */
+  /** The Dock icon's number (FIX-11): the page's Activity part; the core adds the calls waiting. */
+  dockActivitySet: (count: number) => invoke<void>("dock_activity_set", { count }),
+  appMenuSet: (bar: NativeMenuBar | null) => invoke<void>("app_menu_set", { bar }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),
@@ -1977,6 +2007,8 @@ export const api = {
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
   /** The person opened this recording (since v1.3): no longer unread, on every device. */
   markOpened: (id: string) => invoke<void>("session_opened", { id }),
+  /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
+  markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */

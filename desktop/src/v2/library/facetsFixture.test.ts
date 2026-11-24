@@ -1,14 +1,15 @@
 // The shared cases of the Library's filters (contract 2.0.0-p): web/tests/Fixtures/library-facets.json, which the server,
 // the desktop and the phone all read and must agree on. Every recording is turned into the library item this computer
-// holds (with the facets the server sends), and for each filter set the list and every option's count must be the
-// file's: the library views, Needs you (and why), and the 28 filter sets with and without the search.
+// holds (with the facets the server sends), and for each filter set the list, its kinds (the tabs, expect.kinds) and
+// every option's count must be the file's: the library views, Needs you (and why), and the filter sets with and without
+// the search.
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LibraryItem } from "../../lib/ipc";
 import {
-  facetCounts, filterFacts, libraryViewCounts, matchesSearch, needsReason, needsYouCount, prepare, readSpec, searchWords, SECTIONS, type FilterSpec,
+  facetCounts, filterFacts, libraryViewCounts, matchesSearch, needsReason, needsYouCount, prepare, readSpec, searchWords, SECTIONS, tabCounts, type FilterSpec,
 } from "./facets";
 
 type Recording = {
@@ -27,7 +28,10 @@ type Fixture = {
   recordings: Recording[];
   needs_you: { count: number; failed: number; waiting: number; stuck: number; ids: Record<string, "failed" | "waiting" | "stuck"> };
   library_counts: { all: number; needs_you: number; unread: number; important: number; not_transcribed: number; audio_only: number };
-  filter_sets: { name: string; filters: unknown; search: string | null; expect: { total: number; ids: string[]; facets: Record<string, Record<string, number>> } }[];
+  filter_sets: {
+    name: string; filters: unknown; search: string | null;
+    expect: { total: number; ids: string[]; facets: Record<string, Record<string, number>>; kinds: { call: number; meeting: number; voice_note: number; other: number } };
+  }[];
 };
 
 // The server's file (LIBRARY_FACETS_FIXTURE: another copy of it, to try one before it lands).
@@ -74,13 +78,18 @@ describe("the shared fixture (contract 2.0.0-p)", () => {
   });
 
   for (const set of fixture.filter_sets) {
-    it(`${set.name}: the list and every option's count`, () => {
+    it(`${set.name}: the list, its kinds and every option's count`, () => {
       const spec: FilterSpec = readSpec(set.filters);
       const words = searchWords(set.search ?? "");
       const searched = facts.filter((f) => matchesSearch(f, words));
-      const shown = filterFacts(searched, spec, now, fixture.tz).map((f) => f.item.id);
+      const kept = filterFacts(searched, spec, now, fixture.tz);
+      const shown = kept.map((f) => f.item.id);
       expect(shown.length, "total").toBe(set.expect.total);
       expect([...shown].sort(), "ids").toEqual([...set.expect.ids].sort());
+      // The Library's tabs (contract 2.0.0-q): what the filters and the search keep, by kind, adding up to All.
+      const tabs = tabCounts(kept);
+      expect({ call: tabs.calls, meeting: tabs.meetings, voice_note: tabs.voice_notes, other: tabs.other }, "kinds").toEqual(set.expect.kinds);
+      expect(tabs.calls + tabs.meetings + tabs.voice_notes + tabs.other, "the kinds add up to All").toBe(tabs.all);
       // Counted among what the search keeps; offered from the whole library.
       const counts = facetCounts(searched, spec, names, now, fixture.tz, facts);
       for (const section of SECTIONS) {

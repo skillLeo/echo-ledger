@@ -25,6 +25,10 @@ import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
+import { MenuBar } from "../../v2/actions/useMenuBar";
+import { listenToMenuPicks, menuPicksReady, setPickedHandler, useMenuPart } from "../../v2/actions/menuState";
+import { runPicked } from "../../v2/actions/popup";
+import { registerAction } from "../../v2/actions/registry";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
@@ -129,6 +133,13 @@ export function typingIn(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
+/** The menu bar's commands the main window answers itself (FIX-05); the shell (NavShell) and the pages add theirs. */
+const MENU_COMMANDS = [
+  "app.accountPlan", "app.checkUpdates", "file.syncNow", "file.newProject", "view.themeLight", "view.themeDark", "view.themeSystem",
+  "go.allRecordings", "go.needsYou", "go.unread", "go.audioOnly", "go.trash", "go.shared", "live.pauseRecording", "live.captions", "window.pill",
+  "help.help", "help.shortcuts", "help.setupHealth",
+] as const;
+
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
@@ -185,6 +196,11 @@ export default function MainApp() {
   const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting, so only Activity's part is sent.
+  const activityPart = actionCount(activityItems, 0);
+  useEffect(() => {
+    void api.dockActivitySet(activityPart).catch(() => undefined);
+  }, [activityPart]);
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
   const [projects, setProjects] = useState<ClientFolder[] | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -258,6 +274,46 @@ export default function MainApp() {
   // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
   const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+  // FIX-05: the window's one listener for every pick from a menu the system drew (menuState.ts), in the classic shell
+  // too; the platform is read at each pick. The Mac menu bar itself is the <MenuBar /> leaf (with the new design's
+  // shell), and the window's own commands (MENU_COMMANDS) are registered below while the app is in use.
+  const menuPlatform = useRef<"macos" | "windows">("windows");
+  menuPlatform.current = status?.platform === "macos" ? "macos" : "windows";
+  useEffect(() => listenToMenuPicks(() => menuPlatform.current), []);
+  // A right-click menu's (numbered) picks are its own (actions/popup.ts): run by the item they came from.
+  useEffect(() => setPickedHandler(runPicked), []);
+  const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
+  // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
+  const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });
+  // What Live's hiding items follow, as the core works it out (privacy_status): the main window hidden from screen
+  // shares now (an expired 15 minutes is not), the person's Hide EchoLedger windows, and its shortcut.
+  const [privacyNow, setPrivacyNow] = useState({ hiding: false, windowsHidden: false, hideAllShortcut: "" });
+  useMenuPart({ state: {
+    themeLight: theme === "light", themeDark: theme === "dark", themeSystem: theme === "system",
+    paused: !!status?.paused, captionsShown: !!status?.captionsLive, pillShown: !!status?.recording && !status.pillHidden,
+    hiding: privacyNow.hiding, windowsHidden: privacyNow.windowsHidden, hideAllShortcut: privacyNow.hideAllShortcut,
+  } });
+  useEffect(() => {
+    let alive = true;
+    let expiry = 0;
+    const read = () => {
+      void Promise.all([api.privacyStatus(), api.settings()]).then(([p, s]) => {
+        if (!alive) return;
+        setPrivacyNow({ hiding: !!p.mainHide, windowsHidden: !!p.hiddenByShortcut, hideAllShortcut: s.shortcuts?.hide_all ?? "" });
+        // A hide for a time is read again when its time comes.
+        window.clearTimeout(expiry);
+        const until = p.mainHide?.until;
+        if (until?.kind === "at") expiry = window.setTimeout(read, Math.max(0, until.at_ms - Date.now()) + 1000);
+      }).catch(() => undefined);
+    };
+    read();
+    const offs = [listenTo("privacy:changed", read), listenTo("settings:changed", read)];
+    return () => {
+      alive = false;
+      window.clearTimeout(expiry);
+      offs.forEach((off) => void off.then((f) => f()).catch(() => undefined));
+    };
+  }, []);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
   const [palette, setPalette] = useState(false);
@@ -453,7 +509,8 @@ export default function MainApp() {
       }),
     ];
     // After the kept view is applied, so a navigation sent while the window was built wins over it.
-    announceReady([restore, ...unlisten], () => alive);
+    // And once the menus' listener hears picks: a pick the core kept while the window was built reaches it.
+    announceReady([restore, ...unlisten, menuPicksReady()], () => alive);
     return () => {
       alive = false;
       unlisten.forEach((p) => p.then((f) => f()).catch(() => undefined));
@@ -724,6 +781,20 @@ export default function MainApp() {
   // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
+  // The window's own menu commands, only while the app is in use (signed in, unlocked, set up): on the lock screen, at
+  // sign-in and in setup nothing here can run them, so the menu bar greys them. Their functions are the latest render's.
+  useEffect(() => {
+    if (!inApp) return;
+    const target = (ctx: { targets?: readonly string[] }) => ctx.targets?.[0];
+    const offs = [
+      ...MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.())),
+      registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
+      registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [inApp]);
+  // The Mac menu bar's leaf (FIX-05), in every screen of the new design's window; classic keeps the core's own bar.
+  const menuBarView = status?.platform === "macos" && ui.flags["ui_v2.shell"] ? <MenuBar platform="macos" /> : null;
   // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
   // The new design's window keeps its message regions mounted; only the message in them changes.
   const toastV2 = inApp && ui.flags["ui_v2.shell"];
@@ -758,6 +829,7 @@ export default function MainApp() {
     return (
       <>
         <LockScreen status={lock} onUnlocked={setLock} />
+        {menuBarView}
         {toastView}
       </>
     );
@@ -772,6 +844,7 @@ export default function MainApp() {
             <div className="el-root el-embedded"><OnboardingV2 status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} /></div>
           </Suspense>
         ) : <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />}
+        {menuBarView}
         {toastView}
       </>
     );
@@ -781,6 +854,7 @@ export default function MainApp() {
     return (
       <main className="gate">
         {status && !status.paired ? <SignInView onSignedIn={signedIn} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
+        {menuBarView}
         {toastView}
       </main>
     );
@@ -916,6 +990,33 @@ export default function MainApp() {
     setTab("projects");
     setProjectId(null);
     setProjectRequest({ kind: "new", seq: ++navigations.current });
+  };
+  const setupPage = ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic";
+  projectCommands.current = { open: (id) => openProject(id), requestFiles: (id) => setRequestSheet({ projectId: id }) };
+  menuCommands.current = {
+    "app.accountPlan": () => openAccount("plan"),
+    "app.checkUpdates": () => {
+      openAccount("about");
+      void api.checkForUpdates().catch(() => undefined);
+    },
+    // The same as ⌘R (FIX-10): only in the app itself and never behind a dialog; it keeps the sidebar's "Synced … ago".
+    "file.syncNow": () => void syncNow.current(),
+    "file.newProject": newProject,
+    "view.themeLight": () => chooseTheme("light"),
+    "view.themeDark": () => chooseTheme("dark"),
+    "view.themeSystem": () => chooseTheme("system"),
+    "go.allRecordings": () => openScope(ALL_SCOPE),
+    "go.needsYou": () => openScope({ kind: "view", view: "needs" }),
+    "go.unread": () => openScope({ kind: "view", view: "unread" }),
+    "go.audioOnly": () => openScope({ kind: "view", view: "audio_only" }),
+    "go.trash": () => openScope({ kind: "trash" }),
+    "go.shared": () => openShared(SHARED_TABS[0][0] as SharedTab),
+    "live.pauseRecording": () => void run(status.paused ? api.resumeRecording : api.pauseRecording),
+    "live.captions": () => void run(api.toggleCaptions),
+    "window.pill": () => void run(() => api.setPillHidden(!status.pillHidden)),
+    "help.help": openHelp,
+    "help.shortcuts": openHelp,
+    "help.setupHealth": () => openAccount(setupPage),
   };
   const signOut = async () => {
     if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out", tone: "danger" }))) return;
@@ -1191,6 +1292,7 @@ export default function MainApp() {
       )}
       <UpgradeSheet />
       <ConfirmHost />
+      {menuBarView}
       {toastView}
     </>
   );
