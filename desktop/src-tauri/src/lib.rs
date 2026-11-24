@@ -27,6 +27,7 @@ pub mod material;
 pub mod native_feel;
 pub mod native_menu;
 pub mod dock;
+pub mod taskbar;
 pub mod my_account;
 pub mod net;
 pub mod notifications;
@@ -540,6 +541,14 @@ pub fn run() {
             tray::create(&handle)?;
             // FIX-11: the menu bar icon as the settings say (shown or not), and the Dock's number.
             tray::follow_settings(&handle);
+            // FIX-12 (Windows): the Jump List's Tasks and Open with, the tray tip once after install; a start from the
+            // Jump List runs its task, a start with audio files (Open with) imports them.
+            taskbar::register(&handle);
+            #[cfg(windows)]
+            taskbar::tray_tip_once(&handle);
+            let args: Vec<String> = std::env::args().collect();
+            taskbar::run_jump_task(&handle, &args);
+            dock::opened(&handle, taskbar::opened_files(&args));
             // C9: no window is built here. The main window and the overlays are built when first needed
             // (lifecycle.rs), so an idle app (in the Dock and the menu bar, or the notification area) runs no web view.
             audio::platform::set_preferred_mic(settings.input_device.clone());
@@ -956,6 +965,17 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
         // C9: closing the main window destroys it (the app keeps running: in the Dock and the menu bar of a Mac, the
         // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
         // (main_view_get).
+        // FIX-12: on Windows "When I close the window" decides (keep, said the first time, or quit); a Mac's red button
+        // always keeps EchoLedger running.
+        #[cfg(windows)]
+        WindowEvent::CloseRequested { api, .. } if window.label() == lifecycle::MAIN => {
+            if taskbar::main_close_requested(window.app_handle()) {
+                lifecycle::main_closing(window.app_handle());
+            } else {
+                api.prevent_close();
+            }
+        }
+        #[cfg(not(windows))]
         WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
         // The Live Assist card was dragged: its place is kept for the next session.
         WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),

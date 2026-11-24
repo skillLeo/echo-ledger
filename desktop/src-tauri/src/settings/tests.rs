@@ -23,6 +23,9 @@ fn customised() -> Settings {
         menu_bar_icon: false,
         menu_bar_timer: false,
         dock_badge: false,
+        close_quits: true,
+        close_tip_shown: true,
+        tray_tip_shown: true,
         sign_in_id: Some("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b".into()),
         install_id: Some("3f1c5e0b7a9d2c4e6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e".into()),
         shortcuts,
@@ -183,6 +186,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "cardHintSeen",
             "cardStreak",
             "clientId",
+            "closeQuits",
+            "closeTipShown",
             "consentAcknowledged",
             "deviceId",
             "deviceName",
@@ -222,10 +227,11 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "signInId",
             "siteRules",
             "skipCallsShorterThanS",
-            "transcriptionLanguage"
+            "transcriptionLanguage",
+            "trayTipShown"
         ]
     );
-    assert_eq!(keys.len(), 58, "section 4.7 of the IPC contract, with the call choice's four keys, the sign-in id and FIX-11's three (the menu bar icon, its timer, the Dock's number)");
+    assert_eq!(keys.len(), 61, "section 4.7 of the IPC contract, with the call choice's four keys, the sign-in id, FIX-11's three (the menu bar icon, its timer, the Dock's number) and FIX-12's three (closing, its tip, the tray tip)");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");

@@ -455,6 +455,9 @@ export interface Settings {
   menuBarIcon: boolean; // FIX-11: EchoLedger's icon in the Mac menu bar
   menuBarTimer: boolean; // FIX-11: the recording's time beside it
   dockBadge: boolean; // FIX-11: the Activity number on the Dock icon
+  closeQuits: boolean; // FIX-12: Windows' ✕ quits ("When I close the window")
+  closeTipShown: boolean; // FIX-12: the first ✕ said EchoLedger keeps running
+  trayTipShown: boolean; // FIX-12: the tray tip after install was shown
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
@@ -592,6 +595,7 @@ export interface SettingsPatch {
   menuBarIcon?: boolean;
   menuBarTimer?: boolean;
   dockBadge?: boolean;
+  closeQuits?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
   consentAcknowledged?: boolean;

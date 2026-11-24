@@ -896,6 +896,7 @@ pub struct SettingsPatch {
     menu_bar_icon: Option<bool>,
     menu_bar_timer: Option<bool>,
     dock_badge: Option<bool>,
+    close_quits: Option<bool>,
     dictation_output: Option<String>,
     /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
     #[serde(default, deserialize_with = "double_option")]
@@ -968,6 +969,7 @@ impl SettingsPatch {
         if let Some(v) = self.menu_bar_icon { s.menu_bar_icon = v; }
         if let Some(v) = self.menu_bar_timer { s.menu_bar_timer = v; }
         if let Some(v) = self.dock_badge { s.dock_badge = v; }
+        if let Some(v) = self.close_quits { s.close_quits = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &self.client_id { s.client_id = v.clone(); }
         if let Some(v) = self.consent_acknowledged { s.consent_acknowledged = v; }
