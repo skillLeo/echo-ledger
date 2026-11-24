@@ -1280,7 +1280,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-palette .palette-item { display: grid; gap: var(--el-space-2); padding: var(--el-space-8); border-radius: var(--el-radius-sm); color: var(--el-role-text-primary); }
 .el-palette .palette-item.active { background: var(--el-role-accent-soft); }
 .el-palette .palette-detail, .el-palette .palette-empty, .el-palette .palette-foot { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
-.el-palette .palette-detail mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
+.el-palette :is(.palette-detail, .palette-label) mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 .el-palette .palette-empty { padding: var(--el-space-12) var(--el-space-8); }
 .el-palette .palette-foot { padding: var(--el-space-8) var(--el-space-16); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 /* From the title row (UX-20): the field grows into the search, its results drop down under it, 560 px wide. */

@@ -106,6 +106,30 @@ describe("the title row (UX-20)", () => {
     expect(searchFits(800, 237, 0)).toBe(false);
   });
 
+  it("with no room the field becomes a ⌕ button that opens the same search", () => {
+    // A narrow row: 400 px with a long title at its start.
+    const observers: (() => void)[] = [];
+    const Real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { constructor(cb: () => void) { observers.push(cb); } observe() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return this.classList?.contains("el-titlerow") ? 400 : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get() { return this.classList?.contains("el-titlerow__title") ? 180 : 0; } });
+    try {
+      const onEverything = vi.fn();
+      render(<TitleRow {...base} place="projects" title={{ title: "A project with a very long name", count: 12 }} onEverything={onEverything} />);
+      expect(row()).toHaveClass("el-titlerow--compact");
+      const button = within(row()).getByRole("button", { name: "Search projects" });
+      expect(button).toHaveClass("el-button");
+      fireEvent.click(button);
+      expect(onEverything).toHaveBeenCalledWith("");
+    } finally {
+      globalThis.ResizeObserver = Real;
+      if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll);
+    }
+  });
+
   it("a hairline under it only once the page has scrolled", () => {
     const { rerender } = render(<TitleRow {...base} />);
     expect(row()).not.toHaveClass("el-titlerow--scrolled");

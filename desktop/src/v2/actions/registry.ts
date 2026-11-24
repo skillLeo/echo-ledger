@@ -157,6 +157,10 @@ export function shortcutClashes(items: readonly { id: string; mac?: string | nul
 }
 
 const handlers = new Map<string, ((ctx: ActionContext) => void)[]>();
+/** Whether something in this window can run the command now (a screen registered it). */
+export function hasHandler(id: string): boolean {
+  return (handlers.get(id) ?? []).length > 0;
+}
 /** What an id does here (the screen that can do it); the newest registration runs. Returns what takes it back. */
 export function registerAction(id: string, run: (ctx: ActionContext) => void): () => void {
   need(id);

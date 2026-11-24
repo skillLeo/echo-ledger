@@ -2,7 +2,7 @@
 // (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page by name (a project, a
 // smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups: Actions,
 // Settings, Pages, Recordings. It is the window's one search: the top bar's field and the sidebar's Search open it.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { recordingName } from "../../lib/library";
@@ -13,6 +13,7 @@ import type { NoticeTarget } from "../../lib/notice";
 import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { BadgeMark } from "./Upgrade";
 import { LucideSearchIcon, LucideXIcon } from "../../components/Icons";
+import { ACTIONS, available, hasHandler, runAction, type ActionContext } from "../../v2/actions/registry";
 
 export interface PaletteCommand {
   id: string;
@@ -154,7 +155,7 @@ export function paletteCommands(status: AppStatus, actions: {
   return list;
 }
 
-export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "" }: {
+export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "", inRow = false, onShowAll, onAsk }: {
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
@@ -172,6 +173,15 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   look?: "classic" | "v2";
   /** What was typed already (the title row's field, UX-20): the search starts from it. */
   initialQuery?: string;
+  /**
+   * The title row's search of everything (UX-20): under the row's field, in its groups (Recordings, Projects, Ask,
+   * Settings, Commands), with "Show all in the list" and Ask. Elsewhere (classic, the sidebar shell) as before.
+   */
+  inRow?: boolean;
+  /** "Show all in the list": the Library becomes the results of what was typed. */
+  onShowAll?: (query: string) => void;
+  /** Ask the projects what was typed. */
+  onAsk?: (question: string) => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const entitlements = useEntitlements();
@@ -186,7 +196,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   // it (kept inside the window), over a lighter scrim: the field itself grows into the search.
   const [fromRow, setFromRow] = useState<CSSProperties | null>(null);
   useLayoutEffect(() => {
-    if (look !== "v2") return;
+    if (look !== "v2" || !inRow) return;
     const cell = document.querySelector<HTMLElement>(".el-titlerow__middle");
     const box = cell?.getBoundingClientRect();
     if (!box || !box.width) return;
@@ -194,7 +204,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const half = Math.min(wide, window.innerWidth - 16) / 2;
     const centre = Math.min(Math.max(box.left + box.width / 2, half + 8), window.innerWidth - half - 8);
     setFromRow({ position: "fixed", top: Math.max(4, box.top + box.height / 2 - 18), left: centre });
-  }, [look]);
+  }, [look, inRow]);
   // Where the pointer last was over the list: only its own movement chooses a row (see `pointed`).
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra, v2: look === "v2" }), [status, onGo, run, folders, onFolder, extra, look]);
@@ -236,7 +246,30 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   });
   // How well each shown row matches: a setting or recording found by what it says, not its name, counts as a keyword.
   const nameScore = (label: string) => Math.max(1, paletteScore(query, { label }));
-  const scored: [string, PaletteCommand[], number[]][] = [
+  const q = query.trim();
+  // The title row's groups (UX-20): the recordings first, then projects, Ask, settings and every command (the palette's,
+  // the pages it goes to, and the action list's that this window can run now, UX-21).
+  const rowGroups = (): [string, PaletteCommand[], number[]][] => {
+    const isProject = (id: string) => id.startsWith("project-");
+    const projectRows = pageRows.filter((p) => isProject(p.row.id));
+    const otherPages = pageRows.filter((p) => !isProject(p.row.id));
+    const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording } };
+    const taken = new Set(matching.map((c) => c.label.toLowerCase()));
+    const registry = ranked(ACTIONS.filter((a) => hasHandler(a.id) && available(a.id, ctx) && !taken.has(a.label.toLowerCase())),
+      (a) => (q ? paletteScore(query, { label: a.label, keywords: a.menu ?? "" }) : 0))
+      .map(({ row: a, score }) => ({ row: { id: `action-${a.id}`, label: a.label, run: () => void runAction(a.id, ctx) } as PaletteCommand, score }));
+    const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: "Show all in the list", run: () => onShowAll(q) }] : [];
+    const ask: PaletteCommand[] = onAsk && q.length >= 2 ? [{ id: "ask", label: `Ask about “${q}”`, run: () => onAsk(q) }] : [];
+    const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+    return [
+      ["Recordings", [...recordings, ...showAll], [...recordings.map((r) => nameScore(r.label)), ...showAll.map(() => 0)]],
+      ["Projects", projectRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: p.label, run: p.open })), projectRows.map((p) => p.score)],
+      ["Ask", ask, ask.map(() => 1)],
+      ["Settings", settingHits, settingHits.map((s) => nameScore(s.label))],
+      ["Commands", [...matching, ...otherHits, ...registry.map((r) => r.row)], [...actions.map((a) => a.score), ...otherPages.map((p) => p.score), ...registry.map((r) => r.score)]],
+    ];
+  };
+  const scored: [string, PaletteCommand[], number[]][] = inRow ? rowGroups() : [
     ["Actions", matching, actions.map((a) => a.score)],
     ["Settings", settingHits, settingHits.map((s) => nameScore(s.label))],
     ["Pages", pageHits, pageRows.map((p) => p.score)],
@@ -247,10 +280,12 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const options: PaletteCommand[] = groups.flatMap(([, list]) => list);
   const scores: number[] = shownGroups.flatMap(([, , s]) => s);
   // Enter runs the best match (the first of the best, in the order shown) until the arrows move. Recordings come in later
-  // (from 250 ms, the last group): they never take the highlight from a row already shown for what was typed, so Enter
-  // runs what was on screen; they are the best match only when nothing else is listed.
-  const early = scores.length - recordings.length;
-  const best = scores.slice(0, early > 0 ? early : scores.length).reduce((at, s, i) => (s > scores[at] ? i : at), 0);
+  // (from 250 ms): they never take the highlight from a row already shown for what was typed, so Enter runs what was on
+  // screen; they (or "Show all in the list") are the best match only when nothing else is listed.
+  const late = (o: PaletteCommand) => o.id.startsWith("rec-") || o.id === "show-all";
+  const settled = options.map((o, i) => (late(o) ? -1 : scores[i]));
+  const pool = settled.some((s) => s >= 0) ? settled : scores;
+  const best = pool.reduce((at, s, i) => (s > pool[at] ? i : at), 0);
   const selected = Math.min(index ?? best, Math.max(0, options.length - 1));
 
   // The pointer chooses a row only by moving: rows re-ranked or arriving under a still pointer (recordings coming in, a
@@ -286,7 +321,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   };
 
   return (
-    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${fromRow ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${inRow && look === "v2" ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
@@ -308,7 +343,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
                 return (
                   <div key={o.id} id={`${listId}-${o.id}`} role="option" aria-selected={i === selected} className={`palette-item ${i === selected ? "active" : ""}`}
                     onMouseMove={(e) => pointed(e, i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
-                    <span className="palette-label">{o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
+                    <span className="palette-label">{record && inRow ? marked(o.label, query) : o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
                     {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in {lowestPlan(entitlements, o.feature)?.name ?? "a paid plan"}</span>}
                     {crumb && <span className="palette-detail small muted">{crumb}</span>}
                     {hit && (
@@ -324,6 +359,27 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       </div>
     </div>
   );
+}
+
+/** A recording's title with the words typed marked (pure): each typed word where a word of the title starts with it. */
+export function marked(title: string, query: string): ReactNode {
+  const words = wordsOf(query);
+  if (!words.length) return title;
+  // Plain text between the marks (text nodes, not elements), so the row's name reads as the title does.
+  const out: ReactNode[] = [];
+  let text = "";
+  title.split(/([^\p{L}\p{M}\p{N}]+)/u).forEach((part, i) => {
+    const word = words.find((w) => part.toLowerCase().startsWith(w));
+    if (!word) {
+      text += part;
+      return;
+    }
+    if (text) out.push(text);
+    out.push(<mark key={i}>{part.slice(0, word.length)}</mark>);
+    text = part.slice(word.length);
+  });
+  if (text) out.push(text);
+  return out;
 }
 
 /** What the palette says when nothing is listed (pure): recordings are searched from two letters, so one letter asks

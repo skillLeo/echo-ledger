@@ -205,7 +205,9 @@ export default function MainApp() {
   const lastProject = useRef<string | null>(null);
   const lastSettings = useRef<string | null>(null);
   const [activityShow, setActivityShow] = useState<ActivityShow>("all");
-  const [askProject, setAskProject] = useState<{ id: string | null; seq: number }>({ id: null, seq: 0 });
+  const [askProject, setAskProject] = useState<{ id: string | null; seq: number; question?: string }>({ id: null, seq: 0 });
+  // The title row's search asks for a place (Ask about "…", UX-20).
+  const [placeRequest, setPlaceRequest] = useState<{ place: NavPlace; seq: number } | null>(null);
   const [filtersRequest, setFiltersRequest] = useState<{ seq: number } | null>(null);
   const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
   const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
@@ -1130,6 +1132,20 @@ export default function MainApp() {
     <>
     {palette && (
         <CommandPalette status={status} onClose={() => { setPalette(false); setPaletteFrom(""); }} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"} initialQuery={paletteFrom}
+          inRow={ui.flags["ui_v2.shell"] && ui.flags["ui_v2.library"]}
+          onShowAll={(q) => {
+            // The Library becomes the results: All recordings, nothing filtered, searched for what was typed.
+            setTab("library");
+            setLibraryFolder(null);
+            setLibraryView(null);
+            setSharedFocus(null);
+            setLibraryScope(ALL_SCOPE);
+            setScopeRequest({ scope: ALL_SCOPE, seq: ++navigations.current, restore: { scope: ALL_SCOPE, spec: {}, query: q, tab: "all" } });
+          }}
+          onAsk={ui.flags["ui_v2.ask"] ? (q) => {
+            setAskProject((a) => ({ id: a.id, seq: a.seq + 1, question: q }));
+            setPlaceRequest((r) => ({ place: "ask", seq: (r?.seq ?? 0) + 1 }));
+          } : undefined}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet({ projectId: null }),
@@ -1196,6 +1212,7 @@ export default function MainApp() {
               panelFlyout: ui.flags.v21_panel_flyout,
               layoutFor: liveViews ?? lastViews,
               titleEnd: <RestartToUpdate appStatus={status} notify={notify} />,
+              placeRequest,
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
@@ -1246,7 +1263,7 @@ export default function MainApp() {
             </div></Suspense>}
             ask={ui.flags["ui_v2.ask"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
-                <AskV2 key={askProject.seq} initialProjectId={askProject.id} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
+                <AskV2 key={askProject.seq} initialProjectId={askProject.id} initialQuestion={askProject.question} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
                   onOpenProject={(id) => openProject(id)} onLibrary={() => openFolder(null)} />
               </div></Suspense>
             ) : undefined}
