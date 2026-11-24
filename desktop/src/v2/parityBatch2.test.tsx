@@ -76,7 +76,24 @@ describe("the recording page (parity batch 2)", () => {
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: "Bilal · March shipment" } }]);
     expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Bilal · March shipment");
+    // Saved: the keyboard is back on the title too.
+    expect(within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Bilal · March shipment" })).toHaveFocus();
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
+  });
+
+  it("DT-REC-004: Esc closes only the Rename dialog; the recording stays open, the keyboard on its title", async () => {
+    await openRecording(item({ title_source: "own" }));
+    const title = () => within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Bilal Qureshi" });
+    fireEvent.click(title());
+    const box = within(screen.getByRole("dialog", { name: "Rename" })).getByRole("textbox", { name: "Title" });
+    fireEvent.change(box, { target: { value: "Ignored" } });
+    fireEvent.keyDown(box, { key: "Escape" });
+    await act(flushAsync);
+    expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
+    expect(callsOf("session_organise")).toEqual([]);
+    // Still the recording's page, not the Library.
+    expect(title()).toBeInTheDocument();
+    expect(title()).toHaveFocus();
   });
 
   it("DT-REC-004: a title that isn't the person's own (Call with …) opens an empty box with it as the hint; Save with nothing changes nothing", async () => {
