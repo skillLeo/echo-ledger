@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2
 
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -303,6 +304,8 @@ class V2LibraryFiltersTest : ScreenTest() {
         seed()
         val kinds = hasAnyAncestor(hasTestTag(KIND_ROW_TAG))
         listOf("All · 5", "Calls · 2", "Meetings · 2", "Voice notes · 1").forEach { compose.onNode(hasText(it) and kinds).assertExists() }
+        // Nothing of another kind: no Other tab.
+        assertTrue(compose.onAllNodes(hasText("Other", substring = true) and kinds).fetchSemanticsNodes().isEmpty())
         // Calls are WhatsApp and Skype; Meetings Zoom and Slack (docs/API.md "The Library's tabs").
         tap("Calls · 2")
         shown("Rec Alpha", "Rec Delta")
@@ -314,6 +317,30 @@ class V2LibraryFiltersTest : ScreenTest() {
         compose.onNode(hasText("Meetings · 0") and kinds).assertExists()
         compose.onNode(hasText("Calls · 2") and kinds).assertExists()
         shown()
+    }
+
+    /** Contract 2.0.0-q: every recording has one kind, so the tabs add up to All; Other only while it holds something. */
+    @Test
+    fun otherIsATabOnlyWhileItHoldsSomethingAndTheTabsAlwaysAddUpToAll() {
+        seed(more = listOf(row("01JF", "Rec Foxtrot", "imported", "\"labels\":[],\"opened\":true")))
+        val kinds = hasAnyAncestor(hasTestTag(KIND_ROW_TAG))
+        listOf("All · 6", "Calls · 2", "Meetings · 2", "Voice notes · 1", "Other · 1").forEach {
+            compose.onNode(hasText(it) and kinds).assertExists()
+        }
+        // The last tab: scrolled to in the row first.
+        compose.onNode(hasText("Other · 1") and kinds).performScrollTo().performClick()
+        compose.waitForIdle()
+        pumpUntil("only the imported file") {
+            compose.onAllNodesWithText("Rec Foxtrot").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("Rec Alpha").fetchSemanticsNodes().isEmpty()
+        }
+        // A filter that leaves Other empty (the sheet counts inside the tab: none): the tab goes, the list falls back to All.
+        tapDescribed("Filters")
+        option("Zoom").performClick()
+        tap(V2Testing.resources(EchoLanguage.English).getQuantityString(R.plurals.v2_lf_show_results, 0, 0))
+        pumpUntil("Other gone") { compose.onAllNodes(hasText("Other", substring = true) and kinds).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(hasText("All · 1") and kinds).assertIsSelected()
+        pumpUntil("back on All") { compose.onAllNodesWithText("Rec Bravo").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

@@ -131,6 +131,14 @@ class LibraryFacetsFixtureTest {
             val expect = set.getValue("expect").jsonObject
             assertEquals("$name: total", expect.getValue("total").jsonPrimitive.intOrNull, shown.size)
             assertEquals("$name: ids", expect.getValue("ids").jsonArray.map { it.jsonPrimitive.content }, shown)
+            // The kind tabs (contract 2.0.0-q): each recording in exactly one, so they add up to the list; the file's own
+            // numbers once it has them (expect.kinds, beside expect.facets).
+            val kept = LibraryFacets.filter(counted, filters, today)
+            val kinds = LibraryKind.KINDS.associate { k -> k.kind to kept.count { k.holds(it.kind) } }
+            assertEquals("$name: the kinds add up to All", shown.size, kinds.values.sum())
+            expect["kinds"]?.jsonObject?.let { want ->
+                assertEquals("$name: kinds", want.mapValues { it.value.jsonPrimitive.intOrNull }, kinds)
+            }
             val counts = LibraryFacets.facets(counted, filters, facts, today, projects, lists)
             val sections = expect.getValue("facets").jsonObject
             for (section in FilterSection.entries) {

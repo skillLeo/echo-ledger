@@ -13,8 +13,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The rules of contract 2.0.0-p the shared fixture doesn't spell out case by case: the Library's tabs (Calls, Meetings,
- * Voice notes by Source, Imported and Other under All only, ANDed with the place, the filters and the search), how a
+ * The rules of contract 2.0.0-p the shared fixture doesn't spell out case by case: the Library's tabs (since 2.0.0-q one
+ * kind per recording, Calls, Meetings, Voice notes and Other, the server's or by Source, so they add up to All; ANDed
+ * with the place, the filters and the search), how a
  * search is read, the Urdu folding letter by letter, a filter set read forgivingly, and Needs you's own part on a phone.
  */
 class LibraryFacetsTest {
@@ -46,19 +47,70 @@ class LibraryFacetsTest {
         facets = ItemFacetsDto(source, status, "ur")
     )
 
+    /** The tabs a recording of [source] (with the server's [kind], when given) is in. */
+    private fun tabsOf(source: String?, kind: String? = null): List<LibraryKind> =
+        LibraryKind.entries.filter { it.holds(LibraryKind.of(kind, source)) }
+
     @Test
-    fun theTabsSplitTheListBySourceAsTheContractSays() {
+    fun everyRecordingHasExactlyOneKindByItsSourceAsTheContractSays() {
         val calls = listOf("whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype")
         val meetings = listOf("zoom", "google_meet", "microsoft_teams", "slack", "discord")
         for (s in LibraryFacets.SOURCES) {
-            assertEquals(s, s in calls, LibraryKind.CALLS.holds(s))
-            assertEquals(s, s in meetings, LibraryKind.MEETINGS.holds(s))
-            assertEquals(s, s == "voice_note", LibraryKind.VOICE_NOTES.holds(s))
-            assertTrue(s, LibraryKind.ALL.holds(s))
+            val want = when (s) {
+                in calls -> LibraryKind.CALLS
+                in meetings -> LibraryKind.MEETINGS
+                "voice_note" -> LibraryKind.VOICE_NOTES
+                else -> LibraryKind.OTHER
+            }
+            assertEquals(s, listOf(LibraryKind.ALL, want), tabsOf(s))
         }
-        // Imported and Other are under All only.
-        listOf("imported", "other").forEach { s -> assertEquals(listOf(LibraryKind.ALL), LibraryKind.entries.filter { it.holds(s) }) }
-        assertEquals(listOf("all", "calls", "meetings", "voice_notes"), LibraryKind.entries.map { it.wire })
+        // Since 2.0.0-q imported files, `other` and a Source the phone does not know are Other (no longer All only).
+        listOf("imported", "other", "a_new_app", null).forEach { s -> assertEquals("$s", listOf(LibraryKind.ALL, LibraryKind.OTHER), tabsOf(s)) }
+        assertEquals(listOf("all", "calls", "meetings", "voice_notes", "other"), LibraryKind.entries.map { it.wire })
+    }
+
+    @Test
+    fun theServersKindWinsAndAnUnknownOneIsWorkedOutFromTheSource() {
+        // An imported WhatsApp file: the server says other, whatever app it names.
+        assertEquals(listOf(LibraryKind.ALL, LibraryKind.OTHER), tabsOf("whatsapp", kind = "other"))
+        assertEquals(listOf(LibraryKind.ALL, LibraryKind.MEETINGS), tabsOf("other", kind = "meeting"))
+        // A kind this phone does not know, or none (cached before 2.0.0-q): from the Source.
+        assertEquals(listOf(LibraryKind.ALL, LibraryKind.CALLS), tabsOf("telegram", kind = "webinar"))
+        assertEquals(listOf(LibraryKind.ALL, LibraryKind.VOICE_NOTES), tabsOf("voice_note", kind = null))
+    }
+
+    @Test
+    fun otherIsATabOnlyWhileItHoldsSomething() {
+        assertEquals(
+            listOf(LibraryKind.ALL, LibraryKind.CALLS, LibraryKind.MEETINGS, LibraryKind.VOICE_NOTES),
+            LibraryKind.shown(mapOf(LibraryKind.ALL to 3, LibraryKind.CALLS to 3, LibraryKind.OTHER to 0))
+        )
+        assertEquals(LibraryKind.entries, LibraryKind.shown(mapOf(LibraryKind.OTHER to 1)))
+    }
+
+    @Test
+    fun theKindTabsAlwaysAddUpToAllWithEveryFilterAndSearch() {
+        val sources = LibraryFacets.SOURCES + listOf("imported", "other", "a_new_app")
+        val items = sources.flatMapIndexed { i, s ->
+            listOf(
+                item("%02d".format(i * 2), s, title = "Acme $s", labels = if (i % 2 == 0) listOf("Clients") else emptyList(), opened = i % 3 == 0),
+                item("%02d".format(i * 2 + 1), s, title = "Family $s", opened = i % 2 == 0)
+            )
+        }
+        val facts = LibraryFacets.prepare(items, emptyList(), zone, now)
+        val filterSets = listOf(
+            LibraryFilterSet(),
+            LibraryFilterSet().toggle(FilterSection.LABELS, "clients"),
+            LibraryFilterSet().toggle(FilterSection.SOURCE, "zoom").toggle(FilterSection.SOURCE, "imported"),
+            LibraryFilterSet().toggle(FilterSection.SOURCE, "whatsapp").not(FilterSection.SOURCE, true)
+        )
+        for (place in LibraryPlace.entries) for (search in listOf(null, "acme", "family zoom")) for (filters in filterSets) {
+            val placed = facts.filter { it.matches(LibraryFacets.searchWords(search)) && LibraryFacets.inPlace(it, place) }
+            val kept = LibraryFacets.filter(placed, filters, today)
+            val counts = LibraryKind.KINDS.sumOf { k -> kept.count { k.holds(it.kind) } }
+            assertEquals("$place, $search, $filters", kept.size, counts)
+            kept.forEach { f -> assertEquals(f.item.id, 1, LibraryKind.KINDS.count { it.holds(f.kind) }) }
+        }
     }
 
     @Test
@@ -76,13 +128,22 @@ class LibraryFacetsTest {
         val placed = searched.filter { LibraryFacets.inPlace(it, LibraryPlace.UNREAD) }
         val filters = LibraryFilterSet().toggle(FilterSection.LABELS, "clients")
         val kept = LibraryFacets.filter(placed, filters, today)
-        val counts = LibraryKind.entries.associateWith { k -> kept.count { k.holds(it.source) } }
+        val counts = LibraryKind.entries.associateWith { k -> kept.count { k.holds(it.kind) } }
         // Unread, Acme, Clients: 01 (WhatsApp), 02 (Zoom), 04 (Skype), 05 (Imported); 06 isn't Acme, 03 is opened.
-        assertEquals(mapOf(LibraryKind.ALL to 4, LibraryKind.CALLS to 2, LibraryKind.MEETINGS to 1, LibraryKind.VOICE_NOTES to 0), counts)
+        assertEquals(
+            mapOf(
+                LibraryKind.ALL to 4,
+                LibraryKind.CALLS to 2,
+                LibraryKind.MEETINGS to 1,
+                LibraryKind.VOICE_NOTES to 0,
+                LibraryKind.OTHER to 1
+            ),
+            counts
+        )
         // A Source filter still applies inside a tab.
         val zoomOnly = LibraryFacets.filter(placed, filters.toggle(FilterSection.SOURCE, "zoom"), today)
-        assertEquals(listOf("02"), zoomOnly.filter { LibraryKind.MEETINGS.holds(it.source) }.map { it.item.id })
-        assertEquals(emptyList<String>(), zoomOnly.filter { LibraryKind.CALLS.holds(it.source) }.map { it.item.id })
+        assertEquals(listOf("02"), zoomOnly.filter { LibraryKind.MEETINGS.holds(it.kind) }.map { it.item.id })
+        assertEquals(emptyList<String>(), zoomOnly.filter { LibraryKind.CALLS.holds(it.kind) }.map { it.item.id })
     }
 
     @Test
