@@ -220,8 +220,8 @@ trait ManagesAccountPages
     public function signInDeviceAction(): Action
     {
         return Action::make('signInDevice')->label('Sign in a device')
-            ->modalHeading('Sign in a phone or computer')
-            ->modalDescription('Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.')
+            ->modalHeading(__('Sign in a phone or computer'))
+            ->modalDescription(__('Scan the QR code in the :app app, or type the code. It works once and expires in 10 minutes.', ['app' => Brand::name()]))
             ->fillForm(function (PairingService $pairing): array {
                 try {
                     $code = $pairing->createCode($this->account());
@@ -232,8 +232,9 @@ trait ManagesAccountPages
 
                 return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
             })
-            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
-            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+            // The new frame's copy of the window's body has its words in the console's language (W-207, W-208).
+            ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('md');
     }
 
     /** A device's sheet: rename it, sign it out, sign it in again or remove it from the list. */
@@ -274,8 +275,8 @@ trait ManagesAccountPages
     public function signInAgainAction(): Action
     {
         return Action::make('signInAgain')
-            ->modalHeading(fn (array $arguments): string => 'Sign in '.$this->ownDevice($arguments)->readableName().' again')
-            ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
+            ->modalHeading(fn (array $arguments): string => __('Sign in :name again', ['name' => $this->ownDevice($arguments)->readableName()]))
+            ->modalDescription(__('Open the :app app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.', ['app' => Brand::name()]))
             ->fillForm(function (array $arguments, PairingService $pairing): array {
                 try {
                     $code = $pairing->createBoundCode($this->account(), $this->ownDevice($arguments)->id);
@@ -286,8 +287,9 @@ trait ManagesAccountPages
 
                 return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
             })
-            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
-            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+            // The new frame's copy of the window's body has its words in the console's language (W-207, W-208).
+            ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('md');
     }
 
     /** @param  array<string, mixed>  $arguments */

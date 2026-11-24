@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Filament\Support\SettingsContext;
@@ -148,6 +149,40 @@ it('opens a device row\'s Sign in again window from the new frame\'s own copy in
     Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out')
         ->assertActionExists(TestAction::make('signInAgain')->table($device->fresh()), fn (Action $a): bool => $a->getModalHeading() === 'Sign in '.$device->fresh()->readableName().' again'
             && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.');
+});
+
+it('opens Settings › Devices\' Sign in a device and Sign in again windows from the new frame\'s copy, in Urdu, and classic\'s English otherwise (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    $settings = fn () => Livewire::test(EditProfile::class, ['subpage' => 'devices']);
+    $again = TestAction::make('signInAgain')->arguments(['device' => $device->id]);
+
+    $as(true, 'ur');
+    expect(mountedWindow($settings()->mountAction('signInDevice'))['pairing']->getView())->toBe('filament.v2.pair-device')
+        ->and(mountedWindow($settings()->mountAction($again))['pairing']->getView())->toBe('filament.v2.pair-device');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getModalHeading() === 'فون یا کمپیوٹر سائن اِن کریں'
+        && str_contains((string) $a->getModalDescription(), 'QR کوڈ اسکین کریں') && $a->getModalCancelActionLabel() === __('Done'));
+    $settings()->assertActionExists($again, fn (Action $a): bool => str_contains((string) $a->getModalHeading(), 'کو دوبارہ سائن اِن کریں')
+        && str_contains((string) $a->getModalDescription(), 'اس کی ریکارڈنگز اور نام برقرار رہتے ہیں۔'));
+
+    $as(false, 'en');
+    expect(mountedWindow($settings()->mountAction('signInDevice'))['pairing']->getView())->toBe('filament.pair-device')
+        ->and(mountedWindow($settings()->mountAction($again))['pairing']->getView())->toBe('filament.pair-device');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getModalHeading() === 'Sign in a phone or computer'
+        && $a->getModalDescription() === 'Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.'
+        && $a->getModalCancelActionLabel() === 'Done');
+    $settings()->assertActionExists($again, fn (Action $a): bool => $a->getModalHeading() === 'Sign in '.$device->fresh()->readableName().' again'
+        && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.');
 });
 
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {

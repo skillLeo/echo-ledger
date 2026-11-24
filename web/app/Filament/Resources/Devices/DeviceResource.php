@@ -141,7 +141,7 @@ class DeviceResource extends Resource
                 ->modalDescription(__('Open the :app app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.', ['app' => Brand::name()]))
                 ->fillForm(fn (Device $record, ListDevices $livewire): array => $livewire->signInAgainForm($record))
                 ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
-                ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md'),
+                ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('md'),
             Action::make('signOut')->label(__('Sign out'))->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
                 ->authorize(fn (Device $record): bool => Gate::allows('delete', $record))
                 ->visible(fn (Device $record): bool => $record->signed_out_at === null)
