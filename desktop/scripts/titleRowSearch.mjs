@@ -5,7 +5,7 @@
 // name at 1280 and 1024), whether the title is cut, whether its count shows, and the search's form (field or ⌕ button); after
 // the change the run fails when a title is cut at 720 px or wider, or a count is not shown; and at 720, 900, 1024 and
 // 1440, English and Urdu, when a tab or a toolbar label beside them is cut or wrapped, or the search's placeholder is
-// cut.
+// cut; and that each shot reads its way: the search and the toolbar at the right end in English, at the left in Urdu.
 //   node scripts/titleRowSearch.mjs before
 //   node scripts/titleRowSearch.mjs after
 import { createServer } from "vite";
@@ -33,6 +33,8 @@ await mkdir(out, { recursive: true });
 
 const open = async (width, lang, theme, extra = "") => {
   const page = await browser.newPage({ viewport: { width, height: HEIGHT }, colorScheme: theme, reducedMotion: "reduce" });
+  // A busy machine serves the fixture slowly; the waits below are for it to load, not a measure of anything.
+  page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&lights=1${lang === "ur" ? "&lang=ur" : ""}${extra}`);
   await page.getByRole("button", { name: "Library", exact: true }).last().click();
   await page.locator("button[data-row-id]").first().waitFor();
@@ -57,7 +59,31 @@ const measure = (page) => page.evaluate(() => {
     title: name?.textContent ?? null,
     cut: name ? name.scrollWidth > name.clientWidth + 0.5 : null,
     count: count ? box(count).width > 0 && box(count).right <= box(row).right : false,
-    search: field ? `field ${Math.round(box(field).width)} px` : row?.querySelector('[aria-label^="Search"]') ? "button" : "none",
+    search: row?.querySelector(".el-titlerow__field")
+      ? `field ${Math.round(box(field).width)} px, "${row.querySelector(".el-titlerow__field").placeholder}"`
+      : field ? "button" : "none",
+  };
+});
+
+/**
+ * Which way the window reads, as drawn: where the search sits in the title row (its end: the right in English, the left
+ * when mirrored for Urdu), on the far side of the title, and the Library's row 2 the same way (the first tab on the
+ * start side, Filters and Sort & display at the end).
+ */
+const sides = (page) => page.evaluate(() => {
+  const row = document.querySelector('[data-testid="title-row"]');
+  const search = row?.querySelector(".el-titlerow__search")?.getBoundingClientRect();
+  const title = row?.querySelector(".el-titlerow__start")?.getBoundingClientRect();
+  const tabs = [...document.querySelectorAll(".el-lib-tabs__tab")].map((t) => t.getBoundingClientRect());
+  const tools = document.querySelector(".el-lib-row2__end")?.getBoundingClientRect();
+  const centre = (r) => r.left + r.width / 2;
+  const half = innerWidth / 2;
+  return {
+    dir: document.documentElement.dir || "ltr",
+    search: search ? (centre(search) > half ? "right" : "left") : "none",
+    searchPastTitle: !!search && !!title && (search.left >= title.right - 0.5 || search.right <= title.left + 0.5),
+    tabsFrom: tabs.length > 1 ? (tabs[0].left > tabs[1].left ? "right" : "left") : "none",
+    tools: tools ? (centre(tools) > half ? "right" : "left") : "none",
   };
 });
 
@@ -110,7 +136,13 @@ try {
     await rest(page);
     const file = join(out, `${prefix}-${width}-${lang}-${theme}.png`);
     await page.screenshot({ path: file });
-    console.log(file);
+    const s = await sides(page);
+    // English reads left to right: the search and the toolbar at the right end. Urdu is the mirror.
+    const end = lang === "ur" ? "left" : "right";
+    const start = lang === "ur" ? "right" : "left";
+    const mirrored = s.search === end && s.searchPastTitle && s.tabsFrom === start && s.tools === end;
+    console.log(`${file.slice(out.length + 1)}: ${s.dir}, search at the ${s.search} end${s.searchPastTitle ? " past the title" : ", OVER THE TITLE"}, tabs from the ${s.tabsFrom}, Filters and Sort & display at the ${s.tools}${mirrored ? "" : ` (WRONG: the ${end} end expected)`}`);
+    if (prefix === "after" && !mirrored) problems.push(`${width} ${lang} ${theme}: not laid out ${lang === "ur" ? "right to left" : "left to right"}`);
     await page.close();
   }
   for (const width of MEASURED) {
@@ -129,8 +161,18 @@ try {
     // How the row made room: the toolbar's labels or its icons only, the tabs whole or scrolling.
     const state = await page.evaluate(() => {
       const labels = [...document.querySelectorAll(".el-lib-row2__end button")].some((b) => b.textContent.trim());
-      const scrolls = !!document.querySelector(".el-lib-tabs--scrolls");
-      return `${labels ? "labels" : "icons"}, tabs ${scrolls ? "scroll" : "whole"}`;
+      const tabs = document.querySelector(".el-lib-tabs--scrolls");
+      if (!tabs) return `${labels ? "labels" : "icons"}, tabs whole`;
+      // Scrolling: how much is out of view, and whether that is only a tab's padding or some of its words.
+      const view = tabs.getBoundingClientRect();
+      const hidden = [...tabs.querySelectorAll(".el-lib-tabs__tab")].filter((tab) => {
+        const range = document.createRange();
+        range.selectNodeContents(tab);
+        const words = range.getBoundingClientRect();
+        return words.left < view.left - 0.5 || words.right > view.right + 0.5;
+      }).map((tab) => `"${tab.textContent.trim()}"`);
+      const out = tabs.scrollWidth - tabs.clientWidth;
+      return `${labels ? "labels" : "icons"}, tabs scroll: ${out} px out of view, ${hidden.length ? `the words of ${hidden.join(", ")} partly out of view until scrolled` : "only a tab's padding, every tab's words in view"}`;
     });
     console.log(`${width} ${lang} (${state}): ${found.length ? found.join("; ") : "every label whole"}`);
     if (prefix === "after") problems.push(...found.map((f) => `${width} ${lang}: ${f}`));

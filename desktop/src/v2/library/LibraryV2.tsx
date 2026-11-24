@@ -753,7 +753,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const row2 = useRef<HTMLDivElement>(null);
   const row2Tabs = useRef<HTMLDivElement>(null);
   const row2End = useRef<HTMLDivElement>(null);
-  const row2Fit = useFitRow(row2, row2Tabs, row2End, filtersOn);
+  const row2Fit = useFitRow(row2, row2Tabs, row2End);
   /** The list as drawn (for a delete's next row): the rows on screen, folded sections left out. */
   const listOf = (_all: readonly LibraryItem[] | null) => ({ rows: shown });
 
