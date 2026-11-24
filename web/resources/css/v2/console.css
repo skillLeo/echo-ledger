@@ -490,9 +490,18 @@ body.el-resizing {
     }
 }
 
+/* Decision 18 (PLAN_V2_1_POLISH): the search at the bar's end, as the desktop's title row has it, 180 to 260 px (22 %
+   of the bar between, as the desktop's is of its window). With less room the empty space before it goes first, then it
+   shrinks to 180 px; below that it is the ⌕ button (header-fit, "Decision 18" below). */
 .v2-tb-search {
-    flex: 1;
-    max-width: calc(var(--el-space-64) * 8);
+    flex: 1 1 calc(var(--el-space-40) * 4.5);
+    min-inline-size: calc(var(--el-space-40) * 4.5);
+    max-inline-size: clamp(calc(var(--el-space-40) * 4.5), 22%, calc(var(--el-space-40) * 6.5));
+    margin-inline-start: auto;
+}
+
+.v2-tb > .el-workspace-switcher {
+    flex: none;
 }
 
 .v2-tb-spacer {
@@ -3221,48 +3230,10 @@ button.v2-row-tile:focus-visible,
     inset-inline-end: 0;
 }
 
-/* With the three levels the toolbar row also holds the tabs: on a computer it stays one line, the search giving way
-   first, and narrower than --el-breakpoint-wide Sort & display keeps its icon (its name in the tooltip and for screen
-   readers). */
-.v2-lib-shell.is-right .v2-library .fi-ta-search-field {
-    flex: 0 1 calc(var(--el-space-40) * 5);
-    min-inline-size: calc(var(--el-space-40) * 3);
-}
-
-@media (min-width: 1024px) {
-    .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
-        flex-wrap: nowrap;
-    }
-}
-
-/* The breadcrumb keeps its words; the tabs scroll sideways when the row is short (the filters beside the list). */
+/* The breadcrumb keeps its words. */
 .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
     display: flex;
     flex: none;
-}
-
-.v2-lib-shell.is-right .v2-lib-tabs {
-    flex: 0 1 auto;
-}
-
-.v2-lib-shell.is-right.is-pushing [data-menu='display'] .v2-chip-words {
-    position: absolute;
-    width: var(--el-border-hairline);
-    height: var(--el-border-hairline);
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-}
-
-@media not all and (min-width: 1440px) {
-    .v2-lib-shell.is-right [data-menu='display'] .v2-chip-words {
-        position: absolute;
-        width: var(--el-border-hairline);
-        height: var(--el-border-hairline);
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
 }
 
 /* Settings › Appearance › Sidebar style for the rail and its panels: Soft grey (their own), Light, or Dark (the light
@@ -3408,10 +3379,215 @@ button.v2-row-tile:focus-visible,
     display: none;
 }
 
-/* The tabs give way after the search, so every tab stays in sight while there is room; beside the filters (no room
-   for both) they scroll sideways first, as before. */
-.v2-lib-shell.is-right:not(.is-pushing) .v2-library .fi-ta-header-toolbar .v2-lib-tabs {
-    flex-shrink: 0;
+/* ================================================================== Decision 18: the header makes room in order
+   (docs/PLAN_V2_1_POLISH.md, an owner request): the page title never loses its words, and no tab or toolbar label is cut
+   or wrapped. filament.v2.header-fit lays each step out, measures it and keeps the first that fits on the page's root
+   (resources/js/header-fit-core.cjs decides the order); these rules draw the steps. */
+
+/* The top bar's ⌕ button: the field itself, folded to a square (its words and ⌘K hidden); a click, ⌘K or the focus opens
+   it over the bar, from one side to the other, and it folds again as the focus leaves it. */
+:root[data-tb-search='button'] .fi-topbar.v2-tb {
+    position: relative;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) {
+    flex: none;
+    inline-size: var(--el-layout-control-height);
+    min-inline-size: 0;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:focus-within {
+    position: absolute;
+    inset-inline: var(--el-layout-page-padding-mobile);
+    inset-block-start: 50%;
+    z-index: var(--el-layer-sticky);
+    max-inline-size: none;
+    margin: 0;
+    translate: 0 -50%;
+}
+
+/* The Library's search folded the same way (on the toolbar row's first line), and open over that line. */
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    position: relative;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    flex: none;
+    inline-size: var(--el-component-chip-height);
+    min-inline-size: 0;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-search-field > .fi-input-wrp:focus-within {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 0;
+    z-index: var(--el-layer-sticky);
+    max-inline-size: none;
+    margin: 0;
+}
+
+/* Folded, the field is a square ⌕: the glyph in the middle, the input over the whole square (a click opens it), its
+   words and ⌘K hidden. While the Library's search holds words it looks on, as a chip with a filter on does. */
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    position: relative;
+    overflow: hidden;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp {
+    block-size: var(--el-layout-control-height);
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    block-size: var(--el-component-chip-height);
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-prefix,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input-wrp-prefix {
+    position: absolute;
+    inset: 0;
+    justify-content: center;
+    padding: 0;
+    pointer-events: none;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-content-ctn,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input-wrp-content-ctn {
+    position: absolute;
+    inset: 0;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input {
+    inline-size: 100%;
+    block-size: 100%;
+    padding: 0;
+    color: transparent;
+    cursor: pointer;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input::placeholder,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input::placeholder {
+    color: transparent;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-suffix {
+    display: none;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within):has(.fi-input:not(:placeholder-shown)) {
+    border-color: var(--el-role-accent-default);
+    background-color: var(--el-role-accent-soft);
+}
+
+/* The Library's toolbar row with the three levels: [Library / title] [count] [tabs] [empty] [search] [Filters]
+   [Sort & display]. The title's words are whole; the tabs and the toolbar's buttons never shrink, the tabs' words never
+   wrap (.v2-tab); the search, as the top bar's, takes 180 to 260 px at the row's end, the empty space going first. */
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    flex-wrap: wrap;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    flex: none;
+    margin-inline-end: 0;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
+    flex: 1 1 calc(var(--el-space-40) * 4.5);
+    order: 0;
+    min-inline-size: calc(var(--el-space-40) * 4.5);
+    max-inline-size: clamp(calc(var(--el-space-40) * 4.5), 22%, calc(var(--el-space-40) * 6.5));
+    margin-inline-start: auto;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+    display: flex;
+    flex: none;
+    flex-wrap: nowrap;
+    order: 0;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+}
+
+.v2-lib-shell.is-right .v2-lib-tools .v2-chip {
+    position: relative;
+}
+
+/* The toolbar's labels go first: [Filters] and [Sort & display] keep their icons (and a filter count), their words
+   hidden for the eye only, so the buttons keep their names; the tooltips say them too. */
+:root[data-lib-labels='off'] .v2-lib-shell.is-right .v2-lib-tools .v2-chip-words {
+    position: absolute;
+    width: var(--el-border-hairline);
+    height: var(--el-border-hairline);
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Two lines, as the desktop's title row and row 2: [title] [count] [empty] [search], then [tabs] [empty] [Filters]
+   [Sort & display]. The break between them is the row's own ::after, a whole line 8 px tall. */
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    row-gap: 0;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child::after {
+    content: '';
+    flex-basis: 100%;
+    order: 4;
+    block-size: var(--el-space-8);
+}
+
+/* On the first line the title, its count and the search sit with the row's own gap, leaving the title the most room. */
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    order: 1;
+    margin-inline-end: 0;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-total {
+    order: 2;
+    margin-inline-end: 0;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
+    order: 3;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    order: 5;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+    order: 6;
+    margin-inline-start: auto;
+}
+
+/* Then the tabs scroll sideways, as the list chips' row does: one line, no scrollbar drawn and no fade (no gradients,
+   DS rule 1); the tab cut at the edge shows there is more. They take what the toolbar leaves (from nothing, so the
+   toolbar never wraps under them). A tab's focus ring is drawn inside it, where the scroller cannot cut it. */
+:root[data-lib-tabs='scroll'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+:root[data-lib-tabs='scroll'] .v2-lib-shell.is-right .v2-lib-tabs .v2-tab:focus-visible {
+    outline-offset: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
+}
+
+/* Only when even the ⌕ button leaves no room (a window under the console's least width, or a very long view name on a
+   phone) does the title take more lines: every word kept, a word longer than the line broken where it must. It takes
+   what its count and the button leave (from nothing, so they stay on its line). */
+:root[data-lib-title='wraps'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    flex: 1 1 0;
+    min-inline-size: 0;
+}
+
+:root[data-lib-title='wraps'] .v2-lib-shell.is-right .v2-lib-title {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 /* UX-22 (PLAN_V2_1_POLISH 3b): a Library row's right-click menu (filament.v2.context-menu-script), the desktop's on
