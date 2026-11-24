@@ -45,6 +45,7 @@
     <string name="v2_lib_save">محفوظ کریں</string>
     <string name="v2_lib_select">منتخب کریں</string>
     <string name="v2_lib_sync">ابھی سنک کریں</string>
+    <string name="v2_lib_search_in">%1$s میں تلاش کریں</string>
     <string name="v2_lib_recently_deleted">حال ہی میں حذف شدہ</string>
     <string name="v2_lib_views">منظر</string>
     <string name="v2_lib_source">ذریعہ</string>

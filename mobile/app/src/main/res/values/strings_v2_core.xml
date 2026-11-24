@@ -70,6 +70,7 @@
     <string name="v2_not_signed_in">Not signed in</string>
     <string name="v2_clear_search">Clear search</string>
     <string name="v2_close">Close</string>
+    <string name="v2_back_to_top">Back to top</string>
     <string name="v2_loading">Loading</string>
     <string name="v2_undo">Undo</string>
     <string name="v2_selected">Selected</string>

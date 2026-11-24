@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
+use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
@@ -19,11 +20,13 @@ use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\SendsToWhatsApp;
+use App\Filament\Support\SharingActions;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\SessionOpen;
+use App\Models\Transcript;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\Library\LibraryFacets;
@@ -1044,7 +1047,20 @@ class ListCaptureSessions extends ListRecords
 
     /** UX-22 (PLAN_V2_1_POLISH 3b): what a row's right-click menu can do here, by its ids in the one action list (resources/js/actions.json). */
     public const MENU_ACTIONS = ['recording.open', 'recording.transcribe', 'recording.pin', 'recording.important', 'recording.unread', 'recording.labels', 'label.new',
-        'recording.moveToProject', 'file.rename', 'recording.exportAs', 'recording.moveToTrash'];
+        'recording.moveToProject', 'file.rename', 'file.share', 'file.copyLink', 'file.shareWithPeople', 'file.sendToWhatsApp', 'recording.exportAs', 'recording.moveToTrash'];
+
+    /** UX-22: the recording a menu's dialog is for (Rename…, Share ›): the server's to say, never the browser's. */
+    #[Locked]
+    public ?string $menuRecord = null;
+
+    /**
+     * UX-22: the person's own selection while a menu's action runs for other rows, given back when it ends or is
+     * cancelled (selected, deselected, and whether it was every page's).
+     *
+     * @var array{selected: list<string>, deselected: list<string>, tracking: bool}|null
+     */
+    #[Locked]
+    public ?array $menuSelection = null;
 
     /**
      * UX-22: a pick in a row's right-click menu (filament.v2.context-menu) for the recordings it was opened on. Pin, Mark
@@ -1052,19 +1068,29 @@ class ListCaptureSessions extends ListRecords
      * every one is, the menu's own rule); Mark as unread takes back the person's own opens (contract 2.0.0-t), and once
      * every one is unread it is Mark as read; Move to project › moves them (value "none": out of any). Rename… (one), New
      * label…, Export › a format, Transcribe and Move to trash open, or run, the console's own actions for them (the
-     * selection bar's, with their questions, checks and Undo). Only the person's own recordings of this workspace (the
-     * Library's query, read from the database; the browser's ids are only asked about), never from a read-only console
-     * or the classic Library. Open is the browser's (the row's own click).
+     * selection bar's, with their questions, checks and Undo); for one recording Share › Copy link (the share dialog),
+     * Share with people… and Send to WhatsApp… open the recording page's (Copy link and WhatsApp only with its audio).
+     * Only the person's own recordings of this workspace (the Library's query, read from the database; the browser's ids
+     * are only asked about), at most LibraryOrganiser::MAX_BULK at a time (more: it says how many to unselect, and does
+     * nothing), never from a read-only console or the classic Library. Open is the browser's (the row's own click).
+     * $selection: the menu is the selection's own, which its actions clear as the selection bar's do; otherwise the
+     * person's selection is left as it was.
      *
      * @param  array<int, mixed>  $ids
      */
-    public function menuAction(string $action, array $ids, ?string $value = null): mixed
+    public function menuAction(string $action, array $ids, ?string $value = null, bool $selection = false): mixed
     {
         if (! ConsoleV2::library() || ConsoleAccess::readOnly() || ! in_array($action, self::MENU_ACTIONS, true)) {
             return null;
         }
-        $asked = array_slice(array_values(array_unique(array_filter(array_map(fn (mixed $id): string => is_scalar($id) ? (string) $id : '', $ids),
-            fn (string $id): bool => $id !== ''))), 0, LibraryOrganiser::MAX_BULK);
+        $asked = array_values(array_unique(array_filter(array_map(fn (mixed $id): string => is_scalar($id) ? (string) $id : '', $ids),
+            fn (string $id): bool => $id !== '')));
+        if (count($asked) > LibraryOrganiser::MAX_BULK) {
+            Notification::make()->title(__('Up to :max at a time: unselect :count', ['max' => LibraryOrganiser::MAX_BULK, 'count' => count($asked) - LibraryOrganiser::MAX_BULK]))
+                ->warning()->send();
+
+            return null;
+        }
         /** @var EloquentCollection<int, CaptureSession> $records */
         $records = $asked === [] ? new EloquentCollection : CaptureSessionResource::getEloquentQuery()->whereIn('id', $asked)->with('labels')->get();
         if ($records->isEmpty()) {
@@ -1073,6 +1099,8 @@ class ListCaptureSessions extends ListRecords
         $keys = $records->map(fn (CaptureSession $r): string => (string) $r->getKey())->values()->all();
         $value = is_string($value) ? trim($value) : null;
         $label = $value !== null ? mb_strtolower($value) : null;
+        $one = count($keys) === 1 ? $records->first() : null;
+        $keep = ! $selection;
 
         return match ($action) {
             'recording.pin' => $this->organise($keys, $records->every(fn (CaptureSession $r): bool => (bool) $r->pinned) ? 'unpin' : 'pin'),
@@ -1081,11 +1109,14 @@ class ListCaptureSessions extends ListRecords
             'recording.labels' => $label === null || $label === '' ? null : $this->organise($keys,
                 $records->every(fn (CaptureSession $r): bool => $r->labels->contains(fn ($l): bool => mb_strtolower((string) $l->label) === $label)) ? 'unlabel' : 'label', null, $value),
             'recording.moveToProject' => $value === null || $value === '' ? null : $this->organise($keys, 'move', $value === 'none' ? null : $value),
-            'file.rename' => count($keys) === 1 ? $this->mountAction('rename', [], ['table' => true, 'recordKey' => $keys[0]]) : null,
-            'label.new' => $this->mountForMenu('labelInMenu', $keys),
-            'recording.exportAs' => $value !== null && array_key_exists($value, CaptureSessionsTable::V2_EXPORT_FORMATS) ? $this->mountForMenu('exportInMenu'.ucfirst($value), $keys) : null,
-            'recording.transcribe' => $this->mountForMenu('transcribeInMenu', $keys),
-            'recording.moveToTrash' => $this->mountForMenu('trashFromMenu', $keys),
+            'file.rename' => $one !== null ? $this->mountForRecord('menuRename', $one) : null,
+            'file.copyLink' => $one !== null && ! $one->hasNoAudio() ? $this->mountForRecord('menuShare', $one) : null,
+            'file.shareWithPeople' => $one !== null ? $this->mountForRecord('menuSend', $one) : null,
+            'file.sendToWhatsApp' => $one !== null && ! $one->hasNoAudio() ? $this->mountForRecord('menuWhatsapp', $one) : null,
+            'label.new' => $this->mountForMenu('labelInMenu', $keys, $keep),
+            'recording.exportAs' => $value !== null && array_key_exists($value, CaptureSessionsTable::V2_EXPORT_FORMATS) ? $this->mountForMenu('exportInMenu'.ucfirst($value), $keys, $keep) : null,
+            'recording.transcribe' => $this->mountForMenu('transcribeInMenu', $keys, $keep),
+            'recording.moveToTrash' => $this->mountForMenu('trashFromMenu', $keys, $keep),
             default => null,
         };
     }
@@ -1129,16 +1160,98 @@ class ListCaptureSessions extends ListRecords
     /**
      * One of the selection bar's actions for what the menu was opened on: [$ids] become the table's selection for it
      * (its records are read through the table's own query), and it opens with its question, or runs when it has none.
+     * With $keep (the menu of rows outside the selection) the person's own selection is given back when it ends or is
+     * cancelled, and the browser is not told to clear it.
      *
      * @param  list<string>  $ids
      */
-    private function mountForMenu(string $name, array $ids): mixed
+    private function mountForMenu(string $name, array $ids, bool $keep): mixed
     {
+        $this->menuSelection = $keep ? ['selected' => array_values(array_map('strval', $this->selectedTableRecords)),
+            'deselected' => array_values(array_map('strval', $this->deselectedTableRecords)), 'tracking' => $this->isTrackingDeselectedTableRecords] : null;
         $this->selectedTableRecords = $ids;
         $this->deselectedTableRecords = [];
         $this->isTrackingDeselectedTableRecords = false;
 
         return $this->mountAction($name, [], ['table' => true, 'bulk' => true]);
+    }
+
+    /** One recording's dialog from the menu (Rename…, Share ›): the page's own action for it. */
+    private function mountForRecord(string $name, CaptureSession $record): mixed
+    {
+        $this->menuRecord = (string) $record->getKey();
+
+        return $this->mountAction($name);
+    }
+
+    /** A menu's action for other rows has ended: the selection they replaced comes back. */
+    public function unmountAction(bool|string|null $cancelParentActions = null): void
+    {
+        parent::unmountAction($cancelParentActions);
+        if ($this->mountedActions === [] && $this->menuSelection !== null) {
+            $this->selectedTableRecords = $this->menuSelection['selected'];
+            $this->deselectedTableRecords = $this->menuSelection['deselected'];
+            $this->isTrackingDeselectedTableRecords = $this->menuSelection['tracking'];
+            $this->menuSelection = null;
+        }
+    }
+
+    /** The selection bar's actions clear the selection when they end; a menu's for other rows leaves the person's alone. */
+    public function deselectAllTableRecords(): void
+    {
+        if ($this->menuSelection === null) {
+            parent::deselectAllTableRecords();
+        }
+    }
+
+    /** The recording a menu's dialog is for: one of the person's own, in this workspace. */
+    private function menuRecording(): CaptureSession
+    {
+        $record = $this->menuRecord !== null ? CaptureSessionResource::getEloquentQuery()->find($this->menuRecord) : null;
+
+        return $record instanceof CaptureSession ? $record : abort(404);
+    }
+
+    /** Rename… from a row's menu (UX-22): the row's own Rename. */
+    public function menuRenameAction(): Action
+    {
+        return CaptureSessionsTable::renameAction()->name('menuRename')->record(fn (): CaptureSession => $this->menuRecording());
+    }
+
+    /** Share › Copy link (UX-22): the recording page's share dialog, which makes the link to copy. */
+    public function menuShareAction(): Action
+    {
+        return SharingActions::share(fn (): CaptureSession => $this->menuRecording(), fn (): array => self::readyViewsOf($this->menuRecording()),
+            fn (): bool => $this->menuRecording()->primaryRecording?->isReady() === true)
+            ->name('menuShare')->visible(fn (): bool => ! ConsoleAccess::readOnly() && ! $this->menuRecording()->hasNoAudio());
+    }
+
+    /** Share › Share with people… (UX-22): Send to a teammate, as on the recording page. */
+    public function menuSendAction(): Action
+    {
+        return SharingActions::send(fn (): CaptureSession => $this->menuRecording())->name('menuSend')->visible(fn (): bool => ! ConsoleAccess::readOnly());
+    }
+
+    /** Share › Send to WhatsApp… (UX-22): the recording page's panel (only with the recording's audio). */
+    public function menuWhatsappAction(): Action
+    {
+        return WhatsAppActions::send(fn (): CaptureSession => $this->menuRecording(), name: 'menuWhatsapp');
+    }
+
+    /**
+     * The views of [$session]'s transcript ready to share (the recording page's readyViews): none until it is done.
+     *
+     * @return list<string>
+     */
+    private static function readyViewsOf(CaptureSession $session): array
+    {
+        $final = $session->finalTranscript;
+        if (! $final instanceof Transcript || $final->status !== TranscriptStatus::Completed) {
+            return [];
+        }
+        $state = app(TranscriptViews::class)->state($final);
+
+        return $state['status'] === 'ready' ? array_values(array_filter($state['available'], fn (string $v): bool => $state[$v] !== null)) : [];
     }
 
     /**
@@ -1147,7 +1260,7 @@ class ListCaptureSessions extends ListRecords
      * here, the person's labels and projects, the export formats and its own words.
      *
      * @return array{actions: list<array<string, mixed>>, runnable: list<string>, say: array<string, string>, labels: list<array{value: string, label: string}>,
-     *     projects: list<array{value: string, label: string}>, formats: list<array{value: string, label: string}>, words: array<string, string>}
+     *     projects: list<array{value: string, label: string}>, formats: list<array{value: string, label: string}>, words: array<string, string>, max: int}
      */
     public function menuData(): array
     {
@@ -1174,7 +1287,9 @@ class ListCaptureSessions extends ListRecords
                 ->map(fn (Client $c): array => ['value' => (string) $c->id, 'label' => (string) $c->name])->values()->all(),
             'formats' => array_map(fn (string $format, string $label): array => ['value' => $format, 'label' => __($label)],
                 array_keys(CaptureSessionsTable::V2_EXPORT_FORMATS), array_values(CaptureSessionsTable::V2_EXPORT_FORMATS)),
-            'words' => ['many' => __(':count recordings'), 'noProject' => __('No project'), 'menu' => __('Recording actions')],
+            'words' => ['many' => __(':count recordings'), 'noProject' => __('No project'), 'menu' => __('Recording actions'),
+                'limit' => __('Up to :max at a time: unselect :count')],
+            'max' => LibraryOrganiser::MAX_BULK,
         ];
     }
 

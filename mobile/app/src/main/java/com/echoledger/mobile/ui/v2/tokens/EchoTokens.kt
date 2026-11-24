@@ -154,9 +154,22 @@ object EchoTokens {
         val full = 999.dp
     }
 
+    /** Tints laid over a surface. */
+    object Tint {
+        /**
+         * The row you came back to (v2.1 UX-25): a neutral grey, the text colour over the page as the desktop mixes it,
+         * 6 % in light and 9 % in dark; never the accent, so it never reads as selected.
+         */
+        const val returnedLight = 0.06f
+        const val returnedDark = 0.09f
+    }
+
     object Layout {
         val pagePaddingDesktop = 24.dp
         val pagePaddingMobile = 16.dp
+
+        /** One UI's minimum side margin (v2.1 UX-14): the Library's header, chips and rows. */
+        val pagePaddingPhone = 24.dp
         val rowComfortable = 56.dp
         val rowCompact = 44.dp
         val rowMobile = 64.dp

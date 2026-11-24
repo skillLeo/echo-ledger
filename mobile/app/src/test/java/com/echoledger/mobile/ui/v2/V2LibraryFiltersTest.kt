@@ -344,6 +344,55 @@ class V2LibraryFiltersTest : ScreenTest() {
         pumpUntil("back on All") { compose.onAllNodesWithText("Rec Bravo").fetchSemanticsNodes().isNotEmpty() }
     }
 
+    /** The Library opened on a kept Other, its first frame before the library is read (back from the background). */
+    private fun openOnOtherBeforeTheLibraryIsRead(rows: List<String>) {
+        runBlocking { app.pairLocally(server) }
+        server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        server.on("GET", "/api/library") { req -> FakeServer.json(200, library(rows, req)) }
+        server.on("GET", "/api/views", FakeServer.json(200, """{"data":[],"views_version":0,"limit":30}"""))
+        app.graph.library.clear()
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                    V2LibraryScreen(
+                        vm,
+                        initials = "AS",
+                        onOpen = {},
+                        onTrash = {},
+                        onAccount = {},
+                        initialKind = com.echoledger.mobile.core.LibraryKind.OTHER
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    /** Review of I-07: a kept Other survives the first frame, and stays once the sync brings its recordings. */
+    @Test
+    fun aKeptOtherSurvivesTheFirstFrameAndStaysWhenTheSyncBringsItsRecordings() {
+        openOnOtherBeforeTheLibraryIsRead(
+            listOf(row("01JA", "Rec Alpha", "whatsapp", "\"labels\":[]"), row("01JF", "Rec Foxtrot", "imported", "\"labels\":[]"))
+        )
+        vm.refresh()
+        pumpUntil("synced") { compose.onAllNodesWithText("Rec Foxtrot").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Other · 1") and hasAnyAncestor(hasTestTag(KIND_ROW_TAG))).assertIsSelected()
+        assertTrue("only Other's", compose.onAllNodesWithText("Rec Alpha").fetchSemanticsNodes().isEmpty())
+    }
+
+    /** Review of I-07: a kept Other whose sync brings none goes back to All when the sync ends, never a hidden tab. */
+    @Test
+    fun aKeptOtherGoesBackToAllWhenTheSyncEndsWithoutAny() {
+        openOnOtherBeforeTheLibraryIsRead(listOf(row("01JA", "Rec Alpha", "whatsapp", "\"labels\":[]")))
+        vm.refresh()
+        pumpUntil("synced") { compose.onAllNodesWithText("Rec Alpha").fetchSemanticsNodes().isNotEmpty() && !vm.syncing.value }
+        val kinds = hasAnyAncestor(hasTestTag(KIND_ROW_TAG))
+        pumpUntil("back on All") {
+            compose.onAllNodes(hasText("All · 1") and kinds and androidx.compose.ui.test.isSelected()).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue("no hidden tab", compose.onAllNodes(hasText("Other", substring = true) and kinds).fetchSemanticsNodes().isEmpty())
+    }
+
     @Test
     fun theFiltersSheetCountsLiveSaysIsNotClearsASectionAndShowsTheResults() {
         seed()

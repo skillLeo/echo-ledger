@@ -74,6 +74,9 @@ class AppGraph(val context: Context) {
     /** The app language and text size last saved in this process, so a change of either refreshes what Android draws. */
     @Volatile private var shownLook: Pair<String, String>? = null
 
+    /** Whether the after-call channel was last made (true) or removed (false) in this process; null before the first save. */
+    @Volatile private var shownNotify: Boolean? = null
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private val lookRefresh = Dispatchers.Default.limitedParallelism(1)
 
@@ -85,6 +88,12 @@ class AppGraph(val context: Context) {
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
             // The app language or text size changed (or this process saves for the first time): what Android draws for
             // the app (the widget, the notification channels' names) follows, as the v2 screens do.
+            // The after-call flag came on or went off (v2.1): its channel follows, whatever page is open.
+            val notify = com.echoledger.mobile.calls.CallChoice.notifies(saved)
+            if (shownNotify != notify) {
+                shownNotify = notify
+                scope.launch(lookRefresh) { runCatching { com.echoledger.mobile.notify.AfterCallNotice.followFlag(context, notify) } }
+            }
             val look = saved.appLanguage to saved.textSize
             if (shownLook != look) {
                 // One after another, each with the latest language: a slow one never names them after an older choice.

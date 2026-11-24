@@ -10,6 +10,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.R
 import com.echoledger.mobile.testsupport.FakeServer
@@ -146,8 +147,10 @@ class LibraryParityShotsTest : ScreenTest() {
             if (compose.onAllNodes(classic).fetchSemanticsNodes().isNotEmpty()) {
                 tap("View: group, sort and density")
             } else {
-                tap(*words(R.string.v2_lib_more).toTypedArray())
-                tap(*words(R.string.v2_lf_sort_display).toTypedArray())
+                // The chips row's last chip since v2.1 (UX-14): scrolled to, then tapped.
+                val chip = words(R.string.v2_lf_sort_display).map { hasText(it) }.reduce { a, b -> a or b } and hasClickAction()
+                compose.onAllNodes(chip).onFirst().performScrollTo().performClick()
+                compose.waitForIdle()
             }
         }
     )

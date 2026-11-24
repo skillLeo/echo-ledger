@@ -2,17 +2,21 @@ package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,7 +27,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -41,6 +49,7 @@ import com.echoledger.mobile.data.ListDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
+import com.echoledger.mobile.ui.v2.components.EchoBackToTop
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
@@ -59,6 +68,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
+import com.echoledger.mobile.ui.v2.components.LocalPageMargin
 import com.echoledger.mobile.ui.v2.components.formatClock
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.V2Text
@@ -69,6 +79,7 @@ import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -160,7 +171,9 @@ fun V2LibraryScreen(
     onSharedWithMe: () -> Unit = {},
     onRequests: () -> Unit = {},
     /** A call waiting for Transcribe or Delete, listed in Needs you: where the choice is made (Activity). */
-    onReviewWaiting: () -> Unit = {}
+    onReviewWaiting: () -> Unit = {},
+    /** The tab it opens on, as one kept from before (tests); the person's own choice is kept across a rotation anyway. */
+    initialKind: LibraryKind = LibraryKind.ALL
 ) {
     val text = v2Text
     // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
@@ -212,7 +225,7 @@ fun V2LibraryScreen(
     fun setFilters(next: LibraryFilterSet) {
         filtersJson = LibraryScreenState.json(next)
     }
-    var kindKey by rememberSaveable { mutableStateOf(LibraryKind.ALL.name) }
+    var kindKey by rememberSaveable { mutableStateOf(initialKind.name) }
     val kind = LibraryKind.entries.firstOrNull { it.name == kindKey } ?: LibraryKind.ALL
     // A list or a view that is gone (deleted here or elsewhere) goes back to All recordings.
     val target = LibraryScreenState.resolve(LibraryTarget.parse(targetKey), lists, savedViews, viewsReady)
@@ -266,9 +279,12 @@ fun V2LibraryScreen(
     // background, the process made again) keeps the Other the person chose.
     val otherCount = kindCounts[LibraryKind.OTHER] ?: 0
     var otherHad by remember { mutableStateOf(false) }
-    LaunchedEffect(kind, otherCount) {
+    // Synced as of the list this frame shows, never mid-sync: read with the list (a sync sets its point just before its
+    // items), so a synced library without any Other goes back to All once its sync ends, and only then.
+    val synced = remember(library, syncing) { !syncing && vm.hasSynced() }
+    LaunchedEffect(kind, otherCount, synced) {
         if (otherCount > 0) otherHad = true
-        if (LibraryKind.backToAll(kind, otherCount, otherHad, vm.hasSynced())) kindKey = LibraryKind.ALL.name
+        if (LibraryKind.backToAll(kind, otherCount, otherHad, synced)) kindKey = LibraryKind.ALL.name
     }
     val counted = remember(placed, kind) { placed.filter { kind.holds(it.kind) } }
     val waiting = remember(facts, target) { LibraryScreenState.waiting(facts, target) }
@@ -557,6 +573,33 @@ fun V2LibraryScreen(
         is LibraryTarget.Label -> lists.firstOrNull { it.key == target.label }?.name.orEmpty()
         is LibraryTarget.View -> openView?.name.orEmpty()
     }
+    // The recording opened last (UX-25): back from it, the list shows it with a light tint, focused, where it was. The
+    // tint stays until another row is opened or tapped, the view, tab or filters change, or 60 s pass.
+    // The row and when its tint ends (SystemClock.elapsedRealtime) are saved, so a rotation or the process made again
+    // right after coming back keeps it for the time it has left.
+    var openedLast by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnedTo by rememberSaveable { mutableStateOf<String?>(null) }
+    var tintEnds by rememberSaveable { androidx.compose.runtime.mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        openedLast?.let {
+            returnedTo = it
+            tintEnds = android.os.SystemClock.elapsedRealtime() + RETURN_TINT_MS
+            openedLast = null
+        }
+    }
+    LaunchedEffect(returnedTo) {
+        if (returnedTo != null) {
+            kotlinx.coroutines.delay((tintEnds - android.os.SystemClock.elapsedRealtime()).coerceIn(0L, RETURN_TINT_MS))
+            returnedTo = null
+        }
+    }
+    // The view, its filters and its tab: each such list keeps its own scroll position; a change ends the tint.
+    val place = "$viewKey|${filtersJson.hashCode()}|${kind.name}"
+    var tintedIn by rememberSaveable { mutableStateOf(place) }
+    if (tintedIn != place) {
+        tintedIn = place
+        returnedTo = null
+    }
     V2LibraryContent(
         state = state,
         query = query,
@@ -565,11 +608,13 @@ fun V2LibraryScreen(
         onToggleView = {},
         initials = initials,
         onOpen = {
+            returnedTo = null
             if (ticked.isNotEmpty()) {
                 pick(listOf(it.id), off = it.id in picked)
             } else {
                 keepSearch(query)
                 vm.markOpened(it.item)
+                openedLast = it.id
                 onOpen(it.item)
             }
         },
@@ -589,7 +634,10 @@ fun V2LibraryScreen(
             folded = folded,
             onFold = { key -> folded = if (key in folded) folded - key else folded + key },
             selected = ticked,
-            onToggle = { row -> pick(listOf(row.id), off = row.id in picked) },
+            onToggle = { row ->
+                returnedTo = null
+                pick(listOf(row.id), off = row.id in picked)
+            },
             onSelectGroup = { g ->
                 val ids = g.rows.map { it.id }.toSet()
                 pick(ids, off = picked.containsAll(ids))
@@ -614,7 +662,7 @@ fun V2LibraryScreen(
                 )
             },
             filterRow = {
-                LibraryKindRow(kind, kindCounts, filters.count, { kindKey = it.name }) {
+                LibraryKindRow(kind, kindCounts, filters.count, { kindKey = it.name }, onSortDisplay = { sortOpen = true }) {
                     filtersAt = null
                     filtersOpen = true
                 }
@@ -669,7 +717,9 @@ fun V2LibraryScreen(
             recent = settings.recentSearches,
             onKeepSearch = ::keepSearch,
             title = title,
-            onTitle = { menuOpen = true }
+            onTitle = { menuOpen = true },
+            place = place,
+            returnedTo = returnedTo
         )
     )
     if (menuOpen) {
@@ -843,7 +893,11 @@ class LibraryTools(
     val swipes: Boolean = true,
     /** What the list shows ("All recordings", a label, one of My views): the title, which opens [onTitle]'s menu. */
     val title: String? = null,
-    val onTitle: (() -> Unit)? = null
+    val onTitle: (() -> Unit)? = null,
+    /** Which list this is (the view, its filters, tab and search): each keeps its own scroll position (UX-25). */
+    val place: String = "",
+    /** The recording come back to: a light tint and accessibility focus, so the person sees where they were. */
+    val returnedTo: String? = null
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -892,7 +946,31 @@ fun V2LibraryContent(
     onReviewWaiting: () -> Unit = {}
 ) {
     val c = EchoV2.colors
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Each list keeps its own place (UX-25), across a recording opened and closed, a rotation and the process made again.
+    val listState = rememberSaveable(tools?.place ?: "", saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
+        androidx.compose.foundation.lazy.LazyListState()
+    }
+    // Back from a recording: its row is where it was on screen (recordings that came in above it meanwhile would move the
+    // saved place by as many rows), with focus (screen readers start there) and a light tint while it lasts.
+    val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    var openedAt by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    var broughtBack by rememberSaveable { mutableStateOf<String?>(null) }
+    val openRow: (V2Row) -> Unit = { row ->
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == row.id }?.let { openedAt = it.offset }
+        broughtBack = null
+        onOpen(row)
+    }
+    LaunchedEffect(tools?.returnedTo) {
+        val t = tools ?: return@LaunchedEffect
+        val id = t.returnedTo ?: return@LaunchedEffect
+        if (broughtBack != id) {
+            val searching = query.trim().length >= 2
+            val shown = t.groups.filter { g -> !(g.name.isNotEmpty() && !searching) || g.key !in t.folded }
+            listState.bringBack(id, shown.flatMap { g -> g.rows.map { it.id } }, openedAt)
+            broughtBack = id
+        }
+        runCatching { returnFocus.requestFocus() }
+    }
     val scrollToTop = extras?.scrollToTop ?: 0
     LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
     val text = v2Text
@@ -910,225 +988,264 @@ fun V2LibraryContent(
         onQuery("")
         focus.clearFocus(force = true)
     }
-    androidx.activity.compose.BackHandler(enabled = !selecting && (searchFocused || query.isNotEmpty())) { leaveSearch() }
-    Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        if (selecting) {
-            tools!!.selectionBar()
-        } else {
-            // With the full Library the title says what the list shows and opens the menu of places (All recordings ▾).
-            EchoTopBar(
-                tools?.title ?: stringResource(R.string.v2_library),
-                large = tools?.onTitle == null,
-                onTitleClick = tools?.onTitle,
-                titleClickLabel = stringResource(R.string.v2_lf_choose_view)
-            ) {
-                onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
-                if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
-                extras?.actions?.invoke()
-                if (tools != null) {
+    // The full Library (v2.1 UX-14): search is the ⌕ in the title row and opens over the page; a query left in keeps it.
+    var searchOpen by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
+    val compactHeader = tools != null
+
+    // The full Library's avatar opens its menu (Select, Sync now, Settings); the simple page's opens Settings.
+    val onAvatar: () -> Unit = if (compactHeader) ({ menu = true }) else onAccount
+
+    fun closeSearch() {
+        leaveSearch()
+        searchOpen = false
+    }
+    androidx.activity.compose.BackHandler(enabled = !selecting && (searchFocused || query.isNotEmpty() || searchOpen)) {
+        if (compactHeader) closeSearch() else leaveSearch()
+    }
+    // The chips' row hides while the list scrolls down and comes back as it scrolls up (UX-14), never while searching.
+    val chips = remember { ChipsOffset() }
+    CompositionLocalProvider(LocalPageMargin provides if (compactHeader) EchoTokens.Layout.pagePaddingPhone else LocalPageMargin.current) {
+        // While the list scrolls, the chips' row follows it (not while searching).
+        val follow = if (compactHeader && !searchOpen) Modifier.nestedScroll(chips) else Modifier
+        Column(modifier.fillMaxSize().background(c.bgCanvas).then(follow)) {
+            if (selecting) {
+                tools!!.selectionBar()
+            } else if (compactHeader && searchOpen) {
+                // Search over the page: ← and the field, "Search in All recordings", focused.
+                SearchBar(
+                    query,
+                    onQuery,
+                    stringResource(R.string.v2_lib_search_in, tools?.title ?: stringResource(R.string.v2_library)),
+                    onBack = ::closeSearch,
+                    onFocus = { searchFocused = it },
+                    onSearch = { tools?.onKeepSearch?.invoke(it) }
+                )
+            } else {
+                // With the full Library the title says what the list shows and opens the menu of places (All recordings ▾);
+                // then search, the bell and the avatar, whose menu has Select, Sync now and Settings (no ⋮).
+                EchoTopBar(
+                    tools?.title ?: stringResource(R.string.v2_library),
+                    large = tools?.onTitle == null,
+                    onTitleClick = tools?.onTitle,
+                    titleClickLabel = stringResource(R.string.v2_lf_choose_view)
+                ) {
+                    onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
+                    if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
+                    if (tools != null) EchoIconButton(EchoIcons.Search, text.searchRecordings, { searchOpen = true })
+                    extras?.actions?.invoke()
+                    // The avatar last, at the top end, as on every main screen.
                     Box {
-                        EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
-                        val look = rememberPageLook()
-                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            ProvidePageLook(look) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lib_select), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.SelectAll, null) },
-                                    onClick = {
+                        Box(
+                            Modifier
+                                .size(EchoTokens.Layout.controlTouchMin)
+                                .then(
+                                    // The full Library's avatar opens a menu: TalkBack says so ("drop-down list, double tap
+                                    // to show choices"); the simple page's opens Settings.
+                                    if (compactHeader) {
+                                        Modifier.clickable(
+                                            onClickLabel = stringResource(R.string.v2_open_menu),
+                                            role = androidx.compose.ui.semantics.Role.DropdownList,
+                                            onClick = onAvatar
+                                        )
+                                    } else {
+                                        Modifier.clickable(onClickLabel = text.accountAndSettings, onClick = onAvatar)
+                                    }
+                                )
+                                .semantics { contentDescription = text.accountAndSettings },
+                            contentAlignment = Alignment.Center
+                        ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
+                        if (tools != null) {
+                            val look = rememberPageLook()
+                            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                ProvidePageLook(look) {
+                                    AvatarItem(stringResource(R.string.v2_lib_select), EchoIcons.SelectAll) {
                                         menu = false
                                         tools.onSelect()
                                     }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lib_sync), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sync, null) },
-                                    onClick = {
+                                    AvatarItem(stringResource(R.string.v2_lib_sync), EchoIcons.Sync) {
                                         menu = false
                                         tools.onSync()
                                     }
-                                )
-                                // Sort & display (PLAN_LIBRARY_FILTERS §2); Trash is in the title's menu.
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lf_sort_display), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sort, null) },
-                                    onClick = {
+                                    AvatarItem(stringResource(R.string.v2_settings), EchoIcons.Settings) {
                                         menu = false
-                                        tools.onSortGroup()
+                                        onAccount()
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
-                // The avatar last, at the top end, as on every main screen.
-                Box(
-                    Modifier
-                        .size(EchoTokens.Layout.controlTouchMin)
-                        .clickable(onClickLabel = text.accountAndSettings, onClick = onAccount)
-                        .semantics { contentDescription = text.accountAndSettings },
-                    contentAlignment = Alignment.Center
-                ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
             }
-        }
-        if (!selecting && extras != null) {
-            Box(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile).padding(bottom = EchoTokens.Space.s8)) {
-                extras.status()
+            // The Calls chip only on the simple page; the full Library says what is wrong in one line inside the list.
+            if (!selecting && extras != null && !compactHeader) {
+                Box(Modifier.padding(horizontal = LocalPageMargin.current).padding(bottom = EchoTokens.Space.s8)) {
+                    extras.status()
+                }
             }
-        }
-        if (!selecting) {
-            Row(
-                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
-            ) {
-                EchoSearchField(
-                    query,
-                    onQuery,
-                    text.searchRecordings,
-                    Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
-                    onSearch = { tools?.onKeepSearch?.invoke(it) }
-                )
+            if (!selecting && !compactHeader) {
+                Row(
+                    Modifier.padding(horizontal = LocalPageMargin.current),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+                ) {
+                    EchoSearchField(
+                        query,
+                        onQuery,
+                        text.searchRecordings,
+                        Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
+                        onSearch = { tools?.onKeepSearch?.invoke(it) }
+                    )
+                }
             }
-            if (tools != null) {
-                tools.filterRow()
-            } else {
-                EchoFilterBar(
-                    filters = listOf(
-                        EchoFilter(SavedView.Today.name, text.today),
-                        EchoFilter(SavedView.Untranscribed.name, text.untranscribed)
-                    ),
-                    selected = views.map { it.name }.toSet(),
-                    onToggle = { onToggleView(SavedView.valueOf(it)) },
-                    modifier = Modifier.padding(vertical = EchoTokens.Space.s4)
-                )
+            if (!selecting) {
+                if (tools != null) {
+                    if (!searchOpen) Box(Modifier.collapsing(chips)) { Column { tools.filterRow() } }
+                } else {
+                    EchoFilterBar(
+                        filters = listOf(
+                            EchoFilter(SavedView.Today.name, text.today),
+                            EchoFilter(SavedView.Untranscribed.name, text.untranscribed)
+                        ),
+                        selected = views.map { it.name }.toSet(),
+                        onToggle = { onToggleView(SavedView.valueOf(it)) },
+                        modifier = Modifier.padding(vertical = EchoTokens.Space.s4)
+                    )
+                }
             }
-        }
-        when (state) {
-            LibraryState.Loading -> EchoSkeletonList(7, Modifier.weight(1f))
+            when (state) {
+                LibraryState.Loading -> EchoSkeletonList(7, Modifier.weight(1f))
 
-            LibraryState.Error -> Box(Modifier.weight(1f)) {
-                EchoErrorState(text.loadErrorTitle, text.loadErrorBody, actionLabel = text.tryAgain, onAction = onRetry)
-            }
+                LibraryState.Error -> Box(Modifier.weight(1f)) {
+                    EchoErrorState(text.loadErrorTitle, text.loadErrorBody, actionLabel = text.tryAgain, onAction = onRetry)
+                }
 
-            is LibraryState.Ready -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-                isRefreshing = tools?.refreshing == true,
-                onRefresh = { tools?.onSync?.invoke() ?: onRetry() },
-                modifier = Modifier.weight(1f)
-            ) {
-                LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
-                    val recent = tools?.recent.orEmpty()
-                    if (searchFocused && query.isEmpty() && recent.isNotEmpty()) {
-                        item(key = "h-recent") { SearchHeader(stringResource(R.string.v2_lib_recent_searches)) }
-                        items(recent, key = { "recent-$it" }) { words ->
-                            EchoListRow(
-                                title = words,
-                                leading = { androidx.compose.material3.Icon(EchoIcons.Search, null, tint = c.textSecondary) },
-                                onClickLabel = text.searchRecordings,
-                                onClick = { onQuery(words) }
-                            )
-                        }
-                    }
-                    if (state.offline) {
-                        item {
-                            EchoBanner(
-                                text.offlineBanner,
-                                EchoBannerKind.Info,
-                                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                                actionLabel = text.tryAgain,
-                                onAction = onRetry
-                            )
-                        }
-                    }
-                    items(state.uploads, key = { "local-" + it.id }) { up ->
-                        UploadingRow(
-                            up,
-                            onRetry = { onRetryUpload(up.id) },
-                            onDismiss = { onDismissUpload(up.id) },
-                            onMenu = { uploadMenu = up },
-                            onReview = onReviewWaiting
-                        )
-                    }
-                    if (state.rows.isEmpty() && state.uploads.isEmpty()) {
-                        item {
-                            when {
-                                tools?.emptyList != null && tools.filtered != true && query.isBlank() -> EchoEmptyState(
-                                    stringResource(R.string.v2_lists_empty_title, tools.emptyList),
-                                    stringResource(R.string.v2_lists_empty_body),
-                                    icon = EchoIcons.Label
+                is LibraryState.Ready -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    isRefreshing = tools?.refreshing == true,
+                    onRefresh = { tools?.onSync?.invoke() ?: onRetry() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
+                        val recent = tools?.recent.orEmpty()
+                        if (searchFocused && query.isEmpty() && recent.isNotEmpty()) {
+                            item(key = "h-recent") { SearchHeader(stringResource(R.string.v2_lib_recent_searches)) }
+                            items(recent, key = { "recent-$it" }) { words ->
+                                EchoListRow(
+                                    title = words,
+                                    leading = { androidx.compose.material3.Icon(EchoIcons.Search, null, tint = c.textSecondary) },
+                                    onClickLabel = text.searchRecordings,
+                                    onClick = { onQuery(words) }
                                 )
-
-                                tools?.filtered == true -> EchoEmptyState(
-                                    stringResource(R.string.v2_lf_no_match),
-                                    stringResource(R.string.v2_lf_no_match_body),
-                                    icon = EchoIcons.Search,
-                                    actionLabel = stringResource(R.string.v2_lib_clear_filters),
-                                    onAction = tools.onClearFilters
-                                )
-
-                                state.anyAtAll -> EchoEmptyState(text.noMatchTitle, text.noMatchBody, icon = EchoIcons.Search)
-
-                                else -> EchoEmptyState(text.noRecordingsTitle, text.noRecordingsBody, icon = EchoIcons.Library)
                             }
                         }
-                    }
-                    if (tools == null) {
-                        items(state.rows, key = { it.id }) { row ->
-                            LibraryRow(row, selected = null, compact = false, onOpen = { onOpen(row) }, onLongClick = { actionsFor = row })
+                        if (state.offline) {
+                            item {
+                                EchoBanner(
+                                    text.offlineBanner,
+                                    EchoBannerKind.Info,
+                                    Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
+                                    actionLabel = text.tryAgain,
+                                    onAction = onRetry
+                                )
+                            }
                         }
-                    } else {
-                        val searching = query.trim().length >= 2
-                        if (searching &&
-                            state.rows.isNotEmpty()
-                        ) {
-                            item(key = "h-titles") { SearchHeader(stringResource(R.string.v2_lib_titles)) }
+                        items(state.uploads, key = { "local-" + it.id }) { up ->
+                            UploadingRow(
+                                up,
+                                onRetry = { onRetryUpload(up.id) },
+                                onDismiss = { onDismissUpload(up.id) },
+                                onMenu = { uploadMenu = up },
+                                onReview = onReviewWaiting
+                            )
                         }
-                        tools.groups.forEach { g ->
-                            val showHeader = g.name.isNotEmpty() && !searching
-                            if (showHeader) {
-                                item(key = "h-" + g.key) {
-                                    val ids = g.rows.map { it.id }
-                                    SectionHeader(
-                                        g.name,
-                                        g.rows.size,
-                                        g.key in tools.folded,
-                                        selecting,
-                                        tools.selected.containsAll(ids),
-                                        onFold = { tools.onFold(g.key) },
-                                        onSelect = { tools.onSelectGroup(g) }
+                        if (state.rows.isEmpty() && state.uploads.isEmpty()) {
+                            item {
+                                when {
+                                    tools?.emptyList != null && tools.filtered != true && query.isBlank() -> EchoEmptyState(
+                                        stringResource(R.string.v2_lists_empty_title, tools.emptyList),
+                                        stringResource(R.string.v2_lists_empty_body),
+                                        icon = EchoIcons.Label
                                     )
+
+                                    tools?.filtered == true -> EchoEmptyState(
+                                        stringResource(R.string.v2_lf_no_match),
+                                        stringResource(R.string.v2_lf_no_match_body),
+                                        icon = EchoIcons.Search,
+                                        actionLabel = stringResource(R.string.v2_lib_clear_filters),
+                                        onAction = tools.onClearFilters
+                                    )
+
+                                    state.anyAtAll -> EchoEmptyState(text.noMatchTitle, text.noMatchBody, icon = EchoIcons.Search)
+
+                                    else -> EchoEmptyState(text.noRecordingsTitle, text.noRecordingsBody, icon = EchoIcons.Library)
                                 }
                             }
-                            if (!showHeader || g.key !in tools.folded) {
-                                items(g.rows, key = { it.id }) { row ->
-                                    SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
-                                        tools.onPin(row)
-                                    }, onDelete = { onDelete(row) }) {
-                                        LibraryRow(
-                                            row,
-                                            selected = if (selecting) row.id in tools.selected else null,
-                                            compact = tools.compact,
-                                            onOpen = { onOpen(row) },
-                                            onLongClick = { tools.onToggle(row) }
+                        }
+                        if (tools == null) {
+                            items(state.rows, key = { it.id }) { row ->
+                                LibraryRow(row, selected = null, compact = false, onOpen = {
+                                    onOpen(row)
+                                }, onLongClick = { actionsFor = row })
+                            }
+                        } else {
+                            val searching = query.trim().length >= 2
+                            if (searching &&
+                                state.rows.isNotEmpty()
+                            ) {
+                                item(key = "h-titles") { SearchHeader(stringResource(R.string.v2_lib_titles)) }
+                            }
+                            tools.groups.forEach { g ->
+                                val showHeader = g.name.isNotEmpty() && !searching
+                                if (showHeader) {
+                                    item(key = "h-" + g.key) {
+                                        val ids = g.rows.map { it.id }
+                                        SectionHeader(
+                                            g.name,
+                                            g.rows.size,
+                                            g.key in tools.folded,
+                                            selecting,
+                                            tools.selected.containsAll(ids),
+                                            onFold = { tools.onFold(g.key) },
+                                            onSelect = { tools.onSelectGroup(g) }
                                         )
                                     }
                                 }
+                                if (!showHeader || g.key !in tools.folded) {
+                                    items(g.rows, key = { it.id }) { row ->
+                                        SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
+                                            tools.onPin(row)
+                                        }, onDelete = { onDelete(row) }) {
+                                            val back = row.id == tools.returnedTo
+                                            LibraryRow(
+                                                row,
+                                                selected = if (selecting) row.id in tools.selected else null,
+                                                compact = tools.compact,
+                                                onOpen = { openRow(row) },
+                                                onLongClick = { tools.onToggle(row) },
+                                                returned = back,
+                                                modifier = if (back) Modifier.focusRequester(returnFocus) else Modifier
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        if (searching && tools.matches.isNotEmpty()) {
-                            item(key = "h-transcripts") { SearchHeader(stringResource(R.string.v2_lib_transcripts)) }
-                            items(tools.matches, key = { "t-" + it.row.id + "-" + it.atMs }) { m ->
-                                EchoListRow(
-                                    title = m.row.title,
-                                    meta = m.snippet,
-                                    titleEnd = formatClock(m.atMs),
-                                    leading = { RowSourceLogo(m.row) },
-                                    tall = true,
-                                    onClick = { tools.onOpenAt(m) }
-                                )
+                            if (searching && tools.matches.isNotEmpty()) {
+                                item(key = "h-transcripts") { SearchHeader(stringResource(R.string.v2_lib_transcripts)) }
+                                items(tools.matches, key = { "t-" + it.row.id + "-" + it.atMs }) { m ->
+                                    EchoListRow(
+                                        title = m.row.title,
+                                        meta = m.snippet,
+                                        titleEnd = formatClock(m.atMs),
+                                        leading = { RowSourceLogo(m.row) },
+                                        tall = true,
+                                        onClick = { tools.onOpenAt(m) }
+                                    )
+                                }
                             }
                         }
                     }
+                    // Back to top (UX-25): at the list's bottom end, above the bottom bar, clear of Record.
+                    EchoBackToTop(listState, Modifier.align(Alignment.BottomEnd))
                 }
             }
         }
@@ -1174,6 +1291,78 @@ fun V2LibraryContent(
 
 @Composable
 private fun SearchHeader(words: String) = EchoSectionHeader(words)
+
+/** One item of the avatar's menu (Select, Sync now, Settings). */
+@Composable
+private fun AvatarItem(words: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(words, style = EchoV2.type.body) },
+        leadingIcon = { androidx.compose.material3.Icon(icon, null) },
+        onClick = onClick
+    )
+}
+
+/**
+ * Search over the page (v2.1 UX-14): ← and the field ("Search in All recordings"), focused as it opens; the list
+ * under it shows what the words find, and the recent searches while it is empty.
+ */
+@Composable
+private fun SearchBar(
+    query: String,
+    onQuery: (String) -> Unit,
+    placeholder: String,
+    onBack: () -> Unit,
+    onFocus: (Boolean) -> Unit,
+    onSearch: (String) -> Unit
+) {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = EchoTokens.Space.s64)
+            .padding(start = EchoTokens.Space.s4, end = LocalPageMargin.current),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+    ) {
+        EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack)
+        EchoSearchField(
+            query,
+            onQuery,
+            placeholder,
+            Modifier.weight(1f).focusRequester(focus).onFocusChanged { onFocus(it.isFocused) },
+            onSearch = onSearch
+        )
+    }
+}
+
+/**
+ * How far the chips' row is pushed up (0 to its whole height): the list scrolling down takes it away, scrolling up
+ * brings it back, as a collapsing toolbar does. Nothing is consumed: the list scrolls as before.
+ */
+@androidx.compose.runtime.Stable
+internal class ChipsOffset : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+    var height by androidx.compose.runtime.mutableIntStateOf(0)
+    var offset by androidx.compose.runtime.mutableFloatStateOf(0f)
+
+    override fun onPreScroll(
+        available: androidx.compose.ui.geometry.Offset,
+        source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+    ): androidx.compose.ui.geometry.Offset {
+        offset = (offset + available.y).coerceIn(-height.toFloat(), 0f)
+        return androidx.compose.ui.geometry.Offset.Zero
+    }
+}
+
+/** Lays the chips' row out as tall as what is left of it, pushed up by [chips]' offset. */
+private fun Modifier.collapsing(chips: ChipsOffset): Modifier = this
+    .clipToBounds()
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints.copy(minHeight = 0))
+        chips.height = placeable.height
+        val shown = (placeable.height + chips.offset.toInt()).coerceIn(0, placeable.height)
+        layout(placeable.width, shown) { placeable.placeRelative(0, chips.offset.toInt()) }
+    }
 
 /**
  * A recording on its way to the server (classic's UploadingRow): "Waiting to upload", "Uploading 40%", Failed (a tap
@@ -1227,7 +1416,16 @@ private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Un
  * count and the pinned mark; in selection mode a tick ([selected] not null) and a tap selects.
  */
 @Composable
-private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen: () -> Unit, onLongClick: () -> Unit) {
+private fun LibraryRow(
+    row: V2Row,
+    selected: Boolean?,
+    compact: Boolean,
+    onOpen: () -> Unit,
+    onLongClick: () -> Unit,
+    /** The row come back to from its recording (UX-25): a neutral grey ([returnedTint]), not the selection's tint. */
+    returned: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val c = EchoV2.colors
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
@@ -1248,8 +1446,14 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val important = stringResource(R.string.v2_lib_important_mark)
     EchoListRow(
         title = row.title,
-        // A selected row is tinted all across, as classic's is.
-        modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
+        // A selected row is tinted all across, as classic's is; the row come back to is a light neutral grey.
+        modifier = modifier.then(
+            when {
+                selected == true -> Modifier.background(c.accentSoft)
+                returned -> Modifier.background(returnedTint(c)).semantics { this[ReturnedRow] = true }
+                else -> Modifier
+            }
+        ),
         // A failed transcript or one with nothing heard says so in place of the meta line, as classic's row does;
         // U19's converting line comes next, then how long kept audio stays.
         meta = when {
@@ -1371,3 +1575,36 @@ private fun statusBadge(status: RowStatus, text: V2Text): (@Composable () -> Uni
 
 /** How often the Library asks again while something is on its way (classic's LIVE_REFRESH_MS). */
 private const val LIVE_REFRESH_MS = 5_000L
+
+/**
+ * Puts the row [key] back at [offset] from the list's top (UX-25). The saved place is an index, off by as many rows as
+ * came in above it while its recording was open. A row off screen is found through [order], the rows' keys in the
+ * list's order: the headers between them make a first guess a little off, and the next look corrects it.
+ */
+private suspend fun androidx.compose.foundation.lazy.LazyListState.bringBack(key: Any, order: List<Any>, offset: Int) {
+    val target = order.indexOf(key)
+    if (target < 0) return
+    // The first layout after coming back.
+    androidx.compose.runtime.snapshotFlow { layoutInfo.totalItemsCount }.first { it > 0 }
+    repeat(BRING_BACK_LOOKS) {
+        val visible = layoutInfo.visibleItemsInfo
+        visible.firstOrNull { it.key == key }?.let { item ->
+            if (item.offset != offset) scrollBy((item.offset - offset).toFloat())
+            return
+        }
+        val seen = visible.firstNotNullOfOrNull { v -> order.indexOf(v.key).takeIf { it >= 0 }?.let { v.index to it } } ?: return
+        scrollToItem((seen.first + target - seen.second).coerceAtLeast(0))
+    }
+}
+
+private const val BRING_BACK_LOOKS = 5
+
+/** How long the row come back to stays tinted at most (UX-25). */
+private const val RETURN_TINT_MS = 60_000L
+
+/** The row come back to (UX-25): the text colour over the page, as the desktop's, never the accent. */
+fun returnedTint(c: com.echoledger.mobile.ui.v2.theme.EchoV2Colors): androidx.compose.ui.graphics.Color =
+    c.textPrimary.copy(alpha = if (c.isDark) EchoTokens.Tint.returnedDark else EchoTokens.Tint.returnedLight)
+
+/** Marks the row come back to (tests read it; screen readers get its focus). */
+val ReturnedRow = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("ReturnedRow")

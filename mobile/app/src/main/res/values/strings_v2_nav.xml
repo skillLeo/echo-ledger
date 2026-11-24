@@ -42,6 +42,13 @@
     <string name="v2_lib_setup_title">Finish setting up</string>
     <string name="v2_lib_setup_hide">Hide</string>
     <string name="v2_lib_need_calls_off">Calls are not being recorded</string>
+    <string name="v2_lib_need_wont_record">Calls won\'t record</string>
+    <string name="v2_lib_need_wont_record_why">Calls won\'t record: %1$s</string>
+    <string name="v2_lib_need_retry_all">Retry all</string>
+    <plurals name="v2_lib_need_not_uploaded">
+        <item quantity="one">%1$d didn\'t upload</item>
+        <item quantity="other">%1$d didn\'t upload</item>
+    </plurals>
     <string name="v2_lib_need_waiting_one">1 call waiting: Transcribe or Delete</string>
     <string name="v2_lib_need_waiting">%1$d calls waiting: Transcribe or Delete</string>
     <string name="v2_lib_need_more">%1$s · %2$d more</string>

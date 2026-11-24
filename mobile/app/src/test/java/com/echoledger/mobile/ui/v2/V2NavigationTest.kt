@@ -336,12 +336,11 @@ class V2NavigationTest : ScreenTest() {
             compose.onAllNodes(hasContentDescription("Activity, 1 needs you")).fetchSemanticsNodes().isNotEmpty()
         }
         // One quiet banner. Calls are not recorded on this test phone, but the setup card's "Call recording ready" row
-        // and the chip say so already: the banner says the next thing, the call waiting.
+        // says so already: the banner says the next thing, the call waiting. No Calls chip since v2.1 (UX-14).
         compose.onNodeWithText("Call recording ready").assertExists()
-        compose.onNodeWithText("Calls are not being recorded", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Calls won't record", substring = true).assertDoesNotExist()
         compose.onNodeWithText("1 call waiting: Transcribe or Delete").assertExists()
-        compose.onNodeWithText("Not ready · Fix").performClick()
-        assertEquals(listOf(false), readyChecks)
+        compose.onNodeWithText("Not ready · Fix").assertDoesNotExist()
         compose.onNodeWithContentDescription("Activity, 1 needs you").performClick()
         compose.onNodeWithText("Needs action").assertExists()
         compose.onNodeWithText("Transcribe").assertExists()
@@ -380,11 +379,14 @@ class V2NavigationTest : ScreenTest() {
     }
 
     @Test
-    fun theCallsChipSaysHowCallsStandAndOpensTheReadyCheck() {
+    fun callsThatWontRecordAreOneLineInTheListWhoseFixOpensTheReadyCheck() {
         seed()
+        runBlocking { app.graph.settings.update { it.copy(setupCardHidden = true) } }
         shell()
-        // This test phone's helper isn't running: "Not ready · Fix", as classic's chip.
-        compose.onNodeWithText("Not ready · Fix").performClick()
+        // This test phone's helper isn't running: one line in the list (v2.1 UX-14), no chip in the header.
+        pumpUntil("the line") { compose.onAllNodesWithText("Calls won't record", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Not ready · Fix").assertDoesNotExist()
+        compose.onNode(hasText("Fix") and hasClickAction()).performClick()
         assertEquals(listOf(false), readyChecks)
     }
 

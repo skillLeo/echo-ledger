@@ -288,15 +288,14 @@
   "pattern": "^input\\|select/deselect item "
  },
  "WEB-LIB-012": {
-  "type": "controls",
+  "type": "html",
   "page": "library",
-  "scope": "main",
-  "keys": [
-   "button|more",
-   "menuitem|more › open",
-   "menuitem|more › rename",
-   "menuitem|more › send to whatsapp…",
-   "menuitem|more › delete"
+  "contains": [
+   "data-row-menu",
+   "window.elV2ContextMenu.openFromButton($el, $event)",
+   "\"file.rename\"",
+   "\"file.sendToWhatsApp\"",
+   "\"recording.moveToTrash\""
   ]
  },
  "WEB-LIB-013": {
