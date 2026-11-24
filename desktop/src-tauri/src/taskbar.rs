@@ -22,9 +22,11 @@ pub const JUMP_TASKS: [(&str, &str, &str); 4] = [
     ("live-assist", "Start Live Assist", "live.startAssist"),
 ];
 
-/// The command a start's arguments ask for (pure): `--action=new-recording` and so on; none without one.
+/// The command a start's arguments ask for (pure): `--action=new-recording` and so on, only as the start's one argument
+/// (the Jump List's task starts `EchoLedger.exe --action=…` and nothing else); none otherwise.
 pub fn jump_action(args: &[String]) -> Option<&'static str> {
-    let wanted = args.iter().find_map(|a| a.strip_prefix("--action="))?;
+    let [_, only] = args else { return None };
+    let wanted = only.strip_prefix("--action=")?;
     JUMP_TASKS.iter().find(|(arg, _, _)| *arg == wanted).map(|(_, _, action)| *action)
 }
 
@@ -185,13 +187,25 @@ fn red_dot() -> tauri::image::Image<'static> {
     tauri::image::Image::new_owned(red_dot_rgba(), 16, 16)
 }
 
-/// Windows: the Jump List's Tasks and Open with, set at each start (both idempotent), on a thread of their own (COM).
+/// Whether this is the installed EchoLedger (pure but for the check that the file exists): a release build in the folder
+/// the installer made, next to its uninstall.exe. A dev build, or a build run from anywhere else, never writes to the
+/// person's registry or Jump List (whose tasks would start that build).
+pub fn installed_release(debug_build: bool, exe: &std::path::Path) -> bool {
+    !debug_build && exe.parent().is_some_and(|dir| dir.join("uninstall.exe").is_file())
+}
+
+/// Windows: the Jump List's Tasks (for the app's id, the one its Start menu and pinned shortcuts carry) and Open with,
+/// set at each start of the installed app (both idempotent), on a thread of their own (COM). The uninstaller removes
+/// Open with's entries (windows/hooks.nsh).
 pub fn register(app: &AppHandle) {
     #[cfg(windows)]
     {
-        let _ = app;
-        std::thread::spawn(|| {
-            if let Err(e) = win::set_jump_list() {
+        if !std::env::current_exe().is_ok_and(|exe| installed_release(cfg!(debug_assertions), &exe)) {
+            return;
+        }
+        let app_id = app.config().identifier.clone();
+        std::thread::spawn(move || {
+            if let Err(e) = win::set_jump_list(&app_id) {
                 eprintln!("[echoledger] the taskbar's Jump List was not set: {e}");
             }
             if let Err(e) = win::add_open_with() {
@@ -223,14 +237,16 @@ mod win {
         std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).map_err(|_| windows::core::Error::from_thread())
     }
 
-    pub fn set_jump_list() -> windows::core::Result<()> {
-        // SAFETY: COM on this thread of our own, initialised here and uninitialised at its end; every interface is
-        // created and released through the windows crate's owned wrappers.
+    pub fn set_jump_list(app_id: &str) -> windows::core::Result<()> {
+        // SAFETY: COM on this thread of our own, initialised here and, only when that succeeded, uninitialised at its
+        // end; every interface is created and released through the windows crate's owned wrappers.
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
             let result = (|| {
                 let exe = exe()?;
                 let list: ICustomDestinationList = CoCreateInstance(&DestinationList, None, CLSCTX_INPROC_SERVER)?;
+                // The app's id (the bundle identifier): the list goes to the pinned and Start menu EchoLedger.
+                list.SetAppID(&HSTRING::from(app_id))?;
                 let mut slots = 0u32;
                 let _removed: IObjectArray = list.BeginList(&mut slots)?;
                 let tasks: IObjectCollection = CoCreateInstance(&EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)?;
@@ -283,6 +299,11 @@ mod tests {
         assert_eq!(jump_action(&args("--action=live-assist")), Some("live.startAssist"));
         assert_eq!(jump_action(&args("--action=format-disk")), None);
         assert_eq!(jump_action(&args("--autostart")), None);
+        // Only as the start's one argument: never with anything else beside it.
+        let with = |more: &[&str]| ["EchoLedger.exe"].iter().chain(more).map(|a| a.to_string()).collect::<Vec<_>>();
+        assert_eq!(jump_action(&with(&["--action=import", r"C:\Users\me\Call.m4a"])), None);
+        assert_eq!(jump_action(&with(&["--autostart", "--action=new-recording"])), None);
+        assert_eq!(jump_action(&with(&[])), None);
         assert_eq!(JUMP_TASKS.map(|(_, title, _)| title), ["New recording", "New voice note", "Import audio files…", "Start Live Assist"]);
         // Each is a command of the action list, with the menu bar's id; recording ones run in the core.
         for (_, _, action) in JUMP_TASKS {
@@ -329,6 +350,50 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(opened, [audio], "an audio type whatever its case; never a flag, another type or a file not there");
         assert!(opened_files(&["EchoLedger.exe".to_string(), "--action=import".into()]).is_empty());
+    }
+
+    #[test]
+    fn only_the_installed_release_build_registers_and_the_uninstaller_removes_what_it_wrote() {
+        let dir = std::env::temp_dir().join(format!("echoledger-installed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("EchoLedger.exe");
+        std::fs::write(&exe, b"exe").unwrap();
+        let before = installed_release(false, &exe);
+        std::fs::write(dir.join("uninstall.exe"), b"uninstaller").unwrap();
+        let installed = installed_release(false, &exe);
+        let dev = installed_release(true, &exe);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!before, "a release build run from anywhere else");
+        assert!(installed, "the installer's folder");
+        assert!(!dev, "never a dev build");
+        let code = include_str!("taskbar.rs").split("#[cfg(test)]").next().unwrap();
+        let register = &code[code.find("pub fn register(app: &AppHandle)").unwrap()..];
+        let register = &register[..register.find("\n}\n").unwrap()];
+        let gate = register.find("installed_release(cfg!(debug_assertions), &exe)").expect("gated");
+        assert!(gate < register.find("win::set_jump_list(").unwrap() && gate < register.find("win::add_open_with()").unwrap());
+        assert!(register.contains("app.config().identifier"), "the Jump List for the app's id");
+        assert!(code.contains("list.SetAppID(&HSTRING::from(app_id))?;"));
+        assert!(code.contains("CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;"), "uninitialised only once initialised");
+        // The uninstaller (an NSIS hook) removes every value Open with wrote, and tells Explorer.
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.windows.conf.json")).unwrap();
+        assert_eq!(conf["bundle"]["windows"]["nsis"]["installerHooks"], "./windows/hooks.nsh");
+        assert_eq!(conf["bundle"]["windows"]["nsis"]["installMode"], "currentUser", "HKCU is the same person's");
+        let hooks = include_str!("../windows/hooks.nsh");
+        let uninstall = &hooks[hooks.find("!macro NSIS_HOOK_POSTUNINSTALL").expect("a post-uninstall hook")..];
+        let uninstall = &uninstall[..uninstall.find("!macroend").unwrap()];
+        for (path, name, _) in open_with_values(r"C:\EchoLedger.exe") {
+            if name.is_empty() {
+                if !path.contains(r"\shell\") {
+                    assert!(uninstall.contains(&format!("DeleteRegKey HKCU \"{path}\"")), "{path}");
+                }
+            } else {
+                assert!(uninstall.contains(&format!("DeleteRegValue HKCU \"{path}\" \"{name}\"")), "{path} {name}");
+            }
+        }
+        // A type's own key is never removed (other apps' entries live there): only EchoLedger's value in it.
+        assert!(!uninstall.contains(r#"DeleteRegKey HKCU "Software\Classes\."#));
+        assert!(!uninstall.contains("/ifempty"));
+        assert!(uninstall.contains("SHChangeNotify(i 0x08000000, i 0, p 0, p 0)"), "Explorer told (SHCNE_ASSOCCHANGED)");
     }
 
     #[test]
