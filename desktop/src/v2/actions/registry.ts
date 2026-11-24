@@ -2,12 +2,13 @@
 // and sends the action's id: the Mac menu bar, right-click menus, a row's ⋯, Record's menu, the avatar's menu, ⌘K,
 // the menu-bar and tray menu, the Dock menu, the Windows Jump List. A screen registers what an id does where it can
 // (registerAction) and the registry runs it (runAction) when its conditions hold. Labels follow the app's state
-// ("Pin" ↔ "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
+// ("Pin" or "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
 // with a label, a shortcut or an action that isn't in the file fails.
 import list from "./actions.json";
 import * as Icons from "../components/icons";
 import type { IconType } from "../components/Button";
 import type { MenuItem } from "../components/Menu";
+import type { NativeMenuItem } from "../../lib/ipc";
 
 export type Platform = "macos" | "windows";
 export type AppliesTo = "none" | "one" | "many" | "oneOrMany";
@@ -123,7 +124,7 @@ export function shortcutOf(id: string, platform: Platform): string | null {
 }
 
 const MAC_KEYS: Record<string, string> = { "⌃": "Control", "⌥": "Alt", "⇧": "Shift", "⌘": "Meta" };
-const KEY_NAMES: Record<string, string> = { "⌫": "Backspace", "↩": "Enter", "←": "ArrowLeft", "→": "ArrowRight", "−": "-", Ctrl: "Control", Del: "Delete" };
+const KEY_NAMES: Record<string, string> = { "⌫": "Backspace", "\u21A9": "Enter", "←": "ArrowLeft", "→": "ArrowRight", "−": "-", Ctrl: "Control", Del: "Delete" };
 /** A shortcut as aria-keyshortcuts says it: "⇧⌘N" → "Shift+Meta+N", "Ctrl+Shift+E" → "Control+Shift+E". */
 export function ariaKeys(shortcut: string): string {
   if (/^[⌃⌥⇧⌘]/.test(shortcut)) {
@@ -222,4 +223,38 @@ export function checkMenu(items: readonly (MenuItem & { action?: string })[], pl
     if (item.items) out.push(...checkMenu(item.items, platform));
   }
   return out;
+}
+
+const ACCEL: Record<string, string> = { "⌃": "Ctrl", "⌥": "Alt", "⇧": "Shift", "⌘": "CmdOrCtrl" };
+/** A shortcut as Tauri's accelerator for a native menu: "⇧⌘N" → "Shift+CmdOrCtrl+N", "Ctrl+O" → "CmdOrCtrl+O". */
+export function accelerator(shortcut: string): string {
+  if (/^[⌃⌥⇧⌘]/.test(shortcut)) {
+    const mods = [...shortcut].filter((c) => ACCEL[c]);
+    const key = [...shortcut].slice(mods.length).join("");
+    return [...mods.map((m) => ACCEL[m]), KEY_NAMES[key] ?? key].join("+");
+  }
+  return shortcut.split("+").map((p) => (p === "Ctrl" ? "CmdOrCtrl" : KEY_NAMES[p] ?? p)).join("+");
+}
+
+/** A menu made by menuItems() as a native menu's lines (native_menu.rs): a line apart becomes a separator before it. */
+export function nativeItems(items: readonly (MenuItem & { action: string })[]): NativeMenuItem[] {
+  return items.flatMap((i) => [
+    ...(i.separator ? [{ action: null }] : []),
+    { action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null },
+  ]);
+}
+
+/** Whether a key press is this shortcut ("⇧⌘N" on a Mac, "Ctrl+Shift+N" on Windows): the same keys, no others. */
+export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
+  const mac = /^[⌃⌥⇧⌘]/.test(shortcut);
+  const mods = mac ? [...shortcut].filter((c) => ACCEL[c]) : shortcut.split("+").slice(0, -1);
+  const key = mac ? [...shortcut].slice(mods.length).join("") : shortcut.split("+").pop()!;
+  const want = {
+    meta: mac ? mods.includes("⌘") : false,
+    ctrl: mac ? mods.includes("⌃") : mods.includes("Ctrl"),
+    alt: mac ? mods.includes("⌥") : mods.includes("Alt"),
+    shift: mac ? mods.includes("⇧") : mods.includes("Shift"),
+  };
+  if (e.metaKey !== want.meta || e.ctrlKey !== want.ctrl || e.altKey !== want.alt || e.shiftKey !== want.shift) return false;
+  return e.key.toLowerCase() === (KEY_NAMES[key] ?? key).toLowerCase();
 }

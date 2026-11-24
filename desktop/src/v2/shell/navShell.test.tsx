@@ -69,7 +69,7 @@ describe("the three levels", () => {
     fireEvent.click(rail().getByRole("button", { name: "Projects" }));
     expect(onPlace).toHaveBeenLastCalledWith("projects", true);
     fireEvent.click(rail().getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(within(screen.getByRole("menu", { name: "More ways to record" })).getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "More ways to record" })).getByRole("menuitem", { name: "Record Page" }));
     expect(onHome).toHaveBeenCalled();
     expect(rail().queryAllByRole("button").filter((b) => b.getAttribute("aria-current") === "page")).toEqual([]);
     // Home has no panel.
@@ -216,16 +216,16 @@ describe("the three levels", () => {
     expect(document.querySelector(".el-shell")).not.toHaveClass("el-shell--short");
   });
 
-  it("Record's menu: Record now, Import audio files, Call recording on or off, the Record page", () => {
+  it("Record's menu (DES-02): New recording, Import audio files, the Auto-record tick on or off, the Record page", () => {
     setWidth(1440);
     const toggleCalls = vi.fn();
     render(<App toggleCalls={toggleCalls} />);
     fireEvent.click(rail().getByRole("button", { name: "More ways to record" }));
     const menu = within(screen.getByRole("menu", { name: "More ways to record" }));
-    expect([...screen.getByRole("menu", { name: "More ways to record" }).querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(
-      ["Record now", "Import audio files…", "Call recording", "Record page"]);
-    expect(menu.getByRole("menuitemcheckbox", { name: "Call recording" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Call recording" }));
+    expect([...screen.getByRole("menu", { name: "More ways to record" }).querySelectorAll('[role^="menuitem"] .el-menu__label')].map((m) => m.textContent)).toEqual(
+      ["New Recording", "Import Audio Files…", "Auto-record Calls & Meetings", "Record Page"]);
+    expect(menu.getByRole("menuitemcheckbox", { name: "Auto-record Calls & Meetings" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Auto-record Calls & Meetings" }));
     expect(toggleCalls).toHaveBeenCalled();
   });
 });

@@ -5,13 +5,16 @@
 // panel run to the top: on a Mac the window's buttons sit in the rail's top cell. Clicking the selected place again
 // starts that place over; ⌘1…⌘6 go to the places.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Avatar, Icon, Icons, Status } from "../components";
+import { Avatar, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
+import { listenTo } from "../../lib/ipc";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
 import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
+import { RecordSplit } from "./RecordSplit";
+import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
@@ -57,6 +60,8 @@ function savePinned(account: string | null | undefined, pinned: boolean) {
  */
 export const RAIL_FULL_FROM = 680;
 const PRESS_HOLD_MS = 3000;
+/** The actions whose keys the window answers here (the menu bar's, once FIX-05 draws it, take them first on a Mac). */
+const RECORD_KEYS = ["file.newRecording", "file.newVoiceNote", "file.importAudio", "live.stopRecording"] as const;
 
 /** Which places' panels are hidden, each account's own on this computer (shown unless hidden). */
 function loadHidden(account: string | null | undefined): Set<Place> {
@@ -122,7 +127,7 @@ export type NavShellProps = {
 };
 
 export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
-  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, titleEnd, children }: NavShellProps) {
+  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, titleEnd, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
   useEffect(() => {
@@ -243,6 +248,15 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e) => {
     if (e.defaultPrevented) return;
+    // Record's keys (DES-02, actions.json): ⌘N, ⇧⌘N, ⌘O and ⌘. (Ctrl on Windows), even while typing; never behind a dialog.
+    for (const id of RECORD_KEYS) {
+      const keys = shortcutOf(id, recordLive.current.ctx.platform);
+      if (!keys || !matchesShortcut(e, keys)) continue;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      runAction(id, recordLive.current.ctx);
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
       e.preventDefault();
@@ -342,13 +356,34 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     setPressing({ from: !!recording });
     void Promise.resolve(onRecord()).catch(() => setPressing(null));
   };
-  const recordMenu: MenuItem[] = [
-    ...(onRecord ? [{ label: stops ? "Stop recording" : "Record now", icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
-    ...(onUpload ? [{ label: "Import audio files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
-    ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
-    ...(callRecording ? [{ label: "Call recording", group: "Calls", checked: callRecording.on, onPick: callRecording.toggle }] : []),
-    { label: "Record page", icon: Icons.HomeIcon, onPick: onHome },
-  ];
+  const mac = searchKeys?.startsWith("⌘") ?? false;
+  // Record's menu (DES-02), every item an action of actions.json (UX-21): New recording, New voice note, Import audio
+  // files…, the Auto-record tick, and the Record page (Home, now that the logo has left the rail).
+  const recordCtx: ActionContext = { platform: mac ? "macos" : "windows", state: { canRecord: !!onRecord, recording: stops, autoRecord: !!callRecording?.on } };
+  const recordMenu = menuItems([
+    ...(onRecord ? ["file.newRecording"] : []), ...(onVoiceNote ? ["file.newVoiceNote"] : []), ...(onUpload ? ["file.importAudio"] : []),
+    "-", ...(callRecording ? ["live.autoRecord"] : []), "-", "go.recordPage",
+  ], recordCtx);
+  const recordLive = useRef({ pressRecord, onVoiceNote, onUpload, callRecording, onHome, stops, ctx: recordCtx });
+  recordLive.current = { pressRecord, onVoiceNote, onUpload, callRecording, onHome, stops, ctx: recordCtx };
+  // What Record's actions do here, wherever they are asked for (this menu, the system's, the keys, later the menu bar).
+  useEffect(() => {
+    const r = recordLive;
+    const offs = [
+      registerAction("file.newRecording", () => { if (!r.current.stops) r.current.pressRecord(); }),
+      registerAction("live.stopRecording", () => { if (r.current.stops) r.current.pressRecord(); }),
+      registerAction("file.newVoiceNote", () => r.current.onVoiceNote?.()),
+      registerAction("file.importAudio", () => r.current.onUpload?.()),
+      registerAction("live.autoRecord", () => r.current.callRecording?.toggle()),
+      registerAction("go.recordPage", () => r.current.onHome()),
+    ];
+    // A pick in a menu the system drew (native_menu.rs).
+    const unlisten = listenTo("menu:action", (id) => { runAction(id, r.current.ctx); });
+    return () => {
+      offs.forEach((off) => off());
+      void unlisten.then((off) => off()).catch(() => undefined);
+    };
+  }, []);
   // ⊟ in the title row (UX-20, right after the window's buttons) while the panel is off the screen, and in a small window
   // while its flyout is open (expanded: focus goes back to it); in a small window, the pin (UX-02).
   const rowToggle = hasPanel && (narrow || !shown) ? {
@@ -406,13 +441,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
           {/* Where the buttons are (and 4 px round them): no drag region, nothing of ours that takes a press. */}
           <span className="el-rail__lights" data-tauri-drag-region="false" />
         </div>
-        <div className="el-rail__record" role="group" aria-label="Record">
-          <button type="button" className={`el-rail__rec${stops ? " el-rail__rec--stop" : ""}`} aria-label={stops ? "Stop recording" : "Record"} title={stops ? "Stop recording" : "Record now"}
-            aria-disabled={pressing ? true : undefined} onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>
-            <Icon icon={stops ? Icons.StopIcon : Icons.RecordIcon} size="md" />
-          </button>
-          <Menu label="More ways to record" items={recordMenu} button={{ variant: "quiet", size: "sm", icon: Icons.ChevronDownIcon, className: "el-rail__rec-more" }} />
-        </div>
+        <RecordSplit stops={stops} time={status.kind === "recording" ? status.time : undefined} busy={!!pressing} onPress={pressRecord} menu={recordMenu} ctx={recordCtx} />
         <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
         <div className="el-rail__foot">
           {!short && <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />}

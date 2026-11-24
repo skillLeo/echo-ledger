@@ -1953,14 +1953,27 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 [data-platform="macos"]:not([data-titlebar]) .el-rail__lights { display: none; }
 [data-platform="macos"]:not([data-titlebar]) .el-rail__top { block-size: var(--el-desktop-titlerow-rail-top-fullscreen); }
-.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: 0; margin-block: 0 var(--el-space-4); }
-.el-rail__rec {
-  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-40); block-size: var(--el-space-40);
-  border: 0; border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); cursor: pointer;
+/* DES-02: Record, a joined 56×40 pill: the 40 px circle with its red dot records now; the 16 px chevron behind a hairline
+   opens its menu; "Record" under it. Red with ■ and the time while recording. */
+.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); flex: none; margin-block: var(--el-space-4) var(--el-space-8); }
+.el-record__pill {
+  display: flex; box-sizing: border-box; inline-size: var(--el-desktop-record-width); block-size: var(--el-desktop-record-height);
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-full); background: var(--el-role-bg-surface);
 }
-.el-rail__rec:hover { background: var(--el-role-accent-hover, var(--el-role-accent-default)); }
-.el-rail__rec--stop { background: var(--el-role-danger-default); }
-.el-rail__record .el-button.el-rail__rec-more { min-block-size: var(--el-space-16); padding: 0 var(--el-space-4); }
+.el-record__now, .el-record__more { display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--el-role-text-secondary); }
+.el-record__now { flex: 1 1 auto; border-radius: var(--el-radius-full); }
+.el-record__more { flex: none; inline-size: var(--el-desktop-record-chevron); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); border-start-end-radius: var(--el-radius-full); border-end-end-radius: var(--el-radius-full); }
+.el-record__now:hover, .el-record__more:hover, .el-record__more[aria-expanded="true"] { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); color: var(--el-role-text-primary); }
+.el-record__now:focus-visible, .el-record__more:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: calc(-1 * var(--el-focus-width)); }
+.el-record__now[aria-disabled="true"] { cursor: progress; }
+.el-record__dot { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full); background: var(--el-role-record-default); }
+.el-record__stop { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__pill { background: var(--el-role-record-default); border-color: var(--el-role-record-default); }
+.el-rail__record--on .el-record__now, .el-rail__record--on .el-record__more { color: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__more { border-inline-start-color: color-mix(in srgb, var(--el-role-text-on-accent) 40%, transparent); }
+.el-rail__record--on .el-record__now:hover, .el-rail__record--on .el-record__more:hover { background: color-mix(in srgb, var(--el-role-text-on-accent) 16%, transparent); }
+.el-rail__record .el-rail__label { color: var(--el-role-text-secondary); }
+.el-rail__record--on .el-rail__label { color: var(--el-role-record-default); font-weight: var(--el-text-body-strong-weight); font-variant-numeric: tabular-nums; }
 .el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: 0; inline-size: 100%; }
 .el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-4); }
 /* An item: 56 px, the 20 px icon in a 48×28 pill (the accent's tint when selected, 8% on hover), 4 px, the 11 px label. */

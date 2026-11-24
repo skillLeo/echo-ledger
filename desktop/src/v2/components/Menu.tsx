@@ -244,6 +244,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
+          data-action={item.action}
           data-active={i === active || undefined}
           onMouseEnter={() => { setActive(i); if (!room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
