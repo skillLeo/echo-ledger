@@ -179,7 +179,7 @@ body { background: var(--bg); overflow: hidden; }
      :where(), so a page's own cursor rule gives way, but a drag's grabbing cursor (also !important, more specific)
      doesn't.
    - UI text (buttons, menus, headers, the rail and sidebars, toasts) can't be selected; content (transcripts, notes,
-     what one types) can.
+     what one types, a message's own words, to copy an error) can.
    - Pictures, icons and links can't be dragged out of the window by accident.
    - Focus rings for the keyboard only, never after a click. */
 html { background: var(--bg); }
@@ -187,7 +187,7 @@ html, body { overscroll-behavior: none; }
 :where(button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="switch"], [role="checkbox"], [role="radio"], label, summary, select) { cursor: default !important; }
 a[href] { cursor: pointer; }
 :where(button, [role="button"], [role="tab"], [role="menu"], [role="menuitem"], label, nav, header, .el-rail, .el-panel__head, .el-toast, .el-page__head, .sidebar, .topbar) { -webkit-user-select: none; user-select: none; }
-:where(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+:where(input, textarea, [contenteditable="true"], .el-toast__message) { -webkit-user-select: text; user-select: text; }
 :where(img, svg, a) { -webkit-user-drag: none; }
 :focus:not(:focus-visible) { outline: none; }
 html[data-window="overlay"] body, html[data-window="dictation"] body,

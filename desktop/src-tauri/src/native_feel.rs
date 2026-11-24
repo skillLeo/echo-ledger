@@ -1,7 +1,8 @@
 //! FIX-10: the main window is an app, not a web page. On Windows, WebView2 has browser keys of its own (reload, print the
 //! page, the find bar, downloads, history, the developer tools), fills forms from its saved entries and offers to save
-//! passwords: all three go off at the source, before the page is drawn, in release and development builds alike (the
-//! page's own guard, src/lib/nativeFeel.ts, takes the same keys on every system). Tauri 2.12 has a switch only for
+//! passwords: they go off at the source, as the window is made. Autofill and password saving in every build; the
+//! browser keys in a release build only (a development build keeps reload and the tools). The page's own guard,
+//! src/lib/nativeFeel.ts, takes reload, print and the tools on every system once the page runs. Tauri 2.12 has a switch only for
 //! general autofill, so this sets WebView2's own settings (ICoreWebView2Settings3 and 4, the interfaces wry itself
 //! uses); webview2-com 0.39.1 and windows 0.62.2 are the versions Tauri's wry is built with (Cargo.lock).
 //!
@@ -20,7 +21,10 @@ pub fn quiet_browser<R: Runtime>(window: &WebviewWindow<R>) {
             unsafe {
                 let Ok(core) = webview.controller().CoreWebView2() else { return };
                 let Ok(settings) = core.Settings() else { return };
-                if let Ok(keys) = settings.cast::<ICoreWebView2Settings3>() {
+                // The browser's keys only in a release build: a development build keeps reload and the developer tools.
+                if !cfg!(debug_assertions)
+                    && let Ok(keys) = settings.cast::<ICoreWebView2Settings3>()
+                {
                     let _ = keys.SetAreBrowserAcceleratorKeysEnabled(false);
                 }
                 if let Ok(forms) = settings.cast::<ICoreWebView2Settings4>() {

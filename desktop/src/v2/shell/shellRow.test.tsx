@@ -7,6 +7,7 @@ import { useState, type ReactNode } from "react";
 import { NavShell, RAIL_FULL_FROM } from "./NavShell";
 import { PanelToggle, usePageHistory, type Place } from "./NavRail";
 import { usePageTitle } from "../pageTitle";
+import { installNativeFeel } from "../../lib/nativeFeel";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -23,15 +24,17 @@ function Titled({ title, count, search }: { title: string; count: number | null;
   return <p data-testid="list">{query || "the list"}</p>;
 }
 
-function App({ onPlace = vi.fn(), onHome = vi.fn(), onSearch = vi.fn(), page }: {
+function App({ onPlace = vi.fn(), onHome = vi.fn(), onSearch = vi.fn(), page, flyouts = false }: {
   onPlace?: ReturnType<typeof vi.fn>; onHome?: ReturnType<typeof vi.fn>; onSearch?: ReturnType<typeof vi.fn>; page?: (place: Place | null) => ReactNode;
+  /** v21_panel_flyout (⌃⌘S toggles the panel). */
+  flyouts?: boolean;
 }) {
   const [place, setPlace] = useState<Place | null>("library");
   const panel = (name: string) => <ul aria-label={`${name} views`}><li><button type="button">First {name} view</button></li></ul>;
   return (
     <NavShell place={place} onPlace={(p, again) => { onPlace(p, again); setPlace(p); }} onHome={() => { onHome(); setPlace(null); }}
       status={{ kind: "ready", text: "Ready to record" }} libraryCount={4} activityCount={12} liveDot liveDotWords="recording" setupAttention onSetupHealth={() => undefined}
-      onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} onSearch={onSearch} searchKeys="⌘K" layoutFor="server|ayesha@example.test|w1"
+      onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} onSearch={onSearch} searchKeys="⌘K" layoutFor="server|ayesha@example.test|w1" panelFlyout={flyouts}
       me={{ name: "Ayesha Khan", email: "ayesha@example.test", plan: "Free", usage: "12 of 30 min used this month", color: 4 }}
       account={[{ label: "Theme", onPick: () => undefined }, { label: "Sign out", onPick: () => undefined }]}
       panels={{ library: panel("Library"), projects: panel("Projects"), live: panel("Live"), ask: panel("Ask"), activity: panel("Activity"), settings: panel("Settings") }}>
@@ -135,6 +138,33 @@ describe("the title row in the shell (UX-20)", () => {
     expect(screen.getByText("The list")).toBeInTheDocument();
     expect(onPlace).not.toHaveBeenCalled();
     expect(within(row()).getByRole("button", { name: "Back" })).toBeDisabled();
+  });
+
+  it("a release build's guard on the browser's keys (FIX-10), installed first, leaves ⌃⌘S to the panel, ⌘[ and Alt+← to the page's steps, and ⌘F to the row", () => {
+    setSize(1440);
+    const stop = installNativeFeel({ release: true, mac: true, onSyncNow: () => undefined });
+    try {
+      function Reading() {
+        const [steps, setSteps] = useState(2);
+        usePageHistory(steps > 0 ? { back: () => setSteps((n) => n - 1) } : null);
+        return <p>{`Steps left: ${steps}`}</p>;
+      }
+      render(<App flyouts page={() => <><Titled title="All recordings" count={219} search /><Reading /></>} />);
+      // ⌃⌘S: the sidebar (UX-02), not the browser's save.
+      expect(screen.getByTestId("nav-panel")).toBeInTheDocument();
+      expect(fireEvent.keyDown(window, { key: "s", metaKey: true, ctrlKey: true })).toBe(false);
+      expect(screen.queryByTestId("nav-panel")).toBeNull();
+      fireEvent.keyDown(window, { key: "s", metaKey: true, ctrlKey: true });
+      expect(screen.getByTestId("nav-panel")).toBeInTheDocument();
+      expect(fireEvent.keyDown(window, { key: "[", metaKey: true })).toBe(false);
+      expect(screen.getByText("Steps left: 1")).toBeInTheDocument();
+      expect(fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true })).toBe(false);
+      expect(screen.getByText("Steps left: 0")).toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "f", metaKey: true });
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
+    } finally {
+      stop();
+    }
   });
 
   it("usePageHistory: true in the shell, false outside it; the page mounted last is asked first, with its newest functions", () => {

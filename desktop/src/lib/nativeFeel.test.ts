@@ -19,56 +19,102 @@ afterEach(() => {
 const key = (k: string, mods: Partial<KeyboardEventInit> = {}, target: EventTarget = document.body) => fireEvent.keyDown(target, { key: k, ...mods });
 
 describe("browser keys (FIX-10)", () => {
-  it("knows the browser's own keys on a Mac and on Windows", () => {
-    const k = (key: string, mods: Partial<KeyboardEvent> = {}) => browserKey({ key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods } as KeyboardEvent);
-    expect(k("F5")).toBe("reload");
-    expect(k("r", { metaKey: true })).toBe("reload");
-    expect(k("R", { ctrlKey: true, shiftKey: true })).toBe("reload");
-    expect(k("p", { metaKey: true })).toBe("print");
-    expect(k("f", { ctrlKey: true })).toBe("find");
-    expect(k("g", { metaKey: true })).toBe("find");
-    expect(k("F3")).toBe("find");
-    expect(k("s", { ctrlKey: true })).toBe("save");
-    expect(k("u", { ctrlKey: true })).toBe("source");
-    expect(k("j", { ctrlKey: true })).toBe("downloads");
-    expect(k("h", { ctrlKey: true })).toBe("history");
-    expect(k("F12")).toBe("devtools");
-    expect(k("I", { ctrlKey: true, shiftKey: true })).toBe("devtools");
-    expect(k("i", { metaKey: true, altKey: true })).toBe("devtools");
-    expect(k("ArrowLeft", { altKey: true })).toBe("navigate");
-    expect(k("BrowserBack")).toBe("navigate");
-    // Not the browser's: typing, the app's own keys.
-    expect(k("r")).toBeNull();
-    expect(k("k", { metaKey: true })).toBeNull();
-    expect(k("1", { metaKey: true })).toBeNull();
+  const k = (key: string, mods: Partial<KeyboardEvent>, mac: boolean) =>
+    browserKey({ key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods } as KeyboardEvent, mac);
+
+  it("only the true browser leftovers: reload, print the page, the developer tools (⌘ on a Mac, Ctrl on Windows)", () => {
+    // A Mac.
+    expect(k("F5", {}, true)).toBe("reload");
+    expect(k("r", { metaKey: true }, true)).toBe("reload");
+    expect(k("R", { metaKey: true, shiftKey: true }, true)).toBe("reload");
+    expect(k("p", { metaKey: true }, true)).toBe("print");
+    expect(k("i", { metaKey: true, altKey: true }, true)).toBe("devtools");
+    // Windows.
+    expect(k("F5", {}, false)).toBe("reload");
+    expect(k("r", { ctrlKey: true }, false)).toBe("reload");
+    expect(k("p", { ctrlKey: true }, false)).toBe("print");
+    expect(k("F12", {}, false)).toBe("devtools");
+    expect(k("I", { ctrlKey: true, shiftKey: true }, false)).toBe("devtools");
+    expect(k("BrowserBack", {}, false)).toBe("navigate");
+  });
+
+  it("never the app's keys or a text field's: ⌘F and find-next, ⌃⌘ anything, ⌥/Alt and the arrows, a Mac's Ctrl keys", () => {
+    for (const mac of [true, false]) {
+      const mod = mac ? { metaKey: true } : { ctrlKey: true };
+      expect(k("f", mod, mac)).toBeNull();
+      expect(k("g", mod, mac)).toBeNull();
+      expect(k("F3", {}, mac)).toBeNull();
+      expect(k("s", mod, mac)).toBeNull();
+      expect(k("s", { metaKey: true, ctrlKey: true }, mac)).toBeNull();
+      expect(k("r", { metaKey: true, ctrlKey: true }, mac)).toBeNull();
+      expect(k("ArrowLeft", { altKey: true }, mac)).toBeNull();
+      expect(k("ArrowRight", { altKey: true, shiftKey: true }, mac)).toBeNull();
+      expect(k("[", mod, mac)).toBeNull();
+      expect(k("k", mod, mac)).toBeNull();
+    }
+    // On a Mac, Ctrl+P, Ctrl+F, Ctrl+H, Ctrl+R move and edit text.
+    for (const letter of ["p", "f", "h", "r"]) expect(k(letter, { ctrlKey: true }, true)).toBeNull();
+    // On a Mac there is no Browser Back key of the web view's.
+    expect(k("BrowserBack", {}, true)).toBeNull();
   });
 
   it("in a release build they do nothing of the browser's; F5 and ⌘R sync now, ⌘P prints the open transcript", () => {
     const sync = vi.fn();
-    stop = installNativeFeel({ release: true, onSyncNow: sync });
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: sync });
     expect(key("F5")).toBe(false);
     expect(key("r", { metaKey: true })).toBe(false);
-    expect(key("r", { ctrlKey: true })).toBe(false);
-    expect(sync).toHaveBeenCalledTimes(3);
+    expect(sync).toHaveBeenCalledTimes(2);
     // ⌘P: a page with a transcript open takes it first (its own listener); otherwise nothing prints the page.
     const print = vi.fn((e: KeyboardEvent) => e.preventDefault());
     document.addEventListener("keydown", print);
     key("p", { metaKey: true });
     expect(print).toHaveBeenCalledTimes(1);
     document.removeEventListener("keydown", print);
-    for (const [k, mods] of [["p", { metaKey: true }], ["f", { ctrlKey: true }], ["s", { metaKey: true }], ["F12", {}], ["i", { metaKey: true, altKey: true }], ["j", { ctrlKey: true }], ["ArrowLeft", { altKey: true }]] as const) {
-      expect(key(k, mods), `${k}`).toBe(false);
+    expect(key("p", { metaKey: true })).toBe(false);
+    expect(key("i", { metaKey: true, altKey: true })).toBe(false);
+    expect(sync).toHaveBeenCalledTimes(2);
+    // Not claimed: the app's and a text field's keys reach them untouched.
+    for (const [k2, mods] of [["f", { metaKey: true }], ["s", { metaKey: true }], ["s", { metaKey: true, ctrlKey: true }], ["ArrowLeft", { altKey: true }], ["p", { ctrlKey: true }]] as const) {
+      expect(key(k2, mods), `${k2}`).toBe(true);
     }
-    expect(sync).toHaveBeenCalledTimes(3);
   });
 
-  it("leaves what the app takes first (⌘F's search, Alt+← Back) and every other key alone", () => {
-    stop = installNativeFeel({ release: true, onSyncNow: () => undefined });
-    const search = vi.fn((e: KeyboardEvent) => { if (e.key === "f") e.preventDefault(); });
-    window.addEventListener("keydown", search);
-    expect(key("f", { metaKey: true })).toBe(false);
-    expect(search).toHaveBeenCalled();
-    window.removeEventListener("keydown", search);
+  it("never takes a key from a text field (the title row's search, its Esc, a note)", () => {
+    const sync = vi.fn();
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: sync });
+    document.body.innerHTML = `<input id="search" type="search" /><div id="note" contenteditable="true">x</div>`;
+    for (const id of ["search", "note"]) {
+      const field = document.getElementById(id)!;
+      expect(key("r", { metaKey: true }, field)).toBe(true);
+      expect(key("p", { metaKey: true }, field)).toBe(true);
+      expect(key("Escape", {}, field)).toBe(true);
+      expect(key("f", { metaKey: true }, field)).toBe(true);
+    }
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it("Windows: Ctrl+R syncs, Ctrl+P and F12 do nothing", () => {
+    const sync = vi.fn();
+    stop = installNativeFeel({ release: true, mac: false, onSyncNow: sync });
+    expect(key("r", { ctrlKey: true })).toBe(false);
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(key("p", { ctrlKey: true })).toBe(false);
+    expect(key("F12")).toBe(false);
+    expect(key("f", { ctrlKey: true })).toBe(true);
+    expect(key("ArrowLeft", { altKey: true })).toBe(true);
+  });
+
+  it("leaves what the app takes first and every other key alone", () => {
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: () => undefined });
+    const reload = vi.fn((e: KeyboardEvent) => { if (e.key === "r") e.preventDefault(); });
+    window.addEventListener("keydown", reload);
+    const sync = vi.fn();
+    stop();
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: sync });
+    key("r", { metaKey: true });
+    expect(reload).toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", reload);
     expect(key("a")).toBe(true);
     expect(key("k", { metaKey: true })).toBe(true);
   });
@@ -102,6 +148,23 @@ describe("the right-click (FIX-10)", () => {
     expect(ours).toHaveBeenCalledTimes(1);
   });
 
+  it("on selected text (a transcript's words) the system's menu stays: Look Up, Translate, Copy, Share", () => {
+    stop = installNativeFeel({ release: true, onSyncNow: () => undefined });
+    document.body.innerHTML = `<p id="words">Assalam o alaikum, the invoice is due</p><p id="other">Elsewhere</p>`;
+    const words = document.getElementById("words")!;
+    const range = document.createRange();
+    range.selectNodeContents(words);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    expect(fireEvent.contextMenu(words)).toBe(true);
+    // A press away from the selection: nothing.
+    expect(fireEvent.contextMenu(document.getElementById("other")!)).toBe(false);
+    // Nothing selected (a collapsed selection): nothing.
+    window.getSelection()!.collapse(words, 0);
+    expect(fireEvent.contextMenu(words)).toBe(false);
+    window.getSelection()!.removeAllRanges();
+  });
+
   it("in a development build the browser's menu (Inspect) stays", () => {
     stop = installNativeFeel({ release: false, onSyncNow: () => undefined });
     document.body.innerHTML = `<p id="text">Words</p>`;
@@ -118,7 +181,7 @@ describe("the checklist (FIX-10)", () => {
 
   it("UI text can't be selected; content can", () => {
     expect(css).toMatch(/:where\(button, \[role="button"\], \[role="tab"\], \[role="menu"\], \[role="menuitem"\], label, nav, header, \.el-rail, \.el-panel__head, \.el-toast, \.el-page__head, \.sidebar, \.topbar\) \{ -webkit-user-select: none; user-select: none; \}/);
-    expect(css).toMatch(/:where\(input, textarea, \[contenteditable="true"\]\) \{ -webkit-user-select: text; user-select: text; \}/);
+    expect(css).toMatch(/:where\(input, textarea, \[contenteditable="true"\], \.el-toast__message\) \{ -webkit-user-select: text; user-select: text; \}/);
   });
 
   it("images, logos and links can't be dragged out", () => {
@@ -148,8 +211,46 @@ describe("the checklist (FIX-10)", () => {
   it("on Windows, WebView2's browser keys, autofill and password saving are off", () => {
     const rust = read("..", "..", "src-tauri", "src", "native_feel.rs");
     expect(rust).toContain("SetAreBrowserAcceleratorKeysEnabled(false)");
+    expect(rust).toMatch(/if !cfg!\(debug_assertions\)[\s\S]*SetAreBrowserAcceleratorKeysEnabled/);
     expect(rust).toContain("SetIsPasswordAutosaveEnabled(false)");
     expect(rust).toContain("SetIsGeneralAutofillEnabled(false)");
     expect(read("..", "..", "src-tauri", "src", "lifecycle.rs")).toContain("crate::native_feel::quiet_browser(&window);");
+  });
+});
+
+describe("the app's own keys come first (FIX-10 with the title row)", () => {
+  it("installed before the app (as main.tsx does), it never takes ⌘F, Alt+← → or ⌘[ ⌘] from the window's own listeners", () => {
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: () => undefined });
+    // The shell's listener (NavShell: ⌘F's search, Back and Forward), added after, on the window too.
+    const seen: string[] = [];
+    const shell = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if ((e.metaKey && (e.key === "f" || e.key === "[" || e.key === "]")) || (e.altKey && e.key.startsWith("Arrow"))) {
+        e.preventDefault();
+        seen.push(`${e.metaKey ? "⌘" : "Alt+"}${e.key}`);
+      }
+    };
+    window.addEventListener("keydown", shell);
+    try {
+      expect(key("f", { metaKey: true })).toBe(false);
+      expect(key("[", { metaKey: true })).toBe(false);
+      expect(key("]", { metaKey: true })).toBe(false);
+      expect(key("ArrowLeft", { altKey: true })).toBe(false);
+      expect(key("ArrowRight", { altKey: true })).toBe(false);
+      expect(seen).toEqual(["⌘f", "⌘[", "⌘]", "Alt+ArrowLeft", "Alt+ArrowRight"]);
+    } finally {
+      window.removeEventListener("keydown", shell);
+    }
+  });
+
+  it("a key nobody took is still stopped, even when one before it stopped its own propagation", () => {
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: () => undefined });
+    const stopper = (e: KeyboardEvent) => e.stopPropagation();
+    document.body.addEventListener("keydown", stopper);
+    key("p", { metaKey: true });
+    document.body.removeEventListener("keydown", stopper);
+    // The next key, an ordinary one, isn't taken by what was left waiting for the stopped one.
+    expect(key("a")).toBe(true);
+    expect(key("p", { metaKey: true })).toBe(false);
   });
 });

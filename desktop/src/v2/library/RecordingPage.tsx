@@ -589,13 +589,18 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onMessage("Could not access the clipboard");
     }
   };
-  // ⌘P (Ctrl+P): print the transcript (its print page, where Save as PDF is too), not the window (FIX-10). Heard on the
-  // document, before the window's guard; not while typing or behind a dialog.
+  // ⌘P on a Mac, Ctrl+P elsewhere: print the transcript (its print page, where Save as PDF is too), not the window
+  // (FIX-10). Heard on the document, before the window's guard; never while typing (a field keeps its keys; Ctrl+P
+  // moves up a line on a Mac) or behind a dialog.
   const printNow = useRef<() => void>(() => undefined);
   printNow.current = () => void exportAs("html");
   useEffect(() => {
+    const mac = /mac/i.test(navigator.platform || navigator.userAgent);
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "p") return;
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || e.key.toLowerCase() !== "p") return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select"))) return;
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       printNow.current();
