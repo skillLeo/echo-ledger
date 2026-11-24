@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -177,60 +178,70 @@ fun V2WorkspaceScreen(
             EchoIconButton(EchoIcons.Share, stringResource(R.string.v2_ws_share), { sheet = "share" })
             EchoIconButton(EchoIcons.More, stringResource(R.string.v2_ws_menu), { menuOpen = true })
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Crumbs(path, onOpenProject)
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-            ) {
-                Text(recordingsCount(recordings.size), style = EchoV2.type.meta, color = c.textSecondary, modifier = Modifier.weight(1f))
-                EchoButton(stringResource(R.string.v2_ws_copy_ai), {
-                    scope.launch {
-                        vm.bundle(projectId)?.let { bundle ->
-                            context.getSystemService(ClipboardManager::class.java)
-                                ?.setPrimaryClip(ClipData.newPlainText(project.name, bundle))
-                            toasts.show(copied)
+        val pageScroll = rememberScrollState()
+        Box(Modifier.weight(1f)) {
+            Column(Modifier.fillMaxSize().verticalScroll(pageScroll)) {
+                Crumbs(path, onOpenProject)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+                ) {
+                    Text(
+                        recordingsCount(recordings.size),
+                        style = EchoV2.type.meta,
+                        color = c.textSecondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    EchoButton(stringResource(R.string.v2_ws_copy_ai), {
+                        scope.launch {
+                            vm.bundle(projectId)?.let { bundle ->
+                                context.getSystemService(ClipboardManager::class.java)
+                                    ?.setPrimaryClip(ClipData.newPlainText(project.name, bundle))
+                                toasts.show(copied)
+                            }
                         }
-                    }
-                }, kind = EchoButtonKind.Secondary)
-            }
-            EchoTabs(tabs.map { stringResource(it.label) }, tabs.indexOf(shown), onSelect = { tab = tabs[it] })
-            val w = workspace
-            when {
-                shown == WorkspaceTab.Recordings -> RecordingsTab(
-                    vm,
-                    project,
-                    folders,
-                    recordings,
-                    nested,
-                    { nested = it },
-                    onOpenProject,
-                    onOpenRecording
-                )
-
-                shown == WorkspaceTab.Screens -> ScreensTab(vm, project, nested) { list, i -> viewing = list to i }
-
-                shown == WorkspaceTab.Ask -> Column(Modifier.fillMaxWidth().height(EchoTokens.Space.s64 * ASK_UNITS)) {
-                    V2AskScreen(vm, onOpenAt, fixedProject = project)
+                    }, kind = EchoButtonKind.Secondary)
                 }
+                EchoTabs(tabs.map { stringResource(it.label) }, tabs.indexOf(shown), onSelect = { tab = tabs[it] })
+                val w = workspace
+                when {
+                    shown == WorkspaceTab.Recordings -> RecordingsTab(
+                        vm,
+                        project,
+                        folders,
+                        recordings,
+                        nested,
+                        { nested = it },
+                        onOpenProject,
+                        onOpenRecording
+                    )
 
-                w == null && failed -> EchoErrorState(
-                    stringResource(R.string.v2_ws_failed_title),
-                    stringResource(R.string.v2_ws_failed_body),
-                    actionLabel = stringResource(R.string.v2_ws_try_again),
-                    onAction = { reload++ }
-                )
+                    shown == WorkspaceTab.Screens -> ScreensTab(vm, project, nested) { list, i -> viewing = list to i }
 
-                w == null -> EchoSkeletonList(3, avatar = false)
+                    shown == WorkspaceTab.Ask -> Column(Modifier.fillMaxWidth().height(EchoTokens.Space.s64 * ASK_UNITS)) {
+                        V2AskScreen(vm, onOpenAt, fixedProject = project)
+                    }
 
-                shown == WorkspaceTab.Files -> FilesTab(vm, project, w, onChanged = { reload++ })
+                    w == null && failed -> EchoErrorState(
+                        stringResource(R.string.v2_ws_failed_title),
+                        stringResource(R.string.v2_ws_failed_body),
+                        actionLabel = stringResource(R.string.v2_ws_try_again),
+                        onAction = { reload++ }
+                    )
 
-                shown == WorkspaceTab.Memory -> MemoryTab(vm, project, w, aiNotesInPlan, onOpenAt, { workspace = it }, { reload++ })
+                    w == null -> EchoSkeletonList(3, avatar = false)
 
-                else -> NotesTab(project, w.notes, onOpenAt)
+                    shown == WorkspaceTab.Files -> FilesTab(vm, project, w, onChanged = { reload++ })
+
+                    shown == WorkspaceTab.Memory -> MemoryTab(vm, project, w, aiNotesInPlan, onOpenAt, { workspace = it }, { reload++ })
+
+                    else -> NotesTab(project, w.notes, onOpenAt)
+                }
+                Spacer(Modifier.height(EchoTokens.Space.s24))
             }
-            Spacer(Modifier.height(EchoTokens.Space.s24))
+            // Back to top (UX-25): a project's recordings can be a long page.
+            com.echoledger.mobile.ui.v2.components.EchoBackToTop(pageScroll, Modifier.align(Alignment.BottomEnd))
         }
     }
     if (menuOpen) {

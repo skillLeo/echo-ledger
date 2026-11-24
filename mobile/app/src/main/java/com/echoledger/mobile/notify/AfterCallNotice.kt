@@ -68,6 +68,12 @@ object AfterCallNotice {
         if (manager.getNotificationChannel(CHANNEL) == null) manager.createNotificationChannel(channel(AppWords.resources(context)))
     }
 
+    /** The after-call flag is [on] or off: its channel is made, or removed so it never shows in Android's settings. */
+    fun followFlag(context: Context, on: Boolean) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (on) ensureChannel(context) else manager.deleteNotificationChannel(CHANNEL)
+    }
+
     /** Whether the notification can show: allowed on Android 13+, and neither the app's notifications nor this channel off. */
     fun canShow(context: Context): Boolean {
         if (!Notifications.canPost(context)) return false
@@ -212,10 +218,12 @@ object AfterCallNotice {
     fun transcribingAll(context: Context, recs: List<LocalRecording>) {
         recs.forEach { markTranscribing(context, it.id, true) }
         // The group's one notification follows them all: it ends once the last one is ready ([groupMemberDone]).
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putStringSet(GROUP_LEFT, recs.map { it.id }.toSet())
-            .putInt(GROUP_READY, 0)
-            .apply()
+        synchronized(groupLock) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putStringSet(GROUP_LEFT, recs.map { it.id }.toSet())
+                .putInt(GROUP_READY, 0)
+                .commit()
+        }
         if (!canShow(context)) return
         val words = AppWords.resources(context)
         val title = NoticeWords.drawn(words, words.getString(R.string.cc_done_transcribing))
@@ -260,12 +268,16 @@ object AfterCallNotice {
      */
     @SuppressLint("MissingPermission") // canShow() first
     fun groupMemberDone(context: Context, id: String, ready: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val left = prefs.getStringSet(GROUP_LEFT, emptySet()).orEmpty()
-        if (id !in left) return
-        val readyCount = prefs.getInt(GROUP_READY, 0) + if (ready) 1 else 0
-        prefs.edit().putStringSet(GROUP_LEFT, left - id).putInt(GROUP_READY, readyCount).apply()
-        if ((left - id).isNotEmpty()) return
+        // One at a time: the ready watchers run side by side, and each one's count must reach the next.
+        val readyCount = synchronized(groupLock) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val left = prefs.getStringSet(GROUP_LEFT, emptySet()).orEmpty()
+            if (id !in left) return
+            val count = prefs.getInt(GROUP_READY, 0) + if (ready) 1 else 0
+            prefs.edit().putStringSet(GROUP_LEFT, left - id).putInt(GROUP_READY, count).commit()
+            if ((left - id).isNotEmpty()) return
+            count
+        }
         if (readyCount == 0 || !canShow(context)) {
             cancelGrouped(context)
             return
@@ -289,7 +301,8 @@ object AfterCallNotice {
      */
     private fun swiped(context: Context, ids: List<String>, offset: Int): PendingIntent =
         action(context, SaveDecisionReceiver.ACTION_AC_SWIPED, ids, offset) {
-            putExtra(SaveDecisionReceiver.EXTRA_POSTED_AT, System.currentTimeMillis())
+            // The time since boot, as the other end reads it: a clock set back never makes the hour a swipe.
+            putExtra(SaveDecisionReceiver.EXTRA_POSTED_AT, android.os.SystemClock.elapsedRealtime())
         }
 
     /**
@@ -352,6 +365,7 @@ object AfterCallNotice {
 
     private const val NOTICED = "noticed"
     private const val GROUP_LEFT = "group_left"
+    private val groupLock = Any()
     private const val GROUP_READY = "group_ready"
 
     /** The large icon's size, as Android's own notification templates draw it. */

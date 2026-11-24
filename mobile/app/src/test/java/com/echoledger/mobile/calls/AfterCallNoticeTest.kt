@@ -217,7 +217,7 @@ class AfterCallNoticeTest : AppTest() {
                 .putExtra(SaveDecisionReceiver.EXTRA_IDS, arrayOf(id))
                 .putExtra(SaveDecisionReceiver.EXTRA_POSTED_AT, postedAt)
         )
-        gone("call-1", System.currentTimeMillis() - CallChoice.NOTICE_MS)
+        gone("call-1", android.os.SystemClock.elapsedRealtime() - CallChoice.NOTICE_MS)
         pumpUntil("kept as audio only") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == false } == true }
         AfterCallActions.drainForTest()
         assertEquals("nobody chose", 0, app.graph.liveSettings.value?.callChoiceStreakCount)
@@ -225,24 +225,57 @@ class AfterCallNoticeTest : AppTest() {
         // A swipe within the hour is the person's choice.
         asked("call-2")
         assertNotNull("the swipe carries when it was posted", noticeOf("call-2")!!.deleteIntent)
-        gone("call-2", System.currentTimeMillis() - 5_000)
+        gone("call-2", android.os.SystemClock.elapsedRealtime() - 5_000)
         pumpUntil("counted") { app.graph.liveSettings.value?.callChoiceStreakCount == 1 }
         assertEquals(CallChoice.Pick.AUDIO.wire, app.graph.liveSettings.value?.callChoiceStreak)
     }
 
+    /** Review of UX-13: the channel follows the flag as the server's flags are saved, whatever page is open. */
     @Test
     fun `the After a call channel exists only while the flag is on`() {
         val nm = app.getSystemService(NotificationManager::class.java)
         notifying(false)
-        com.echoledger.mobile.notify.Notifications.createChannels(app)
-        assertNull("not in Android's settings for anyone else", nm.getNotificationChannel(AfterCallNotice.CHANNEL))
+        pumpUntil("gone with the flag") { nm.getNotificationChannel(AfterCallNotice.CHANNEL) == null }
         notifying(true)
-        // The flag came on before the channels were made again: the first notification makes it.
-        val notice = asked()
-        assertEquals(AfterCallNotice.CHANNEL, notice.channelId)
-        assertNotNull(nm.getNotificationChannel(AfterCallNotice.CHANNEL))
-        com.echoledger.mobile.notify.Notifications.createChannels(app)
-        assertNotNull("kept while the flag is on", nm.getNotificationChannel(AfterCallNotice.CHANNEL))
+        pumpUntil("back with the flag") { nm.getNotificationChannel(AfterCallNotice.CHANNEL) != null }
+        notifying(false)
+        pumpUntil("gone again") { nm.getNotificationChannel(AfterCallNotice.CHANNEL) == null }
+        // The flag on again: and the first notification finds its channel.
+        notifying(true)
+        assertEquals(AfterCallNotice.CHANNEL, asked().channelId)
+    }
+
+    /** Review of UX-13: a call sent with Transcribe all that never reaches the server ends its part of the group. */
+    @Test
+    fun `a member of Transcribe all deleted or never uploaded counts as done, so the group never waits the hour`() {
+        (1..2).forEach { PostCallPrompt.show(app, call("call-$it"), "dark") }
+        pumpUntil("grouped") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "2 calls saved" }
+        tap(manager().getNotification(AfterCallNotice.GROUPED_ID), "Transcribe all")
+        pumpUntil("Transcribing…") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "Transcribing…" }
+        // call-1 deleted before it was sent; call-2's file gone, so its upload fails for good.
+        runBlocking { Decisions.apply(app, "call-1", keep = false) }
+        app.graph.recordings.encryptedFile("call-2").delete()
+        val result = runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<com.echoledger.mobile.net.UploadWorker>(app)
+                .setInputData(androidx.work.workDataOf("recording_id" to "call-2"))
+                .build()
+                .doWork()
+        }
+        assertTrue(result is androidx.work.ListenableWorker.Result.Failure)
+        pumpUntil("the group's notification goes") { manager().getNotification(AfterCallNotice.GROUPED_ID) == null }
+    }
+
+    /** Review of UX-13: the ready watchers run side by side; each count reaches the next. */
+    @Test
+    fun `members done at once all count, and the group says so`() {
+        (1..8).forEach { PostCallPrompt.show(app, call("call-$it"), "dark") }
+        pumpUntil("grouped") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "8 calls saved" }
+        tap(manager().getNotification(AfterCallNotice.GROUPED_ID), "Transcribe all")
+        pumpUntil("Transcribing…") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "Transcribing…" }
+        val threads = (1..8).map { i -> Thread { AfterCallNotice.groupMemberDone(app, "call-$i", ready = true) } }
+        threads.forEach(Thread::start)
+        threads.forEach { it.join(10_000) }
+        pumpUntil("8 transcripts ready") { title(manager().getNotification(AfterCallNotice.GROUPED_ID)) == "8 transcripts ready" }
     }
 
     @Test

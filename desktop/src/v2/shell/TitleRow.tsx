@@ -136,13 +136,13 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
                 if (search.query) search.setQuery("");
                 else field.current?.blur();
               }} />
-            <kbd className="el-titlerow__keys" aria-hidden="true">{everyKeys}</kbd>
+            <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </div>
         ) : (
           <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" onClick={() => everything("")}>
             <Icon icon={Icons.SearchIcon} />
             <span className="el-titlerow__placeholder">{words}</span>
-            <kbd className="el-titlerow__keys" aria-hidden="true">{everyKeys}</kbd>
+            <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </button>
         )}
       </div>

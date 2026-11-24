@@ -252,130 +252,134 @@ fun V2ActivityContent(
                 }, kind = EchoButtonKind.Quiet)
             }
         }
-        LazyColumn(Modifier.weight(1f), state = list) {
-            when {
-                failed -> item(key = "failed") {
-                    EchoBanner(
-                        stringResource(R.string.v2_act_error),
-                        EchoBannerKind.Error,
-                        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                        actionLabel = stringResource(R.string.v2_act_retry),
-                        onAction = {
-                            failed = false
-                            items = null
-                            attempt++
-                        }
-                    )
-                }
-
-                items == null -> item(key = "loading") { EchoSkeletonList(4) }
-
-                !needs && loaded.isEmpty() && local.isEmpty() && skipped.isEmpty() -> item(key = "empty") {
-                    EchoEmptyState(
-                        stringResource(R.string.v2_act_empty_title),
-                        stringResource(R.string.v2_act_empty_body),
-                        icon = EchoIcons.Bell
-                    )
-                }
-            }
-            if (needs) {
-                item(key = "h-needs") { EchoSectionHeader(stringResource(R.string.v2_act_needs)) }
-                if (waiting.size > 1) {
-                    item(key = "waiting-all") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
-                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
-                        ) {
-                            EchoButton(stringResource(R.string.v2_act_discard_all), {
-                                waiting.forEach(onDiscard)
-                            }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
-                            EchoButton(stringResource(R.string.cc_save_audio_all), {
-                                waiting.forEach(onSaveAudio)
-                            }, kind = EchoButtonKind.Secondary)
-                        }
-                    }
-                }
-                items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard, clients, onRename, onProject) }
-                if (failedUploads.isNotEmpty()) {
-                    item(key = "uploads") {
-                        EchoSettingRow(
-                            if (failedUploads.size == 1) {
-                                stringResource(R.string.v2_home_failed_upload_one)
-                            } else {
-                                stringResource(R.string.v2_home_failed_uploads, failedUploads.size)
-                            },
-                            subtitle = stringResource(R.string.v2_home_failed_uploads_detail),
-                            icon = EchoIcons.Error,
-                            trailing = {
-                                EchoButton(stringResource(R.string.v2_home_retry), onRetryUploads, kind = EchoButtonKind.Secondary)
+        Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), state = list) {
+                when {
+                    failed -> item(key = "failed") {
+                        EchoBanner(
+                            stringResource(R.string.v2_act_error),
+                            EchoBannerKind.Error,
+                            Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+                            actionLabel = stringResource(R.string.v2_act_retry),
+                            onAction = {
+                                failed = false
+                                items = null
+                                attempt++
                             }
                         )
                     }
+
+                    items == null -> item(key = "loading") { EchoSkeletonList(4) }
+
+                    !needs && loaded.isEmpty() && local.isEmpty() && skipped.isEmpty() -> item(key = "empty") {
+                        EchoEmptyState(
+                            stringResource(R.string.v2_act_empty_title),
+                            stringResource(R.string.v2_act_empty_body),
+                            icon = EchoIcons.Bell
+                        )
+                    }
                 }
-                items(localNeeds, key = { "m-" + it.ref }) { row ->
-                    Dismissible({ settleMissed(row, dismiss = true) }) {
-                        MissedRow(row, today, locale, onClick = { settleMissed(row, dismiss = false) }) {
-                            settleMissed(row, dismiss = false)
-                            actions.onFix(row.button)
+                if (needs) {
+                    item(key = "h-needs") { EchoSectionHeader(stringResource(R.string.v2_act_needs)) }
+                    if (waiting.size > 1) {
+                        item(key = "waiting-all") {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
+                                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
+                            ) {
+                                EchoButton(stringResource(R.string.v2_act_discard_all), {
+                                    waiting.forEach(onDiscard)
+                                }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
+                                EchoButton(stringResource(R.string.cc_save_audio_all), {
+                                    waiting.forEach(onSaveAudio)
+                                }, kind = EchoButtonKind.Secondary)
+                            }
                         }
                     }
-                }
-                items(problems, key = { "a-" + it.id }) { row ->
-                    Dismissible({ dismiss(row) }) { ActivityRow(row, today, locale) { open(row) } }
-                }
-                if (untranscribed > 0) {
-                    item(key = "untranscribed") {
-                        EchoSettingRow(
-                            if (untranscribed == 1) {
-                                stringResource(R.string.v2_home_untranscribed_one)
-                            } else {
-                                stringResource(R.string.v2_home_untranscribed, untranscribed)
-                            },
-                            icon = EchoIcons.Transcribe,
-                            onClick = actions.onOpenUntranscribed
-                        )
+                    items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard, clients, onRename, onProject) }
+                    if (failedUploads.isNotEmpty()) {
+                        item(key = "uploads") {
+                            EchoSettingRow(
+                                if (failedUploads.size == 1) {
+                                    stringResource(R.string.v2_home_failed_upload_one)
+                                } else {
+                                    stringResource(R.string.v2_home_failed_uploads, failedUploads.size)
+                                },
+                                subtitle = stringResource(R.string.v2_home_failed_uploads_detail),
+                                icon = EchoIcons.Error,
+                                trailing = {
+                                    EchoButton(stringResource(R.string.v2_home_retry), onRetryUploads, kind = EchoButtonKind.Secondary)
+                                }
+                            )
+                        }
                     }
-                }
-                if (failedTranscripts > 0) {
-                    item(key = "failed-transcripts") {
-                        EchoSettingRow(
-                            if (failedTranscripts == 1) {
-                                stringResource(R.string.v2_home_failed_transcript_one)
-                            } else {
-                                stringResource(R.string.v2_home_failed_transcripts, failedTranscripts)
-                            },
-                            icon = EchoIcons.Error,
-                            onClick = actions.onOpenUntranscribed
-                        )
-                    }
-                }
-            }
-            if (skipped.isNotEmpty()) item(key = "skipped") { SkippedLine(skipped, onRestore) }
-            later.groupBy { row ->
-                val at = if (row is MissedItem) {
-                    java.time.Instant.ofEpochMilli(row.startedAtMs).toString()
-                } else {
-                    (row as com.echoledger.mobile.data.ActivityItemDto).at
-                }
-                com.echoledger.mobile.ui.design.dateGroup(at, today) == "Today"
-            }.toSortedMap(compareBy { !it }).forEach { (isToday, rows) ->
-                item(key = "h-$isToday") {
-                    EchoSectionHeader(stringResource(if (isToday) R.string.v2_act_today else R.string.v2_act_earlier))
-                }
-                items(rows, key = {
-                    if (it is MissedItem) "m-" + it.ref else "a-" + (it as com.echoledger.mobile.data.ActivityItemDto).id
-                }) { row ->
-                    if (row is MissedItem) {
+                    items(localNeeds, key = { "m-" + it.ref }) { row ->
                         Dismissible({ settleMissed(row, dismiss = true) }) {
-                            MissedRow(row, today, locale, onClick = null) { actions.onFix(row.button) }
+                            MissedRow(row, today, locale, onClick = { settleMissed(row, dismiss = false) }) {
+                                settleMissed(row, dismiss = false)
+                                actions.onFix(row.button)
+                            }
                         }
-                    } else {
-                        val item = row as com.echoledger.mobile.data.ActivityItemDto
-                        Dismissible({ dismiss(item) }) { ActivityRow(item, today, locale) { open(item) } }
+                    }
+                    items(problems, key = { "a-" + it.id }) { row ->
+                        Dismissible({ dismiss(row) }) { ActivityRow(row, today, locale) { open(row) } }
+                    }
+                    if (untranscribed > 0) {
+                        item(key = "untranscribed") {
+                            EchoSettingRow(
+                                if (untranscribed == 1) {
+                                    stringResource(R.string.v2_home_untranscribed_one)
+                                } else {
+                                    stringResource(R.string.v2_home_untranscribed, untranscribed)
+                                },
+                                icon = EchoIcons.Transcribe,
+                                onClick = actions.onOpenUntranscribed
+                            )
+                        }
+                    }
+                    if (failedTranscripts > 0) {
+                        item(key = "failed-transcripts") {
+                            EchoSettingRow(
+                                if (failedTranscripts == 1) {
+                                    stringResource(R.string.v2_home_failed_transcript_one)
+                                } else {
+                                    stringResource(R.string.v2_home_failed_transcripts, failedTranscripts)
+                                },
+                                icon = EchoIcons.Error,
+                                onClick = actions.onOpenUntranscribed
+                            )
+                        }
                     }
                 }
+                if (skipped.isNotEmpty()) item(key = "skipped") { SkippedLine(skipped, onRestore) }
+                later.groupBy { row ->
+                    val at = if (row is MissedItem) {
+                        java.time.Instant.ofEpochMilli(row.startedAtMs).toString()
+                    } else {
+                        (row as com.echoledger.mobile.data.ActivityItemDto).at
+                    }
+                    com.echoledger.mobile.ui.design.dateGroup(at, today) == "Today"
+                }.toSortedMap(compareBy { !it }).forEach { (isToday, rows) ->
+                    item(key = "h-$isToday") {
+                        EchoSectionHeader(stringResource(if (isToday) R.string.v2_act_today else R.string.v2_act_earlier))
+                    }
+                    items(rows, key = {
+                        if (it is MissedItem) "m-" + it.ref else "a-" + (it as com.echoledger.mobile.data.ActivityItemDto).id
+                    }) { row ->
+                        if (row is MissedItem) {
+                            Dismissible({ settleMissed(row, dismiss = true) }) {
+                                MissedRow(row, today, locale, onClick = null) { actions.onFix(row.button) }
+                            }
+                        } else {
+                            val item = row as com.echoledger.mobile.data.ActivityItemDto
+                            Dismissible({ dismiss(item) }) { ActivityRow(item, today, locale) { open(item) } }
+                        }
+                    }
+                }
+                item { Box(Modifier.padding(bottom = EchoTokens.Space.s24)) }
             }
-            item { Box(Modifier.padding(bottom = EchoTokens.Space.s24)) }
+            // Back to top (UX-25).
+            com.echoledger.mobile.ui.v2.components.EchoBackToTop(list, Modifier.align(Alignment.BottomEnd))
         }
     }
 }

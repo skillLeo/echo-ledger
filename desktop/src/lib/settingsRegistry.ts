@@ -238,7 +238,7 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["one window", "tab", "whole screen", "safety net"], ru: ["ek window", "tab"], ur: ["ایک ونڈو", "ٹیب"] },
   { id: "share_privacy.demo", title: "Show Live Translate for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
   { id: "share_privacy.hide_all", title: "Hide EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info",
-    keywords: ["shortcut", "hide windows", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao"], ur: ["ونڈوز چھپائیں", "چھپائیں"] },
+    keywords: ["shortcut", "hide windows", "hide echoledger windows now", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao", "windows dikhao"], ur: ["ونڈوز چھپائیں", "چھپائیں", "ونڈوز دکھائیں"] },
   { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"], ru: ["doosri screen"], ur: ["دوسری اسکرین"] },
   { id: "share_privacy.diagnostics", title: "Send diagnostics", page: "share_privacy", section: "Diagnostics", kind: "switch", resettable: true,
     description: "Sends each check's result with your system and app version to EchoLedger, never a picture or a window title.",

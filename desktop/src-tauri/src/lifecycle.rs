@@ -237,6 +237,12 @@ pub fn show(app: &AppHandle, label: &'static str, reason: &'static str) {
     }
 }
 
+/// The main window's phase now, or none while the lifecycle's lock is held (by this thread too): never waits for it.
+pub fn main_phase_now(app: &AppHandle) -> Option<Phase> {
+    let slots = app.state::<WindowLifecycle>().inner().slots.try_lock().ok()?;
+    Some(slots.phase(MAIN))
+}
+
 /// `reason` no longer needs `label`; an overlay nothing needs is destroyed after `HIDE_GRACE`.
 pub fn hide(app: &AppHandle, label: &'static str, reason: &'static str) {
     let generation = slots(app).hide(label, reason);
@@ -363,9 +369,24 @@ pub fn reopen_action(main_exists: bool, notified_lately: bool) -> Reopen {
     if !main_exists && notified_lately { Reopen::OpenNotified } else { Reopen::Show }
 }
 
-/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray.
+/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray. The menu bar
+/// greys what only its page could do (`app_menu::page_gone`).
 pub fn main_closing(app: &AppHandle) {
     slots(app).closing(MAIN);
+    #[cfg(target_os = "macos")]
+    crate::app_menu::page_gone(app);
+}
+
+/// An in-window command picked from the menu bar while the main window is minimised or put away: brought forward
+/// quietly, as a quiet open is (what keeps it off, a person's hide or a share, still does).
+pub fn bring_forward_quietly(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN) else { return };
+    if slots(app).phase(MAIN) != Phase::Ready {
+        return;
+    }
+    if window.is_minimized().unwrap_or(false) || !window.is_visible().unwrap_or(true) {
+        reveal_main(app, true);
+    }
 }
 
 /// `WindowEvent::Destroyed`: forgets the window's hit regions and caption channel; builds it again when it was asked

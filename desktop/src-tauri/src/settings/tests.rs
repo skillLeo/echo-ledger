@@ -532,6 +532,36 @@ fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
 }
 
 #[test]
+fn hidden_from_screen_shares_until_i_quit_lasts_the_run_and_the_next_launch_starts_shown() {
+    use crate::privacy::share::{HideFor, HideUntil, MainHideTimer, hide_until, main_hidden};
+    let now = chrono::Local::now();
+    let hide = hide_until(HideFor::UntilQuit, now, false).unwrap();
+    assert_eq!(hide.until, HideUntil::UntilQuit);
+    // While EchoLedger runs: hidden, and nothing ends it by itself (a week later, no call) until Stop Hiding clears it.
+    let mut timer = MainHideTimer::default();
+    for later in [0, 60_000, 7 * 24 * 60 * 60_000] {
+        assert!(main_hidden(Some(&hide), now.timestamp_millis() + later));
+        assert!(!timer.tick(Some(&hide), now.timestamp_millis() + later, false));
+    }
+    assert!(!main_hidden(None, now.timestamp_millis()), "Stop Hiding: shown");
+    // Quit, then launch again: the settings file still says it, but the new run starts shown.
+    let dir = dir();
+    let path = dir.path().join("settings.json");
+    let mut s = Settings { main_share_hide: Some(hide), ..Settings::default() };
+    s.save(&path).unwrap();
+    let relaunched = Settings::load(&path);
+    assert_eq!(relaunched.main_share_hide, None);
+    assert!(!main_hidden(relaunched.main_share_hide.as_ref(), now.timestamp_millis()));
+    // The tray's "until I turn it off" is kept as before.
+    s.main_share_hide = Some(hide_until(HideFor::UntilOff, now, false).unwrap());
+    s.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).main_share_hide.map(|h| h.until), Some(HideUntil::UntilOff));
+    // Its words, and the menu bar's Until I Quit is this hide.
+    assert_eq!(crate::privacy::share::until_words(&hide, now), "until you quit EchoLedger");
+    assert_eq!(crate::native_menu::core_step("live.hideUntilQuit"), Some(crate::native_menu::CoreStep::HideFromShares(HideFor::UntilQuit)));
+}
+
+#[test]
 fn the_hide_all_shortcut_is_added_to_an_older_file() {
     let s = Settings::from_value(json!({"shortcuts": {"toggle_captions": "CommandOrControl+Shift+Space"}}));
     assert_eq!(s.shortcuts.get(&Action::HideAll).map(String::as_str), Some("CommandOrControl+Alt+Shift+P"));

@@ -28,6 +28,7 @@ import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoCard
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
+import com.echoledger.mobile.ui.v2.components.LocalPageMargin
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -122,9 +123,10 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions, onClose: 
     val res = LocalContext.current.resources
     val words = when (banner.kind) {
         // Since v1.5, in its own words ("…: the helper stopped when the phone restarted"), never only "not recorded".
+        // v2.1 UX-14: "Calls won't record · Fix", in its own words when it has them.
         NeedsBanner.Kind.CallsOff -> banner.reason?.let {
-            res.getString(R.string.v2_lib_need_calls_off_why, res.getString(it).replaceFirstChar { ch -> ch.lowercase() })
-        } ?: res.getString(R.string.v2_lib_need_calls_off)
+            res.getString(R.string.v2_lib_need_wont_record_why, res.getString(it).replaceFirstChar { ch -> ch.lowercase() })
+        } ?: res.getString(R.string.v2_lib_need_wont_record)
 
         NeedsBanner.Kind.Waiting -> if (banner.count == 1) {
             res.getString(R.string.v2_lib_need_waiting_one)
@@ -132,11 +134,8 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions, onClose: 
             res.getString(R.string.v2_lib_need_waiting, banner.count)
         }
 
-        NeedsBanner.Kind.FailedUploads -> if (banner.count == 1) {
-            res.getString(R.string.v2_home_failed_upload_one)
-        } else {
-            res.getString(R.string.v2_home_failed_uploads, banner.count)
-        }
+        // "3 didn't upload · Retry all".
+        NeedsBanner.Kind.FailedUploads -> res.getQuantityString(R.plurals.v2_lib_need_not_uploaded, banner.count, banner.count)
 
         NeedsBanner.Kind.FailedTranscripts -> if (banner.count == 1) {
             res.getString(R.string.v2_home_failed_transcript_one)
@@ -150,7 +149,7 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions, onClose: 
         NeedsBanner.Kind.FailedUploads -> if (banner.more ==
             0
         ) {
-            res.getString(R.string.v2_home_retry) to actions.onRetryUploads
+            res.getString(if (banner.count > 1) R.string.v2_lib_need_retry_all else R.string.v2_home_retry) to actions.onRetryUploads
         } else {
             res.getString(R.string.v2_lib_need_review) to
                 actions.onReview
@@ -161,7 +160,7 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions, onClose: 
     EchoBanner(
         if (banner.more > 0) res.getString(R.string.v2_lib_need_more, words, banner.more) else words,
         if (banner.kind == NeedsBanner.Kind.CallsOff) EchoBannerKind.Warning else EchoBannerKind.Info,
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
         actionLabel = label,
         onAction = run,
         onClose = onClose,
@@ -186,7 +185,7 @@ private fun ServerLine(banner: com.echoledger.mobile.core.ServerBanners.Banner, 
     EchoBanner(
         words,
         if (banner.warning) EchoBannerKind.Warning else EchoBannerKind.Info,
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
         actionLabel = if (update) res.getString(R.string.v2_lib_server_update_action) else null,
         onAction = actions.onUpdate,
         onClose = onClose,
@@ -202,7 +201,7 @@ fun setupShowsCapture(checklist: List<Pair<ChecklistItem, Boolean>>, setupHidden
 @Composable
 private fun SetupCard(items: List<Pair<ChecklistItem, Boolean>>, actions: LibraryTopActions) {
     val c = EchoV2.colors
-    EchoCard(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)) {
+    EchoCard(Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
