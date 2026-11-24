@@ -1203,7 +1203,7 @@ export default function MainApp() {
               setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on") } : undefined,
               account: account ? [
-                { label: `${account.name || account.email}`, group: account.email, disabled: true },
+                // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).
                 { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
                 { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
                 { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
