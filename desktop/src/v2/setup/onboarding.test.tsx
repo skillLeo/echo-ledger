@@ -83,7 +83,7 @@ describe("the first-run wizard in the new design", () => {
     // FIX-11: asked at the end, recommended (ticked); the menu bar's icon is a Mac's only.
     const atLogin = screen.getByRole("checkbox", { name: "Open EchoLedger at login (recommended, so calls are recorded automatically)" });
     expect(atLogin).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "Show EchoLedger in the menu bar (recommended)" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Show EchoLedger in the menu bar (recommended; shown while recording)" })).toBeNull();
     fireEvent.click(atLogin);
     fireEvent.click(screen.getByRole("button", { name: "Start using EchoLedger" }));
     await act(flushAsync);

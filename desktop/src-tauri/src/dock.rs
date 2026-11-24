@@ -70,6 +70,11 @@ pub fn opened(app: &AppHandle, files: Vec<std::path::PathBuf>) {
     if files.is_empty() {
         return;
     }
+    // The Import button's guard: locked, or a viewer's computer, nothing is imported, and the person is told why.
+    if let Err(refusal) = crate::commands::may_import(&app.state::<crate::AppState>()) {
+        crate::refusal::say(app, &refusal.to_string(), crate::refusal::Asked::Other);
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let summary = crate::actions::import_files(&app, &files, None, None);
@@ -95,39 +100,39 @@ pub fn import_words(queued: usize, duplicates: usize, not_imported: usize) -> St
     if parts.is_empty() { "Nothing was imported".into() } else { parts.join(" · ") }
 }
 
-/// One line of the Dock's menu (pure): an action of the menu bar's, its words, or a sub-menu.
+/// One line of the Dock's menu (pure): an item (its menu bar id, its words), a line, or a sub-menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DockLine {
-    Item { action: &'static str, label: &'static str },
+    Item { id: &'static str, label: &'static str },
+    Separator,
     Submenu { label: &'static str, items: Vec<DockLine> },
 }
 
 /// The Dock's menu for the moment (pure): New Recording or Stop Recording, New Voice Note (Stop Voice Note while one
-/// runs), Start Live Assist…, Hide from Screen Shares ›. A viewer's computer has only the last.
+/// runs), Start Live Assist…, Hide from Screen Shares › (the set every menu has, native_menu::hide_from_shares). A
+/// viewer's computer has only the last two.
 pub fn dock_lines(recording: bool, mic_note: bool, can_record: bool, hiding: bool) -> Vec<DockLine> {
     let mut lines = Vec::new();
     if can_record || recording {
         lines.push(if recording {
-            DockLine::Item { action: "live.stopRecording", label: "Stop Recording" }
+            DockLine::Item { id: "action:live.stopRecording", label: "Stop Recording" }
         } else {
-            DockLine::Item { action: "file.newRecording", label: "New Recording" }
+            DockLine::Item { id: "action:file.newRecording", label: "New Recording" }
         });
         if !recording || mic_note {
-            lines.push(DockLine::Item { action: "file.newVoiceNote", label: if mic_note { "Stop Voice Note" } else { "New Voice Note" } });
+            lines.push(DockLine::Item { id: "action:file.newVoiceNote", label: if mic_note { "Stop Voice Note" } else { "New Voice Note" } });
         }
     }
-    lines.push(DockLine::Item { action: "live.startAssist", label: "Start Live Assist…" });
+    lines.push(DockLine::Item { id: "action:live.startAssist", label: "Start Live Assist…" });
     lines.push(DockLine::Submenu {
-        label: "Hide from Screen Shares",
-        items: if hiding {
-            vec![DockLine::Item { action: "live.stopHiding", label: "Stop Hiding" }]
-        } else {
-            vec![
-                DockLine::Item { action: "live.hide15", label: "For 15 Minutes" },
-                DockLine::Item { action: "live.hide60", label: "For 1 Hour" },
-                DockLine::Item { action: "live.hideUntilQuit", label: "Until I Quit" },
-            ]
-        },
+        label: crate::native_menu::HIDE_FROM_SHARES_TITLE.1,
+        items: crate::native_menu::hide_from_shares(hiding, true)
+            .into_iter()
+            .map(|line| match line {
+                crate::native_menu::HideLine::Item { id, label } => DockLine::Item { id, label },
+                crate::native_menu::HideLine::Separator => DockLine::Separator,
+            })
+            .collect(),
     });
     lines
 }
@@ -196,19 +201,19 @@ pub mod mac {
 
     /// The lines as a menu: each item's id is the menu bar's for its action, so its pick goes through `picked`.
     fn build(lines: &[DockLine]) -> Result<muda::Menu, muda::Error> {
-        fn item(action: &str, label: &str) -> muda::MenuItem {
-            let id = crate::native_menu::item_id(&crate::native_menu::Pick::of(action)).unwrap_or_default();
-            muda::MenuItem::with_id(id, label, true, None)
-        }
+        let item = |id: &str, label: &str| muda::MenuItem::with_id(id, label, true, None);
         let menu = muda::Menu::new();
         for line in lines {
             match line {
-                DockLine::Item { action, label } => menu.append(&item(action, label))?,
+                DockLine::Item { id, label } => menu.append(&item(id, label))?,
+                DockLine::Separator => menu.append(&muda::PredefinedMenuItem::separator())?,
                 DockLine::Submenu { label, items } => {
                     let sub = muda::Submenu::new(*label, true);
                     for line in items {
-                        if let DockLine::Item { action, label } = line {
-                            sub.append(&item(action, label))?;
+                        match line {
+                            DockLine::Item { id, label } => sub.append(&item(id, label))?,
+                            DockLine::Separator => sub.append(&muda::PredefinedMenuItem::separator())?,
+                            DockLine::Submenu { .. } => {}
                         }
                     }
                     menu.append(&sub)?;
@@ -243,44 +248,73 @@ mod tests {
         assert!(page.contains(r#"return count > 9 ? "9+" : String(Math.floor(count));"#));
     }
 
+    fn words(lines: &[DockLine]) -> Vec<&'static str> {
+        lines
+            .iter()
+            .map(|l| match l {
+                DockLine::Item { label, .. } | DockLine::Submenu { label, .. } => *label,
+                DockLine::Separator => "---",
+            })
+            .collect()
+    }
+
     #[test]
     fn the_dock_menu_is_the_plan_s_and_its_picks_go_through_the_menu_bar_s_routing() {
-        let labels = |lines: &[DockLine]| {
-            lines
-                .iter()
-                .map(|l| match l {
-                    DockLine::Item { label, .. } | DockLine::Submenu { label, .. } => *label,
-                })
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(labels(&dock_lines(false, false, true, false)), ["New Recording", "New Voice Note", "Start Live Assist…", "Hide from Screen Shares"]);
-        assert_eq!(labels(&dock_lines(true, false, true, false)), ["Stop Recording", "Start Live Assist…", "Hide from Screen Shares"]);
-        assert_eq!(labels(&dock_lines(true, true, true, false)), ["Stop Recording", "Stop Voice Note", "Start Live Assist…", "Hide from Screen Shares"]);
-        assert_eq!(labels(&dock_lines(false, false, false, false)), ["Start Live Assist…", "Hide from Screen Shares"], "a viewer records nothing");
+        assert_eq!(words(&dock_lines(false, false, true, false)), ["New Recording", "New Voice Note", "Start Live Assist…", "Hide from Screen Shares"]);
+        assert_eq!(words(&dock_lines(true, false, true, false)), ["Stop Recording", "Start Live Assist…", "Hide from Screen Shares"]);
+        assert_eq!(words(&dock_lines(true, true, true, false)), ["Stop Recording", "Stop Voice Note", "Start Live Assist…", "Hide from Screen Shares"]);
+        assert_eq!(words(&dock_lines(false, false, false, false)), ["Start Live Assist…", "Hide from Screen Shares"], "a viewer records nothing");
+        // The one set every menu has.
         let DockLine::Submenu { items, .. } = &dock_lines(false, false, true, false)[3] else { panic!() };
-        assert_eq!(labels(items), ["For 15 Minutes", "For 1 Hour", "Until I Quit"]);
+        assert_eq!(words(items), ["For 15 Minutes", "For 1 Hour", "Until I Quit", "Until I Turn It Off"]);
         let DockLine::Submenu { items, .. } = &dock_lines(false, false, true, true)[3] else { panic!() };
-        assert_eq!(labels(items), ["Stop Hiding"]);
-        // Every action is one the core runs (picked → Route::Core), so the Dock's menu works with the window closed.
-        let mut all = Vec::new();
-        for lines in [dock_lines(false, false, true, false), dock_lines(true, true, true, true)] {
+        assert_eq!(words(items), ["For 15 Minutes", "For 1 Hour", "Until I Quit", "Until I Turn It Off", "---", "Stop Hiding"]);
+        // Every item is the menu bar's id for an action the core runs (picked → Route::Core): the Dock's menu works
+        // with the window closed.
+        let mut ids = Vec::new();
+        fn collect(lines: &[DockLine], into: &mut Vec<&'static str>) {
             for line in lines {
                 match line {
-                    DockLine::Item { action, .. } => all.push(action),
-                    DockLine::Submenu { items, .. } => items.into_iter().for_each(|l| {
-                        if let DockLine::Item { action, .. } = l {
-                            all.push(action);
-                        }
-                    }),
+                    DockLine::Item { id, .. } => into.push(id),
+                    DockLine::Submenu { items, .. } => collect(items, into),
+                    DockLine::Separator => {}
                 }
             }
         }
-        for action in all {
-            assert_eq!(crate::native_menu::route(action, crate::lifecycle::Phase::Absent), crate::native_menu::Route::Core, "{action}");
-            assert!(crate::native_menu::item_id(&crate::native_menu::Pick::of(action)).is_some(), "{action}");
+        collect(&dock_lines(false, false, true, true), &mut ids);
+        collect(&dock_lines(true, true, true, false), &mut ids);
+        for id in ids {
+            let pick = crate::native_menu::parse_item_id(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(crate::native_menu::item_id(&crate::native_menu::Pick::of(&pick.action)).as_deref(), Some(id));
+            assert_eq!(crate::native_menu::route(&pick.action, crate::lifecycle::Phase::Absent), crate::native_menu::Route::Core, "{id}");
         }
         // Installed before the app runs, as the quit answer is.
         assert!(include_str!("lib.rs").contains("dock::mac::install(app.handle())"));
+    }
+
+    #[test]
+    fn open_with_and_the_dock_import_nothing_while_locked_or_on_a_viewer_s_computer() {
+        use crate::commands::import_refusal;
+        assert_eq!(import_refusal(true, None).as_deref(), Some("EchoLedger is locked."));
+        assert_eq!(import_refusal(true, Some("You are a viewer.".into())).as_deref(), Some("EchoLedger is locked."), "locked first");
+        assert_eq!(import_refusal(false, Some("You are a viewer.".into())).as_deref(), Some("You are a viewer."));
+        assert_eq!(import_refusal(false, None), None);
+        // One guard for every import: the Import button's command and Open With / a drop on the Dock icon.
+        let commands = include_str!("commands.rs");
+        let import = &commands[commands.find("pub async fn import_voice_notes(").unwrap()..];
+        assert!(import[..import.find("\n}\n").unwrap()].contains("may_import(&app.state::<AppState>())?;"));
+        let code = include_str!("dock.rs").split("#[cfg(test)]").next().unwrap();
+        let opened = &code[code.find("pub fn opened(app: &AppHandle").unwrap()..];
+        let opened = &opened[..opened.find("\n}\n").unwrap()];
+        let guard = opened.find("crate::commands::may_import(").expect("guarded");
+        assert!(guard < opened.find("import_files(").unwrap(), "before anything is imported");
+        assert!(opened.contains("crate::refusal::say(app, &refusal.to_string()"), "and said");
+    }
+
+    #[test]
+    fn muda_is_the_one_tauri_uses() {
+        let lock = include_str!("../Cargo.lock");
+        assert_eq!(lock.matches("\nname = \"muda\"\n").count(), 1, "Cargo.lock lists muda once: the Dock's menu and Tauri share it");
     }
 
     #[test]
@@ -290,8 +324,12 @@ mod tests {
         assert_eq!(import_words(2, 0, 0), "2 recordings imported");
         assert_eq!(import_words(1, 1, 1), "1 recording imported · 1 already in the Library · 1 couldn't be imported");
         assert_eq!(import_words(0, 0, 0), "Nothing was imported");
-        // Registered as an alternate handler only, never the default player, for the plan's types.
-        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        // Registered as an alternate handler only, never the default player, for the plan's types: on the Mac only
+        // (tauri.macos.conf.json). Windows' installer would make a type's default its own; Windows adds EchoLedger to
+        // Open with by itself instead (FIX-12).
+        let base: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert!(base["bundle"].get("fileAssociations").is_none(), "never for every platform's installer");
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.macos.conf.json")).unwrap();
         let associations = conf["bundle"]["fileAssociations"].as_array().expect("file associations");
         let audio = &associations[0];
         assert_eq!(audio["rank"], "Alternate");

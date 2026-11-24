@@ -254,7 +254,7 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
             <ShareCheck platform={status.platform} />
             <h2 className="el-body-strong">Start-up</h2>
             <Checkbox label="Open EchoLedger at login (recommended, so calls are recorded automatically)" checked={atLogin} onChange={(e) => setAtLogin(e.target.checked)} />
-            {mac && <Checkbox label="Show EchoLedger in the menu bar (recommended)" checked={inMenuBar} onChange={(e) => setInMenuBar(e.target.checked)} />}
+            {mac && <Checkbox label="Show EchoLedger in the menu bar (recommended; shown while recording)" checked={inMenuBar} onChange={(e) => setInMenuBar(e.target.checked)} />}
             <div className="el-wizard__actions el-wizard__actions--end">
               <Button variant="primary" onClick={() => void finish(true)}>Start using EchoLedger</Button>
             </div>

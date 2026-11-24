@@ -179,7 +179,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
     const key = ICON_SWITCHES[id];
     if (key) {
       return (
-        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
+        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} meta={entry.description}
           control={settings ? <Toggle label={entry.title} hideLabel checked={settings[key] !== false}
             onChange={(on) => void api.updateSettings({ [key]: on }).then(setSettings, () => undefined)} /> : undefined} />
       );

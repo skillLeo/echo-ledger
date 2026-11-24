@@ -280,35 +280,8 @@ struct MenuShape {
 pub enum MainShare {
     /// Shown: "Hide from screen shares" opens the durations; `call`: "Until this call ends" is offered.
     Shown { call: bool },
-    /// Hidden: the line ("Hidden until 14:30 · Show now", [`crate::privacy::share::tray_line`]) shows it now.
+    /// Hidden: the line ("Hidden from screen shares until 14:30"), above the set with its Stop Hiding.
     Hidden(String),
-}
-
-/// The tray's entry that hides the main window from screen shares for a while (PLAN_V2_1_POLISH FIX-01: the words say
-/// which window): the durations open under it.
-pub const TRAY_HIDE_MAIN: &str = "Hide the EchoLedger window from screen shares for…";
-
-/// The durations under [`TRAY_HIDE_MAIN`], by menu id, in order.
-pub const HIDE_CHOICES: [(&str, &str); 6] = [
-    ("share_hide_call", "Until this call ends"),
-    ("share_hide_15", "15 min"),
-    ("share_hide_60", "1 hour"),
-    ("share_hide_tomorrow", "Until tomorrow"),
-    ("share_hide_off", "Until I turn it off"),
-    ("share_hide_custom", "Custom…"),
-];
-
-/// The choice a duration's menu id stands for; none for "Custom…" (it opens Settings) and other ids.
-pub fn hide_choice(id: &str) -> Option<crate::privacy::share::HideFor> {
-    use crate::privacy::share::HideFor;
-    match id {
-        "share_hide_call" => Some(HideFor::CallEnds),
-        "share_hide_15" => Some(HideFor::Minutes15),
-        "share_hide_60" => Some(HideFor::Hour1),
-        "share_hide_tomorrow" => Some(HideFor::Tomorrow),
-        "share_hide_off" => Some(HideFor::UntilOff),
-        _ => None,
-    }
 }
 
 /// Why EchoLedger's windows are off the screen, as the tray says it.
@@ -461,17 +434,28 @@ fn menu_entries_for(shape: &MenuShape, macos: bool) -> Vec<Entry> {
             enabled: shape.mic_note || !shape.recording,
             checked: None,
         });
-        entries.push(item("assist", w("Start Live Assist…", "Start Live Assist…")));
+        // The menu bar's command: the core opens the window quietly on Live (what keeps it off still does).
+        entries.push(item("action:live.startAssist", w("Start Live Assist…", "Start Live Assist…")));
         entries.push(Entry::Separator);
         entries.push(Entry::Item { id: "auto", label: w("Auto-record Calls & Meetings", "Auto-record calls & meetings"), enabled: true, checked: Some(shape.auto) });
     }
-    match &shape.main_share {
-        Some(MainShare::Shown { call }) => entries.push(Entry::Submenu {
-            label: w("Hide from Screen Shares", "Hide from screen shares"),
-            items: HIDE_CHOICES.iter().filter(|(id, _)| *call || *id != "share_hide_call").map(|(id, label)| item(id, *label)).collect(),
-        }),
-        Some(MainShare::Hidden(line)) => entries.push(item("share_show_now", line.clone())),
-        None => {}
+    // Hide from Screen Shares ›: the one set every menu has (native_menu::hide_from_shares); while hidden, what for.
+    if let Some(share) = &shape.main_share {
+        let (title_win, title_mac) = crate::native_menu::HIDE_FROM_SHARES_TITLE;
+        let hiding = matches!(share, MainShare::Hidden(_));
+        if let MainShare::Hidden(line) = share {
+            entries.push(greyed("share_hidden", line.clone()));
+        }
+        entries.push(Entry::Submenu {
+            label: (if macos { title_mac } else { title_win }).to_string(),
+            items: crate::native_menu::hide_from_shares(hiding, macos)
+                .into_iter()
+                .map(|line| match line {
+                    crate::native_menu::HideLine::Item { id, label } => item(id, label),
+                    crate::native_menu::HideLine::Separator => Entry::Separator,
+                })
+                .collect(),
+        });
     }
     // Hide EchoLedger Windows, and while they are off what took them off and how to bring them back.
     match shape.hidden {
@@ -514,8 +498,10 @@ fn build_menu(app: &AppHandle, shape: &MenuShape) -> tauri::Result<(Menu<tauri::
             Entry::Submenu { label, items } => {
                 let submenu = tauri::menu::Submenu::new(app, label, true)?;
                 for entry in items {
-                    if let Entry::Item { id, label, enabled, .. } = entry {
-                        submenu.append(&MenuItem::with_id(app, id, label, enabled, None::<&str>)?)?;
+                    match entry {
+                        Entry::Item { id, label, enabled, .. } => submenu.append(&MenuItem::with_id(app, id, label, enabled, None::<&str>)?)?,
+                        Entry::Separator => submenu.append(&PredefinedMenuItem::separator(app)?)?,
+                        Entry::Submenu { .. } => {}
                     }
                 }
                 menu.append(&submenu)?
@@ -560,11 +546,6 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         Ok(())
                     }
                     "pause" => crate::actions::toggle_pause(&app).await,
-                    // Start Live Assist…: the person asked from the menu, so the window opens on Live.
-                    "assist" => {
-                        crate::actions::navigate(&app, "live", None, false);
-                        Ok(())
-                    }
                     "controls" => {
                         crate::actions::set_pill_hidden(&app, false);
                         Ok(())
@@ -595,14 +576,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::privacy::show_windows(&app);
                         Ok(())
                     }
-                    "share_show_now" => crate::privacy::show_main_in_shares(&app, None),
-                    "share_hide_custom" => {
-                        crate::actions::open_settings(&app, "share_privacy.main");
-                        Ok(())
-                    }
                     // A page's own native menu (Record's, DES-02): the main window runs the action picked.
                     id if crate::native_menu::picked_action(id).is_some() => crate::native_menu::picked(&app, id).await,
-                    id if hide_choice(id).is_some() => hide_choice(id).map_or(Ok(()), |choice| crate::privacy::hide_main(&app, choice).map(|_| ())),
                     // ⌘Q or Quit while recording asks first (FIX-11): Stop and Quit, or Cancel (the recording goes on).
                     "quit" if !crate::app_life::may_quit(&app).await => Ok(()),
                     "quit" => {
@@ -734,11 +709,16 @@ fn draw(app: &AppHandle, generation: u64, state: TrayState, shape: MenuShape) {
             let _ = tray.set_icon_with_as_template(Some(Image::new_owned(rgba, base.width(), base.height())), shown.template);
         }
     }
-    if let Some(state) = state
-        && !matches!(state, TrayState::Recording | TrayState::Paused)
-    {
-        // The recording ended: no time beside the icon.
-        let _ = tray.set_title(None::<&str>);
+    if let Some(state) = state {
+        let recording = matches!(state, TrayState::Recording | TrayState::Paused);
+        if !recording {
+            // The recording ended: no time beside the icon.
+            let _ = tray.set_title(None::<&str>);
+        }
+        // Shown while recording whatever the setting; as the setting says otherwise.
+        if cfg!(target_os = "macos") {
+            let _ = tray.set_visible(icon_shown(menu_bar_icon_setting(app), recording));
+        }
     }
     if let Some(shape) = shape
         && let Ok((menu, status)) = build_menu(app, &shape)
@@ -746,6 +726,11 @@ fn draw(app: &AppHandle, generation: u64, state: TrayState, shape: MenuShape) {
         keep_status(app, status);
         let _ = tray.set_menu(Some(menu));
     }
+}
+
+/// "Show EchoLedger in the menu bar" now.
+fn menu_bar_icon_setting(app: &AppHandle) -> bool {
+    app.try_state::<crate::AppState>().is_none_or(|s| s.settings().menu_bar_icon)
 }
 
 /// Keeps the menu's status line for `tick` (its lock let go before anything waits for the main thread).
@@ -783,15 +768,23 @@ pub fn tick(app: &AppHandle) {
     });
 }
 
+/// Whether the menu bar icon shows (pure): as "Show EchoLedger in the menu bar" says, and always while recording, so a
+/// recording is never invisible.
+pub fn icon_shown(setting: bool, recording: bool) -> bool {
+    setting || recording
+}
+
 /// "Show EchoLedger in the menu bar" and "Show timer in the menu bar" changed: the icon shown or not, the time taken off
 /// at once when it is off. The Dock's number follows too (`dock::follow`).
 pub fn follow_settings(app: &AppHandle) {
-    let settings = app.state::<crate::AppState>().settings();
+    let state = app.state::<crate::AppState>();
+    let settings = state.settings();
+    let shown = icon_shown(settings.menu_bar_icon, state.capture.is_recording());
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Some(tray) = handle.tray_by_id(TRAY_ID) {
             if cfg!(target_os = "macos") {
-                let _ = tray.set_visible(settings.menu_bar_icon);
+                let _ = tray.set_visible(shown);
             }
             if !settings.menu_bar_timer {
                 let _ = tray.set_title(None::<&str>);
@@ -861,28 +854,27 @@ mod tests {
     }
 
     #[test]
-    fn the_main_window_is_hidden_from_screen_shares_for_a_chosen_time_and_shown_with_one_line() {
-        let shown = labels(&MenuShape { main_share: Some(MainShare::Shown { call: false }), ..MenuShape::default() });
-        assert!(shown.contains(&"Hide from screen shares ▸ 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "{shown:?}");
-        let in_call = labels(&MenuShape { main_share: Some(MainShare::Shown { call: true }), ..MenuShape::default() });
-        assert!(in_call.contains(&"Hide from screen shares ▸ Until this call ends | 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "offered only while a call is detected");
-        let hidden = labels(&MenuShape { main_share: Some(MainShare::Hidden("Hidden until 14:30 · Show now".into())), ..MenuShape::default() });
-        assert!(hidden.contains(&"Hidden until 14:30 · Show now".to_string()));
-        assert!(!hidden.iter().any(|l| l.starts_with("Hide from screen shares")));
+    fn hide_from_screen_shares_is_the_one_set_every_menu_has() {
+        let shown = labels(&MenuShape { main_share: Some(MainShare::Shown { call: true }), ..MenuShape::default() });
+        assert!(shown.contains(&"Hide from screen shares ▸ For 15 minutes | For 1 hour | Until I quit | Until I turn it off".to_string()), "{shown:?}");
+        // While hidden: what for (greyed), and Stop hiding at the end of the set.
+        let hidden_shape = MenuShape { main_share: Some(MainShare::Hidden("Hidden from screen shares until 14:30".into())), ..MenuShape::default() };
+        let hidden = labels(&hidden_shape);
+        assert!(hidden.contains(&"Hidden from screen shares until 14:30".to_string()));
+        assert!(hidden.contains(&"Hide from screen shares ▸ For 15 minutes | For 1 hour | Until I quit | Until I turn it off |  | Stop hiding".to_string()), "{hidden:?}");
+        let line = menu_entries(&hidden_shape).into_iter().find(|e| matches!(e, Entry::Item { id: "share_hidden", .. })).unwrap();
+        assert!(matches!(line, Entry::Item { enabled: false, .. }), "information, not an action");
+        // A Mac's words; every item is the menu bar's id, so a pick goes through the same routing (the core runs it).
+        let Some(Entry::Submenu { label, items }) = menu_entries_for(&hidden_shape, true).into_iter().find(|e| matches!(e, Entry::Submenu { .. })) else { panic!() };
+        assert_eq!(label, "Hide from Screen Shares");
+        let ids: Vec<&str> = items.iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(*id), _ => None }).collect();
+        assert_eq!(ids, ["action:live.hide15", "action:live.hide60", "action:live.hideUntilQuit", "action:live.hideUntilOff", "action:live.stopHiding"]);
         let held = labels(&MenuShape { held_back: Some(crate::privacy::held_back_line(crate::privacy::ASSIST)), ..MenuShape::default() });
         assert!(held.contains(&"The Live Assist card couldn't be hidden from screen shares, so it stays off.".to_string()), "the tray tells the person");
         let none = labels(&MenuShape::default());
         assert!(!none.iter().any(|l| l.contains("screen share")), "nothing before the first status");
-        // Each duration's id stands for its choice; Custom… opens Settings.
-        use crate::privacy::share::HideFor;
-        assert_eq!(hide_choice("share_hide_call"), Some(HideFor::CallEnds));
-        assert_eq!(hide_choice("share_hide_15"), Some(HideFor::Minutes15));
-        assert_eq!(hide_choice("share_hide_60"), Some(HideFor::Hour1));
-        assert_eq!(hide_choice("share_hide_tomorrow"), Some(HideFor::Tomorrow));
-        assert_eq!(hide_choice("share_hide_off"), Some(HideFor::UntilOff));
-        assert_eq!(hide_choice("share_hide_custom"), None);
-        let source = include_str!("tray.rs");
-        assert!(source.contains("\"share_show_now\" => crate::privacy::show_main_in_shares(&app, None)"));
+        // "Until tomorrow" and "Custom…" are Settings' only.
+        assert!(!hidden.iter().any(|l| l.contains("tomorrow") || l.contains("Custom")));
     }
 
     #[test]
@@ -891,6 +883,16 @@ mod tests {
         assert_eq!(with_readiness(TrayState::Uploading, true), TrayState::Attention);
         assert_eq!(with_readiness(TrayState::Recording, true), TrayState::Recording, "a recording's indicator always wins");
         assert_eq!(with_readiness(TrayState::Idle, false), TrayState::Idle);
+    }
+
+    #[test]
+    fn the_menu_bar_icon_always_shows_while_recording() {
+        assert!(icon_shown(true, false));
+        assert!(!icon_shown(false, false), "Show EchoLedger in the menu bar off");
+        assert!(icon_shown(false, true), "a recording is never invisible");
+        let code = include_str!("tray.rs").split("#[cfg(test)]").next().unwrap();
+        assert!(code.contains("let _ = tray.set_visible(icon_shown(menu_bar_icon_setting(app), recording));"), "followed as the recording starts and ends");
+        assert!(code.contains("let shown = icon_shown(settings.menu_bar_icon, state.capture.is_recording());"), "and as the setting changes");
     }
 
     #[test]
@@ -939,13 +941,12 @@ mod tests {
 
     #[test]
     fn menu_ids_keep_their_actions() {
-        let shape = MenuShape { recording: true, review: 1, main_share: Some(MainShare::Hidden("Hidden until you show it · Show now".into())), ..MenuShape::default() };
+        let shape = MenuShape { recording: true, review: 1, main_share: Some(MainShare::Hidden("Hidden from screen shares until you show it".into())), ..MenuShape::default() };
         let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), _ => None }).collect();
-        assert_eq!(ids, [STATUS_ID, "record", "pause", "mic_note", "assist", "auto", "share_show_now", "hide_windows", "review", "open", crate::app_menu::SETTINGS, "quit"]);
-        // Start Live Assist… opens the window on Live (the person asked from the menu).
-        let source = include_str!("tray.rs");
-        let arm = &source[source.find("\"assist\" =>").unwrap()..];
-        assert!(arm[..arm.find("Ok(())").unwrap()].contains("crate::actions::navigate(&app, \"live\", None, false)"));
+        assert_eq!(ids, [STATUS_ID, "record", "pause", "mic_note", "action:live.startAssist", "auto", "share_hidden", "hide_windows", "review", "open", crate::app_menu::SETTINGS, "quit"]);
+        // Start Live Assist… is the menu bar's command: the core opens the window quietly on Live, as the Dock's does.
+        assert_eq!(crate::native_menu::route("live.startAssist", crate::lifecycle::Phase::Absent), crate::native_menu::Route::Core);
+        assert!(!include_str!("tray.rs").contains("\"assist\" =>"));
     }
 
     #[test]

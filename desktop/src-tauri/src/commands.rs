@@ -87,7 +87,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
-        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::tray_line(&hide, chrono::Local::now())),
+        Some(hide) => crate::tray::MainShare::Hidden(format!("Hidden from screen shares {}", crate::privacy::share::until_words(&hide, chrono::Local::now()))),
         None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
     });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
@@ -1262,10 +1262,7 @@ pub fn hide_captions(app: AppHandle) -> AppStatus {
 /// with the batch's client and language (none = automatic). Hashing and copying run off the main thread.
 #[tauri::command]
 pub async fn import_voice_notes(app: AppHandle, paths_list: Vec<String>, client_id: Option<String>, language: Option<String>) -> AppResult<crate::files::ImportSummary> {
-    ensure_unlocked(&app.state::<AppState>())?;
-    if let Some(refusal) = app.state::<AppState>().viewer_refusal() {
-        return Err(AppError::Message(refusal));
-    }
+    may_import(&app.state::<AppState>())?;
     let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
     let language = crate::settings::language_or_none(language.as_deref());
     let sources: Vec<std::path::PathBuf> = paths_list.iter().map(std::path::PathBuf::from).collect();
@@ -1847,6 +1844,20 @@ pub fn lock_status_of(state: &AppState) -> LockStatus {
 }
 
 /// Library, transcript and export commands refuse to answer while the app is locked.
+/// What stops an import (pure): a locked EchoLedger ("EchoLedger is locked."), or a viewer's computer (its sentence).
+pub fn import_refusal(locked: bool, viewer: Option<String>) -> Option<String> {
+    if locked { Some("EchoLedger is locked.".into()) } else { viewer }
+}
+
+/// Every import's guard, one for all (the Import button and a drop on the window; Open With and a drop on the Dock icon,
+/// dock::opened): nothing is uploaded on the person's account while EchoLedger is locked, nor from a viewer's computer.
+pub fn may_import(state: &AppState) -> AppResult<()> {
+    match import_refusal(state.lock.is_locked(), state.viewer_refusal()) {
+        Some(refusal) => Err(AppError::Message(refusal)),
+        None => Ok(()),
+    }
+}
+
 pub fn ensure_unlocked(state: &AppState) -> AppResult<()> {
     if state.lock.is_locked() { Err(AppError::msg("EchoLedger is locked.")) } else { Ok(()) }
 }

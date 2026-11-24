@@ -286,7 +286,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "shortcuts.app", title: "In the app", page: "shortcuts", section: "In the app", kind: "list", keywords: ["keys", "search", "play pause", "find"] },
   { id: "app.autostart", title: "Start when I sign in", page: null, root: "App", kind: "switch", resettable: true, keywords: ["launch at login", "startup", "autostart", "open at login"] },
   // FIX-11: the Mac's menu bar icon, its timer, and the Dock icon's number.
-  { id: "app.menu_bar_icon", title: "Show EchoLedger in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+  { id: "app.menu_bar_icon", title: "Show EchoLedger in the menu bar", description: "Shown while recording", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["menu bar", "status bar", "icon", "tray"], ru: ["menu bar icon"], ur: ["مینو بار"] },
   { id: "app.menu_bar_timer", title: "Show timer in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["menu bar", "timer", "recording time", "clock"], ru: ["timer"], ur: ["ٹائمر"] },

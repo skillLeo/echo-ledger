@@ -72,15 +72,6 @@
     "publisher": "SkillLeo",
     "copyright": "© 2026 SkillLeo",
     "shortDescription": "Private, accurate transcription for calls and meetings",
-    "fileAssociations": [
-      {
-        "ext": ["m4a", "mp3", "wav", "aac", "ogg", "opus", "amr", "flac", "webm"],
-        "name": "Audio",
-        "description": "Audio to transcribe with EchoLedger",
-        "role": "Viewer",
-        "rank": "Alternate"
-      }
-    ],
     "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",

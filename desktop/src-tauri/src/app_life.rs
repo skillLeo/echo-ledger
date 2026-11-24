@@ -88,23 +88,41 @@ pub fn quit_goes_on(recording: bool, saving: bool, answer: Option<bool>) -> bool
     !recording || saving || answer == Some(true)
 }
 
-/// Asks before the person's own Quit while a recording runs: Stop and Quit, or Cancel. A quit from outside (the Dock's
-/// Quit, logging out) never asks: macOS waits while the recording is kept (`mac`).
+/// Asks before the person's own Quit while a recording runs: Stop and Quit, or Cancel. On a Mac the question is the app's
+/// own alert, hidden from screen shares as its other windows are (`mac::ask_quit`); the Dock's Quit and ⌘Tab then Q ask
+/// it too, while logging out, restarting and shutting down never wait for it (`mac`).
 pub async fn may_quit(app: &tauri::AppHandle) -> bool {
     use tauri::Manager;
     let recording = app.try_state::<crate::AppState>().is_some_and(|s| s.capture.is_recording());
     if quit_goes_on(recording, quit_save().saving(), None) {
         return true;
     }
-    let (title, body, stop, cancel) = QUIT_WHILE_RECORDING;
-    let answer = rfd::AsyncMessageDialog::new()
-        .set_level(rfd::MessageLevel::Warning)
-        .set_title(title)
-        .set_description(body)
-        .set_buttons(rfd::MessageButtons::OkCancelCustom(stop.into(), cancel.into()))
-        .show()
-        .await;
-    quit_goes_on(recording, false, Some(answer == rfd::MessageDialogResult::Custom(stop.into())))
+    quit_goes_on(recording, false, Some(ask(app).await))
+}
+
+/// The question itself: true for Stop and Quit.
+async fn ask(app: &tauri::AppHandle) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let _ = app.run_on_main_thread(move || {
+            let _ = tx.send(objc2::MainThreadMarker::new().is_some_and(mac::ask_quit));
+        });
+        rx.await.unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        let (title, body, stop, cancel) = QUIT_WHILE_RECORDING;
+        let answer = rfd::AsyncMessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title(title)
+            .set_description(body)
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(stop.into(), cancel.into()))
+            .show()
+            .await;
+        answer == rfd::MessageDialogResult::Custom(stop.into())
+    }
 }
 
 /// The app's one [`QuitSave`].
@@ -136,6 +154,27 @@ pub enum TerminateReply {
     Later,
 }
 
+/// What a quit from outside does on a Mac (pure): nothing records, it quits now; a quit already keeps the recording, or
+/// the system quits (logging out, restarting, shutting down: the Apple event's quit reason), the recording is kept
+/// first without a question, so a logout never waits for the person; any other (the Dock's Quit, ⌘Tab then Q, a
+/// script) asks first, as ⌘Q does.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminatePlan {
+    Now,
+    Keep,
+    Ask,
+}
+
+#[cfg(any(target_os = "macos", test))]
+pub fn terminate_plan(recording: bool, saving: bool, system_quit: bool) -> TerminatePlan {
+    match terminate_reply(recording, saving) {
+        TerminateReply::Now => TerminatePlan::Now,
+        TerminateReply::Later if saving || system_quit => TerminatePlan::Keep,
+        TerminateReply::Later => TerminatePlan::Ask,
+    }
+}
+
 #[cfg(any(target_os = "macos", test))]
 pub fn terminate_reply(recording: bool, saving: bool) -> TerminateReply {
     if recording || saving { TerminateReply::Later } else { TerminateReply::Now }
@@ -160,10 +199,37 @@ pub mod mac {
 
     use objc2::MainThreadMarker;
     use objc2::runtime::{AnyClass, AnyObject, Imp, NSObjectProtocol, Sel};
-    use objc2_app_kit::{NSApplication, NSApplicationTerminateReply};
+    use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSAlertStyle, NSApplication, NSApplicationTerminateReply, NSWindowSharingType};
+    use objc2_foundation::{NSAppleEventManager, NSString};
     use tauri::{AppHandle, Manager};
 
-    use super::{SAVE_LIMIT, SAVE_LIMIT_BACKSTOP, TerminateReply, terminate_reply};
+    use super::{QUIT_WHILE_RECORDING, SAVE_LIMIT, SAVE_LIMIT_BACKSTOP, TerminatePlan, terminate_plan};
+
+    /// The Apple event's quit reason (`keyAEQuitReason`, 'why?'): present when the system quits the app (logging out,
+    /// restarting, shutting down), absent for the Dock's Quit, ⌘Tab then Q or a script.
+    const KEY_AE_QUIT_REASON: u32 = u32::from_be_bytes(*b"why?");
+
+    fn system_quit() -> bool {
+        let Some(event) = NSAppleEventManager::sharedAppleEventManager().currentAppleEvent() else { return false };
+        // SAFETY: `attributeDescriptorForKeyword:` takes an AEKeyword (a FourCharCode, u32) and returns an
+        // NSAppleEventDescriptor or nil; only whether it is nil is read.
+        let reason: *mut AnyObject = unsafe { objc2::msg_send![&*event, attributeDescriptorForKeyword: KEY_AE_QUIT_REASON] };
+        !reason.is_null()
+    }
+
+    /// "Stop the recording and quit?" as the app's own alert, hidden from screen shares as its other windows are. True
+    /// for Stop and Quit. On the main thread; it waits for the answer.
+    pub fn ask_quit(mtm: MainThreadMarker) -> bool {
+        let (title, body, stop, cancel) = QUIT_WHILE_RECORDING;
+        let alert = NSAlert::new(mtm);
+        alert.setAlertStyle(NSAlertStyle::Warning);
+        alert.setMessageText(&NSString::from_str(title));
+        alert.setInformativeText(&NSString::from_str(body));
+        alert.addButtonWithTitle(&NSString::from_str(stop));
+        alert.addButtonWithTitle(&NSString::from_str(cancel));
+        alert.window().setSharingType(NSWindowSharingType::None);
+        alert.runModal() == NSAlertFirstButtonReturn
+    }
 
     static APP: OnceLock<AppHandle> = OnceLock::new();
     /// The delegate answers `applicationShouldTerminate:` (the smoke test fails without it).
@@ -214,9 +280,16 @@ pub mod mac {
     extern "C-unwind" fn should_terminate(_delegate: &AnyObject, _cmd: Sel, _sender: *mut AnyObject) -> usize {
         let Some(app) = APP.get() else { return NSApplicationTerminateReply::TerminateNow.0 };
         let recording = app.try_state::<crate::AppState>().is_some_and(|s| s.capture.is_recording());
-        if terminate_reply(recording, super::quit_save().saving()) == TerminateReply::Now {
-            return NSApplicationTerminateReply::TerminateNow.0;
+        match terminate_plan(recording, super::quit_save().saving(), system_quit()) {
+            TerminatePlan::Now => return NSApplicationTerminateReply::TerminateNow.0,
+            TerminatePlan::Keep => {}
+            // The Dock's Quit: asked first, here (AppKit waits for this answer); Cancel and nothing quits.
+            TerminatePlan::Ask => match MainThreadMarker::new() {
+                Some(mtm) if ask_quit(mtm) => {}
+                _ => return NSApplicationTerminateReply::TerminateCancel.0,
+            },
         }
+        // The recording is kept, then the app quits: the 22 s backstop starts only now (after Stop and Quit).
         if !PENDING.swap(true, Ordering::SeqCst) {
             // Whatever happens to the keeping, the main queue answers once its time is up.
             if let Ok(when) = dispatch2::DispatchTime::try_from(SAVE_LIMIT_BACKSTOP) {
@@ -256,6 +329,25 @@ mod tests {
     fn code(file: &str) -> String {
         let text = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file)).unwrap();
         text.split("\n#[cfg(test)]\nmod tests").next().unwrap().to_string()
+    }
+
+    #[test]
+    fn the_dock_s_quit_asks_too_and_logging_out_never_waits_for_an_answer() {
+        assert_eq!(terminate_plan(false, false, false), TerminatePlan::Now, "nothing records");
+        assert_eq!(terminate_plan(false, false, true), TerminatePlan::Now);
+        assert_eq!(terminate_plan(true, false, false), TerminatePlan::Ask, "the Dock's Quit, ⌘Tab then Q: asked as ⌘Q is");
+        assert_eq!(terminate_plan(true, false, true), TerminatePlan::Keep, "logging out, restarting, shutting down: kept, no question");
+        assert_eq!(terminate_plan(true, true, false), TerminatePlan::Keep, "a quit already keeps it");
+        // Told apart by the Apple event's quit reason ('why?'); Cancel answers TerminateCancel; the backstop starts only
+        // after the answer.
+        let mac = code("app_life.rs");
+        let mac = mac.split("pub mod mac").nth(1).unwrap();
+        assert!(mac.contains("u32::from_be_bytes(*b\"why?\")") && mac.contains("attributeDescriptorForKeyword: KEY_AE_QUIT_REASON"));
+        assert!(mac.contains("_ => return NSApplicationTerminateReply::TerminateCancel.0,"));
+        let ask = mac.find("TerminatePlan::Ask =>").unwrap();
+        assert!(ask < mac.find("dispatch2::DispatchQueue::main().after(when, reply_once)").unwrap(), "the backstop after the question");
+        // The question is the app's own alert, hidden from screen shares.
+        assert!(mac.contains("alert.window().setSharingType(NSWindowSharingType::None);"));
     }
 
     #[test]

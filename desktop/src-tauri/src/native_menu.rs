@@ -193,7 +193,7 @@ pub fn acts_outside_main(action: &str) -> bool {
 /// recording's, the captions', the pill's, Auto-record, hiding from screen shares (Hide from Screen Shares is its
 /// times' sub-menu), and the person's Hide EchoLedger Windows and Show EchoLedger Windows. The page enables them by
 /// their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
-pub const CORE_RUNS: [&str; 15] = [
+pub const CORE_RUNS: [&str; 16] = [
     "file.newRecording",
     "file.newVoiceNote",
     "live.startAssist",
@@ -205,11 +205,44 @@ pub const CORE_RUNS: [&str; 15] = [
     "live.hide15",
     "live.hide60",
     "live.hideUntilQuit",
+    "live.hideUntilOff",
     "live.stopHiding",
     "live.hideWindowsNow",
     "live.showWindows",
     "window.pill",
 ];
+
+/// Hide from Screen Shares ›, one set in every menu (the menu bar's from actions.json, the same words; the menu bar
+/// icon's and the Dock's from here): each line's action, its item id, Windows' words and a Mac's. "Until tomorrow" and
+/// "Custom…" are Settings' only.
+pub const HIDE_FROM_SHARES: [(&str, &str, &str, &str); 4] = [
+    ("live.hide15", "action:live.hide15", "For 15 minutes", "For 15 Minutes"),
+    ("live.hide60", "action:live.hide60", "For 1 hour", "For 1 Hour"),
+    ("live.hideUntilQuit", "action:live.hideUntilQuit", "Until I quit", "Until I Quit"),
+    ("live.hideUntilOff", "action:live.hideUntilOff", "Until I turn it off", "Until I Turn It Off"),
+];
+/// Its last line, while the main window is hidden from screen shares.
+pub const STOP_HIDING: (&str, &str, &str, &str) = ("live.stopHiding", "action:live.stopHiding", "Stop hiding", "Stop Hiding");
+/// Its title: Windows', a Mac's.
+pub const HIDE_FROM_SHARES_TITLE: (&str, &str) = ("Hide from screen shares", "Hide from Screen Shares");
+
+/// One line of the set: an item (its id, its words), or the line before Stop Hiding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HideLine {
+    Item { id: &'static str, label: &'static str },
+    Separator,
+}
+
+/// The set for the moment (pure), in the platform's words: the four times, and while hidden a line and Stop Hiding.
+pub fn hide_from_shares(hiding: bool, macos: bool) -> Vec<HideLine> {
+    let words = |(_, id, win, mac): (&'static str, &'static str, &'static str, &'static str)| HideLine::Item { id, label: if macos { mac } else { win } };
+    let mut lines: Vec<HideLine> = HIDE_FROM_SHARES.into_iter().map(words).collect();
+    if hiding {
+        lines.push(HideLine::Separator);
+        lines.push(words(STOP_HIDING));
+    }
+    lines
+}
 
 /// What the core does for one of [`CORE_RUNS`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -249,6 +282,7 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
         "live.hide15" => CoreStep::HideFromShares(HideFor::Minutes15),
         "live.hide60" => CoreStep::HideFromShares(HideFor::Hour1),
         "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilQuit),
+        "live.hideUntilOff" => CoreStep::HideFromShares(HideFor::UntilOff),
         "live.stopHiding" => CoreStep::StopHiding,
         "live.hideWindowsNow" => CoreStep::HideWindows,
         "live.showWindows" => CoreStep::ShowWindows,

@@ -142,6 +142,7 @@
     { "id": "live.hide15", "label": "For 15 minutes", "menu": "Live" },
     { "id": "live.hide60", "label": "For 1 hour", "menu": "Live" },
     { "id": "live.hideUntilQuit", "label": "Until I quit", "menu": "Live" },
+    { "id": "live.hideUntilOff", "label": "Until I turn it off", "menu": "Live" },
     { "id": "live.stopHiding", "label": "Stop hiding", "menu": "Live", "when": ["hiding"] },
     { "id": "live.hideWindowsNow", "label": "Hide EchoLedger windows now", "menu": "Live", "global": true },
     { "id": "live.showWindows", "label": "Show EchoLedger windows", "menu": "Live", "when": ["windowsHidden"] },
