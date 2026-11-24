@@ -562,6 +562,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::actions::open_settings(&app, "share_privacy.main");
                         Ok(())
                     }
+                    // A page's own native menu (Record's, DES-02): the main window runs the action picked.
+                    id if crate::native_menu::picked_action(id).is_some() => {
+                        crate::native_menu::picked(&app, id);
+                        Ok(())
+                    }
                     id if hide_choice(id).is_some() => hide_choice(id).map_or(Ok(()), |choice| crate::privacy::hide_main(&app, choice).map(|_| ())),
                     "quit" => {
                         // Never lose audio on quit: a running recording is kept first (the Dock's Quit does the same). When

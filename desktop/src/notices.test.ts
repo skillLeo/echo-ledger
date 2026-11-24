@@ -3,8 +3,19 @@
 // in particular. A plain error (`notify(text, true)`) may leave it out. Read from the source, so a new call site that
 // forgets is caught here.
 import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const sources = import.meta.glob<string>("./views/**/*.tsx", { query: "?raw", import: "default", eager: true });
+// Read from disk when the test runs (not import.meta.glob: Vitest's module cache keeps a glob's list of files from a run
+// before a file was added). Keyed as the glob did: "./views/main/MainApp.tsx".
+const here = dirname(fileURLToPath(import.meta.url));
+const walk = (at: string): string[] => readdirSync(at).flatMap((name) => {
+  const path = join(at, name);
+  return statSync(path).isDirectory() ? walk(path) : [path];
+});
+const sources: Record<string, string> = Object.fromEntries(walk(join(here, "views")).filter((path) => path.endsWith(".tsx"))
+  .map((path) => [`./${relative(here, path).split("\\").join("/")}`, readFileSync(path, "utf8")]));
 
 /** The text of each call `name(...)` in `source`, with its arguments split at the top level. */
 export function callsOf(source: string, name: RegExp): { line: number; args: string[] }[] {

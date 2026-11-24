@@ -66,7 +66,7 @@ export function AccountCard() {
   return (
     <>
       <Card className="el-profile" label={account.name || account.email}>
-        {picture ? <img className="el-avatar" src={picture} alt="" /> : <Avatar initials={initials(account.name, account.email)} />}
+        <Avatar initials={initials(account.name, account.email)} photo={picture} color={account.avatar_color} seed={account.email} />
         <div className="el-profile__who">
           <span className="el-title-s" dir="auto">{account.name || account.email}</span>
           {account.name && <span className="el-caption el-profile__email">{account.email}</span>}

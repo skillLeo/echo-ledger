@@ -2,6 +2,9 @@
 // the Rust tests) goes through the typed wrappers in ipc.ts, the pure helpers in library.ts / format.ts and the
 // Library screen, and has to come out as what the user sees.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "./ipc";
 import ipcSource from "./ipc.ts?raw";
@@ -23,7 +26,11 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefi
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const files = import.meta.glob("../../src-tauri/tests/fixtures/server/*.json", { eager: true, import: "default" }) as Record<string, Json>;
+// Read from disk when the test runs (not import.meta.glob: Vitest's module cache keeps a glob's list of files from a run
+// before a fixture was added). Keyed as the glob did.
+const fixturesAt = join(dirname(fileURLToPath(import.meta.url)), "../../src-tauri/tests/fixtures/server");
+const files: Record<string, Json> = Object.fromEntries(readdirSync(fixturesAt).filter((name) => name.endsWith(".json"))
+  .map((name) => [`../../src-tauri/tests/fixtures/server/${name}`, JSON.parse(readFileSync(join(fixturesAt, name), "utf8")) as Json]));
 const fx = (name: string): Json => {
   const found = files[`../../src-tauri/tests/fixtures/server/${name}.json`];
   if (!found) throw new Error(`fixture ${name} not found`);

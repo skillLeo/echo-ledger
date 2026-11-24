@@ -2,7 +2,7 @@
 // (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page by name (a project, a
 // smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups: Actions,
 // Settings, Pages, Recordings. It is the window's one search: the top bar's field and the sidebar's Search open it.
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { recordingName } from "../../lib/library";
@@ -154,7 +154,7 @@ export function paletteCommands(status: AppStatus, actions: {
   return list;
 }
 
-export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic" }: {
+export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "" }: {
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
@@ -170,8 +170,10 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   settings?: (query: string) => PaletteSetting[];
   /** "v2": drawn with the new design's values (v2.css .el-palette), the same rows, keys and ranking. */
   look?: "classic" | "v2";
+  /** What was typed already (the title row's field, UX-20): the search starts from it. */
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const entitlements = useEntitlements();
   // The row the arrows moved to; none: the best match (Enter runs it).
   const [index, setIndex] = useState<number | null>(null);
@@ -180,6 +182,19 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const [lookingUp, setLookingUp] = useState(false);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Under the three levels' title row (UX-20) the results drop down from its search field, 560 px wide and centred on
+  // it (kept inside the window), over a lighter scrim: the field itself grows into the search.
+  const [fromRow, setFromRow] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (look !== "v2") return;
+    const cell = document.querySelector<HTMLElement>(".el-titlerow__middle");
+    const box = cell?.getBoundingClientRect();
+    if (!box || !box.width) return;
+    const wide = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--el-desktop-search-results-width")) || 560;
+    const half = Math.min(wide, window.innerWidth - 16) / 2;
+    const centre = Math.min(Math.max(box.left + box.width / 2, half + 8), window.innerWidth - half - 8);
+    setFromRow({ position: "fixed", top: Math.max(4, box.top + box.height / 2 - 18), left: centre });
+  }, [look]);
   // Where the pointer last was over the list: only its own movement chooses a row (see `pointed`).
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra, v2: look === "v2" }), [status, onGo, run, folders, onFolder, extra, look]);
@@ -271,8 +286,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   };
 
   return (
-    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey}>
+    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${fromRow ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
           <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder="Search recordings, settings, pages… or type a command"

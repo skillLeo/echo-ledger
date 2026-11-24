@@ -565,8 +565,9 @@
   border: var(--el-border-hairline) solid var(--el-role-border-default);
   border-radius: var(--el-component-card-radius);
 }
+/* The avatar: a circle with the initials, or the photo filling it. Classic keeps its neutral circle. */
 .el-avatar {
-  flex: none;
+  position: relative; flex: none; overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center;
   inline-size: var(--el-space-48); block-size: var(--el-space-48);
   border-radius: var(--el-radius-full);
@@ -574,8 +575,25 @@
   color: var(--el-role-text-primary);
   font-size: var(--el-text-title-s-size);
   font-weight: var(--el-text-title-s-weight);
+  user-select: none;
 }
-.el-avatar--sm { inline-size: var(--el-space-32); block-size: var(--el-space-32); font-size: var(--el-text-caption-size); }
+.el-avatar > img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+/* DES-08, in the three levels and the account menu: initials on one of 8 solid colours (role.avatar.*, the server's
+   avatar_color) and a 1 px inner ring over the colour or the photo, so neither melts into the background. */
+:is(.el-shell--nav, .el-account-head) .el-avatar { color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 var(--el-desktop-avatar-ring) var(--el-role-avatar-ring); pointer-events: none; }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="0"] { background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="1"] { background: var(--el-role-avatar-1); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="2"] { background: var(--el-role-avatar-2); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="3"] { background: var(--el-role-avatar-3); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="4"] { background: var(--el-role-avatar-4); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="5"] { background: var(--el-role-avatar-5); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="6"] { background: var(--el-role-avatar-6); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="7"] { background: var(--el-role-avatar-7); }
+.el-avatar--sm, .el-avatar--list { inline-size: var(--el-desktop-avatar-list); block-size: var(--el-desktop-avatar-list); font-size: var(--el-text-caption-size); }
+.el-avatar--rail { inline-size: var(--el-desktop-avatar-rail); block-size: var(--el-desktop-avatar-rail); font-size: var(--el-desktop-text-avatar-rail-size); font-weight: var(--el-desktop-text-avatar-rail-weight); }
+.el-avatar--menu { inline-size: var(--el-desktop-avatar-menu); block-size: var(--el-desktop-avatar-menu); font-size: var(--el-desktop-text-avatar-menu-size); font-weight: var(--el-desktop-text-avatar-menu-weight); }
+.el-avatar--profile { inline-size: var(--el-desktop-avatar-profile); block-size: var(--el-desktop-avatar-profile); font-size: var(--el-text-title-l-size); font-weight: var(--el-text-title-l-weight); }
 .el-avatar--img { inline-size: var(--el-space-32); block-size: var(--el-space-32); object-fit: cover; padding: 0; }
 
 .el-sidebar {
@@ -1265,6 +1283,10 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-palette .palette-detail mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 .el-palette .palette-empty { padding: var(--el-space-12) var(--el-space-8); }
 .el-palette .palette-foot { padding: var(--el-space-8) var(--el-space-16); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+/* From the title row (UX-20): the field grows into the search, its results drop down under it, 560 px wide. */
+.el-palette.el-palette--row { padding: 0; background: color-mix(in srgb, var(--el-role-scrim-default) 25%, transparent); }
+.el-palette--row .palette { translate: -50% 0; margin: 0; inline-size: min(var(--el-desktop-search-results-width), calc(100% - var(--el-space-16))); }
+.el-palette--row .palette-input { padding: var(--el-space-8) 0; font-size: var(--el-desktop-text-body-size); }
 
 /* The top of the Library (plan 2): the get-started card until setup is done, and the needs-action banner. */
 .el-library-top { display: flex; flex-direction: column; gap: var(--el-space-12); }
@@ -1913,47 +1935,161 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-check-box > .el-check:indeterminate { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
 .el-check-box:has(> .el-check:indeterminate)::after { content: ""; position: absolute; inset-inline: var(--el-space-4); inset-block-start: 50%; block-size: var(--el-border-strong); margin-block-start: calc(var(--el-border-strong) / -2); background: var(--el-role-text-on-accent); pointer-events: none; }
 
-/* ---- The three levels (PLAN_NAV_3_LEVELS): rail 72 px · panel 260 px · page ------------------------------------ */
+/* ---- The three levels (PLAN_NAV_3_LEVELS): rail · panel · page, under one title row (UX-20) --------------------------
+   The rail and the panel run to the very top; the page's column starts with the title row (TitleRow.tsx). On a Mac the
+   window's buttons sit in the rail's top cell, as tall as the row; full screen hides them and the cell shrinks. */
 .el-shell--nav { display: grid; grid-template-columns: auto auto minmax(0, 1fr); block-size: 100%; position: relative; }
 .el-shell--nav > .el-shell__main { grid-column: 3; }
+/* DES-01: 72 px, a label under every icon, never scrolling (a short window moves Help and Setup into the avatar's menu). */
 .el-rail {
-  grid-column: 1; display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4);
-  inline-size: calc(var(--el-space-64) + var(--el-space-8)); padding-block: var(--el-space-12); min-block-size: 0; overflow-y: auto;
+  grid-column: 1; display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2);
+  inline-size: var(--el-desktop-rail-width); padding-block: var(--el-space-8); min-block-size: 0; overflow: hidden;
   background: var(--el-role-bg-subtle); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
-[data-platform="macos"] .el-rail { padding-block-start: var(--el-space-40); }
-.el-rail__home { display: inline-flex; border: 0; padding: var(--el-space-4); background: transparent; border-radius: var(--el-radius-md); cursor: pointer; }
-.el-rail__home:hover { background: var(--el-role-border-default); }
-.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: 0; margin-block: var(--el-space-4) var(--el-space-8); }
-.el-rail__rec {
-  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-40); block-size: var(--el-space-40);
-  border: 0; border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); cursor: pointer;
+.el-rail__top { display: none; flex: none; align-self: stretch; }
+[data-platform="macos"] .el-shell--nav .el-rail { padding-block-start: 0; }
+[data-platform="macos"] .el-rail__top { display: block; block-size: var(--el-desktop-titlerow-height); }
+/* The buttons' own spot (and 4 px round them), always at the window's left whatever the page's direction. */
+.el-rail__lights {
+  position: fixed; z-index: var(--el-layer-sticky); left: var(--el-desktop-titlerow-lights-left); top: var(--el-desktop-titlerow-lights-top);
+  inline-size: var(--el-desktop-titlerow-lights-width); block-size: var(--el-desktop-titlerow-lights-height);
 }
-.el-rail__rec:hover { background: var(--el-role-accent-hover, var(--el-role-accent-default)); }
-.el-rail__rec--stop { background: var(--el-role-danger-default); }
-.el-rail__record .el-button.el-rail__rec-more { min-block-size: var(--el-space-16); padding: 0 var(--el-space-4); }
-.el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2); inline-size: 100%; }
-.el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-8); }
-.el-rail__item {
-  display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2); inline-size: calc(100% - var(--el-space-8));
-  padding: var(--el-space-4) 0; border: 0; border-radius: var(--el-radius-md); background: transparent; color: var(--el-role-text-secondary); cursor: pointer; font: inherit;
+[data-platform="macos"]:not([data-titlebar]) .el-rail__lights { display: none; }
+[data-platform="macos"]:not([data-titlebar]) .el-rail__top { block-size: var(--el-desktop-titlerow-rail-top-fullscreen); }
+/* DES-02: Record, a joined 56×40 pill: the 40 px circle with its red dot records now; the 16 px chevron behind a hairline
+   opens its menu; "Record" under it. Red with ■ and the time while recording. */
+.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); flex: none; margin-block: var(--el-space-4) var(--el-space-8); }
+.el-record__pill {
+  display: flex; box-sizing: border-box; inline-size: var(--el-desktop-record-width); block-size: var(--el-desktop-record-height);
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-full); background: var(--el-role-bg-surface);
 }
-.el-rail__item:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
-.el-rail__item[aria-current="page"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-default); }
-.el-rail__icon { position: relative; display: inline-flex; }
-.el-rail__label { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-record__now, .el-record__more { display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--el-role-text-secondary); }
+.el-record__now { flex: 1 1 auto; border-radius: var(--el-radius-full); }
+.el-record__more { flex: none; inline-size: var(--el-desktop-record-chevron); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); border-start-end-radius: var(--el-radius-full); border-end-end-radius: var(--el-radius-full); }
+.el-record__now:hover, .el-record__more:hover, .el-record__more[aria-expanded="true"] { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); color: var(--el-role-text-primary); }
+.el-record__now:focus-visible, .el-record__more:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: calc(-1 * var(--el-focus-width)); }
+.el-record__now[aria-disabled="true"] { cursor: progress; }
+.el-record__dot { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full); background: var(--el-role-record-default); }
+.el-record__stop { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__pill { background: var(--el-role-record-default); border-color: var(--el-role-record-default); }
+.el-rail__record--on .el-record__now, .el-rail__record--on .el-record__more { color: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__more { border-inline-start-color: color-mix(in srgb, var(--el-role-text-on-accent) 40%, transparent); }
+.el-rail__record--on .el-record__now:hover, .el-rail__record--on .el-record__more:hover { background: color-mix(in srgb, var(--el-role-text-on-accent) 16%, transparent); }
+.el-rail__record .el-rail__label { color: var(--el-role-text-secondary); }
+.el-rail__record--on .el-rail__label { color: var(--el-role-record-default); font-weight: var(--el-text-body-strong-weight); font-variant-numeric: tabular-nums; }
+.el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: 0; inline-size: 100%; }
+.el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-4); }
+/* An item: 56 px, the 20 px icon in a 48×28 pill (the accent's tint when selected, 8% on hover), 4 px, the 11 px label. */
+.el-rail__item, .el-rail__me .el-button.el-rail__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--el-space-4);
+  inline-size: 100%; min-block-size: var(--el-desktop-rail-item-height); padding: 0; border: 0; border-radius: 0;
+  background: transparent; color: var(--el-role-text-secondary); cursor: pointer; font: inherit;
+}
+.el-rail__item:hover, .el-rail__me .el-button.el-rail__item:hover { background: transparent; color: var(--el-role-text-primary); }
+.el-rail__item:focus-visible { outline: none; }
+.el-rail__icon {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-desktop-rail-pill-width); block-size: var(--el-desktop-rail-pill-height); border-radius: var(--el-radius-full);
+}
+.el-rail__item:hover .el-rail__icon { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
+.el-rail__item:focus-visible .el-rail__icon { box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-focus); }
+.el-rail__item[aria-current="page"] .el-rail__icon { background: var(--el-role-accent-soft); }
+.el-rail__item[aria-current="page"] { color: var(--el-role-accent-text); }
+/* Never clipped: the labels are short (9 letters at most), and Urdu's line box is taller than its 14 px. */
+.el-rail__label {
+  max-inline-size: 100%; white-space: nowrap;
+  font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); font-weight: var(--el-desktop-text-rail-label-weight);
+}
 .el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+/* Badges: on the icon's top-right corner, cut out of it by a ring in the rail's colour. The number (Activity's only):
+   16 px tall, 10 px semibold tabular figures, the accent with its text colour; a dot: 8 px (Live's red, recording). */
 .el-rail__count {
-  position: absolute; inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-end: calc(-1 * var(--el-space-8)); min-inline-size: var(--el-space-16);
-  padding-inline: var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent);
-  font-size: var(--el-text-caption-size); line-height: var(--el-space-16); text-align: center;
+  position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-height) / 2);
+  inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-height) / 2);
+  min-inline-size: var(--el-desktop-badge-height); block-size: var(--el-desktop-badge-height); padding-inline: var(--el-desktop-badge-padding); box-sizing: border-box;
+  border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent);
+  box-shadow: 0 0 0 var(--el-desktop-badge-ring) var(--el-role-bg-subtle);
+  font-size: var(--el-desktop-text-badge-size); line-height: var(--el-desktop-text-badge-line); font-weight: var(--el-desktop-text-badge-weight);
+  font-family: var(--el-desktop-text-badge-font); font-variant-numeric: tabular-nums; text-align: center;
 }
 .el-rail__dot {
-  position: absolute; inset-block-start: calc(-1 * var(--el-space-2)); inset-inline-end: calc(-1 * var(--el-space-2)); inline-size: var(--el-space-8); block-size: var(--el-space-8);
-  border-radius: var(--el-radius-full); background: var(--el-role-danger-default);
+  position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
+  inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
+  inline-size: var(--el-desktop-badge-dot); block-size: var(--el-desktop-badge-dot); border-radius: var(--el-radius-full);
+  background: var(--el-role-accent-default); box-shadow: 0 0 0 var(--el-desktop-badge-ring) var(--el-role-bg-subtle);
 }
-.el-rail__me { margin-block-start: var(--el-space-4); }
-.el-rail__me .el-button.el-rail__avatar { padding: var(--el-space-2); border-radius: var(--el-radius-full); }
+.el-rail__dot--live { background: var(--el-role-danger-default); }
+/* The avatar (DES-08): 28 px in a 40 px click area, labelled Account like every item. */
+.el-rail__me { inline-size: 100%; }
+.el-rail__me .el-menu-anchor { inline-size: 100%; }
+.el-rail__me .el-rail__icon { inline-size: var(--el-desktop-avatar-rail-hit); block-size: var(--el-desktop-avatar-rail-hit); }
+.el-rail__me .el-rail__item[aria-expanded="true"] .el-avatar { box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-default); }
+.el-rail__me .el-rail__item:hover .el-rail__icon { background: transparent; }
+.el-rail__me .el-rail__item:hover .el-avatar { box-shadow: 0 0 0 var(--el-space-4) color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
+.el-rail__me .el-button.el-rail__item > span { display: contents; }
+/* The account menu's head: the 40 px avatar, the name, the email, the plan. */
+.el-menu__header { list-style: none; padding: var(--el-space-8) var(--el-space-12) var(--el-space-12); margin-block-end: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-account-head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: calc(var(--el-space-64) * 4); }
+.el-account-head__who { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-account-head__name { font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-primary); }
+.el-account-head__line { font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line); color: var(--el-role-text-secondary); }
+/* A tooltip (Tip.tsx): beside its control, above everything. */
+.el-tip {
+  position: fixed; z-index: var(--el-layer-overlay); translate: 0 -50%; pointer-events: none; white-space: nowrap;
+  padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-sm);
+  background: var(--el-role-text-primary); color: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-1);
+  font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line);
+}
+
+/* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
+   52 px: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in grey; the one
+   search field centred in the column (28 px, 280–400 px wide, the place in its placeholder, ⌘K at its end); the status
+   items at the end. No line under it until the page has scrolled. */
+.el-titlerow {
+  flex: none; display: grid; align-items: center; gap: var(--el-space-8);
+  grid-template-columns: minmax(0, 1fr) minmax(var(--el-desktop-search-min-width), var(--el-desktop-search-max-width)) minmax(0, 1fr);
+  block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
+  border-block-end: var(--el-border-hairline) solid transparent;
+}
+.el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
+.el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
+.el-titlerow__end { justify-content: flex-end; }
+.el-titlerow__history { display: inline-flex; flex: none; }
+.el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
+.el-titlerow__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-role-text-primary);
+  font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
+}
+.el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
+.el-titlerow__middle { display: flex; justify-content: center; min-inline-size: 0; }
+/* No room for the field: a ⌕ button, and its column gives its width back. */
+.el-titlerow--compact { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.el-titlerow__search {
+  display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
+  inline-size: 100%; block-size: var(--el-desktop-search-height);
+  padding-inline: var(--el-space-8); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font: inherit; font-size: var(--el-desktop-text-secondary-size); cursor: text;
+}
+.el-titlerow__search:hover { border-color: var(--el-role-border-strong); }
+.el-titlerow__search:focus-within { border-color: var(--el-role-accent-default); box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-focus); background: var(--el-role-bg-surface); }
+.el-titlerow__search--button { text-align: start; }
+.el-titlerow__placeholder { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-titlerow__field { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-text-primary); outline: none; }
+.el-titlerow__keys { flex: none; font: inherit; font-size: var(--el-desktop-text-small-size); color: var(--el-role-text-secondary); }
+.el-titlerow__scope {
+  display: inline-flex; align-items: center; gap: var(--el-space-2); flex: none; max-inline-size: 50%;
+  padding-inline: var(--el-space-8) var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-accent-soft); color: var(--el-role-accent-text);
+  font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line); white-space: nowrap;
+}
+.el-titlerow__scope > span { overflow: hidden; text-overflow: ellipsis; }
+.el-titlerow__unscope { display: inline-flex; border: 0; padding: var(--el-space-2); border-radius: var(--el-radius-full); background: transparent; color: inherit; cursor: pointer; }
+.el-titlerow__unscope:hover { background: color-mix(in srgb, var(--el-role-accent-default) 12%, transparent); }
+/* On a Mac nothing that can be clicked sits within 80 px of the window's left edge in this row: with the panel hidden,
+   ⊟ comes right after the rail (72 px) and the row's own start. */
+[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: calc(var(--el-desktop-titlerow-keep-clear) - var(--el-desktop-rail-width)); }
+/* Right to left the rail is on the right, but the window's buttons stay at the window's left (the system's side): the
+   row's end keeps the 80 px clear there. */
+[data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: var(--el-desktop-titlerow-keep-clear); }
 
 /* The panel: the place's name, its ⋯ and ⊟; group titles in sentence case; under 1100 px a flyout over the page. */
 .el-panel {
@@ -1962,7 +2098,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 /* Its containing block is the grid's second column, which starts where the rail ends. */
 .el-panel--flyout { position: absolute; inset-block: 0; inset-inline-start: 0; z-index: var(--el-layer-overlay); box-shadow: var(--el-shadow-2); }
-.el-panel__head { display: flex; align-items: center; gap: var(--el-space-4); padding: var(--el-space-12) var(--el-space-8) var(--el-space-8) var(--el-space-16); }
+/* The panel's top cell of the title row (UX-20): as tall as the row, the place's name and ⊟. */
+.el-panel__head { flex: none; display: flex; align-items: center; gap: var(--el-space-4); block-size: var(--el-desktop-titlerow-height); box-sizing: border-box; padding: 0 var(--el-space-8) 0 var(--el-space-16); }
 .el-panel__title { flex: 1; margin: 0; font-size: var(--el-text-title-m-size); font-weight: var(--el-text-body-strong-weight); }
 .el-panel__body { flex: 1 1 auto; min-block-size: 0; overflow-y: auto; padding: 0 var(--el-space-8) var(--el-space-8); display: flex; flex-direction: column; gap: var(--el-space-8); }
 .el-panel__foot { flex: none; display: flex; flex-direction: column; gap: var(--el-space-2); padding: var(--el-space-4) var(--el-space-8) var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
@@ -1970,11 +2107,6 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-panel__none { margin: var(--el-space-4) var(--el-space-8); }
 .el-panel .el-nav-section__title, .el-panel .el-nav-section__link { text-transform: none; letter-spacing: normal; color: var(--el-role-text-secondary); }
 .el-panel .el-nav-item__count--quiet { background: transparent; color: var(--el-role-text-secondary); }
-.el-panel-show {
-  grid-column: 2; align-self: start; margin: var(--el-space-12) var(--el-space-4) 0; display: inline-flex; padding: var(--el-space-4);
-  border: 0; border-radius: var(--el-radius-sm); background: transparent; color: var(--el-role-text-secondary); cursor: pointer;
-}
-.el-panel-show:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
 /* UX-02 (v21_panel_flyout, .el-shell--flyouts): the panel 240 px wide; the flyout over a light scrim, sliding in from the
    rail; hidden, the panel takes no column and its toggle sits at the start of the page header (PanelToggle). */
 .el-panel-scrim {
@@ -2000,14 +2132,6 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-settings-split__list { flex: none; inline-size: calc(var(--el-space-64) * 3); padding: var(--el-space-24) var(--el-space-8) 0 var(--el-space-16); position: sticky; inset-block-start: 0; }
 .el-settings-split__title { margin: 0 var(--el-space-8) var(--el-space-8); color: var(--el-role-text-secondary); }
 .el-settings-split > .el-settings-page { flex: 1; min-inline-size: 0; }
-/* A short window: the rail's icons only (names for assistive tools and in tooltips), so the foot stays on screen. */
-.el-shell--short-rail .el-rail { gap: var(--el-space-2); padding-block: var(--el-space-8); }
-.el-shell--short-rail .el-rail__label {
-  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-}
-.el-shell--short-rail .el-rail__item { padding: var(--el-space-8) 0; }
-.el-shell--short-rail .el-rail__record { margin-block: var(--el-space-2) var(--el-space-4); }
-
 /* ---- macOS: the title-bar strip in a normal window (D-214, lib/titlebar.ts) ---------------------------------------------
    The window's own close, minimize and zoom sit in an empty strip across the top, as tall as their native row, in the
    chrome's colour: nothing of ours under or beside them. It drags the window and zooms it on a double click
@@ -2021,9 +2145,7 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 /* Its own drag region replaces the classic strip over the sidebar's top (MainApp puts the two side by side). */
 [data-titlebar="strip"] .el-titlebar + .titlebar-drag { display: none; }
-[data-titlebar="strip"] .el-shell { margin-block-start: var(--el-layout-titlebar-macos); block-size: calc(100% - var(--el-layout-titlebar-macos)); }
-[data-titlebar="strip"] .el-rail { padding-block-start: var(--el-space-12); }
-[data-titlebar="strip"] .el-shell--short-rail .el-rail { padding-block-start: var(--el-space-8); }
+[data-titlebar="strip"] .el-shell:not(.el-shell--nav) { margin-block-start: var(--el-layout-titlebar-macos); block-size: calc(100% - var(--el-layout-titlebar-macos)); }
 [data-titlebar="strip"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-16); }
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
@@ -2037,3 +2159,26 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
 .el-shell--nav > .el-shell__main:focus { outline: none; }
 .el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
+
+/* ---- DES-03: the desktop's base sizes (PLAN_V2_1_POLISH, a proposal for the owner to pick from) ---------------------
+   100% looks like the 90-95% the owner asked for, without a default zoom: in the three levels' shell only (the floating
+   windows, and classic's sidebar, keep their own sizes). Body 14, secondary 13, small 12; page titles 18, the panel's 15 semibold, rail labels
+   11; panel items 32, rows 56/44, buttons and fields 32 (28 small); icons 16, 20 in the rail. Urdu and Arabic titles keep
+   their own sizes and line heights (Nastaliq and Naskh are taller). */
+.el-shell--nav {
+  --el-component-button-height: var(--el-desktop-control-height);
+  --el-component-field-height: var(--el-desktop-control-height);
+}
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)),
+.el-shell--nav :is(.el-lib-crumbs__root, .el-lib-crumbs__sep):not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-page-title-size); line-height: var(--el-desktop-text-page-title-line);
+}
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)) { font-weight: var(--el-desktop-text-page-title-weight); }
+.el-shell--nav .el-panel__title:not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-panel-title-size); line-height: var(--el-desktop-text-panel-title-line); font-weight: var(--el-desktop-text-panel-title-weight);
+}
+.el-shell--nav .el-rail__label { font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); }
+.el-shell--nav .el-row__meta.el-caption:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
+.el-shell--nav .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
+.el-shell--nav .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
+.el-shell--nav .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }

@@ -185,6 +185,37 @@ describe("the Library's places", () => {
     expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
   });
 
+  it("in the app, the mouse's back button steps once, also after leaving the Library and coming back (the title row's Back is not run too)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const heading = () => screen.getByRole("heading", { level: 1 });
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    // Projects and back: the Library is drawn again (its listeners too).
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    // One press of the side button: one step, the Library's own, not the places' too (still the Library, not Projects).
+    fireEvent.mouseDown(window, { button: 3 });
+    fireEvent.mouseUp(window, { button: 3 });
+    await settle();
+    expect(heading()).not.toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // And one press forward brings back exactly where it was: one step was taken, no more.
+    fireEvent.mouseDown(window, { button: 4 });
+    fireEvent.mouseUp(window, { button: 4 });
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+  });
+
   it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
     respond("projects_list", { data: [] });
