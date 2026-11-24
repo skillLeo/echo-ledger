@@ -205,6 +205,9 @@ object EchoTokens {
     object Component {
         val buttonRadius = 4.dp
         val buttonHeight = 36.dp
+
+        /** The New sheet's Record now (v2.1 UX-15): the one big, filled button. */
+        val bigButtonHeight = 56.dp
         val buttonPaddingX = 12.dp
         val fieldRadius = 4.dp
         val fieldHeight = 36.dp
