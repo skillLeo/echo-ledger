@@ -8,17 +8,20 @@ import { AppToastV2, type AppMessage } from "../shell/AppToast";
 
 afterEach(() => vi.useRealTimers());
 
-/** A page's own message (the Library's Undo) and the app's, side by side as the window has them. */
-function Window() {
-  const [page, setPage] = useState<{ id: number; text: string } | null>(null);
+/** A page's own message (the Library's Undo, or its error) and the app's, side by side as the window has them. */
+function Window({ onUndo = () => undefined }: { onUndo?: () => void }) {
+  const [page, setPage] = useState<{ id: number; text: string; error?: boolean } | null>(null);
   const [app, setApp] = useState<AppMessage | null>(null);
   const seq = (n: number) => n + 1;
   return (
     <>
       <button type="button" onClick={() => setPage((m) => ({ id: seq(m?.id ?? 0), text: "Moved to Trash" }))}>Delete</button>
+      <button type="button" onClick={() => setPage((m) => ({ id: seq(m?.id ?? 0), text: "The recording couldn't be moved.", error: true }))}>Fail</button>
       <button type="button" onClick={() => setApp((m) => ({ id: seq(m?.id ?? 0), text: "Synced", error: false }))}>Sync</button>
+      <button type="button" onClick={() => setApp((m) => ({ id: seq(m?.id ?? 0), text: "The upload stopped.", error: true }))}>Upload fails</button>
       <ToastRegion>
-        {page && <Toast key={page.id} message={page.text} duration={0} onAction={() => undefined} onClose={() => setPage(null)} />}
+        {page && <Toast key={page.id} message={page.text} duration={0} onAction={page.error ? undefined : onUndo} error={page.error}
+          onClose={() => setPage(null)} />}
       </ToastRegion>
       <AppToastV2 message={app} duration={() => 0} onClose={() => setApp(null)} />
     </>
@@ -28,11 +31,14 @@ const shown = () => [...document.querySelectorAll(".el-toast .el-toast__message"
 
 describe("one message at a time (FIX-03)", () => {
   it("a new message, from anywhere in the window, takes the place of the one on screen", () => {
-    render(<Window />);
+    const onUndo = vi.fn();
+    render(<Window onUndo={onUndo} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(shown()).toEqual(["Moved to Trash"]);
     fireEvent.click(screen.getByRole("button", { name: "Sync" }));
     expect(shown()).toEqual(["Synced"]);
+    // Replaced is not undone.
+    expect(onUndo).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(shown()).toEqual(["Moved to Trash"]);
   });
@@ -44,6 +50,39 @@ describe("one message at a time (FIX-03)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Sync" }));
     });
     expect(shown()).toHaveLength(1);
+  });
+
+  it("an error is never replaced by a message from elsewhere: that one waits until the error closes", () => {
+    render(<Window />);
+    fireEvent.click(screen.getByRole("button", { name: "Fail" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    expect(shown()).toEqual(["The recording couldn't be moved."]);
+    // A newer one from elsewhere replaces the one waiting (one at a time, the newest).
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    expect(shown()).toEqual(["The recording couldn't be moved."]);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(shown()).toEqual(["Synced"]);
+    // The app's error: the page's message waits for it too.
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload fails" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(shown()).toEqual(["The upload stopped."]);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(shown()).toEqual(["Moved to Trash"]);
+    // A newer error does replace an error.
+    fireEvent.click(screen.getByRole("button", { name: "Upload fails" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fail" }));
+    expect(shown()).toEqual(["The recording couldn't be moved."]);
+  });
+
+  it("a waiting message's time starts only once it is on screen", () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const { rerender } = render(<><Toast message="Problem" duration={0} error onClose={() => undefined} /></>);
+    rerender(<><Toast message="Problem" duration={0} error onClose={() => undefined} /><ToastRegion><Toast message="Later" duration={1000} onClose={onClose} /></ToastRegion></>);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(shown()).toEqual(["Problem"]);
   });
 
   it("each has its ✕", () => {
@@ -78,12 +117,13 @@ describe("one message at a time (FIX-03)", () => {
     fireEvent.keyDown(document.body, { key: "Escape" });
     menu.remove();
     expect(onClose).not.toHaveBeenCalled();
-    // The page closed its open recording with this Esc first (it prevents the default): the message stays.
+    // The page closed its open recording with this Esc first (it prevents the default): the message stays, even when the
+    // page's listener (on the document, in the bubble phase) was added after the toast came.
     rerender(<Toast message="Saved" duration={0} onClose={onClose} />);
     const taken = (e: KeyboardEvent) => e.preventDefault();
-    document.addEventListener("keydown", taken, true);
+    document.addEventListener("keydown", taken);
     fireEvent.keyDown(document.body, { key: "Escape" });
-    document.removeEventListener("keydown", taken, true);
+    document.removeEventListener("keydown", taken);
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
