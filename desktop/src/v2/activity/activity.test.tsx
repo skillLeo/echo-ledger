@@ -78,14 +78,28 @@ describe("the v2 Activity page", () => {
     expect(screen.queryByRole("button", { name: "Mark all read" })).toBeNull();
   });
 
-  it("an item's right-click menu (UX-22, 3b): Open · Mark as read | Retry for a failure; only what fits it", async () => {
+  it("an item's right-click menu (UX-22, 3b): Open · Mark as read | Retry for an upload that stopped; only what fits it", async () => {
+    respond("activity_list", { data: [...ITEMS,
+      { id: "n4", kind: "upload_failed", title: "Upload failed — retry", body: "Voice note", session_id: "s4", read: true, at: new Date(2026, 9, 28, 8, 0).toISOString() },
+      { id: "n5", kind: "budget_reached", title: "Minutes used up", body: "This month's minutes are used.", session_id: null, read: true, at: new Date(2026, 9, 28, 7, 0).toISOString() }], unread_count: 2 });
     respond("activity_read", { unread_count: 1 });
     const { onOpenRecording, onFailed } = await show();
     const words = () => [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
-    fireEvent.contextMenu(screen.getAllByText("Transcription failed")[0].closest(".el-row") ?? row("Transcription failed"), { clientX: 20, clientY: 30 });
-    expect(words()).toEqual(["Open", "Mark as read", "Retry"]);
+    const menuOn = (title: string) => fireEvent.contextMenu(screen.getAllByText(title)[0].closest(".el-row") ?? row(title), { clientX: 20, clientY: 30 });
+    // An upload that stopped: Retry, where failed uploads are retried.
+    menuOn("Upload failed — retry");
+    expect(words()).toEqual(["Open", "Retry"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Retry" }));
-    expect(onFailed).toHaveBeenCalled();
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    // A transcription that failed is tried again on its recording's page (Open), not in failed uploads; minutes used up
+    // have nothing to retry.
+    menuOn("Transcription failed");
+    expect(words()).toEqual(["Open", "Mark as read"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    menuOn("Minutes used up");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(onFailed).toHaveBeenCalledTimes(1);
     fireEvent.contextMenu(row("Transcript ready"), { clientX: 20, clientY: 30 });
     expect(words()).toEqual(["Open", "Mark as read"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Mark as read" }));
