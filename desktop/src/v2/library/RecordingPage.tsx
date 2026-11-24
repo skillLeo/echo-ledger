@@ -589,6 +589,20 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onMessage("Could not access the clipboard");
     }
   };
+  // ⌘P (Ctrl+P): print the transcript (its print page, where Save as PDF is too), not the window (FIX-10). Heard on the
+  // document, before the window's guard; not while typing or behind a dialog.
+  const printNow = useRef<() => void>(() => undefined);
+  printNow.current = () => void exportAs("html");
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "p") return;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      printNow.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const exportAs = async (format: ExportFormat) => {
     if (!tDetail) return;
     try {

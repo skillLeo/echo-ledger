@@ -25,6 +25,7 @@ import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { UpdateBanner } from "./UpdateSettings";
+import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { SettingsView } from "./SettingsView";
@@ -695,6 +696,15 @@ export default function MainApp() {
       return undefined;
     }
   };
+
+  // F5 and ⌘R (Ctrl+R) in a release build (FIX-10, lib/nativeFeel.ts): Sync now, as the search's "Sync the library".
+  const syncNow = useRef(() => undefined as unknown);
+  syncNow.current = () => (status?.paired ? run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) : undefined);
+  useEffect(() => {
+    const on = () => void syncNow.current();
+    window.addEventListener(SYNC_NOW_EVENT, on);
+    return () => window.removeEventListener(SYNC_NOW_EVENT, on);
+  }, []);
 
   // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
   // window back to the sign-in form, must stay visible (A6.DU1).

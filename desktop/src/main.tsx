@@ -6,6 +6,7 @@ import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
 import { watchTitlebar } from "./lib/titlebar";
+import { installNativeFeel, SYNC_NOW_EVENT } from "./lib/nativeFeel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WindowErrorBoundary } from "./components/WindowErrorBoundary";
 
@@ -73,6 +74,9 @@ api
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);
+// FIX-10: an app, not a web page. In a release build the web view's menu and keys go from the main window (its
+// floating windows have their own few keys and no menu either); F5 and ⌘R sync now.
+installNativeFeel({ release: import.meta.env.PROD, onSyncNow: () => window.dispatchEvent(new Event(SYNC_NOW_EVENT)) });
 
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 
