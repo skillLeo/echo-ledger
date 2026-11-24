@@ -136,6 +136,8 @@ export type ShellProps = {
     layoutFor?: string | null;
     /** The title row's status items (UX-20): Restart to update, the share badge, the zoom chip. */
     titleEnd?: ReactNode;
+    /** Show a place from elsewhere (the title row's search: Ask about "…"); each request has a new seq. */
+    placeRequest?: { place: Place; seq: number } | null;
     panels?: Partial<Record<Place, ReactNode>>;
     feet?: Partial<Record<Place, ReactNode>>;
     onPlace?: (place: Place, again: boolean) => void;
@@ -331,6 +333,15 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
     if (nav?.onPlace) nav.onPlace(p, again);
     else onGo(MODULE_TAB[p]);
   };
+  // A place asked for from elsewhere (the search's Ask): shown as if chosen in the rail.
+  const placeAsked = nav?.placeRequest?.seq;
+  const onPlaceRef = useRef(onPlace);
+  onPlaceRef.current = onPlace;
+  useEffect(() => {
+    if (placeAsked === undefined || !nav?.placeRequest) return;
+    onPlaceRef.current(nav.placeRequest.place, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeAsked]);
   // While recordings are dragged (lib/dragMove.ts), the Library's panel lists where they can go: No project (out of
   // their project) and every project. Hidden otherwise; Move to project… is the way for the keyboard.
   const drops = (
