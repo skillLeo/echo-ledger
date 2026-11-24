@@ -2156,3 +2156,12 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   pointer-events: auto; transition: opacity var(--el-motion-fast), visibility var(--el-motion-fast);
 }
 .el-back-top[data-shown="false"] .el-back-top__button { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- The selected-words bar (UX-22) --------------------------------------------------------------------------- */
+/* Above the words selected in a transcript, centred on them: Play from here, Ask about this, Copy with time, Share. */
+.el-selection-bar {
+  position: fixed; z-index: var(--el-layer-menu); transform: translate(-50%, calc(-100% - var(--el-space-8)));
+  display: flex; gap: var(--el-space-2); padding: var(--el-space-4);
+  background: var(--el-role-bg-overlay); border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-menu-radius); box-shadow: var(--el-shadow-1);
+}

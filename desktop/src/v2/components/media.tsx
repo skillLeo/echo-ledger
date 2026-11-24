@@ -1,4 +1,4 @@
-import { memo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { memo, type CSSProperties, type MouseEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Button } from "./Button";
 import { Avatar } from "./layout";
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./icons";
@@ -95,7 +95,10 @@ const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, acti
  * A transcript: who spoke, when, and what; the line being played is marked. Each line is drawn again only when what it
  * shows changes, so `renderText`, `note`, `after` and `lineTitle` should hand back the same values for lines that did not.
  */
-export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = defaultPlayLabel, note, renderText, lineTitle, grouped = false }: {
+/** A right-click in a transcript (UX-22): the line, whether it was on the speaker's name, the words selected, and where. */
+export type TranscriptMenuEvent = { index: number; onSpeaker: boolean; selected: string; at: { x: number; y: number }; preventDefault: () => void };
+
+export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = defaultPlayLabel, note, renderText, lineTitle, grouped = false, onMenu }: {
   label: string;
   /** Lines of one speaker in a row read as one turn: the avatar and name once, at its start (classic's speaker blocks). */
   grouped?: boolean;
@@ -113,9 +116,19 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
   renderText?: (index: number) => ReactNode | undefined;
   /** A line's tooltip and its dotted look (the engine was not sure of the whole line). */
   lineTitle?: (index: number) => string | undefined;
+  /** A right-click on a line, a speaker's name or selected words (one handler for the list: lines stay as drawn). */
+  onMenu?: (e: TranscriptMenuEvent) => void;
 }) {
+  const menu = onMenu && ((e: ReactMouseEvent<HTMLOListElement>) => {
+    const line = (e.target as HTMLElement).closest("li.el-segment");
+    if (!line || !e.currentTarget.contains(line)) return;
+    const index = [...e.currentTarget.querySelectorAll(":scope > li.el-segment")].indexOf(line);
+    const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
+    const selected = selection && !selection.isCollapsed && e.currentTarget.contains(selection.anchorNode) ? selection.toString().trim() : "";
+    onMenu({ index, onSpeaker: !!(e.target as HTMLElement).closest(".el-segment__name, .el-segment__speaker"), selected, at: { x: e.clientX, y: e.clientY }, preventDefault: () => e.preventDefault() });
+  });
   return (
-    <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang}>
+    <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang} onContextMenu={menu || undefined}>
       {segments.map((s, i) => (
         <TranscriptLine key={`${s.start}-${i}`} segment={s} index={i} active={i === activeIndex} text={renderText?.(i)} note={note?.(i) ?? null}
           after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel}
@@ -135,23 +148,30 @@ export type WaveMark = { id: string | number; atMs: number; title: string };
  * seeks there. It draws for the pointer only: the Player's Position slider is the control for the keyboard and screen
  * readers, so the waveform itself is hidden from them.
  */
-export function Waveform({ bars, marks = [], durationMs, nowMs, onSeek }: {
+export function Waveform({ bars, marks = [], durationMs, nowMs, onSeek, onMenu }: {
   bars: readonly WaveBar[];
   marks?: readonly WaveMark[];
   durationMs: number;
   nowMs: number;
   onSeek: (ms: number) => void;
+  /** A right-click: the moment under the pointer and where to open its menu (UX-22: Play from here). */
+  onMenu?: (ms: number, at: { x: number; y: number }) => void;
 }) {
   if (!(durationMs > 0) || (bars.length === 0 && marks.length === 0)) return null;
   const share = (ms: number) => Math.min(100, Math.max(0, (ms / durationMs) * 100));
   const played = share(nowMs);
-  const seekAt = (e: MouseEvent<HTMLDivElement>) => {
+  const msAt = (e: MouseEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
-    if (box.width > 0) onSeek(Math.max(0, Math.min(durationMs, ((e.clientX - box.left) / box.width) * durationMs)));
+    return box.width > 0 ? Math.max(0, Math.min(durationMs, ((e.clientX - box.left) / box.width) * durationMs)) : null;
+  };
+  const seekAt = (e: MouseEvent<HTMLDivElement>) => {
+    const ms = msAt(e);
+    if (ms !== null) onSeek(ms);
   };
   const at = (name: string, value: string) => ({ [name]: value }) as CSSProperties;
   return (
-    <div className="el-wave" dir="ltr" aria-hidden="true" data-testid="waveform" onClick={seekAt}>
+    <div className="el-wave" dir="ltr" aria-hidden="true" data-testid="waveform" onClick={seekAt}
+      onContextMenu={onMenu ? (e) => { e.preventDefault(); onMenu(msAt(e) ?? 0, { x: e.clientX, y: e.clientY }); } : undefined}>
       {bars.map((b, i) => (
         <span key={i} className={`el-wave__bar el-wave__bar--${b.channel}${((i + 0.5) / bars.length) * 100 <= played ? " el-wave__bar--played" : ""}`}
           style={at("--el-wave-level", `${Math.round(b.level * 100)}%`)} />
