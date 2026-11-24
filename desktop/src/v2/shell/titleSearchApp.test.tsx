@@ -58,6 +58,19 @@ describe("the title row's search in the app (UX-20)", () => {
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("invoice");
   });
 
+  it("from the Library's title row: ⌘F, typed words, then Search everything instead opens the grouped search with them", async () => {
+    await app();
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = within(screen.getByTestId("title-row")).getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    fireEvent.change(field, { target: { value: "invoice" } });
+    fireEvent.click(within(screen.getByTestId("title-row")).getByRole("button", { name: "Search everything instead" }));
+    await settle();
+    expect(screen.getByRole("combobox")).toHaveValue("invoice");
+    expect(await screen.findByRole("option", { name: "Show all in the list" })).toBeInTheDocument();
+  });
+
   it("Ask about \"…\" opens Ask with the question in it", async () => {
     await app();
     fireEvent.keyDown(window, { key: "k", metaKey: true });
