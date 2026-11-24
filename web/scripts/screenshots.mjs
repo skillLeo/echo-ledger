@@ -41,6 +41,10 @@ const themes = (process.env.THEMES ?? 'light,dark').split(',');
 // A name for the account in the file names (web-settings-plan-free-…), for runs with another EMAIL.
 const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 
+/** JavaScript that right-clicks the Library's row [at] a little in from its start (UX-22's menu). */
+const menuOn = (at) => `(() => { const row = document.querySelectorAll('.v2-library .v2-lib-row')[${at}]; const r = row.getBoundingClientRect();`
+    + ` row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height / 2 })); })()`;
+
 // Pages by name. A function gets the page and resolves its path (for records whose ids change per database). `run`
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
 const pages = {
@@ -63,6 +67,10 @@ const pages = {
     library: { path: '/app/sessions' },
     'library-drawer': { path: '/app/sessions', waitFor: '.el-row', run: "document.querySelector('.el-row')?.click()", full: false, wide: true },
     'library-table': { path: '/app/sessions', run: "document.querySelector('[data-layout=table]')?.click()", after: "document.querySelector('[data-layout=list]')?.click()", wide: true },
+    // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
+    'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
+    'library-menu-sub': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `${menuOn(1)};document.querySelector('.v2-ctx [aria-haspopup=menu]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`, full: false, wide: true },
+    'library-menu-many': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `[...document.querySelectorAll('.v2-library input.fi-ta-record-checkbox')].slice(0, 2).forEach((b) => b.click());${menuOn(0)}`, full: false, wide: true },
     'library-folder': { path: '/app/sessions?folder=whatsapp' },
     'library-failed': { path: '/app/sessions?tab=failed' },
     'library-empty': { path: '/app/sessions?search=zzzz-nothing-matches' },

@@ -2,9 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\WorkspaceRole;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Models\CaptureSession;
+use App\Models\Workspace;
 use App\Services\InterfaceFlags;
+use App\Services\Workspaces\ConsoleAccess;
+use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Process;
+use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
@@ -45,28 +52,28 @@ it('opens the row\'s Delete confirmation when a swipe asks for it, and deletes n
     foreach (InterfaceFlags::UI_V2 as $flag) {
         app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
     }
-    $session = \App\Models\CaptureSession::query()->where('title', 'Payment terms')->firstOrFail();
-    $page = \Livewire\Livewire::test(\App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions::class)
+    $session = CaptureSession::query()->where('title', 'Payment terms')->firstOrFail();
+    $page = Livewire::test(ListCaptureSessions::class)
         ->mountTableAction('delete', $session->id);
     // The confirmation is open on that row, and nothing is gone yet.
     expect(collect($page->get('mountedActions'))->only([0])->map(fn (array $a): array => [$a['name'], $a['context']['recordKey'] ?? null])->all())->toBe([['delete', (string) $session->id]]);
-    expect(\App\Models\CaptureSession::query()->whereKey($session->id)->exists())->toBeTrue();
+    expect(CaptureSession::query()->whereKey($session->id)->exists())->toBeTrue();
 
     $page->callMountedTableAction();
-    expect(\App\Models\CaptureSession::query()->whereKey($session->id)->exists())->toBeFalse()
-        ->and(\App\Models\CaptureSession::withTrashed()->whereKey($session->id)->exists())->toBeTrue();
+    expect(CaptureSession::query()->whereKey($session->id)->exists())->toBeFalse()
+        ->and(CaptureSession::withTrashed()->whereKey($session->id)->exists())->toBeTrue();
 });
 
 it('gives a read-only console no swipe (it can\'t delete or pin there)', function () {
     foreach (InterfaceFlags::UI_V2 as $flag) {
         app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
     }
-    $workspace = \App\Models\Workspace::query()->findOrFail($this->owner->current_workspace_id);
+    $workspace = Workspace::query()->findOrFail($this->owner->current_workspace_id);
     $member = Fx::user(['name' => 'Sana Malik']);
-    app(\App\Services\Workspaces\Workspaces::class)->addMember($workspace, $member, \App\Enums\WorkspaceRole::Member);
+    app(Workspaces::class)->addMember($workspace, $member, WorkspaceRole::Member);
     $member->forceFill(['current_workspace_id' => $workspace->id])->save();
     $this->actingAs($member->fresh(), 'web');
-    expect(\App\Services\Workspaces\ConsoleAccess::readOnly())->toBeTrue();
+    expect(ConsoleAccess::readOnly())->toBeTrue();
 
     $response = $this->get('/app/sessions')->assertOk();
     expect((string) $response->getContent())->not->toContain('elV2LibrarySwipe');
