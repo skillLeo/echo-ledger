@@ -124,7 +124,7 @@ function abilityRoutes(): array
         // Since 2.0.0-r (BE-02).
         'activity groups' => ['GET', '/api/activity/groups', 'library:read'],
         // Since 2.0.0-r (BE-03).
-        'retry all uploads' => ['POST', '/api/activity/retry-all', 'library:read'],
+        'retry all uploads' => ['POST', '/api/activity/retry-all', 'sessions:write'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

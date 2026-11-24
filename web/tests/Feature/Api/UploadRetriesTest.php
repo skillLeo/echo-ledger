@@ -73,6 +73,16 @@ it('refuses any other group, and asks only the person\'s own devices', function 
         ->and(retriesApi($other)->getJson('/api/activity')->json('retry_requested_at'))->toBeNull();
     retriesApi($me)->getJson('/api/config')->assertOk();
     test()->api(Fx::token(Fx::device($me), ['config:read']))->postJson('/api/activity/retry-all', ['group' => 'upload_failed'])->assertForbidden();
+    // A write: a token that may only read the library may not ask the devices.
+    test()->api(Fx::token(Fx::device($me), ['library:read']))->postJson('/api/activity/retry-all', ['group' => 'upload_failed'])->assertForbidden();
+});
+
+it('takes 6 a minute from a device, then 429', function () {
+    $api = retriesApi(Fx::user());
+    for ($i = 0; $i < 6; $i++) {
+        $api->postJson('/api/activity/retry-all', ['group' => 'upload_failed'])->assertStatus(202);
+    }
+    $api->postJson('/api/activity/retry-all', ['group' => 'upload_failed'])->assertStatus(429);
 });
 
 it('has Retry all on the console\'s Activity page while an upload failed, asking the same way', function () {

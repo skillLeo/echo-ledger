@@ -129,6 +129,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('help/guides/{id}', [HelpController::class, 'guide'])->middleware('abilities:config:read')->name('api.help.guides.show');
         Route::get('help/whats-new', [HelpController::class, 'whatsNew'])->middleware('abilities:config:read')->name('api.help.whats-new');
         Route::post('support/messages', [HelpController::class, 'support'])->middleware('abilities:sessions:write')->name('api.support.messages');
+        // Since 2.0.0-r (BE-03): Retry all, which the devices act on; a write, 6 a minute.
+        Route::post('activity/retry-all', [ActivityController::class, 'retryAll'])->middleware(['abilities:sessions:write', 'throttle:retry-all'])->name('api.activity.retry-all');
         // Upgrade requests (v1.6): the newest one of this device's person.
         Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
         // Payment receipts (v1.7): a receipt of the person's own request, decrypted for this answer only.
@@ -277,8 +279,6 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::get('badge', BadgeController::class)->name('api.badge');
             // Since 2.0.0-r (BE-02): the groups, as "3 recordings didn't finish uploading · Retry all".
             Route::get('activity/groups', [ActivityController::class, 'groups'])->name('api.activity.groups');
-            // Since 2.0.0-r (BE-03): Retry all, which the devices act on.
-            Route::post('activity/retry-all', [ActivityController::class, 'retryAll'])->name('api.activity.retry-all');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
