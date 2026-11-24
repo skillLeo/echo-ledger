@@ -506,4 +506,19 @@ it('never starts an audio-only recording for a read-only console or a viewer', f
     expect($plan['ready'])->toBe([])->and($plan['can'])->toBeFalse()
         ->and($plan['words'])->toBe('Nothing here can be transcribed: each one is already transcribed or has no audio.');
     expect($old->fresh()->status)->toBe(SessionStatus::AudioOnly)->and($old->fresh()->finalTranscript)->toBeNull();
+
+    // Nor does their own failed transcript start again: one check covers both kinds (not only TranscribeLater's).
+    $failed = Fx::session($operator, Fx::device($operator), ['title' => 'Failed before', 'duration_ms' => 60_000, 'status' => SessionStatus::Failed, 'workspace_id' => $workspaceId]);
+    Fx::readyRecording($failed, 'audio of the failed one');
+    $failed->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed,
+        'error_code' => TranscriptErrorCode::ProviderUnreachable->value]);
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey([$old->id, $failed->id])->get());
+    expect($plan['restart'])->toBe([])->and($plan['ready'])->toBe([])->and($plan['can'])->toBeFalse();
+    try {
+        Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$old->id, $failed->id]);
+    } catch (Throwable) {
+        // Refused before it runs: what matters is that nothing started.
+    }
+    expect(Queue::pushed(CallQueuedClosure::class))->toHaveCount(0)
+        ->and($failed->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Failed);
 });

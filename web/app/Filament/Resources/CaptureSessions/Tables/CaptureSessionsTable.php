@@ -37,6 +37,7 @@ use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\Workspaces;
 use App\Stt\LanguageRouter;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -624,6 +625,13 @@ final class CaptureSessionsTable
         $mine = self::changeable($records);
         $person = auth()->user();
         $workspace = (int) CurrentWorkspace::id();
+        // One check for both kinds, as TranscribeLater checks the audio-only ones: someone who may not change their own
+        // content here (a viewer, even with the whole console) starts nothing, a failed transcript included.
+        try {
+            $person instanceof User ? app(Workspaces::class)->assertMay($person, $workspace, 'ownContent') : throw new ApiError(403, 'not_allowed', 'Sign in again.');
+        } catch (ApiError) {
+            $mine = $mine->take(0);
+        }
         $service = app(TranscribeLater::class);
         // An audio-only recording: TranscribeLater's estimate says which it will start and their minutes (plan minutes,
         // none on the person's own key or an on-device engine).
