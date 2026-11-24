@@ -16,6 +16,7 @@ use App\Models\SessionMarker;
 use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
@@ -332,6 +333,9 @@ function isoApiCases(array $b): array
         'api.badge' => ['GET', '/api/badge', [], 'list'],
         // Since 2.0.0-r: the Activity's groups, the person's own (tests/Feature/Api/ActivityDedupeTest.php).
         'api.activity.groups' => ['GET', '/api/activity/groups', [], 'list'],
+        // Since 2.0.0-r: Retry all sets the person's own time only (tests/Feature/Api/UploadRetriesTest.php).
+        'api.activity.retry-all' => ['POST', '/api/activity/retry-all', ['group' => 'upload_failed'], fn (TestResponse $r): bool => $r->status() === 202
+            && unscoped(fn (): bool => User::query()->whereKey($b['bob']->id)->value('retry_requested_at') === null)],
         'api.sessions.export' => ['POST', '/api/sessions/export', ['ids' => [$s], 'format' => 'txt'],
             // Same answer as for unknown ids: nothing of the workspace matched.
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],

@@ -277,6 +277,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::get('badge', BadgeController::class)->name('api.badge');
             // Since 2.0.0-r (BE-02): the groups, as "3 recordings didn't finish uploading · Retry all".
             Route::get('activity/groups', [ActivityController::class, 'groups'])->name('api.activity.groups');
+            // Since 2.0.0-r (BE-03): Retry all, which the devices act on.
+            Route::post('activity/retry-all', [ActivityController::class, 'retryAll'])->name('api.activity.retry-all');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
