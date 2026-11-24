@@ -70,6 +70,7 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $recovery_codes_generated_at since 2.0.0-l: when the two-step recovery codes were last made (any path)
  * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
  * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials
+ * @property int|null $avatar_color since 2.0.0-r §6 (BE-06): the initials' colour the person chose, 0 to 7; null = their id's (avatarColor())
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
@@ -186,6 +187,18 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     }
 
     /** @return array<string, string> */
+    /** Avatar colours (contract 2.0.0-r §6, named in 2.0.0-u): 0 to 7, teal, blue, cyan, olive, pink, orange, green, slate. */
+    public const AVATAR_COLORS = 8;
+
+    /**
+     * The colour of the person's initials' circle (BE-06): the one they chose, else their id's, so it is theirs from
+     * sign-up and the same on every device without anything stored.
+     */
+    public function avatarColor(): int
+    {
+        return $this->avatar_color ?? ((int) $this->id % self::AVATAR_COLORS);
+    }
+
     protected function casts(): array
     {
         return [
@@ -203,6 +216,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'assist_settings' => 'array',
             'has_password' => 'boolean',
             'avatar_version' => 'integer',
+            'avatar_color' => 'integer',
             'email_restore' => 'encrypted:array',
             'email_restore_until' => 'datetime',
             'recovery_codes_generated_at' => 'datetime',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\ApiError;
+use App\Filament\Support\Shell;
 use App\Http\Controllers\Controller;
 use App\Models\AccountExport;
 use App\Models\Device;
@@ -65,6 +66,8 @@ final class AccountController extends Controller
             'has_password' => AccountProof::hasPassword($user),
             ...app(EmailChange::class)->payload($user),
             'passkeys_available' => Passkeys::availableOnPhone(),
+            // Since 2.0.0-r §6 (BE-06): the interface language, the console's own setting (avatar_color is beside avatar_url).
+            'language' => Shell::preferences($user)['app_language'],
         ]);
     }
 
