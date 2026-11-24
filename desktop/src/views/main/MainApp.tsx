@@ -1186,6 +1186,7 @@ export default function MainApp() {
             ) : undefined}
             libraryAttention={(libraryCounts?.needs ?? 0) > 0}
             nav={{
+              panelFlyout: ui.flags.v21_panel_flyout,
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,

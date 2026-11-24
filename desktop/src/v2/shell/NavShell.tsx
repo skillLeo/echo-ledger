@@ -7,12 +7,31 @@ import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { BrandMark } from "../../components/BrandMark";
 import { initials } from "../settings/initials";
-import { PLACE_NAMES, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
+import { PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
 export const FLYOUT_BELOW = 1100;
+/** With v21_panel_flyout (UX-02): docked from this window width, a flyout below it (760–1199 px), unless pinned. */
+export const DOCK_FROM = 1200;
 const PANEL_KEY = "echoledger-nav-panels";
+/** Whether the panel is pinned beside the page in a small window (UX-02), kept on this computer. */
+const PIN_KEY = "echoledger-nav-pinned-small";
+function loadPinned(): boolean {
+  try {
+    return localStorage.getItem(PIN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function savePinned(pinned: boolean) {
+  try {
+    if (pinned) localStorage.setItem(PIN_KEY, "1");
+    else localStorage.removeItem(PIN_KEY);
+  } catch {
+    // Kept for this session only.
+  }
+}
 /** Below this window height the rail shows its icons only. */
 export const SHORT_RAIL_BELOW = 820;
 const PRESS_HOLD_MS = 3000;
@@ -72,11 +91,14 @@ export type NavShellProps = {
   uploading?: string | null;
   notices?: ReactNode;
   banners?: ReactNode;
+  /** v21_panel_flyout (UX-02): docked from 1200 px, a flyout with a scrim below it unless pinned, 0 px when hidden with
+   * the toggle at the start of the page header, ⌃⌘S. Off: as before (docked from 1100 px). */
+  panelFlyout?: boolean;
   children: ReactNode;
 };
 
 export function NavShell({ place, onPlace, onHome, status, panels, feet, libraryCount, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
-  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, children }: NavShellProps) {
+  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
   useEffect(() => {
@@ -87,7 +109,10 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     window.addEventListener("resize", follow);
     return () => window.removeEventListener("resize", follow);
   }, []);
-  const narrow = width < FLYOUT_BELOW;
+  const [pinned, setPinned] = useState(loadPinned);
+  const small = width < (panelFlyout ? DOCK_FROM : FLYOUT_BELOW);
+  // A small window's panel is a flyout, unless pinned there (v21_panel_flyout).
+  const narrow = small && !(panelFlyout && pinned);
   // A short window: the rail's names go (each place keeps its name for assistive tools and in its tooltip), so every
   // place and the foot stay on screen.
   const short = height < SHORT_RAIL_BELOW;
@@ -142,6 +167,12 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
   keys.current = (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.defaultPrevented || typing(e.target)) return;
     if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+    // ⌃⌘S: the Mac's own Show/Hide Sidebar (v21_panel_flyout); ⌘\ (Ctrl+\) as before.
+    if (panelFlyout && e.metaKey && e.ctrlKey && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      togglePanel();
+      return;
+    }
     if (e.key === "\\") {
       e.preventDefault();
       togglePanel();
@@ -196,6 +227,33 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     { label: "Record page", icon: Icons.HomeIcon, onPick: onHome },
   ];
   const mac = searchKeys?.startsWith("⌘") ?? false;
+  // UX-02: the page header's toggle while the panel is off the screen; in a small window, the pin.
+  const pageToggle = panelFlyout && hasPanel && !shown ? {
+    label: `Show the ${PLACE_NAMES[place!]} panel`,
+    onToggle: (button: HTMLElement) => {
+      if (narrow) {
+        opener.current = button;
+        setFlyout(true);
+      } else togglePanel();
+    },
+  } : null;
+  const pin = panelFlyout && small ? {
+    pinned,
+    onPin: () => {
+      const next = !pinned;
+      setPinned(next);
+      savePinned(next);
+      setFlyout(false);
+      // Unpinned: back to a flyout, closed; pinned: beside the page, shown.
+      if (next && place) setHidden((now) => {
+        if (!now.has(place)) return now;
+        const shownAgain = new Set(now);
+        shownAgain.delete(place);
+        saveHidden(shownAgain);
+        return shownAgain;
+      });
+    },
+  } : undefined;
   const counts: Partial<Record<Place, number | undefined>> = { library: libraryCount || undefined, activity: activityCount || undefined };
   const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
@@ -232,8 +290,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
           )}
         </div>
       </nav>
+      {shown && narrow && panelFlyout && <div className="el-panel-scrim" data-testid="panel-scrim" aria-hidden="true" />}
       {shown && (
-        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={closeFlyout}
+        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={closeFlyout} pin={pin}
           foot={<>
             {feet?.[place!]}
             {uploading && <p className="el-shell__uploads el-caption el-secondary" aria-live="polite" data-testid="sidebar-uploads"><span className="el-spinner" aria-hidden="true" /><span dir="auto">{uploading}</span></p>}
@@ -247,14 +306,14 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
           {panels[place!]}
         </PlacePanel>
       )}
-      {!shown && hasPanel && !narrow && (
+      {!shown && hasPanel && !narrow && !panelFlyout && (
         <button type="button" className="el-panel-show" aria-label={`Show the ${PLACE_NAMES[place!]} panel`} title={`Show panel (${mac ? "⌘" : "Ctrl+"}\\)`}
           aria-keyshortcuts="Meta+\ Control+\" onClick={togglePanel}><Icon icon={Icons.SidebarIcon} /></button>
       )}
       <main className="el-shell__main" ref={main} tabIndex={-1}>
         {notices}
         {banners}
-        {children}
+        <PanelToggleContext.Provider value={pageToggle}>{children}</PanelToggleContext.Provider>
       </main>
     </div>
   );
