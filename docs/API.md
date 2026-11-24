@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-w (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-x (2026-11-25, proposed by EL-Backend, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-x (proposed 2026-11-25; CC5, docs/PLAN_CALL_CHOICE.md and docs/PLAN_CALL_RULES.md §3, see "Choices that follow the account (since 2.0.0-x)"): the rest of the call choice's state is kept for the account too, behind the same `call_rules` flag: the two privacy switches (`hide_live_words`, `block_screenshots`), the first-time hint, the "Always do this?" streak and whether it was offered, and the contacts and Sources whose "Always …?" offer the person turned down. `preferences` in `GET /api/call-rules` and in `call_rules` of `GET /api/config`, `PATCH /api/call-rules/preferences`, and `POST` / `DELETE /api/call-rules/declined`. Additions only, no migration.
 2.0.0-w (accepted 2026-11-24 by EL-Lead; B5, docs/PLAN_CALL_RULES.md, see "Call rules (since 2.0.0-w)"): the person's call rules, kept on the server for every device of the account: the "After each call" default (`ask` | `always_transcribe` | `always_audio` | `dont_record`) and "When to ask", the short-call setting, and rules per contact, per contact group and per Source, with one order (contact, then group, then Source, then the default). New routes under `/api/call-rules`, `call_rules` in `GET /api/config`, and the interface flag `call_rules` (off for everyone but the admin's lists at first). Additions only: an app that does not know them keeps its own per-device setting.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
@@ -2612,6 +2613,46 @@ Removes one rule → `204`; the next call follows the next step of the order. `4
 - Numbers and names in rules are never written to logs. Erasing the account erases its rules, and "Export my data"
   includes them.
 - Limits: 60 changes a minute per person.
+
+### Choices that follow the account (since 2.0.0-x)
+CC5 (docs/PLAN_CALL_CHOICE.md): the rest of what the after-call card and Settings › Privacy & data remember, kept for
+the account like the rules, so a hint seen or an offer turned down on the phone is not shown again on the Mac. Behind
+the same `call_rules` flag; while it is off, each app keeps these on the device as before.
+
+`GET /api/call-rules` gains, and `call_rules` in `GET /api/config` gains the same object:
+```json
+"preferences": {"hide_live_words": true, "block_screenshots": false, "hint_seen": false,
+                "always_offered": false, "streak": {"choice": "always_audio", "count": 2}}
+```
+
+| Key | Default | What it is |
+|---|---|---|
+| `hide_live_words` | `true` | "Hide EchoLedger's live words from screenshots and screen shares" (captions, Live Assist, Live Translate). Each app hides them in the way its system allows. |
+| `block_screenshots` | `false` | "Block screenshots of EchoLedger" (the app's screens). |
+| `hint_seen` | `false` | The card's first-time line "You can change this in Settings › After each call" has been shown. |
+| `always_offered` | `false` | The card has offered "Always do this?" once; it never offers it again. |
+| `streak` | `null` | The last choice made on the card (`always_transcribe`, `always_audio` or `delete`) and how many times in a row (1 to 99). |
+
+`GET /api/call-rules` also gains `"declined": [{"kind": "contact", "number": "+923001234567", "name": "Ahmed Khan"},
+{"kind": "source", "source_app": "zoom"}]`: the contacts and Sources whose "Always … for Ahmed?" offer (PLAN_CALL_RULES
+§3) the person turned down or ignored, newest first. Apps never offer it again for those. It is not in `/api/config`.
+
+### `PATCH /api/call-rules/preferences` — `sessions:write`
+Any of the keys above, each on its own: `{"hint_seen": true}`, `{"streak": {"choice": "always_audio", "count": 3}}`,
+`{"streak": null}` → `200` with the whole answer of `GET /api/call-rules`. Keys not sent keep their value, so two
+devices that change different keys never undo each other; for one key, the last change wins. `version` goes up by
+one. A key or a value that is not one of the above is `422 validation_failed` with `error_codes`.
+
+### `POST /api/call-rules/declined` — `sessions:write`
+One contact or Source, the same fields as a rule without `action`: `{"kind": "contact", "number": "+92 300 1234567",
+"name": "Ahmed Khan"}` or `{"kind": "source", "source_app": "zoom"}` → `201`, or `200` when it is already there (a
+number with or without its country code, and a name, match as in a rule). At most 500; past that the oldest goes.
+Making a rule for that contact or Source does not remove it.
+
+### `DELETE /api/call-rules/declined` — `sessions:write`
+Forgets every turned-down offer ("Show these offers again" in Settings) → `204`.
+
+Numbers and names in `declined` are kept, logged and erased like those in rules. Limits: as for rules.
 
 ## Activity centre (since v1.1)
 
