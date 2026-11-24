@@ -2,8 +2,11 @@
 // always the same items (greyed, never hidden, when they can't run), the state's words and ticks, macOS's own items
 // for the standard commands, the Window and Help menus set as the app's.
 import { afterEach, describe, expect, it } from "vitest";
-import { ACTIONS, registerAction, shortcutClashes, type ActionContext } from "./registry";
-import { MENU_BAR, menuBarModel, menuBarProblems, type NativeEntry } from "./menuBar";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { ACTIONS, CONDITIONS, registerAction, shortcutClashes, type ActionContext } from "./registry";
+import { CORE_RUNS, MENU_BAR, menuBarModel, menuBarProblems, type NativeEntry } from "./menuBar";
 
 const mac: ActionContext = { platform: "macos" };
 const offs: (() => void)[] = [];
@@ -97,6 +100,35 @@ describe("the Mac menu bar (FIX-05)", () => {
     expect(find(menu("Live", now({ autoRecord: false })).items, "live.autoRecord")).toMatchObject({ checked: false });
     const theme = find(menu("View", now({ themeDark: true })).items, "view.themeDark");
     expect(theme).toMatchObject({ checked: true });
+  });
+
+  it("the core's own commands (hiding from shares, the recording's, captions, the pill) need no page: enabled by their conditions, with their look rule", () => {
+    const rust = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "src-tauri", "src", "native_menu.rs"), "utf8");
+    const listed = rust.slice(rust.indexOf("pub const CORE_RUNS"), rust.indexOf("];", rust.indexOf("pub const CORE_RUNS")));
+    expect([...listed.matchAll(/"([a-z]+\.[A-Za-z0-9]+)"/g)].map((m) => m[1])).toEqual([...CORE_RUNS]);
+    // Nothing on the page answers them: still enabled (the core does), by their conditions.
+    const live = (state: ActionContext["state"] = {}) => menu("Live", { ...mac, state }).items;
+    for (const id of ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.hideWordsNow", "live.captions", "live.autoRecord"]) {
+      expect(find(live(), id), id).toMatchObject({ enabled: true });
+    }
+    expect(find(live(), "live.stopHiding")).toMatchObject({ enabled: false });
+    expect(find(live({ hiding: true }), "live.stopHiding")).toMatchObject({ enabled: true });
+    expect(find(live(), "live.pauseRecording")).toMatchObject({ enabled: false });
+    expect(find(live({ recording: true }), "live.pauseRecording")).toMatchObject({
+      enabled: true, core: { when: ["recording"], state: "paused", off: "Pause Recording", on: "Resume Recording", check: null },
+    });
+    expect(find(live(), "live.autoRecord")).toMatchObject({ core: { check: "autoRecord" } });
+    expect(find(menu("Window").items, "window.pill")).toMatchObject({ enabled: true, core: { state: "pillShown", off: "Show Recording Pill", on: "Hide Recording Pill" } });
+    // A page command carries no rule (the core greys it with no page).
+    expect(find(menu("Go").items, "go.library")).not.toHaveProperty("core");
+    // Every condition and state the core follows is one the page has, and the core knows each a core command uses.
+    const appMenu = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "src-tauri", "src", "app_menu.rs"), "utf8");
+    const known = [...appMenu.slice(appMenu.indexOf("pub const CORE_KEYS"), appMenu.indexOf("];", appMenu.indexOf("pub const CORE_KEYS"))).matchAll(/"(\w+)"/g)].map((m) => m[1]);
+    for (const id of CORE_RUNS) {
+      const a = ACTIONS.find((x) => x.id === id)!;
+      for (const key of [...a.when, a.state?.key, a.state?.check].filter(Boolean) as string[]) expect(known, `${id}: ${key}`).toContain(key);
+      for (const key of a.when) expect(Object.keys(CONDITIONS), `${id}: ${key}`).toContain(key);
+    }
   });
 
   it("Space, ⌘← and ⌘→ are greyed while typing, so they keep their text meaning", () => {

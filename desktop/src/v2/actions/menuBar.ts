@@ -91,6 +91,23 @@ export type MenuChoices = Partial<Record<string, readonly { value: string; label
 export const CORE_ACTIONS: ReadonlySet<string> = new Set(["app.settings", "app.quit"]);
 
 /**
+ * The core's own commands (native_menu.rs CORE_RUNS, the same list): run by the core, page or not, as the tray's are,
+ * so they are enabled by their conditions alone; with no page the core keeps their words, greying and ticks in step.
+ */
+export const CORE_RUNS: readonly string[] = [
+  "live.stopRecording", "live.pauseRecording", "live.captions", "live.autoRecord", "live.hideFromShares", "live.hide15",
+  "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "window.pill",
+];
+
+/** A core command's look rule for the core (app_menu.rs CoreItem): its conditions, the state its words follow, its tick. */
+function coreItem(id: string, at: ActionContext) {
+  const a = findAction(id)!;
+  const key = a.state?.key ?? null;
+  const words = (on: boolean) => (key ? actionLabel(id, { ...at, state: { ...at.state, [key]: on } }) : null);
+  return { when: [...a.when], state: key, off: words(false), on: words(true), check: a.state?.check ?? null };
+}
+
+/**
  * Keys with no modifier (Space, Return) are shown in the plan, but a menu key with no modifier would take the key from a
  * text field before the field sees it: they stay the page's own keys, not the menu's.
  */
@@ -109,10 +126,12 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}, kind
       const action = findAction(layout);
       if (!action) throw new Error(`${layout} is not in actions.json`);
       if (action.native && !CORE_ACTIONS.has(action.id)) return { kind: "native", action: action.id, native: action.native };
-      const enabled = CORE_ACTIONS.has(action.id) || (runs(action.id) && available(action.id, at));
+      const core = CORE_RUNS.includes(action.id);
+      const enabled = CORE_ACTIONS.has(action.id) || ((core || runs(action.id)) && available(action.id, at));
       return {
         kind: "item", action: action.id, label: actionLabel(action.id, at), accelerator: menuKey(action.mac), enabled,
         checked: action.state?.check ? !!at.state?.[action.state.check] : null,
+        ...(core ? { core: coreItem(action.id, at) } : {}),
       };
     }
     const label = layout.title ?? (layout.action ? actionLabel(layout.action, at) : "");

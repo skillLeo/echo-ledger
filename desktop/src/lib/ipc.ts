@@ -383,7 +383,11 @@ export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "
 /** The Mac menu bar the page draws (app_menu.rs app_menu_set; built by v2/actions/menuBar.ts). */
 export type NativeMenuBar = { menus: { title: string; role?: "window" | "help"; items: NativeBarEntry[] }[] };
 export type NativeBarEntry =
-  | { kind: "item"; action: string; value?: string; label: string; accelerator: string | null; enabled: boolean; checked: boolean | null }
+  | {
+    kind: "item"; action: string; value?: string; label: string; accelerator: string | null; enabled: boolean; checked: boolean | null;
+    /** One of the core's own commands: what its look follows while there is no page (app_menu.rs CoreItem). */
+    core?: { when: string[]; state: string | null; off: string | null; on: string | null; check: string | null };
+  }
   | { kind: "native"; action: string; native: string }
   | { kind: "separator" }
   | { kind: "submenu"; action?: string; label: string; enabled: boolean; items: NativeBarEntry[] };

@@ -5,7 +5,7 @@
 // other menu (registry.ts).
 import { useEffect, useId, useSyncExternalStore } from "react";
 import { listenTo } from "../../lib/ipc";
-import { canRun, runAction, watchHandlers, type ActionContext } from "./registry";
+import { canRun, findAction, runAction, watchHandlers, type ActionContext } from "./registry";
 import type { MenuChoices } from "./menuBar";
 
 type State = NonNullable<ActionContext["state"]>;
@@ -174,8 +174,18 @@ function letGo() {
   held = null;
 }
 
+/**
+ * The commands a pick may wait for (pure): only one that acts on no recording, the same whenever it runs (Go, View, Help,
+ * File's New…, the app's); one on the selection (Move to Trash) never runs seconds later on another one.
+ */
+export function mayWait(pick: MenuPick): boolean {
+  const action = findAction(pick.id);
+  return !!action && action.appliesTo === "none" && pick.target === undefined && /^(go|view|help|app)\.|^file\.new/.test(pick.id);
+}
+
 function hold(pick: MenuPick, platform: () => ActionContext["platform"]) {
   letGo();
+  if (!mayWait(pick)) return;
   const timer = window.setTimeout(letGo, PICK_HOLD_MS);
   let soon = 0;
   // Told when a command is registered; tried a moment later, once the screen that registered it has settled.
@@ -195,7 +205,8 @@ function hold(pick: MenuPick, platform: () => ActionContext["platform"]) {
  * claims (a menu let go, an earlier one's) is dropped, never run through the registry. Any other (the menu bar,
  * Record's menu, the tree's project menu) runs through the registry with the focused page's state, selection and kind;
  * a pick on a thing (`@target`) runs on that thing instead of the selection. One whose command nothing here answers
- * yet (the window was just built, the app isn't in use yet) waits for it, the latest only, for PICK_HOLD_MS.
+ * yet (the window was just built, the app isn't in use yet) waits for it, the latest only, for PICK_HOLD_MS, when it
+ * acts on no recording (mayWait).
  */
 function runPick(payload: string, platform: () => ActionContext["platform"]) {
   const pick = parsePick(payload);

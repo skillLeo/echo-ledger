@@ -363,9 +363,24 @@ pub fn reopen_action(main_exists: bool, notified_lately: bool) -> Reopen {
     if !main_exists && notified_lately { Reopen::OpenNotified } else { Reopen::Show }
 }
 
-/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray.
+/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray. The menu bar
+/// greys what only its page could do (`app_menu::page_gone`).
 pub fn main_closing(app: &AppHandle) {
     slots(app).closing(MAIN);
+    #[cfg(target_os = "macos")]
+    crate::app_menu::page_gone(app);
+}
+
+/// An in-window command picked from the menu bar while the main window is minimised or put away: brought forward
+/// quietly, as a quiet open is (what keeps it off, a person's hide or a share, still does).
+pub fn bring_forward_quietly(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN) else { return };
+    if slots(app).phase(MAIN) != Phase::Ready {
+        return;
+    }
+    if window.is_minimized().unwrap_or(false) || !window.is_visible().unwrap_or(true) {
+        reveal_main(app, true);
+    }
 }
 
 /// `WindowEvent::Destroyed`: forgets the window's hit regions and caption channel; builds it again when it was asked

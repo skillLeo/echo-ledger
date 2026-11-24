@@ -189,23 +189,104 @@ pub fn acts_outside_main(action: &str) -> bool {
     action.starts_with("window.") || (action.starts_with("live.") && !LIVE_IN_MAIN.contains(&action))
 }
 
-/// What a pick does with the main window.
+/// The menu bar's commands the core answers itself, with or without the main window's page, as the tray does: the
+/// recording's, the captions', the pill's, Auto-record, and hiding from screen shares (Hide from Screen Shares is its
+/// times' sub-menu). The page enables them by their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
+pub const CORE_RUNS: [&str; 11] = [
+    "live.stopRecording",
+    "live.pauseRecording",
+    "live.captions",
+    "live.autoRecord",
+    "live.hideFromShares",
+    "live.hide15",
+    "live.hide60",
+    "live.hideUntilQuit",
+    "live.stopHiding",
+    "live.hideWordsNow",
+    "window.pill",
+];
+
+/// What the core does for one of [`CORE_RUNS`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreStep {
+    StopRecording,
+    TogglePause,
+    ToggleCaptions,
+    ToggleAutoRecord,
+    /// The main window hidden from screen shares for a time (`privacy::hide_main`, as the tray's times).
+    HideFromShares(crate::privacy::share::HideFor),
+    /// In screen shares again (`privacy::show_main_in_shares`, the tray's Show Now).
+    StopHiding,
+    /// Every EchoLedger window off the screen at once (the person's hide, as the shortcut and the tray's).
+    HideWindows,
+    TogglePill,
+}
+
+/// The core's step for a pick (pure); none for what only the page can do. Until I Quit is the core's "until I turn it
+/// off" (the setting it keeps).
+pub fn core_step(action: &str) -> Option<CoreStep> {
+    use crate::privacy::share::HideFor;
+    Some(match action {
+        "live.stopRecording" => CoreStep::StopRecording,
+        "live.pauseRecording" => CoreStep::TogglePause,
+        "live.captions" => CoreStep::ToggleCaptions,
+        "live.autoRecord" => CoreStep::ToggleAutoRecord,
+        "live.hide15" => CoreStep::HideFromShares(HideFor::Minutes15),
+        "live.hide60" => CoreStep::HideFromShares(HideFor::Hour1),
+        "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilOff),
+        "live.stopHiding" => CoreStep::StopHiding,
+        "live.hideWordsNow" => CoreStep::HideWindows,
+        "window.pill" => CoreStep::TogglePill,
+        _ => return None,
+    })
+}
+
+/// Runs a core step, as the tray's menu does.
+async fn run_core(app: &AppHandle, step: CoreStep) -> crate::error::AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    match step {
+        CoreStep::StopRecording if state.capture.is_recording() => crate::actions::stop_recording(app, false).await,
+        CoreStep::StopRecording => Ok(()),
+        CoreStep::TogglePause => crate::actions::toggle_pause(app).await,
+        CoreStep::ToggleCaptions => crate::actions::toggle_captions(app).await,
+        CoreStep::ToggleAutoRecord => state.update_settings(|s| s.auto_mode = !s.auto_mode).map(|_| ()),
+        CoreStep::HideFromShares(choice) => crate::privacy::hide_main(app, choice).map(|_| ()),
+        CoreStep::StopHiding => crate::privacy::show_main_in_shares(app, None),
+        CoreStep::HideWindows => {
+            crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, true);
+            Ok(())
+        }
+        CoreStep::TogglePill => {
+            let hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
+            crate::actions::set_pill_hidden(app, !hidden);
+            Ok(())
+        }
+    }
+}
+
+/// What a pick does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Route {
-    /// Its page takes it (built or being built): the core shows nothing.
+    /// The core answers it, page or not (a [`CORE_RUNS`] command).
+    Core,
+    /// Its page takes it (built or being built).
     Send,
     /// No page can take it (no window, or one being closed): opened quietly, the pick kept for its page.
     OpenQuietly,
-    /// It acts outside the main window and no page can take it: let go, never a reason to bring the window up.
+    /// It acts outside the main window, the core can't do it and no page can take it: let go (the bar greys it then,
+    /// `app_menu::page_gone`).
     Drop,
 }
 
 /// Where a pick goes (pure). The core never reveals the main window for a pick: a person's Hide EchoLedger Windows,
 /// Hide from Screen Shares and a whole-screen share stay as they are (`show_main` would end them, as an open by the
-/// person does). Only when no page can take the pick is the window opened, quietly (`show_main_quietly`: what keeps
-/// it off still does), and never for a pick that acts outside it.
+/// person does). The core's own commands run in the core; when no page can take another pick the window is opened
+/// quietly (`show_main_quietly`: what keeps it off still does), never for a pick that acts outside it.
 pub fn route(action: &str, main: crate::lifecycle::Phase) -> Route {
     use crate::lifecycle::Phase;
+    if core_step(action).is_some() {
+        return Route::Core;
+    }
     match main {
         Phase::Creating | Phase::Ready => Route::Send,
         Phase::Absent | Phase::Closing if acts_outside_main(action) => Route::Drop,
@@ -213,19 +294,28 @@ pub fn route(action: &str, main: crate::lifecycle::Phase) -> Route {
     }
 }
 
-/// A pick from a native menu or the menu bar: the main window's page runs its action ("view.sortBy=newest" with a
-/// choice), by [`route`].
-pub fn picked(app: &AppHandle, id: &str) {
-    let (Some(pick), Some(payload)) = (parse_item_id(id), picked_action(id)) else { return };
+/// A pick from a native menu or the menu bar, by [`route`]: the core's own command run here, else the main window's page
+/// runs its action ("view.sortBy=newest" with a choice). An in-window command brings a minimised or put-away window
+/// forward, quietly (every hide reason kept).
+pub async fn picked(app: &AppHandle, id: &str) -> crate::error::AppResult<()> {
+    let (Some(pick), Some(payload)) = (parse_item_id(id), picked_action(id)) else { return Ok(()) };
     #[cfg(target_os = "macos")]
     crate::app_menu::keep_tick(id);
     let main = crate::lifecycle::phases(app, &[crate::lifecycle::MAIN])[0].1;
     match route(&pick.action, main) {
-        Route::Drop => return,
+        Route::Core => {
+            return match core_step(&pick.action) {
+                Some(step) => run_core(app, step).await,
+                None => Ok(()),
+            };
+        }
+        Route::Drop => return Ok(()),
         Route::OpenQuietly => crate::lifecycle::show_main_quietly(app),
+        Route::Send if !acts_outside_main(&pick.action) => crate::lifecycle::bring_forward_quietly(app),
         Route::Send => {}
     }
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, EVENT, payload);
+    Ok(())
 }
 
 /// One line as the system draws it: a hairline, a greyed title, a sub-menu (one level), a tick or a plain item. An item
@@ -350,27 +440,40 @@ mod tests {
     fn a_pick_never_reveals_the_main_window_and_is_kept_while_it_is_being_closed() {
         use crate::lifecycle::{Delivery, MAIN, Phase, Slots};
         use std::time::Instant;
-        // Its page takes it: nothing shown, whatever the pick (hiding stays hidden, a share stays clean).
-        for action in ["go.library", "live.hide15", "live.stopHiding", "live.hideWordsNow", "window.pill", "live.captions"] {
+        // The core's own commands run in the core, page or not (the tray has them too).
+        for phase in [Phase::Absent, Phase::Closing, Phase::Creating, Phase::Ready] {
+            for action in ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "live.captions", "live.autoRecord", "live.pauseRecording", "live.stopRecording", "window.pill"] {
+                assert_eq!(route(action, phase), Route::Core, "{action} {phase:?}");
+            }
+        }
+        // Its page takes any other: nothing shown (hiding stays hidden, a share stays clean).
+        for action in ["go.library", "window.captions", "live.translate"] {
             assert_eq!(route(action, Phase::Ready), Route::Send, "{action}");
             assert_eq!(route(action, Phase::Creating), Route::Send, "{action}");
         }
-        // No page: an in-window command opens it quietly; one that acts outside it is let go.
+        // No page: an in-window command opens it quietly; one that acts outside it, which the core can't do, is let go
+        // (and greyed: app_menu::pageless_look).
         for phase in [Phase::Absent, Phase::Closing] {
             for action in ["go.library", "file.newRecording", "view.sidebar", "live.startAssist", "live.pastReports"] {
                 assert_eq!(route(action, phase), Route::OpenQuietly, "{action} {phase:?}");
             }
-            for action in ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "live.captions", "live.autoRecord", "live.pauseRecording", "live.stopRecording", "window.pill", "window.captions", "window.assistCard"] {
+            for action in ["window.captions", "window.assistCard", "live.translate", "live.dictation"] {
                 assert_eq!(route(action, phase), Route::Drop, "{action} {phase:?}");
             }
         }
-        // picked(): never show_main (it ends a person's hide and shows the window in a share), only the quiet open.
+        // picked(): never show_main (it ends a person's hide and shows the window in a share), only the quiet open, and
+        // an in-window command brings a minimised or put-away window forward quietly.
         let code = include_str!("native_menu.rs");
-        let body = &code[code.find("pub fn picked(app: &AppHandle, id: &str) {").unwrap()..];
+        let body = &code[code.find("pub async fn picked(app: &AppHandle, id: &str)").unwrap()..];
         let body = &body[..body.find("\n}\n").unwrap()];
         assert!(body.contains("crate::lifecycle::show_main_quietly(app)"));
+        assert!(body.contains("Route::Send if !acts_outside_main(&pick.action) => crate::lifecycle::bring_forward_quietly(app)"));
         assert!(!body.contains("show_main(app)") && !body.contains("opened_by_person"));
-        // A quiet open keeps the window off while the person hid it, and during a whole-screen share.
+        let lifecycle = include_str!("lifecycle.rs");
+        let forward = &lifecycle[lifecycle.find("pub fn bring_forward_quietly(").unwrap()..];
+        let forward = &forward[..forward.find("\n}\n").unwrap()];
+        assert!(forward.contains("reveal_main(app, true)") && forward.contains("is_minimized()") && forward.contains("is_visible()"));
+        // A quiet open keeps the window off while the person hid the windows, and during a whole-screen share.
         use crate::privacy::{Choice, HideReason, Privacy};
         let choice = Choice { hiding: crate::settings::ShareHiding::All, demo: false, main_hidden: true, show_card: false, show_captions: false };
         for reason in [HideReason::Person, HideReason::Share] {
@@ -388,6 +491,40 @@ mod tests {
         assert_eq!(slots.event(MAIN, EVENT, serde_json::json!("go.library")), Delivery::Kept);
         assert!(slots.destroyed(MAIN, now), "built again");
         assert_eq!(slots.ready(MAIN, now).events, vec![(EVENT.to_string(), serde_json::json!("go.library"))]);
+    }
+
+    #[test]
+    fn with_the_window_closed_hide_from_screen_shares_really_hides_and_the_others_run_in_the_core() {
+        use crate::lifecycle::Phase;
+        use crate::privacy::share::{HideFor, hide_until, main_hidden};
+        // The window closed to the menu bar: Hide from Screen Shares › For 15 Minutes is the core's.
+        assert_eq!(route("live.hide15", Phase::Absent), Route::Core);
+        assert_eq!(core_step("live.hide15"), Some(CoreStep::HideFromShares(HideFor::Minutes15)));
+        // What the core does for it is the tray's own hide: the main window is hidden from shares until then.
+        let now = chrono::Local::now();
+        let hide = hide_until(HideFor::Minutes15, now, false).unwrap();
+        assert!(main_hidden(Some(&hide), now.timestamp_millis()));
+        assert!(!main_hidden(Some(&hide), now.timestamp_millis() + 16 * 60 * 1000));
+        let code = include_str!("native_menu.rs");
+        let run = &code[code.find("async fn run_core(").unwrap()..];
+        let run = &run[..run.find("\n}\n").unwrap()];
+        for step in [
+            "CoreStep::HideFromShares(choice) => crate::privacy::hide_main(app, choice)",
+            "CoreStep::StopHiding => crate::privacy::show_main_in_shares(app, None)",
+            "crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, true)",
+            "crate::actions::stop_recording(app, false)",
+            "CoreStep::TogglePause => crate::actions::toggle_pause(app)",
+            "CoreStep::ToggleCaptions => crate::actions::toggle_captions(app)",
+            "crate::actions::set_pill_hidden(app, !hidden)",
+        ] {
+            assert!(run.contains(step), "{step}");
+        }
+        // Every core command has its step but Hide from Screen Shares, its times' sub-menu.
+        for action in CORE_RUNS {
+            assert_eq!(core_step(action).is_some(), action != "live.hideFromShares", "{action}");
+        }
+        // The tray hands every pick to picked(), and a failure is said as the tray's own are.
+        assert!(include_str!("tray.rs").contains("id if crate::native_menu::picked_action(id).is_some() => crate::native_menu::picked(&app, id).await,"));
     }
 
     #[test]
@@ -430,7 +567,7 @@ mod tests {
     #[test]
     fn its_picks_reach_the_main_window_through_the_menus_handler() {
         let tray = include_str!("tray.rs");
-        assert!(tray.contains("id if crate::native_menu::picked_action(id).is_some() => {"));
+        assert!(tray.contains("id if crate::native_menu::picked_action(id).is_some() => crate::native_menu::picked(&app, id).await,"));
         assert!(include_str!("lib.rs").contains("native_menu::native_menu_popup,"));
         assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null })"#));
     }

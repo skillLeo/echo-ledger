@@ -85,6 +85,9 @@ pub enum BarEntry {
         accelerator: Option<String>,
         enabled: bool,
         checked: Option<bool>,
+        /// One of the core's own commands (native_menu::CORE_RUNS): what its look follows while there is no page.
+        #[serde(default)]
+        core: Option<CoreItem>,
     },
     Native {
         action: String,
@@ -128,6 +131,94 @@ pub fn bar_item_id(action: &str, value: Option<&str>) -> Option<String> {
 #[cfg(target_os = "macos")]
 pub fn keep_tick(id: &str) {
     mac::keep_tick(id);
+}
+
+/// A core command's look as the page knows it (its actions.json entry), so the core keeps it in step while there is no
+/// page: the conditions it needs, the state its words follow with both words, the state its tick shows.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct CoreItem {
+    #[serde(default)]
+    pub when: Vec<String>,
+    pub state: Option<String>,
+    pub off: Option<String>,
+    pub on: Option<String>,
+    pub check: Option<String>,
+}
+
+/// What the core knows of the moment, for its own commands' looks while there is no page.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CoreState {
+    pub recording: bool,
+    pub paused: bool,
+    pub captions: bool,
+    pub pill_shown: bool,
+    pub auto_record: bool,
+    pub hiding: bool,
+}
+
+/// The state and condition names the core follows (the same as the page's, v2/actions/registry.ts CONDITIONS and the
+/// menus' state).
+pub const CORE_KEYS: [&str; 7] = ["recording", "notRecording", "paused", "captionsShown", "pillShown", "autoRecord", "hiding"];
+
+impl CoreState {
+    /// Whether a condition or a state holds now (pure); one it doesn't know never does.
+    pub fn holds(&self, key: &str) -> bool {
+        match key {
+            "recording" => self.recording,
+            "notRecording" => !self.recording,
+            "paused" => self.paused,
+            "captionsShown" => self.captions,
+            "pillShown" => self.pill_shown,
+            "autoRecord" => self.auto_record,
+            "hiding" => self.hiding,
+            _ => false,
+        }
+    }
+}
+
+/// Whether the core answers an action itself (pure): Settings…, Quit and its own commands.
+pub fn core_answers(action: &str) -> bool {
+    action == "app.settings" || action == "app.quit" || crate::native_menu::CORE_RUNS.contains(&action)
+}
+
+/// An item's or a sub-menu's look with no page (pure): the core's own commands follow the core's state; what only the
+/// page could do is greyed (its words and tick stay); a sub-menu with no action of its own (Find, Theme) stays as it is.
+pub fn pageless_look(action: Option<&str>, core: Option<&CoreItem>, drawn: &Look, state: &CoreState) -> Look {
+    match (action, core) {
+        (_, Some(core)) => {
+            let on = core.state.as_deref().map(|key| state.holds(key));
+            Look {
+                label: match (on, &core.off, &core.on) {
+                    (Some(true), _, Some(words)) | (Some(false), Some(words), _) => words.clone(),
+                    _ => drawn.label.clone(),
+                },
+                enabled: core.when.iter().all(|key| state.holds(key)),
+                checked: core.check.as_deref().map(|key| state.holds(key)).or(drawn.checked),
+            }
+        }
+        (Some(action), None) if !core_answers(action) => Look { enabled: false, ..drawn.clone() },
+        _ => drawn.clone(),
+    }
+}
+
+/// The main window's page went away (closed to the menu bar): the bar greys what only it could do, and keeps the core's
+/// own commands in step from now on (`core_follow`).
+#[cfg(target_os = "macos")]
+pub fn page_gone(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || mac::follow(&handle));
+}
+
+/// The status changed: with no page, the core's own commands follow it (Pause or Resume Recording, Stop Hiding…).
+/// Posted to the main thread, never waited for.
+#[cfg(target_os = "macos")]
+pub fn core_follow(app: &AppHandle) {
+    use crate::lifecycle::{MAIN, Phase};
+    if !matches!(crate::lifecycle::phases(app, &[MAIN])[0].1, Phase::Absent | Phase::Closing) {
+        return;
+    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || mac::follow(&handle));
 }
 
 /// What an item or a sub-menu shows that can change in place: its words, whether it can be picked, its tick.
@@ -213,7 +304,7 @@ pub fn app_menu_set(app: AppHandle, bar: Option<MenuBar>) -> Result<(), String> 
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{BarEntry, Look, MenuBar, bar_item_id, changed, looks, structure};
+    use super::{BarEntry, CoreItem, CoreState, Look, MenuBar, bar_item_id, changed, looks, pageless_look, structure};
     use std::sync::Mutex;
     use tauri::menu::{AboutMetadata, CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
     use tauri::{AppHandle, Wry};
@@ -264,10 +355,17 @@ mod mac {
     }
 
     /// The bar drawn last: its structure, its looks, and its items' handles in the same order.
+    /// One drawn item or sub-menu: its handle, the action it is for, and, for the core's own commands, their look's rule.
+    struct Slot {
+        handle: Handle,
+        action: Option<String>,
+        core: Option<CoreItem>,
+    }
+
     struct Drawn {
         structure: String,
         looks: Vec<Look>,
-        handles: Vec<Handle>,
+        handles: Vec<Slot>,
     }
 
     static DRAWN: Mutex<Option<Drawn>> = Mutex::new(None);
@@ -278,7 +376,7 @@ mod mac {
         let ticked = {
             let drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner());
             drawn.as_ref().and_then(|d| {
-                d.handles.iter().zip(&d.looks).find_map(|(handle, look)| match handle {
+                d.handles.iter().zip(&d.looks).find_map(|(slot, look)| match &slot.handle {
                     Handle::Check(item) if item.id().0 == id => Some((item.clone(), look.checked.unwrap_or(false))),
                     _ => None,
                 })
@@ -286,6 +384,38 @@ mod mac {
         };
         if let Some((item, checked)) = ticked {
             let _ = item.set_checked(checked);
+        }
+    }
+
+    /// What the core reads of the moment for its own commands.
+    fn core_state(app: &AppHandle) -> CoreState {
+        use tauri::Manager;
+        let state = app.state::<crate::AppState>();
+        let settings = state.settings();
+        let recording = state.capture.is_recording();
+        CoreState {
+            recording,
+            paused: recording && state.capture.is_paused(),
+            captions: state.live.is_live(),
+            pill_shown: recording && !state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
+            auto_record: settings.auto_mode,
+            hiding: crate::privacy::share::main_hidden(settings.main_share_hide.as_ref(), crate::privacy::now_ms()),
+        }
+    }
+
+    /// With no page: each item's look by `pageless_look`, changed in place (on the main thread).
+    pub fn follow(app: &AppHandle) {
+        let state = core_state(app);
+        let Some(mut d) = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
+        let now: Vec<Look> = d.handles.iter().zip(&d.looks).map(|(slot, look)| pageless_look(slot.action.as_deref(), slot.core.as_ref(), look, &state)).collect();
+        for at in changed(&d.looks, &now) {
+            let _ = d.handles[at].handle.relabel(&d.looks[at], &now[at]);
+        }
+        d.looks = now;
+        // A bar the page drew meanwhile wins.
+        let mut drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner());
+        if drawn.is_none() {
+            *drawn = Some(d);
         }
     }
 
@@ -303,7 +433,7 @@ mod mac {
             Some(mut d)
                 if d.structure == shape
                     && d.handles.len() == now.len()
-                    && changed(&d.looks, &now).into_iter().try_for_each(|at| d.handles[at].relabel(&d.looks[at], &now[at])).is_ok() =>
+                    && changed(&d.looks, &now).into_iter().try_for_each(|at| d.handles[at].handle.relabel(&d.looks[at], &now[at])).is_ok() =>
             {
                 d.looks = now;
                 d
@@ -315,7 +445,7 @@ mod mac {
     }
 
     fn draw(app: &AppHandle, bar: &MenuBar, structure: String, looks: Vec<Look>) -> tauri::Result<Drawn> {
-        fn entries(app: &AppHandle, items: &[BarEntry], handles: &mut Vec<Option<Handle>>) -> tauri::Result<Vec<Box<dyn IsMenuItem<Wry>>>> {
+        fn entries(app: &AppHandle, items: &[BarEntry], handles: &mut Vec<Option<Slot>>) -> tauri::Result<Vec<Box<dyn IsMenuItem<Wry>>>> {
             let mut out: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
             for item in items {
                 match item {
@@ -345,7 +475,7 @@ mod mac {
                         };
                         out.push(Box::new(made?));
                     }
-                    BarEntry::Item { action, value, label, accelerator, enabled, checked } => {
+                    BarEntry::Item { action, value, label, accelerator, enabled, checked, core } => {
                         // A choice with an empty value isn't drawn (its pick would say nothing); its place stays,
                         // empty, so the handles keep the looks' order.
                         let Some(id) = bar_item_id(action, value.as_deref()) else {
@@ -357,25 +487,25 @@ mod mac {
                             Some(checked) => {
                                 let item = CheckMenuItem::with_id(app, &id, label, *enabled, *checked, accelerator.as_deref())
                                     .or_else(|_| CheckMenuItem::with_id(app, &id, label, *enabled, *checked, None::<&str>))?;
-                                handles.push(Some(Handle::Check(item.clone())));
+                                handles.push(Some(Slot { handle: Handle::Check(item.clone()), action: Some(action.clone()), core: core.clone() }));
                                 out.push(Box::new(item));
                             }
                             None => {
                                 let item = MenuItem::with_id(app, &id, label, *enabled, accelerator.as_deref())
                                     .or_else(|_| MenuItem::with_id(app, &id, label, *enabled, None::<&str>))?;
-                                handles.push(Some(Handle::Item(item.clone())));
+                                handles.push(Some(Slot { handle: Handle::Item(item.clone()), action: Some(action.clone()), core: core.clone() }));
                                 out.push(Box::new(item));
                             }
                         }
                     }
-                    BarEntry::Submenu { label, enabled, items, .. } => {
+                    BarEntry::Submenu { action, label, enabled, items } => {
                         // Its place before its items', as `looks` has it.
                         let place = handles.len();
                         handles.push(None);
                         let inner = entries(app, items, handles)?;
                         let refs: Vec<&dyn IsMenuItem<Wry>> = inner.iter().map(|b| b.as_ref()).collect();
                         let sub = Submenu::with_items(app, label, *enabled, &refs)?;
-                        handles[place] = Some(Handle::Sub(sub.clone()));
+                        handles[place] = Some(Slot { handle: Handle::Sub(sub.clone()), action: action.clone(), core: None });
                         out.push(Box::new(sub));
                     }
                 }
@@ -512,6 +642,45 @@ mod tests {
         assert!(page.contains("void api.appMenuSet(null)"));
         let main = include_str!("../../src/views/main/MainApp.tsx");
         assert!(main.contains(r#"status?.platform === "macos" && ui.flags["ui_v2.shell"] ? <MenuBar platform="macos" /> : null"#));
+    }
+
+    #[test]
+    fn with_no_page_its_items_are_greyed_and_the_core_s_own_follow_the_core() {
+        let drawn = |label: &str, enabled: bool, checked: Option<bool>| Look { label: label.into(), enabled, checked };
+        let idle = CoreState::default();
+        let recording = CoreState { recording: true, ..CoreState::default() };
+        // What only the page could do: greyed, its words and tick kept.
+        assert_eq!(pageless_look(Some("go.library"), None, &drawn("Library", true, None), &idle), drawn("Library", false, None));
+        assert_eq!(pageless_look(Some("view.themeDark"), None, &drawn("Dark", true, Some(true)), &idle), drawn("Dark", false, Some(true)));
+        assert!(!pageless_look(Some("view.sortBy"), None, &drawn("Sort By", true, None), &idle).enabled);
+        // Settings…, Quit, a sub-menu of its own (Find, Theme) and Hide from Screen Shares stay.
+        for action in [Some("app.settings"), Some("app.quit"), None, Some("live.hideFromShares")] {
+            assert!(pageless_look(action, None, &drawn("x", true, None), &idle).enabled, "{action:?}");
+        }
+        // The core's own: their conditions, words and ticks from the core's state.
+        let pause = CoreItem { when: vec!["recording".into()], state: Some("paused".into()), off: Some("Pause Recording".into()), on: Some("Resume Recording".into()), check: None };
+        assert_eq!(pageless_look(Some("live.pauseRecording"), Some(&pause), &drawn("Pause Recording", true, None), &idle), drawn("Pause Recording", false, None));
+        assert_eq!(pageless_look(Some("live.pauseRecording"), Some(&pause), &drawn("Pause Recording", false, None), &recording), drawn("Pause Recording", true, None));
+        let paused = CoreState { paused: true, ..recording };
+        assert_eq!(pageless_look(Some("live.pauseRecording"), Some(&pause), &drawn("Pause Recording", true, None), &paused).label, "Resume Recording");
+        let auto = CoreItem { when: vec![], state: None, off: None, on: None, check: Some("autoRecord".into()) };
+        assert_eq!(pageless_look(Some("live.autoRecord"), Some(&auto), &drawn("Auto-record", true, Some(false)), &CoreState { auto_record: true, ..idle }).checked, Some(true));
+        let stop_hiding = CoreItem { when: vec!["hiding".into()], state: None, off: None, on: None, check: None };
+        assert!(!pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", true, None), &idle).enabled);
+        assert!(pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", false, None), &CoreState { hiding: true, ..idle }).enabled);
+        // Every key the core follows holds when its state does; one it doesn't know never does.
+        let all = CoreState { recording: true, paused: true, captions: true, pill_shown: true, auto_record: true, hiding: true };
+        for key in CORE_KEYS {
+            assert_eq!(all.holds(key), key != "notRecording", "{key}");
+        }
+        assert!(!all.holds("somethingElse"));
+        // Wired: the page going away greys, and the status keeps the core's own in step while there is no page.
+        assert!(include_str!("lifecycle.rs").contains("crate::app_menu::page_gone(app);"));
+        assert!(include_str!("commands.rs").contains("crate::app_menu::core_follow(app);"));
+        let code = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
+        let follow = &code[code.find("pub fn follow(app: &AppHandle)").unwrap()..];
+        let follow = &follow[..follow.find("\n    }\n").unwrap()];
+        assert!(follow.contains(".take()") && follow.contains("pageless_look("), "taken out of its lock before the menu changes");
     }
 
     #[test]

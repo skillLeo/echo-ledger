@@ -6,7 +6,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { canRun, registerAction } from "./registry";
 import { MENU_BAR_SETTLE_MS, MenuBar, useMenuBar } from "./useMenuBar";
-import { PICK_HOLD_MS, listenToMenuPicks, menuPicksReady, menuSnapshot, parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
+import { PICK_HOLD_MS, listenToMenuPicks, mayWait, menuPicksReady, menuSnapshot, parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -149,6 +149,29 @@ describe("the menu bar in step with the app (FIX-05)", () => {
     act(() => { offs.push(registerAction("go.shared", shared)); });
     act(() => { vi.advanceTimersByTime(1); });
     expect(shared).not.toHaveBeenCalled();
+  });
+
+  it("only a pick that acts on no recording waits: a held Move to Trash never runs later on another selection", async () => {
+    render(<App platform="macos" />);
+    setMenuPart("page", { targets: ["r1"] });
+    const trash = vi.fn();
+    await act(() => emitEvent("menu:action", "recording.moveToTrash"));
+    act(() => setMenuPart("page", { targets: ["r2"] }));
+    act(() => { offs.push(registerAction("recording.moveToTrash", trash)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(trash).not.toHaveBeenCalled();
+    // A thing of its own (the tree's project) doesn't wait either.
+    const rename = vi.fn();
+    await act(() => emitEvent("menu:action", "project.rename@p1"));
+    act(() => { offs.push(registerAction("project.rename", rename)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(rename).not.toHaveBeenCalled();
+    expect(mayWait({ id: "go.library" })).toBe(true);
+    expect(mayWait({ id: "file.newVoiceNote" })).toBe(true);
+    expect(mayWait({ id: "view.themeDark" })).toBe(true);
+    expect(mayWait({ id: "help.shortcuts" })).toBe(true);
+    for (const id of ["recording.moveToTrash", "recording.pin", "file.rename", "file.export", "recording.deleteNow"]) expect(mayWait({ id }), id).toBe(false);
+    setMenuPart("page", null);
   });
 
   it("a context menu's pick (numbered) goes to its menu only, never through the registry; others never go to it", async () => {
