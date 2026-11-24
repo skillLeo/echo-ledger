@@ -155,6 +155,53 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(document.querySelector(".el-lib-list")).toBeNull();
   });
 
+  it("a menu shows only the keys the Library answers, and they work: F2 Rename…, Ctrl+T Transcribe, Ctrl+Shift+L Mark as important", async () => {
+    respond("sessions_transcribe_estimate", { minutes: 3, minutes_left: 310, items: [] });
+    await show();
+    const keysOf = (menu: HTMLElement) => Object.fromEntries([...menu.querySelectorAll('[role^="menuitem"]')]
+      .map((m) => [m.querySelector(".el-menu__label")?.textContent, m.querySelector(".el-menu__shortcut")?.textContent ?? null]));
+    fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
+    const menu = screen.getByRole("menu", { name: "Recording actions" });
+    expect(keysOf(menu)).toEqual({
+      Open: "Enter", Transcribe: "Ctrl+T", Pin: null, "Mark as important": "Ctrl+Shift+L", Labels: null, "Move to project": null,
+      "Rename…": "F2", Export: null, "Move to trash": "Delete",
+    });
+    fireEvent.keyDown(menu, { key: "Escape" });
+    act(() => row("Bilal Qureshi").focus());
+    fireEvent.keyDown(row("Bilal Qureshi"), { key: "F2" });
+    expect(screen.getByRole("dialog", { name: /^Rename/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /^Rename/ }), { key: "Escape" });
+    act(() => row("Voice note").focus());
+    fireEvent.keyDown(row("Voice note"), { key: "t", ctrlKey: true });
+    await act(flushAsync);
+    expect(screen.getByRole("dialog", { name: /^Transcribe/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /^Transcribe/ }), { key: "Escape" });
+    act(() => row("Bilal Qureshi").focus());
+    fireEvent.keyDown(row("Bilal Qureshi"), { key: "L", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["bilal"], action: "important", clientId: null, label: null });
+    // The list's space: only Select all's ⌘A / Ctrl+A is the Library's.
+    render(<LibraryV2 onImport={() => undefined} onRecord={() => undefined} />);
+    await act(flushAsync);
+    fireEvent.contextMenu(document.querySelectorAll(".el-lib__main")[1] as HTMLElement, { clientX: 400, clientY: 500 });
+    const space = keysOf(screen.getByRole("menu", { name: "List actions" }));
+    expect(Object.entries(space).filter(([, key]) => key)).toEqual([["Select all", "Ctrl+A"]]);
+  });
+
+  it("on a Mac the same keys in its words: ⇧⌘L Mark as important, ⌘T Transcribe", async () => {
+    setPlatform("MacIntel");
+    respond("sessions_transcribe_estimate", { minutes: 3, minutes_left: 310, items: [] });
+    await show();
+    act(() => row("Bilal Qureshi").focus());
+    fireEvent.keyDown(row("Bilal Qureshi"), { key: "l", metaKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["bilal"], action: "important", clientId: null, label: null });
+    act(() => row("Voice note").focus());
+    fireEvent.keyDown(row("Voice note"), { key: "t", metaKey: true });
+    await act(flushAsync);
+    expect(screen.getByRole("dialog", { name: /^Transcribe/ })).toBeInTheDocument();
+  });
+
   it("an empty Library (its empty state) has no list-space menu", async () => {
     respond("library_list", []);
     respond("library_refresh", []);

@@ -23,10 +23,10 @@ import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_G
 import { RecordingRow } from "./RecordingRow";
 import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
-import { contextItems, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
+import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
 import { currentPlatform, popupNative } from "../actions/popup";
-import { choiceItems, menuItems, registerAction, type ActionContext } from "../actions/registry";
+import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
@@ -80,6 +80,10 @@ export const FILTER_DEBOUNCE_MS = 150;
  * test keeps them one). */
 export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
+/** The menu keys the Library answers through the registry (UX-22); with Open (Enter, the row's own), Move to trash
+ * (Delete, ⌘⌫) and Select all (⌘A), the only shortcuts its menus show. */
+const KEYED_HERE = ["file.rename", "recording.transcribe", "recording.important"] as const;
+const LIBRARY_KEYS: ReadonlySet<string> = new Set([...KEYED_HERE, "recording.open", "recording.moveToTrash", "edit.selectAll"]);
 
 /**
  * UX-25: where the list was when a recording was opened from it: the place and view, the scroll, the recording and its
@@ -1109,6 +1113,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
+    // The menus' keys (actions.json, UX-22): Rename… F2, Transcribe ⌘T / Ctrl+T, Mark as important ⇧⌘L / Ctrl+Shift+L,
+    // on the picked recordings or the focused one, through the registry (the menus show only the keys answered here).
+    for (const id of KEYED_HERE) {
+      if (!keyMatches(e, shortcutOf(id, currentPlatform()))) continue;
+      const ids = choosing && pickedIds.length ? pickedIds : focused ? [focused] : [];
+      if (!ids.length || e.defaultPrevented) return;
+      e.preventDefault();
+      runAction(id, recordingContext(ids));
+      return;
+    }
     if (mod && e.key.toLowerCase() === "a" && !e.shiftKey) {
       e.preventDefault();
       pickAll();
@@ -1222,7 +1236,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
         ], ctx).map(oneOf),
         "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: f.label })), ctx),
-      }),
+      }, LIBRARY_KEYS),
     };
   };
   /** A recording in Trash: Restore | Delete immediately…; Trash itself (its empty space): Empty trash…. */
@@ -1234,7 +1248,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
       "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
       "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label, checked: density === d })), ctx).map(oneOf),
-    });
+    }, LIBRARY_KEYS);
   };
   /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
   const showMenu = (next: { at: { x: number; y: number }; ids: string[]; space?: true; trash?: true }) => {
