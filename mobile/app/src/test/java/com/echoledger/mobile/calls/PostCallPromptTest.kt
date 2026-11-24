@@ -1139,7 +1139,8 @@ class PostCallPromptTest : AppTest() {
         pumpUntil("held, not deleted yet") {
             app.peekRecording("call-2")?.let { it.state == "pending_decision" && it.notDeletedYet } == true
         }
-        assertTrue("held behind call-1's question", DecisionPopup.answersFor("call-2"))
+        // Marked first (the store), then held on the main thread: never held while it could still be deleted.
+        pumpUntil("held behind call-1's question") { DecisionPopup.answersFor("call-2") }
         assertEquals("call-1", DecisionPopup.showingFor)
         assertTrue(app.graph.recordings.encryptedFile("call-2").exists())
 

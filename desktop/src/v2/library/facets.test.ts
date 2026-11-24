@@ -6,7 +6,8 @@ import { makeItem } from "../../test/fixtures";
 import type { LibraryItem } from "../../lib/ipc";
 import {
   activeSections, clearSection, cleanSpec, dateRange, facetCounts, filterFacts, inLibraryView, libraryViewCounts, matchesSearch, needsReason, needsYou,
-  foldText, needsYouCount, pillWords, prepare, readSpec, searchWords, setDate, setNot, sourceOf, statusOf, toggleValue, STUCK_MS, type FilterSpec,
+  foldText, needsYouCount, pillWords, prepare, readSpec, searchWords, setDate, setNot, sourceOf, statusOf, toggleValue, LIBRARY_VIEWS, STUCK_MS, type FilterSpec,
+  inTab, kindOf, kindOfItem, kindOfSource, shownTabs, tabCounts, LIBRARY_TAB_NAMES,
 } from "./facets";
 
 const NOW = new Date(2026, 10, 23, 12, 0); // Mon 23 Nov 2026, local
@@ -69,14 +70,40 @@ describe("Needs you", () => {
 });
 
 describe("the library views", () => {
-  it("All, Needs you, Unread, Important, Not transcribed, Audio only; a deleted recording is in none", () => {
+  it("All, Needs you, Unread, Important, Audio only (Not transcribed is Audio only since v2.1); a deleted recording is in none", () => {
     const { facts } = prepared();
-    expect(libraryViewCounts(facts)).toEqual({ all: 7, needs: 2, unread: 2, important: 1, not_transcribed: 1, audio_only: 1 });
+    expect(LIBRARY_VIEWS).toEqual(["all", "needs", "unread", "important", "audio_only"]);
+    expect(libraryViewCounts(facts)).toEqual({ all: 7, needs: 2, unread: 2, important: 1, audio_only: 1 });
+    // Audio only is Status's not_transcribed: the same recordings, so the view and the filter agree.
+    expect(facts.filter((f) => inLibraryView(f, "audio_only")).map((f) => f.item.id))
+      .toEqual(facts.filter((f) => f.values.status[0] === "not_transcribed").map((f) => f.item.id));
     expect(facts.filter((f) => inLibraryView(f, "unread")).map((f) => f.item.id)).toEqual(["vn1", "up1"]);
   });
   it("opened on this computer is read at once, before the server says so", () => {
     const { facts } = prepare(ITEMS, { now: NOW.getTime(), read: new Set(["vn1"]) });
     expect(facts.filter((f) => inLibraryView(f, "unread")).map((f) => f.item.id)).toEqual(["up1"]);
+  });
+});
+
+describe("the kinds and the page's tabs (contract 2.0.0-q)", () => {
+  it("one kind each from its Source, the server's when it sent one; the kind tabs add up to All; Other only while it has some", () => {
+    const { facts } = prepared();
+    const live = facts.filter((f) => inLibraryView(f, "all"));
+    // vn1 came in as a file here (Imported): a voice note's app, but Other.
+    expect(Object.fromEntries(live.map((f) => [f.item.id, kindOf(f)]))).toEqual({ wa1: "call", wa2: "call", zo1: "meeting", vn1: "other", tm1: "meeting", up1: "meeting", old: "meeting" });
+    const counts = tabCounts(live);
+    expect(counts).toEqual({ all: 7, calls: 2, meetings: 4, voice_notes: 0, other: 1 });
+    expect(counts.calls + counts.meetings + counts.voice_notes + counts.other).toBe(counts.all);
+    expect(live.filter((f) => inTab(f, "other")).map((f) => f.item.id)).toEqual(["vn1"]);
+    expect(LIBRARY_TAB_NAMES.other).toBe("Other");
+    expect(shownTabs(counts, "all")).toEqual(["all", "calls", "meetings", "voice_notes", "other"]);
+    // Voice notes always shows, at 0 too; Other only while it has recordings, or while it is the open tab.
+    expect(shownTabs({ ...counts, other: 0 }, "all")).toEqual(["all", "calls", "meetings", "voice_notes"]);
+    expect(shownTabs({ ...counts, other: 0 }, "other")).toEqual(["all", "calls", "meetings", "voice_notes", "other"]);
+    // The server's kind wins; one this app doesn't know, or none, is worked out from the Source; an unknown Source is Other.
+    expect(kindOfItem({ ...makeItem("k"), facets: { source: "zoom", kind: "call" } } as LibraryItem, "zoom")).toBe("call");
+    expect(kindOfItem({ ...makeItem("k"), facets: { source: "zoom", kind: "podcast" } } as LibraryItem, "zoom")).toBe("meeting");
+    expect(["whatsapp", "google_meet", "voice_note", "imported", "carrier_pigeon"].map(kindOfSource)).toEqual(["call", "meeting", "voice_note", "other", "other"]);
   });
 });
 
@@ -97,7 +124,7 @@ describe("each section's options with their counts", () => {
   });
   it("Device and Status keep their own order; Project and Language most first", () => {
     expect(pairs(counts().device)).toEqual([["Phone", 1], ["Desktop", 5], ["Web", 1]]);
-    expect(pairs(counts().status)).toEqual([["Transcribed", 3], ["Not transcribed", 1], ["Processing", 2], ["Failed", 1]]);
+    expect(pairs(counts().status)).toEqual([["Transcribed", 3], ["Audio only", 1], ["In progress", 2], ["Failed", 1]]);
     expect(pairs(counts().project)).toEqual([["No project", 5], ["Acme", 2]]);
     expect(pairs(counts().language)).toEqual([["Unknown", 6], ["Urdu", 1]]);
   });
@@ -128,7 +155,7 @@ describe("each section's options with their counts", () => {
   it("is not counts the same way: the other sections count what it keeps", () => {
     const c = counts(setNot(toggleValue({}, "source", "zoom"), "source", true));
     expect(table(c.source).Zoom).toBe(3);
-    expect(table(c.status)).toEqual({ Transcribed: 2, "Not transcribed": 1, Processing: 0, Failed: 1 });
+    expect(table(c.status)).toEqual({ Transcribed: 2, "Audio only": 1, "In progress": 0, Failed: 1 });
   });
   it("a ticked value stays offered when nothing has it any more", () => {
     // Most first, the one at 0 last: offered, to take off again or for "is not".

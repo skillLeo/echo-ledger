@@ -6,24 +6,29 @@
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
 // reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
 // a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { PanelToggle } from "../shell/NavRail";
+import { PanelToggle, usePageHistory } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
+import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Button, Card, Dialog, Icon, LabelDot, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
-  Toast, ToastRegion,
+  Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Toast, ToastRegion, BackToTop, scrollRootOf,
 } from "../components";
-import { ScreensMark } from "./screens";
-import { binHours, binSentence, isUntranscribed, rowModel, type SavedView } from "./model";
+import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
+import { RecordingRow } from "./RecordingRow";
+import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
+import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
+import { confirmAction } from "../../lib/confirm";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, LIBRARY_TABS, matchesSearch, prepare, searchWords, sourceOf, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
@@ -38,7 +43,6 @@ import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove
 import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
-import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
 import { QueueV2 } from "./QueueV2";
 import { useLibraryQueue } from "../../views/main/LibraryQueue";
@@ -47,14 +51,15 @@ import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLa
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
-  TranscribeDialog, WhatsAppDialog,
+  sayProblem, TranscribeDialog, WhatsAppDialog, ZIP_FORMATS,
 } from "./organise";
+import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 
 /** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
 export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
 
 type Organise =
-  | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
+  | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null; of?: number }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
 
 /** How often the list syncs while something uploads or is transcribed (classic's)… */
@@ -75,6 +80,18 @@ export const FILTER_DEBOUNCE_MS = 150;
  * test keeps them one). */
 export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
+/** The menu keys the Library answers through the registry (UX-22); with Open (Enter, the row's own), Move to trash
+ * (Delete, ⌘⌫) and Select all (⌘A), the only shortcuts its menus show. */
+const KEYED_HERE = ["file.rename", "recording.transcribe", "recording.important"] as const;
+const LIBRARY_KEYS: ReadonlySet<string> = new Set([...KEYED_HERE, "recording.open", "recording.moveToTrash", "edit.selectAll"]);
+
+/**
+ * UX-25: where the list was when a recording was opened from it: the place and view, the scroll, the recording and its
+ * row's place in the list. Back from the recording the list is there again.
+ */
+type KeptPlace = { key: string; top: number; rowId: string; index: number };
+/** How long the recording you came back from keeps its tint (the owner's "a bit of highlight" that stays). */
+export const LAST_OPENED_MS = 60_000;
 /** A search is one step of Back and Forward once typing has stopped this long. */
 const SEARCH_STEP_MS = 700;
 /** How many steps Back keeps. */
@@ -83,17 +100,17 @@ const HISTORY_MAX = 50;
 export type LibraryPlaceState = { scope: LibraryScope; spec: FilterSpec; query: string; tab: LibraryTab };
 /** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
 type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
-/** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
- * --el-breakpoint-medium. */
-const WIDE = 1440;
-/** …and with the filters pushing the list (the rail and the place's panel take their room too). */
+/** The search box names its place where it has room: from --el-breakpoint-medium, and with the filters pushing the
+ * list (the rail and the place's panel take their room too) from this width. */
 const WIDE_WITH_PANEL = 1800;
 const NARROW = 1024;
-/** The search's placeholder for the room its box has. */
-function placeholderFor(width: number, filtersBeside: boolean): string {
-  if (width >= (filtersBeside ? WIDE_WITH_PANEL : WIDE)) return `Search titles, transcripts and projects (${MOD}F)`;
-  if (width >= NARROW && !filtersBeside) return `Search recordings (${MOD}F)`;
-  return `Search (${MOD}F)`;
+/**
+ * The search's placeholder (UX-20: it names what it searches): "Search recordings ⌘F"; "Search ⌘F" where its box is
+ * narrow (under 1024 px, or with the filters beside it below WIDE_WITH_PANEL).
+ */
+export function placeholderFor(width: number, filtersBeside: boolean): string {
+  if (width >= (filtersBeside ? WIDE_WITH_PANEL : NARROW)) return `Search recordings ${MOD}F`;
+  return `Search ${MOD}F`;
 }
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -101,7 +118,7 @@ const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'));
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
-type Message = { id: number; text: string; action?: { label: string; run: () => void } };
+type Message = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
 
 const readPanel = () => {
   try {
@@ -134,8 +151,8 @@ const EMPTY_VIEW: Partial<Record<LibraryViewId, { title: string; body: string }>
   needs: { title: "Nothing needs you", body: "Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here." },
   unread: { title: "You've opened every recording", body: "New recordings show here until you open them." },
   important: { title: "Nothing marked important yet", body: "Recordings you mark important show here." },
-  not_transcribed: { title: "Everything is transcribed", body: "Recordings without a transcript show here." },
-  audio_only: { title: "No audio-only recordings", body: "Calls saved as audio only show here, to transcribe later." },
+  // Since v2.1 one view (Not transcribed merged into it): every recording kept without a transcript.
+  audio_only: { title: "No audio-only recordings", body: "Recordings kept as audio, without a transcript, show here to transcribe later." },
 };
 
 export type LibraryV2Props = {
@@ -173,7 +190,7 @@ export type LibraryV2Props = {
   onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -187,18 +204,48 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const setOpenId = useCallback((id: string | null) => {
     if (id) {
+      // Opened from the list: keep its place for the way back (UX-25), and the recording starts at its own top.
+      const list = !openIdRef.current ? root.current?.querySelector(".el-lib-list") : null;
+      if (list) {
+        const box = scrollRootOf(root.current);
+        const rows = [...list.querySelectorAll<HTMLElement>("[data-row-id]")];
+        returning.current = { key: viewKeyRef.current, top: box?.scrollTop ?? 0, rowId: id, index: Math.max(0, rows.findIndex((r) => r.dataset.rowId === id)) };
+        scrollTopOnOpen.current = true;
+      }
+      setLastOpened(null);
       setOpened(rememberOpened(id));
       setReadHere((r) => (r.has(id) ? r : new Set(r).add(id)));
       // Read on every device (POST /api/sessions/{id}/opened). Offline it stays read here; the dot is only a hint.
       void api.markOpened(id).catch(() => undefined);
     }
+    openIdRef.current = id;
     setOpenIdNow(id);
   }, []);
+  const openIdRef = useRef<string | null>(null);
+  openIdRef.current = openId;
+  /** The place to come back to from the recording open now (UX-25). */
+  const returning = useRef<KeptPlace | null>(null);
+  const scrollTopOnOpen = useRef(false);
+  /** The recording you came back from: a quiet tint on its row until another is opened or clicked, the view, tab or
+   * filters change, or 60 s pass (UX-25). Not the selection's colour. */
+  const [lastOpened, setLastOpened] = useState<{ id: string; key: string } | null>(null);
   // The filters: what the panel and the pills show at once (`spec`), and what the list and the counts follow
   // (`applied`), 150 ms after the last tick; a change from elsewhere (a view, Clear all) applies at once.
   const [spec, setSpecNow] = useState<FilterSpec>({});
   const [applied, setApplied] = useState<FilterSpec>({});
   const debounce = useRef(0);
+  /** This place and view: what a kept position belongs to (UX-25). */
+  const viewKey = JSON.stringify([scopeKey(scope), tab, cleanSpec(applied), query.trim()]);
+  const viewKeyRef = useRef(viewKey);
+  viewKeyRef.current = viewKey;
+  useEffect(() => {
+    setLastOpened((l) => (l && l.key !== viewKey ? null : l));
+  }, [viewKey]);
+  useEffect(() => {
+    if (!lastOpened) return;
+    const timer = window.setTimeout(() => setLastOpened(null), LAST_OPENED_MS);
+    return () => window.clearTimeout(timer);
+  }, [lastOpened]);
   const setSpec = useCallback((next: FilterSpec, at: "now" | "soon" = "now") => {
     setSpecNow(next);
     window.clearTimeout(debounce.current);
@@ -259,17 +306,40 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   useEffect(() => {
     if (!focusAfter) return;
     setFocusAfter(null);
+    const el = root.current;
+    const rowOf = (id: string | null) => (id ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`) ?? null : null);
+    // Back from a recording opened here (UX-25): the list where it was; the recording's row tinted, or (gone since) the
+    // row now nearest its place.
+    const back = returning.current;
+    returning.current = null;
+    const here = back && back.key === viewKeyRef.current && !!el?.querySelector(".el-lib-list") ? back : null;
+    const box = here ? scrollRootOf(el) : null;
+    if (box && here) box.scrollTop = here.top;
     const active = document.activeElement;
     if (active && active !== document.body) return;
-    const el = root.current;
-    const row = focusAfter.rowId ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusAfter.rowId)}"]`) : null;
+    let row = rowOf(focusAfter.rowId);
+    if (here) {
+      if (row && focusAfter.rowId === here.rowId) setLastOpened({ id: here.rowId, key: here.key });
+      else if (!row) {
+        const rows = [...(el?.querySelectorAll<HTMLElement>(".el-lib-list [data-row-id]") ?? [])];
+        row = rows[Math.min(here.index, rows.length - 1)] ?? null;
+      }
+    }
+    if (row && here && box) {
+      row.focus({ preventScroll: true });
+      const r = row.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (r.height && (r.top < b.top || r.bottom > b.bottom)) row.scrollIntoView?.({ block: "nearest" });
+      return;
+    }
     (row ?? el?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
   }, [focusAfter]);
   const keepHours = useTrashKeepHours();
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
-  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[] } | null>(null);
+  /** Our right-click menu (Windows; a Mac shows the system's): a recording's or the picked ones', or the list's space. */
+  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[]; space?: true; trash?: true } | null>(null);
   const [organise, setOrganise] = useState<Organise | null>(null);
   const endSelection = useCallback(() => {
     setSelecting(false);
@@ -277,10 +347,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     anchor.current = null;
   }, []);
 
-  const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
+  const say = useCallback((text: string, action?: Message["action"], error?: boolean) => setMessage({ id: ++seq.current, text, action, error }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
   // the list is away (Trash, a selection, a recording open).
-  const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
+  const queue = useLibraryQueue(useCallback((text: string, error?: boolean) => say(text, undefined, error), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -526,6 +596,57 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     restoredId.current = null;
     if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
   }, [items, initialOpen]);
+  // A stuck group heading also covers the scrolling box's top padding (UX-25 review): mark the stuck ones, and give
+  // the cover the padding's height, as the list scrolls.
+  useEffect(() => {
+    const box = scrollRootOf(root.current);
+    if (!box) return;
+    let frame = 0;
+    const mark = () => {
+      frame = 0;
+      const el = root.current;
+      if (!el) return;
+      const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
+      // On the Library's root: the stuck headings and the stuck selection bar both cover the padding band.
+      el.style.setProperty("--el-sticky-cover", `${pad}px`);
+      const top = box.getBoundingClientRect().top + pad;
+      const stuck = (h: HTMLElement) => box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1;
+      for (const h of el.querySelectorAll<HTMLElement>(".el-lib-list > .el-list-section, .el-selectbar")) h.toggleAttribute("data-stuck", stuck(h));
+    };
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(mark);
+    };
+    box.addEventListener("scroll", soon, { passive: true });
+    // A tab, a filter, a sort, a delete or a resize moves the headings without a scroll: marked again then too.
+    window.addEventListener("resize", soon);
+    const resized = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
+    if (resized && root.current) resized.observe(root.current);
+    return () => {
+      box.removeEventListener("scroll", soon);
+      window.removeEventListener("resize", soon);
+      resized?.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  // A recording opened from the list starts at its own top (UX-25 keeps the list's place for the way back). In the
+  // Table it opens in a drawer over the list, which stays as it is.
+  useEffect(() => {
+    if (!openId || !scrollTopOnOpen.current) return;
+    scrollTopOnOpen.current = false;
+    if (layout !== "table" || trash) {
+      const box = scrollRootOf(root.current);
+      if (box) box.scrollTop = 0;
+    }
+    // Only when a recording opens: the layout and the place are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+  // The recording opened from the list is gone since (deleted elsewhere, or no longer here): back to the list, where it was.
+  useEffect(() => {
+    if (!openId || !items || returning.current?.rowId !== openId) return;
+    if (items.some((i) => i.id === openId && !i.deleted)) return;
+    setOpenIdNow(null);
+    setFocusAfter({ rowId: null, seq: ++seq.current });
+  }, [items, openId]);
   const reported = useRef<string | null | undefined>(undefined);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
@@ -596,6 +717,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // place, the filters and the search.
   const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
   const tabCount = useMemo(() => tabCounts(filtered), [filtered]);
+  // Other only while it has recordings, or is open (contract 2.0.0-q: the tabs add up to All).
+  const tabsShown = useMemo(() => shownTabs(tabCount, tab), [tabCount, tab]);
   const shownItems = useMemo(() => [...waitingHere, ...filtered.filter((f) => inTab(f, tab)).map((f) => f.item)], [waitingHere, filtered, tab]);
   // Kept by the window while another place is shown, to come back to as it was.
   const placeNow = useRef(onPlace);
@@ -629,10 +752,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
         run: () => void api.restoreSession(item.id).then(async () => {
           await load();
           setFocusAfter({ rowId: item.id, seq: ++seq.current });
-        }).catch((e) => say(errorMessage(e))),
+        }).catch((e) => sayProblem(say, errorMessage(e))),
       });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -652,7 +775,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     }
     await load();
     const left = ids.length - back;
-    say(left === 0 ? `${recordingsWord(back)} back` : `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
+    if (left === 0) say(`${recordingsWord(back)} back`);
+    else sayProblem(say, `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
   };
   /** Delete a whole view or more than this many: asked first. */
   const ASK_ABOVE = 20;
@@ -676,7 +800,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       const gone = await api.bulkSessions([...ids], "delete");
       endSelection();
       if (!gone) {
-        say("Nothing was moved to Trash. Try again, or reload the Library.");
+        sayProblem(say, "Nothing was moved to Trash. Try again, or reload the Library.");
         void load();
         return;
       }
@@ -706,7 +830,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
       say(`${recordingsWord(gone)} moved to Trash · ${kept}`, { label: "Undo", run: () => void restoreMany(ids) });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -720,11 +844,11 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       await api.bulkSessions([...ids], on ? "label" : "unlabel", null, list.name);
       say(on ? `Added to ${list.name}` : `Removed from ${list.name}`, changed.length ? {
         label: "Undo",
-        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => say(errorMessage(e))),
+        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => sayProblem(say, errorMessage(e))),
       } : undefined);
       await Promise.all([load(), reloadLists()]);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
@@ -733,7 +857,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       say(ids.length === 1 ? done : `${done} · ${recordingsWord(changed)}`);
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -766,6 +890,9 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
     if (!all((i) => !!i.keep)) add("keep", { label: "Keep forever", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "keep", "Kept forever") });
     if (!none((i) => !!i.keep)) add("unkeep", { label: "Allow auto clean-up", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "unkeep", "Auto clean-up allowed") });
+    // Mark as important (UX-22): actions.json's item, the same as a right-click's (the selection bar's ⋮ and the
+    // recording page's menu have it too).
+    for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: "Organise" });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
         ? { label: `Transcribe (${MAX_TRANSCRIBE} at a time)`, icon: Icons.TranscriptIcon, group: "Organise", disabled: true }
@@ -780,6 +907,34 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     return list.map(({ key: _key, ...item }) => item);
   };
 
+  /**
+   * A row's actions on hover and keyboard focus (UX-06), in place of when and how long: Transcribe for Audio only, Pin or
+   * Unpin, Label, then ⋯ (the whole menu, as a right-click).
+   */
+  const rowActions = (item: LibraryItem, r: RowModel): ReactNode => (
+    <>
+      {r.state?.key === "audio_only" && (
+        <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} aria-label={`Transcribe ${r.title}`} title="Transcribe"
+          onClick={() => setOrganise({ kind: "transcribe", ids: [item.id] })}>Transcribe</Button>
+      )}
+      <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={`${item.pinned ? "Unpin" : "Pin"} ${r.title}`} title={item.pinned ? "Unpin" : "Pin"}
+        onClick={() => void bulk([item.id], item.pinned ? "unpin" : "pin", item.pinned ? "Unpinned" : "Pinned")} />
+      {lists ? (
+        <Menu label={`Label ${r.title}`} button={{ variant: "quiet", size: "sm", icon: Icons.LabelIcon, title: "Label" }}
+          items={() => addToListMenu({ lists, chosen: [item], onToggle: (list, on) => void putInList([item.id], list, on), onNew: () => setNewLabel({ ids: [item.id] }) }).items ?? []} />
+      ) : (
+        <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={`Label ${r.title}`} title="Label" onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
+      )}
+      {/* The same menu as a right-click (UX-22): the system's on a Mac, ours elsewhere. */}
+      {currentPlatform() === "macos" ? (
+        <Button size="sm" variant="quiet" icon={Icons.MoreIcon} aria-label={`More for ${r.title}`} aria-haspopup="menu"
+          onClick={(e) => showMenu({ at: menuPointFor(e.currentTarget), ids: [item.id] })} />
+      ) : (
+        <Menu label={`More for ${r.title}`} items={() => recordingMenu([item.id]).items} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+      )}
+    </>
+  );
+
   const restore = async (b: BinItem) => {
     try {
       await api.restoreSession(b.id);
@@ -787,7 +942,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       await load();
       say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const eraseNow = async (b: BinItem) => {
@@ -797,7 +952,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
       say(`"${b.title || "Recording"}" deleted forever`);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -868,22 +1023,24 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       endSelection();
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
     // The press that ended a drag never opens or ticks the row.
     if (dragJustEnded()) return;
+    // Another row pressed: the tint of the one you came back from goes (UX-25).
+    if (lastOpened?.id !== item.id) setLastOpened(null);
     if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) pickRange(item.id);
     else if (choosing || e.shiftKey || e.metaKey || e.ctrlKey) toggle(item.id);
     else setOpenId(item.id);
   };
   const rowMenu = (item: LibraryItem, e: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLButtonElement>) => {
     const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
-    setContext({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
+    showMenu({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
   };
   /** A row's checkbox: ticks it (Shift: the range from the last one ticked). */
-  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLInputElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
+  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
 
   /** A row's source logo or label: the list shows only that source, or that label, too (it adds to the section). */
   const quick = (section: Exclude<SectionKey, "date">, value: string) => {
@@ -898,8 +1055,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   };
   /**
    * What Save as view keeps (contract 2.0.0-p: filters, search, sort, group, density). Where the list started from a
-   * label, Important or Not transcribed, that is kept as its filter; Needs you, Unread and Audio only have none, so a
-   * view saved there keeps the filters and the search (the dialog says so).
+   * label, Important or Audio only (Status is not transcribed), that is kept as its filter; Needs you and Unread have
+   * none, so a view saved there keeps the filters and the search (the dialog says so).
    */
   const viewSpec = (): ViewSpec => {
     let filters = spec;
@@ -908,10 +1065,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     };
     if (labelKey) add("labels", labelKey);
     if (baseView === "important") add("marked", "important");
-    if (baseView === "not_transcribed") add("status", "not_transcribed");
+    if (baseView === "audio_only") add("status", "not_transcribed");
     return { filters, search: query.trim() || null, sort: choice.sort, group: choice.group, density };
   };
-  const unsaved = baseView === "needs" || baseView === "unread" || baseView === "audio_only";
+  const unsaved = baseView === "needs" || baseView === "unread";
   const canSave = filtersOn > 0 || !!query.trim() || (baseView !== "all" && !unsaved) || !!labelKey;
   const changed = !!savedView && JSON.stringify([cleanSpec(spec), query.trim() || null, choice.sort, choice.group])
     !== JSON.stringify([cleanSpec(savedView.spec.filters), savedView.spec.search ?? null, savedView.spec.sort, savedView.spec.group]);
@@ -920,11 +1077,15 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // else closes the filters; J and K move between rows, Enter opens one, X ticks it; ⌘A / Ctrl+A picks every row shown;
   // Delete sends the picked (or the focused) ones to Trash with Undo.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  /** Inside the shell (its title row has ← → and the one search): set where usePageHistory and usePageTitle answer. */
+  const inShellRef = useRef(false);
+  const inTitleRowRef = useRef(false);
   keys.current = (e: KeyboardEvent) => {
     if (organise || context || savingView || newLabel) return;
     const mod = e.metaKey || e.ctrlKey;
     // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
-    if (!open && !trash && items && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+    // In the shell's title row (inTitleRow) ⌘F is the row's: it searches this view and says so ("In: All recordings").
+    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -933,7 +1094,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (typing(e.target)) return;
     // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
     // (the search, a field, the pill editor) or with a question open.
-    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+    // In the shell the title row answers them (usePageHistory), asking the Library first: nothing moves twice.
+    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       back.current(e.key === "[" ? "back" : "forward");
@@ -963,6 +1125,16 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     }
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
+    // The menus' keys (actions.json, UX-22): Rename… F2, Transcribe ⌘T / Ctrl+T, Mark as important ⇧⌘L / Ctrl+Shift+L,
+    // on the picked recordings or the focused one, through the registry (the menus show only the keys answered here).
+    for (const id of KEYED_HERE) {
+      if (!keyMatches(e, shortcutOf(id, currentPlatform()))) continue;
+      const ids = choosing && pickedIds.length ? pickedIds : focused ? [focused] : [];
+      if (!ids.length || e.defaultPrevented) return;
+      e.preventDefault();
+      runAction(id, recordingContext(ids));
+      return;
+    }
     if (mod && e.key.toLowerCase() === "a" && !e.shiftKey) {
       e.preventDefault();
       pickAll();
@@ -1010,23 +1182,26 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     walk(way);
   };
   useEffect(() => {
-    // The mouse's back (button 3) and forward (4): never the web view's own page history.
-    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    // The mouse's back (button 3) and forward (4): never the web view's own page history. Heard first (the capture phase),
+    // so the Library answers before the shell's title row, which walks the places, however often it is drawn again; a
+    // press something else took is left alone.
+    // In the shell its title row hears them (usePageHistory) and asks the Library first.
+    const side = (e: MouseEvent) => !inShellRef.current && (e.button === 3 || e.button === 4);
     const down = (e: MouseEvent) => {
       if (side(e)) e.preventDefault();
     };
     const up = (e: MouseEvent) => {
-      if (!side(e)) return;
+      if (!side(e) || e.defaultPrevented) return;
       e.preventDefault();
       // Not behind a question or a dialog.
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       back.current(e.button === 3 ? "back" : "forward");
     };
-    window.addEventListener("mousedown", down);
-    window.addEventListener("mouseup", up);
+    window.addEventListener("mousedown", down, true);
+    window.addEventListener("mouseup", up, true);
     return () => {
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("mouseup", up);
+      window.removeEventListener("mousedown", down, true);
+      window.removeEventListener("mouseup", up, true);
     };
   }, []);
   useEffect(() => {
@@ -1037,13 +1212,201 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setOrganise(null);
     void load();
   };
+  // UX-22 (PLAN_V2_1_POLISH 3b): a recording's right-click menu and its ⋯ are one menu from actions.json; each item
+  // sends its id and the registry runs it (the handlers below). Only what fits: what doesn't apply, or can't run here,
+  // is left out. Several have the title "3 recordings".
+  const recordingContext = (ids: readonly string[]): ActionContext => {
+    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const every = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
+    const one = chosen.length === 1 ? chosen[0] : null;
+    return {
+      platform: currentPlatform(), targets: [...ids], kind: "recording",
+      state: {
+        pinned: every((i) => !!i.pinned), important: every((i) => !!i.important), keptForever: every((i) => !!i.keep),
+        unread: every((i) => i.opened === false && !readHere.has(i.id)), hasTranscript: !!one && !isUntranscribed(one),
+      },
+    };
+  };
+  /** A choice of one (a project, a sort order): a radio item. */
+  const oneOf = (item: MenuItem): MenuItem => ({ ...item, radio: true });
+  const recordingMenu = (ids: readonly string[]): { title?: string; items: MenuItem[] } => {
+    // More than the core takes at once: the menu says so and does nothing else.
+    if (ids.length > MAX_BULK) return { title: manyTitle(ids.length), items: [{ label: `Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`, disabled: true }] };
+    const ctx = recordingContext(ids);
+    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const one = chosen.length === 1 ? chosen[0] : null;
+    // One recording: Transcribe only while it is Audio only (Ask about this once it has a transcript).
+    const list = one ? RECORDING_ONE.filter((id) => id !== "recording.transcribe" || rowState(one)?.key === "audio_only") : RECORDING_MANY;
+    const inList = (key: string) => chosen.length > 0 && chosen.every((i) => (i.labels ?? []).some((l) => listKey(l) === key));
+    const where = one ? one.client?.id ?? "none" : null;
+    return {
+      title: manyTitle(ids.length),
+      items: contextItems(list, ctx, {
+        "recording.labels": [
+          ...(lists ? choiceItems("recording.labels", lists.map((l) => ({ value: l.key, label: l.name, checked: inList(l.key) })), ctx) : []),
+          ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
+        ],
+        "recording.moveToProject": choiceItems("recording.moveToProject", [
+          { value: "none", label: "No project", checked: where === "none" },
+          ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
+        ], ctx).map(oneOf),
+        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: f.label })), ctx),
+      }, LIBRARY_KEYS),
+    };
+  };
+  /** A recording in Trash: Restore | Delete immediately…; Trash itself (its empty space): Empty trash…. */
+  const trashMenu = (ids: readonly string[]): MenuItem[] =>
+    contextItems(ids.length ? TRASH_ITEM : TRASH, { platform: currentPlatform(), targets: [...ids], kind: "trash" });
+  const listSpaceMenu = (): MenuItem[] => {
+    const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
+    return contextItems(LIST_SPACE, ctx, {
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
+      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label, checked: density === d })), ctx).map(oneOf),
+    }, LIBRARY_KEYS);
+  };
+  /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
+  const showMenu = (next: { at: { x: number; y: number }; ids: string[]; space?: true; trash?: true }) => {
+    if (currentPlatform() !== "macos") {
+      setContext(next);
+      return;
+    }
+    const menu = next.trash ? { title: undefined, items: trashMenu(next.ids) } : next.space ? { title: undefined, items: listSpaceMenu() } : recordingMenu(next.ids);
+    void popupNative(menu.items, next.at, menu.title).then((shown) => { if (!shown) setContext(next); });
+  };
+  /** The list's empty space (below or beside the rows, in the box that scrolls; not a row, a field or a menu): its own menu. */
+  const spaceMenu = useRef<(e: MouseEvent) => void>(() => undefined);
+  spaceMenu.current = (e: MouseEvent) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (!target || e.defaultPrevented || open || (!trash && (layout === "table" || !items))) return;
+    if (target.closest("li, a, button, input, textarea, select, header, .el-lib-row2, .el-banner, .el-empty, [role='status'], [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
+    // Only the list's area, under row 2 (or Trash's list): not the title, the count, a banner or an empty state.
+    const el = root.current;
+    const list = el?.querySelector<HTMLElement>(trash ? '[aria-label="Deleted recordings"]' : ".el-lib-list");
+    if (!list) return;
+    const from = trash ? list.getBoundingClientRect().top : el?.querySelector(".el-lib-row2")?.getBoundingClientRect().bottom ?? list.getBoundingClientRect().top;
+    if (e.clientY < from) return;
+    // In Trash its own: Empty trash… (only while it holds something).
+    if (trash && !bin?.length) return;
+    e.preventDefault();
+    showMenu({ at: { x: e.clientX, y: e.clientY }, ids: [], ...(trash ? { trash: true as const } : { space: true as const }) });
+  };
+  useEffect(() => {
+    const box = scrollRootOf(root.current);
+    if (!box) return;
+    const on = (e: MouseEvent) => spaceMenu.current(e);
+    box.addEventListener("contextmenu", on);
+    return () => box.removeEventListener("contextmenu", on);
+  }, []);
+  /** Empty trash…: asks, then erases every recording in Trash (their audio and transcripts), and says how many. */
+  const emptyTrash = async () => {
+    const all = bin ?? [];
+    if (!all.length) return;
+    const ok = await confirmAction({ title: "Empty the trash?", body: `${recordingsWord(all.length)} and their transcripts are erased from the server. This can't be undone.`, confirm: "Empty trash", tone: "danger" });
+    if (!ok) return;
+    let erased = 0;
+    for (const b of all) {
+      try {
+        await api.eraseFromBin(b.id);
+        erased++;
+      } catch {
+        // Counted below: what is left stays in Trash.
+      }
+    }
+    setBin((list) => list?.filter((x) => !all.some((b) => b.id === x.id)) ?? list);
+    await loadBin();
+    say(erased === all.length ? `Trash emptied · ${recordingsWord(erased)}` : `Erased ${erased} of ${all.length}; the rest stay in Trash`);
+  };
+  /** Move to project › a project (or No project), as Move to project… does. */
+  const moveTo = async (ids: readonly string[], projectId: string | null) => {
+    const title = ids.length === 1 ? (items ?? []).find((i) => i.id === ids[0])?.title ?? null : null;
+    try {
+      await moveRecordings(ids, projectId);
+      say(projectId ? movedText(ids.length, title, (projects ?? []) as unknown as ClientFolder[], projectId)
+        : ids.length === 1 ? `Took “${title || "the recording"}” out of its project` : `Took ${ids.length} recordings out of their projects`);
+      await load();
+    } catch (e) {
+      sayProblem(say, errorMessage(e));
+    }
+  };
+  // What the Library's menus do (the registry runs these; one code path for every menu that sends these ids).
+  const runs: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    "recording.open": (c) => { if (c.targets?.[0]) setOpenId(c.targets[0]); },
+    "recording.transcribe": (c) => setOrganise({ kind: "transcribe", ids: [...(c.targets ?? [])] }),
+    "recording.pin": (c) => void bulk(c.targets ?? [], c.state?.pinned ? "unpin" : "pin", c.state?.pinned ? "Unpinned" : "Pinned"),
+    "recording.important": (c) => void bulk(c.targets ?? [], c.state?.important ? "unimportant" : "important", c.state?.important ? "Not important" : "Marked as important"),
+    "recording.labels": (c) => {
+      const list = lists?.find((l) => l.key === c.value);
+      const ids = c.targets ?? [];
+      const all = ids.length > 0 && ids.every((id) => ((items ?? []).find((i) => i.id === id)?.labels ?? []).some((l) => listKey(l) === c.value));
+      if (list) void putInList(ids, list, !all);
+    },
+    "label.new": (c) => (lists ? setNewLabel({ ids: [...(c.targets ?? [])] }) : setOrganise({ kind: "label", ids: [...(c.targets ?? [])] })),
+    "recording.moveToProject": (c) => void moveTo(c.targets ?? [], c.value === "none" ? null : c.value ?? null),
+    "file.rename": (c) => {
+      const one = (items ?? []).find((i) => i.id === c.targets?.[0]);
+      if (one && c.targets?.length === 1) setOrganise({ kind: "rename", item: one });
+    },
+    "recording.exportAs": (c) => {
+      const chosen = (items ?? []).filter((i) => c.targets?.includes(i.id));
+      if (c.value) void exportRecordings(c.targets ?? [], c.value as BulkExportFormat, say, shownExportView(chosen));
+    },
+    "recording.moveToTrash": (c) => deleteOrAsk(c.targets ?? []),
+    "file.newRecording": onRecord ? () => onRecord() : undefined,
+    // A voice note from the microphone (3b's New voice note), where this computer can record.
+    "file.newVoiceNote": onRecord ? () => void api.toggleMicNote().catch((e) => sayProblem(say, errorMessage(e))) : undefined,
+    "file.importAudio": onImport ? () => onImport() : undefined,
+    "view.sortBy": (c) => { if (c.value) setChoice({ ...choice, sort: c.value as SortKey }); },
+    "view.groupBy": (c) => { if (c.value) setChoice({ ...choice, group: c.value as LibraryViewChoice["group"] }); },
+    "view.asList": () => setLayout("list"),
+    "view.asTable": () => setLayout("table"),
+    "view.density": (c) => { if (c.value) setDensity(c.value as Density); },
+    "edit.selectAll": () => pickAll(),
+    "trash.restore": (c) => { for (const b of (bin ?? []).filter((x) => c.targets?.includes(x.id))) void restore(b); },
+    "recording.deleteNow": (c) => { const b = (bin ?? []).find((x) => x.id === c.targets?.[0]); if (b) setErase(b); },
+    "trash.empty": () => void emptyTrash(),
+  };
+  // A built-in view's menu (the sidebar's, UX-22): Unread's Mark all as read, Audio only's Transcribe all… (it asks with
+  // the count and the minutes first, as Transcribe does).
+  const placeRuns: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    "view.markAllRead": () => {
+      const unread = (items ?? []).filter((i) => !i.deleted && i.opened === false && !readHere.has(i.id)).map((i) => i.id);
+      if (!unread.length) return;
+      setReadHere((r) => new Set([...r, ...unread]));
+      for (const id of unread) void api.markOpened(id).catch(() => undefined);
+      say(`Marked ${recordingsWord(unread.length)} as read`);
+    },
+    "view.transcribeAll": () => {
+      const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
+      if (audioOnly.length) setOrganise({ kind: "transcribe", ids: audioOnly.slice(0, MAX_TRANSCRIBE), of: audioOnly.length });
+    },
+  };
+  const placeRunsRef = useRef(placeRuns);
+  placeRunsRef.current = placeRuns;
+  useEffect(() => {
+    const offs = Object.keys(placeRunsRef.current).map((id) => registerAction(id, (ctx) => placeRunsRef.current[id]?.(ctx), "place"));
+    return () => offs.forEach((off) => off());
+  }, []);
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+  const runnable = Object.keys(runs).filter((id) => runs[id]).join(" ");
+  useEffect(() => {
+    // Each for its kind of thing: the list's space, else a recording (the sidebar's Rename… of a view is its own).
+    const kindOf = (id: string) => ((LIST_SPACE as readonly string[]).includes(id) ? "list" : ([...TRASH, ...TRASH_ITEM] as readonly string[]).includes(id) ? "trash" : "recording");
+    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx), kindOf(id)));
+    return () => offs.forEach((off) => off());
+  }, [runnable]);
+
   const dialogs = (
     <>
-      {context && <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`}
-        items={menuFor(context.ids)} at={context.at} onClose={() => setContext(null)} />}
+      {context?.trash && <ContextMenu label={context.ids.length ? "Deleted recording actions" : "Trash actions"} items={trashMenu(context.ids)} at={context.at} onClose={() => setContext(null)} />}
+      {context && !context.trash && (context.space
+        ? <ContextMenu label="List actions" items={listSpaceMenu()} at={context.at} onClose={() => setContext(null)} />
+        : <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`} title={manyTitle(context.ids.length)}
+          items={recordingMenu(context.ids).items} at={context.at} onClose={() => setContext(null)} />)}
       {organise?.kind === "move" && <MoveDialog ids={organise.ids} title={organise.title} current={organise.current} onClose={closeOrganise} say={say} />}
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
-      {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} onClose={closeOrganise} say={say} />}
+      {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} of={organise.of} onClose={closeOrganise} say={say} />}
       {organise?.kind === "whatsapp" && <WhatsAppDialog item={organise.item} onClose={() => setOrganise(null)} say={say} />}
       {newLabel && <NewLabelFor ids={newLabel.ids} onClose={() => setNewLabel(null)} onMade={(list, ids) => void putInList(ids, list, true)} />}
       {savingView && (
@@ -1068,19 +1431,53 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const toasts = (
     <ToastRegion>
       {message && (
-        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run}
+        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error}
           onClose={() => setMessage((m) => (m?.id === message.id ? null : m))} />
       )}
     </ToastRegion>
   );
 
+  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
+  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
+  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
+  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
+  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
+    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
+  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
+  // The window's title row (UX-20) shows the list's place, its count and the search; a recording opened as its own
+  // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
+  const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
+    : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
+  /** A toolbar's keys (the selection bar, as the shared SelectionBar): ← → between its controls, Home and End to the ends. */
+  const toolbarKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const next = rtl ? "ArrowLeft" : "ArrowRight";
+    const prev = rtl ? "ArrowRight" : "ArrowLeft";
+    if (![next, prev, "Home", "End"].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+    const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [role="checkbox"]')]
+      .filter((c) => !c.closest('[role="menu"]'));
+    const at = controls.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const to = e.key === "Home" ? 0 : e.key === "End" ? controls.length - 1 : e.key === next ? Math.min(at + 1, controls.length - 1) : Math.max(at - 1, 0);
+    controls[to].focus();
+  };
   const closeOpen = () => {
     const id = open?.id ?? null;
     setOpenId(null);
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
+  // The title row's ← → (⌘[ ⌘], Alt+← →, the mouse's side buttons) ask the Library first (UX-20): an open recording
+  // goes back to the list where it was (UX-25's kept place is this step); else the Library's own steps (a view, a
+  // filter, a search); then the places visited. Outside the shell the Library hears those keys itself.
+  const inShell = usePageHistory({
+    back: open ? closeOpen : steps.current.back.length ? () => void walk("back") : null,
+    forward: !open && steps.current.forward.length ? () => void walk("forward") : null,
+  });
+  inShellRef.current = inShell;
+  inTitleRowRef.current = inTitleRow;
   const recordingPage = open && (
-    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
@@ -1111,13 +1508,6 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
-  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
-  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
-  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
-  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
-  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
-    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
-  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
   const viewEmpty = scope.kind === "view" ? EMPTY_VIEW[scope.view] : undefined;
   const panelShown = panel && !trash && !choosing;
 
@@ -1128,86 +1518,88 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts()} drawer={drawer} onClose={() => setPanel(false)}
             onSaveView={() => setSavingView(true)} canSave={canSave} />
         )}
-        <div className="el-page el-page--wide el-lib__main">
-          {choosing ? (
-            <header className="el-lib-toolbar el-selectbar" role="toolbar" aria-label="Selected recordings">
-              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
-                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h1 className="el-title-m el-lib-toolbar__title" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
-              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
-              <div className="el-page__actions el-lib-toolbar__end">
-                <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
-                <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
-                )}
-                <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
-                  onClick={() => deleteOrAsk(pickedIds)} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
-                )}
-                <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
-              </div>
-            </header>
-          ) : (
+        <div className="el-page el-page--wide el-lib__main el-back-top-room">
+          {/* UX-05/UX-20: the window's title row shows the place, its count and the one search (usePageTitle). Without
+              it (no title row in this shell) the page keeps a slim header of its own with the same three. */}
+          {!inTitleRow && (
             <header className="el-lib-toolbar">
               <PanelToggle />
-              {!trash && layout === "list" && shownIds.length > 0 && (
-                <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
-              )}
-              {/* Library / <the place>: "Library" goes back to All recordings, its filters and search cleared. */}
-              <nav className="el-lib-crumbs" aria-label="Breadcrumbs">
-                <button type="button" className="el-lib-crumbs__root" onClick={() => show(ALL_SCOPE, {}, true)}
-                  title="All recordings, nothing filtered">Library</button>
-                <span className="el-lib-crumbs__sep" aria-hidden="true">/</span>
-              </nav>
               <h1 className="el-title-m el-lib-toolbar__title">
                 <span dir="auto">{title}</span>
                 {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
               </h1>
               {!trash && (
-                <>
-                  <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={placeholderFor(width, panelShown && !drawer)}
-                    className="el-lib-toolbar__search" />
-                  <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
-                    title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
-                    Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
-                  </Button>
-                  <Menu label="Sort & display" items={displayMenu}
-                    button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
-                </>
+                <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
+                  placeholder={placeholderFor(width, panelShown && !drawer)} className="el-lib-toolbar__search" />
               )}
             </header>
           )}
-          {!trash && !choosing && (
-            <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
-              {LIBRARY_TABS.map((t) => (
-                <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
-                  onClick={() => setTab(t)} onKeyDown={(e) => {
-                    const at = LIBRARY_TABS.indexOf(t);
-                    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
-                    const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
-                    if (!step) return;
-                    e.preventDefault();
-                    const next = LIBRARY_TABS[(at + step + LIBRARY_TABS.length) % LIBRARY_TABS.length];
-                    setTab(next);
-                    (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[LIBRARY_TABS.indexOf(next)])?.focus();
-                  }}>
-                  {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
-                </button>
-              ))}
+          {choosing ? (
+            // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
+              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
+                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
+              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
+                  onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>
+                  {pickedIds.length > MAX_TRANSCRIBE && !tooMany ? `Transcribe (${MAX_TRANSCRIBE} at a time)` : "Transcribe"}
+                </Button>
+                <Button size="sm" variant="quiet" icon={Icons.MoveIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })}>Move to project</Button>
+                <Button size="sm" variant="quiet" icon={Icons.LabelIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })}>Label</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="Share or export" button={{ variant: "quiet", size: "sm", icon: Icons.ShareIcon, text: "Export", "aria-label": "Share or export", title: "Share or export" }}
+                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title="Delete (Del)" aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                  onClick={() => deleteOrAsk(pickedIds)}>Delete</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="More actions" button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
+                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "transcribe", "export", "ai", "delete"]))} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
+              </div>
+            </div>
+          ) : !trash && (
+            // Row 2 (40 px): the kinds on the start side (Other only while it has recordings), the list's controls on the end.
+            <div className="el-lib-row2">
+              <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
+                {tabsShown.map((t) => (
+                  <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
+                    onClick={() => setTab(t)} onKeyDown={(e) => {
+                      const at = tabsShown.indexOf(t);
+                      const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+                      const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
+                      // Home and End: the first and the last tab (Back to top leaves keys in a tab list alone).
+                      const to = e.key === "Home" ? 0 : e.key === "End" ? tabsShown.length - 1 : step ? (at + step + tabsShown.length) % tabsShown.length : -1;
+                      if (to < 0) return;
+                      e.preventDefault();
+                      const next = tabsShown[to];
+                      setTab(next);
+                      (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
+                    }}>
+                    {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
+                  title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
+                  Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                </Button>
+                <Menu label="Sort & display" items={displayMenu}
+                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+              </div>
             </div>
           )}
           {!trash && !choosing && (filtersOn > 0 || changed) && (
             <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}
               onSaveView={() => setSavingView(true)} onSaveChanges={changed && savedView ? () => {
-                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => say(errorMessage(e)));
+                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => sayProblem(say, errorMessage(e)));
               } : undefined} />
           )}
           {top && scope.kind === "view" && scope.view === "all" && !filtersOn && !query && !choosing && <LibraryTop {...top} items={items} />}
@@ -1261,6 +1653,11 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                   {bin.map((b) => (
                     <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
                       meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
+                        showMenu({ at, ids: [b.id], trash: true });
+                      }}
                       control={
                         <span className="el-row__buttons">
                           <Button size="sm" onClick={() => void restore(b)}>Restore</Button>
@@ -1300,7 +1697,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
               rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
-            <List label="Recordings">
+            <List label="Recordings" className="el-lib-list">
               {groups.map((g) => [
                 g.label ? (
                   <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
@@ -1312,40 +1709,23 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                     } : undefined} />
                 ) : null,
                 ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                  const r = rowModel(item, undefined, rowViews.summaryFor(item));
-                  const source = sourceOf(item);
+                  // In a date group (Today, Yesterday, This week) a row says only the time: its heading says the day.
+                  const r = rowModel(item, undefined, rowViews.summaryFor(item), TIME_ONLY_GROUPS.has(g.key));
                   return (
-                    <ListRow key={item.id} strong title={r.title} compact={density === "compact"}
-                      leading={
-                        <button type="button" className="el-row__source" aria-label={`Show only ${source.label}`} title={`Show only ${source.label}`}
-                          onClick={() => quick("source", source.value)}>
-                          <SourceAvatar item={item} />
-                        </button>
-                      }
-                      meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
-                      badge={r.badge || recovered.has(item.id) ? <>
-                        {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
-                        {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
-                      </> : undefined}
-                      mark={item.pinned || r.screens || item.labels?.length ? <>
-                        {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
-                        {r.screens ? <ScreensMark count={r.screens} /> : null}
-                        {(item.labels ?? []).slice(0, 3).map((l) => [
-                          <button key={l} type="button" className="el-row__label" title={`Show only ${l}`} aria-label={`Show only label ${l}`}
-                            onClick={() => quick("labels", listKey(l))}>
-                            <LabelDot name={l} colour={labelColour(item, l)} decorative /><span dir="auto">{l}</span>
-                          </button>, " "])}
-                      </> : undefined}
-                      endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                      rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                      pick={{ checked: picked.has(item.id), label: `Select ${r.title}`, onToggle: (e) => pickRow(item, e), shown: choosing }}
-                      checked={choosing ? picked.has(item.id) : undefined}
-                      actions={choosing ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+                    <RecordingRow key={item.id} item={item} r={r} compact={density === "compact"} choosing={choosing} picked={picked.has(item.id)}
+                      labels={(item.labels ?? []).map((l) => ({ name: l, key: listKey(l), colour: labelColour(item, l) }))}
+                      onLabel={(key) => quick("labels", key)}
+                      recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}
+                      onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                      onPick={(e) => pickRow(item, e)} last={lastOpened?.id === item.id}
+                      actions={choosing ? undefined : rowActions(item, r)} />
                   );
                 }),
               ])}
             </List>
           )}
+          {/* UX-25: after one screen down, ↑ at the list's bottom end corner (Home, ⌘↑ and Ctrl+Home too). */}
+          {items && <BackToTop />}
         </div>
       </div>
       <Dialog open={!!erase} alert title="Delete forever?"

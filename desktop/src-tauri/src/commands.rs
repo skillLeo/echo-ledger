@@ -2008,7 +2008,8 @@ fn main_window_handle(app: &AppHandle) -> isize {
 /// `language` (since v1.2) changes the recording's language without re-transcribing it.
 pub const SESSION_PATCH_KEYS: [&str; 6] = ["title", "client_id", "pinned", "keep", "labels", "language"];
 pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
-pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
+/// `important` and `unimportant` since UX-22 (Mark as important; the server has taken them since contract 2.0.0-i).
+pub const BULK_ACTIONS: [&str; 10] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "important", "unimportant", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
 pub const MAX_BULK: usize = 200;

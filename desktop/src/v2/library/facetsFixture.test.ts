@@ -57,11 +57,11 @@ describe("the shared fixture (contract 2.0.0-p)", () => {
     expect(fixture.filter_sets.length).toBeGreaterThanOrEqual(28);
   });
 
-  it("the library views' counts: All, Needs you, Unread, Important, Not transcribed, Audio only", () => {
+  it("the library views' counts: All, Needs you, Unread, Important, Audio only (the server's not_transcribed since v2.1)", () => {
     const counts = libraryViewCounts(facts);
     expect({ ...counts, needs: needsYouCount(items, { waiting: 0, failedUploads: 0 }, now) }).toEqual({
       all: fixture.library_counts.all, needs: fixture.library_counts.needs_you, unread: fixture.library_counts.unread,
-      important: fixture.library_counts.important, not_transcribed: fixture.library_counts.not_transcribed, audio_only: fixture.library_counts.audio_only,
+      important: fixture.library_counts.important, audio_only: fixture.library_counts.not_transcribed,
     });
   });
 

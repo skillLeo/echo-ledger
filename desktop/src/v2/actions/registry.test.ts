@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Icons from "../components/icons";
 import list from "./actions.json";
 import {
-  ACTIONS, CONDITIONS, MAC_SYSTEM, actionLabel, ariaKeys, available, checkMenu, findAction, macTitle, menuItems, registerAction, runAction, shortcutClashes, shortcutOf,
+  ACTIONS, CONDITIONS, MAC_SYSTEM, accelerator, actionLabel, ariaKeys, available, checkMenu, findAction, macTitle, matchesShortcut, menuItems, nativeItems, registerAction, runAction,
+  shortcutClashes, shortcutOf,
   type ActionContext,
 } from "./registry";
 
@@ -18,7 +19,7 @@ describe("the action list (actions.json)", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBeGreaterThan(100);
     for (const a of ACTIONS) {
-      expect(a.id, a.id).toMatch(/^(app|file|edit|view|go|recording|live|window|help|account)\.[a-z][A-Za-z0-9]*$/);
+      expect(a.id, a.id).toMatch(/^(app|file|edit|view|go|recording|live|window|help|account|place|label|trash|player|speaker|text|activity)\.[a-z][A-Za-z0-9]*$/);
       // Sentence case: a capital first, no Title Case words after it but names the file keeps (EchoLedger, Live Assist…).
       const rest = list.titleCase.keep.reduce((text, name) => text.split(name).join(""), a.label.slice(1));
       expect(a.label[0], a.label).toBe(a.label[0].toLocaleUpperCase());
@@ -146,5 +147,31 @@ describe("one code path: a menu sends the id, the registry runs it", () => {
     expect(checkMenu([{ ...good[0], shortcut: "⇧⌘R" }], "macos")).toEqual(['"New Recording": shortcut ⇧⌘R, actions.json says ⌘N']);
     expect(checkMenu([{ ...good[0], label: "New Thing" }], "macos")).toEqual(['"New Thing": file.newRecording is "New Recording"']);
     expect(checkMenu([{ label: "x", action: "file.nope" }], "macos")).toEqual(['"x": file.nope is not in actions.json']);
+  });
+
+  it("native menus get Tauri's accelerators and send the same ids", () => {
+    expect(accelerator("⇧⌘N")).toBe("Shift+CmdOrCtrl+N");
+    expect(accelerator("⌘O")).toBe("CmdOrCtrl+O");
+    expect(accelerator("⌘.")).toBe("CmdOrCtrl+.");
+    expect(accelerator("⌥⌘⌫")).toBe("Alt+CmdOrCtrl+Backspace");
+    expect(accelerator("Ctrl+Shift+N")).toBe("CmdOrCtrl+Shift+N");
+    const items = menuItems(["file.newRecording", "-", "live.autoRecord"], { ...mac, state: { autoRecord: false } });
+    expect(nativeItems(items)).toEqual([
+      { action: "file.newRecording", label: "New Recording", accelerator: "CmdOrCtrl+N", enabled: true, checked: null },
+      { action: null },
+      { action: "live.autoRecord", label: "Auto-record Calls & Meetings", accelerator: null, enabled: true, checked: false },
+    ]);
+  });
+
+  it("a key press matches a command's shortcut on its platform", () => {
+    const key = (key: string, mods: Partial<KeyboardEventInit> = {}) => new KeyboardEvent("keydown", { key, ...mods });
+    expect(matchesShortcut(key("n", { metaKey: true }), "⌘N")).toBe(true);
+    expect(matchesShortcut(key("N", { metaKey: true, shiftKey: true }), "⇧⌘N")).toBe(true);
+    expect(matchesShortcut(key("n", { metaKey: true, shiftKey: true }), "⌘N")).toBe(false);
+    expect(matchesShortcut(key(".", { metaKey: true }), "⌘.")).toBe(true);
+    expect(matchesShortcut(key("n", { ctrlKey: true }), "⌘N")).toBe(false);
+    expect(matchesShortcut(key("n", { ctrlKey: true, shiftKey: true }), "Ctrl+Shift+N")).toBe(true);
+    expect(matchesShortcut(key("o", { ctrlKey: true }), "Ctrl+O")).toBe(true);
+    expect(matchesShortcut(key(".", { ctrlKey: true }), "Ctrl+.")).toBe(true);
   });
 });

@@ -143,7 +143,9 @@ describe("the Library (parity batch 2)", () => {
 
   it("DT-LIB-070: a row being transcribed in parts says which part", () => {
     const making = item({ status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 2, total: 5 } } });
-    expect(rowModel(making).meta).toBe("WhatsApp · Transcribing… part 3 of 5");
+    // The app is the mark's 14 px badge since v2.1 (UX-06), so line 2 is only the state.
+    expect(rowModel(making).meta).toBe("Transcribing… part 3 of 5");
+    expect(rowModel(making).state).toMatchObject({ key: "transcribing", tone: "quiet" });
   });
 
   it("DT-LIB-043: Density is in the Library's Sort & display menu, saved for Settings › Appearance too", async () => {

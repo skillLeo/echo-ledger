@@ -110,8 +110,12 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: none today (every sample has a model). */
-    private val notUsedYet = emptySet<String>()
+    /**
+     * Answers the phone does not ask for yet (contract 2.0.0-r, known not to be read yet): the one Activity number
+     * (`badge`), Activity's groups (`activity_groups`) and Retry all (`activity_retry_all`). The phone takes them in
+     * UX-08 and Wave 3; each moves to [readBy] with its model then.
+     */
+    private val notUsedYet = setOf("activity_groups", "activity_retry_all", "badge")
 
     private val everyField = Json {
         encodeDefaults = true

@@ -562,9 +562,12 @@ data class SavedViewAnswer(val data: SavedViewDto, @SerialName("views_version") 
 @Serializable
 data class SavedViewDeleted(val id: String? = null, @SerialName("views_version") val viewsVersion: Long = 0)
 
-/** A library item's `facets` (contract 2.0.0-p): the apps count with these instead of working them out again. */
+/**
+ * A library item's `facets` (contract 2.0.0-p): the apps count with these instead of working them out again. [kind] (since
+ * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds").
+ */
 @Serializable
-data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null)
+data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null, val kind: String? = null)
 
 @Serializable
 data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)

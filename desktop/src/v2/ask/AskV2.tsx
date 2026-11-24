@@ -38,6 +38,8 @@ export type AskV2Props = {
   projects: { id: string; name: string }[];
   /** The project to start on (opened from a project's page). */
   initialProjectId?: string | null;
+  /** A question to start from (the title row's search: Ask about "…"). */
+  initialQuestion?: string;
   onOpenAt: (sessionId: string, atMs: number) => void;
   onOpenProject: (projectId: string) => void;
   onLibrary: () => void;
@@ -48,9 +50,9 @@ export type AskV2Props = {
 /** The answer languages the server takes (POST /api/clients/{id}/ask: en | roman_urdu); Urdu script waits for it. */
 const LANGUAGES: { value: AnswerLanguage; label: string }[] = [{ value: "en", label: "English" }, { value: "roman_urdu", label: "Roman Urdu" }];
 
-export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
+export function AskV2({ projects, initialProjectId = null, initialQuestion = "", onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(initialQuestion);
   const [language, setLanguage] = useState<AnswerLanguage>("en");
   const [state, setState] = useState<AskState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);

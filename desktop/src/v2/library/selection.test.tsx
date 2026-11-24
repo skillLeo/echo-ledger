@@ -1,6 +1,9 @@
 // Selection mode and the one recording menu in the v2 Library (PLAN_V2_PARITY 3 and 7; docs/v2/audit/parity.csv
 // DT-LIB-075..107): Select, a Cmd/Ctrl- or Shift-click, Cmd/Ctrl+A, the bar's four actions and ⋮, the row ⋮, a
 // right-click, Delete with Undo, Export ▸ every format, Copy for AI and Transcribe with its minutes first.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
@@ -73,6 +76,21 @@ describe("selection mode", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Bilal Qureshi" })).toBeInTheDocument();
   });
 
+  it("the selection bar is a toolbar: ← → move between its controls, Home and End go to its ends", async () => {
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    const all = within(bar()).getByRole("checkbox", { name: /^(Select|Unselect) all$/ });
+    act(() => all.focus());
+    fireEvent.keyDown(all, { key: "ArrowRight" });
+    expect(within(bar()).getByRole("button", { name: "Transcribe" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "End" });
+    expect(within(bar()).getByRole("button", { name: "Cancel selection" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowLeft" });
+    expect(within(bar()).getByRole("button", { name: "More actions" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Home" });
+    expect(all).toHaveFocus();
+  });
+
   it("Cmd/Ctrl-click starts it on that row; Shift-click adds the range; Cmd/Ctrl+A picks every row shown; Esc ends it", async () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
@@ -130,7 +148,7 @@ describe("selection mode", () => {
     expect(callsOf("sessions_bulk").at(-1)).toMatchObject({ ids: ["voice", "habib"], action: "delete" });
   });
 
-  it("the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format", async () => {
+  it("row 2 becomes the bar: ☐, the count, Transcribe, Move to project, Label, Export, Delete, ⋮ (Pin, Unpin, Keep forever, grouped) and ×", async () => {
     respond("sessions_export", "/Users/me/Downloads/EchoLedger transcripts.zip");
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
@@ -138,9 +156,13 @@ describe("selection mode", () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
     fireEvent.click(row("Usman Chaudhry"));
+    expect(within(bar()).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent))
+      .toEqual(["Transcribe", "Move to project", "Label", "Share or export", "Delete", "More actions", "Cancel selection"]);
+    expect(within(bar()).getByRole("button", { name: "Share or export" })).toHaveTextContent("Export");
+    // Transcribe and Export are on the bar, so its ⋮ doesn't repeat them.
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     const menu = screen.getByRole("menu", { name: "More actions" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Pin", "Unpin", "Keep forever", "Transcribe…", "Export"]);
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Pin", "Unpin", "Keep forever"]);
     expect(within(menu).getByText("Organise")).toBeInTheDocument();
     fireEvent.click(menuItem("Pin"));
     await act(flushAsync);
@@ -148,10 +170,9 @@ describe("selection mode", () => {
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["usman", "bilal"], action: "pin", clientId: null, label: null }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Pinned · 2 recordings");
 
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    fireEvent.click(menuItem("Export"));
-    const formats = screen.getByRole("menu", { name: "Export" });
-    expect(within(formats).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(ZIP_FORMATS.map((f) => f.label));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
+    const formats = screen.getByRole("menu", { name: "Share or export" });
+    expect(within(formats).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([...ZIP_FORMATS.map((f) => f.label), "Copy for AI"]);
     expect(ZIP_FORMATS.map((f) => f.format)).toEqual(["docx", "txt", "md", "srt", "vtt", "json"]);
     fireEvent.click(within(formats).getByRole("menuitem", { name: "Subtitles (.srt)" }));
     await act(flushAsync);
@@ -167,20 +188,19 @@ describe("selection mode", () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
     fireEvent.click(row("Usman Chaudhry"), { metaKey: true });
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    fireEvent.click(menuItem("Export"));
-    fireEvent.click(within(screen.getByRole("menu", { name: "Export" })).getByRole("menuitem", { name: "Text (.txt)" }));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Share or export" })).getByRole("menuitem", { name: "Text (.txt)" }));
     await act(flushAsync);
     expect(callsOf("sessions_export").at(-1)).toMatchObject({ format: "txt", view: "roman" });
   });
 
   it("Export ▸ opens from the keyboard: ArrowRight in, ArrowLeft back, Esc closes one level", async () => {
     await show();
-    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
-    fireEvent.click(row("Habib & Co."));
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    const menu = screen.getByRole("menu", { name: "More actions" });
+    fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
+    const menu = screen.getByRole("menu", { name: "More for Habib & Co." });
+    // From the foot: Move to trash, then Export (UX-22's order).
     fireEvent.keyDown(menu, { key: "End" });
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
     expect(menuItem("Export")).toHaveFocus();
     fireEvent.keyDown(menu, { key: "ArrowRight" });
     expect(screen.getByRole("menuitem", { name: "Word (.docx)" })).toHaveFocus();
@@ -188,8 +208,8 @@ describe("selection mode", () => {
     expect(screen.queryByRole("menu", { name: "Export" })).toBeNull();
     expect(menuItem("Export")).toHaveFocus();
     fireEvent.keyDown(menu, { key: "Escape" });
-    expect(screen.queryByRole("menu", { name: "More actions" })).toBeNull();
-    expect(within(bar()).getByRole("button", { name: "More actions" })).toHaveFocus();
+    expect(screen.queryByRole("menu", { name: "More for Habib & Co." })).toBeNull();
+    expect(screen.getByRole("button", { name: "More for Habib & Co." })).toHaveFocus();
   });
 
   it("Transcribe says the minutes and the minutes left before it starts, and won't start what the month can't cover", async () => {
@@ -198,8 +218,7 @@ describe("selection mode", () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
     fireEvent.click(row("Voice note"));
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    fireEvent.click(menuItem("Transcribe…"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "Transcribe 2 recordings?" });
     expect(dialog).toHaveAccessibleDescription("About 40 minutes of the 310 minutes left this month.");
@@ -210,8 +229,7 @@ describe("selection mode", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing 1 recording · 1 skipped");
 
     respond("sessions_transcribe_estimate", { minutes: 400, minutes_left: 310, items: [] });
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    fireEvent.click(menuItem("Transcribe…"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     const over = screen.getByRole("dialog", { name: "Transcribe 2 recordings?" });
     expect(over).toHaveAccessibleDescription(/more than is left, so nothing will start/);
@@ -277,53 +295,74 @@ describe("the row ⋮ and the right-click menu", () => {
     await act(flushAsync);
   };
 
-  it("a row's ⋮: Open, Select, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
+  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
     respond("library_refresh", pinned);
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
-      "Open", "SelectX", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
-    ]);
-    expect(menuItem("Select")).toHaveAttribute("aria-keyshortcuts", "X");
-    // Every item has its icon, Open and Select too.
-    expect(within(menu).getAllByRole("menuitem").filter((m) => !m.querySelector("svg")).map((m) => m.textContent)).toEqual([]);
-    expect([...menu.querySelectorAll(".el-menu__group")].map((g) => g.textContent)).toEqual(["Organise", "Export", "Danger"]);
-    expect(menuItem("Delete")).toHaveClass("el-menu__option--danger");
-    expect(menuItem("Delete")).toHaveAttribute("aria-keyshortcuts", "Delete");
+    const words = () => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
+    // Hairlines between 3b's groups, no group headers; every item without a tick has its icon.
+    expect(menu.querySelectorAll(".el-menu__separator")).toHaveLength(3);
+    expect(menu.querySelectorAll(".el-menu__group")).toHaveLength(0);
+    expect([...menu.querySelectorAll('[role="menuitem"]')].filter((m) => !m.querySelector("svg")).map((m) => m.textContent)).toEqual([]);
+    expect(menuItem("Move to trash")).toHaveClass("el-menu__option--danger");
+    expect(menuItem("Move to trash")).toHaveAttribute("aria-keyshortcuts", "Delete");
     fireEvent.click(menuItem("Unpin"));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["usman"], action: "unpin", clientId: null, label: null }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Unpinned");
-    // An untranscribed recording offers Transcribe; a transcribed one doesn't.
+    // An Audio only recording offers Transcribe; a transcribed one doesn't.
     fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
-    expect(menuItem("Transcribe…")).toBeInTheDocument();
+    expect(menuItem("Transcribe")).toBeInTheDocument();
   });
 
-  it("Select, from the ⋮ or a right-click, starts selection mode with exactly that row ticked", async () => {
+  it("a row's hover actions, in place of when and how long (UX-06): Transcribe for Audio only, Pin or Unpin, Label, then ⋯; none while picking", async () => {
+    respond("sessions_transcribe_estimate", { minutes: 3, minutes_left: 310, items: [] });
     await show();
-    const ticked = () => rows().filter((r) => r.getAttribute("aria-pressed") === "true").map((r) => r.textContent);
-    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
-    fireEvent.click(menuItem("Select"));
-    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
-    expect(row("Voice note")).toHaveAttribute("aria-pressed", "true");
-    expect(ticked()).toHaveLength(1);
-    // While selecting, the menu no longer offers it; × ends selection as when Select or X started it.
-    fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 10, clientY: 10 });
-    expect(screen.queryByRole("menuitem", { name: "Select" })).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    fireEvent.click(within(bar()).getByRole("button", { name: "Cancel selection" }));
-    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    // Shown on hover or keyboard focus (or while its menu is open), and the end side's when and how long hide for them.
+    expect(css).toMatch(/\.el-rec--actions:hover \.el-rec__actions, \.el-rec--actions:focus-within \.el-rec__actions[^{]*\{ display: flex; \}/);
+    expect(css).toMatch(/\.el-rec--actions:hover \.el-rec__end, \.el-rec--actions:focus-within \.el-rec__end[^{]*\{ visibility: hidden; \}/);
+    const actions = (title: string) => row(title).closest("li")!.querySelector<HTMLElement>(".el-rec__actions")!;
+    expect(within(actions("Voice note")).getAllByRole("button").map((b) => b.getAttribute("aria-label")))
+      .toEqual(["Transcribe Voice note", "Pin Voice note", "Label Voice note", "More for Voice note"]);
+    // A transcribed recording has nothing to transcribe.
+    expect(within(actions("Bilal Qureshi")).getAllByRole("button").map((b) => b.getAttribute("aria-label")))
+      .toEqual(["Pin Bilal Qureshi", "Label Bilal Qureshi", "More for Bilal Qureshi"]);
+    fireEvent.click(within(actions("Bilal Qureshi")).getByRole("button", { name: "Pin Bilal Qureshi" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal"], action: "pin", clientId: null, label: null }]);
+    fireEvent.click(within(actions("Voice note")).getByRole("button", { name: "Transcribe Voice note" }));
+    await act(flushAsync);
+    fireEvent.click(within(screen.getByRole("dialog", { name: /^Transcribe/ })).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_transcribe")).toEqual([{ ids: ["voice"] }]);
+    // While picking, a press on a row ticks it: no actions on the rows.
+    fireEvent.click(row("Usman Chaudhry"), { metaKey: true });
+    expect(document.querySelectorAll(".el-rec__actions")).toHaveLength(0);
+  });
 
+  it("Select, Keep forever, Copy for AI and Send to WhatsApp left the row menu (3b) for their homes: X and the box, the bar's ⋮ and Export", async () => {
+    await show();
     fireEvent.contextMenu(row("Habib & Co."), { clientX: 120, clientY: 300 });
     const menu = screen.getByRole("menu", { name: "Recording actions" });
-    expect(within(menu).getByRole("menuitem", { name: "Select" })).toHaveTextContent("SelectX");
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Select" }));
+    expect(within(menu).queryByText(/^(Select|Keep forever|Copy for AI|Send to WhatsApp…)$/)).toBeNull();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    // X (or the row's box) starts selection with exactly that row ticked.
+    act(() => row("Habib & Co.").focus());
+    fireEvent.keyDown(row("Habib & Co."), { key: "x" });
     expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
-    expect(row("Habib & Co.")).toHaveAttribute("aria-pressed", "true");
-    expect(ticked()).toHaveLength(1);
+    expect(rows().filter((r) => r.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    // The bar's ⋮ keeps Keep forever and Send to WhatsApp…; its Export keeps Copy for AI.
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    expect(menuItem("Keep forever")).toBeInTheDocument();
+    expect(menuItem("Send to WhatsApp…")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menu", { name: "More actions" }), { key: "Escape" });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
+    expect(menuItem("Copy for AI")).toBeInTheDocument();
   });
 
   it("Rename: a new title, or empty for the automatic one", async () => {
@@ -348,7 +387,9 @@ describe("the row ⋮ and the right-click menu", () => {
     respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
     respond("whatsapp_open", true);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+    // Send to WhatsApp… lives in the selection bar's ⋮ and on the recording page (UX-22: not in the row menu).
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
     const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -374,7 +415,8 @@ describe("the row ⋮ and the right-click menu", () => {
     });
     const open = async () => {
       await show();
-      fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+      fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+      fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
       fireEvent.click(menuItem("Send to WhatsApp…"));
       await act(flushAsync);
       return screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -566,7 +608,8 @@ describe("the row ⋮ and the right-click menu", () => {
     respond("share_create", { url: "https://ledger.example.com/s/abc", id: "sh1" });
     respond("whatsapp_open", false);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
+    fireEvent.click(row("Voice note"), { metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
     const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -592,7 +635,7 @@ describe("the row ⋮ and the right-click menu", () => {
     fireEvent.click(row("Voice note"));
     fireEvent.contextMenu(row("Voice note"), { clientX: 10, clientY: 10 });
     const many = screen.getByRole("menu", { name: "Actions for 2 recordings" });
-    fireEvent.click(within(many).getByRole("menuitem", { name: /^Delete 2/ }));
+    fireEvent.click(within(many).getByRole("menuitem", { name: "Move to trash" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "voice"], action: "delete", clientId: null, label: null }]);
   });
@@ -854,8 +897,12 @@ describe("Trash, Undo and the limits", () => {
     expect(within(bar()).getByRole("button", { name: "Move to project" })).toBeDisabled();
     fireEvent.click(within(bar()).getByRole("checkbox", { name: "Unselect all" }));
     for (const r of rows().slice(0, 51)) fireEvent.click(r);
-    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
-    expect(menuItem("Transcribe (50 at a time)")).toHaveAttribute("aria-disabled", "true");
+    expect(within(bar()).getByRole("button", { name: "Transcribe (50 at a time)" })).toBeDisabled();
+    fireEvent.click(rows()[51]);
+    fireEvent.click(rows()[51]);
+    expect(within(bar()).getByRole("button", { name: "Transcribe (50 at a time)" })).toBeDisabled();
+    fireEvent.click(rows()[50]);
+    expect(within(bar()).getByRole("button", { name: "Transcribe" })).toBeEnabled();
     fireEvent.keyDown(document.body, { key: "Escape" });
     // Over 200: the Delete key and a right-click on a picked row say the limit and do nothing else.
     fireEvent.keyDown(document.body, { key: "a", metaKey: true });

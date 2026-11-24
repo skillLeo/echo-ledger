@@ -1,16 +1,24 @@
 // Labels in the v2 Library (D14, contract 2.0.0-m; PLAN_LIBRARY_FILTERS: "lists ARE labels"). A label is one of the
 // person's lists kept by the server (a name, a colour, a place in the order), so the same labels in the same order show
 // on every device. They live in the sidebar's LABELS section (LabelsNav): choosing one shows its recordings, "+ New
-// label" makes one, and each has Rename…, Change colour…, Move up / Move down and Delete label…. A recording's ⋮ and
+// label" makes one, and each has Show recordings, Rename…, Colour ›, Move up / Move down and Delete label…. A recording's ⋮ and
 // right-click have Labels ▸ to put it in or take it out of them.
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type ListItem } from "../../lib/ipc";
 import {
-  Button, ColourPicker, ContextMenu, Dialog, Icon, Icons, LABEL_COLOURS, LabelDot, NEW_LIST_WORDS, NewListDialog, RENAME_LIST_WORDS, RenameListDialog,
-  addToListItems, deleteListWords, labelColourName, listChipMenuItems, menuPointFor, type LabelColour,
+  Button, ContextMenu, Dialog, Icon, Icons, LABEL_COLOURS, LabelDot, NEW_LIST_WORDS, NewListDialog, RENAME_LIST_WORDS, RenameListDialog,
+  addToListItems, deleteListWords, labelColourName, menuPointFor,
 } from "../components";
 import type { MenuItem } from "../components/Menu";
+import { contextItems, LABEL } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { choiceItems, type ActionContext } from "../actions/registry";
+import { useActions } from "../actions/useActions";
+import { sayProblem, type Say } from "./organise";
+
+/** What a label's menu runs (contextMenus LABEL's ids). */
+const LABEL_IDS = ["label.showRecordings", "file.rename", "label.colour", "view.moveUp", "view.moveDown", "label.delete"] as const;
 
 /** A label's key: its name in lower case, as the server keys it. */
 export const listKey = (name: string) => name.toLowerCase();
@@ -97,7 +105,7 @@ export function addToListMenu({ lists: all, chosen, onToggle, onNew }: {
   };
 }
 
-type Editing = { kind: "rename" | "recolour" | "delete"; list: ListItem };
+type Editing = { kind: "rename" | "delete"; list: ListItem };
 
 /** Under the name field: a library view's name is reserved, another label's name is in use. */
 const nameWords = (taken: (name: string) => string) => ({
@@ -107,7 +115,7 @@ const nameWords = (taken: (name: string) => string) => ({
 /**
  * The sidebar's LABELS section: a header that folds (kept on this computer) with "+", each label with its colour dot
  * and its count (muted), the one shown marked, its menu on ⋮ or a right-click, and "+ New label" at the end. The
- * dialogs it opens: New label, Rename label, Change colour and the Delete question.
+ * dialogs it opens: New label, Rename label and the Delete question (Colour › sets a colour at once).
  */
 export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChanged }: {
   /** How many recordings have each label, by key. */
@@ -117,7 +125,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   onOpen: (key: string) => void;
   /** The label shown was deleted or renamed away: the Library goes back to All. */
   onGone: () => void;
-  say: (text: string) => void;
+  say: Say;
   /** The recordings' labels changed (a rename, a recolour or a delete): the Library is synced once. */
   onLibraryChanged: () => void;
 }) {
@@ -132,9 +140,11 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{ list: ListItem; at: { x: number; y: number } } | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [colour, setColour] = useState<LabelColour>("grey");
   const [busy, setBusy] = useState(false);
   const section = useRef<HTMLElement>(null);
+  // A label's menu (UX-22): what it does, registered before the labels are known (filled in below).
+  const labelActions = useRef<Record<string, (c: ActionContext) => void>>({});
+  useActions("label", Object.fromEntries(LABEL_IDS.map((id) => [id, (c: ActionContext) => labelActions.current[id]?.(c)])));
   if (!all) return null;
   const names = all.map((l) => l.name);
   const fold = () => setFolded((f) => {
@@ -151,7 +161,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     try {
       await fn();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
       // The label may be gone (deleted on another device: list_not_found): read them again.
       await reload();
     } finally {
@@ -182,12 +192,37 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     onLibraryChanged();
     say(`Renamed to ${saved.name}`);
   });
-  const recolour = (list: ListItem) => run(async () => {
-    const saved = await api.updateList(list.key, { color: LABEL_COLOURS[colour].toLowerCase() });
+  /** Colour › a colour (UX-22): set at once. */
+  const setColourOf = (list: ListItem, name: keyof typeof LABEL_COLOURS) => run(async () => {
+    const saved = await api.updateList(list.key, { color: LABEL_COLOURS[name].toLowerCase() });
     setLists(all.map((l) => (l.key === list.key ? saved : l)));
-    setEditing(null);
     onLibraryChanged();
   });
+  // A label's menu (UX-22, 3b), from actions.json: Show recordings | Rename… · Colour › · Move up · Move down |
+  // Delete label… (its recordings stay).
+  const listOf = (c: ActionContext) => all.find((l) => l.key === c.targets?.[0]);
+  labelActions.current = {
+    "label.showRecordings": (c) => { const l = listOf(c); if (l) onOpen(l.key); },
+    "file.rename": (c) => { const l = listOf(c); if (l) edit("rename", l); },
+    "label.colour": (c) => { const l = listOf(c); if (l && c.value && c.value in LABEL_COLOURS) void setColourOf(l, c.value as keyof typeof LABEL_COLOURS); },
+    "view.moveUp": (c) => { const l = listOf(c); if (l) void move(l, -1); },
+    "view.moveDown": (c) => { const l = listOf(c); if (l) void move(l, 1); },
+    "label.delete": (c) => { const l = listOf(c); if (l) edit("delete", l); },
+  };
+  const labelMenu = (list: ListItem): MenuItem[] => {
+    const i = all.findIndex((l) => l.key === list.key);
+    const ctx: ActionContext = { platform: currentPlatform(), targets: [list.key], kind: "label" };
+    const now = labelColourName(list.color);
+    const colours = (Object.keys(LABEL_COLOURS) as (keyof typeof LABEL_COLOURS)[]).map((name) => ({
+      value: name, label: name.charAt(0).toUpperCase() + name.slice(1), checked: now === name,
+    }));
+    return contextItems(LABEL, ctx, { "label.colour": choiceItems("label.colour", colours, ctx).map((item) => ({ ...item, radio: true })) })
+      .filter((item) => !(item.action === "view.moveUp" && i === 0) && !(item.action === "view.moveDown" && i === all.length - 1));
+  };
+  const openMenu = (list: ListItem, where: { x: number; y: number }) => {
+    if (currentPlatform() !== "macos") return setMenu({ list, at: where });
+    void popupNative(labelMenu(list), where).then((shown) => { if (!shown) setMenu({ list, at: where }); });
+  };
   const remove = (list: ListItem) => run(async () => {
     await api.deleteList(list.key);
     setLists(all.filter((l) => l.key !== list.key));
@@ -197,7 +232,6 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     say(`${list.name} deleted · its recordings are still in your Library`);
   });
   const edit = (kind: Editing["kind"], list: ListItem) => {
-    setColour(labelColourName(list.color) ?? "grey");
     setEditing({ kind, list });
   };
   const asked = editing ? deleteListWords(editing.list.name, { body: "Its recordings stay in your Library; only the label goes." }) : null;
@@ -212,16 +246,16 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
       {!folded && (
         <ul className="el-nav-list" aria-label={LABEL_WORDS.section}>
           {all.map((l, i) => (
-            <li key={l.key} className="el-nav-row" onContextMenu={(e) => { e.preventDefault(); setMenu({ list: l, at: { x: e.clientX, y: e.clientY } }); }}>
+            <li key={l.key} className="el-nav-row" onContextMenu={(e) => { e.preventDefault(); openMenu(l, { x: e.clientX, y: e.clientY }); }}>
               <button type="button" className="el-nav-item el-nav-item--row" aria-current={current === l.key ? "page" : undefined}
                 aria-label={`${l.name}, ${counts[l.key] ?? 0}`} onClick={() => onOpen(l.key)}
-                onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); setMenu({ list: l, at: menuPointFor(e.currentTarget) }); } }}>
+                onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openMenu(l, menuPointFor(e.currentTarget)); } }}>
                 <LabelDot name={l.name} colour={l.color} decorative />
                 <span className="el-nav-item__label" dir="auto">{l.name}</span>
                 {(counts[l.key] ?? 0) > 0 && <span className="el-nav-item__count el-caption el-num">{counts[l.key]}</span>}
               </button>
               <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${l.name}`}
-                onClick={(e) => setMenu({ list: l, at: menuPointFor(e.currentTarget) })} data-index={i} />
+                onClick={(e) => openMenu(l, menuPointFor(e.currentTarget))} data-index={i} />
             </li>
           ))}
           <li>
@@ -237,11 +271,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
         if (!list) return null;
         return (
           <ContextMenu label={list.name} at={menu.at} onClose={() => setMenu(null)}
-            items={listChipMenuItems({
-              name: list.name, canMoveEarlier: i > 0, canMoveLater: i < all.length - 1, words: LABEL_WORDS.chipMenu,
-              onRename: () => edit("rename", list), onRecolour: () => edit("recolour", list),
-              onMoveEarlier: () => void move(list, -1), onMoveLater: () => void move(list, 1), onDelete: () => edit("delete", list),
-            })} />
+            items={labelMenu(list)} />
         );
       })()}
       <NewListDialog open={creating} onClose={() => setCreating(false)} existing={names} reserved={RESERVED_NAMES} usedColours={all.map((l) => l.color)}
@@ -249,10 +279,6 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
       <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={RESERVED_NAMES}
         words={{ ...LABEL_WORDS.renameDialog, ...nameWords(LABEL_WORDS.renameDialog.duplicate) }}
         onClose={() => setEditing(null)} onRename={(name) => editing && void rename(editing.list, name)} />
-      <Dialog open={editing?.kind === "recolour"} title="Change colour" onClose={() => setEditing(null)}
-        actions={<><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => editing && void recolour(editing.list)}>Save</Button></>}>
-        <ColourPicker label="Colour" hideLabel value={colour} onChange={setColour} />
-      </Dialog>
       <Dialog open={editing?.kind === "delete"} alert title={asked?.title ?? ""} description={asked?.body} onClose={() => setEditing(null)}
         actions={<><Button onClick={() => setEditing(null)}>{asked?.cancel}</Button><Button variant="danger" loading={busy} loadingLabel="Deleting…" onClick={() => editing && void remove(editing.list)}>{asked?.confirm}</Button></>} />
     </section>

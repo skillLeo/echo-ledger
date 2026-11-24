@@ -89,6 +89,11 @@ data class AppSettings(
     val callChoiceStreakCount: Int = 0,
     /** "Always do this?" was offered (once). */
     val callChoiceAlwaysOffered: Boolean = false,
+    /**
+     * v2.1 UX-13, Settings › After each call › "Show a small bar on screen" (off by default; needs the overlay
+     * permission): a 56 dp line under the status bar beside the after-call notification.
+     */
+    val afterCallBar: Boolean = false,
     /** Since v1.5: automatic call recordings shorter than this are skipped (0 = never). */
     val skipCallsShorterThanS: Int = 10,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */

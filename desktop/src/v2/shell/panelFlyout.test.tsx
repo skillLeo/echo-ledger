@@ -60,13 +60,13 @@ describe("the panel can always be opened (UX-02)", () => {
     window.localStorage.clear();
   });
 
-  it("docks from 1200 px; below it is hidden, with the toggle at the start of the page header", () => {
+  it("docks from 1200 px; below it is hidden, with the toggle at the start of the title row (UX-20)", () => {
     expect(DOCK_FROM).toBe(1200);
     setWidth(1199);
     render(<App />);
     expect(panel()).toBeNull();
-    const header = screen.getByRole("heading", { name: "The page" }).parentElement!;
-    expect(within(header).getByRole("button", { name: "Show the Library panel" })).toBe(header.firstElementChild?.querySelector("button"));
+    const row = screen.getByTestId("title-row");
+    expect(within(row).getByRole("button", { name: "Show the Library panel" })).toBe(row.querySelector("button"));
     act(() => setWidth(1200));
     expect(panel()).not.toBeNull();
     expect(panel()).not.toHaveClass("el-panel--flyout");
@@ -314,13 +314,13 @@ describe("the panel can always be opened (UX-02)", () => {
     expect(off.container.querySelector(".el-shell")).not.toHaveClass("el-shell--flyouts");
   });
 
-  it("without the flag the window is as before: docked from 1100 px, no toggle in the page header", () => {
+  it("without the flag the window is as before: docked from 1100 px, no toggle in the page header (the title row's ⊟ shows it)", () => {
     setWidth(1150);
     render(<App flag={false} />);
     expect(panel()).not.toBeNull();
     fireEvent.click(within(panel()!).getByRole("button", { name: "Hide panel" }));
     const header = screen.getByRole("heading", { name: "The page" }).parentElement!;
     expect(within(header).queryByRole("button")).toBeNull();
-    expect(screen.getByRole("button", { name: "Show the Library panel" })).toHaveClass("el-panel-show");
+    expect(within(screen.getByTestId("title-row")).getByRole("button", { name: "Show the Library panel" })).toBeInTheDocument();
   });
 });

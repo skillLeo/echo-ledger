@@ -8,6 +8,7 @@ import list from "./actions.json";
 import * as Icons from "../components/icons";
 import type { IconType } from "../components/Button";
 import type { MenuItem } from "../components/Menu";
+import type { NativeMenuItem } from "../../lib/ipc";
 
 export type Platform = "macos" | "windows";
 export type AppliesTo = "none" | "one" | "many" | "oneOrMany";
@@ -66,6 +67,10 @@ export type ActionContext = {
   targets?: readonly string[];
   /** A right-click menu: what doesn't apply is left out, and on a Mac there are no shortcuts. */
   context?: boolean;
+  /** A sub-menu's choice it was picked with (a label, a project, a format, a sort order: choiceItems). */
+  value?: string;
+  /** What it acts on ("recording", "view", "label", "trash"…): one id (Rename…) can mean each, done by its own screen. */
+  kind?: string;
 };
 
 /** The conditions `when` names. Left unsaid, a state that is usually so (can record, has audio) holds. */
@@ -155,19 +160,27 @@ export function shortcutClashes(items: readonly { id: string; mac?: string | nul
   return out;
 }
 
-const handlers = new Map<string, ((ctx: ActionContext) => void)[]>();
-/** What an id does here (the screen that can do it); the newest registration runs. Returns what takes it back. */
-export function registerAction(id: string, run: (ctx: ActionContext) => void): () => void {
+type Handler = { run: (ctx: ActionContext) => void; kind?: string };
+const handlers = new Map<string, Handler[]>();
+/** The newest handler for an id that takes this kind of thing (one registered without a kind takes any). */
+const handlerFor = (id: string, kind?: string): Handler | undefined =>
+  [...(handlers.get(id) ?? [])].reverse().find((h) => !h.kind || h.kind === kind);
+/**
+ * What an id does here (the screen that can do it); the newest registration runs. With a `kind` it runs only for that
+ * kind of thing (ActionContext.kind): the Library's Rename… is a recording's, the sidebar's a view's. Returns what
+ * takes it back.
+ */
+export function registerAction(id: string, run: (ctx: ActionContext) => void, kind?: string): () => void {
   need(id);
-  handlers.set(id, [...(handlers.get(id) ?? []), run]);
-  return () => handlers.set(id, (handlers.get(id) ?? []).filter((r) => r !== run));
+  const handler: Handler = { run, kind };
+  handlers.set(id, [...(handlers.get(id) ?? []), handler]);
+  return () => handlers.set(id, (handlers.get(id) ?? []).filter((h) => h !== handler));
 }
 /** Runs the command if something here can and its conditions hold. True when it ran. */
 export function runAction(id: string, ctx: ActionContext): boolean {
-  const all = handlers.get(id) ?? [];
-  const run = all[all.length - 1];
-  if (!run || !available(id, ctx)) return false;
-  run(ctx);
+  const handler = handlerFor(id, ctx.kind);
+  if (!handler || !available(id, ctx)) return false;
+  handler.run(ctx);
   return true;
 }
 
@@ -201,10 +214,32 @@ export function menuItems(ids: readonly string[], ctx: ActionContext): (MenuItem
   return out;
 }
 
+/**
+ * A sub-menu's choices (UX-22): a label's name, a project, a format, a sort order. Each sends the sub-menu's action with
+ * its value; their words are the choices' own, so checkMenu takes them only under that sub-menu.
+ */
+export function choiceItems(action: string, choices: readonly { value: string; label: string; checked?: boolean; disabled?: boolean; icon?: MenuItem["icon"] }[],
+  ctx: ActionContext): MenuItem[] {
+  need(action);
+  return choices.map((c) => ({
+    action, choice: c.value, label: c.label, icon: c.icon, checked: c.checked, disabled: c.disabled || undefined,
+    onPick: () => void runAction(action, { ...ctx, value: c.value }),
+  }));
+}
+
+/** Whether something here does `id` now (a screen registered it): a right-click menu shows only what can run. */
+export function canRun(id: string, kind?: string): boolean {
+  return !!handlerFor(id, kind);
+}
+
 /** What is wrong with a menu (the test's check): an item with no action, an unknown one, other words or keys. */
-export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform): string[] {
+export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform, parent?: string): string[] {
   const out: string[] = [];
   for (const item of items) {
+    if (item.choice !== undefined) {
+      if (!parent || item.action !== parent) out.push(`"${item.label}": a choice outside its sub-menu (${item.action ?? "no action"})`);
+      continue;
+    }
     if (!item.action) {
       out.push(`"${item.label}": no action in actions.json`);
     } else {
@@ -219,7 +254,54 @@ export function checkMenu(items: readonly (MenuItem & { action?: string })[], pl
         if (item.shortcut && !keys.includes(item.shortcut)) out.push(`"${item.label}": shortcut ${item.shortcut}, actions.json says ${keys[0] ?? "none"}`);
       }
     }
-    if (item.items) out.push(...checkMenu(item.items, platform));
+    if (item.items) out.push(...checkMenu(item.items, platform, item.action));
   }
   return out;
+}
+
+const ACCEL: Record<string, string> = { "⌃": "Ctrl", "⌥": "Alt", "⇧": "Shift", "⌘": "CmdOrCtrl" };
+/** A shortcut as Tauri's accelerator for a native menu: "⇧⌘N" → "Shift+CmdOrCtrl+N", "Ctrl+O" → "CmdOrCtrl+O". */
+export function accelerator(shortcut: string): string {
+  if (/^[⌃⌥⇧⌘]/.test(shortcut)) {
+    const mods = [...shortcut].filter((c) => ACCEL[c]);
+    const key = [...shortcut].slice(mods.length).join("");
+    return [...mods.map((m) => ACCEL[m]), KEY_NAMES[key] ?? key].join("+");
+  }
+  return shortcut.split("+").map((p) => (p === "Ctrl" ? "CmdOrCtrl" : KEY_NAMES[p] ?? p)).join("+");
+}
+
+/** A menu made by menuItems() as a native menu's lines (native_menu.rs): a line apart becomes a separator before it. */
+export function nativeItems(items: readonly MenuItem[], title?: string, depth = 0): NativeMenuItem[] {
+  // A title line (several chosen, UX-22), greyed, with a hairline under it.
+  const out: NativeMenuItem[] = title ? [{ action: null, label: title, enabled: false }, { action: null }] : [];
+  for (const i of items) {
+    if (i.separator && out.length && out[out.length - 1].action !== null) out.push({ action: null });
+    // A note, not a command ("Up to 200 at a time…"): greyed.
+    if (!i.action) out.push({ action: null, label: i.label, enabled: false });
+    // A sub-menu, one level deep (3b): its choices come back with their values.
+    else if (i.items?.length) {
+      if (depth === 0) out.push({ action: i.action, label: i.label, enabled: !i.disabled, items: nativeItems(i.items, undefined, 1) });
+    } else {
+      out.push({
+        action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null,
+        ...(i.choice !== undefined ? { value: i.choice } : {}),
+      });
+    }
+  }
+  return out;
+}
+
+/** Whether a key press is this shortcut ("⇧⌘N" on a Mac, "Ctrl+Shift+N" on Windows): the same keys, no others. */
+export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
+  const mac = /^[⌃⌥⇧⌘]/.test(shortcut);
+  const mods = mac ? [...shortcut].filter((c) => ACCEL[c]) : shortcut.split("+").slice(0, -1);
+  const key = mac ? [...shortcut].slice(mods.length).join("") : shortcut.split("+").pop()!;
+  const want = {
+    meta: mac ? mods.includes("⌘") : false,
+    ctrl: mac ? mods.includes("⌃") : mods.includes("Ctrl"),
+    alt: mac ? mods.includes("⌥") : mods.includes("Alt"),
+    shift: mac ? mods.includes("⇧") : mods.includes("Shift"),
+  };
+  if (e.metaKey !== want.meta || e.ctrlKey !== want.ctrl || e.altKey !== want.alt || e.shiftKey !== want.shift) return false;
+  return e.key.toLowerCase() === (KEY_NAMES[key] ?? key).toLowerCase();
 }

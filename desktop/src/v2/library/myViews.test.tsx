@@ -11,9 +11,11 @@ import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { LibraryNav } from "./LibraryNav";
 import { libraryViewCounts, prepare } from "./facets";
+import { checkMenu } from "../actions/registry";
 import { fromServer, MAX_VIEWS, syncedViewsStore, toServer, VIEW_WORDS, viewsAccount, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "./scope";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -394,7 +396,7 @@ describe("My views in the sidebar and the Library", () => {
   it("Save as view keeps the filters, the search and the sort; it appears in MY VIEWS, opens there and syncs", async () => {
     render(<App />);
     await act(flushAsync);
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "whatsapp" } });
     fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Longest" }));
@@ -478,6 +480,30 @@ describe("My views in the sidebar and the Library", () => {
     expect(title()).toHaveTextContent(/^Two/);
   });
 
+  it("a view's menu (UX-22, 3b), from actions.json: Open | Rename… · Duplicate · Move up/down | Delete view…; Duplicate makes a copy", async () => {
+    render(<App />);
+    await act(flushAsync);
+    await act(async () => { await viewsStore.create("WhatsApp", SPEC); await viewsStore.create("Zoom", SPEC); });
+    await act(flushAsync);
+    fireEvent.contextMenu(myViews().getByRole("button", { name: "WhatsApp" }), { clientX: 20, clientY: 30 });
+    const menu = screen.getByRole("menu", { name: "WhatsApp" });
+    const groups: string[][] = [[]];
+    for (const el of menu.querySelectorAll(":scope > li")) {
+      if (el.getAttribute("role") === "separator") groups.push([]);
+      const label = el.querySelector(".el-menu__label")?.textContent;
+      if (label) groups[groups.length - 1].push(label);
+    }
+    // The first view can't move up; Edit filters… waits for its way in.
+    expect(groups).toEqual([["Open"], ["Rename…", "Duplicate", "Move down"], ["Delete view…"]]);
+    expect(checkMenu([...menu.querySelectorAll('[role^="menuitem"]')].map((m) => ({ label: m.querySelector(".el-menu__label")?.textContent ?? "", action: m.getAttribute("data-action") ?? undefined })), "windows")).toEqual([]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Duplicate" }));
+    await act(flushAsync);
+    expect(myViews().getByRole("button", { name: "WhatsApp copy" })).toBeInTheDocument();
+    fireEvent.contextMenu(myViews().getByRole("button", { name: "WhatsApp copy" }), { clientX: 20, clientY: 30 });
+    fireEvent.click(within(screen.getByRole("menu", { name: "WhatsApp copy" })).getByRole("menuitem", { name: "Delete view…" }));
+    expect(screen.getByRole("alertdialog", { name: "Delete WhatsApp copy?" })).toBeInTheDocument();
+  });
+
   it("Alt+1…Alt+9 open the panel's first nine: the library views, then My views (⌘1…⌘6 are the rail's)", async () => {
     render(<App />);
     await act(flushAsync);
@@ -488,10 +514,11 @@ describe("My views in the sidebar and the Library", () => {
     await act(flushAsync);
     expect(nav().getByRole("button", { name: "Unread, 1" })).toHaveAttribute("aria-current", "page");
     expect(rows()).toEqual(["wa2"]);
-    fireEvent.keyDown(window, { key: "7", code: "Digit7", altKey: true });
+    // Five library views since v2.1 (Audio only took in Not transcribed), so the first of My views is Alt+6.
+    fireEvent.keyDown(window, { key: "6", code: "Digit6", altKey: true });
     await act(flushAsync);
     expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
-    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+7");
+    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+6");
     // Typed in a field, Alt+1 is the field's (a character on some keyboards), never a view.
     const field = screen.getByRole("searchbox", { name: "Search recordings" });
     field.focus();

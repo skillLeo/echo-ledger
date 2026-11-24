@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon, type IconType } from "./Button";
 
 /** A flat panel with a hairline border (mixed items only, never a coloured edge). */
@@ -6,9 +6,41 @@ export function Card({ children, className, label }: { children: ReactNode; clas
   return <section className={["el-card", className].filter(Boolean).join(" ")} aria-label={label}>{children}</section>;
 }
 
-/** Initials in a neutral circle; the name is read from the text beside it, so the avatar itself is hidden. */
-export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm" | "md" }) {
-  return <span className={`el-avatar${size === "sm" ? " el-avatar--sm" : ""}`} aria-hidden="true">{initials}</span>;
+/** The avatars' colours (tokens role.avatar.0…7, the server's avatar_color). */
+export const AVATAR_COLOURS = 8;
+
+/**
+ * The colour of someone's circle: the server's avatar_color (0–7, BE-06), else one worked out from who it is (their
+ * email, a speaker's name), the same every time.
+ */
+export function avatarColour(color: number | null | undefined, seed: string): number {
+  if (typeof color === "number" && Number.isInteger(color) && color >= 0 && color < AVATAR_COLOURS) return color;
+  let hash = 0;
+  for (const ch of seed.trim().toLowerCase()) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
+  return hash % AVATAR_COLOURS;
+}
+
+/**
+ * A person's avatar (DES-08), the same everywhere: their photo filling the circle, else their initials on a solid
+ * colour (never grey or white), with a 1 px inner ring so neither melts into the background. A photo that fails to load
+ * shows the initials. The name is said by what holds it, so the avatar itself is hidden from assistive tools.
+ * Sizes: rail 28, list 32 (sm), account menu 40, md 48, profile 96.
+ */
+export function Avatar({ initials, size = "md", color, seed, photo }: {
+  initials: string;
+  size?: "sm" | "md" | "rail" | "list" | "menu" | "profile";
+  /** The server's avatar_color (0–7); left out, one from `seed` (else the initials). */
+  color?: number | null;
+  seed?: string;
+  photo?: string | null;
+}) {
+  const [broken, setBroken] = useState<string | null>(null);
+  const showPhoto = !!photo && broken !== photo;
+  return (
+    <span className={`el-avatar el-avatar--${size}`} data-colour={avatarColour(color, seed ?? initials)} aria-hidden="true">
+      {showPhoto ? <img src={photo!} alt="" onError={() => setBroken(photo!)} /> : initials}
+    </span>
+  );
 }
 
 /** The app's primary navigation; below the rail breakpoint (780 px window) it keeps its icons only. */
