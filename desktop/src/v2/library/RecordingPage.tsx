@@ -599,11 +599,15 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     const mac = /mac/i.test(navigator.platform || navigator.userAgent);
     const onKey = (e: KeyboardEvent) => {
       const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || e.key.toLowerCase() !== "p") return;
+      // The P key whatever the layout types with it (Urdu, Arabic: e.code), as LibraryNav does.
+      const p = e.key.toLowerCase() === "p" || (e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key) && e.code === "KeyP");
+      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || !p) return;
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (target && (target.isContentEditable || target.closest("input, textarea, select"))) return;
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
+      // Held down, it repeats: printed once.
+      if (e.repeat) return;
       printNow.current();
     };
     document.addEventListener("keydown", onKey);

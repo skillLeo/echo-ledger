@@ -93,6 +93,32 @@ describe("browser keys (FIX-10)", () => {
     expect(sync).not.toHaveBeenCalled();
   });
 
+  it("a held key repeats: stopped each time, acted on once", () => {
+    const sync = vi.fn();
+    stop = installNativeFeel({ release: true, mac: true, onSyncNow: sync });
+    expect(key("r", { metaKey: true })).toBe(false);
+    expect(key("r", { metaKey: true, repeat: true })).toBe(false);
+    expect(key("F5", { repeat: true })).toBe(false);
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("never a key the app's own commands have (⌥⌘C and Ctrl+Shift+C copy the transcript)", () => {
+    expect(k("c", { metaKey: true, altKey: true }, true)).toBeNull();
+    expect(k("C", { ctrlKey: true, shiftKey: true }, false)).toBeNull();
+    // Its own two stay: Sync Now and Print Transcript are what ⌘R and ⌘P become here.
+    expect(k("r", { metaKey: true }, true)).toBe("reload");
+    expect(k("p", { metaKey: true }, true)).toBe("print");
+  });
+
+  it("knows the keys on an Urdu or Arabic keyboard by where they are (e.code)", () => {
+    const urdu = (key: string, code: string, mods: Partial<KeyboardEvent>, mac: boolean) =>
+      browserKey({ key, code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods } as KeyboardEvent, mac);
+    expect(urdu("ق", "KeyR", { metaKey: true }, true)).toBe("reload");
+    expect(urdu("پ", "KeyP", { ctrlKey: true }, false)).toBe("print");
+    expect(urdu("ی", "KeyI", { metaKey: true, altKey: true }, true)).toBe("devtools");
+    expect(urdu("ف", "KeyF", { metaKey: true }, true)).toBeNull();
+  });
+
   it("Windows: Ctrl+R syncs, Ctrl+P and F12 do nothing", () => {
     const sync = vi.fn();
     stop = installNativeFeel({ release: true, mac: false, onSyncNow: sync });
@@ -104,15 +130,14 @@ describe("browser keys (FIX-10)", () => {
     expect(key("ArrowLeft", { altKey: true })).toBe(true);
   });
 
-  it("leaves what the app takes first and every other key alone", () => {
-    stop = installNativeFeel({ release: true, mac: true, onSyncNow: () => undefined });
-    const reload = vi.fn((e: KeyboardEvent) => { if (e.key === "r") e.preventDefault(); });
-    window.addEventListener("keydown", reload);
+  it("leaves what the app takes first (a listener added after it, on the window) and every other key alone", () => {
     const sync = vi.fn();
-    stop();
     stop = installNativeFeel({ release: true, mac: true, onSyncNow: sync });
-    key("r", { metaKey: true });
-    expect(reload).toHaveBeenCalled();
+    const reload = vi.fn((e: KeyboardEvent) => { if (e.key === "r" || e.key === "F5") e.preventDefault(); });
+    window.addEventListener("keydown", reload);
+    expect(key("r", { metaKey: true })).toBe(false);
+    expect(key("F5")).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(2);
     expect(sync).not.toHaveBeenCalled();
     window.removeEventListener("keydown", reload);
     expect(key("a")).toBe(true);
@@ -148,21 +173,39 @@ describe("the right-click (FIX-10)", () => {
     expect(ours).toHaveBeenCalledTimes(1);
   });
 
-  it("on selected text (a transcript's words) the system's menu stays: Look Up, Translate, Copy, Share", () => {
+  it("on the selected text itself (a transcript's words) the system's menu stays; not on what holds it", () => {
     stop = installNativeFeel({ release: true, onSyncNow: () => undefined });
-    document.body.innerHTML = `<p id="words">Assalam o alaikum, the invoice is due</p><p id="other">Elsewhere</p>`;
+    document.body.innerHTML = `<ol id="list"><li id="line"><span id="words">Assalam o alaikum, the invoice is due</span> </li></ol>`;
     const words = document.getElementById("words")!;
-    const range = document.createRange();
-    range.selectNodeContents(words);
-    window.getSelection()!.removeAllRanges();
-    window.getSelection()!.addRange(range);
-    expect(fireEvent.contextMenu(words)).toBe(true);
-    // A press away from the selection: nothing.
-    expect(fireEvent.contextMenu(document.getElementById("other")!)).toBe(false);
-    // Nothing selected (a collapsed selection): nothing.
-    window.getSelection()!.collapse(words, 0);
-    expect(fireEvent.contextMenu(words)).toBe(false);
-    window.getSelection()!.removeAllRanges();
+    // jsdom draws nothing: the selected words sit at 100–300 × 40–60.
+    const drawn = [{ left: 100, right: 300, top: 40, bottom: 60 }] as unknown as DOMRectList;
+    const had = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
+    Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => drawn });
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(words);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(range);
+      expect(fireEvent.contextMenu(words, { clientX: 150, clientY: 50 })).toBe(true);
+      // The line that holds it, the list, the page: a press beside the words, nothing.
+      expect(fireEvent.contextMenu(document.getElementById("line")!, { clientX: 400, clientY: 50 })).toBe(false);
+      expect(fireEvent.contextMenu(document.getElementById("list")!, { clientX: 20, clientY: 80 })).toBe(false);
+      expect(fireEvent.contextMenu(document.body, { clientX: 500, clientY: 500 })).toBe(false);
+      // Select All: the page is selected, but only a press on drawn text keeps the menu.
+      const all = document.createRange();
+      all.selectNodeContents(document.body);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(all);
+      expect(fireEvent.contextMenu(document.body, { clientX: 500, clientY: 500 })).toBe(false);
+      expect(fireEvent.contextMenu(words, { clientX: 120, clientY: 45 })).toBe(true);
+      // Nothing selected (a collapsed selection): nothing.
+      window.getSelection()!.collapse(words, 0);
+      expect(fireEvent.contextMenu(words, { clientX: 150, clientY: 50 })).toBe(false);
+    } finally {
+      if (had) Object.defineProperty(Range.prototype, "getClientRects", had);
+      else delete (Range.prototype as unknown as { getClientRects?: unknown }).getClientRects;
+      window.getSelection()!.removeAllRanges();
+    }
   });
 
   it("in a development build the browser's menu (Inspect) stays", () => {

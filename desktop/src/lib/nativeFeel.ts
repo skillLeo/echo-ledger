@@ -6,10 +6,17 @@
 // combination is the app's (⌃⌘S the sidebar), and on a Mac only ⌘ counts (Ctrl+P, Ctrl+F, Ctrl+H edit text there).
 // Answered after every listener of the page and the shell, wherever they listen and whenever they were added: whatever
 // they took is left alone. Windows also turns WebView2's own browser keys off at the source (native_feel.rs), with its
-// autofill and password saving.
+// autofill and password saving, and trims its own menu to Cut, Copy, Paste and Select All.
+import { ACTIONS, matchesShortcut } from "../v2/actions/registry";
 
 /** What a browser would do with a key press, or null when it isn't one of the browser's keys. */
 export type BrowserKey = "reload" | "print" | "devtools" | "navigate";
+
+/** The app's own keys (actions.json) are never the browser's, but for the two this guard answers itself. */
+const ANSWERED_HERE = new Set(["file.syncNow", "file.printTranscript"]);
+const appKey = (e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">, mac: boolean) =>
+  ACTIONS.some((a) => !ANSWERED_HERE.has(a.id) && [mac ? a.mac : a.win, ...(mac ? a.macAlso : a.winAlso)]
+    .some((keys) => !!keys && matchesShortcut(e as KeyboardEvent, keys)));
 
 const isMacPlatform = () => typeof navigator !== "undefined" && /mac/i.test(navigator.platform || navigator.userAgent);
 
@@ -17,8 +24,11 @@ const isMacPlatform = () => typeof navigator !== "undefined" && /mac/i.test(navi
  * The browser's own key for this press (pure). The browser's modifier is ⌘ on a Mac and Ctrl elsewhere; a press with
  * both (⌃⌘S) is never the browser's.
  */
-export function browserKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">, mac: boolean = isMacPlatform()): BrowserKey | null {
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+export function browserKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"> & { code?: string }, mac: boolean = isMacPlatform()): BrowserKey | null {
+  // The letter on the key, whatever the keyboard's layout types with it (Urdu, Arabic): e.code's KeyR, as LibraryNav does.
+  const typed = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const key = e.key.length === 1 && !/^[a-z0-9]$/.test(typed) && /^Key[A-Z]$/.test(e.code ?? "") ? e.code!.slice(3).toLowerCase() : typed;
+  if (appKey({ key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey }, mac)) return null;
   if (e.metaKey && e.ctrlKey) return null;
   const mod = mac ? e.metaKey : e.ctrlKey;
   const other = mac ? e.ctrlKey : e.metaKey;
@@ -27,7 +37,7 @@ export function browserKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" 
   if (mod && !e.altKey && key === "r") return "reload";
   if (mod && !e.altKey && !e.shiftKey && key === "p") return "print";
   if (!mac && key === "F12") return "devtools";
-  if (mac ? mod && e.altKey && ["i", "j", "c"].includes(key) : mod && e.shiftKey && !e.altKey && ["i", "j", "c"].includes(key)) return "devtools";
+  if (mac ? mod && e.altKey && ["i", "j"].includes(key) : mod && e.shiftKey && !e.altKey && ["i", "j"].includes(key)) return "devtools";
   // Windows' own Back and Forward keys (a keyboard's or a mouse's); never Alt and an arrow (the app's Back, a word move).
   if (!mac && (key === "BrowserBack" || key === "BrowserForward")) return "navigate";
   return null;
@@ -39,12 +49,20 @@ export const SYNC_NOW_EVENT = "echoledger:sync-now";
 /** A field the person types in: the system's Cut, Copy and Paste menu stays there. */
 const editable = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest("input, textarea, select, [contenteditable='true']"));
-/** A press on selected text (a transcript's words): the system's menu stays (Look Up, Translate, Copy, Share, Speech). */
-function onSelection(target: EventTarget | null, win: Window): boolean {
+/**
+ * A press on the selected text itself (a transcript's words): the system's menu stays (Look Up, Translate, Copy,
+ * Share, Speech). Only where the selection is drawn, not on what merely holds it (its list, a paragraph's blank end, the
+ * page after Select All).
+ */
+function onSelection(e: MouseEvent, win: Window): boolean {
   const selection = win.getSelection?.();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0 || !(target instanceof Node)) return false;
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
   for (let i = 0; i < selection.rangeCount; i++) {
-    if (selection.getRangeAt(i).intersectsNode(target)) return true;
+    const range = selection.getRangeAt(i);
+    // A web view always draws a range; a document that draws nothing (a test's) has nothing to press on.
+    for (const box of typeof range.getClientRects === "function" ? range.getClientRects() : []) {
+      if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) return true;
+    }
   }
   return false;
 }
@@ -74,13 +92,14 @@ export function installNativeFeel({ release, onSyncNow, mac = isMacPlatform(), w
       settle();
       if (last.defaultPrevented) return;
       last.preventDefault();
-      if (browserKey(last, mac) === "reload" && !last.shiftKey) onSyncNow();
+      // A held key repeats: stopped each time, acted on once.
+      if (browserKey(last, mac) === "reload" && !last.shiftKey && !last.repeat) onSyncNow();
     };
     waiting = { event: e, listener };
     win.addEventListener("keydown", listener);
   };
   const onMenu = (e: MouseEvent) => {
-    if (e.defaultPrevented || editable(e.target) || onSelection(e.target, win)) return;
+    if (e.defaultPrevented || editable(e.target) || onSelection(e, win)) return;
     e.preventDefault();
   };
   win.addEventListener("keydown", onKey, true);

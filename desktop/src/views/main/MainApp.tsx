@@ -706,8 +706,12 @@ export default function MainApp() {
   };
 
   // F5 and ⌘R (Ctrl+R) in a release build (FIX-10, lib/nativeFeel.ts): Sync now, as the search's "Sync the library".
+  // Only in the app itself (unlocked, set up), never behind a dialog; syncLibrary keeps the sidebar's "Synced … ago".
   const syncNow = useRef(() => undefined as unknown);
-  syncNow.current = () => (status?.paired ? run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) : undefined);
+  syncNow.current = () => {
+    if (!status?.paired || !restored || lock?.locked || setupDone === false || document.querySelector('[aria-modal="true"]')) return;
+    return syncLibrary().catch((e) => notify(errorMessage(e), true));
+  };
   useEffect(() => {
     const on = () => void syncNow.current();
     window.addEventListener(SYNC_NOW_EVENT, on);
