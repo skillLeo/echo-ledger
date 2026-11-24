@@ -277,7 +277,7 @@ describe("the Library's right-click menus (UX-22)", () => {
     await act(flushAsync);
     expect(screen.queryByRole("menu", { name: "Recording actions" })).toBeNull();
     type Line = { action: string | null; label?: string; accelerator?: string | null; checked?: boolean | null; value?: string; items?: Line[] };
-    const [call] = callsOf("native_menu_popup") as { items: Line[]; x: number; y: number }[];
+    const [call] = callsOf("native_menu_popup") as { items: Line[]; x: number; y: number; menu: number }[];
     expect([call.x, call.y]).toEqual([40, 60]);
     expect(call.items.map((i) => (i.action === null && !i.label ? "—" : i.label))).toEqual([
       "Open", "—", "Pin", "Mark as Important", "Labels", "Move to Project", "—", "Rename…", "Export", "—", "Move to Trash",
@@ -285,9 +285,11 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(call.items.every((i) => !i.accelerator)).toBe(true);
     expect(call.items.find((i) => i.label === "Mark as Important")).toMatchObject({ checked: false });
     const move = call.items.find((i) => i.label === "Move to Project")!;
-    expect(move.items!.map((i) => [i.label, i.value, i.checked])).toEqual([["No project", "none", true], ["Qureshi Textiles", "c1", false]]);
-    // A pick comes back as "<id>=<value>" (menu:action) and runs through the item it came from.
-    expect(runPicked("recording.moveToProject=c1")).toBe(true);
+    // The app's own words in a Mac's case ("No Project"); a project's name as it is. The menu has a number of its own.
+    expect(move.items!.map((i) => [i.label, i.value, i.checked])).toEqual([["No Project", "none", true], ["Qureshi Textiles", "c1", false]]);
+    expect(call.menu).toBeGreaterThan(0);
+    // A pick comes back as "<id>=<value>~<menu>" (menu:action) and runs through the item it came from.
+    expect(runPicked(`recording.moveToProject=c1~${call.menu}`)).toBe(true);
     await act(flushAsync);
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { client_id: "c1" } }]);
     // Several: a greyed title line first.
@@ -295,8 +297,11 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.click(row("Voice note"), { metaKey: true });
     fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
     await act(flushAsync);
-    expect((callsOf("native_menu_popup")[1] as { items: Line[] }).items.slice(0, 2)).toEqual([{ action: null, label: "2 recordings", enabled: false }, { action: null }]);
-    // A pick of something this menu didn't show is left to the shell (Record's menu).
+    expect((callsOf("native_menu_popup")[1] as { items: Line[] }).items.slice(0, 2)).toEqual([{ action: null, label: "2 Recordings", enabled: false }, { action: null }]);
+    // A pick without a number (another menu's: Record's) is left to the shell; an earlier menu's is claimed and dropped.
     expect(runPicked("file.newRecording")).toBe(false);
+    expect(runPicked(`recording.moveToProject=c1~${call.menu}`)).toBe(true);
+    await act(flushAsync);
+    expect(callsOf("session_organise")).toHaveLength(1);
   });
 });

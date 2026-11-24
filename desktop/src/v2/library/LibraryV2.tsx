@@ -25,7 +25,7 @@ import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
-import { currentPlatform, popupNative } from "../actions/popup";
+import { appWords, currentPlatform, popupNative } from "../actions/popup";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
@@ -526,6 +526,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // `settling`: a Back or Forward is under way; whatever the Library settles on meanwhile (a view deleted since falls
   // back to All recordings, a view saved offline has the server's id now) is where it went, never a new step.
   const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; settling: number }>({ back: [], forward: [], now: null, settling: 0 });
+  /** How many steps each way, as state: the title row's ← → (usePageHistory) are drawn from it, lit when there are some. */
+  const [stepCounts, setStepCounts] = useState({ back: 0, forward: 0 });
+  const countSteps = useCallback(() => {
+    const h = steps.current;
+    setStepCounts((c) => (c.back === h.back.length && c.forward === h.forward.length ? c : { back: h.back.length, forward: h.forward.length }));
+  }, []);
   // A place that can't be shown any more: a view or a label deleted since.
   const goneFrom = (p: Place) => (p.scope.kind === "saved" && !viewsStore.list().some((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")))
     || (p.scope.kind === "label" && !!lists && !lists.some((l) => l.key === (p.scope.kind === "label" ? p.scope.key : "")));
@@ -545,6 +551,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (h.settling > 0) {
       h.now = here;
       tidy();
+      countSteps();
       return;
     }
     if (h.now && placeKey(h.now) === key) return;
@@ -556,6 +563,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     h.now = here;
     tidy();
+    countSteps();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, applied, searchStep]);
   const walk = useCallback((way: "back" | "forward") => {
@@ -577,8 +585,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }, 0);
     show(to.scope, to.spec, true, { query: to.query });
     setSearchStep(to.query);
+    countSteps();
     return true;
-  }, [show]);
+  }, [show, countSteps]);
 
   // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
   const restored = useRef(false);
@@ -596,6 +605,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     restoredId.current = null;
     if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
   }, [items, initialOpen]);
+  /** Marks what is stuck again (set by the effect below; a change that moves things without a scroll calls it). */
+  const remark = useRef<() => void>(() => undefined);
   // A stuck group heading also covers the scrolling box's top padding (UX-25 review): mark the stuck ones, and give
   // the cover the padding's height, as the list scrolls.
   useEffect(() => {
@@ -616,6 +627,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const soon = () => {
       if (!frame) frame = requestAnimationFrame(mark);
     };
+    remark.current = soon;
     box.addEventListener("scroll", soon, { passive: true });
     // A tab, a filter, a sort, a delete or a resize moves the headings without a scroll: marked again then too.
     window.addEventListener("resize", soon);
@@ -626,6 +638,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       window.removeEventListener("resize", soon);
       resized?.disconnect();
       cancelAnimationFrame(frame);
+      remark.current = () => undefined;
     };
   }, []);
   // A recording opened from the list starts at its own top (UX-25 keeps the list's place for the way back). In the
@@ -968,6 +981,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   shownCount.current = shownIds.length;
   // Picking turns the toolbar into the selection bar; it stays until Esc, Cancel, or nothing is picked.
   const choosing = selecting || pickedIds.length > 0;
+  // Picking (the selection bar takes the tabs row's place), a tab or the filters change what is stuck without a scroll.
+  useEffect(() => {
+    remark.current();
+  }, [choosing, tab, applied]);
   // More picked than the core takes at once: the actions wait and the bar says why.
   const tooMany = pickedIds.length > MAX_BULK;
   const toggle = (id: string) => {
@@ -1247,10 +1264,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
         ],
         "recording.moveToProject": choiceItems("recording.moveToProject", [
-          { value: "none", label: "No project", checked: where === "none" },
+          { value: "none", label: appWords("No project", ctx.platform), checked: where === "none" },
           ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
         ], ctx).map(oneOf),
-        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: f.label })), ctx),
+        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: appWords(f.label, ctx.platform) })), ctx),
       }, LIBRARY_KEYS),
     };
   };
@@ -1260,9 +1277,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const listSpaceMenu = (): MenuItem[] => {
     const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
-      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
-      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
-      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label, checked: density === d })), ctx).map(oneOf),
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(SORT_NAMES[k], ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(GROUP_NAMES[k], ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
+      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label: appWords(label, ctx.platform), checked: density === d })), ctx).map(oneOf),
     }, LIBRARY_KEYS);
   };
   /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
@@ -1471,8 +1488,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // goes back to the list where it was (UX-25's kept place is this step); else the Library's own steps (a view, a
   // filter, a search); then the places visited. Outside the shell the Library hears those keys itself.
   const inShell = usePageHistory({
-    back: open ? closeOpen : steps.current.back.length ? () => void walk("back") : null,
-    forward: !open && steps.current.forward.length ? () => void walk("forward") : null,
+    back: open ? closeOpen : stepCounts.back ? () => void walk("back") : null,
+    forward: !open && stepCounts.forward ? () => void walk("forward") : null,
   });
   inShellRef.current = inShell;
   inTitleRowRef.current = inTitleRow;
@@ -1539,7 +1556,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
               <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
               {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
               <div className="el-lib-row2__end">
                 <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}

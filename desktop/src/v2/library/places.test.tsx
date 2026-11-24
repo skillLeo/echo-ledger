@@ -262,6 +262,68 @@ describe("the Library's places", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
   });
 
+  it("in the app, a view picked in the sidebar is one step: ⌘[ straight after goes back to All recordings, still in the Library", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeDisabled();
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    // Lit at once (the Library's step), no other redraw needed.
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeEnabled();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+  });
+
+  it("in the app, Back then a new view: Forward goes out (nothing ahead any more)", async () => {
+    inTheApp();
+    await settle();
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(titleRow().getByRole("button", { name: "Back" }));
+    await settle();
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Important/);
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeDisabled();
+  });
+
+  it("in the app, back from a recording opened from a scrolled list, by the row's ←, ⌘[ and the side button: the same place, its row tinted (UX-25)", async () => {
+    respond("session_detail", { playback_url: null });
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    // The shell's content area is the box that scrolls (its CSS isn't loaded here).
+    const box = document.querySelector<HTMLElement>(".content")!;
+    box.style.overflowY = "auto";
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const ways: [string, () => void][] = [
+      ["the row's ←", () => fireEvent.click(titleRow().getByRole("button", { name: "Back" }))],
+      ["⌘[", () => fireEvent.keyDown(document.body, { key: "[", metaKey: true })],
+      ["the side button", () => { fireEvent.mouseDown(window, { button: 3 }); fireEvent.mouseUp(window, { button: 3 }); }],
+    ];
+    for (const [way, back] of ways) {
+      box.scrollTop = 700;
+      fireEvent.click(within(screen.getByRole("list", { name: "Recordings" })).getByRole("button", { name: "Imported memo" }));
+      await settle();
+      expect(screen.getByRole("heading", { level: 1, name: "Imported memo" }), way).toBeInTheDocument();
+      box.scrollTop = 0;
+      back();
+      await settle();
+      expect(box.scrollTop, way).toBe(700);
+      expect(document.querySelector(".el-rec--last button[data-row-id]")?.getAttribute("data-row-id"), way).toBe("file");
+    }
+  });
+
   it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
     respond("projects_list", { data: [] });

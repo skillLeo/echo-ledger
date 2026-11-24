@@ -737,8 +737,18 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const box = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
       setPicked({ text, at: segments[index]?.start ?? 0, x: box ? box.left + box.width / 2 : 0, y: box?.top ?? 0 });
     };
-    document.addEventListener("selectionchange", changed);
-    return () => document.removeEventListener("selectionchange", changed);
+    // One update a frame, on a change of the selection and on any scroll (the bar follows the words it is over).
+    let frame = 0;
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; changed(); });
+    };
+    document.addEventListener("selectionchange", soon);
+    window.addEventListener("scroll", soon, true);
+    return () => {
+      document.removeEventListener("selectionchange", soon);
+      window.removeEventListener("scroll", soon, true);
+      cancelAnimationFrame(frame);
+    };
   }, [segments]);
   const pickedItems = picked ? contextItems(["player.playFromHere", "text.ask", "text.copyWithTime", "text.share"],
     { platform: currentPlatform(), kind: "transcript", value: picked.text, state: { hasAudio: canPlay, hasTranscript: true, at: String(picked.at) } }) : [];
@@ -984,6 +994,15 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 onMenu={transcriptMenu}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => parts[i]?.note} lineTitle={(i) => parts[i]?.title} after={(i) => parts[i]?.after} />
+              {/* The selected words' bar, right after the transcript (Tab reaches it from the words). */}
+              {picked && pickedItems.length > 0 && (
+                // A press here keeps the selection (the words stay chosen while the bar acts on them).
+                <div role="toolbar" aria-label="Selected words" className="el-selection-bar" style={{ left: picked.x, top: picked.y }} onMouseDown={(e) => e.preventDefault()}>
+                  {pickedItems.map((i) => (
+                    <Button key={i.action} size="sm" variant="quiet" icon={i.icon} data-action={i.action} onClick={() => i.onPick?.()}>{i.label}</Button>
+                  ))}
+                </div>
+              )}
             </>
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
@@ -1028,14 +1047,6 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           onReplaced={showTranscript} />
       )}
       {pageMenu && <ContextMenu label={pageMenu.label} items={pageMenu.items} at={pageMenu.at} onClose={() => setPageMenu(null)} />}
-      {picked && pickedItems.length > 0 && (
-        // A press here keeps the selection (the words stay chosen while the bar acts on them).
-        <div role="toolbar" aria-label="Selected words" className="el-selection-bar" style={{ left: picked.x, top: picked.y }} onMouseDown={(e) => e.preventDefault()}>
-          {pickedItems.map((i) => (
-            <Button key={i.action} size="sm" variant="quiet" icon={i.icon} data-action={i.action} onClick={() => i.onPick?.()}>{i.label}</Button>
-          ))}
-        </div>
-      )}
       {tool === "speakers" && transcript.state === "ready" && transcript.value && (
         <SpeakersDialog sessionId={item.id} labels={speakerLabels(transcript.value.segments)} names={names} hasProject={!!item.client}
           onClose={() => setTool(null)} say={onMessage}

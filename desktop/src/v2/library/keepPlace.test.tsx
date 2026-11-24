@@ -227,15 +227,15 @@ describe("a stuck group heading (UX-25 review)", () => {
     act(() => void window.dispatchEvent(new Event("resize")));
     await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
     expect(headings()[0]).toHaveAttribute("data-stuck");
-    // The selection bar, stuck at the top while picking, is marked and covers the band too.
-    fireEvent.click(row("Call 1"), { metaKey: true });
-    const bar = document.querySelector(".el-selectbar") as HTMLElement;
+    // Picking while scrolled down: the selection bar takes the tabs row's place, stuck at the top, and is marked at once
+    // (no scroll needed) and covers the band too.
     spy.mockImplementation(function (this: HTMLElement) {
-      const top = this === scroller ? 0 : this === bar ? 24 : 400;
+      const top = this === scroller ? 0 : this.classList.contains("el-selectbar") ? 24 : 400;
       return { top, bottom: top + 40, left: 0, right: 800, width: 800, height: 40, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
     });
-    scrollTo(scroller, 950);
+    fireEvent.click(row("Call 1"), { metaKey: true });
     await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    const bar = document.querySelector(".el-selectbar") as HTMLElement;
     expect(bar).toHaveAttribute("data-stuck");
     expect(css).toMatch(/\[data-v2="library"\] \.el-selectbar\[data-stuck\]::before,/);
     // The last-opened grey is 6% (9% on hover) in light, 9% (12%) in dark, where 6% is a row's own hover.

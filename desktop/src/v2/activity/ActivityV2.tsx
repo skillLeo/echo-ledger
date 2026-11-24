@@ -17,8 +17,14 @@ import { currentPlatform, popupNative } from "../actions/popup";
 import type { ActionContext } from "../actions/registry";
 import { useActions } from "../actions/useActions";
 
-/** An Activity item's menu (UX-22, 3b): Open · Mark as read | Retry (a failure). */
-const ACTIVITY_ITEM = ["place.open", "recording.unread", "-", "activity.retry"] as const;
+/** An Activity item's menu (UX-22, 3b): Open · Mark as read | Retry (an upload that stopped). */
+const ACTIVITY_ITEM = ["place.open", "activity.markRead", "-", "activity.retry"] as const;
+
+/**
+ * Retry only where it retries something: an upload that stopped, in failed uploads. A transcription that failed is tried
+ * again on its recording's page (Open), and minutes used up have nothing to retry.
+ */
+const retries = (i: Pick<ActivityItem, "kind">) => i.kind === "upload_failed";
 
 const iconOf = (kind: string | null): IconType =>
   isProblem(kind) ? Icons.ErrorIcon : kind === "transcript_ready" ? Icons.CheckIcon : kind === "device_paired" ? Icons.LaptopIcon : Icons.BellIcon;
@@ -116,12 +122,13 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
   // An item's right-click menu (UX-22), from actions.json: only what fits it (Open a recording's; Mark as read while
-  // unread; Retry a failure, where failed uploads are retried). Notification settings… and Remove wait for their way in.
+  // unread; Retry an upload that stopped, where failed uploads are retried). Notification settings… and Remove wait for
+  // their way in.
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; label: string; items: MenuItem[] } | null>(null);
   const itemOf = (c: ActionContext) => (items ?? []).find((i) => i.id === c.targets?.[0]);
   useActions("activity", {
     "place.open": (c) => { const i = itemOf(c); if (i) void choose(i); },
-    "recording.unread": (c) => {
+    "activity.markRead": (c) => {
       const i = itemOf(c);
       if (!i || i.read) return;
       void api.markActivityRead([i.id]).catch(() => null);
@@ -130,8 +137,8 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
     "activity.retry": () => onFailed(),
   });
   const itemMenu = (i: ActivityItem): MenuItem[] =>
-    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity", state: { unread: !i.read } })
-      .filter((m) => (m.action !== "place.open" || !!i.session_id) && (m.action !== "recording.unread" || !i.read) && (m.action !== "activity.retry" || isProblem(i.kind)));
+    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity" })
+      .filter((m) => (m.action !== "place.open" || !!i.session_id) && (m.action !== "activity.markRead" || !i.read) && (m.action !== "activity.retry" || retries(i)));
   const openMenu = (i: ActivityItem, at: { x: number; y: number }) => {
     const shown = itemMenu(i);
     if (!shown.length) return;
