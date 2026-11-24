@@ -81,6 +81,11 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [consent, setConsent] = useState(false);
+  // FIX-11: asked here, recommended (ticked): EchoLedger at login (auto-record needs it running) and, on a Mac, its icon
+  // in the menu bar. Apple's rule: the person decides; both stay in Settings › Shortcuts & start-up.
+  const [atLogin, setAtLogin] = useState(true);
+  const [inMenuBar, setInMenuBar] = useState(true);
+  const mac = status.platform === "macos";
   const [busy, setBusy] = useState<string | null>(null);
   // A permission request the system refused to show: said on the step, never silent.
   const [askFailed, setAskFailed] = useState<{ kind: PermissionKind; words: string } | null>(null);
@@ -103,9 +108,13 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
     heading.current?.focus();
   }, [step]);
 
-  const finish = async () => {
+  /** `answered`: the last step's start-up questions were seen (Skip setup saves only that setup is done). */
+  const finish = async (answered = false) => {
     try {
-      await api.updateSettings({ onboardingDone: true, ...(consent ? { consentAcknowledged: true } : {}) });
+      await api.updateSettings({
+        onboardingDone: true, ...(consent ? { consentAcknowledged: true } : {}),
+        ...(answered ? { autostart: atLogin, ...(mac ? { menuBarIcon: inMenuBar } : {}) } : {}),
+      });
       onFinished();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -243,8 +252,11 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
             <Consent legal={status.plan.known && status.paired} />
             <Checkbox label={CONSENT_TICK} checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <ShareCheck platform={status.platform} />
+            <h2 className="el-body-strong">Start-up</h2>
+            <Checkbox label="Open EchoLedger at login (recommended, so calls are recorded automatically)" checked={atLogin} onChange={(e) => setAtLogin(e.target.checked)} />
+            {mac && <Checkbox label="Show EchoLedger in the menu bar (recommended; shown while recording)" checked={inMenuBar} onChange={(e) => setInMenuBar(e.target.checked)} />}
             <div className="el-wizard__actions el-wizard__actions--end">
-              <Button variant="primary" onClick={() => void finish()}>Start using EchoLedger</Button>
+              <Button variant="primary" onClick={() => void finish(true)}>Start using EchoLedger</Button>
             </div>
           </section>
         )}

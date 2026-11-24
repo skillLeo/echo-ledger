@@ -176,10 +176,10 @@ impl MainHideTimer {
     }
 }
 
-/// The tray's line while the main window is hidden (pure): "Hidden until 14:30 · Show now", "Hidden until you show it ·
-/// Show now", "Hidden until this call ends · Show now"; another day says which.
-pub fn tray_line(hide: &MainHide, now: DateTime<Local>) -> String {
-    format!("Hidden {} · Show now", until_words(hide, now))
+/// The menus' line while the main window is hidden (pure, greyed above Hide from Screen Shares › and its Stop Hiding):
+/// "Hidden from screen shares until 14:30", "… until you show it", "… until this call ends"; another day says which.
+pub fn menu_line(hide: &MainHide, now: DateTime<Local>) -> String {
+    format!("Hidden from screen shares {}", until_words(hide, now))
 }
 
 /// "until 14:30", "until tomorrow 08:00", "until Fri 21 Nov 14:30", "until you show it", "until this call ends" (pure).
@@ -407,17 +407,17 @@ mod tests {
     }
 
     #[test]
-    fn the_tray_says_until_when_with_show_now() {
+    fn the_menus_say_until_when() {
         let now = at(2026, 11, 18, 14, 0);
         let fifteen = hide_until(HideFor::Minutes15, now, false).unwrap();
-        assert_eq!(tray_line(&fifteen, now), "Hidden until 14:15 · Show now");
+        assert_eq!(menu_line(&fifteen, now), "Hidden from screen shares until 14:15");
         let half_past = MainHide { until: HideUntil::At { at_ms: at(2026, 11, 18, 14, 30).timestamp_millis() }, since_ms: 0 };
-        assert_eq!(tray_line(&half_past, now), "Hidden until 14:30 · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::UntilOff, now, false).unwrap(), now), "Hidden until you show it · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::CallEnds, now, true).unwrap(), now), "Hidden until this call ends · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::Tomorrow, now, false).unwrap(), now), "Hidden until tomorrow 08:00 · Show now");
+        assert_eq!(menu_line(&half_past, now), "Hidden from screen shares until 14:30");
+        assert_eq!(menu_line(&hide_until(HideFor::UntilOff, now, false).unwrap(), now), "Hidden from screen shares until you show it");
+        assert_eq!(menu_line(&hide_until(HideFor::CallEnds, now, true).unwrap(), now), "Hidden from screen shares until this call ends");
+        assert_eq!(menu_line(&hide_until(HideFor::Tomorrow, now, false).unwrap(), now), "Hidden from screen shares until tomorrow 08:00");
         let week = hide_until(HideFor::Custom { minutes: 3 * 24 * 60 }, now, false).unwrap();
-        assert_eq!(tray_line(&week, now), "Hidden until Sat 21 14:00 · Show now");
+        assert_eq!(menu_line(&week, now), "Hidden from screen shares until Sat 21 14:00");
     }
 
     /// The platform layer, as the system would answer.

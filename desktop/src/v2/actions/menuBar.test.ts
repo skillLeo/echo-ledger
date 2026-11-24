@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ACTIONS, CONDITIONS, registerAction, shortcutClashes, type ActionContext } from "./registry";
+import { ACTIONS, CONDITIONS, actionLabel, registerAction, shortcutClashes, type ActionContext } from "./registry";
 import { CORE_RUNS, MENU_BAR, menuBarModel, menuBarProblems, type NativeEntry } from "./menuBar";
 
 const mac: ActionContext = { platform: "macos" };
@@ -143,6 +143,22 @@ describe("the Mac menu bar (FIX-05)", () => {
     expect(find(live({ windowsHidden: true }), "live.showWindows")).toMatchObject({ enabled: true });
     // No item says "live words" any more: the words say which windows go.
     expect(JSON.stringify(menuBarModel(mac))).not.toMatch(/live words/i);
+  });
+
+  it("Hide from Screen Shares is one set in every menu: the menu bar's words are the menu bar icon's and the Dock's (native_menu.rs)", () => {
+    const rust = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "src-tauri", "src", "native_menu.rs"), "utf8");
+    const block = rust.slice(rust.indexOf("pub const HIDE_FROM_SHARES:"), rust.indexOf("];", rust.indexOf("pub const HIDE_FROM_SHARES:")));
+    const stop = rust.slice(rust.indexOf("pub const STOP_HIDING:"), rust.indexOf(";", rust.indexOf("pub const STOP_HIDING:")));
+    const rows = [...`${block}${stop}`.matchAll(/\("([a-zA-Z0-9.]+)", "action:([a-zA-Z0-9.]+)", "([^"]+)", "([^"]+)"\)/g)].map((m) => m.slice(1));
+    expect(rows.map((r) => r[0])).toEqual(["live.hide15", "live.hide60", "live.hideUntilQuit", "live.hideUntilOff", "live.stopHiding"]);
+    for (const [id, action, win, macWords] of rows) {
+      expect(action).toBe(id);
+      expect(actionLabel(id, { platform: "windows" }), id).toBe(win);
+      expect(actionLabel(id, { platform: "macos" }), id).toBe(macWords);
+    }
+    // The menu bar's sub-menu: the same four, a line, Stop Hiding.
+    const set = find(menu("Live").items, "live.hideFromShares");
+    expect(set && set.kind === "submenu" ? labels(set.items) : []).toEqual(["For 15 Minutes", "For 1 Hour", "Until I Quit", "Until I Turn It Off", "—", "Stop Hiding"]);
   });
 
   it("Space, ⌘← and ⌘→ are greyed while typing, so they keep their text meaning", () => {

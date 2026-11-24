@@ -69,7 +69,7 @@ export const MENU_BAR: readonly { title: string; role?: "window" | "help"; items
       "live.startAssist", "live.practice", "live.pastReports",
       "live.translate", "live.captions", "live.dictation", LINE,
       "live.autoRecord", LINE,
-      { action: "live.hideFromShares", items: ["live.hide15", "live.hide60", "live.hideUntilQuit", LINE, "live.stopHiding"] },
+      { action: "live.hideFromShares", items: ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.hideUntilOff", LINE, "live.stopHiding"] },
       "live.hideWindowsNow", "live.showWindows", "live.shareCheck",
     ],
   },
@@ -95,8 +95,9 @@ export const CORE_ACTIONS: ReadonlySet<string> = new Set(["app.settings", "app.q
  * so they are enabled by their conditions alone; with no page the core keeps their words, greying and ticks in step.
  */
 export const CORE_RUNS: readonly string[] = [
+  "file.newRecording", "file.newVoiceNote", "live.startAssist",
   "live.stopRecording", "live.pauseRecording", "live.captions", "live.autoRecord", "live.hideFromShares", "live.hide15",
-  "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWindowsNow", "live.showWindows", "window.pill",
+  "live.hide60", "live.hideUntilQuit", "live.hideUntilOff", "live.stopHiding", "live.hideWindowsNow", "live.showWindows", "window.pill",
 ];
 
 /**

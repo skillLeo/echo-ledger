@@ -193,7 +193,10 @@ pub fn acts_outside_main(action: &str) -> bool {
 /// recording's, the captions', the pill's, Auto-record, hiding from screen shares (Hide from Screen Shares is its
 /// times' sub-menu), and the person's Hide EchoLedger Windows and Show EchoLedger Windows. The page enables them by
 /// their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
-pub const CORE_RUNS: [&str; 12] = [
+pub const CORE_RUNS: [&str; 16] = [
+    "file.newRecording",
+    "file.newVoiceNote",
+    "live.startAssist",
     "live.stopRecording",
     "live.pauseRecording",
     "live.captions",
@@ -202,15 +205,54 @@ pub const CORE_RUNS: [&str; 12] = [
     "live.hide15",
     "live.hide60",
     "live.hideUntilQuit",
+    "live.hideUntilOff",
     "live.stopHiding",
     "live.hideWindowsNow",
     "live.showWindows",
     "window.pill",
 ];
 
+/// Hide from Screen Shares ›, one set in every menu (the menu bar's from actions.json, the same words; the menu bar
+/// icon's and the Dock's from here): each line's action, its item id, Windows' words and a Mac's. "Until tomorrow" and
+/// "Custom…" are Settings' only.
+pub const HIDE_FROM_SHARES: [(&str, &str, &str, &str); 4] = [
+    ("live.hide15", "action:live.hide15", "For 15 minutes", "For 15 Minutes"),
+    ("live.hide60", "action:live.hide60", "For 1 hour", "For 1 Hour"),
+    ("live.hideUntilQuit", "action:live.hideUntilQuit", "Until I quit", "Until I Quit"),
+    ("live.hideUntilOff", "action:live.hideUntilOff", "Until I turn it off", "Until I Turn It Off"),
+];
+/// Its last line, while the main window is hidden from screen shares.
+pub const STOP_HIDING: (&str, &str, &str, &str) = ("live.stopHiding", "action:live.stopHiding", "Stop hiding", "Stop Hiding");
+/// Its title: Windows', a Mac's.
+pub const HIDE_FROM_SHARES_TITLE: (&str, &str) = ("Hide from screen shares", "Hide from Screen Shares");
+
+/// One line of the set: an item (its id, its words), or the line before Stop Hiding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HideLine {
+    Item { id: &'static str, label: &'static str },
+    Separator,
+}
+
+/// The set for the moment (pure), in the platform's words: the four times, and while hidden a line and Stop Hiding.
+pub fn hide_from_shares(hiding: bool, macos: bool) -> Vec<HideLine> {
+    let words = |(_, id, win, mac): (&'static str, &'static str, &'static str, &'static str)| HideLine::Item { id, label: if macos { mac } else { win } };
+    let mut lines: Vec<HideLine> = HIDE_FROM_SHARES.into_iter().map(words).collect();
+    if hiding {
+        lines.push(HideLine::Separator);
+        lines.push(words(STOP_HIDING));
+    }
+    lines
+}
+
 /// What the core does for one of [`CORE_RUNS`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreStep {
+    /// Records now, as the tray's New Recording (a meeting or call on screen with both sides, else a voice note).
+    NewRecording,
+    /// A voice note into the microphone, or its stop.
+    NewVoiceNote,
+    /// The main window on Live, opened quietly (what keeps it off still does), as an in-window command is.
+    OpenLive,
     StopRecording,
     TogglePause,
     ToggleCaptions,
@@ -230,6 +272,9 @@ pub enum CoreStep {
 pub fn core_step(action: &str) -> Option<CoreStep> {
     use crate::privacy::share::HideFor;
     Some(match action {
+        "file.newRecording" => CoreStep::NewRecording,
+        "file.newVoiceNote" => CoreStep::NewVoiceNote,
+        "live.startAssist" => CoreStep::OpenLive,
         "live.stopRecording" => CoreStep::StopRecording,
         "live.pauseRecording" => CoreStep::TogglePause,
         "live.captions" => CoreStep::ToggleCaptions,
@@ -237,6 +282,7 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
         "live.hide15" => CoreStep::HideFromShares(HideFor::Minutes15),
         "live.hide60" => CoreStep::HideFromShares(HideFor::Hour1),
         "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilQuit),
+        "live.hideUntilOff" => CoreStep::HideFromShares(HideFor::UntilOff),
         "live.stopHiding" => CoreStep::StopHiding,
         "live.hideWindowsNow" => CoreStep::HideWindows,
         "live.showWindows" => CoreStep::ShowWindows,
@@ -249,6 +295,15 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
 async fn run_core(app: &AppHandle, step: CoreStep) -> crate::error::AppResult<()> {
     let state = app.state::<crate::AppState>();
     match step {
+        CoreStep::NewRecording if state.capture.is_recording() => Ok(()),
+        CoreStep::NewRecording => crate::actions::record_now(app).await,
+        CoreStep::NewVoiceNote => crate::actions::toggle_mic_note(app).await,
+        CoreStep::OpenLive => {
+            crate::lifecycle::show_main_quietly(app);
+            let payload = crate::commands::NavigatePayload { view: "live".into(), pending_id: None, rename: false, recording_id: None, link: None, section: None };
+            crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
+            Ok(())
+        }
         CoreStep::StopRecording if state.capture.is_recording() => crate::actions::stop_recording(app, false).await,
         CoreStep::StopRecording => Ok(()),
         CoreStep::TogglePause => crate::actions::toggle_pause(app).await,
@@ -462,7 +517,7 @@ mod tests {
         // No page: an in-window command opens it quietly; one that acts outside it, which the core can't do, is let go
         // (and greyed: app_menu::pageless_look).
         for phase in [Phase::Absent, Phase::Closing] {
-            for action in ["go.library", "file.newRecording", "view.sidebar", "live.startAssist", "live.pastReports"] {
+            for action in ["go.library", "file.importAudio", "view.sidebar", "live.practice", "live.pastReports"] {
                 assert_eq!(route(action, phase), Route::OpenQuietly, "{action} {phase:?}");
             }
             for action in ["window.captions", "window.assistCard", "live.translate", "live.dictation"] {
