@@ -13,7 +13,7 @@ import type { NoticeTarget } from "../../lib/notice";
 import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { BadgeMark } from "./Upgrade";
 import { LucideSearchIcon, LucideXIcon } from "../../components/Icons";
-import { ACTIONS, actionLabel, available, hasHandler, runAction, type ActionContext } from "../../v2/actions/registry";
+import { ACTIONS, actionLabel, available, canRun, runAction, type ActionContext } from "../../v2/actions/registry";
 
 export interface PaletteCommand {
   id: string;
@@ -290,7 +290,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording, ...actionState } };
     const words = (id: string) => actionLabel(id, { ...ctx, platform: "windows" });
     const taken = new Set(matching.map((c) => c.label.toLowerCase()));
-    const registry = ranked(ACTIONS.filter((a) => hasHandler(a.id) && available(a.id, ctx) && !taken.has(words(a.id).toLowerCase())),
+    const registry = ranked(ACTIONS.filter((a) => canRun(a.id, ctx.kind) && available(a.id, ctx) && !taken.has(words(a.id).toLowerCase())),
       (a) => (q ? paletteScore(query, { label: words(a.id), keywords: `${a.label} ${a.menu ?? ""}` }) : 0))
       .map(({ row: a, score }) => ({
         row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? "On" : "Off") : undefined,

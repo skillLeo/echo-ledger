@@ -69,6 +69,8 @@ export type ActionContext = {
   context?: boolean;
   /** A sub-menu's choice it was picked with (a label, a project, a format, a sort order: choiceItems). */
   value?: string;
+  /** What it acts on ("recording", "view", "label", "trash"…): one id (Rename…) can mean each, done by its own screen. */
+  kind?: string;
 };
 
 /** The conditions `when` names. Left unsaid, a state that is usually so (can record, has audio) holds. */
@@ -158,22 +160,27 @@ export function shortcutClashes(items: readonly { id: string; mac?: string | nul
   return out;
 }
 
-const handlers = new Map<string, ((ctx: ActionContext) => void)[]>();
-/**
- * Whether something in this window can run the command now (a screen registered it).
- * The web builder's `canRun` (fix/D-menus-v21, UX-22) does the same: when the two branches meet, keep `canRun` and drop
- * this one.
- */
-export function hasHandler(id: string): boolean {
-  return (handlers.get(id) ?? []).length > 0;
+type Handler = { run: (ctx: ActionContext) => void; kind?: string };
+const handlers = new Map<string, Handler[]>();
+/** The newest handler for an id that takes this kind of thing (one registered without a kind takes any). */
+const handlerFor = (id: string, kind?: string): Handler | undefined =>
+  [...(handlers.get(id) ?? [])].reverse().find((h) => !h.kind || h.kind === kind);
+/** Whether something here does `id` now, for this kind of thing (a screen registered it): what can't is greyed or left out. */
+export function canRun(id: string, kind?: string): boolean {
+  return !!handlerFor(id, kind);
 }
-/** What an id does here (the screen that can do it); the newest registration runs. Returns what takes it back. */
-export function registerAction(id: string, run: (ctx: ActionContext) => void): () => void {
+/**
+ * What an id does here (the screen that can do it); the newest registration runs. With a `kind` it runs only for that
+ * kind of thing (ActionContext.kind): the Library's Rename… is a recording's, the sidebar's a view's. Returns what
+ * takes it back.
+ */
+export function registerAction(id: string, run: (ctx: ActionContext) => void, kind?: string): () => void {
   need(id);
-  handlers.set(id, [...(handlers.get(id) ?? []), run]);
+  const handler: Handler = { run, kind };
+  handlers.set(id, [...(handlers.get(id) ?? []), handler]);
   handlersChanged();
   return () => {
-    handlers.set(id, (handlers.get(id) ?? []).filter((r) => r !== run));
+    handlers.set(id, (handlers.get(id) ?? []).filter((h) => h !== handler));
     handlersChanged();
   };
 }
@@ -191,10 +198,9 @@ export function watchHandlers(notify: () => void): () => void {
 export const handlersVersion = () => handlersChangedAt;
 /** Runs the command if something here can and its conditions hold. True when it ran. */
 export function runAction(id: string, ctx: ActionContext): boolean {
-  const all = handlers.get(id) ?? [];
-  const run = all[all.length - 1];
-  if (!run || !available(id, ctx)) return false;
-  run(ctx);
+  const handler = handlerFor(id, ctx.kind);
+  if (!handler || !available(id, ctx)) return false;
+  handler.run(ctx);
   return true;
 }
 

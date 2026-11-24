@@ -25,8 +25,8 @@ import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
-import { useMenuBar } from "../../v2/actions/useMenuBar";
-import { useMenuPart } from "../../v2/actions/menuState";
+import { MenuBar } from "../../v2/actions/useMenuBar";
+import { listenToMenuPicks, menuPicksReady, useMenuPart } from "../../v2/actions/menuState";
 import { registerAction } from "../../v2/actions/registry";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
@@ -268,24 +268,15 @@ export default function MainApp() {
   // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
   const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
-  // FIX-05: the Mac menu bar, drawn from the action list, and every pick from a menu the system drew. The window's own
-  // commands are here (MENU_COMMANDS, set below once the window's functions exist); the shell and the pages add theirs.
-  useMenuBar(status?.platform);
+  // FIX-05: the window's one listener for every pick from a menu the system drew (menuState.ts), in the classic shell
+  // too; the platform is read at each pick. The Mac menu bar itself is the <MenuBar /> leaf (with the new design's
+  // shell), and the window's own commands (MENU_COMMANDS) are registered below while the app is in use.
+  const menuPlatform = useRef<"macos" | "windows">("windows");
+  menuPlatform.current = status?.platform === "macos" ? "macos" : "windows";
+  useEffect(() => listenToMenuPicks(() => menuPlatform.current), []);
   const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
-  useEffect(() => {
-    const offs = MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.()));
-    return () => offs.forEach((off) => off());
-  }, []);
   // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
   const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });
-  useEffect(() => {
-    const target = (ctx: { targets?: readonly string[] }) => ctx.targets?.[0];
-    const offs = [
-      registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
-      registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
-    ];
-    return () => offs.forEach((off) => off());
-  }, []);
   useMenuPart({ state: {
     themeLight: theme === "light", themeDark: theme === "dark", themeSystem: theme === "system",
     paused: !!status?.paused, captionsShown: !!status?.captionsLive, pillShown: !!status?.recording && !status.pillHidden,
@@ -485,7 +476,8 @@ export default function MainApp() {
       }),
     ];
     // After the kept view is applied, so a navigation sent while the window was built wins over it.
-    announceReady([restore, ...unlisten], () => alive);
+    // And once the menus' listener hears picks: a pick the core kept while the window was built reaches it.
+    announceReady([restore, ...unlisten, menuPicksReady()], () => alive);
     return () => {
       alive = false;
       unlisten.forEach((p) => p.then((f) => f()).catch(() => undefined));
@@ -756,6 +748,20 @@ export default function MainApp() {
   // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
+  // The window's own menu commands, only while the app is in use (signed in, unlocked, set up): on the lock screen, at
+  // sign-in and in setup nothing here can run them, so the menu bar greys them. Their functions are the latest render's.
+  useEffect(() => {
+    if (!inApp) return;
+    const target = (ctx: { targets?: readonly string[] }) => ctx.targets?.[0];
+    const offs = [
+      ...MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.())),
+      registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
+      registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [inApp]);
+  // The Mac menu bar's leaf (FIX-05), in every screen of the new design's window; classic keeps the core's own bar.
+  const menuBarView = status?.platform === "macos" && ui.flags["ui_v2.shell"] ? <MenuBar platform="macos" /> : null;
   // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
   // The new design's window keeps its message regions mounted; only the message in them changes.
   const toastV2 = inApp && ui.flags["ui_v2.shell"];
@@ -790,6 +796,7 @@ export default function MainApp() {
     return (
       <>
         <LockScreen status={lock} onUnlocked={setLock} />
+        {menuBarView}
         {toastView}
       </>
     );
@@ -804,6 +811,7 @@ export default function MainApp() {
             <div className="el-root el-embedded"><OnboardingV2 status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} /></div>
           </Suspense>
         ) : <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />}
+        {menuBarView}
         {toastView}
       </>
     );
@@ -813,6 +821,7 @@ export default function MainApp() {
     return (
       <main className="gate">
         {status && !status.paired ? <SignInView onSignedIn={signedIn} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
+        {menuBarView}
         {toastView}
       </main>
     );
@@ -957,7 +966,8 @@ export default function MainApp() {
       openAccount("about");
       void api.checkForUpdates().catch(() => undefined);
     },
-    "file.syncNow": () => void run(api.refreshLibrary, "Library synced", { kind: "library", view: null }),
+    // The same as ⌘R (FIX-10): only in the app itself and never behind a dialog; it keeps the sidebar's "Synced … ago".
+    "file.syncNow": () => void syncNow.current(),
     "file.newProject": newProject,
     "view.themeLight": () => chooseTheme("light"),
     "view.themeDark": () => chooseTheme("dark"),
@@ -1249,6 +1259,7 @@ export default function MainApp() {
       )}
       <UpgradeSheet />
       <ConfirmHost />
+      {menuBarView}
       {toastView}
     </>
   );

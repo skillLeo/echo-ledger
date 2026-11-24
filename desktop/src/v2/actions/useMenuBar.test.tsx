@@ -1,10 +1,12 @@
-// FIX-05: the Mac menu bar kept in step with the app, and every pick from a menu the system drew run by the registry.
+// FIX-05: the Mac menu bar kept in step with the app (a leaf of its own), and every pick from a menu the system drew
+// heard once: a context menu's (numbered) by its menu only, any other run by the registry with the focused page's kind.
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
-import { registerAction } from "./registry";
-import { MENU_BAR_SETTLE_MS, useMenuBar } from "./useMenuBar";
-import { parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
+import { canRun, registerAction } from "./registry";
+import { MENU_BAR_SETTLE_MS, MenuBar, useMenuBar } from "./useMenuBar";
+import { listenToMenuPicks, menuPicksReady, menuSnapshot, parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,10 +15,12 @@ import type { NativeMenuBar } from "../../lib/ipc";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
+/** The window: its one listener (MainApp's), the bar, a part's state, a field and two buttons. */
 function App({ platform, state }: { platform: string; state?: Record<string, boolean> }) {
+  useEffect(() => listenToMenuPicks(platform === "macos" ? "macos" : "windows"), [platform]);
   useMenuBar(platform);
   useMenuPart({ state: state ?? {} });
-  return <input aria-label="A field" />;
+  return <><input aria-label="A field" /><button type="button">One</button><button type="button">Two</button></>;
 }
 const settle = () => act(() => { vi.advanceTimersByTime(MENU_BAR_SETTLE_MS + 1); });
 const lastBar = () => callsOf("app_menu_set").at(-1)?.bar as NativeMenuBar;
@@ -43,6 +47,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   offs.splice(0).forEach((off) => off());
+  // Unmounted while the clock is ours, so classic's bar coming back is this test's, not the next one's.
+  cleanup();
+  vi.runOnlyPendingTimers();
   vi.useRealTimers();
 });
 
@@ -113,33 +120,126 @@ describe("the menu bar in step with the app (FIX-05)", () => {
     expect(rename).toHaveBeenCalledTimes(1);
   });
 
-  it("the open context menu has the first say over a pick; what it leaves runs through the registry", async () => {
+  it("a context menu's pick (numbered) goes to its menu only, never through the registry; others never go to it", async () => {
+    const pin = vi.fn();
     const labels = vi.fn();
-    offs.push(registerAction("recording.labels", labels));
+    offs.push(registerAction("recording.pin", pin), registerAction("recording.labels", labels));
+    setMenuPart("page", { targets: ["r1"] });
     const taken: unknown[] = [];
-    offs.push(setPickedHandler((pick, payload) => {
-      taken.push([pick, payload]);
-      return pick.value === "mine";
+    let claim = true;
+    offs.push(setPickedHandler((payload, pick) => {
+      taken.push([payload, pick]);
+      return claim;
     }));
     render(<App platform="macos" />);
-    await act(() => emitEvent("menu:action", "recording.labels@r1=mine"));
-    expect(taken).toEqual([[{ id: "recording.labels", target: "r1", value: "mine" }, "recording.labels@r1=mine"]]);
+    // Claimed: run by its menu, not the registry.
+    await act(() => emitEvent("menu:action", "recording.labels@r1=clients~4"));
+    expect(taken).toEqual([["recording.labels@r1=clients~4", { id: "recording.labels", target: "r1", value: "clients", menu: 4 }]]);
+    // Not claimed (a menu let go, an earlier one's): dropped, still never the registry's.
+    claim = false;
+    await act(() => emitEvent("menu:action", "recording.pin~3"));
+    expect(taken).toHaveLength(2);
+    offs.splice(0, 0, setPickedHandler(null));
+    await act(() => emitEvent("menu:action", "recording.pin~5"));
+    expect(pin).not.toHaveBeenCalled();
     expect(labels).not.toHaveBeenCalled();
-    await act(() => emitEvent("menu:action", "recording.labels@r1=clients"));
-    expect(labels).toHaveBeenCalledTimes(1);
-    expect(labels).toHaveBeenCalledWith(expect.objectContaining({ value: "clients", targets: ["r1"] }));
+    // A pick with no number (the menu bar, Record's menu) is the registry's, never the menu's: run once.
+    taken.length = 0;
+    offs.push(setPickedHandler((payload, pick) => { taken.push([payload, pick]); return true; }));
+    await act(() => emitEvent("menu:action", "recording.pin"));
+    expect(taken).toEqual([]);
+    expect(pin).toHaveBeenCalledTimes(1);
+    expect(pin).toHaveBeenCalledWith(expect.objectContaining({ targets: ["r1"] }));
+    setMenuPart("page", null);
   });
 
-  it("one form for every pick: the choice after =, the thing after @, both together; the core's own prefix read too", () => {
-    expect(parsePick("go.library")).toEqual({ id: "go.library" });
-    expect(parsePick("view.sortBy=newest")).toEqual({ id: "view.sortBy", value: "newest" });
-    expect(parsePick("project.rename@p1")).toEqual({ id: "project.rename", target: "p1" });
-    expect(parsePick("recording.labels@r1=clients")).toEqual({ id: "recording.labels", target: "r1", value: "clients" });
-    expect(parsePick("action:view.sortBy=newest")).toEqual({ id: "view.sortBy", value: "newest" });
-    // A target or value holding a separator, or an empty part, is refused (they are ids we build, never text).
-    for (const bad of ["view.sortBy=a=b", "view.sortBy=a@b", "project.rename@p@1", "project.rename@=x", "view.sortBy=", "project.rename@", "=x", "library", "go..library", "go.library#x"]) {
-      expect(parsePick(bad), bad).toBeNull();
+  it("the menu bar runs and greys for the focused page's kind, with its selection", async () => {
+    const pin = vi.fn();
+    const viewRename = vi.fn();
+    offs.push(registerAction("recording.pin", pin, "recording"), registerAction("file.rename", viewRename, "view"));
+    render(<App platform="macos" />);
+    await settle();
+    // Selected things of no kind: the Library's Pin (a recording's) can't run for them, greyed.
+    const pinItem = () => item(lastBar(), "Recording", "recording.pin");
+    act(() => setMenuPart("library", { targets: ["r1", "r2"] }));
+    await settle();
+    expect(pinItem()).toMatchObject({ enabled: false });
+    await act(() => emitEvent("menu:action", "recording.pin"));
+    expect(pin).not.toHaveBeenCalled();
+    // The focused page's selection, of its kind: Pin runs for those; the sidebar's Rename… (a view's) doesn't.
+    act(() => setMenuPart("library", { targets: ["r1", "r2"], kind: "recording" }));
+    await settle();
+    expect(pinItem()).toMatchObject({ enabled: true });
+    expect(item(lastBar(), "File", "file.rename")).toMatchObject({ enabled: false });
+    await act(() => emitEvent("menu:action", "recording.pin"));
+    expect(pin).toHaveBeenCalledTimes(1);
+    expect(pin).toHaveBeenCalledWith(expect.objectContaining({ kind: "recording", targets: ["r1", "r2"] }));
+    // Asked with no kind (the palette): the Library's Pin isn't there.
+    expect(canRun("recording.pin")).toBe(false);
+    act(() => setMenuPart("library", null));
+    await settle();
+    expect(pinItem()).toMatchObject({ enabled: false });
+  });
+
+  it("a focus change or the same state again tells no one: the menus' state changes only when it changes", async () => {
+    const { getByRole, getByLabelText } = render(<App platform="macos" state={{ sidebarHidden: false }} />);
+    await settle();
+    const drawn = callsOf("app_menu_set").length;
+    const before = menuSnapshot();
+    act(() => { (getByRole("button", { name: "One" }) as HTMLElement).focus(); });
+    act(() => { (getByRole("button", { name: "Two" }) as HTMLElement).focus(); });
+    act(() => setMenuPart("again", { state: { sidebarHidden: false } }));
+    await settle();
+    expect(menuSnapshot()).toBe(before);
+    expect(callsOf("app_menu_set")).toHaveLength(drawn);
+    // Into a field: typing, said once.
+    act(() => { (getByLabelText("A field") as HTMLElement).focus(); });
+    await settle();
+    expect(menuSnapshot()).not.toBe(before);
+    expect(menuSnapshot().state.typing).toBe(true);
+    setMenuPart("again", null);
+  });
+
+  it("the leaf: classic's bar comes back when the last one goes, not while moving between screens", async () => {
+    const { rerender, unmount } = render(<MenuBar key="lock" platform="macos" />);
+    await settle();
+    expect(lastBar()).not.toBeNull();
+    // The lock screen to the app: one leaf goes, another comes; classic's bar never comes back in between.
+    rerender(<MenuBar key="app" platform="macos" />);
+    await settle();
+    expect(callsOf("app_menu_set").filter((c) => c.bar === null)).toHaveLength(0);
+    unmount();
+    await settle();
+    expect(callsOf("app_menu_set").at(-1)).toEqual({ bar: null });
+  });
+
+  it("the listener says when it hears picks (MainApp waits for it before the window says it is ready)", async () => {
+    await expect(menuPicksReady()).resolves.toBeUndefined();
+    const stop = listenToMenuPicks("macos");
+    // The listener's own subscription: it settles once the core's event reaches it.
+    await expect(menuPicksReady()).resolves.toBeTypeOf("function");
+    stop();
+  });
+
+  it("a target or value's own %, =, @ and ~ come percent-encoded and are decoded; a label ending in ~12 is no menu", async () => {
+    for (const [coded, plain] of [["50%25", "50%"], ["a%3Db", "a=b"], ["me%40home", "me@home"], ["x%7Ey", "x~y"], ["Clients%7E12", "Clients~12"], ["a%3db", "a=b"]]) {
+      expect(parsePick(`recording.labels=${coded}`), coded).toEqual({ id: "recording.labels", value: plain });
+      expect(parsePick(`recording.labels@${coded}=${coded}~3`), coded).toEqual({ id: "recording.labels", target: plain, value: plain, menu: 3 });
     }
+    // Not ours: a bare "%", another escape, a half one.
+    for (const bad of ["recording.labels=50%", "recording.labels=%zz", "recording.labels=%4", "recording.labels=a%20b"]) expect(parsePick(bad), bad).toBeNull();
+    // Through the window's listener: the menu bar's Labels › "Clients~12" runs with that label, not as menu 12's.
+    const labels = vi.fn();
+    offs.push(registerAction("recording.labels", labels));
+    const menus = vi.fn(() => true);
+    offs.push(setPickedHandler(menus));
+    setMenuPart("page", { targets: ["r1"] });
+    render(<App platform="macos" />);
+    await act(() => emitEvent("menu:action", "recording.labels=Clients%7E12"));
+    expect(menus).not.toHaveBeenCalled();
+    expect(labels).toHaveBeenCalledTimes(1);
+    expect(labels).toHaveBeenCalledWith(expect.objectContaining({ value: "Clients~12", targets: ["r1"] }));
+    setMenuPart("page", null);
   });
 
   it("nothing else listens to the system's menus: one listener, so a pick runs once", () => {
@@ -152,5 +252,8 @@ describe("the menu bar in step with the app (FIX-05)", () => {
     // ipc.ts only names the event's payload; menuState.ts listens once.
     expect(code(files["src/lib/ipc.ts"]).match(/["'`]menu:action["'`]/g)).toHaveLength(1);
     expect(code(files["src/v2/actions/menuState.ts"]).match(/listenTo\(\s*["'`]menu:action["'`]/g)).toHaveLength(1);
+    // MainApp mounts the listener and the leaf; it never follows the menus' state itself (a focus change redraws only the leaf).
+    expect(code(files["src/views/main/MainApp.tsx"])).toMatch(/listenToMenuPicks\(/);
+    expect(code(files["src/views/main/MainApp.tsx"])).not.toMatch(/useMenuBar\(|useMenuSnapshot\(|watchHandlers|handlersVersion/);
   });
 });

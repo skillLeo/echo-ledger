@@ -120,18 +120,83 @@ pub fn bar_item_id(action: &str, value: Option<&str>) -> Option<String> {
     match action {
         "app.settings" => Some(SETTINGS.to_string()),
         "app.quit" => Some(QUIT.to_string()),
-        _ => crate::native_menu::item_id(action, None, value),
+        _ => crate::native_menu::item_id(&crate::native_menu::Pick { value, ..crate::native_menu::Pick::of(action) }),
     }
 }
 
-/// The page's menu bar (FIX-05): drawn by the system, macOS's own items for the standard commands; the Window and Help
-/// menus set as the app's, so macOS adds the window list, Fill and Center, and the Help search that finds any item.
-/// Elsewhere (Windows) there is no menu bar: the same commands are in the avatar's menu and the search (3b).
+/// What an item or a sub-menu shows that can change in place: its words, whether it can be picked, its tick.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Look {
+    pub label: String,
+    pub enabled: bool,
+    pub checked: Option<bool>,
+}
+
+/// The bar's structure (pure): every menu, item, choice, key and line in order, without what changes in place (an item's
+/// or a sub-menu's words, greying and tick). A bar of the same structure is updated in place; any other is drawn again.
+pub fn structure(bar: &MenuBar) -> String {
+    fn strip(items: &mut [BarEntry]) {
+        for item in items {
+            match item {
+                BarEntry::Item { label, enabled, checked, .. } => {
+                    label.clear();
+                    *enabled = false;
+                    *checked = checked.map(|_| false);
+                }
+                BarEntry::Submenu { label, enabled, items, .. } => {
+                    label.clear();
+                    *enabled = false;
+                    strip(items);
+                }
+                BarEntry::Native { .. } | BarEntry::Separator => {}
+            }
+        }
+    }
+    let mut bare = bar.clone();
+    for menu in &mut bare.menus {
+        strip(&mut menu.items);
+    }
+    format!("{bare:?}")
+}
+
+/// What changes in place, in drawing order (pure): one per item and sub-menu (a sub-menu before its items), the order
+/// `draw` keeps their handles in.
+pub fn looks(bar: &MenuBar) -> Vec<Look> {
+    fn walk(items: &[BarEntry], out: &mut Vec<Look>) {
+        for item in items {
+            match item {
+                BarEntry::Item { label, enabled, checked, .. } => out.push(Look { label: label.clone(), enabled: *enabled, checked: *checked }),
+                BarEntry::Submenu { label, enabled, items, .. } => {
+                    out.push(Look { label: label.clone(), enabled: *enabled, checked: None });
+                    walk(items, out);
+                }
+                BarEntry::Native { .. } | BarEntry::Separator => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for menu in &bar.menus {
+        walk(&menu.items, &mut out);
+    }
+    out
+}
+
+/// The places whose look changed (pure).
+pub fn changed(before: &[Look], now: &[Look]) -> Vec<usize> {
+    now.iter().zip(before).enumerate().filter(|(_, (n, b))| n != b).map(|(at, _)| at).collect()
+}
+
+/// The page's menu bar (FIX-05), with the new design's shell: drawn by the system, macOS's own items for the standard
+/// commands; the Window and Help menus set as the app's, so macOS adds the window list, Fill and Center, and the Help
+/// search that finds any item. A bar of the same structure is updated in place, item by item (its words, greying,
+/// ticks), so nothing is rebuilt while a menu is open; only new choices or another layout draw it again. None puts
+/// classic's own bar back (`build`). Elsewhere (Windows) there is no menu bar: the same commands are in the avatar's
+/// menu and the search (3b).
 #[tauri::command]
-pub fn app_menu_set(app: AppHandle, bar: MenuBar) -> Result<(), String> {
+pub fn app_menu_set(app: AppHandle, bar: Option<MenuBar>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        draw(&app, &bar).map_err(|e| e.to_string())
+        mac::set(&app, bar.as_ref()).map_err(|e| e.to_string())
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -141,83 +206,184 @@ pub fn app_menu_set(app: AppHandle, bar: MenuBar) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn draw<R: tauri::Runtime>(app: &tauri::AppHandle<R>, bar: &MenuBar) -> tauri::Result<()> {
+mod mac {
+    use super::{BarEntry, Look, MenuBar, bar_item_id, changed, looks, structure};
+    use std::sync::Mutex;
     use tauri::menu::{AboutMetadata, CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+    use tauri::{AppHandle, Wry};
 
-    fn entries<R: tauri::Runtime>(app: &tauri::AppHandle<R>, items: &[BarEntry]) -> tauri::Result<Vec<Box<dyn IsMenuItem<R>>>> {
-        let mut out: Vec<Box<dyn IsMenuItem<R>>> = Vec::new();
-        for item in items {
-            match item {
-                BarEntry::Separator => out.push(Box::new(PredefinedMenuItem::separator(app)?)),
-                BarEntry::Native { native, .. } => {
-                    let info = app.package_info();
-                    let made = match native.as_str() {
-                        "about" => PredefinedMenuItem::about(app, None, Some(AboutMetadata { name: Some(info.name.clone()), version: Some(info.version.to_string()), ..Default::default() })),
-                        "services" => PredefinedMenuItem::services(app, None),
-                        "hide" => PredefinedMenuItem::hide(app, None),
-                        "hideOthers" => PredefinedMenuItem::hide_others(app, None),
-                        "showAll" => PredefinedMenuItem::show_all(app, None),
-                        "undo" => PredefinedMenuItem::undo(app, None),
-                        "redo" => PredefinedMenuItem::redo(app, None),
-                        "cut" => PredefinedMenuItem::cut(app, None),
-                        "copy" => PredefinedMenuItem::copy(app, None),
-                        "paste" => PredefinedMenuItem::paste(app, None),
-                        "selectAll" => PredefinedMenuItem::select_all(app, None),
-                        // The predefined Close sends the window its close, which `lifecycle::main_closing` turns into
-                        // closing to the menu bar.
-                        "closeWindow" => PredefinedMenuItem::close_window(app, None),
-                        "minimize" => PredefinedMenuItem::minimize(app, None),
-                        "maximize" => PredefinedMenuItem::maximize(app, None),
-                        "fullscreen" => PredefinedMenuItem::fullscreen(app, None),
-                        "bringAllToFront" => PredefinedMenuItem::bring_all_to_front(app, None),
-                        _ => continue,
-                    };
-                    out.push(Box::new(made?));
+    /// One of our items or sub-menus as drawn, to change in place.
+    enum Handle {
+        Item(MenuItem<Wry>),
+        Check(CheckMenuItem<Wry>),
+        Sub(Submenu<Wry>),
+    }
+
+    impl Handle {
+        /// Says what changed, and only that.
+        fn relabel(&self, before: &Look, now: &Look) -> tauri::Result<()> {
+            let text = before.label != now.label;
+            let enabled = before.enabled != now.enabled;
+            match self {
+                Handle::Item(item) => {
+                    if text {
+                        item.set_text(&now.label)?;
+                    }
+                    if enabled {
+                        item.set_enabled(now.enabled)?;
+                    }
                 }
-                BarEntry::Item { action, value, label, accelerator, enabled, checked } => {
-                    // A choice whose value isn't one of our ids isn't drawn (its pick would be read as something else).
-                    let Some(id) = bar_item_id(action, value.as_deref()) else { continue };
-                    // A key the menu can't take is left off rather than losing the item.
-                    out.push(match checked {
-                        Some(checked) => Box::new(
-                            CheckMenuItem::with_id(app, &id, label, *enabled, *checked, accelerator.as_deref())
-                                .or_else(|_| CheckMenuItem::with_id(app, &id, label, *enabled, *checked, None::<&str>))?,
-                        ),
-                        None => Box::new(
-                            MenuItem::with_id(app, &id, label, *enabled, accelerator.as_deref()).or_else(|_| MenuItem::with_id(app, &id, label, *enabled, None::<&str>))?,
-                        ),
-                    });
+                Handle::Check(item) => {
+                    if text {
+                        item.set_text(&now.label)?;
+                    }
+                    if enabled {
+                        item.set_enabled(now.enabled)?;
+                    }
+                    if let Some(checked) = now.checked.filter(|c| Some(*c) != before.checked) {
+                        item.set_checked(checked)?;
+                    }
                 }
-                BarEntry::Submenu { label, enabled, items, .. } => {
-                    let inner = entries(app, items)?;
-                    let refs: Vec<&dyn IsMenuItem<R>> = inner.iter().map(|b| b.as_ref()).collect();
-                    out.push(Box::new(Submenu::with_items(app, label, *enabled, &refs)?));
+                Handle::Sub(sub) => {
+                    if text {
+                        sub.set_text(&now.label)?;
+                    }
+                    if enabled {
+                        sub.set_enabled(now.enabled)?;
+                    }
                 }
             }
+            Ok(())
         }
-        Ok(out)
     }
 
-    let menu = Menu::new(app)?;
-    let mut roles = Vec::new();
-    for bar_menu in &bar.menus {
-        let inner = entries(app, &bar_menu.items)?;
-        let refs: Vec<&dyn IsMenuItem<R>> = inner.iter().map(|b| b.as_ref()).collect();
-        let submenu = Submenu::with_items(app, &bar_menu.title, true, &refs)?;
-        menu.append(&submenu)?;
-        if let Some(role) = &bar_menu.role {
-            roles.push((role.clone(), submenu));
-        }
+    /// The bar drawn last: its structure, its looks, and its items' handles in the same order.
+    struct Drawn {
+        structure: String,
+        looks: Vec<Look>,
+        handles: Vec<Handle>,
     }
-    app.set_menu(menu)?;
-    for (role, submenu) in roles {
-        match role.as_str() {
-            "window" => submenu.set_as_windows_menu_for_nsapp()?,
-            "help" => submenu.set_as_help_menu_for_nsapp()?,
-            _ => {}
-        }
+
+    static DRAWN: Mutex<Option<Drawn>> = Mutex::new(None);
+
+    pub fn set(app: &AppHandle, bar: Option<&MenuBar>) -> tauri::Result<()> {
+        // What was drawn is taken out first: no lock is held while the menu changes on the main thread.
+        let last = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let Some(bar) = bar else {
+            app.set_menu(super::build(app)?)?;
+            return Ok(());
+        };
+        let shape = structure(bar);
+        let now = looks(bar);
+        let drawn = match last {
+            // The same structure: each item says only what changed, in place.
+            Some(mut d)
+                if d.structure == shape
+                    && d.handles.len() == now.len()
+                    && changed(&d.looks, &now).into_iter().try_for_each(|at| d.handles[at].relabel(&d.looks[at], &now[at])).is_ok() =>
+            {
+                d.looks = now;
+                d
+            }
+            _ => draw(app, bar, shape, now)?,
+        };
+        *DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = Some(drawn);
+        Ok(())
     }
-    Ok(())
+
+    fn draw(app: &AppHandle, bar: &MenuBar, structure: String, looks: Vec<Look>) -> tauri::Result<Drawn> {
+        fn entries(app: &AppHandle, items: &[BarEntry], handles: &mut Vec<Option<Handle>>) -> tauri::Result<Vec<Box<dyn IsMenuItem<Wry>>>> {
+            let mut out: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
+            for item in items {
+                match item {
+                    BarEntry::Separator => out.push(Box::new(PredefinedMenuItem::separator(app)?)),
+                    BarEntry::Native { native, .. } => {
+                        let info = app.package_info();
+                        let made = match native.as_str() {
+                            "about" => PredefinedMenuItem::about(app, None, Some(AboutMetadata { name: Some(info.name.clone()), version: Some(info.version.to_string()), ..Default::default() })),
+                            "services" => PredefinedMenuItem::services(app, None),
+                            "hide" => PredefinedMenuItem::hide(app, None),
+                            "hideOthers" => PredefinedMenuItem::hide_others(app, None),
+                            "showAll" => PredefinedMenuItem::show_all(app, None),
+                            "undo" => PredefinedMenuItem::undo(app, None),
+                            "redo" => PredefinedMenuItem::redo(app, None),
+                            "cut" => PredefinedMenuItem::cut(app, None),
+                            "copy" => PredefinedMenuItem::copy(app, None),
+                            "paste" => PredefinedMenuItem::paste(app, None),
+                            "selectAll" => PredefinedMenuItem::select_all(app, None),
+                            // The predefined Close sends the window its close, which `lifecycle::main_closing` turns
+                            // into closing to the menu bar.
+                            "closeWindow" => PredefinedMenuItem::close_window(app, None),
+                            "minimize" => PredefinedMenuItem::minimize(app, None),
+                            "maximize" => PredefinedMenuItem::maximize(app, None),
+                            "fullscreen" => PredefinedMenuItem::fullscreen(app, None),
+                            "bringAllToFront" => PredefinedMenuItem::bring_all_to_front(app, None),
+                            _ => continue,
+                        };
+                        out.push(Box::new(made?));
+                    }
+                    BarEntry::Item { action, value, label, accelerator, enabled, checked } => {
+                        // A choice with an empty value isn't drawn (its pick would say nothing); its place stays,
+                        // empty, so the handles keep the looks' order.
+                        let Some(id) = bar_item_id(action, value.as_deref()) else {
+                            handles.push(None);
+                            continue;
+                        };
+                        // A key the menu can't take is left off rather than losing the item.
+                        match checked {
+                            Some(checked) => {
+                                let item = CheckMenuItem::with_id(app, &id, label, *enabled, *checked, accelerator.as_deref())
+                                    .or_else(|_| CheckMenuItem::with_id(app, &id, label, *enabled, *checked, None::<&str>))?;
+                                handles.push(Some(Handle::Check(item.clone())));
+                                out.push(Box::new(item));
+                            }
+                            None => {
+                                let item = MenuItem::with_id(app, &id, label, *enabled, accelerator.as_deref())
+                                    .or_else(|_| MenuItem::with_id(app, &id, label, *enabled, None::<&str>))?;
+                                handles.push(Some(Handle::Item(item.clone())));
+                                out.push(Box::new(item));
+                            }
+                        }
+                    }
+                    BarEntry::Submenu { label, enabled, items, .. } => {
+                        // Its place before its items', as `looks` has it.
+                        let place = handles.len();
+                        handles.push(None);
+                        let inner = entries(app, items, handles)?;
+                        let refs: Vec<&dyn IsMenuItem<Wry>> = inner.iter().map(|b| b.as_ref()).collect();
+                        let sub = Submenu::with_items(app, label, *enabled, &refs)?;
+                        handles[place] = Some(Handle::Sub(sub.clone()));
+                        out.push(Box::new(sub));
+                    }
+                }
+            }
+            Ok(out)
+        }
+
+        let menu = Menu::new(app)?;
+        let mut roles = Vec::new();
+        let mut handles = Vec::new();
+        for bar_menu in &bar.menus {
+            let inner = entries(app, &bar_menu.items, &mut handles)?;
+            let refs: Vec<&dyn IsMenuItem<Wry>> = inner.iter().map(|b| b.as_ref()).collect();
+            let submenu = Submenu::with_items(app, &bar_menu.title, true, &refs)?;
+            menu.append(&submenu)?;
+            if let Some(role) = &bar_menu.role {
+                roles.push((role.clone(), submenu));
+            }
+        }
+        app.set_menu(menu)?;
+        for (role, submenu) in roles {
+            match role.as_str() {
+                "window" => submenu.set_as_windows_menu_for_nsapp()?,
+                "help" => submenu.set_as_help_menu_for_nsapp()?,
+                _ => {}
+            }
+        }
+        // A place left empty (an item not drawn) can't be updated: the next bar with it draws again.
+        let handles = handles.into_iter().collect::<Option<Vec<_>>>().unwrap_or_default();
+        Ok(Drawn { structure, looks, handles })
+    }
 }
 
 /// No window tabs: macOS would otherwise add "Show Tab Bar" and "Show All Tabs" to View (3b).
@@ -254,10 +420,75 @@ mod tests {
         assert_eq!(bar_item_id("file.newRecording", None).as_deref(), Some("action:file.newRecording"));
         // The one form every menu uses: a choice after "=".
         assert_eq!(bar_item_id("file.openRecent", Some("r1")).as_deref(), Some("action:file.openRecent=r1"));
-        assert_eq!(bar_item_id("file.openRecent", Some("r=1")), None);
+        // A value is an id we build, its "=" "@" "~" "%" percent-encoded all the same; an empty one isn't drawn.
+        assert_eq!(bar_item_id("file.openRecent", Some("r=1")).as_deref(), Some("action:file.openRecent=r%3D1"));
+        assert_eq!(bar_item_id("file.openRecent", Some("")), None);
         // The page reads back what the core built.
         let page = include_str!("../../src/v2/actions/menuState.ts");
         assert!(page.contains("export function parsePick(payload: string): MenuPick | null {"));
+    }
+
+    /// A small bar: Sidebar (words follow the state), a tick, Sort By with its choices.
+    fn small_bar(sidebar: &str, enabled: bool, ticked: bool, choices: &[&str]) -> MenuBar {
+        let choices: Vec<String> = choices
+            .iter()
+            .map(|c| format!(r#"{{"kind":"item","action":"view.sortBy","value":"{c}","label":"{c}","accelerator":null,"enabled":true,"checked":false}}"#))
+            .collect();
+        serde_json::from_str(&format!(
+            r#"{{"menus":[{{"title":"View","items":[
+                {{"kind":"item","action":"view.sidebar","label":"{sidebar}","accelerator":"Ctrl+CmdOrCtrl+S","enabled":{enabled},"checked":null}},
+                {{"kind":"item","action":"live.autoRecord","label":"Auto-record","accelerator":null,"enabled":true,"checked":{ticked}}},
+                {{"kind":"separator"}},
+                {{"kind":"submenu","action":"view.sortBy","label":"Sort By","enabled":true,"items":[{}]}}]}}]}}"#,
+            choices.join(",")
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_same_structure_is_updated_in_place_and_only_new_choices_or_keys_draw_it_again() {
+        let before = small_bar("Hide Sidebar", true, false, &["newest", "oldest"]);
+        // The words, the greying and the tick change: the same structure, so updated in place, item by item.
+        let after = small_bar("Show Sidebar", false, true, &["newest", "oldest"]);
+        assert_eq!(structure(&before), structure(&after));
+        // Sidebar, Auto-record, Sort By, its two choices: in drawing order, a sub-menu before its items.
+        assert_eq!(looks(&before).iter().map(|l| l.label.as_str()).collect::<Vec<_>>(), ["Hide Sidebar", "Auto-record", "Sort By", "newest", "oldest"]);
+        assert_eq!(changed(&looks(&before), &looks(&after)), [0, 1]);
+        assert_eq!(looks(&after)[0], Look { label: "Show Sidebar".into(), enabled: false, checked: None });
+        assert_eq!(looks(&after)[1].checked, Some(true));
+        assert_eq!(changed(&looks(&before), &looks(&before)), Vec::<usize>::new());
+        // Other choices are another structure: drawn again.
+        assert_ne!(structure(&before), structure(&small_bar("Hide Sidebar", true, false, &["newest"])));
+        assert_ne!(structure(&before), structure(&small_bar("Hide Sidebar", true, false, &["newest", "title"])));
+        // So is another key, and a plain item that becomes a ticked one.
+        let mut keyed = before.clone();
+        if let BarEntry::Item { accelerator, .. } = &mut keyed.menus[0].items[0] {
+            *accelerator = None;
+        }
+        assert_ne!(structure(&before), structure(&keyed));
+        let mut ticked = before.clone();
+        if let BarEntry::Item { checked, .. } = &mut ticked.menus[0].items[0] {
+            *checked = Some(false);
+        }
+        assert_ne!(structure(&before), structure(&ticked));
+    }
+
+    #[test]
+    fn classic_gets_its_own_bar_back_and_the_mac_keeps_what_it_drew_to_update_it() {
+        // The page sends null with the new design's shell off: classic's bar, as at start (`build`).
+        let none: Option<MenuBar> = serde_json::from_str("null").unwrap();
+        assert!(none.is_none());
+        let code = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
+        let set = &code[code.find("pub fn set(app: &AppHandle, bar: Option<&MenuBar>)").expect("the Mac's set")..];
+        let set = &set[..set.find("\n    }\n").unwrap()];
+        assert!(set.contains("app.set_menu(super::build(app)?)?;"), "classic's bar comes back");
+        assert!(set.contains("if d.structure == shape"), "the same structure is updated in place");
+        assert!(include_str!("lib.rs").contains("builder.menu(app_menu::build)"), "classic's bar at start");
+        // The page: classic keeps the core's bar (no leaf), the leaf's last one going puts it back.
+        let page = include_str!("../../src/v2/actions/useMenuBar.ts");
+        assert!(page.contains("void api.appMenuSet(null)"));
+        let main = include_str!("../../src/views/main/MainApp.tsx");
+        assert!(main.contains(r#"status?.platform === "macos" && ui.flags["ui_v2.shell"] ? <MenuBar platform="macos" /> : null"#));
     }
 
     #[test]

@@ -100,8 +100,8 @@
     { "id": "recording.copyTranscript", "label": "Copy transcript", "menu": "Recording", "icon": "CopyIcon", "appliesTo": "one", "mac": "⌥⌘C", "win": "Ctrl+Shift+C", "when": ["hasTranscript"] },
     { "id": "recording.saveAudioOnly", "label": "Save audio only", "appliesTo": "oneOrMany" },
     { "id": "recording.select", "label": "Select", "icon": "SelectIcon", "appliesTo": "one" },
-    { "id": "recording.moveToTrash", "label": "Move to trash", "menu": "Recording", "icon": "TrashIcon", "appliesTo": "oneOrMany", "mac": "⌘⌫", "win": "Delete", "destructive": true },
-    { "id": "recording.deleteNow", "label": "Delete immediately…", "menu": "Recording", "appliesTo": "oneOrMany", "mac": "⌥⌘⌫", "win": "Shift+Delete", "destructive": true, "confirm": "Delete immediately? It can't be brought back from the trash." },
+    { "id": "recording.moveToTrash", "label": "Move to trash", "menu": "Recording", "icon": "TrashIcon", "appliesTo": "oneOrMany", "mac": "⌘⌫", "win": "Delete", "when": ["notTyping"], "destructive": true },
+    { "id": "recording.deleteNow", "label": "Delete immediately…", "menu": "Recording", "appliesTo": "oneOrMany", "mac": "⌥⌘⌫", "win": "Shift+Delete", "when": ["notTyping"], "destructive": true, "confirm": "Delete immediately? It can't be brought back from the trash." },
 
     { "id": "live.stopRecording", "label": "Stop recording", "menu": "Live", "icon": "StopIcon", "mac": "⌘.", "win": "Ctrl+.", "when": ["recording"] },
     { "id": "live.pauseRecording", "label": "Pause recording", "menu": "Live", "mac": "⌥⌘.", "win": "Ctrl+Shift+.", "when": ["recording"], "state": { "key": "paused", "on": "Resume recording" } },

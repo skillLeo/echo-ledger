@@ -4,7 +4,7 @@
 // the same items, an item that can't run now greyed, never hidden; show/hide items say the current state; Title Case.
 // macOS's own items (About, Services, Hide, Undo, Copy, Minimize, Full Screen…) are the system's (`native`). The page
 // sends the model to the core (app_menu_set), which draws it; a pick comes back as `menu:action`, run by the registry.
-import { ACTIONS, accelerator, actionLabel, available, findAction, hasHandler, type ActionContext } from "./registry";
+import { ACTIONS, accelerator, actionLabel, available, canRun, findAction, type ActionContext } from "./registry";
 
 /** One place in the layout: an action, a line, or a sub-menu (its own title, or an action's; its choices from the page). */
 type Layout = string | { title?: string; action?: string; items?: readonly Layout[]; choices?: true; after?: readonly Layout[] };
@@ -81,7 +81,10 @@ export const MENU_BAR: readonly { title: string; role?: "window" | "help"; items
 export type { NativeBarEntry as NativeEntry, NativeMenuBar } from "../../lib/ipc";
 import type { NativeBarEntry as NativeEntry, NativeMenuBar } from "../../lib/ipc";
 
-/** A sub-menu's choices, from the page that has them (Sort By's orders, Labels' labels): each sends its action with its value. */
+/**
+ * A sub-menu's choices, from the page that has them (Sort By's orders, Labels' labels): each sends its action with its
+ * value, an id we build (the sort key, the label's id, the project's id), never the words shown.
+ */
 export type MenuChoices = Partial<Record<string, readonly { value: string; label: string; checked?: boolean }[]>>;
 
 /** Answered by the core itself, with or without the page: Settings… and Quit (it keeps a running recording first). */
@@ -102,7 +105,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}): Nat
       const action = findAction(layout);
       if (!action) throw new Error(`${layout} is not in actions.json`);
       if (action.native && !CORE_ACTIONS.has(action.id)) return { kind: "native", action: action.id, native: action.native };
-      const enabled = CORE_ACTIONS.has(action.id) || (hasHandler(action.id) && available(action.id, at));
+      const enabled = CORE_ACTIONS.has(action.id) || (canRun(action.id, at.kind) && available(action.id, at));
       return {
         kind: "item", action: action.id, label: actionLabel(action.id, at), accelerator: menuKey(action.mac), enabled,
         checked: action.state?.check ? !!at.state?.[action.state.check] : null,
@@ -111,7 +114,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}): Nat
     const label = layout.title ?? (layout.action ? actionLabel(layout.action, at) : "");
     if (layout.choices && layout.action) {
       const id = layout.action;
-      const can = hasHandler(id) && available(id, at);
+      const can = canRun(id, at.kind) && available(id, at);
       const items: NativeEntry[] = (choices[id] ?? []).map((c) => ({
         kind: "item", action: id, value: c.value, label: c.label, accelerator: null, enabled: can, checked: !!c.checked,
       }));

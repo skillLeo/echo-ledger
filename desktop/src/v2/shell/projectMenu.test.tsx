@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { Shell, type SidebarProject } from "./Shell";
 import { registerAction } from "../actions/registry";
+import { PROJECT_MENU } from "./ProjectMenu";
 import { listenToMenuPicks } from "../actions/menuState";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -33,9 +34,9 @@ describe("a project's menu in the panel (3b)", () => {
     delete document.documentElement.dataset.platform;
   });
 
-  it("Open · Pin | Rename… · Instructions & memory… · Request files… · Members… | Archive | Delete project…; greyed where nothing can run it", () => {
+  it("Open · Pin | Rename… · Instructions & memory… · Request files… · Members… | Archive | Delete project…, with every one answered", () => {
     const open = vi.fn();
-    offs.push(registerAction("project.open", open));
+    offs.push(registerAction("project.open", open), ...PROJECT_MENU.filter((id) => id !== "-" && id !== "project.open").map((id) => registerAction(id, () => undefined)));
     show();
     fireEvent.contextMenu(project("Mehran Foods"), { clientX: 40, clientY: 100 });
     const menu = screen.getByRole("menu", { name: "Mehran Foods" });
@@ -43,13 +44,27 @@ describe("a project's menu in the panel (3b)", () => {
       "Open", "Pin", "Rename…", "Instructions & memory…", "Request files…", "Members…", "Archive", "Delete project…",
     ]);
     expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(3);
-    expect(within(menu).getByRole("menuitem", { name: "Rename…" })).toHaveAttribute("aria-disabled", "true");
-    expect(within(menu).getByRole("menuitem", { name: "Open" })).not.toHaveAttribute("aria-disabled");
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Open" }));
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ targets: ["m"] }));
   });
 
+  it("a right-click menu leaves out what nothing here can run (only the menu bar greys), and an emptied group's line", () => {
+    offs.push(registerAction("project.open", () => undefined), registerAction("project.requestFiles", () => undefined));
+    show();
+    fireEvent.contextMenu(project("Mehran Foods"), { clientX: 40, clientY: 100 });
+    const menu = screen.getByRole("menu", { name: "Mehran Foods" });
+    expect([...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(["Open", "Request files…"]);
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect(menu.querySelectorAll('[aria-disabled="true"]')).toHaveLength(0);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    // Nothing here can do anything for a project: no menu at all.
+    offs.splice(0).forEach((off) => off());
+    fireEvent.contextMenu(project("Mehran Foods"), { clientX: 40, clientY: 100 });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("a pinned project reads Unpin; the keyboard opens it too (Shift+F10, the menu key)", () => {
+    offs.push(registerAction("project.open", () => undefined), registerAction("project.pin", () => undefined));
     show();
     project("Qureshi Textiles").focus();
     fireEvent.keyDown(project("Qureshi Textiles"), { key: "F10", shiftKey: true });
@@ -63,20 +78,17 @@ describe("a project's menu in the panel (3b)", () => {
     document.documentElement.dataset.platform = "macos";
     respond("native_menu_popup", null);
     const requestFiles = vi.fn();
-    offs.push(registerAction("project.requestFiles", requestFiles));
+    offs.push(registerAction("project.open", () => undefined), registerAction("project.requestFiles", requestFiles), registerAction("project.delete", () => undefined));
     show();
     fireEvent.contextMenu(project("Mehran Foods"), { clientX: 40, clientY: 100 });
     await act(async () => undefined);
     expect(screen.queryByRole("menu")).toBeNull();
     const [call] = callsOf("native_menu_popup");
     const items = call.items as { action: string | null; label?: string; enabled?: boolean; target?: string }[];
-    expect(items.filter((i) => i.action).map((i) => i.label)).toEqual([
-      "Open", "Pin", "Rename…", "Instructions & Memory…", "Request Files…", "Members…", "Archive", "Delete Project…",
-    ]);
-    expect(items.filter((i) => i.action).every((i) => i.target === "m")).toBe(true);
-    expect(items.find((i) => i.action === "project.requestFiles")).toMatchObject({ enabled: true });
-    expect(items.find((i) => i.action === "project.members")).toMatchObject({ enabled: false });
+    expect(items.map((i) => i.label ?? "-")).toEqual(["Open", "-", "Request Files…", "-", "Delete Project…"]);
+    expect(items.filter((i) => i.action).every((i) => i.target === "m" && i.enabled)).toBe(true);
     await act(() => emitEvent("menu:action", "project.requestFiles@m"));
+    expect(requestFiles).toHaveBeenCalledTimes(1);
     expect(requestFiles).toHaveBeenCalledWith(expect.objectContaining({ targets: ["m"] }));
   });
 });

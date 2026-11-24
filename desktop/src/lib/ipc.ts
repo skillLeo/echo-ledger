@@ -398,8 +398,13 @@ export interface NativeMenuItem {
   checked?: boolean | null;
   /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree): "action:<id>@<target>". */
   target?: string;
-  /** A sub-menu's choice, sent with its action: "action:<id>=<value>". A target or value is an id, never holding "@" or "=". */
+  /**
+   * A sub-menu's choice, sent with its action: "action:<id>=<value>". A target or value is an id we build (a project's, a
+   * label's, a sort key), never a display name; the core percent-encodes any "%", "=", "@" or "~" in it.
+   */
   value?: string;
+  /** The context menu it belongs to (popup.ts numbers each it shows): "action:<id>…~<n>", answered only by that menu. */
+  menu?: number;
 }
 
 export interface UpdateStatus {
@@ -1912,8 +1917,11 @@ export const api = {
   titleDoubleClick: () => invoke<void>("title_double_click"),
   /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
   nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number) => invoke<void>("native_menu_popup", { items, x, y }),
-  /** The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. */
-  appMenuSet: (bar: NativeMenuBar) => invoke<void>("app_menu_set", { bar }),
+  /**
+   * The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. Null puts
+   * classic's own bar back (the new design's shell turned off).
+   */
+  appMenuSet: (bar: NativeMenuBar | null) => invoke<void>("app_menu_set", { bar }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),
