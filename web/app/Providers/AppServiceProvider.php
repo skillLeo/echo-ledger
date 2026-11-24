@@ -344,6 +344,8 @@ class AppServiceProvider extends ServiceProvider
             'account-two-factor' => 10, 'account-passkeys' => 10, 'account-proof-code' => 5] as $name => $perHour) {
             RateLimiter::for($name, fn (Request $request) => Limit::perHour($perHour)->by($name.':'.$person($request)));
         }
+        // Since 2.0.0-v (B5): changes to a person's call rules, from all their devices together.
+        RateLimiter::for('call-rules', fn (Request $request) => Limit::perMinute(60)->by('call-rules:'.$person($request)));
         // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
         RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));

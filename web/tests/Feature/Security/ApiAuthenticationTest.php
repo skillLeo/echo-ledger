@@ -137,6 +137,12 @@ function secDeviceGuardedRoutes(): array
         // Since 2.0.0-a: the person's "Switch back to classic".
         'PUT account/ui' => ['PUT', '/api/account/ui', 'config:read'],
         'GET account/ui' => ['GET', '/api/account/ui', 'config:read'],
+        // Since 2.0.0-v: call rules (404 while the call_rules flag is off, after the token and its ability).
+        'GET call-rules' => ['GET', '/api/call-rules', 'config:read'],
+        'PUT call-rules/settings' => ['PUT', '/api/call-rules/settings', 'sessions:write'],
+        'POST call-rules' => ['POST', '/api/call-rules', 'sessions:write'],
+        'PATCH call-rules/{id}' => ['PATCH', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE call-rules/{id}' => ['DELETE', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
@@ -266,8 +272,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
     // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
     // 2.0.0-p: the five saved view routes and the filter counts; 2.0.0-r: the badge, the Activity's groups and Retry all;
-    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened).
-    expect($guarded)->toBe(178);
+    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-v: the five call rules routes.
+    expect($guarded)->toBe(183);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

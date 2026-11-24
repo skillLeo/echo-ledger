@@ -54,6 +54,7 @@ use Laravel\Passport\HasApiTokens;
  * @property array<string, mixed>|null $assist_settings Live Assist's defaults per meeting type (since v1.9 L8, AssistDefaults)
  * @property array<string, mixed>|null $console_preferences the console's Library group and sort per view (since v1.5, Phase 1C)
  * @property bool $has_password whether its owner chose a password (since v1.6: an account made with a code or Google has none)
+ * @property array<string, mixed>|null $call_settings After each call, When to ask, short calls, the rules' version (since 2.0.0-v)
  * @property array{features?: array<string, bool>, limits?: array<string, int|float|null>}|null $entitlement_overrides the super admin's own settings for this person (since v1.6)
  * @property string|null $transcription_key the person's own Groq key, encrypted (since v1.6; never sent back)
  * @property string|null $transcription_key_provider
@@ -203,6 +204,8 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     {
         return [
             'email_verified_at' => 'datetime',
+            // Since 2.0.0-v: After each call, When to ask, short calls and the rules' version (CallRules).
+            'call_settings' => 'array',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
             'current_workspace_id' => 'integer',
