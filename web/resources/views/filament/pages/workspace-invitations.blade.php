@@ -1,5 +1,7 @@
 @php $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);'; @endphp
-{{-- Pending invitations (since v1.5, Phase 1C: Resend and Cancel). --}}
+{{-- Pending invitations (since v1.5, Phase 1C: Resend and Cancel). DES-08: in the new console each address and each
+     link's maker have an avatar (an address with no account yet: its first letter on a colour from the address); plain
+     PHP picks it, so Livewire adds no block markers and the classic cells stay byte for byte as they were. --}}
 <x-filament::section heading="Pending invitations" :description="($plan ? $plan.' ' : '').'Each email link works once, for its address only, until it ends. Resend makes a new link; the old one stops working.'">
     @if ($invitations === [])
         <p style="font-size:.85rem;opacity:.7;margin:0">No invitation is waiting.</p>
@@ -15,7 +17,7 @@
                 <tbody>
                     @foreach ($invitations as $invitation)
                         <tr>
-                            <td style="{{ $cell }}">{{ $invitation['email'] }}</td><td style="{{ $cell }}">{{ $invitation['role'] }}</td>
+                            <td style="{{ $cell }}"><?php if ($v2 ?? false): ?><x-el.person :email="$invitation['email']" /><?php else: ?>{{ $invitation['email'] }}<?php endif; ?></td><td style="{{ $cell }}">{{ $invitation['role'] }}</td>
                             <td style="{{ $cell }}">{{ $invitation['sent'] }}</td><td style="{{ $cell }}">{{ $invitation['expires'] }}</td>
                             <td style="{{ $cell }}text-align:right;white-space:nowrap">
                                 <x-filament::link tag="button" size="sm" wire:click="resendInvitation({{ $invitation['id'] }})" aria-label="Resend the invitation to {{ $invitation['email'] }}">Resend</x-filament::link>
@@ -45,7 +47,7 @@
                 <tbody>
                     @foreach ($links as $link)
                         <tr>
-                            <td style="{{ $cell }}">{{ $link['role'] }}</td><td style="{{ $cell }}">{{ $link['by'] }}</td>
+                            <td style="{{ $cell }}">{{ $link['role'] }}</td><td style="{{ $cell }}"><?php if (($v2 ?? false) && ($link['creator'] ?? null) !== null): ?><x-el.person :person="$link['creator']" /><?php else: ?>{{ $link['by'] }}<?php endif; ?></td>
                             <td style="{{ $cell }}">{{ $link['uses'] }}</td><td style="{{ $cell }}">{{ $link['expires'] }}</td>
                             <td style="{{ $cell }}text-align:right;white-space:nowrap">
                                 <x-filament::link tag="button" color="danger" size="sm" wire:click="revokeLink({{ $link['id'] }})" wire:confirm="Revoke this invite link? It stops working at once." aria-label="Revoke the {{ \Illuminate\Support\Str::lower($link['role']) }} invite link">Revoke</x-filament::link>

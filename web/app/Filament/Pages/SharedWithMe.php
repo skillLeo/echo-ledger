@@ -13,6 +13,7 @@ use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\PersonAvatar;
 use App\Models\CaptureSession;
 use App\Models\SentItem;
 use App\Models\Transcript;
@@ -36,6 +37,7 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\HtmlString;
 use UnitEnum;
 
 /**
@@ -78,7 +80,10 @@ class SharedWithMe extends Page implements HasTable
             ->columns([
                 TextColumn::make('title')->label('Title')->limit(60)->searchable()
                     ->description(fn (SentItem $item): string => $item->kind === 'project' ? 'Project' : 'Recording'),
-                TextColumn::make('sender.name')->label('From')->description(fn (SentItem $item): string => $item->sender->email),
+                // DES-08: in the new console the sender's avatar is beside their name, their email under it.
+                ConsoleV2::any()
+                    ? TextColumn::make('sender.name')->label('From')->formatStateUsing(fn (SentItem $item): HtmlString => PersonAvatar::cell($item->sender, $item->sender->email))
+                    : TextColumn::make('sender.name')->label('From')->description(fn (SentItem $item): string => $item->sender->email),
                 TextColumn::make('note')->label('Note')->placeholder('—')->limit(80)->wrap(),
                 TextColumn::make('sent_at')->label('Sent')->since()->sortable(),
                 TextColumn::make('saved_at')->label('Saved')->since()->placeholder('Not yet'),

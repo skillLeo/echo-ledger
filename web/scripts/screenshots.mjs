@@ -405,6 +405,14 @@ const pages = {
     devices: { path: '/app/devices' },
     usage: { path: '/app/usage' },
     workspace: { path: '/app/workspace' },
+    // DES-08: a person's avatar (their photo, else their initials on their colour) in each list of people: Sent to (a
+    // recording's More menu), the avatar menu, Shared with me and the workspace's people and invitations above.
+    'sent-to': { path: async (page) => `/app/sessions/${await recording(page, 'Retainer check-in')}`, full: false,
+        run: "Livewire.all().find((c) => /ViewCaptureSession$/.test(c.name)).$wire.mountAction('sentTo')", settle: 1500 },
+    // On a phone the avatar is in the menu (☰): it opens first.
+    'avatar-menu': { path: '/app/sessions', full: false, settle: 1200,
+        run: "(async () => { if (innerWidth < 1024) { document.querySelector('.v2-tb-menu')?.click(); await new Promise((r) => setTimeout(r, 600)); }"
+            + " [...document.querySelectorAll('.v2-um-trigger')].find((b) => b.getClientRects().length > 0)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); })()" },
     // Settings (since v1.7). Per account: EMAIL=free@echoledger.local SUFFIX=free (php artisan db:seed --class=SettingsTourSeeder).
     'settings-overview': { path: '/app/settings' },
     'settings-plan': { path: '/app/settings/plan' },
@@ -470,6 +478,8 @@ async function requestPath(page, tail) {
 
 // The first Library row whose title matches (the demo data: php artisan db:seed --class=ConsoleTourSeeder).
 async function recording(page, title) {
+    // A new window is still on about:blank, where a fetch cannot reach the console (a page run alone, ONLY=...).
+    if (!page.url().startsWith(base)) await page.goto(`${base}/app`, { waitUntil: 'load' });
     return page.evaluate(async (url) => {
         const html = await (await fetch(url)).text();
         const match = html.match(/data-recording="([0-9A-Za-z]{26})"/);
