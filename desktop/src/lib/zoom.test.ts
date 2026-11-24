@@ -1,6 +1,6 @@
 // UX-07: zoom like Chrome: its steps, its keys, Ctrl + the wheel and a pinch, kept on this computer.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PINCH_STEP, ZOOM_EVENT, ZOOM_KEY, ZOOM_STEPS, loadZoom, parseZoom, setZoom, stepZoom, watchZoomWheel, zoomKey, zoomNow } from "./zoom";
+import { PINCH_IDLE_MS, PINCH_STEP, ZOOM_EVENT, ZOOM_KEY, ZOOM_STEPS, loadZoom, parseZoom, setZoom, stepZoom, watchZoomWheel, zoomHint, zoomKey, zoomNow } from "./zoom";
 
 const key = (k: string, mods: { meta?: boolean; ctrl?: boolean; alt?: boolean; code?: string } = {}) =>
   ({ key: k, code: mods.code ?? "", metaKey: !!mods.meta, ctrlKey: !!mods.ctrl, altKey: !!mods.alt });
@@ -76,5 +76,31 @@ describe("zoom like Chrome (UX-07)", () => {
     stop();
     wheel(-100);
     expect(steps).toHaveLength(4);
+  });
+
+  it("a pinch's build-up is dropped after a pause; a zoomed page's smaller notch is still one step", () => {
+    const steps: number[] = [];
+    let t = 0;
+    let factor = 1;
+    const stop = watchZoomWheel(window, (dir) => steps.push(dir), () => factor, () => t);
+    const wheel = (deltaY: number) => window.dispatchEvent(new WheelEvent("wheel", { deltaY, ctrlKey: true, cancelable: true }));
+    wheel(-60);
+    t += PINCH_IDLE_MS + 1;
+    wheel(-60);
+    expect(steps).toEqual([], "the first 60 px were dropped after the pause");
+    t += 10;
+    wheel(-40);
+    expect(steps).toEqual([1]);
+    // At 200% the page hears a notch as 50 px: still one step.
+    factor = 2;
+    t += PINCH_IDLE_MS + 1;
+    wheel(50);
+    expect(steps).toEqual([1, -1]);
+    stop();
+  });
+
+  it("the keys' hint in this computer's words", () => {
+    expect(zoomHint(true)).toBe("Shortcut: ⌘+ and ⌘−, ⌘0 to reset.");
+    expect(zoomHint(false)).toBe("Shortcut: Ctrl+ and Ctrl−, Ctrl+0 to reset, or Ctrl + the mouse wheel.");
   });
 });

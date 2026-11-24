@@ -24,7 +24,7 @@ export function ZoomChip() {
   return (
     <Menu label={`Zoom, ${level}%`} align="end"
       items={[{ label: "Zoom", stepper: zoomStepper(level) }, { label: "Reset to 100%", onPick: () => void zoomBy(0) }]}
-      button={{ variant: "quiet", size: "sm", icon: Icons.SearchIcon, text: `${level}%`, className: "el-zoom-chip", title: `Zoom ${level}%` }} />
+      button={{ variant: "quiet", size: "sm", icon: Icons.ZoomIcon, text: `${level}%`, className: "el-zoom-chip", title: `Zoom ${level}%`, "aria-label": `Zoom, ${level}%` }} />
   );
 }
 

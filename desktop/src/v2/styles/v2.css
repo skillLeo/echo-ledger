@@ -2109,6 +2109,11 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-rail__record--on .el-rail__label { color: var(--el-role-record-default); font-weight: var(--el-text-body-strong-weight); font-variant-numeric: tabular-nums; }
 .el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: 0; inline-size: 100%; }
 .el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-4); }
+/* When even the short rail is taller than the window (a high zoom, UX-07), Settings and Account stay at its foot and the
+   places above them scroll (no scrollbar drawn); at every other size nothing scrolls. */
+.el-rail__places { flex: 0 1 auto; min-block-size: 0; overflow-y: auto; scrollbar-width: none; }
+.el-rail__places::-webkit-scrollbar { display: none; }
+.el-rail__foot { flex: none; }
 /* An item: 56 px, the 20 px icon in a 48×28 pill (the accent's tint when selected, 8% on hover), 4 px, the 11 px label. */
 .el-rail__item, .el-rail__me .el-button.el-rail__item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--el-space-4);
@@ -2392,7 +2397,7 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   left: calc(var(--el-desktop-titlerow-lights-left) / var(--el-zoom, 1)); top: calc(var(--el-desktop-titlerow-lights-top) / var(--el-zoom, 1));
   inline-size: calc(var(--el-desktop-titlerow-lights-width) / var(--el-zoom, 1)); block-size: calc(var(--el-desktop-titlerow-lights-height) / var(--el-zoom, 1));
 }
-[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) - var(--el-desktop-rail-width)); }
+[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: max(var(--el-space-8), calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) - var(--el-desktop-rail-width))); }
 /* Zoomed out, the rail stays at least as wide as the buttons' spot, so they never sit over the panel's name. */
 [data-platform="macos"][data-titlebar] .el-rail {
   inline-size: max(var(--el-desktop-rail-width), calc((var(--el-desktop-titlerow-lights-left) + var(--el-desktop-titlerow-lights-width)) / var(--el-zoom, 1)));
@@ -2405,5 +2410,10 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   box-shadow: var(--el-shadow-2); font-size: var(--el-text-body-size);
 }
 .el-zoom-bubble[data-shown] { display: inline-flex; }
+/* Between changes its live region stays in the page, empty and out of sight, so the next change is said. */
+.el-zoom-bubble:not([data-shown]) {
+  display: block; padding: 0; border: 0; box-shadow: none; background: transparent;
+  inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 :dir(rtl) .el-zoom-bubble { translate: 50% 0; }
 .el-zoom-bubble__reset { padding: 0; border: 0; background: transparent; color: var(--el-role-accent-text); font: inherit; cursor: pointer; text-decoration: underline; }

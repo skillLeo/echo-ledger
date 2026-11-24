@@ -15,7 +15,8 @@ function Zoom({ down = vi.fn(), up = vi.fn(), value = "100%", atEnd = false }) {
 }
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Account" }));
 const menu = () => screen.getByRole("menu", { name: "Account" });
-const row = () => within(menu()).getAllByRole("menuitem")[1];
+const row = () => within(menu()).getByRole("menuitem", { name: /^Zoom, / });
+const buttons = () => [...row().querySelectorAll<HTMLButtonElement>(".el-menu__step")];
 
 describe("a menu's stepping row (UX-07)", () => {
   it("[−] value [+] at the row's end; the buttons step it and the menu stays open", () => {
@@ -23,13 +24,17 @@ describe("a menu's stepping row (UX-07)", () => {
     const up = vi.fn();
     render(<Zoom down={down} up={up} value="110%" />);
     open();
-    expect(row()).toHaveTextContent("Zoom");
+    // To a screen reader: its name and value, and how to change it; the − and + are the pointer's.
+    expect(row()).toHaveAccessibleName("Zoom, 110%");
+    expect(row()).toHaveAccessibleDescription("Press + or − to change");
     expect(row().querySelector(".el-menu__step-value")).toHaveTextContent("110%");
-    const buttons = within(row()).getAllByRole("button");
-    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Zoom out", "Zoom in"]);
-    for (const b of buttons) expect(b).toHaveAttribute("tabindex", "-1");
-    fireEvent.click(buttons[1]);
-    fireEvent.click(buttons[0]);
+    expect(buttons().map((b) => b.getAttribute("title"))).toEqual(["Zoom out", "Zoom in"]);
+    for (const b of buttons()) {
+      expect(b).toHaveAttribute("tabindex", "-1");
+      expect(b).toHaveAttribute("aria-hidden", "true");
+    }
+    fireEvent.click(buttons()[1]);
+    fireEvent.click(buttons()[0]);
     expect(up).toHaveBeenCalledTimes(1);
     expect(down).toHaveBeenCalledTimes(1);
     expect(menu()).toBeInTheDocument();
@@ -51,5 +56,13 @@ describe("a menu's stepping row (UX-07)", () => {
     expect(up).not.toHaveBeenCalled();
     fireEvent.keyDown(menu(), { key: "Enter" });
     expect(menu()).toBeInTheDocument();
+  });
+
+  it("its name follows the value", () => {
+    const { rerender } = render(<Zoom value="100%" />);
+    open();
+    expect(row()).toHaveAccessibleName("Zoom, 100%");
+    rerender(<Zoom value="125%" />);
+    expect(row()).toHaveAccessibleName("Zoom, 125%");
   });
 });

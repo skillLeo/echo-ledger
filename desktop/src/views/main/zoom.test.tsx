@@ -59,6 +59,10 @@ describe("zoom like Chrome (UX-07)", () => {
     expect(zoomNow()).toBe(100);
     for (const id of ["view.zoomIn", "view.zoomOut", "view.actualSize"]) expect(canRun(id), id).toBe(false);
     expect(screen.queryByRole("button", { name: /^Zoom/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Account, / }));
+    const menu = screen.getByRole("menu", { name: /^Account, / });
+    expect(within(menu).getByRole("menuitem", { name: "Theme" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /^Zoom/ })).toBeNull();
   });
 
   it("flag off after a zoom was kept: the window is put back to 100%, and the kept zoom stays for later", async () => {
@@ -115,12 +119,13 @@ describe("zoom like Chrome (UX-07)", () => {
     const menu = screen.getByRole("menu", { name: /^Account, / });
     const labels = [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
     expect(labels.indexOf("Zoom")).toBe(labels.indexOf("Theme") + 1);
-    fireEvent.click(within(menu).getByRole("button", { name: "Zoom in" }));
-    fireEvent.click(within(menu).getByRole("button", { name: "Zoom in" }));
+    expect(within(menu).getByRole("menuitem", { name: "Zoom, 100%" })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByTitle("Zoom in"));
+    fireEvent.click(within(menu).getByTitle("Zoom in"));
     expect(zoomNow()).toBe(125);
     expect(screen.getByRole("menu", { name: /^Account, / })).toBeInTheDocument();
-    expect(menu.querySelector(".el-menu__step-value")).toHaveTextContent("125%");
-    fireEvent.click(within(menu).getByRole("button", { name: "Zoom out" }));
+    expect(within(menu).getByRole("menuitem", { name: "Zoom, 125%" })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByTitle("Zoom out"));
     expect(zoomNow()).toBe(110);
   });
 
@@ -132,7 +137,7 @@ describe("zoom like Chrome (UX-07)", () => {
     try {
       expect(screen.queryByRole("button", { name: /^Zoom/ })).toBeNull();
       press("=");
-      const chip = within(screen.getByTestId("title-row")).getByRole("button", { name: /110%/ });
+      const chip = within(screen.getByTestId("title-row")).getByRole("button", { name: "Zoom, 110%" });
       const bubble = document.querySelector(".el-zoom-bubble")!;
       expect(bubble).toHaveAttribute("data-shown");
       expect(bubble).toHaveTextContent("110% · Reset");

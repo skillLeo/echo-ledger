@@ -136,6 +136,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const headerId = useId();
+  // A stepping row's description for assistive tools (its − and + buttons are the pointer's).
+  const stepHintId = useId();
   const own = useRef<HTMLUListElement | null>(null);
   const setRef = (el: HTMLUListElement | null) => {
     own.current = el;
@@ -262,6 +264,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
       {item.separator && i > 0 && <li role="separator" className="el-menu__separator" />}
       <li role="none" className="el-menu__item">
         <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+          aria-label={item.stepper ? `${item.label}, ${item.stepper.value}` : undefined} aria-describedby={item.stepper ? stepHintId : undefined}
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
@@ -277,10 +280,12 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           <span className="el-menu__label"><bdi>{item.label}</bdi></span>
           {item.stepper && (
             <span className="el-menu__stepper">
+              {/* The row says its name and value ("Zoom, 110%") and how to change it; these two are for the pointer. */}
+              <span className="el-visually-hidden" id={stepHintId}>Press + or − to change</span>
               {([["down", MinusIcon], ["up", PlusIcon]] as const).map(([which, glyph], k) => {
                 const step = item.stepper![which];
                 const button = (
-                  <button key={which} type="button" className="el-menu__step" tabIndex={-1} aria-label={step.label} title={step.label} disabled={step.disabled}
+                  <button key={which} type="button" className="el-menu__step" tabIndex={-1} aria-hidden="true" title={step.label} disabled={step.disabled}
                     onClick={(e) => { e.stopPropagation(); step.onPick(); }}><Icon icon={glyph} /></button>
                 );
                 return k === 0 ? [button, <span key="value" className="el-menu__step-value el-num" aria-hidden="true">{item.stepper!.value}</span>] : button;

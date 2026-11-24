@@ -412,6 +412,10 @@ export const LucideLaptopIcon = L(["M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 
 export const LucideSearchIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Svg>
 );
+/** Zoom (UX-07: the title row's chip, the avatar's Zoom row): Lucide zoom-in, a magnifier with +. */
+export const LucideZoomInIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /><path d="M11 8v6" /><path d="M8 11h6" /></Svg>
+);
 export const LucideCopyIcon = (p: IconProps) => (
   <Svg {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></Svg>
 );

@@ -14,8 +14,15 @@ export const ZOOM_DEFAULT = 100;
 export const ZOOM_KEY = "echoledger-zoom";
 /** Sent on the window when the zoom changes, for the parts that show it. */
 export const ZOOM_EVENT = "echoledger:zoom";
+/** The keys' hint, in this computer's words (Settings › Appearance › Zoom). */
+export function zoomHint(mac: boolean): string {
+  return mac ? "Shortcut: ⌘+ and ⌘−, ⌘0 to reset." : "Shortcut: Ctrl+ and Ctrl−, Ctrl+0 to reset, or Ctrl + the mouse wheel.";
+}
+
 /** A pinch (or a wheel's small moves) this far, in pixels, is one step. */
 export const PINCH_STEP = 100;
+/** After this long without a wheel event what was built up is dropped. */
+export const PINCH_IDLE_MS = 300;
 
 /** The step `dir` steps from `now` (pure): the next one up or down, never past the ends; 0 goes back to 100%. */
 export function stepZoom(now: number, dir: 1 | -1 | 0): number {
@@ -93,16 +100,23 @@ export function useZoom(): number {
  * Ctrl + the wheel (and a touchpad's pinch, which comes as one with ctrlKey): a step for every PINCH_STEP px built up,
  * a mouse's notch being about one. Returns the function that stops listening.
  */
-export function watchZoomWheel(win: Window = window, step: (dir: 1 | -1) => void = (dir) => void zoomBy(dir)): () => void {
+export function watchZoomWheel(win: Window = window, step: (dir: 1 | -1) => void = (dir) => void zoomBy(dir),
+  factor: () => number = () => current / 100, now: () => number = () => performance.now()): () => void {
   let built = 0;
+  let at = -Infinity;
   const wheel = (e: WheelEvent) => {
     if (!e.ctrlKey) {
       built = 0;
       return;
     }
     e.preventDefault();
-    // Lines and pages are a notch each (a mouse's wheel in line mode); pixels build up.
-    const px = e.deltaMode === 0 ? e.deltaY : Math.sign(e.deltaY) * PINCH_STEP;
+    // A pause (PINCH_IDLE_MS) starts over: what a pinch left half built never steps the next one.
+    const t = now();
+    if (t - at > PINCH_IDLE_MS) built = 0;
+    at = t;
+    // Lines and pages are a notch each (a mouse's wheel in line mode); pixels build up, in the screen's own: a zoomed
+    // page hears a notch as that much less, so one notch stays one step at 150% and 200%.
+    const px = e.deltaMode === 0 ? e.deltaY * factor() : Math.sign(e.deltaY) * PINCH_STEP;
     built += px;
     while (Math.abs(built) >= PINCH_STEP) {
       const dir = built < 0 ? 1 : -1;

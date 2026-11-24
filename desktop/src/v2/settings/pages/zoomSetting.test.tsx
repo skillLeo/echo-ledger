@@ -40,8 +40,13 @@ describe("Settings › Appearance › Zoom (UX-07)", () => {
     expect(slider).toHaveAttribute("min", "0");
     expect(slider).toHaveAttribute("max", "9");
     expect(slider).toHaveAttribute("aria-valuetext", "100%");
-    expect(screen.getByText(/Shortcut: ⌘\+ and ⌘−, ⌘0 to reset/)).toBeInTheDocument();
+    expect(screen.getByText(/Shortcut: Ctrl\+ and Ctrl−, Ctrl\+0 to reset, or Ctrl \+ the mouse wheel/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset to 100%" })).toBeNull();
+    // Dragged: the row says the value, the page doesn't rescale under the pointer.
+    fireEvent.input(slider, { target: { value: "7" } });
+    expect(slider).toHaveAttribute("aria-valuetext", "150%");
+    expect(zoomNow()).toBe(100);
+    // Let go (or an arrow key): the native change applies it.
     fireEvent.change(slider, { target: { value: "6" } });
     expect(zoomNow()).toBe(125);
     expect(webview.setZoom).toHaveBeenLastCalledWith(1.25);

@@ -12,7 +12,7 @@ import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
 import { appKeys } from "../../../views/main/AppSettings";
 import { Button, ListRow } from "../../components";
 import { Group, ResetDefaults, SegmentedSetting, SliderSetting, SwitchSetting, type Run } from "./rows";
-import { setZoom, useZoom, ZOOM_DEFAULT, ZOOM_STEPS } from "../../../lib/zoom";
+import { setZoom, useZoom, zoomHint, ZOOM_DEFAULT, ZOOM_STEPS } from "../../../lib/zoom";
 import { useDesignSwitch } from "../../flags";
 
 /** The theme: the app's own when it hands it down (the top bar's toggle follows), else this page's. */
@@ -55,12 +55,12 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false }:
       </Group>
       {zoom && (
         <Group footer={<>
-          <p>{setting("appearance.zoom").description} Kept on this computer.</p>
+          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} Kept on this computer.</p>
           {level !== ZOOM_DEFAULT && <Button size="sm" onClick={() => setZoom(ZOOM_DEFAULT)}>Reset to 100%</Button>}
         </>}>
           {/* The steps, as Chrome's: the slider moves from one to the next. */}
           <SliderSetting id="appearance.zoom" value={ZOOM_STEPS.indexOf(level as (typeof ZOOM_STEPS)[number])} min={0} max={ZOOM_STEPS.length - 1} step={1}
-            format={(i) => `${ZOOM_STEPS[i]}%`} onChange={(i) => setZoom(ZOOM_STEPS[i])} />
+            format={(i) => `${ZOOM_STEPS[i]}%`} onChange={(i) => setZoom(ZOOM_STEPS[i])} onRelease />
         </Group>
       )}
       <DesignRowV2 />

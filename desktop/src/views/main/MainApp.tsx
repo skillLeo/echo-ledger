@@ -153,8 +153,9 @@ export default function MainApp() {
   // too; the menu bar's own on a Mac), Ctrl + the wheel, and the menu bar's View items.
   const zoomOn = ui.flags.v21_zoom;
   const zoomLevel = useZoom();
+  const flagsKnown = flagsReadFor !== null;
   useEffect(() => {
-    if (flagsReadFor === null) return;
+    if (!flagsKnown) return;
     if (!zoomOn) {
       if (zoomNow() !== ZOOM_DEFAULT) setZoom(ZOOM_DEFAULT, false);
       return;
@@ -167,14 +168,15 @@ export default function MainApp() {
       zoomBy(dir);
     };
     window.addEventListener("keydown", key);
-    const stopWheel = watchZoomWheel();
+    // Ctrl + the wheel off a Mac (a Mac's pinch is the system's own).
+    const stopWheel = menuPlatform.current === "macos" ? () => undefined : watchZoomWheel();
     const offs = [registerAction("view.zoomIn", () => zoomBy(1)), registerAction("view.zoomOut", () => zoomBy(-1)), registerAction("view.actualSize", () => zoomBy(0))];
     return () => {
       window.removeEventListener("keydown", key);
       stopWheel();
       offs.forEach((off) => off());
     };
-  }, [zoomOn, flagsReadFor]);
+  }, [zoomOn, flagsKnown]);
   const threeLevels = useRef(false);
   threeLevels.current = ui.flags["ui_v2.library"];
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
@@ -1373,7 +1375,7 @@ export default function MainApp() {
                 { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
                 { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
                 // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme.
-                ...(zoomOn ? [{ label: "Zoom", icon: Icons.SearchIcon, stepper: zoomStepper(zoomLevel) }] : []),
+                ...(zoomOn ? [{ label: "Zoom", icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
                 ...(shellWorkspace ? [
                   { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
                   ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),
