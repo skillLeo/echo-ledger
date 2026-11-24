@@ -6,6 +6,8 @@ use App\Enums\SessionStatus;
 use App\Enums\WorkspaceRole;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\CaptureSession;
+use App\Models\SessionOpen;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Workspaces\Workspaces;
@@ -56,6 +58,24 @@ it('pins and marks important one or several: the rest follow suit until every on
     expect($this->b->fresh()->important)->toBeFalse();
 });
 
+it('marks as unread and as read again: only the person\'s own open, and Mark as read only when every one is unread', function () {
+    $mate = User::factory()->create();
+    SessionOpen::mark($this->a->id, $this->owner->id);
+    SessionOpen::mark($this->a->id, $mate->id);
+    $opened = fn (CaptureSession $s): bool => SessionOpen::query()->where('capture_session_id', $s->id)->where('user_id', $this->owner->id)->exists();
+    $page = Livewire::test(ListCaptureSessions::class);
+
+    // One read, one not: Mark as unread takes back the person's own open, and leaves another person's.
+    $page->call('menuAction', 'recording.unread', [$this->a->id, $this->b->id]);
+    expect($opened($this->a))->toBeFalse()->and($opened($this->b))->toBeFalse()
+        ->and(SessionOpen::query()->where('capture_session_id', $this->a->id)->pluck('user_id')->all())->toBe([$mate->id]);
+    // Every one unread: Mark as read.
+    $page->call('menuAction', 'recording.unread', [$this->a->id, $this->b->id]);
+    expect($opened($this->a))->toBeTrue()->and($opened($this->b))->toBeTrue();
+    // It never touches the recording.
+    expect($this->a->fresh()->updated_at->equalTo($this->a->updated_at))->toBeTrue();
+});
+
 it('ticks a label on or off: on for all unless every one has it, any spelling of it', function () {
     $this->a->labels()->create(['label' => 'Q4']);
     $page = Livewire::test(ListCaptureSessions::class);
@@ -86,10 +106,13 @@ it('changes only the person\'s own recordings of this workspace, whatever ids th
     $foreign = Fx::session(Fx::user(), null, ['title' => 'Not mine']);
     $page = Livewire::test(ListCaptureSessions::class);
 
+    SessionOpen::mark($foreign->id, $this->owner->id);
     $page->call('menuAction', 'recording.pin', [$foreign->id]);
+    $page->call('menuAction', 'recording.unread', [$foreign->id]);
     $page->call('menuAction', 'recording.labels', [$foreign->id, $this->a->id], 'Leak');
     $page->call('menuAction', 'recording.moveToTrash', [$foreign->id]);
     expect($foreign->fresh()->pinned)->toBeFalse()
+        ->and(SessionOpen::query()->where('capture_session_id', $foreign->id)->count())->toBe(1)
         ->and(menuLabels($foreign))->toBe([])
         ->and(CaptureSession::withoutGlobalScopes()->find($foreign->id)?->deleted_at)->toBeNull()
         ->and(menuLabels($this->a))->toBe(['leak']);
@@ -161,9 +184,7 @@ it('gives the menu its choices: the person\'s labels and projects, the export fo
         ->and(array_column($data['projects'], 'label'))->toBe(['Acme'])
         ->and(array_column($data['formats'], 'value'))->toBe(['docx', 'txt', 'md', 'srt', 'vtt', 'html', 'json'])
         ->and($data['words']['many'])->toBe(':count recordings')
-        ->and($data['runnable'])->toContain('recording.pin', 'recording.labels', 'file.rename', 'recording.moveToTrash')
-        // Mark as unread waits for its endpoint (contract 2.0.0-t) on the web.
-        ->not->toContain('recording.unread');
+        ->and($data['runnable'])->toContain('recording.pin', 'recording.unread', 'recording.labels', 'file.rename', 'recording.moveToTrash');
 });
 
 it('draws each row with what its menu needs: pinned, important, its state, its project and its labels', function () {
@@ -173,6 +194,7 @@ it('draws each row with what its menu needs: pinned, important, its state, its p
 
     Livewire::test(ListCaptureSessions::class)
         ->assertSeeHtml('data-recording="'.$this->a->id.'" data-important="0" data-pinned="1"')
+        ->assertSeeHtml('data-opened="0"')
         ->assertSeeHtml('data-client="'.$acme->id.'"')
         ->assertSeeHtml('data-labels="[&quot;q4&quot;]"')
         ->assertSeeHtml('data-v2-menu-data');

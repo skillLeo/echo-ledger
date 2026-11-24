@@ -93,3 +93,10 @@ test('a read-only console\'s menu holds only Open, and nothing for several', () 
     assert.deepEqual(words(core.recordingMenu(readOnly, [rowOf('a')]).items), ['Open']);
     assert.deepEqual(core.recordingMenu(readOnly, [rowOf('a'), rowOf('b')]).items, []);
 });
+
+test('Mark as unread while any is read, Mark as read once every one is unread', () => {
+    const data = { ...DATA, runnable: [...DATA.runnable, 'recording.unread'] };
+    assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: true })]).items).includes('Mark as unread'));
+    assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: false })]).items).includes('Mark as read'));
+    assert.ok(words(core.recordingMenu(data, [rowOf('a', { opened: false }), rowOf('b', { opened: true })]).items).includes('Mark as unread'));
+});

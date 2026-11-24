@@ -23,6 +23,7 @@ use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\SessionOpen;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\Library\LibraryFacets;
@@ -1041,17 +1042,15 @@ class ListCaptureSessions extends ListRecords
         $this->flushCachedTableRecords();
     }
 
-    /**
-     * UX-22 (PLAN_V2_1_POLISH 3b): what a row's right-click menu can do here, by its ids in the one action list
-     * (resources/js/actions.json), and where Mark as unread waits for its endpoint (contract 2.0.0-t) on the web.
-     */
-    public const MENU_ACTIONS = ['recording.open', 'recording.transcribe', 'recording.pin', 'recording.important', 'recording.labels', 'label.new',
+    /** UX-22 (PLAN_V2_1_POLISH 3b): what a row's right-click menu can do here, by its ids in the one action list (resources/js/actions.json). */
+    public const MENU_ACTIONS = ['recording.open', 'recording.transcribe', 'recording.pin', 'recording.important', 'recording.unread', 'recording.labels', 'label.new',
         'recording.moveToProject', 'file.rename', 'recording.exportAs', 'recording.moveToTrash'];
 
     /**
      * UX-22: a pick in a row's right-click menu (filament.v2.context-menu) for the recordings it was opened on. Pin, Mark
      * as important and a label of Labels › are toggles decided here from what the recordings are now (on for all unless
-     * every one is, the menu's own rule); Move to project › moves them (value "none": out of any). Rename… (one), New
+     * every one is, the menu's own rule); Mark as unread takes back the person's own opens (contract 2.0.0-t), and once
+     * every one is unread it is Mark as read; Move to project › moves them (value "none": out of any). Rename… (one), New
      * label…, Export › a format, Transcribe and Move to trash open, or run, the console's own actions for them (the
      * selection bar's, with their questions, checks and Undo). Only the person's own recordings of this workspace (the
      * Library's query, read from the database; the browser's ids are only asked about), never from a read-only console
@@ -1078,6 +1077,7 @@ class ListCaptureSessions extends ListRecords
         return match ($action) {
             'recording.pin' => $this->organise($keys, $records->every(fn (CaptureSession $r): bool => (bool) $r->pinned) ? 'unpin' : 'pin'),
             'recording.important' => $this->organise($keys, $records->every(fn (CaptureSession $r): bool => (bool) $r->important) ? 'unimportant' : 'important'),
+            'recording.unread' => $this->markUnread($keys),
             'recording.labels' => $label === null || $label === '' ? null : $this->organise($keys,
                 $records->every(fn (CaptureSession $r): bool => $r->labels->contains(fn ($l): bool => mb_strtolower((string) $l->label) === $label)) ? 'unlabel' : 'label', null, $value),
             'recording.moveToProject' => $value === null || $value === '' ? null : $this->organise($keys, 'move', $value === 'none' ? null : $value),
@@ -1102,6 +1102,24 @@ class ListCaptureSessions extends ListRecords
             app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), $ids, $action, $client, $label, auth()->user());
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+        }
+        $this->flushCachedTableRecords();
+
+        return null;
+    }
+
+    /**
+     * Mark as unread (contract 2.0.0-t, as DELETE /api/sessions/{id}/opened): only the person's own opens go, and
+     * nobody else's; when none of [$ids] is opened it is Mark as read. The recordings themselves are not touched.
+     *
+     * @param  list<string>  $ids
+     */
+    private function markUnread(array $ids): null
+    {
+        $me = (int) auth()->id();
+        $anyOpened = SessionOpen::query()->where('user_id', $me)->whereIn('capture_session_id', $ids)->exists();
+        foreach ($ids as $id) {
+            $anyOpened ? SessionOpen::unmark($id, $me) : SessionOpen::mark($id, $me);
         }
         $this->flushCachedTableRecords();
 

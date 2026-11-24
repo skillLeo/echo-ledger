@@ -96,9 +96,9 @@
     }
 
     /**
-     * The menu of the rows it was opened on (each as the page draws it: {id, pinned, important, state, client, labels})
-     * with the page's choices (data: ListCaptureSessions::menuData). Pin says Unpin, and a tick shows, only when every
-     * one is so; Transcribe is there while one of them is Audio only; Labels › ticks each label every one has, then
+     * The menu of the rows it was opened on (each as the page draws it: {id, pinned, important, opened, state, client,
+     * labels}) with the page's choices (data: ListCaptureSessions::menuData). Pin says Unpin, Mark as unread says Mark as
+     * read, and a tick shows, only when every one is so; Transcribe is there while one of them is Audio only; Labels › ticks each label every one has, then
      * New label…; Move to project › ticks where every one is (No project when none is in one); Export › lists the
      * formats. Several are titled with their count. Returns {items, title, targets}.
      */
@@ -120,7 +120,7 @@
             ]),
             'recording.exportAs': choices('recording.exportAs', data.formats || []),
         };
-        const state = { pinned: every((r) => r.pinned), important: every((r) => r.important) };
+        const state = { pinned: every((r) => r.pinned), important: every((r) => r.important), unread: every((r) => r.opened === false) };
         const items = menu(data.actions, n > 1 ? RECORDING_MANY : RECORDING_ONE, { ...ctx, state, children });
 
         return { items, title: title(n, words.many || ':count'), targets };

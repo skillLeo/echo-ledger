@@ -24,7 +24,7 @@
             return t ? t.content.cloneNode(true) : null;
         };
         const rowOf = (el) => ({
-            id: el.dataset.recording, pinned: el.dataset.pinned === '1', important: el.dataset.important === '1',
+            id: el.dataset.recording, pinned: el.dataset.pinned === '1', important: el.dataset.important === '1', opened: el.dataset.opened !== '0',
             state: el.dataset.state || 'ready', client: el.dataset.client || null,
             labels: (() => { try { return JSON.parse(el.dataset.labels || '[]'); } catch (e) { return []; } })(),
         });
