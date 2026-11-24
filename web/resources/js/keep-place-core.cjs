@@ -89,6 +89,15 @@
     }
 
     /**
+     * Whether an event is the person doing something (a press, a touch, a key, a wheel turned up or down). A wheel that
+     * is mostly sideways is not: a Mac's two-finger swipe back is a stream of them, and some land on the page it brings.
+     */
+    function takes(e) {
+        if (e.type !== 'wheel') return true;
+        return Math.abs(Number(e.deltaX) || 0) <= Math.abs(Number(e.deltaY) || 0);
+    }
+
+    /**
      * What coming back still does once the rows are there: nothing when the person did something meanwhile (taken: a
      * click, even one that takes no focus, the wheel, a touch, a key), which is theirs; else the place and the tint, and
      * the focus on the row when nothing else has it (focusFree).
@@ -102,5 +111,5 @@
         return now === null || now === body || now === atStart;
     }
 
-    return { KEY, OPENED, MAX_AGE, TINT, keys, place, restorable, cameBack, scrollTo, showUpTo, tinted, showsBackToTop, toTopKey, focusFree, restoreSteps };
+    return { KEY, OPENED, MAX_AGE, TINT, keys, place, restorable, cameBack, scrollTo, showUpTo, tinted, showsBackToTop, toTopKey, focusFree, restoreSteps, takes };
 });

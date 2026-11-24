@@ -74,7 +74,7 @@
         // put it, untinted, and the focus theirs. Heard first (the capture phase), before anything else can stop it.
         let taken = false;
         const INTERACTIONS = ['pointerdown', 'wheel', 'touchstart', 'keydown'];
-        INTERACTIONS.forEach((type) => window.addEventListener(type, () => { taken = true; }, { capture: true, passive: true }));
+        INTERACTIONS.forEach((type) => window.addEventListener(type, (e) => { if (core.takes(e)) taken = true; }, { capture: true, passive: true }));
 
         // The tint: on the opened row while it lasts; Livewire's redraws keep it (they would take a class they don't know).
         let tint = null;

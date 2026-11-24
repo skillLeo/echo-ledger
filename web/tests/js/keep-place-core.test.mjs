@@ -79,6 +79,17 @@ test('Back to top shows once the list is more than a screen down, and Home, Ctrl
     assert.ok(! core.toTopKey(key('Home', { altKey: true }), false));
 });
 
+test('what counts as the person doing something: a press, a touch, a key, a wheel turned up or down; never a sideways wheel', () => {
+    assert.ok(core.takes({ type: 'pointerdown' }));
+    assert.ok(core.takes({ type: 'touchstart' }));
+    assert.ok(core.takes({ type: 'keydown' }));
+    assert.ok(core.takes({ type: 'wheel', deltaX: 0, deltaY: 120 }));
+    assert.ok(core.takes({ type: 'wheel', deltaX: 10, deltaY: -40 }));
+    // A Mac's two-finger swipe back is a stream of sideways wheel events, some landing on the page that comes back.
+    assert.ok(! core.takes({ type: 'wheel', deltaX: -80, deltaY: 3 }));
+    assert.ok(! core.takes({ type: 'wheel', deltaX: 30, deltaY: 0 }));
+});
+
 test('the person did something while the list came back: no scroll, no tint and no focus are put back on them', () => {
     // A click on another row (it opens beside the list), a wheel turn, a touch, a key: even where nothing takes the focus.
     assert.deepEqual(core.restoreSteps(true, true), { scroll: false, tint: false, focus: false });
