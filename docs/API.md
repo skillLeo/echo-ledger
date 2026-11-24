@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-t (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-u (2026-11-24, proposed 2026-11-24, accepted when merged)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-u (proposed 2026-11-24, accepted when merged; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
 2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
 2.0.0-r (accepted 2026-11-24 by EL-Lead; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
@@ -2496,7 +2497,8 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
   - `"language"`: the apps' and the console's interface language, `"en"` or `"ur"`. It is the same setting as the web
     console's language, so a change shows everywhere.
   - `"avatar_color"`: 0 to 7, the colour of the initials' circle when there is no photo. It indexes the tokens' 8
-    colours, in order: teal, blue, indigo, purple, pink, orange, green and slate.
+    colours, in order: teal, blue, cyan, olive, pink, orange, green and slate (since 2.0.0-u; 2.0.0-r named 2 and 3
+    indigo and purple, which the design does not use).
 - Everywhere a person is shown with `avatar_url` (2.0.0-l), `avatar_color` is given beside it.
 - The server picks the colour once, at sign-up, so it is the same on every device. People who signed up earlier get
   one from their id, once, and keep it.
