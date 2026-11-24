@@ -7,11 +7,11 @@ import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { heldLine, importProgressText, pendingTitle, uploadTitle, waitingLine, waitingSummary } from "../../lib/pending";
-import { useLibraryQueue } from "../../views/main/LibraryQueue";
-import type { Notify } from "../../lib/notice";
+import type { LibraryQueueState } from "../../views/main/LibraryQueue";
 import { Banner, Button, Card, Dialog, Icons, List, ListRow, Progress, Status, TextField } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
+import { CALL_WORDS } from "../../lib/callChoice";
 
 const MAX_TITLE_CHARS = 200;
 
@@ -24,14 +24,30 @@ const avatar = (item: { sourceApp: string }) => <SourceAvatar size="sm" item={{ 
  * request it was given, and must not open again for it. */
 const answered = new WeakSet<object>();
 
-export function QueueV2({ say, reviewRequest, onShown }: {
-  say: (text: string) => void;
+/**
+ * What the queue shows with its own Review (the waiting calls, the uploads that need you), or null until both lists have
+ * answered once: the Library's needs button leaves these to it, so there is one Review for each thing, and waits.
+ */
+export function queueCovers(q: LibraryQueueState): { waiting: boolean; failed: boolean } | null {
+  return q.loaded ? { waiting: q.pending.length > 0, failed: q.failed.length > 0 } : null;
+}
+
+/**
+ * The queue drawn from the Library's own copy of it (`queue`, useLibraryQueue in LibraryV2): it stays loaded and
+ * follows the core's events while this list is away (Trash, a selection, a recording open), so what the header says
+ * about it is right the moment the list is back. `openWaiting`: the Waiting place is open, so its calls are listed.
+ */
+export function QueueV2({ queue: q, reviewRequest, openWaiting = false, parts = "all" }: {
+  queue: LibraryQueueState;
   reviewRequest?: { seq: number } | null;
-  /** What the list shows now: the Library's banner leaves these to it, so there is one Review for each. */
-  onShown?: (shown: { waiting: boolean; failed: boolean }) => void;
+  openWaiting?: boolean;
+  /**
+   * Which parts it shows (PLAN_LIBRARY_FILTERS): "needs", what needs the person (calls waiting for a decision, uploads
+   * that failed, recordings waiting for another account: Needs you's own list); "progress", what is on its way
+   * (imports with Cancel, uploads being checked: every other view); "all", both.
+   */
+  parts?: "all" | "needs" | "progress";
 }) {
-  const notify: Notify = (text) => say(text);
-  const q = useLibraryQueue(notify);
   const { pending, failed, verifying, importing, held, clients, busy, bulkBusy, learn } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ item: PendingItem; text: string } | null>(null);
@@ -47,6 +63,13 @@ export function QueueV2({ say, reviewRequest, onShown }: {
   useEffect(() => {
     if (open && reviewRequest) document.getElementById("queue-pending-list")?.scrollIntoView?.({ block: "nearest" });
   }, [open, reviewRequest]);
+  // The Waiting place counts these calls: opening it lists them (Hide still folds them).
+  useEffect(() => {
+    if (!openWaiting) return;
+    setOpen(true);
+    q.loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openWaiting]);
   // Once nothing waits the list closes; the next recording to arrive starts with the summary again (classic's rule).
   // (Only once something has waited: the list reads its recordings after a Review request has opened it.)
   const hadWaiting = useRef(false);
@@ -57,13 +80,9 @@ export function QueueV2({ say, reviewRequest, onShown }: {
       setOpen(false);
     }
   }, [pending.length]);
-  const shows = { waiting: pending.length > 0, failed: failed.length > 0 };
-  useEffect(() => {
-    onShown?.(shows);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shows.waiting, shows.failed]);
-  useEffect(() => () => onShown?.({ waiting: false, failed: false }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
+  const needs = parts !== "progress";
+  const progress = parts !== "needs";
+  if ((!needs || (pending.length === 0 && failed.length === 0 && held.length === 0)) && (!progress || (verifying.length === 0 && importing.length === 0))) return null;
   const shown = open && pending.length > 0;
 
   const review = () => {
@@ -102,7 +121,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
 
   return (
     <div className="el-library-top" data-testid="library-queue">
-      {pending.length > 0 && (
+      {needs && pending.length > 0 && (
         <Card className="el-library-setup" label="Waiting recordings">
           <div className="el-group__head" data-testid="waiting-line" title={waitingSummary(pending)}>
             <h2 className="el-title-s">{waitingLine(pending)}</h2>
@@ -113,8 +132,9 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           {shown && (
             <div id="queue-pending-list" className="el-library-top">
               <div className="el-page__actions">
-                <Button size="sm" variant="primary" disabled={bulkBusy} onClick={() => void q.keepAll()}>Keep all</Button>
-                <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardAll()}>Discard all</Button>
+                <Button size="sm" variant="primary" disabled={bulkBusy} onClick={() => void q.keepAll()}>Transcribe all</Button>
+                <Button size="sm" disabled={bulkBusy} onClick={() => void q.keepAudioAll()}>{CALL_WORDS.save_audio_all}</Button>
+                <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardAll()}>Delete all</Button>
               </div>
               {learn && (
                 <div role="group" aria-label="Remember the language">
@@ -133,11 +153,15 @@ export function QueueV2({ say, reviewRequest, onShown }: {
                   const isBusy = bulkBusy || busy === item.id;
                   return (
                     <ListRow key={item.id} title={title} strong leading={avatar(item)}
-                      meta={meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                      meta={item.restoredDelete ? <>
+                        {meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                        <span className="el-queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</span>
+                      </> : meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={`More for ${title}`} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />
-                        <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Discard</Button>
-                        <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Keep</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Delete</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keepAudio(item)}>{CALL_WORDS.save_audio_only}</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Transcribe</Button>
                       </span>} />
                   );
                 })}
@@ -146,7 +170,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           )}
         </Card>
       )}
-      {importing.length > 0 && (
+      {progress && importing.length > 0 && (
         <Section title="Importing" count={importing.length}>
           {importing.map((item) => {
             const title = uploadTitle(item);
@@ -159,7 +183,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           })}
         </Section>
       )}
-      {failed.length > 0 && (
+      {needs && failed.length > 0 && (
         <Section title="Uploads that need you" count={failed.length}>
           {failed.map((item) => (
             <UploadRow key={item.id} item={item} meta={meta(item.sourceApp, item.startedAt, item.durationMs, item.lastError)}
@@ -170,7 +194,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           ))}
         </Section>
       )}
-      {held.map(([account, items]) => (
+      {needs && held.map(([account, items]) => (
         <Section key={account} title="Waiting for another account" count={items.length} label={`Waiting for ${account}`} testId="held-uploads"
           note={heldLine(account, items.length)}
           end={items.length > 1 && <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardHeld(items)}>Discard all {items.length}</Button>}>
@@ -180,7 +204,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           ))}
         </Section>
       ))}
-      {verifying.length > 0 && (
+      {progress && verifying.length > 0 && (
         <List label="Checking uploads">
           {verifying.map((item) => (
             <UploadRow key={item.id} item={item} meta={meta(item.sourceApp, item.startedAt, item.durationMs)}

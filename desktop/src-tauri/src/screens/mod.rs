@@ -458,17 +458,13 @@ const SHIELD_WAIT: Duration = Duration::from_secs(2);
 #[cfg(windows)]
 fn hide_own_windows(app: &AppHandle, hidden: bool) -> bool {
     app.state::<crate::AppState>().screens.own_hidden.store(hidden, Ordering::SeqCst);
-    let main = app.get_webview_window(crate::lifecycle::MAIN);
-    let wanted = crate::privacy::affinity_for(app, crate::lifecycle::MAIN);
+    let open = app.get_webview_window(crate::lifecycle::MAIN).is_some();
     let handle = app.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let posted = app.run_on_main_thread(move || {
-        // On the main thread the change takes effect before the call returns.
-        let done = main.is_none_or(|w| {
-            let (Ok(hwnd), Some(wanted)) = (w.hwnd(), wanted) else { return false };
-            let hwnd = hwnd.0 as isize;
-            crate::privacy::set_and_read_back(&handle, crate::lifecycle::MAIN, hwnd, wanted)
-        });
+        // On the main thread the change takes effect before the call returns; the capture policy decides the affinity
+        // (the shield is part of it), never this caller.
+        let done = !open || crate::privacy::apply_policy(&handle, crate::lifecycle::MAIN);
         let _ = tx.send(done);
     });
     posted.is_ok() && rx.recv_timeout(SHIELD_WAIT).unwrap_or(false)

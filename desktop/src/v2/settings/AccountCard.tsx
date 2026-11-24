@@ -9,6 +9,7 @@ import { openUpgradeSheet, plansAbove, useEntitlements } from "../../lib/entitle
 import { Avatar, Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, Progress, Skeleton, SkeletonRow } from "../components";
 import { useDesignSwitch, type UiState } from "../flags";
 import { initials } from "./initials";
+import { useAvatar } from "../../views/main/AccountFlows";
 
 export { initials };
 
@@ -25,6 +26,8 @@ export function AccountCard() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const entitlements = useEntitlements();
+  // Since 2.0.0-l the person's picture, kept on this computer by its version; the initials without one.
+  const picture = useAvatar(account);
 
   useEffect(() => {
     let live = true;
@@ -63,7 +66,7 @@ export function AccountCard() {
   return (
     <>
       <Card className="el-profile" label={account.name || account.email}>
-        <Avatar initials={initials(account.name, account.email)} />
+        <Avatar initials={initials(account.name, account.email)} photo={picture} color={account.avatar_color} seed={account.email} />
         <div className="el-profile__who">
           <span className="el-title-s" dir="auto">{account.name || account.email}</span>
           {account.name && <span className="el-caption el-profile__email">{account.email}</span>}

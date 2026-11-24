@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Stt\Data;
 
+use App\Stt\LanguageChoice;
+
 /** Shared transcript unit: channel 1 = "Me" (mic, left), channel 2 = "Client" (system, right). */
 final readonly class Segment
 {
@@ -17,9 +19,20 @@ final readonly class Segment
         public array $words = [],
         /** The engine was not sure of this line (it is kept as heard; the apps underline it, a tap plays it). */
         public bool $uncertain = false,
+        /**
+         * Since 2.0.0-o: the language this line was heard in (one of ours, `ur`, `en`, `ar`…) when the engine said so;
+         * null when it did not. The apps can skip a language's lines.
+         */
+        public ?string $language = null,
     ) {}
 
-    /** @return array{channel: int, speaker: string, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>, uncertain?: true} */
+    /** The same line heard in [$language] (null: not known). */
+    public function withLanguage(?string $language): self
+    {
+        return new self($this->channel, $this->speaker, $this->startMs, $this->endMs, $this->text, $this->words, $this->uncertain, $language);
+    }
+
+    /** @return array{channel: int, speaker: string, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>, uncertain?: true, language?: string} */
     public function toArray(): array
     {
         $out = [
@@ -32,6 +45,9 @@ final readonly class Segment
         ];
         if ($this->uncertain) {
             $out['uncertain'] = true;
+        }
+        if ($this->language !== null) {
+            $out['language'] = $this->language;
         }
 
         return $out;
@@ -49,6 +65,7 @@ final readonly class Segment
         }
 
         return new self((int) ($data['channel'] ?? 1), (string) ($data['speaker'] ?? 'Speaker'), (int) ($data['start_ms'] ?? 0),
-            (int) ($data['end_ms'] ?? 0), (string) ($data['text'] ?? ''), $words, (bool) ($data['uncertain'] ?? false));
+            (int) ($data['end_ms'] ?? 0), (string) ($data['text'] ?? ''), $words, (bool) ($data['uncertain'] ?? false),
+            LanguageChoice::fromDetected($data['language'] ?? null));
     }
 }

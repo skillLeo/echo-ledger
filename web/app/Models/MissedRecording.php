@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\SourceApp;
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Services\ActivityFeed;
 use App\Services\TranscriptExporter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -98,13 +99,29 @@ class MissedRecording extends Model
     /** "WhatsApp call · 5:12 · The helper was not connected", without the length when the app did not know it. */
     public function activityBody(): string
     {
-        $parts = [self::callName($this->source_app)];
-        if ($this->call_duration_s !== null) {
-            $parts[] = TranscriptExporter::clock($this->call_duration_s * 1000);
-        }
-        $parts[] = self::REASONS[$this->reason] ?? self::REASONS['unknown'];
+        return ActivityFeed::text($this->activityLine(), 'en');
+    }
 
-        return implode(' · ', $parts);
+    /**
+     * The same in the reader's language (W-218): the call's name and the reason are lines of lang/ur.json, the length
+     * stays as it is.
+     *
+     * @return array{key: string, params: array<string, mixed>}
+     */
+    public function activityLine(): array
+    {
+        $app = SourceApp::tryFrom($this->source_app);
+        $call = match (true) {
+            $this->source_app === self::BROWSER => ActivityFeed::line('Call in a browser'),
+            $app === null, $app === SourceApp::Other => ActivityFeed::line('Call'),
+            $app === SourceApp::PhoneCall, $app === SourceApp::VoiceNote => ActivityFeed::line((string) $app->getLabel()),
+            default => ActivityFeed::line(':app call', ['app' => ActivityFeed::line((string) $app->getLabel())]),
+        };
+        $reason = ActivityFeed::line(self::REASONS[$this->reason] ?? self::REASONS['unknown']);
+
+        return $this->call_duration_s !== null
+            ? ActivityFeed::line(':call · :length · :reason', ['call' => $call, 'length' => TranscriptExporter::clock($this->call_duration_s * 1000), 'reason' => $reason])
+            : ActivityFeed::line(':call · :reason', ['call' => $call, 'reason' => $reason]);
     }
 
     /**

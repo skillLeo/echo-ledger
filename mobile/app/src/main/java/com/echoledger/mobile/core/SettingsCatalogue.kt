@@ -44,8 +44,8 @@ object SettingsCatalogue {
         SettingsEntry(
             "screen-share",
             SettingsGroup.General,
-            "During screen sharing",
-            "screen share sharing recording cast meeting floating windows private black box show hide dot"
+            "Screenshots and screen sharing",
+            "screenshot screenshots block screen share sharing recording cast meeting floating windows live words black box"
         ),
         SettingsEntry("devices", SettingsGroup.General, "Devices", "revoke paired activity audit security"),
         SettingsEntry("storage", SettingsGroup.General, "Storage and retention", "storage disk space retention deleted bin days"),
@@ -120,7 +120,8 @@ object SettingsReset {
                 dynamicColour = d.dynamicColour,
                 phoneFont = d.phoneFont,
                 textSize = d.textSize,
-                appLanguage = d.appLanguage
+                appLanguage = d.appLanguage,
+                librarySwipes = d.librarySwipes
             )
 
             "notifications" -> s.copy(
@@ -135,19 +136,22 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
-                widgetHideTitles = d.widgetHideTitles,
-                screenShareMode = d.screenShareMode
+                // Hide EchoLedger's live words lives on Privacy & data (2.0.5), so the lock's Reset leaves it alone.
+                widgetHideTitles = d.widgetHideTitles
             )
 
             "language" -> s.copy(transcriptionLanguage = d.transcriptionLanguage)
 
-            "calls" -> s.copy(decisionTimeout = d.decisionTimeout, decisionTimeoutChosen = d.decisionTimeoutChosen)
+            "calls" -> s.copy(
+                decisionTimeout = d.decisionTimeout,
+                decisionTimeoutChosen = d.decisionTimeoutChosen,
+                afterEachCall = d.afterEachCall,
+                whenToAsk = d.whenToAsk
+            )
 
+            // Microphone & audio's own choices only: SIM calls and the Phone app's recordings live on Calls & meetings.
             "mic" -> s.copy(
                 recordingKbps = d.recordingKbps,
-                phoneCalls = d.phoneCalls,
-                phoneAppImport = d.phoneAppImport,
-                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning
@@ -169,8 +173,9 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
+                blockScreens = d.blockScreens,
                 widgetHideTitles = d.widgetHideTitles,
-                screenShareMode = d.screenShareMode,
+                hideLiveWords = d.hideLiveWords,
                 activityNotifications = d.activityNotifications,
                 quietHours = d.quietHours,
                 quietFrom = d.quietFrom,
@@ -190,6 +195,8 @@ object SettingsReset {
                 autoRecordApps = d.autoRecordApps,
                 decisionTimeout = d.decisionTimeout,
                 decisionTimeoutChosen = d.decisionTimeoutChosen,
+                afterEachCall = d.afterEachCall,
+                whenToAsk = d.whenToAsk,
                 captionsEnabled = d.captionsEnabled,
                 captionsDuringCalls = d.captionsDuringCalls,
                 captionStyle = CaptionStyle(),

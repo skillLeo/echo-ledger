@@ -166,6 +166,11 @@ describe("the v2 Shared page", () => {
     expect(within(transcript).getByText("Hello, this is Sam.")).toBeInTheDocument();
     // Nothing that changes it: no editing, no Share, no Rename.
     expect(screen.queryByRole("button", { name: /^(Edit|Share|Rename)$/ })).toBeNull();
+    // DT-REC-038: none of the recording page's editing tools, its ⋮, or a title that renames.
+    for (const tool of ["Edit text", "Find and replace", "Speakers", "History", "Recording actions", "Send to WhatsApp…", "Notify me when ready"]) {
+      expect(screen.queryByRole("button", { name: tool }), tool).toBeNull();
+    }
+    expect(within(screen.getByRole("heading", { level: 1, name: "Call a" })).queryByRole("button")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Shared" }));
     expect(screen.getByRole("list", { name: "Shared with me" })).toBeInTheDocument();
   });
@@ -299,7 +304,7 @@ describe("the v2 Shared page", () => {
     expect(active).toHaveTextContent("Into Acme Ltd · 4 files received · Up to 20 files of 100 MB");
     expect(active).toHaveTextContent("Active");
     expect(active).toHaveTextContent("Never stops");
-    expect(row("Old drop")).toHaveTextContent("Into The Inbox · Nothing received yet");
+    expect(row("Old drop")).toHaveTextContent("Into no project · Nothing received yet");
     expect(row("Old drop")).toHaveTextContent("Revoked");
     expect(screen.getByText("Old drop")).toHaveAttribute("dir", "auto");
 
@@ -538,24 +543,27 @@ describe("a shared recording, open read-only", () => {
     expect(screen.getByText("Playback link expired. Open the recording again.")).toBeInTheDocument();
   });
 
-  it("transcript: its kind line, and Copy ▾ with Copy text, Copy with timestamps and Copy for AI", async () => {
+  it("transcript: its kind line, and Copy: the text at once, its chevron with Copy with timestamps and Copy for AI", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
     const { notify } = await openReader();
     const bar = screen.getByRole("toolbar", { name: "Find and copy" });
     expect(bar).toHaveTextContent("Final transcript");
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
-    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy text", "Copy with timestamps", "Copy for AI"]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "Copy text" }));
     await act(flushAsync);
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Hello, this is Sam."));
+    expect(writeText).not.toHaveBeenLastCalledWith(expect.stringContaining("[0:"));
     expect(notify).toHaveBeenLastCalledWith("Copied", false, undefined);
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy with timestamps", "Copy for AI"]);
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy with timestamps" }));
     await act(flushAsync);
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("[0:12] Imran: Hi Sam, thanks for calling back."));
     expect(notify).toHaveBeenLastCalledWith("Copied with timestamps", false, undefined);
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
     await act(flushAsync);
     expect(writeText).toHaveBeenLastCalledWith(expect.stringMatching(/^# Call a\n/));
@@ -645,6 +653,7 @@ describe("a shared recording, open read-only", () => {
     fireEvent.click(rowButton("Call a"));
     await act(flushAsync);
     expect(screen.getByText("No speech was detected in this recording.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Copy text" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More copy options" })).toBeDisabled();
   });
 });

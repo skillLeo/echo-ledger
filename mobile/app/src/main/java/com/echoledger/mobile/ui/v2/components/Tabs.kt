@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -214,12 +215,15 @@ fun EchoTopBar(
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     large: Boolean = false,
+    /** The title opens a menu of what the page shows (Library's "All recordings ▾"); [titleClickLabel] says what for. */
+    onTitleClick: (() -> Unit)? = null,
+    titleClickLabel: String? = null,
     actions: @Composable () -> Unit = {}
 ) {
     val c = EchoV2.colors
     val back: @Composable () -> Unit = { if (onBack != null) EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack) }
     // A title can be someone's words (a project's or a recording's name): it takes their face and direction.
-    val titleText: @Composable (Modifier, Int) -> Unit = { m, lines ->
+    val words: @Composable (Modifier, Int) -> Unit = { m, lines ->
         Text(
             title,
             style = EchoV2.type.content(title, if (large) EchoV2.type.titleL else EchoV2.type.titleM),
@@ -228,14 +232,32 @@ fun EchoTopBar(
             maxLines = lines,
             overflow = TextOverflow.Ellipsis,
             modifier = m
-                .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Space.s0)
-                .semantics { heading() }
         )
+    }
+    val titleText: @Composable (Modifier, Int) -> Unit = { m, lines ->
+        val start = m.padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Space.s0)
+        if (onTitleClick == null) {
+            words(start.semantics { heading() }, lines)
+        } else {
+            Box(start) {
+                Row(
+                    Modifier
+                        .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
+                        .clickable(onClickLabel = titleClickLabel, role = Role.DropdownList, onClick = onTitleClick)
+                        .semantics(mergeDescendants = true) { heading() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+                ) {
+                    words(Modifier.weight(1f, fill = false), lines)
+                    Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
+                }
+            }
+        }
     }
     val padded = modifier
         .fillMaxWidth()
         .background(c.bgCanvas)
-        .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Space.s4)
+        .padding(start = if (onBack != null) EchoTokens.Space.s4 else LocalPageMargin.current, end = EchoTokens.Space.s4)
     // A page without a title (a recording, whose name is in its header) keeps one row at any text size.
     if (!largeText() || title.isBlank()) {
         Row(padded.defaultMinSize(minHeight = EchoTokens.Space.s64), verticalAlignment = Alignment.CenterVertically) {

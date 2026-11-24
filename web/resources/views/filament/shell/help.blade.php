@@ -5,11 +5,18 @@
 @php
     $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
     $inApp = \App\Filament\Support\Shell::inApp();
+    // With the three levels (docs/PLAN_NAV_3_LEVELS.md section 6) the frame's own keys take the sidebar's [ line.
+    $framed = $inApp && \App\Filament\Support\ConsoleV2::frame();
     $keys = [
         __('Everywhere') => [
             [$mac ? '⌘ K' : 'Ctrl K', __('Search recordings, transcripts, pages and settings, or type a command')],
             ['/', __('Search the list on this page')],
-            ['[', __('Fold the sidebar to icons, and back')],
+            ...($framed ? [
+                [$mac ? '⌘ 1…6' : 'Ctrl 1…6', __('Library, Projects, Live, Ask, Activity, Settings')],
+                [$mac ? '⌥ 1…9' : 'Alt 1…9', __('The panel\'s first nine (the Library\'s views, then My views)')],
+                [$mac ? '⌘ \\  [' : 'Ctrl \\  [', __('Hide or show the panel')],
+                [$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', __('Back and forward')],
+            ] : [['[', __('Fold the sidebar to icons, and back')]]),
             ['?', __('This list')],
             ['Esc', __('Close a panel, a menu or this list')],
         ],

@@ -12,9 +12,11 @@ use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\OrganiseController;
+use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
@@ -145,7 +147,7 @@ class ClientResource extends Resource
                     ->helperText(fn (): string => PlanLock::allows('screen_moments')
                         ? __('The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.')
                         : __('Screen moments are not in your plan: the desktop app keeps no screens until you upgrade.')),
-                Select::make('language')->label(__('Language'))->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
+                Select::make('language')->label(__('Language'))->options(LanguageChoice::offered())->selectablePlaceholder(false)
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))
                     ->helperText(__('Used for this project’s recordings unless a recording chooses its own. Automatic suits mixed-language calls.')),
@@ -156,7 +158,7 @@ class ClientResource extends Resource
             ]),
             Section::make(__('Corrections'))->description(__('Applied to every new final transcript of this project, before the general ones in Settings.'))
                 ->collapsible()->schema([
-                    Repeater::make('replacements')->hiddenLabel()
+                    Repeater::make('replacements')->label(__('Replacements'))->hiddenLabel()
                         ->schema([
                             TextInput::make('from')->label(__('When the transcript says'))->required()->maxLength(TextReplacements::MAX_CHARS),
                             TextInput::make('to')->label(__('Write instead'))->maxLength(TextReplacements::MAX_CHARS),
@@ -169,24 +171,46 @@ class ClientResource extends Resource
         ]);
     }
 
+    /**
+     * Projects' panel views (docs/PLAN_NAV_3_LEVELS.md section 3): Pinned, or Recent (a recording in the last 30 days, the
+     * latest first); anything else is every project.
+     *
+     * @param  Builder<Client>  $query
+     * @return Builder<Client>
+     */
+    public static function shown(Builder $query, string $show): Builder
+    {
+        return match ($show) {
+            'pinned' => $query->where($query->qualifyColumn('pinned'), true),
+            'recent' => $query->whereHas('captureSessions', fn (Builder $s): Builder => $s->where('started_at', '>=', now()->subDays(30)))
+                ->orderByDesc(CaptureSession::query()->select('started_at')->whereColumn('capture_sessions.client_id', 'clients.id')->orderByDesc('started_at')->limit(1)),
+            default => $query,
+        };
+    }
+
     public static function table(Table $table): Table
     {
+        // With the three levels the panel holds the tree and + New project; the All projects page is an overview of
+        // cards (each with its counts, last activity and whether it is pinned) that doesn't list the tree again.
+        $overview = ConsoleV2::frame() && $table->getLivewire() instanceof ListClients;
+
         return $table
             ->defaultSort('name')
             // The top level, like a file browser; a search looks through every level (rows then show their folder).
-            ->modifyQueryUsing(fn (Builder $query, ListRecords $livewire): Builder => $query->with('parent:id,name')->orderByDesc('pinned')
-                ->when(blank($livewire->getTableSearch()), fn (Builder $q): Builder => $q->whereNull('parent_id')))
+            ->modifyQueryUsing(fn (Builder $query, ListRecords $livewire): Builder => self::shown($query->with('parent:id,name'), $livewire instanceof ListClients ? $livewire->show : '')
+                ->orderByDesc('pinned')
+                ->when(blank($livewire->getTableSearch()) && ! ($livewire instanceof ListClients && in_array($livewire->show, ['pinned', 'recent'], true)), fn (Builder $q): Builder => $q->whereNull('parent_id')))
             // The phone's client list: initials avatar, name, "2 recordings · Last call Oct 24"; a row opens the workspace.
             ->columns([
                 Split::make([
-                    ViewColumn::make('name')->label(__('Name'))->view('filament.clients.row')->searchable()->sortable(),
-                    TextColumn::make('language')->placeholder(__('Automatic'))->grow(false)->visibleFrom('md')->color('gray')
-                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
+                    ViewColumn::make('name')->label(__('Name'))->view($overview ? 'filament.clients.card' : 'filament.clients.row')->searchable()->sortable(),
+                    TextColumn::make('language')->placeholder(__('Automatic'))->grow(false)->visibleFrom('md')->color('gray')->hidden($overview)
+                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::offered()[(string) $state] ?? (string) $state),
                     IconColumn::make('pinned')->label(__('Pinned'))->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
                         ->grow(false)->tooltip(fn (Client $record): string => $record->pinned ? __('Unpin') : __('Pin to the top'))
                         ->extraAttributes(fn (Client $record): array => ['class' => $record->pinned ? 'el-pin el-on' : 'el-pin'])
                         ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
-                ])->extraAttributes(['class' => 'el-split']),
+                ])->extraAttributes(['class' => $overview ? 'el-split v2-project-card-row' : 'el-split']),
                 TextColumn::make('keyterms_count')->label(__('Keyterms'))->hidden(),
                 TextColumn::make('capture_sessions_count')->label(__('Recordings'))->hidden(),
             ])
@@ -199,10 +223,13 @@ class ClientResource extends Resource
                     SharingActions::deleteProject(),
                 ])->label(__('More'))->tooltip(__('More'))->color('gray'),
             ])
+            ->contentGrid($overview ? ['md' => 2] : null)
             ->emptyStateIcon(Heroicon::OutlinedFolder)
             ->emptyStateHeading(__('No projects yet'))
-            ->emptyStateDescription(__('A project groups its recordings, files and notes, and teaches the engines its names and words.'))
-            ->emptyStateActions([CreateAction::make()->label(__('Add a project'))]);
+            ->emptyStateDescription($overview
+                ? __('A project groups its recordings, files and notes, and teaches the engines its names and words. Start one with New project in the panel.')
+                : __('A project groups its recordings, files and notes, and teaches the engines its names and words.'))
+            ->emptyStateActions($overview ? [] : [CreateAction::make()->label(__('Add a project'))]);
     }
 
     public static function getRelations(): array

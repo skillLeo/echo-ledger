@@ -63,3 +63,6 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 }
 .g-kit-scroller__head { padding: var(--el-space-16); }
 .g-kit-scroller__line { padding: var(--el-space-8) var(--el-space-16); }
+
+/* The lists page (screen=lists, D14): a recording's lists as their dots in the row's marks slot, up to three. */
+.g-lists-marks { display: inline-flex; align-items: center; gap: var(--el-space-4); }

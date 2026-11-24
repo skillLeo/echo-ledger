@@ -141,7 +141,12 @@ impl Events {
     }
 
     async fn wait_for(&self, what: &str, test: impl Fn(&AssistEvent) -> bool) -> AssistEvent {
-        for _ in 0..300 {
+        self.wait_for_within(what, Duration::from_secs(3), test).await
+    }
+
+    /// Looks every 10 ms, `within` / 10 ms times (a loaded machine's sleeps run long, so it waits at least that long).
+    async fn wait_for_within(&self, what: &str, within: Duration, test: impl Fn(&AssistEvent) -> bool) -> AssistEvent {
+        for _ in 0..within.as_millis() / 10 {
             if let Some(event) = self.all().into_iter().find(|e| test(e)) {
                 return event;
             }
@@ -395,10 +400,17 @@ async fn without_a_relay_it_waits_longer_each_time_then_gives_up() {
     let url = format!("ws://127.0.0.1:{port}/v1/assist");
     let (refresh, _) = refresher(&url);
     let events = Events::default();
-    let policy = Policy { give_up_after: Duration::from_millis(400), ..quick() };
+    // A refused connection is the platform's own wait: at once on the Mac and Linux, about 2 s on Windows (it tries the
+    // SYN again after the reset). The give-up limit counts that wait too, so it leaves room for three of them on top of
+    // the 400 ms: the pauses below are the same everywhere.
+    let started = std::time::Instant::now();
+    let _ = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.expect_err("nothing listens");
+    let refused_in = started.elapsed();
+    let policy = Policy { give_up_after: Duration::from_millis(400) + refused_in * 3, ..quick() };
     // Dropping the handle would end the session: it is kept.
     let _session = client::spawn(grant(&url, "t1", chrono::Duration::minutes(15)), refresh, policy, events.sink());
-    events.wait_for("giving up", |e| matches!(e, AssistEvent::Ended(EndReason::GaveUp(_)))).await;
+    // The first refusal, the give-up limit, then the try that crosses it.
+    events.wait_for_within("giving up", Duration::from_secs(3) + refused_in * 6, |e| matches!(e, AssistEvent::Ended(EndReason::GaveUp(_)))).await;
     let pauses: Vec<(u32, Duration)> = events.all().iter().filter_map(|e| match e {
         AssistEvent::Reconnecting { attempt, after, .. } => Some((*attempt, *after)),
         _ => None,

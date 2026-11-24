@@ -1,17 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { announceReady, listenTo, subscribeCaptions } from "../../lib/ipc";
-import { meterLevel } from "../../lib/controls";
+import { announceReady, api, listenTo, subscribeCaptions, type PermissionKind } from "../../lib/ipc";
+import { SETTINGS_LABEL, meterLevel } from "../../lib/controls";
+import { useEscape } from "../../lib/callChoice";
+import { useHitRegions } from "../../lib/hitRegions";
 import { fillWidth } from "../../lib/motion";
 import { playTone } from "../../lib/sounds";
 import { useConcealed } from "../../lib/privacy";
-import { PrivacyBadge } from "../../components/PrivacyBadge";
+import { CloseIcon } from "../../components/Icons";
 
 /**
- * How long the box stays when a dictation ended while it was still shown (it could not start: not paired, no
- * microphone): long enough to read why, then it hides, because a box left on screen keeps drawing (C9).
+ * How long the box stays when a dictation ended while it was still shown (it could not start: not paired, the
+ * connection failed): long enough to read why, then it hides, because a box left on screen keeps drawing (C9). When a
+ * permission kept it from starting, the box stays until it is closed, with the button that fixes it (D-108).
  */
 export const ENDED_MESSAGE_MS = 4000;
+
+/** The settings button in this computer's words (the window's platform, set at start in main.tsx). */
+function settingsLabel(): string {
+  const platform = document.documentElement.dataset.platform as keyof typeof SETTINGS_LABEL | undefined;
+  return (platform && SETTINGS_LABEL[platform]) || "Open settings";
+}
+
+/**
+ * The refused box's settings button and close. The window takes no clicks but where it says (lib/hitRegions), so the
+ * two buttons are its only regions while they show, and none once they are gone.
+ *
+ * Keyboard: the dictation window is built unfocusable (`.focusable(false)`, overlay/mod.rs), so the person keeps typing
+ * in their own app. The button's focus and Esc therefore work only where the page has focus (a plain browser, the tests),
+ * never in the app; there the box is closed with the ×. From the keyboard the same fix is in the main window, Settings ›
+ * Microphone & audio › Permissions, as with the after-call card.
+ */
+function RefusedActions({ permission, onClose }: { permission: PermissionKind; onClose: () => void }) {
+  const open = useRef<HTMLButtonElement | null>(null);
+  useHitRegions([permission]);
+  useEscape(true, onClose);
+  useEffect(() => {
+    open.current?.focus();
+    return () => void api.setHitRegions([]).catch(() => undefined);
+  }, []);
+  return (
+    <span className="overlay-tools dictation-actions">
+      <button ref={open} type="button" className="overlay-action" data-hit onClick={() => void api.openPrivacySettings(permission).catch(() => undefined)}>{settingsLabel()}</button>
+      <button type="button" className="icon-btn" data-hit title="Close" aria-label="Close" onClick={onClose}><CloseIcon size={14} /></button>
+    </span>
+  );
+}
 
 /**
  * Tiny unfocusable dictation box with a flow bar (B14): a level meter and what you say; the text is typed into your
@@ -25,6 +59,8 @@ export default function DictationApp() {
   const [level, setLevel] = useState(0);
   const [holding, setHolding] = useState(false);
   const [ended, setEnded] = useState(false);
+  /** The permission that kept this dictation from starting: the box then stays until it is closed. */
+  const [refused, setRefused] = useState<PermissionKind | null>(null);
   const concealed = useConcealed();
   const textRef = useRef<HTMLDivElement | null>(null);
 
@@ -44,7 +80,10 @@ export default function DictationApp() {
     const subscriptions = [
       listen<boolean>("overlay:visibility", (e) => {
         setVisible(e.payload);
-        if (e.payload) setEnded(false);
+        if (e.payload) {
+          setEnded(false);
+          setRefused(null);
+        }
       }),
       listenTo("dictation:level", (l) => setLevel(typeof l === "number" ? l : 0)),
       listenTo("dictation:state", (s) => {
@@ -52,6 +91,7 @@ export default function DictationApp() {
         setHolding(s.mode === "push_to_talk");
         if (s.sounds) playTone(s.active ? "start" : "stop");
         setEnded(!s.active);
+        setRefused(!s.active && s.permission ? s.permission : null);
         if (!s.active) setLevel(0);
       }),
     ];
@@ -62,12 +102,13 @@ export default function DictationApp() {
     };
   }, []);
 
-  // A finished dictation hides the box before it ends; one that could not start leaves it shown with the reason.
+  // A finished dictation hides the box before it ends; one that could not start leaves it shown with the reason, for a
+  // few seconds, or until it is closed when a permission kept it from starting.
   useEffect(() => {
-    if (!visible || !ended) return;
+    if (!visible || !ended || refused) return;
     const timer = window.setTimeout(() => setVisible(false), ENDED_MESSAGE_MS);
     return () => window.clearTimeout(timer);
-  }, [visible, ended]);
+  }, [visible, ended, refused]);
 
   // Long dictation wraps inside the small box and scrolls; the newest words stay in view (A6.DU8).
   useEffect(() => {
@@ -79,16 +120,18 @@ export default function DictationApp() {
     <div className={`overlay-root ${visible && !concealed ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
       <div className="overlay-card dictation-card">
         <div className="overlay-head">
-          <PrivacyBadge compact interactive={false} />
+          {/* No privacy badge (FIX-01, decision 8): the box is shown in screen shares, so a lock here would say the opposite. */}
           {!ended && <span className="listening"><span /><span /><span /></span>}
           <span>{ended ? "Dictation did not start" : holding ? "Dictating — let go of the shortcut to insert" : "Dictating — press the shortcut again to insert"}</span>
+          {visible && refused && <RefusedActions permission={refused} onClose={() => setVisible(false)} />}
         </div>
         {!ended && (
           <div className="flow-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(level) * 100)}>
             <span style={fillWidth(meterLevel(level))} />
           </div>
         )}
-        {message && <div className="caption-line small caption-message">{message}</div>}
+        {/* A status, so a screen reader says why dictation did not start (or what it says now). */}
+        {message && <div className="caption-line small caption-message" role="status">{message}</div>}
         <div ref={textRef} className="caption-line dictation-text">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
       </div>
     </div>

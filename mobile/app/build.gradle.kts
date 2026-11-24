@@ -1,3 +1,4 @@
+import java.time.Duration
 import java.util.Properties
 
 plugins {
@@ -167,6 +168,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.common)
     implementation(libs.androidx.biometric)
@@ -228,6 +231,8 @@ roborazzi {
 tasks.withType<Test>().configureEach {
     // The full suite runs out of memory at Gradle's default of 512 MB (Robolectric keeps an SDK per test JVM).
     maxHeapSize = "1g"
+    // A safety net: a test task that hangs (a held request, a thread that never ends) is stopped, never left running.
+    timeout.set(Duration.ofMinutes(30))
     systemProperty("screenshots.dir", designScreens.absolutePath)
     // The Google Play build runs its own tests (its merged manifest and switches) and the shared update rules; all
     // other code is shared and tested once, in the website build, whose behaviour those tests describe.

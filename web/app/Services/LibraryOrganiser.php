@@ -9,16 +9,20 @@ use App\Enums\SourceApp;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Models\Client;
-use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Services\Callers\CallerMatcher;
+use App\Services\Lists\LabelLists;
 use App\Services\Titles\AutoTitles;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
+use App\Support\Translation\IsolatingTranslator;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -231,18 +235,29 @@ final class LibraryOrganiser
 
     /**
      * Every label the person uses in the workspace (all of the workspace's when no person is known), with how many
-     * recordings carry it and, since 2.0.0-i, its colour (null until one is chosen).
+     * recordings carry it and, since 2.0.0-i, its colour (null until one is chosen). Since 2.0.0-m in the order of the
+     * person's lists (GET /api/lists); a label without a list comes after them, by name.
      *
      * @return list<array{label: string, count: int, color: string|null}>
      */
     public function labels(int $workspaceId): array
     {
         $userId = CurrentWorkspace::userId();
-        $colors = $userId !== null ? $this->labelColors($workspaceId, $userId) : [];
+        // The person's lists in one read: each label's colour and place.
+        $lists = $userId !== null ? LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->get(['label_key', 'color', 'position']) : collect();
+        $colors = $lists->whereNotNull('color')->mapWithKeys(fn (LabelList $l): array => [$l->label_key => strtolower((string) $l->color)])->all();
+        $positions = $lists->mapWithKeys(fn (LabelList $l): array => [$l->label_key => $l->position])->all();
 
-        return SessionLabel::query()
+        $labels = SessionLabel::query()
             ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->ofPerson())
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
+            ->sortBy(fn (SessionLabel $l): int => $positions[mb_strtolower($l->label)] ?? PHP_INT_MAX);
+        // A label spelt as a fixed chip has no list, and keeps the colour 2.0.0-i gave it (read only when one is there).
+        if ($userId !== null && $labels->contains(fn (SessionLabel $l): bool => LabelLists::reserved(mb_strtolower($l->label)))) {
+            $colors = $this->labelColors($workspaceId, $userId);
+        }
+
+        return $labels
             ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate'),
                 'color' => $colors[mb_strtolower($l->label)] ?? null])
             ->values()->all();
@@ -261,9 +276,8 @@ final class LibraryOrganiser
             /** @var array<string, string> $cached */
             return $cached;
         }
-        $colors = LabelColor::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)
-            // Lower case on read too, so the apps' palette matches whatever wrote the row.
-            ->pluck('color', 'label_key')->map(fn ($c): string => strtolower((string) $c))->all();
+        // Since 2.0.0-m the colours are the lists' (lower case on read too, whatever wrote the row).
+        $colors = app(LabelLists::class)->colors($workspaceId, $userId);
         request()->attributes->set($key, $colors);
 
         return $colors;
@@ -297,23 +311,23 @@ final class LibraryOrganiser
         }
         $spelt = (string) $carriers->firstOrFail()->label;
         $color = $color !== null ? strtolower($color) : null;
-        DB::transaction(function () use ($workspaceId, $userId, $key, $color, $carriers): void {
-            $row = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key];
-            if ($color === null) {
-                LabelColor::query()->where($row)->delete();
-            } else {
-                // One statement, so two devices setting it at once never trip the unique index.
-                LabelColor::query()->upsert([[...$row, 'color' => $color, 'created_at' => now(), 'updated_at' => now()]],
-                    ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
-            }
+        DB::transaction(function () use ($workspaceId, $userId, $spelt, $color, $carriers): void {
+            // Since 2.0.0-m the colour is the list's (made here when the label has none yet).
+            app(LabelLists::class)->setColour($workspaceId, $userId, $spelt, $color);
             // A plain list of ids: MySQL refuses an UPDATE that reads its own table in a subquery (error 1093).
             foreach ($carriers->pluck('capture_session_id')->unique()->chunk(500) as $ids) {
                 CaptureSession::query()->whereIn('id', $ids->values()->all())->update(['updated_at' => now()]);
             }
         });
-        request()->attributes->remove(self::colorsKey($workspaceId, $userId));
+        $this->forgetColors($workspaceId, $userId);
 
         return ['label' => $spelt, 'color' => $color];
+    }
+
+    /** The colours read for this request are stale (a list was recoloured, renamed or deleted). */
+    public function forgetColors(int $workspaceId, int $userId): void
+    {
+        request()->attributes->remove(self::colorsKey($workspaceId, $userId));
     }
 
     private static function colorsKey(int $workspaceId, int $userId): string
@@ -336,11 +350,17 @@ final class LibraryOrganiser
                 $session->client_id = $this->ownedClient($session->workspace_id, $data['client_id'])?->id;
                 $learn = $session->client_id !== null && $session->client_id !== $before;
             }
-            if (array_key_exists('title', $data)) {
+            // Since 2.0.0-k: "Call with …" sent back as it is shown (an app's pre-filled rename box) changes nothing: it
+            // stays the person called's title, never the person's own.
+            $shown = array_map(IsolatingTranslator::strip(...), array_filter(array_map(
+                fn (string $language): ?string => $session->personTitle($language), array_keys(ConsoleV2::LANGUAGES))));
+            if (array_key_exists('title', $data) && ! in_array(IsolatingTranslator::strip(trim((string) $data['title'])), $shown, true)) {
                 $title = trim((string) $data['title']);
                 $session->title = $title === '' ? null : $title;
                 // A person's title is never replaced; clearing it asks for the automatic one again (since v1.5, Phase 1C).
+                // Since 2.0.0-k it always wins, even a generic word ("WhatsApp call"): title_by_person.
                 $session->title_auto = false;
+                $session->title_by_person = $session->title !== null;
                 $askTitle = $session->title === null;
             }
             if (array_key_exists('pinned', $data)) {
@@ -386,6 +406,8 @@ final class LibraryOrganiser
         foreach ($clean as $label) {
             $session->labels()->create(['label' => $label]);
         }
+        // Since 2.0.0-m: a new label is a new list of the person's, at the end of their row.
+        app(LabelLists::class)->ensure((int) $session->workspace_id, (int) $session->user_id, $clean);
     }
 
     /**
@@ -431,6 +453,13 @@ final class LibraryOrganiser
                 }
                 $session->updated_at = now();
                 $session->save();
+            }
+            // Since 2.0.0-m: a new label is a new list of each person whose recordings got it.
+            if ($action === 'label') {
+                foreach ($sessions->map(fn (CaptureSession $s): string => $s->workspace_id.'|'.$s->user_id)->unique() as $person) {
+                    [$workspaceId, $userId] = array_map('intval', explode('|', $person));
+                    app(LabelLists::class)->ensure($workspaceId, $userId, [(string) $label]);
+                }
             }
         });
 
@@ -490,7 +519,9 @@ final class LibraryOrganiser
                 if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
                     continue;
                 }
-                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format, ['view' => $view]);
+                // Since U19 `shown` decides per recording: each in the view it is shown in (Roman Urdu once made).
+                $own = $view === TranscriptViews::SHOWN ? app(TranscriptViews::class)->shownView($transcript) : $view;
+                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format, ['view' => $own]);
                 $zip->addFromString(self::uniqueName($file['filename'], $names), $file['body']);
             }
             $count = count($names);

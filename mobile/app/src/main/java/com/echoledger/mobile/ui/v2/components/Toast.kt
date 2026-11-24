@@ -1,28 +1,30 @@
 package com.echoledger.mobile.ui.v2.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import com.echoledger.mobile.ui.design.SwipeAway
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlin.coroutines.resume
@@ -79,6 +81,16 @@ class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
     private var busy = false
     private val waiting = ArrayDeque<CompletableDeferred<Unit>>()
 
+    /** The end times of the toasts with one that are on screen or in line ([busyUntil]). */
+    private val deadlines = mutableListOf<Long>()
+
+    /**
+     * When the toasts with an end time that are on screen or in line are all over, on [clock] (0: none). A new toast
+     * whose end time is at least its own length after this is on screen for all of that length: it waits behind
+     * those only, and steps in front of every other toast.
+     */
+    fun busyUntil(): Long = synchronized(lock) { deadlines.maxOrNull() ?: 0L }
+
     /** Joins the line (at the front when [first]); null when the turn is free and now taken. */
     private fun joinLine(first: Boolean): CompletableDeferred<Unit>? = synchronized(lock) {
         if (!busy) {
@@ -114,6 +126,16 @@ class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
      * takes its turn and its own time.
      */
     suspend fun show(message: String, actionLabel: String? = null, deadlineMs: Long? = null): EchoToastResult {
+        if (deadlineMs == null) return take(message, actionLabel, null)
+        synchronized(lock) { deadlines += deadlineMs }
+        try {
+            return take(message, actionLabel, deadlineMs)
+        } finally {
+            synchronized(lock) { deadlines.remove(deadlineMs) }
+        }
+    }
+
+    private suspend fun take(message: String, actionLabel: String?, deadlineMs: Long?): EchoToastResult {
         var first = deadlineMs != null
         // In line before the toast on screen steps aside, so its turn passes to this one, not back to itself.
         var place = joinLine(first)
@@ -147,8 +169,10 @@ class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
 fun rememberEchoToastState(): EchoToastState = remember { EchoToastState() }
 
 /**
- * Where toasts appear (bottom of the screen, above the navigation). A toast with an action stays 6 s, longer when the
- * phone's accessibility settings ask for more time; screen readers announce it politely.
+ * Where toasts appear: Material 3 snackbars at the bottom, above the bottom bar (the caller places it), one at a time.
+ * A swipe left or right dismisses one ([EchoToastResult.Dismissed], as when its time is over). A toast with an action
+ * stays 6 s, longer when the phone's accessibility settings ask for more time; one with an end time stays until then.
+ * Screen readers announce it politely.
  */
 @Composable
 fun EchoToastHost(state: EchoToastState, modifier: Modifier = Modifier) {
@@ -165,44 +189,43 @@ fun EchoToastHost(state: EchoToastState, modifier: Modifier = Modifier) {
         data.dismiss()
     }
     Box(modifier.fillMaxWidth().padding(EchoTokens.Layout.pagePaddingMobile), contentAlignment = Alignment.BottomCenter) {
-        EchoToast(data.message, data.actionLabel, onAction = data::performAction)
-    }
-}
-
-/** The toast itself: the inverse surface, the message, and at most one action. */
-@Composable
-fun EchoToast(message: String, actionLabel: String?, onAction: () -> Unit, modifier: Modifier = Modifier) {
-    val c = EchoV2.colors
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { liveRegion = LiveRegionMode.Polite },
-        shape = RoundedCornerShape(EchoTokens.Component.menuRadius),
-        color = c.textPrimary,
-        contentColor = c.bgSurface,
-        shadowElevation = EchoTokens.Elevation.floating
-    ) {
-        Row(
-            Modifier
-                .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
-                .padding(start = EchoTokens.Space.s16, end = EchoTokens.Space.s4),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
-        ) {
-            Text(message, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s12))
-            if (actionLabel != null) {
-                Surface(
-                    onClick = onAction,
-                    modifier = Modifier.defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin),
-                    color = EchoV2.colors.clear,
-                    contentColor = c.inverseAccent,
-                    shape = RoundedCornerShape(EchoTokens.Component.buttonRadius)
-                ) {
-                    Box(Modifier.padding(horizontal = EchoTokens.Space.s12), contentAlignment = Alignment.Center) {
-                        Text(actionLabel, style = EchoV2.type.label, modifier = Modifier.padding(vertical = EchoTokens.Space.s12))
-                    }
-                }
-            }
+        // Its own swipe state per toast: the next one starts in place.
+        key(data) {
+            SwipeAway(onGone = data::dismiss) { EchoToast(data.message, data.actionLabel, onAction = data::performAction) }
         }
     }
 }
+
+/**
+ * The toast itself: a Material 3 snackbar on the inverse surface, the message and at most one action (on its own row
+ * at the largest text sizes, so neither is cut).
+ */
+@Composable
+fun EchoToast(message: String, actionLabel: String?, onAction: () -> Unit, modifier: Modifier = Modifier) {
+    val c = EchoV2.colors
+    val action: (@Composable () -> Unit)? = actionLabel?.let { label ->
+        {
+            TextButton(
+                onClick = onAction,
+                modifier = Modifier.defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin),
+                shape = RoundedCornerShape(EchoTokens.Component.buttonRadius),
+                colors = ButtonDefaults.textButtonColors(contentColor = c.inverseAccent)
+            ) { Text(label, style = EchoV2.type.label) }
+        }
+    }
+    // No fillMaxWidth: the snackbar takes the width itself, and exact width constraints put its action over the text.
+    Snackbar(
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        action = action,
+        actionOnNewLine = action != null && LocalDensity.current.fontScale >= LARGE_TEXT,
+        shape = RoundedCornerShape(EchoTokens.Component.menuRadius),
+        containerColor = c.textPrimary,
+        contentColor = c.bgSurface,
+        actionContentColor = c.inverseAccent
+    ) {
+        Text(message, style = EchoV2.type.meta, modifier = Modifier.padding(vertical = EchoTokens.Space.s4))
+    }
+}
+
+/** From this font scale on (the largest text sizes) a toast's action goes under its message. */
+private const val LARGE_TEXT = 1.5f

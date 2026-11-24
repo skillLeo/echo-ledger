@@ -22,6 +22,9 @@ pub struct ApiClient {
     install_id: Option<String>,
 }
 
+/// How long a person's picture may take to come (the live client has no total timeout of its own).
+const AVATAR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// A transcript the month's minutes can't cover (`budget_exceeded` with `minutes_needed` and `minutes_left`), in the
 /// person's words (pure).
 pub fn budget_sentence(needed: u64, left: u64) -> String {
@@ -535,6 +538,54 @@ impl ApiClient {
         }
     }
 
+    /// One of the account routes of 2.0.0-l (`my_account::ACTIONS`), answered whole: the status, the body and
+    /// `Retry-After`, refusals included, so the window can say each in its own words. Only `401` is an error (this
+    /// computer is signed out). `body` is sent as JSON when it is not `null` (a proof goes with a `DELETE` too).
+    pub async fn account_request(&self, method: &str, path: &str, body: &serde_json::Value) -> AppResult<crate::my_account::AccountReply> {
+        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| AppError::msg("That is not something this app can change."))?;
+        let mut request = self.http.request(method, self.url(path));
+        if !body.is_null() {
+            request = request.json(body);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::account_reply(resp).await
+    }
+
+    async fn account_reply(resp: reqwest::Response) -> AppResult<crate::my_account::AccountReply> {
+        let status = resp.status().as_u16();
+        if status == 401 {
+            return Err(AppError::NotPaired);
+        }
+        let retry_after = resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+        let text = resp.text().await.unwrap_or_default();
+        let body = if text.trim().is_empty() { serde_json::Value::Null } else { serde_json::from_str(&text).unwrap_or(serde_json::Value::Null) };
+        Ok(crate::my_account::AccountReply::from_answer(status, body, retry_after))
+    }
+
+    /// `POST /api/account/avatar` (since 2.0.0-l): the picture as multipart `image`, already made ready here.
+    pub async fn upload_avatar(&self, picture: &crate::my_account::AvatarFile) -> AppResult<crate::my_account::AccountReply> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_file(&boundary, "image", picture.name, picture.mime, &picture.bytes);
+        let resp = self
+            .authed(self.http.post(self.url("account/avatar")))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .body(body)
+            .send()
+            .await?;
+        Self::account_reply(resp).await
+    }
+
+    /// A person's picture from its signed link (no token: the signature is the key). `None` for an expired or replaced
+    /// link (`403`, `404`), which the window answers with the copy it has or the initials. Redirects are refused (the
+    /// live client follows none): a picture comes from the link the server signed, never from where it points.
+    pub async fn avatar_bytes(&self, url: &str) -> AppResult<Option<Vec<u8>>> {
+        let resp = self.live.get(url).timeout(AVATAR_TIMEOUT).send().await?;
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+        Ok(Some(resp.bytes().await?.to_vec()))
+    }
+
     /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this
     /// computer's token included.
     pub async fn sign_out_everywhere(&self) -> AppResult<()> {
@@ -1034,6 +1085,97 @@ impl ApiClient {
     /// `{"moved_sessions", "moved_projects"}`.
     pub async fn delete_client(&self, id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/{id}/opened` (since v1.3): the person opened the recording; `204`.
+    pub async fn session_opened(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `DELETE /api/sessions/{id}/opened` (since 2.0.0-t): Mark as unread, the person's own open taken back; `204`.
+    pub async fn session_unopen(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
+    fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(key) = key {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(key);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/lists` (since 2.0.0-m): the person's lists in their order, with counts.
+    pub async fn lists(&self) -> AppResult<ListsResponse> {
+        let resp = self.authed(self.http.get(self.list_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/lists` (since 2.0.0-m): a new, empty list at the end; without a colour the server picks the one
+    /// fewest lists have.
+    pub async fn create_list(&self, name: &str, color: Option<&str>) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.post(self.list_url(None)?))?.json(&json!({ "name": name, "color": color })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/lists/{key}` (since 2.0.0-m): `name` and/or `color`; a rename relabels every recording in it.
+    pub async fn update_list(&self, key: &str, patch: &serde_json::Value) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.patch(self.list_url(Some(key))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/lists/{key}` (since 2.0.0-m): the label comes off its recordings, which stay.
+    pub async fn delete_list(&self, key: &str) -> AppResult<ListDeleted> {
+        let resp = self.authed(self.http.delete(self.list_url(Some(key))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/lists/order` (since 2.0.0-m): every list's key once, in the new order.
+    pub async fn order_lists(&self, keys: &[String]) -> AppResult<ListsResponse> {
+        let url = format!("{}/order", self.list_url(None)?);
+        let resp = self.authed(self.http.put(url))?.json(&json!({ "keys": keys })).send().await?;
+        Self::parse(resp).await
+    }
+
+    fn views_url(&self, tail: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("views")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(tail) = tail {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(tail);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/views` (since 2.0.0-p): the person's saved views in their order, with `views_version` and `limit`.
+    pub async fn views(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.views_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/views` (since 2.0.0-p): a view at the end; its `client_ref` sent again answers the view it made.
+    pub async fn create_view(&self, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.views_url(None)?))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/views/{id}` (since 2.0.0-p): any of name, filters, search, sort, group, density.
+    pub async fn update_view(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.views_url(Some(id))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/views/{id}` (since 2.0.0-p).
+    pub async fn delete_view(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.delete(self.views_url(Some(id))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/views/order` (since 2.0.0-p): every view's id once, in the new order.
+    pub async fn order_views(&self, ids: &[String]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.put(self.views_url(Some("order"))?))?.json(&json!({ "ids": ids })).send().await?;
         Self::parse(resp).await
     }
 

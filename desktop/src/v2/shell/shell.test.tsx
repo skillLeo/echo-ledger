@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
@@ -15,6 +15,8 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
   resetTauriMock();
   resetEntitlementsForTests(null);
   window.localStorage.clear();
@@ -71,7 +73,7 @@ describe("the shell", () => {
     expect(screen.getByRole("menuitem", { name: "Record page" })).not.toHaveAttribute("aria-checked");
   });
 
-  it("Search (with its keys) as an icon at the end of the header, Upload files in Record's menu, and Help & shortcuts at the foot", () => {
+  it("Search (with its keys) as an icon at the end of the header, Record now and Import audio files in Record's menu, and Help & shortcuts at the foot", () => {
     const onSearch = vi.fn();
     const onUpload = vi.fn();
     const onHelp = vi.fn();
@@ -89,7 +91,9 @@ describe("the shell", () => {
     fireEvent.click(search);
     expect(onSearch).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Upload files…" }));
+    // ● Record ▾ (PLAN_LIBRARY_FILTERS): Record now and Import audio files first (files can be dropped on the window too).
+    expect(screen.getAllByRole("menuitem").slice(0, 2).map((m) => m.textContent)).toEqual(["Record now", "Import audio files…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Import audio files…" }));
     expect(onUpload).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "Help & shortcuts" }));
     expect(onHelp).toHaveBeenCalled();
@@ -280,13 +284,13 @@ describe("the shell", () => {
 });
 
 describe("the After a call notice in the new shell", () => {
-  it("says it once, with Always transcribe; closing keeps Ask me", async () => {
+  it("says it once, with Transcribe every call; closing keeps Ask me", async () => {
     const { AfterCallNoticeV2 } = await import("./AfterCallNotice");
     respond("after_call_notice_answer", makeStatus());
     const onStatus = vi.fn();
     const { rerender } = render(<AfterCallNoticeV2 text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
     expect(screen.getByTestId("after-call-notice-v2")).toHaveTextContent("After a call, EchoLedger now asks what to do.");
-    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe every call" }));
     await act(flushAsync);
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
     expect(onStatus).toHaveBeenCalled();
@@ -399,6 +403,25 @@ describe("the app with the flags", () => {
     expect(document.querySelector(".sidebar")).not.toBeNull();
   });
 
+  it("a window that read its flags before the core's first config answer switches to the new design when ui:flags comes, on the same page", async () => {
+    backend({});
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Library" });
+    await act(flushAsync);
+    expect(document.querySelector("[data-shell=v2]")).toBeNull();
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    const v2 = { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false,
+      ui_design: { choice: "v2", current: "v2", can_try: false, can_switch_back: true } };
+    respond("ui_flags", v2);
+    await emitEvent("ui:flags", v2);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("ui_v2.shell shows the new shell around today's pages", async () => {
     backend({ "ui_v2.shell": true });
     render(<MainApp />);
@@ -408,6 +431,41 @@ describe("the app with the flags", () => {
     expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, the super admin's account has Admin panel at the sidebar's foot (the website's admin page); any other has none (DT-NAV-036)", async () => {
+    const account = (superAdmin: boolean) => ({ name: "Ayesha", email: "ayesha@example.test", email_verified: true, two_factor: false, google: false, created_at: null,
+      workspace: null, deletes_at: null, super_admin: superAdmin });
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(true));
+    respond("server_page_open", null);
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(await within(nav).findByRole("button", { name: "Admin panel" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]);
+    cleanup();
+    resetTauriMock();
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(false));
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    expect(screen.queryByRole("button", { name: "Admin panel" })).toBeNull();
+  });
+
+  it("in the app, the ? key opens Help & shortcuts (DT-NAV-032)", async () => {
+    backend({ "ui_v2.shell": true });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.keyDown(document.body, { key: "?" });
+    await act(flushAsync);
+    expect(await screen.findByRole("dialog", { name: "Help & shortcuts" })).toBeInTheDocument();
   });
 
   it("in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls", async () => {
@@ -429,7 +487,8 @@ describe("the app with the flags", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Review" }));
     await act(flushAsync);
     await act(flushAsync);
-    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    // The Library on Needs you (the waiting calls' home, PLAN_LIBRARY_FILTERS), its list of waiting calls open.
+    expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
   });
 

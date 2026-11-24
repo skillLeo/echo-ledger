@@ -220,7 +220,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
             <div className="action-card">
               <HourglassIcon size={22} />
               <div className="action-card-main">
-                <span className="action-card-title">Keep or discard?</span>
+                <span className="action-card-title">Transcribe or delete?</span>
                 <span className="small muted">{pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}</span>
               </div>
               <button type="button" className="btn text" onClick={() => onReview(pending[0]?.id ?? null)}>Review</button>

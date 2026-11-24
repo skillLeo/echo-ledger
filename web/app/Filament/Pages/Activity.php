@@ -6,6 +6,8 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleDates;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
@@ -14,6 +16,7 @@ use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\UploadRetries;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -49,7 +52,25 @@ class Activity extends Page
 
     protected string $view = 'filament.pages.activity';
 
-    /** Since v1.6 (P6): only what needs the person, "9+" above nine, as the bell and the apps count it. */
+    /**
+     * Since docs/PLAN_NAV_3_LEVELS.md (Activity's panel): All (''), Needs you (what needs action and is not done yet,
+     * and the waiting calls) or Done (what was read). Kept in the address with the three levels only (queryString), so
+     * the panel's links and Back open it.
+     */
+    public string $show = '';
+
+    /** @return array<string, array{except: string}> */
+    protected function queryString(): array
+    {
+        return ConsoleV2::frame() ? ['show' => ['except' => '']] : [];
+    }
+
+    public function getTitle(): string
+    {
+        return __('Activity');
+    }
+
+    /** Since v1.6 (P6): only what needs the person, as the bell and the apps count it ("99+" above 99 since 2.0.0-r). */
     public static function getNavigationBadge(): ?string
     {
         $user = auth()->user();
@@ -60,7 +81,17 @@ class Activity extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('markAllRead')->label('Mark all as read')->color('gray')->icon(Heroicon::OutlinedCheck)
+            // Since 2.0.0-r (BE-03): the devices hold the files, so Retry all asks them, as the apps' Retry all does.
+            Action::make('retryAll')->label(__('Retry all uploads'))->color('gray')->icon(Heroicon::OutlinedArrowPath)
+                ->visible(fn (): bool => ($user = $this->user()) instanceof User && UploadRetries::failedCount($user) > 0)
+                ->action(function (): void {
+                    $user = $this->user();
+                    if ($user instanceof User) {
+                        $count = app(UploadRetries::class)->requestAll($user)['count'];
+                        Notification::make()->title(trans_choice('Your devices will send 1 recording again.|Your devices will send :count recordings again.', $count))->success()->send();
+                    }
+                }),
+            Action::make('markAllRead')->label(__('Mark all as read'))->color('gray')->icon(Heroicon::OutlinedCheck)
                 ->visible(fn (): bool => $this->user()?->unreadNotifications()->exists() === true)
                 ->action(fn () => $this->user()?->unreadNotifications()->update(['read_at' => now()])),
         ];
@@ -85,7 +116,7 @@ class Activity extends Page
             return;
         }
         if (ActivityFeed::payload($notification)['session_id'] !== null) {
-            Notification::make()->title('This recording is no longer in this workspace\'s library.')->warning()->send();
+            Notification::make()->title(__('This recording is no longer in this workspace\'s library.'))->warning()->send();
         }
     }
 
@@ -97,11 +128,13 @@ class Activity extends Page
         $groups = ['needs' => [], 'today' => [], 'earlier' => []];
         $notifications = $this->user()?->notifications()->latest()->limit(self::LIMIT)->get() ?? collect();
         foreach ($notifications as $notification) {
-            $item = ActivityFeed::payload($notification);
+            // In the reader's language (W-218); notifications made before keep their stored words.
+            $item = [...ActivityFeed::payload($notification), ...ActivityFeed::localized($notification)];
             $at = $notification->created_at?->copy()->setTimezone($zone);
+            // In the console's language (W-213: "17 نومبر 2026 · 11:42 صبح"; English reads exactly as before).
             $item += [
-                'time' => $at === null ? '' : ($at->gte($today) ? $at->format(Shell::timeFormat()) : $at->format('M j')),
-                'full_time' => $at?->format('M j, Y · '.Shell::timeFormat()) ?? '',
+                'time' => $at === null ? '' : ($at->gte($today) ? ConsoleDates::time($at, Shell::timeFormat()) : ConsoleDates::day($at)),
+                'full_time' => $at !== null ? ConsoleDates::dateTime($at, Shell::timeFormat()) : '',
                 'tone' => self::tone($item['kind']),
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
             ];
@@ -109,11 +142,17 @@ class Activity extends Page
                 : ($at !== null && $at->gte($today) ? 'today' : 'earlier');
             $groups[$group][] = $item;
         }
+        if ($this->show === 'needs_you') {
+            $groups = ['needs' => $groups['needs'], 'today' => [], 'earlier' => []];
+        } elseif ($this->show === 'done') {
+            $groups = array_map(fn (array $items): array => array_values(array_filter($items, fn (array $item): bool => (bool) $item['read'])), $groups);
+        }
 
         return [
             'groups' => $groups,
-            'waiting' => app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
-            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => 'waiting']),
+            'waiting' => $this->show === 'done' ? null : app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
+            // Since 2.0.0-p the new Library keeps the waiting calls in Needs you.
+            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => ConsoleV2::library() ? 'needs_you' : 'waiting']),
         ];
     }
 

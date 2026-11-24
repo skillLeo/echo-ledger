@@ -237,6 +237,12 @@ pub fn show(app: &AppHandle, label: &'static str, reason: &'static str) {
     }
 }
 
+/// The main window's phase now, or none while the lifecycle's lock is held (by this thread too): never waits for it.
+pub fn main_phase_now(app: &AppHandle) -> Option<Phase> {
+    let slots = app.state::<WindowLifecycle>().inner().slots.try_lock().ok()?;
+    Some(slots.phase(MAIN))
+}
+
 /// `reason` no longer needs `label`; an overlay nothing needs is destroyed after `HIDE_GRACE`.
 pub fn hide(app: &AppHandle, label: &'static str, reason: &'static str) {
     let generation = slots(app).hide(label, reason);
@@ -363,9 +369,24 @@ pub fn reopen_action(main_exists: bool, notified_lately: bool) -> Reopen {
     if !main_exists && notified_lately { Reopen::OpenNotified } else { Reopen::Show }
 }
 
-/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray.
+/// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray. The menu bar
+/// greys what only its page could do (`app_menu::page_gone`).
 pub fn main_closing(app: &AppHandle) {
     slots(app).closing(MAIN);
+    #[cfg(target_os = "macos")]
+    crate::app_menu::page_gone(app);
+}
+
+/// An in-window command picked from the menu bar while the main window is minimised or put away: brought forward
+/// quietly, as a quiet open is (what keeps it off, a person's hide or a share, still does).
+pub fn bring_forward_quietly(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN) else { return };
+    if slots(app).phase(MAIN) != Phase::Ready {
+        return;
+    }
+    if window.is_minimized().unwrap_or(false) || !window.is_visible().unwrap_or(true) {
+        reveal_main(app, true);
+    }
 }
 
 /// `WindowEvent::Destroyed`: forgets the window's hit regions and caption channel; builds it again when it was asked
@@ -419,6 +440,10 @@ fn spawn_build(app: &AppHandle, label: &'static str) {
     });
 }
 
+/// Run in the main window on a Mac before its page (D-214): `<html data-platform="macos" data-titlebar="strip">` from the
+/// first frame, unless the same window's page said it was full screen before a reload (desktop/src/lib/titlebar.ts).
+pub const TITLEBAR_START: &str = include_str!("../../src/lib/titlebarStart.js");
+
 /// The main window from tauri.conf.json (`"create": false`, hidden until its page is ready).
 fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let config = app.config().app.windows.iter().find(|w| w.label == MAIN).cloned().unwrap_or_else(|| WindowConfig { label: MAIN.into(), ..WindowConfig::default() });
@@ -427,8 +452,12 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     // setting says (`screens::hide_own_windows`).
     let shielded = app.state::<crate::AppState>().screens.own_hidden();
     let builder = crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?);
+    // On a Mac the page's first frame already leaves the window's buttons their strip (D-214, TITLEBAR_START).
+    let builder = if cfg!(target_os = "macos") { builder.initialization_script(TITLEBAR_START) } else { builder };
     let window = crate::privacy::window(app, builder, MAIN, crate::privacy::Kind::Main, |b| if shielded { b.content_protected(true) } else { b })?;
     crate::material::apply(&window);
+    // FIX-10: no browser keys, autofill or password saving (WebView2), before the window first shows.
+    crate::native_feel::quiet_browser(&window);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;
@@ -443,6 +472,19 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mac_main_window_draws_its_title_bar_strip_from_the_first_frame() {
+        // D-214: the strip is there before the page's own scripts ask whether the window is full screen.
+        assert!(TITLEBAR_START.contains(r#"root.dataset.platform = "macos""#));
+        assert!(TITLEBAR_START.contains(r#"root.dataset.titlebar = "strip""#));
+        assert!(TITLEBAR_START.contains(r#"sessionStorage.getItem("echoledger-titlebar")"#), "a reload in full screen keeps its answer");
+        let source = include_str!("lifecycle.rs");
+        let build = &source[source.find("fn build_main").unwrap()..source.find("fn build_main").unwrap() + 1200];
+        assert!(build.contains("if cfg!(target_os = \"macos\") { builder.initialization_script(TITLEBAR_START) }"), "main window only, Mac only");
+        let built = build.find("initialization_script").unwrap();
+        assert!(built < build.find("privacy::window(").unwrap(), "on the builder, before the window is made");
+    }
 
     /// The app's calls made outside a `spawn_blocking(…)`'s arguments, by name (the last part of the path), per function
     /// (`file::name`), and those its async code makes (`async fn` bodies and `async` blocks).
@@ -567,7 +609,8 @@ mod tests {
                     walk(root, &path, calls);
                 } else if path.extension().is_some_and(|e| e == "rs") && path.file_name().is_some_and(|n| n != "tests.rs") {
                     let file = syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap();
-                    calls.file = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                    // One spelling on every platform (Windows' `overlay\mod.rs` too): the names below use `/`.
+                    calls.file = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
                     syn::visit::Visit::visit_file(calls, &file);
                 }
             }

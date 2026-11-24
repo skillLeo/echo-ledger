@@ -24,10 +24,13 @@
 
         @if (filament()->auth()->check())
             @include('filament.v2.create-menu')
-            @if (filament()->hasDatabaseNotifications())
-                @livewire(filament()->getDatabaseNotificationsLivewireComponent(), ['lazy' => filament()->hasLazyLoadedDatabaseNotifications()])
-            @endif
-            @include('filament.v2.user-menu')
+            {{-- With the rail (docs/PLAN_NAV_3_LEVELS.md) Activity and the avatar are the rail's: never at two levels. --}}
+            @unless (\App\Filament\Support\ConsoleV2::frame())
+                @if (filament()->hasDatabaseNotifications())
+                    @livewire(filament()->getDatabaseNotificationsLivewireComponent(), ['lazy' => filament()->hasLazyLoadedDatabaseNotifications()])
+                @endif
+                @include('filament.v2.user-menu')
+            @endunless
         @endif
     </nav>
 

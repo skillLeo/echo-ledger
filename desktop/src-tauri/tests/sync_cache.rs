@@ -364,6 +364,62 @@ async fn the_next_refresh_sends_since_and_applies_tombstones_and_updates() {
     );
 }
 
+/// Titles changed on the server reach recordings already saved here on the next sync: an automatic title in Urdu
+/// letters written again in Roman Urdu (U19, `echoledger:roman-titles` bumps `updated_at`) and a rename from another
+/// device, each with its `title_auto` and `title_source`, kept in the saved file too.
+#[tokio::test]
+async fn titles_changed_on_the_server_replace_the_saved_ones_on_the_next_sync() {
+    let calls = Arc::new(Mutex::new(0usize));
+    let counter = calls.clone();
+    let server = MockServer::start(Router::new().route("GET", "/api/library", move |_, _| {
+        let n = {
+            let mut c = counter.lock().unwrap();
+            *c += 1;
+            *c
+        };
+        Action::Reply(if n == 1 {
+            page(
+                vec![
+                    json!({"id": "a", "deleted": false, "updated_at": "2026-11-20T08:00:00+00:00", "started_at": "2026-11-20T07:00:00+00:00", "title": "بل کی ادائیگی", "title_auto": true, "title_source": "auto"}),
+                    json!({"id": "b", "deleted": false, "updated_at": "2026-11-20T08:00:00+00:00", "started_at": "2026-11-20T06:00:00+00:00", "title": "Recording", "title_auto": false, "title_source": "app"}),
+                ],
+                None,
+                "2026-11-20T09:00:00+00:00",
+            )
+        } else {
+            page(
+                vec![
+                    json!({"id": "a", "deleted": false, "updated_at": "2026-11-21T02:00:00+00:00", "started_at": "2026-11-20T07:00:00+00:00", "title": "Bill ki adaigi", "title_auto": true, "title_source": "auto"}),
+                    json!({"id": "b", "deleted": false, "updated_at": "2026-11-21T03:00:00+00:00", "started_at": "2026-11-20T06:00:00+00:00", "title": "Qureshi Textiles, March shipment", "title_auto": false, "title_source": "own"}),
+                ],
+                None,
+                "2026-11-21T04:00:00+00:00",
+            )
+        })
+    }));
+    let c = client(&server);
+    let mut cache = LibraryCache::default();
+    cache.refresh(&c).await.unwrap();
+    assert_eq!(title(&cache.items, "a"), "بل کی ادائیگی");
+    assert_eq!(cache.refresh(&c).await.unwrap(), 2);
+
+    let field = |items: &[LibraryItem], id: &str, key: &str| items.iter().find(|i| i.id == id).and_then(|i| i.rest.get(key)).cloned();
+    assert_eq!(ids(&cache.items), ["a", "b"], "the same two recordings, nothing added");
+    assert_eq!(title(&cache.items, "a"), "Bill ki adaigi");
+    assert_eq!(field(&cache.items, "a", "title_auto"), Some(json!(true)));
+    assert_eq!(field(&cache.items, "a", "title_source"), Some(json!("auto")));
+    assert_eq!(title(&cache.items, "b"), "Qureshi Textiles, March shipment");
+    assert_eq!(field(&cache.items, "b", "title_auto"), Some(json!(false)));
+    assert_eq!(field(&cache.items, "b", "title_source"), Some(json!("own")));
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.json");
+    cache.save(&path).unwrap();
+    let saved = LibraryCache::load(&path);
+    assert_eq!(title(&saved.items, "a"), "Bill ki adaigi");
+    assert_eq!(field(&saved.items, "b", "title_source"), Some(json!("own")));
+}
+
 #[tokio::test]
 async fn a_page_that_fails_leaves_the_sync_position_unchanged() {
     let server = MockServer::start(Router::new().route("GET", "/api/library", |r, _| {
@@ -383,6 +439,7 @@ async fn a_page_that_fails_leaves_the_sync_position_unchanged() {
     let mut cache = LibraryCache {
         since: Some("2026-10-23T00:00:00+00:00".into()),
         items: vec![],
+        ..Default::default()
     };
     let result = cache.refresh(&client(&server)).await;
     assert!(
@@ -531,6 +588,7 @@ async fn a_server_clock_that_stepped_back_does_not_move_the_sync_position_back()
     let mut cache = LibraryCache {
         since: Some("2026-10-24T09:00:00+00:00".into()),
         items: vec![],
+        ..Default::default()
     };
     cache.refresh(&client(&server)).await.unwrap();
     assert_eq!(cache.since.as_deref(), Some("2026-10-24T09:00:00+00:00"));
@@ -583,6 +641,7 @@ fn the_cache_file_round_trips_items_and_the_sync_position() {
     let mut cache = LibraryCache {
         since: Some("2026-10-24T09:00:00+00:00".into()),
         items: vec![],
+        ..Default::default()
     };
     merge(
         &mut cache.items,
@@ -679,4 +738,111 @@ async fn maintenance_or_a_refused_version_leaves_the_library_and_its_sync_positi
         assert_eq!(ids(&cache.items), ["a"]);
         assert_eq!(cache.since.as_deref(), Some("2026-10-24T08:00:00+00:00"));
     }
+}
+
+#[tokio::test]
+async fn opening_a_recording_tells_the_server_and_the_saved_copy_is_read_at_once() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/sessions/a/opened", Reply::empty(204)));
+    client(&server).session_opened("a").await.unwrap();
+    assert_eq!(server.requests_to("POST", "/api/sessions/a/opened").len(), 1);
+
+    let mut cache = LibraryCache::default();
+    let mut unread = item("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", "a");
+    unread.rest.insert("opened".into(), Value::Bool(false));
+    cache.items.push(unread);
+    assert!(cache.mark_opened("a"), "unread → read");
+    assert_eq!(cache.items[0].rest.get("opened"), Some(&Value::Bool(true)));
+    assert!(!cache.mark_opened("a"), "already read: nothing to save");
+    assert!(!cache.mark_opened("gone"), "not in the Library: nothing to save");
+}
+
+#[tokio::test]
+async fn marking_a_recording_unread_tells_the_server_and_the_saved_copy_is_unread_at_once() {
+    // Contract 2.0.0-t: DELETE on the same address as opening, 204, idempotent.
+    let server = MockServer::start(Router::new().fixed("DELETE", "/api/sessions/a/opened", Reply::empty(204)));
+    client(&server).session_unopen("a").await.unwrap();
+    client(&server).session_unopen("a").await.unwrap();
+    assert_eq!(server.requests_to("DELETE", "/api/sessions/a/opened").len(), 2);
+    assert!(server.requests_to("POST", "/api/sessions/a/opened").is_empty(), "never the opening call");
+
+    let mut cache = LibraryCache::default();
+    let mut read = item("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", "a");
+    read.rest.insert("opened".into(), Value::Bool(true));
+    cache.items.push(read);
+    assert!(cache.mark_unopened("a"), "read → unread");
+    assert_eq!(cache.items[0].rest.get("opened"), Some(&Value::Bool(false)));
+    assert!(!cache.mark_unopened("a"), "already unread: nothing to save");
+    assert!(!cache.mark_unopened("gone"), "not in the Library: nothing to save");
+    // And opening it again reads it.
+    assert!(cache.mark_opened("a"));
+}
+
+#[tokio::test]
+async fn marking_unread_on_a_recording_the_person_cannot_see_or_on_an_older_server_is_an_error() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("DELETE", "/api/sessions/gone/opened", Reply::json(404, json!({"error": {"code": "not_found", "message": "Session not found."}})))
+            .fixed("DELETE", "/api/sessions/old/opened", Reply::json(405, json!({"error": {"code": "method_not_allowed", "message": "Method not allowed."}}))),
+    );
+    let gone = client(&server).session_unopen("gone").await.unwrap_err();
+    assert!(matches!(gone, AppError::Server { status: 404, .. }), "{gone:?}");
+    let old = client(&server).session_unopen("old").await.unwrap_err();
+    assert!(matches!(old, AppError::Server { status: 405, .. }), "{old:?}: the command turns this into 'needs a newer server'");
+}
+
+// ---- saved views (contract 2.0.0-p) -------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_sync_keeps_the_saved_views_version_and_an_older_server_answer_keeps_the_last_one() {
+    let answers = Arc::new(Mutex::new(vec![
+        json!({"data": [], "next_cursor": null, "server_time": "2026-11-23T09:00:00+00:00", "views_version": 4}),
+        json!({"data": [], "next_cursor": null, "server_time": "2026-11-23T09:01:00+00:00"}),
+        json!({"data": [], "next_cursor": null, "server_time": "2026-11-23T09:02:00+00:00", "views_version": 5}),
+    ]));
+    let queue = answers.clone();
+    let server = MockServer::start(Router::new().route("GET", "/api/library", move |_, _| Action::Reply(Reply::json(200, queue.lock().unwrap().remove(0)))));
+    let mut cache = LibraryCache::default();
+    assert_eq!(cache.views_version, None, "none before a sync carried one");
+    cache.refresh(&client(&server)).await.unwrap();
+    assert_eq!(cache.views_version, Some(4));
+    cache.refresh(&client(&server)).await.unwrap();
+    assert_eq!(cache.views_version, Some(4), "an answer without it keeps the last one");
+    cache.refresh(&client(&server)).await.unwrap();
+    assert_eq!(cache.views_version, Some(5));
+    // Kept on disk with the Library.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.json");
+    cache.save(&path).unwrap();
+    assert_eq!(LibraryCache::load(&path).views_version, Some(5));
+}
+
+#[tokio::test]
+async fn saved_views_go_to_the_server_as_the_contract_says() {
+    let seen = Arc::new(Mutex::new(Vec::<(String, String, Value)>::new()));
+    let log = |method: &'static str, log: Arc<Mutex<Vec<(String, String, Value)>>>, answer: Value| {
+        move |r: &common::Recorded, _: usize| {
+            log.lock().unwrap().push((method.to_string(), r.path().to_string(), serde_json::from_slice(&r.body).unwrap_or(Value::Null)));
+            Action::Reply(Reply::json(200, answer.clone()))
+        }
+    };
+    let server = MockServer::start(
+        Router::new()
+            .route("GET", "/api/views", log("GET", seen.clone(), json!({"data": [], "views_version": 4, "limit": 30})))
+            .route("POST", "/api/views", log("POST", seen.clone(), json!({"data": {"id": "v1"}, "views_version": 5})))
+            .route("PATCH", "/api/views/v1", log("PATCH", seen.clone(), json!({"data": {"id": "v1"}, "views_version": 6})))
+            .route("PUT", "/api/views/order", log("PUT", seen.clone(), json!({"data": [], "views_version": 7})))
+            .route("DELETE", "/api/views/v1", log("DELETE", seen.clone(), json!({"id": "v1", "views_version": 8}))),
+    );
+    let api = client(&server);
+    assert_eq!(api.views().await.unwrap()["views_version"], 4);
+    let body = json!({"name": "WhatsApp this week", "filters": {"source": {"op": "is", "values": ["whatsapp"]}}, "client_ref": "r1"});
+    assert_eq!(api.create_view(&body).await.unwrap()["data"]["id"], "v1");
+    api.update_view("v1", &json!({"name": "WhatsApp"})).await.unwrap();
+    api.order_views(&["v1".to_string()]).await.unwrap();
+    assert_eq!(api.delete_view("v1").await.unwrap()["views_version"], 8);
+    let calls = seen.lock().unwrap();
+    assert_eq!(calls.iter().map(|(m, p, _)| format!("{m} {p}")).collect::<Vec<_>>(),
+        ["GET /api/views", "POST /api/views", "PATCH /api/views/v1", "PUT /api/views/order", "DELETE /api/views/v1"]);
+    assert_eq!(calls[1].2, body, "the view goes as the page made it, with its client_ref");
+    assert_eq!(calls[3].2, json!({"ids": ["v1"]}));
 }

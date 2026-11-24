@@ -31,6 +31,15 @@ final class ConsoleV2
         return self::flag('ui_v2.library');
     }
 
+    /**
+     * The three levels of navigation (docs/PLAN_NAV_3_LEVELS.md): the rail, the place's panel and the page's tabs, in
+     * place of the sidebar, with the new frame and the new Library together (NavFrame).
+     */
+    public static function frame(): bool
+    {
+        return self::shell() && self::library();
+    }
+
     /** The admin panel on the design values (ui_v2.admin), for the member of staff signed in to it. */
     public static function admin(): bool
     {

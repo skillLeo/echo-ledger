@@ -9,14 +9,17 @@
 // results, "controls-permission", "controls-nothing" and "controls-device" what the pill says, "controls-dictation-refused"
 // the dictation box with the microphone off).
 import React from "react";
+import { LABEL_COLOURS } from "../../src/v2/components/Label";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
+import conf from "../../src-tauri/tauri.conf.json";
+import { applyTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -32,6 +35,39 @@ if (params.get("lang") === "ur") {
 }
 const controls = screen.startsWith("controls");
 document.documentElement.dataset.window = controls ? "controls" : "main";
+// "&platform=macos" (or "windows"): the main window as on that computer, as main.tsx sets it from window_appearance.
+// "&lights=1" draws macOS's close, minimize and zoom where the app puts them (tauri.conf.json trafficLightPosition), so
+// a picture shows whether anything sits under them; "&fullscreen=1" is the window in full screen (no lights).
+// "&inactive=1": the window not in front (macOS greys its buttons; the page looks the same).
+const platform = params.get("platform");
+if (platform === "macos" || platform === "windows") document.documentElement.dataset.platform = platform;
+const fullscreen = params.get("fullscreen") === "1";
+// "&start=<ms>": the app starting on a Mac. The core's start script (src/lib/titlebarStart.js, which
+// scripts/navLevels.mjs adds before the page as the core does) has set the strip, and the window answers whether it is
+// full screen only after that many milliseconds, as main.tsx asks it. Otherwise the answer is the one main.tsx keeps.
+const start = params.get("start");
+if (start !== null && platform === "macos") watchTitlebar("macos", () => new Promise((done) => window.setTimeout(() => done(fullscreen), Number(start))));
+else applyTitlebar(titlebarMode(platform, fullscreen));
+if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTrafficLights(params.get("inactive") === "1");
+
+/**
+ * macOS's three window buttons over the page, at the left whatever the page's direction. tao moves the close button's
+ * frame (14 x 16) to x and makes the title bar 16 + y tall, the buttons 6 above its bottom edge: each 12 px light is
+ * centred 7 px into its frame, the next one 20 px on.
+ */
+function drawTrafficLights(inactive: boolean) {
+  const { x, y } = conf.app.windows[0].trafficLightPosition;
+  const strip = document.createElement("div");
+  strip.dataset.trafficLights = "";
+  strip.setAttribute("aria-hidden", "true");
+  strip.style.cssText = `position: fixed; left: ${x + 1}px; top: ${y - 4}px; width: 54px; height: 12px; z-index: 2147483647; pointer-events: none; display: flex; gap: 8px; direction: ltr;`;
+  for (const colour of inactive ? ["#cfcfcf", "#cfcfcf", "#cfcfcf"] : ["#ff5f57", "#febc2e", "#28c840"]) {
+    const light = document.createElement("span");
+    light.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
+    strip.append(light);
+  }
+  document.body.append(strip);
+}
 
 /** One second of silence, so the player has something to load. */
 function silentWav(): string {
@@ -289,6 +325,15 @@ const commands: Record<string, (args: Args) => unknown> = {
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+  // Text and voice (F6): no share here, so the fallback: the voice in Downloads and on the clipboard, pasted with the
+  // system's keys ("-mac": ⌘V). "whatsapp-opened": a share whose end is not known (Windows 10, or no answer in time).
+  whatsapp_share_voice: (args: Args) => screen.includes("whatsapp-opened") && args.share !== false ? { kind: "opened" } : ({
+    kind: "fallback",
+    path: mac ? "/Users/ayesha/Downloads/Kick-off Contoso website 2026-11-06.ogg" : "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+    fileOnClipboard: true,
+    textCut: false,
+    pasteKeys: mac ? "⌘V" : "Ctrl+V",
+  }),
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
@@ -300,6 +345,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   library_refresh: () => (empty ? [] : LISTED),
   list_clients: () => ({ data: CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
+  // The person's labels (lists, contract 2.0.0-m): the Library filters redesign shows them in the sidebar.
+  lists_get: () => (empty ? [] : [
+    { key: "kick-off", name: "Kick-off", color: LABEL_COLOURS.teal, position: 0, count: 1 },
+    { key: "invoice", name: "Invoice", color: LABEL_COLOURS.amber, position: 1, count: 1 },
+    { key: "follow up", name: "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
+  ]),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
   client_rules: ({ id }) => ({ data: RULES[id as string] ?? [] }),
   shares_of: () => ({ data: SHARES }),
@@ -411,17 +462,28 @@ const commands: Record<string, (args: Args) => unknown> = {
     sourceApp: "whatsapp",
     language: "ur",
     bluetoothMic: bluetooth,
-    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
+    // "controls-warning": the other side not being recorded (2.0.6), with the call choice's menu open over it.
+    missing: screen === "controls-warning" ? [{ kind: "system_audio", sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" }]
+      : screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
+    // "At the start of the call": the banner beside the pill. No choice is made yet: nothing on the menu is ticked.
+    startBanner: screen === "controls-banner",
+    callChoice: null,
   }),
-  // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
-  after_call_state: () =>
-    makeAfterCallState({
-      saved: screen === "controls-discarded" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
-      // "controls-discarded": the chip's Discard pressed a moment ago, with its Undo.
-      discarded: screen === "controls-discarded" ? makeSavedToast({ id: PENDING[0].id, callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }) : null,
-      ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
-    }),
+  // The after-call window (the call choice), one thing at a time: the card (with its first-time line on
+  // "controls-card"), a confirmation, the grouped card, or "Always do this?". Each stays for the picture.
+  after_call_state: () => {
+    const call = { ...PENDING[1], title: null, clientId: null, clientName: null, callerName: "Muneeb Quraishi", sourceApp: "whatsapp", durationMs: 44_000 };
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    if (screen === "controls-done") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "audio", until }) });
+    if (screen === "controls-discarded") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "delete", until }) });
+    if (screen === "controls-always") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "transcribe", until, offerAlways: "always_transcribe" }) });
+    // Back to back: Omar's call was saved as audio, then Muneeb's was stopped and deleted from the pill: one card, both Undos.
+    // Undo on Omar's row: his card is back, Muneeb's Delete held under it with its own Undo.
+    if (screen === "controls-held") return makeAfterCallState({ ask: makeChipItem("g1", { ...call, id: "g1", callerName: "Omar Khan", deadlineAt: new Date(Date.now() + 5_000).toISOString() }), held: [makeCallDone({ ...call, id: call.id, kind: "delete", until })] });
+    if (screen === "controls-group") return makeAfterCallState({ group: makeCallGroup([makeCallDone({ ...call, id: "g1", callerName: "Omar Khan", kind: "audio", until }), makeCallDone({ ...call, id: call.id, kind: "delete", until })], Date.now() + 3_592_000) });
+    return makeAfterCallState({ hint: screen === "controls-card", ask: makeChipItem(call.id, { ...call, deadlineAt: new Date(Date.now() + 5_000).toISOString() }) });
+  },
   privacy_status: () => privacyStatus(),
   privacy_concealed: () => false,
   privacy_diagnostics: () => "",
@@ -474,12 +536,14 @@ async function render() {
   if (screen === "controls-dictation-refused") {
     const { default: DictationApp } = await import("../../src/views/dictation/DictationApp");
     const { emit } = await import("@tauri-apps/api/event");
+    // The window's platform, as main.tsx sets it from window_appearance: the settings button says it in its words.
+    document.documentElement.dataset.platform = mac ? "macos" : "windows";
     root.render(<div className="screens-canvas"><div className="screens-window" style={{ width: 420, height: 110 }}><DictationApp /></div></div>);
     // What the core sends when it refuses.
     window.setTimeout(() => {
       void emit("overlay:visibility", true);
       captions?.onmessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger. Allow it in your computer's privacy settings." });
-      void emit("dictation:state", { active: false, sounds: false, mode: "toggle" });
+      void emit("dictation:state", { active: false, sounds: false, mode: "toggle", permission: "microphone" });
     }, 300);
     return;
   }
@@ -490,8 +554,8 @@ async function render() {
   const { emit } = await import("@tauri-apps/api/event");
   root.render(
     <div className="screens-canvas">
-      <div className="screens-window" style={{ width: 352, height: 84 }}><PillApp /></div>
-      <div className="screens-window" style={{ width: 360, height: 168 }}><ReviewApp /></div>
+      <div className="screens-window" style={{ width: 352, height: 228 }}><PillApp /></div>
+      <div className="screens-window" style={{ width: 360, height: 340 }}><ReviewApp /></div>
       <div className="screens-window" style={{ width: 560, height: 150 }}><OverlayApp /></div>
     </div>,
   );

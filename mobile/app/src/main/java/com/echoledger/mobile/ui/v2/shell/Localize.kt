@@ -57,12 +57,15 @@ object VmMessages {
         "Stop the recording first, then run the test." to R.string.v2_vm_stop_recording_first,
         "Stopped sharing" to R.string.v2_vm_stopped_sharing,
         "That sign-in link is not for this sign-in. Start again." to R.string.v2_vm_wrong_sign_in_link,
-        "The audio could not be downloaded. Check the connection and try again." to R.string.v2_vm_audio_download_failed,
+        "The voice could not be downloaded. Check the connection and try again." to R.string.v2_vm_audio_download_failed,
         "The change could not be saved." to R.string.v2_vm_change_not_saved,
         "The device could not be revoked." to R.string.v2_vm_device_not_revoked,
         "The export failed." to R.string.v2_vm_export_failed,
         "The file could not be read." to R.string.v2_vm_file_unreadable,
         "The link could not be made." to R.string.v2_vm_link_not_made,
+        "The list could not be saved." to R.string.v2_vm_list_not_saved,
+        "The list could not be deleted." to R.string.v2_vm_list_not_deleted,
+        "The lists could not be moved." to R.string.v2_vm_lists_not_moved,
         "The meeting pack could not be made." to R.string.v2_vm_pack_not_made,
         "The project could not be created." to R.string.v2_vm_project_not_created,
         "The project could not be updated." to R.string.v2_vm_project_not_updated,
@@ -73,7 +76,7 @@ object VmMessages {
         "The term could not be added." to R.string.v2_vm_term_not_added,
         "The views could not be started." to R.string.v2_vm_views_not_started,
         "This phone was signed out on the server. Sign in again." to R.string.v2_vm_signed_out,
-        "This recording has no audio on the server." to R.string.v2_vm_no_audio_on_server,
+        "This recording has no voice on the server." to R.string.v2_vm_no_audio_on_server,
         "1 recording updated" to R.string.v2_vm_one_updated,
         "Sign in on this phone first." to R.string.v2_vm_sign_in_first,
         "The link could not be revoked." to R.string.v2_vm_link_not_revoked,
@@ -118,7 +121,8 @@ object VmMessages {
         "The suggestion could not be saved." to R.string.v2_vm_ws_the_suggestion_could_not_be_saved,
         "The text could not be made." to R.string.v2_vm_ws_the_text_could_not_be_made,
         "Project deleted" to R.string.v2_vm_ws_project_deleted,
-        "Welcome to EchoLedger" to R.string.v2_vm_welcome
+        "Welcome to EchoLedger" to R.string.v2_vm_welcome,
+        "Recording deleted" to R.string.v2_deleted
     )
 
     /**
@@ -133,10 +137,10 @@ object VmMessages {
         Template("Signed in as \$email", Regex("""Signed in as (.+)"""), R.string.v2_vm_signed_in_as),
         Template("Sent to \$sent people", Regex("""Sent to (\d+) people"""), R.string.v2_vm_sent_many),
         Template(
-            " · \${countLabel(answer.movedSessions)} moved to the Inbox",
-            Regex("""Project deleted · (\d+ recordings?) moved to the Inbox"""),
+            " · \${countLabel(answer.movedSessions)} moved to No project",
+            Regex("""Project deleted · (\d+ recordings?) moved to No project"""),
             R.string.v2_vm_project_deleted_moved,
-            sample = "Project deleted · 3 recordings moved to the Inbox"
+            sample = "Project deleted · 3 recordings moved to No project"
         ),
         Template("\$changed deleted", Regex("""(\d+) deleted"""), R.string.v2_vm_many_deleted),
         Template("\$changed recordings updated", Regex("""(\d+) recordings updated"""), R.string.v2_vm_many_updated),

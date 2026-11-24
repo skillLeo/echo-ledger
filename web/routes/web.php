@@ -9,6 +9,7 @@ use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\DeviceSignInController;
+use App\Http\Controllers\Auth\EmailRestoreController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\JoinController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\PaymentProofMediaController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
+use App\Http\Controllers\ServerHealthController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\WorkspaceSwitchController;
 use App\Http\Middleware\AccountGate;
@@ -56,6 +58,9 @@ Route::middleware('throttle:site')->group(function (): void {
         ->name('downloads.file');
 });
 
+// W-INC-1124: the web PHP's own check for deploy/check-php.sh, ok or not (ServerHealthController). Throttled per IP.
+Route::get('/health/php', ServerHealthController::class)->middleware('throttle:site')->name('health.php');
+
 // Since v1.6 (P2.1) the app lives at /app and /admin is the staff panel: the app's old addresses under /admin go to the
 // same page under /app (LegacyConsoleRedirect; a good signed link is signed again for its new address).
 Route::get('/admin/{path}', LegacyConsoleRedirect::class)
@@ -71,6 +76,10 @@ Route::get('/app/profile', function (Request $request) {
     return redirect(EditProfile::settingsUrl($pages[(string) $request->query('tab')] ?? null), 301);
 })->middleware('throttle:site')->name('legacy.profile');
 Route::get('/app/security', fn () => redirect(EditProfile::settingsUrl('security'), 301))->middleware('throttle:site')->name('legacy.security');
+// Since 2.0.0-l: the stable link the desktop app opens to add a passkey, wherever Settings keeps them (the console's
+// sign-in page comes first when the browser is not signed in, then the page itself).
+Route::get('/app/settings/security/passkeys', fn () => redirect(EditProfile::settingsUrl('security', 'security.passkeys')))
+    ->middleware('throttle:site')->name('app.passkeys');
 
 // Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
 Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');
@@ -176,6 +185,12 @@ Route::post('/admin-workspaces/{workspace}/switch', WorkspaceSwitchController::c
 Route::middleware([AuthenticateSession::class, 'throttle:account'])->group(function (): void {
     Route::get('/account/delete', [AccountPageController::class, 'deletePage'])->name('account.delete');
     Route::post('/account/delete', [AccountPageController::class, 'delete'])->middleware('auth:web')->name('account.delete.store');
+});
+// Since the security review of 2.0.0-l: the old address's "Put my address back" after an email change; signed, 7 days,
+// no sign-in (whoever changed the address may hold the account). The link shows a page; its button does it.
+Route::middleware(['signed', 'throttle:account'])->group(function (): void {
+    Route::get('/account/email/restore/{user}', [EmailRestoreController::class, 'show'])->whereNumber('user')->name('account.email.restore');
+    Route::post('/account/email/restore/{user}', [EmailRestoreController::class, 'restore'])->whereNumber('user')->name('account.email.restore.store');
 });
 // Signed for its 24 hours and fetched without a session, as the apps download it too.
 Route::get('/account/export/{export}/download', [AccountPageController::class, 'download'])

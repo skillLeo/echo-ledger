@@ -914,7 +914,7 @@ it('M4 saves a copy of what the project held when sent, not what was filed later
 
 it('M4 lists what you sent, newest first, in the documented shape', function () {
     $w = sentProject();
-    Fx::user(['email' => 'carol@corp.test', 'name' => 'Carol']);
+    $carol = Fx::user(['email' => 'carol@corp.test', 'name' => 'Carol']);
     $this->travel(1)->minutes();
     $this->api($w['anaToken'])->postJson("/api/clients/{$w['project']->id}/send", ['to' => ['carol@corp.test'], 'note' => 'For tomorrow'])->assertCreated();
 
@@ -922,7 +922,7 @@ it('M4 lists what you sent, newest first, in the documented shape', function () 
 
     expect(array_column(array_column($data, 'to'), 'email'))->toBe(['carol@corp.test', 'bob@corp.test'])
         ->and(array_keys($data[0]))->toBe(['id', 'kind', 'to', 'title', 'note', 'sent_at', 'saved_at'])
-        ->and($data[0])->toMatchArray(['kind' => 'project', 'to' => ['name' => 'Carol', 'email' => 'carol@corp.test'], 'title' => 'Acme', 'note' => 'For tomorrow', 'saved_at' => null]);
+        ->and($data[0])->toMatchArray(['kind' => 'project', 'to' => ['name' => 'Carol', 'email' => 'carol@corp.test', 'avatar_url' => null, 'avatar_version' => null, 'avatar_color' => $carol->avatarColor()], 'title' => 'Acme', 'note' => 'For tomorrow', 'saved_at' => null]);
     $this->api($w['anaToken'])->getJson('/api/sent')->assertUnprocessable();
     // What someone else sent, and another recording: nothing.
     expect($this->api($w['bobToken'])->getJson("/api/sent?client_id={$w['project']->id}")->assertOk()->json('data'))->toBe([])

@@ -14,6 +14,9 @@ use crate::error::AppResult;
 pub struct LibraryCache {
     pub since: Option<String>,
     pub items: Vec<LibraryItem>,
+    /// The saved views' version the last sync carried (contract 2.0.0-p "Saved views"); None before one did.
+    #[serde(default)]
+    pub views_version: Option<u64>,
 }
 
 /// Applies a page of changes: tombstones remove, newer items replace, unknown items insert (pure).
@@ -39,6 +42,28 @@ pub fn merge(items: &mut Vec<LibraryItem>, incoming: Vec<LibraryItem>) {
 }
 
 impl LibraryCache {
+    /// The recording was opened (it is no longer unread): true when the saved copy changed.
+    pub fn mark_opened(&mut self, id: &str) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) if item.rest.get("opened") != Some(&serde_json::Value::Bool(true)) => {
+                item.rest.insert("opened".into(), serde_json::Value::Bool(true));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The recording is unread again (Mark as unread, 2.0.0-t): true when the saved copy changed.
+    pub fn mark_unopened(&mut self, id: &str) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) if item.rest.get("opened") != Some(&serde_json::Value::Bool(false)) => {
+                item.rest.insert("opened".into(), serde_json::Value::Bool(false));
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn load(path: &Path) -> Self {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
@@ -75,6 +100,9 @@ impl LibraryCache {
             pages += 1;
             changed += page.data.len();
             server_time.get_or_insert(page.server_time.clone());
+            if page.views_version.is_some() {
+                self.views_version = page.views_version;
+            }
             merge(&mut self.items, page.data);
             match page.next_cursor {
                 Some(next) if pages < MAX_PAGES && seen.insert(next.clone()) => cursor = Some(next),

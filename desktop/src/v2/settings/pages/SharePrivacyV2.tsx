@@ -6,15 +6,15 @@
 // the phone per meeting app. The captured picture lives in the page's state only and goes when the page closes.
 // Names: docs/DESIGN_SYSTEM.md "Screen-share privacy names" (never "overlay").
 import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, type MeetingApp, type MeetingAppRow, type OldWindowsSharing, type Settings, type ShareCheckView, type ShareHiding } from "../../../lib/ipc";
+import { api, errorMessage, type MeetingApp, type MeetingAppRow, type OldWindowsSharing, type PinnedWindow, type Settings, type ShareCheckView, type ShareHiding } from "../../../lib/ipc";
 import { demoLeft, resultLine, summary, usePrivacyStatus } from "../../../lib/privacy";
 import { setting } from "../../../lib/settingsRegistry";
 import { prettyShortcut } from "../../../lib/format";
 import { useCopied } from "../../../views/main/SettingsControls";
 import { PrivacyBadgeView } from "../../../components/PrivacyBadge";
-import { MainShareControl, PinnedShareControl, mainShareValue } from "../../../components/ShareVisibility";
+import { MainShareControl, SHOW_FROM_BADGE, mainShareValue, pinnedValue, useWindowShare } from "../../../components/ShareVisibility";
 import {
-  GUIDED_ALONE, HIDDEN_WHILE_SHARING, SHARE_PRIVACY_MAIN, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
+  ALWAYS_SHOWN, ALWAYS_SHOWN_VALUE, GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIVE_TRANSLATE_SUBTITLE, SHARE_PRIVACY_LEAD, shareFootnote, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
   displaysValue, hiddenReason, hiddenValue, lastCheckValue, statusValue, useCountdown, versionLine,
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
@@ -49,9 +49,6 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
   const hidden = hiddenValue(status);
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows") : "No shortcut";
-  const notes = [
-    status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
-  ].filter(Boolean) as string[];
   const lines = status?.lines ?? [];
   const act = (done: Promise<unknown>, after?: () => void) => {
     setProblem(null);
@@ -60,25 +57,24 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
 
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
-      <div className="el-share-top">{sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="el-secondary">{l}</p>)}</div>
-      <Group footer={<p>{SHARE_PRIVACY_MAIN}</p>}>
+      <div className="el-share-top"><p className="el-secondary"><bdi>{SHARE_PRIVACY_LEAD}</bdi></p></div>
+      <Group footer={<p data-testid="share-privacy-footnote"><bdi>{shareFootnote(status?.platform)}</bdi></p>}>
         <ListRow compact anchor="share_privacy.main" title={setting("share_privacy.main").title} value={mainShareValue(status)} control={<MainShareControl status={status} />} />
-        <ListRow compact anchor="share_privacy.card" title={setting("share_privacy.card").title} control={<PinnedShareControl which="card" />} />
-        <ListRow compact anchor="share_privacy.captions" title={setting("share_privacy.captions").title} control={<PinnedShareControl which="captions" />} />
+        {Object.values(ALWAYS_SHOWN).map((row) => <ListRow key={row.id} compact anchor={row.id} title={setting(row.id).title} meta={row.subtitle} value={ALWAYS_SHOWN_VALUE} />)}
+        <PinnedRow which="card" />
+        <PinnedRow which="captions" />
+        <SelectSetting<ShareHiding> id="share_privacy.hiding" value={settings.hideFromSharing === "off" ? "off" : "all"} onChange={(v) => void patch({ hideFromSharing: v })}
+          meta={LIVE_TRANSLATE_SUBTITLE[settings.hideFromSharing === "off" ? "shown" : "hidden"]} />
       </Group>
-      <Group footer={notes.length || lines.length ? <>
-        {notes.map((l) => <p key={l}>{l}</p>)}
-        {lines.length > 0 && (
-          <div className="el-privacy-lines" role="status">
-            {lines.map((l) => (
-              <p key={l.text} className={l.warning ? "el-privacy-line el-privacy-line--warning" : "el-privacy-line"}>
-                {l.warning && <Icons.WarningIcon />}<span>{l.text}</span>{l.fix && <LineFix fix={l.fix} />}
-              </p>
-            ))}
-          </div>
-        )}
-      </> : undefined}>
-        <SelectSetting<ShareHiding> id="share_privacy.hiding" value={settings.hideFromSharing === "off" ? "off" : "all"} onChange={(v) => void patch({ hideFromSharing: v })} />
+      <Group footer={lines.length ? (
+        <div className="el-privacy-lines" role="status">
+          {lines.map((l) => (
+            <p key={l.text} className={l.warning ? "el-privacy-line el-privacy-line--warning" : "el-privacy-line"}>
+              {l.warning && <Icons.WarningIcon />}<span>{l.text}</span>{l.fix && <LineFix fix={l.fix} />}
+            </p>
+          ))}
+        </div>
+      ) : undefined}>
         <ListRow compact anchor="share_privacy.status" title={setting("share_privacy.status").title}
           value={value ? <span className={value.tone ? "el-privacy-value el-privacy-value--warning" : "el-privacy-value"}>{value.text}</span> : undefined}
           control={status ? <PrivacyBadgeView badge={status.badge} compact /> : undefined} />
@@ -129,6 +125,22 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
           onClick={() => act(api.privacyDiagnostics().then((text) => copy("diag", text)))} />
       </Group>
     </div>
+  );
+}
+
+/** The Live Assist card or the captions: hidden unless shown from that window (its own menu), and while it is shown the
+ * button that hides it again. */
+function PinnedRow({ which }: { which: PinnedWindow }) {
+  const [view, setView] = useWindowShare(which);
+  const [problem, setProblem] = useState<string | null>(null);
+  const anchor = which === "card" ? "share_privacy.card" : "share_privacy.captions";
+  const hide = () => {
+    setProblem(null);
+    void api.privacyWindowShareSet(false, which).then(setView).catch((e) => setProblem(errorMessage(e)));
+  };
+  return (
+    <ListRow compact anchor={anchor} title={setting(anchor).title} meta={problem ?? SHOW_FROM_BADGE[which]} value={pinnedValue(view)}
+      control={view?.shown ? <Button size="sm" onClick={hide}>{view.switchLabel}</Button> : undefined} />
   );
 }
 

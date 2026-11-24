@@ -6,6 +6,10 @@ use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Models\CaptureSession;
 use App\Models\SessionOpen;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Sharing\Teammates;
+use App\Services\Workspaces\Workspaces;
+use Illuminate\Support\Facades\Event;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -62,4 +66,83 @@ it('counts viewing the recording in the console as opening it', function () {
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->assertOk();
 
     expect(SessionOpen::query()->where('user_id', $admin->id)->where('capture_session_id', $session->id)->exists())->toBeTrue();
+});
+
+/*
+ * Mark as unread (contract 2.0.0-t, UX-22): DELETE /api/sessions/{id}/opened takes back the asking person's own open.
+ */
+
+function unreadCount(object $test): int
+{
+    return (int) $test->getJson('/api/library/facets')->assertOk()->json('library.unread');
+}
+
+it('marks a recording unread again: opened false and library.unread one more, the recording itself untouched', function () {
+    $this->postJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
+    $before = unreadCount($this);
+    $updatedAt = $this->session->refresh()->updated_at;
+    // A minute on, so a touch of updated_at would show; and no event of the recording (a save, an update) goes out.
+    $this->travel(1)->minutes();
+    Event::fake();
+
+    $this->deleteJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
+
+    $writes = array_values(array_filter(array_keys(Event::dispatchedEvents()), fn (string $name): bool => str_starts_with($name, 'eloquent.')
+        && ! str_starts_with($name, 'eloquent.retrieved:') && str_ends_with($name, CaptureSession::class)));
+    expect($writes)->toBe([], 'marking unread sends no event of a change to the recording');
+    expect(openedInLibrary($this))->toBeFalse()
+        ->and(unreadCount($this))->toBe($before + 1)
+        ->and(SessionOpen::query()->where('capture_session_id', $this->session->id)->count())->toBe(0)
+        ->and($this->session->refresh()->updated_at->equalTo($updatedAt))->toBeTrue('marking unread never changes the recording itself');
+});
+
+it('is idempotent: a recording not opened, or already unread, answers 204 again', function () {
+    $this->deleteJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
+    $this->deleteJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
+
+    expect(openedInLibrary($this))->toBeFalse();
+});
+
+it('takes back only the asking person\'s open: another person\'s stays', function () {
+    $other = User::factory()->create();
+    SessionOpen::mark($this->session->id, $other->id);
+    SessionOpen::mark($this->session->id, $this->device->user_id);
+
+    $this->deleteJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
+
+    expect(SessionOpen::query()->where('capture_session_id', $this->session->id)->pluck('user_id')->all())->toBe([$other->id]);
+});
+
+it('answers 404 for another workspace\'s recording, and leaves its opens alone', function () {
+    $foreign = CaptureSession::factory()->create();
+    SessionOpen::mark($foreign->id, $foreign->user_id);
+
+    $this->deleteJson("/api/sessions/{$foreign->id}/opened")->assertNotFound();
+    expect(SessionOpen::query()->where('capture_session_id', $foreign->id)->count())->toBe(1);
+});
+
+it('answers 404 for a recording of a teammate the person cannot read, the same as POST', function () {
+    $teammate = User::factory()->create();
+    $hidden = CaptureSession::factory()->create(['user_id' => $teammate->id, 'workspace_id' => $this->device->workspace_id]);
+    SessionOpen::mark($hidden->id, $this->device->user_id);
+
+    $this->postJson("/api/sessions/{$hidden->id}/opened")->assertNotFound();
+    $this->deleteJson("/api/sessions/{$hidden->id}/opened")->assertNotFound();
+    expect(SessionOpen::query()->where('capture_session_id', $hidden->id)->count())->toBe(1);
+});
+
+it('marks unread a recording a teammate sent: 204, and only the person\'s own open goes', function () {
+    $me = User::query()->findOrFail($this->device->user_id);
+    $mate = User::factory()->create();
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+    $sent = CaptureSession::factory()->create(['user_id' => $mate->id, 'workspace_id' => $this->device->workspace_id]);
+    app(Teammates::class)->send($mate, $sent, [$me->email], null);
+    app('auth')->forgetGuards();
+    SessionOpen::mark($sent->id, $mate->id);
+    $this->postJson("/api/sessions/{$sent->id}/opened")->assertNoContent();
+    expect(app(Teammates::class)->readable($me, $sent->id))->not->toBeNull();
+
+    $this->deleteJson("/api/sessions/{$sent->id}/opened")->assertNoContent();
+
+    expect(SessionOpen::query()->where('capture_session_id', $sent->id)->pluck('user_id')->all())->toBe([$mate->id]);
 });

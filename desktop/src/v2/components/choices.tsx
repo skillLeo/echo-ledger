@@ -1,4 +1,4 @@
-import { useId, type ComponentPropsWithRef, type ReactNode } from "react";
+import { useId, type ComponentPropsWithRef, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./Button";
 import { CheckIcon } from "./icons";
 
@@ -85,5 +85,21 @@ export function RadioGroup<T extends string>({ legend, name, value, options, onC
           onChange={() => onChange(o.value)} />
       ))}
     </fieldset>
+  );
+}
+
+/**
+ * A bare checkbox with its tick (a row's pick, Select all): named by `label`, no words beside it. `mixed`: some of what
+ * it stands for are picked (a dash, aria-checked="mixed"). `onClick` gets the event (Shift picks a range).
+ */
+export function PickBox({ checked, mixed = false, label, onClick, className, keyshortcuts }: {
+  checked: boolean; mixed?: boolean; label: string; onClick: (e: MouseEvent<HTMLInputElement>) => void; className?: string; keyshortcuts?: string;
+}) {
+  return (
+    <span className={["el-check-box", className].filter(Boolean).join(" ")}>
+      <input type="checkbox" className="el-check" aria-label={label} checked={checked} aria-keyshortcuts={keyshortcuts}
+        ref={(el) => { if (el) el.indeterminate = mixed && !checked; }} onChange={() => undefined} onClick={onClick} />
+      <Icon icon={CheckIcon} />
+    </span>
   );
 }

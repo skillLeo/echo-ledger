@@ -1,12 +1,12 @@
 // The Library as a table (v1.6, P4.4): one row per recording with the columns the person chose (Columns), the group
 // headers as sticky rows, the row's actions on hover, and the recording opening in the drawer on the right.
 import type { ReactNode } from "react";
-import type { LibraryItem } from "../../lib/ipc";
+import type { LibraryItem, ViewsSummary } from "../../lib/ipc";
 import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
-import { stepOf } from "../../lib/progress";
-import { AppTileIcon, appKind, PinIcon } from "../../components/Icons";
+import { rowViewsLine, stepOf } from "../../lib/progress";
+import { AlertIcon, AppTileIcon, appKind, PinIcon } from "../../components/Icons";
 import { GroupHeader } from "./LibraryGrouping";
 import { dragJustEnded } from "../../lib/dragMove";
 
@@ -37,7 +37,7 @@ export function saveColumns(columns: ReadonlySet<TableColumn>): void {
 
 const STATE_TEXT = { ready: "Ready", processing: "Transcribing", failed: "Transcription failed", no_audio: "No audio" } as const;
 
-function cell(item: LibraryItem, column: TableColumn): ReactNode {
+function cell(item: LibraryItem, column: TableColumn, views: ViewsSummary | null): ReactNode {
   switch (column) {
     case "when":
       return formatWhen(item.started_at);
@@ -49,6 +49,10 @@ function cell(item: LibraryItem, column: TableColumn): ReactNode {
       return item.client?.name ?? "Inbox";
     case "status": {
       const state = itemState(item);
+      // A ready recording whose default view is still written says so (U19), with the percent once there is one.
+      const converting = state === "ready" ? rowViewsLine(views) : null;
+      if (converting?.state === "making") return <span className="pill processing"><span className="spinner" aria-hidden="true" />{converting.text}</span>;
+      if (converting?.state === "failed") return <span className="pill failed" data-testid="convert-failed-pill"><AlertIcon size={14} aria-hidden="true" />{converting.text}</span>;
       return <span className={`pill ${state}`}>{state === "processing" ? stepOf(item).line ?? STATE_TEXT[state] : STATE_TEXT[state]}</span>;
     }
     case "labels":
@@ -58,7 +62,7 @@ function cell(item: LibraryItem, column: TableColumn): ReactNode {
   }
 }
 
-export function LibraryTable({ groups, columns, collapsed, onToggleGroup, picked, selecting, selected, cursor, onOpen, onPick, onPickGroup, onPointerDown, menu }: {
+export function LibraryTable({ groups, columns, collapsed, onToggleGroup, picked, selecting, selected, cursor, onOpen, onPick, onPickGroup, onPointerDown, menu, viewsOf }: {
   groups: readonly ItemGroup[];
   columns: ReadonlySet<TableColumn>;
   collapsed: ReadonlySet<string>;
@@ -74,6 +78,8 @@ export function LibraryTable({ groups, columns, collapsed, onToggleGroup, picked
   onPickGroup: (items: readonly LibraryItem[]) => void;
   onPointerDown: (e: React.PointerEvent, item: LibraryItem) => void;
   menu: (item: LibraryItem) => ReactNode;
+  /** A row's views as known last (the Library asks while they are written); its own otherwise. */
+  viewsOf?: (item: LibraryItem) => ViewsSummary | null;
 }) {
   const shown = TABLE_COLUMNS.filter(([id]) => columns.has(id));
   const span = shown.length + 2;
@@ -112,7 +118,7 @@ export function LibraryTable({ groups, columns, collapsed, onToggleGroup, picked
                   {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                 </span>
               </td>
-              {shown.map(([id]) => <td key={id} className={`col-${id}`}>{cell(item, id)}</td>)}
+              {shown.map(([id]) => <td key={id} className={`col-${id}`}>{cell(item, id, viewsOf ? viewsOf(item) : item.transcript?.views ?? null)}</td>)}
               <td className="col-actions">{!selecting && <div className="item-wrap with-menu table-menu">{menu(item)}</div>}</td>
             </tr>
           ))}

@@ -85,7 +85,8 @@ final class EmailCodes
         if (! $this->signUp->allows($email)) {
             throw new ApiError(403, 'sign_up_closed', 'Sign-up is closed on this server. Ask the owner for an invitation.');
         }
-        if (! $this->gate->allows($email)) {
+        // Since the security review of 2.0.0-l: an address reserved for an account's restore window (EmailChange).
+        if (! $this->gate->allows($email) || EmailChange::isReserved($email)) {
             throw new ApiError(422, 'email_not_allowed', 'This email address cannot be used to sign up. Use your usual email address.');
         }
     }

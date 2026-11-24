@@ -61,5 +61,49 @@
         return s.rowChecked && s.checked > 1 ? 'selection-menu' : 'row-menu';
     }
 
-    return { isTyping, isControl, keyAction, clickAction, contextAction };
+
+    /**
+     * Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the keys of the filter panel and the search, decided
+     * before keyAction. e as keyAction's (with code); s: {modal, panelOpen}. F opens or closes the filters, ⌘F / Ctrl+F
+     * goes to the search (also from another field), and Esc closes the panel before it clears a selection. A single key
+     * with no modifier (F) answers only while the Library has the focus (s.focused), so speech input and stray keys
+     * elsewhere never trigger it (WCAG 2.1.4). The numbers are the frame's since docs/PLAN_NAV_3_LEVELS.md (⌘1…⌘6 the
+     * rail, Alt+1…9 the panel: resources/js/frame-core.cjs). Returns {do} or null.
+     */
+    function shellKey(e, s) {
+        if (e.defaultPrevented || s.modal) return null;
+        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        if ((e.ctrlKey || e.metaKey) && ! e.altKey && key === 'f') return { do: 'search' };
+        if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return key === 'Escape' && s.panelOpen ? { do: 'close-filters' } : null;
+        if (key === 'f') return s.focused ? { do: 'toggle-filters' } : null;
+        if (key === 'Escape' && s.panelOpen) return { do: 'close-filters' };
+        return null;
+    }
+
+    /** Whether a key lands in a form field (an input, a text area or a list), not an editor of rich text. */
+    const FIELDS = ['input', 'textarea', 'select'];
+    function isField(target) {
+        return !! target && (FIELDS.includes(String(target.tagName || '').toLowerCase()) || target.field === true);
+    }
+
+    /**
+     * Back and Forward from the keyboard (docs/PLAN_NAV_3_LEVELS.md sections 0 and 6): ⌘[ and ⌘] on a Mac, Ctrl+[ and
+     * Ctrl+] elsewhere, as the apps have them; the browser's own Back, Forward and the mouse's back button keep working
+     * (the Library keeps its place, filters and view in the address). On a Mac ⌘[ and ⌘] are the browser's Back and
+     * Forward too. The page asks after the focused element has had the key (it listens as the key bubbles up): an
+     * editor of rich text that uses ⌘[ / ⌘] (outdent, indent) claims it first (defaultPrevented: null, nothing more);
+     * in any field left over (an input, a text area, a list, an editor that did not claim it) and over a dialog the
+     * key does nothing ('stay': the page and the typing stay). e as keyAction's (with code and shiftKey;
+     * target.editable for contenteditable); s: {mac, modal}. Returns 'back', 'forward', 'stay' or null.
+     */
+    function historyKey(e, s) {
+        if (e.altKey || e.shiftKey) return null;
+        if (s.mac ? ! (e.metaKey && ! e.ctrlKey) : ! (e.ctrlKey && ! e.metaKey)) return null;
+        const way = e.code === 'BracketLeft' || e.key === '[' ? 'back' : (e.code === 'BracketRight' || e.key === ']' ? 'forward' : null);
+        if (! way || e.defaultPrevented) return null;
+        const editor = !! e.target && (e.target.editable === true || e.target.isContentEditable === true);
+        return s.modal || editor || isField(e.target) ? 'stay' : way;
+    }
+
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
 });

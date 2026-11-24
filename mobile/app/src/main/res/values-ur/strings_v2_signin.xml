@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_in_title_email">سائن ان کریں یا اکاؤنٹ بنائیں</string>
+    <string name="v2_in_title_password">خوش آمدید</string>
+    <string name="v2_in_title_code">اپنی ای میل دیکھیں</string>
+    <string name="v2_in_title_profile">اپنا اکاؤنٹ بنائیں</string>
+    <string name="v2_in_title_otp">دو مرحلوں والا سائن ان</string>
+    <string name="v2_in_change">تبدیل کریں</string>
+    <string name="v2_in_email">ای میل</string>
+    <string name="v2_in_continue">جاری رکھیں</string>
+    <string name="v2_in_one_moment">ایک لمحہ…</string>
+    <string name="v2_in_or">یا</string>
+    <string name="v2_in_google">Google</string>
+    <string name="v2_in_google_full">Google کے ساتھ جاری رکھیں</string>
+    <string name="v2_in_passkey">پاس کی</string>
+    <string name="v2_in_passkey_full">پاس کی سے سائن ان کریں</string>
+    <string name="v2_in_advanced">ایڈوانسڈ</string>
+    <string name="v2_in_hide_advanced">ایڈوانسڈ چھپائیں</string>
+    <string name="v2_in_server">سرور کا پتہ</string>
+    <string name="v2_in_other_server">کوئی اور سرور استعمال کریں</string>
+    <string name="v2_in_password">پاس ورڈ</string>
+    <string name="v2_in_sign_in">سائن ان کریں</string>
+    <string name="v2_in_signing_in">سائن ان ہو رہا ہے…</string>
+    <string name="v2_in_forgot">بھول گئے؟ اس کے بجائے مجھے ای میل پر کوڈ بھیجیں</string>
+    <string name="v2_in_code_sent">ہم نے %1$s پر 6 ہندسوں کا کوڈ بھیجا ہے۔ یہ 10 منٹ چلتا ہے۔</string>
+    <string name="v2_in_code">6 ہندسوں کا کوڈ</string>
+    <string name="v2_in_checking">جانچ ہو رہی ہے…</string>
+    <string name="v2_in_send_again_in">%1$d سیکنڈ میں دوبارہ بھیجیں</string>
+    <string name="v2_in_send_again">دوبارہ بھیجیں</string>
+    <string name="v2_in_name">آپ کا نام</string>
+    <string name="v2_in_accept">میں شرائط اور پرائیویسی پالیسی قبول کرتا ہوں</string>
+    <string name="v2_in_terms">شرائط</string>
+    <string name="v2_in_privacy">پرائیویسی</string>
+    <string name="v2_in_create">اکاؤنٹ بنائیں</string>
+    <string name="v2_in_creating">بن رہا ہے…</string>
+    <string name="v2_in_free_plan">آپ فری پلان سے شروع کریں گے۔ کسی بھی وقت اپ گریڈ کر سکتے ہیں۔</string>
+    <string name="v2_in_code_email">ای میل سے 6 ہندسوں کا کوڈ</string>
+    <string name="v2_in_otp">آپ کی آتھنٹیکیٹر ایپ کا کوڈ</string>
+    <string name="v2_in_other_ways_full">سائن ان کے دوسرے طریقے (QR کوڈ، ون ٹائم کوڈ)</string>
+    <string name="v2_in_encrypted">آپ کی ریکارڈنگز اس فون پر اور سرور تک جاتے ہوئے انکرپٹ رہتی ہیں۔</string>
+    <string name="v2_in_other_ways">سائن ان کے دوسرے طریقے</string>
+    <string name="v2_in_qr_help">کمپیوٹر پر سائن ان ہیں؟ کنسول میں اکاؤنٹ › ڈیوائسز › ڈیوائس سائن ان کریں کھولیں، پھر اس کا QR کوڈ یہاں اسکین کریں۔</string>
+    <string name="v2_in_scan">QR کوڈ اسکین کریں</string>
+    <string name="v2_in_camera_needed">اسکین کے لیے کیمرے کی اجازت چاہیے۔ آپ کوڈ لکھ بھی سکتے ہیں۔</string>
+    <string name="v2_in_camera_off">EchoLedger کے لیے کیمرے کی اجازت بند ہے۔ ایپ کی سیٹنگز کھول کر اجازت دینے کے لیے QR کوڈ اسکین کریں دبائیں، یا کوڈ لکھیں۔</string>
+    <string name="v2_in_one_time">ون ٹائم سائن ان کوڈ</string>
+    <string name="v2_in_with_code">کوڈ سے سائن ان کریں</string>
+    <string name="v2_in_browser">براؤزر میں سائن ان کریں (پاس کی)</string>
+    <string name="v2_in_confirm_title">اس سرور میں سائن ان کریں؟</string>
+    <string name="v2_in_confirm_text">%1$s
+
+اس فون کی ریکارڈنگز اور ٹرانسکرپٹ صرف اسی سرور کو بھیجے جائیں گے۔</string>
+    <string name="v2_in_e_closed">یہ سرور صرف دعوت پر ہے۔ اس کے مالک سے دعوت مانگیں، پھر اسی ای میل سے سائن ان کریں۔</string>
+    <string name="v2_in_e_invalid_code">یہ کوڈ درست نہیں۔ ای میل دیکھیں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_expired">اس کوڈ کی مدت ختم ہو گئی۔ نئے کوڈ کے لیے دوبارہ بھیجیں دبائیں۔</string>
+    <string name="v2_in_e_too_soon">ابھی ایک کوڈ بھیجا گیا ہے۔ دوسرا مانگنے سے پہلے تھوڑا انتظار کریں۔</string>
+    <string name="v2_in_e_too_many">بہت زیادہ کوششیں۔ چند منٹ انتظار کریں، پھر دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_sign_up_limit">آج اس نیٹ ورک سے بہت زیادہ نئے اکاؤنٹ بنے ہیں۔ کل دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_email_not_allowed">یہ ای میل یہاں استعمال نہیں ہو سکتی۔ کوئی اور استعمال کریں۔</string>
+    <string name="v2_in_e_invalid_otp">دو مرحلوں والا کوڈ درست نہیں۔</string>
+</resources>

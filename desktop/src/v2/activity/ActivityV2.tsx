@@ -2,6 +2,7 @@
 // events and rules): what needs the person first (calls waiting for Keep or Discard, uploads that stopped, problems
 // and answers the badge counts), what is in progress, the quiet "Skipped 3 short calls" line with Restore, then the
 // notifications by day. A notification marks itself read and opens its recording. Built from v2 parts only.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem, type SkippedItem } from "../../lib/ipc";
 import { dayGroup } from "../../lib/library";
@@ -9,13 +10,29 @@ import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../li
 import { actionCount, isProblem, needsAction as asksForAction } from "../../lib/badge";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { activitySubtitle, shortWhen, useInProgress } from "../../views/main/ActivityCentre";
-import { Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
+import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
+import { ContextMenu, menuPointFor, type MenuItem } from "../components/Menu";
+import { contextItems } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import type { ActionContext } from "../actions/registry";
+import { useActions } from "../actions/useActions";
+
+/** An Activity item's menu (UX-22, 3b): Open · Mark as read | Retry (an upload that stopped). */
+const ACTIVITY_ITEM = ["place.open", "activity.markRead", "-", "activity.retry"] as const;
+
+/**
+ * Retry only where it retries something: an upload that stopped, in failed uploads. A transcription that failed is tried
+ * again on its recording's page (Open), and minutes used up have nothing to retry.
+ */
+const retries = (i: Pick<ActivityItem, "kind">) => i.kind === "upload_failed";
 
 const iconOf = (kind: string | null): IconType =>
   isProblem(kind) ? Icons.ErrorIcon : kind === "transcript_ready" ? Icons.CheckIcon : kind === "device_paired" ? Icons.LaptopIcon : Icons.BellIcon;
 
-export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItems, say }: {
+export function ActivityV2({ status, show = "all", onOpenRecording, onReview, onFailed, onItems, say }: {
   status: AppStatus;
+  /** What the panel chose: everything, only what needs the person, or only what is done. */
+  show?: "all" | "needs" | "done";
   onOpenRecording: (id: string) => void;
   /** Keep or discard? › Review: the waiting recordings in the Library, the first one in view. */
   onReview: (pendingId: string | null) => void;
@@ -104,16 +121,43 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
   const waiting = pending.length > 0 || status.pendingDecisions > 0;
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
+  // An item's right-click menu (UX-22), from actions.json: only what fits it (Open a recording's; Mark as read while
+  // unread; Retry an upload that stopped, where failed uploads are retried). Notification settings… and Remove wait for
+  // their way in.
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; label: string; items: MenuItem[] } | null>(null);
+  const itemOf = (c: ActionContext) => (items ?? []).find((i) => i.id === c.targets?.[0]);
+  useActions("activity", {
+    "place.open": (c) => { const i = itemOf(c); if (i) void choose(i); },
+    "activity.markRead": (c) => {
+      const i = itemOf(c);
+      if (!i || i.read) return;
+      void api.markActivityRead([i.id]).catch(() => null);
+      setItems((list) => list?.map((x) => (x.id === i.id ? { ...x, read: true } : x)) ?? null);
+    },
+    "activity.retry": () => onFailed(),
+  });
+  const itemMenu = (i: ActivityItem): MenuItem[] =>
+    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity" })
+      .filter((m) => (m.action !== "place.open" || !!i.session_id) && (m.action !== "activity.markRead" || !i.read) && (m.action !== "activity.retry" || retries(i)));
+  const openMenu = (i: ActivityItem, at: { x: number; y: number }) => {
+    const shown = itemMenu(i);
+    if (!shown.length) return;
+    if (currentPlatform() !== "macos") return setMenu({ at, label: i.title || "Activity", items: shown });
+    void popupNative(shown, at).then((ok) => { if (!ok) setMenu({ at, label: i.title || "Activity", items: shown }); });
+  };
+
   const row = (i: ActivityItem) => (
     <ListRow key={i.id} icon={iconOf(i.kind)} title={i.title ?? ""} strong={!i.read}
       meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body].filter(Boolean).join(" · ")}
       badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
-      endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)} />
+      endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)}
+      onContextMenu={(e) => openMenu(i, "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget))} />
   );
 
   return (
-    <div className="el-page el-page--narrow" data-v2="activity">
+    <div className="el-page el-page--narrow el-back-top-room" data-v2="activity">
       <header className="el-page__head">
+        <PanelToggle />
         <div className="el-page__titles">
           <h1 className="el-title-l">Activity</h1>
           <p className="el-secondary" aria-live="polite">{activitySubtitle(needsYou, unread)}</p>
@@ -121,13 +165,13 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
         {unread > 0 && <div className="el-page__actions"><Button variant="quiet" icon={Icons.CheckIcon} onClick={() => void readAll()}>Mark all read</Button></div>}
       </header>
 
-      {(waiting || status.failedUploads > 0 || needsAction.length > 0) && (
+      {show !== "done" && (waiting || status.failedUploads > 0 || needsAction.length > 0) && (
         <section className="el-group" aria-labelledby="activity-needs">
           <h2 id="activity-needs" className="el-caption el-body-strong el-group__title">Needs action</h2>
           <Card>
             <List label="Needs action" className="el-group__rows">
               {waiting && (
-                <ListRow icon={Icons.ClockIcon} title="Keep or discard?"
+                <ListRow icon={Icons.ClockIcon} title="Transcribe or delete?"
                   meta={pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}
                   control={<Button size="sm" onClick={() => onReview(pending[0]?.id ?? null)}>Review</Button>} />
               )}
@@ -142,7 +186,7 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
         </section>
       )}
 
-      {moving.length > 0 && (
+      {show !== "needs" && moving.length > 0 && (
         <section className="el-group" aria-labelledby="activity-moving" data-testid="in-progress">
           <h2 id="activity-moving" className="el-caption el-body-strong el-group__title">In progress</h2>
           <Card>
@@ -165,7 +209,7 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
         <Loading label="Loading activity…"><Card><div className="el-group__rows">{[0, 1, 2].map((n) => <SkeletonRow key={n} />)}</div></Card></Loading>
       )}
 
-      {skipped.length > 0 && (
+      {show !== "needs" && skipped.length > 0 && (
         <section className="el-group" aria-label="Skipped calls" data-testid="skipped-calls">
           <div className="el-group__head">
             <span className="el-secondary">{skippedLine(skipped.length)}</span>
@@ -194,12 +238,17 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
         <EmptyState icon={Icons.BellIcon} title="All caught up" body="Nothing yet. Finished transcripts, failed uploads and new devices show up here." />
       )}
 
-      {groups.map((g) => (
+      {show === "needs" && !(waiting || status.failedUploads > 0 || needsAction.length > 0) && items && (
+        <EmptyState icon={Icons.ReadyIcon} title="Nothing needs you" body="Calls to decide, uploads that failed and anything else that needs you shows up here." />
+      )}
+      {show !== "needs" && groups.map((g) => (
         <section key={g.label} className="el-group" aria-label={g.label}>
           <h2 className="el-caption el-body-strong el-group__title">{g.label}</h2>
           <Card><List label={g.label} className="el-group__rows">{g.items.map(row)}</List></Card>
         </section>
       ))}
+      <BackToTop first=".el-row__hit" />
+      {menu && <ContextMenu label={menu.label} items={menu.items} at={menu.at} onClose={() => setMenu(null)} />}
     </div>
   );
 }

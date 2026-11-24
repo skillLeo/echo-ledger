@@ -148,9 +148,19 @@ export function WindowShareBadge({ compact = true }: { compact?: boolean }) {
 
 /** Where showing it is done: on that window's own badge, never from here. */
 export const SHOW_FROM_BADGE: Record<PinnedWindow, string> = {
-  card: "Show it from the card's badge during a call.",
-  captions: "Show them from the captions' badge.",
+  card: "Show it from the card's own menu",
+  captions: "Show them from the captions' own menu",
 };
+
+/** The card's or the captions' state in a row's value (FIX-01): hidden unless the person showed it from its window. */
+export function pinnedValue(view: Pick<WindowShareView, "state"> | null): string {
+  switch (view?.state) {
+    case "shown": return "Shown";
+    case "black_box": return "Black box";
+    case "could_not_hide": return "Couldn't be hidden";
+    default: return "Hidden";
+  }
+}
 
 /** Settings: the card's or the captions' real state, from the main window (it names the window). From here it can only
  * be hidden again; showing it is done on that window's own badge. */

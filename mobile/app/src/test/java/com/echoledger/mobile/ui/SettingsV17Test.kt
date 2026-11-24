@@ -35,6 +35,7 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.util.AppClock
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -295,6 +296,16 @@ class SettingsV17Test : ScreenTest() {
 
     @Test
     fun `the receipt step takes screenshots, a transaction ID, and sends them`() {
+        // The proof's date is shown against today: the same today on every day it runs (F2).
+        AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try {
+            receiptStep()
+        } finally {
+            AppClock.reset()
+        }
+    }
+
+    private fun receiptStep() {
         val r =
             request(
                 "awaiting_payment",

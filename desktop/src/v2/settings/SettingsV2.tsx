@@ -2,6 +2,7 @@
 // card with the plan and Upgrade on top. Search finds every individual setting by the words the classic search knows
 // (lib/settingsIndex.ts) and jumps to it; a page opens today's page for that feature (its one home), scrolled to the
 // setting and highlighted.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
@@ -12,6 +13,7 @@ import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
 import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType } from "../components";
 import { AccountCard } from "./AccountCard";
+import { SHOW_PANEL_EVENT } from "../shell/NavRail";
 
 /**
  * The goal groups of IA 5 and the root entries each holds (one home per feature), each with its icon and a one-line
@@ -26,7 +28,8 @@ export const GOAL_GROUPS: readonly { title: string; icon: IconType; description:
   { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
   { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
   { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
-  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
+  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, opening EchoLedger when you sign in, and its icons.",
+    ids: ["shortcuts", "app.autostart", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] },
   { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
 ];
 
@@ -57,9 +60,20 @@ export type SettingsV2Props = {
   setupHealth?: boolean;
   /** Shown under the groups ("Switch back to classic"). */
   footer?: ReactNode;
+  /**
+   * The three levels (PLAN_NAV_3_LEVELS §3, §4): the groups and the search are the panel's, so the home shows the
+   * profile card and Sign out only, and a page has its group's sections in an inner list beside it.
+   */
+  inPanel?: boolean;
 };
 
-export function SettingsV2({ available, section = null, renderPage, onSignOut, setupHealth = false, footer }: SettingsV2Props) {
+/** The goal group a section is in (a page or one of its settings: "calls", "calls#calls.after"). */
+export function groupOf(sectionId: string) {
+  const id = sectionId.split("#")[0].split(".")[0];
+  return GOAL_GROUPS.find((g) => g.ids.some((x) => x === sectionId.split("#")[0] || x.split(".")[0] === id)) ?? null;
+}
+
+export function SettingsV2({ available, section = null, renderPage, onSignOut, setupHealth = false, footer, inPanel = false }: SettingsV2Props) {
   const [opened, setOpened] = useState<{ id: string; seq: number } | null>(null);
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -77,7 +91,56 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   }, [section]);
 
   const open = (id: string) => setOpened({ id, seq: ++seq.current });
+  if (opened && inPanel) {
+    // The group's sections beside the page (Level 3: an inner list, as a site's settings have).
+    const group = groupOf(opened.id);
+    // Setup & health is the rail's own (one home): never in the inner list.
+    const ids = (group?.ids ?? []).filter((id) => id !== "setup_health" && !!SETTINGS.find((e) => e.id === id && available(e)));
+    const here = opened.id.split("#")[0];
+    return (
+      <div className="el-settings-split">
+        {group && ids.length > 1 && (
+          <nav className="el-settings-split__list" aria-label={`${group.title} sections`}>
+            <h2 className="el-caption el-body-strong el-settings-split__title">{group.title}</h2>
+            <ul className="el-nav-list">
+              {ids.map((id) => {
+                const entry = SETTINGS.find((e) => e.id === id);
+                const name = id === "setup_health" ? "Setup & health" : entry ? titleV2(entry) : id;
+                return (
+                  <li key={id}>
+                    <button type="button" className="el-nav-item el-nav-item--row" aria-current={here === id || here.startsWith(`${id}.`) ? "page" : undefined}
+                      onClick={() => open(id)}><span className="el-nav-item__label">{name}</span></button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )}
+        <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>
+      </div>
+    );
+  }
   if (opened) return <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>;
+  if (inPanel) {
+    return (
+      <div className="el-page el-page--narrow" data-v2="settings">
+        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
+        <AccountCard />
+        <div className="el-settings-home__groups">
+          <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
+          <Button onClick={() => window.dispatchEvent(new Event(SHOW_PANEL_EVENT))}>Show groups</Button>
+        </div>
+        {onSignOut && (
+          <Card>
+            <List label="Sign out" className="el-group__rows">
+              <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title="Sign out" onClick={onSignOut} />
+            </List>
+          </Card>
+        )}
+        {footer}
+      </div>
+    );
+  }
 
   const answer = query.trim().length >= 2 ? searchSettings(query, available) : null;
   const go = (entry: SettingEntry) => {
@@ -109,12 +172,24 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
             }} /> : undefined} />
       );
     }
+    // FIX-11: the Mac's menu bar icon, its timer and the Dock's number, switched here.
+    const ICON_SWITCHES: Record<string, "menuBarIcon" | "menuBarTimer" | "dockBadge"> = {
+      "app.menu_bar_icon": "menuBarIcon", "app.menu_bar_timer": "menuBarTimer", "app.dock_badge": "dockBadge",
+    };
+    const key = ICON_SWITCHES[id];
+    if (key) {
+      return (
+        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} meta={entry.description}
+          control={settings ? <Toggle label={entry.title} hideLabel checked={settings[key] !== false}
+            onChange={(on) => void api.updateSettings({ [key]: on }).then(setSettings, () => undefined)} /> : undefined} />
+      );
+    }
     return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;
   };
 
   return (
     <div className="el-page el-page--narrow" data-v2="settings">
-      <header className="el-page__head"><h1 className="el-title-l">Settings</h1></header>
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
       <SearchField label="Search settings" value={query} onChange={setQuery} />
       {answer ? (
         answer.settings.length + answer.help.length > 0 ? (

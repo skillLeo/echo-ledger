@@ -327,7 +327,10 @@ data class EchoV2Strings(
     val openMenu: String,
     val dragHandle: String,
     val back: String,
-    val more: String
+    val more: String,
+    /** A menu button's state for screen readers: its menu is open, or closed. */
+    val expanded: String,
+    val collapsed: String
 ) {
     companion object {
         /** The words in the language of [res] (strings_v2_core.xml, values and values-ur). */
@@ -341,7 +344,9 @@ data class EchoV2Strings(
             openMenu = res.getString(R.string.v2_open_menu),
             dragHandle = res.getString(R.string.v2_drag_handle),
             back = res.getString(R.string.v2_back),
-            more = res.getString(R.string.v2_more)
+            more = res.getString(R.string.v2_more),
+            expanded = res.getString(R.string.v2_expanded),
+            collapsed = res.getString(R.string.v2_collapsed)
         )
     }
 }

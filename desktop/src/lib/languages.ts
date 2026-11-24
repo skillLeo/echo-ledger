@@ -116,7 +116,7 @@ export function transcriptStatusLine(status: string | null | undefined): string 
     case undefined:
     case "":
     case "not_started":
-      return "Not transcribed yet.";
+      return "Audio only. No transcript yet.";
     case "awaiting_device":
       return "Waiting for the recording to finish uploading from the device that made it.";
     case "failed":

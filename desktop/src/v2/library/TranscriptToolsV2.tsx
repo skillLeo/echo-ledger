@@ -3,13 +3,15 @@
 // original, a line edited in place, and the call notes of a recording filed under a project. Same commands as classic.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
-  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision,
+  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision, type TranscriptView,
 } from "../../lib/ipc";
+import { convertFailedText, convertingText } from "../../lib/progress";
 import { formatWhen, timestamp } from "../../lib/format";
 import { confirmAction } from "../../lib/confirm";
 import { usePoll } from "../../lib/usePoll";
 import { notesWorking } from "../../views/main/CallNotes";
-import { Badge, Button, Checkbox, Dialog, EmptyState, Icons, Loading, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, Progress, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { sayProblem, type Say } from "./organise";
 
 /** Find in this transcript: the field, "N of M", previous and next; Enter, Shift+Enter and Esc as classic. */
 export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
@@ -79,7 +81,7 @@ export function ReplaceDialog({ transcriptId, onReplaced, onClose, say }: {
   transcriptId: string;
   onReplaced: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
@@ -122,7 +124,7 @@ export function SpeakersDialog({ sessionId, labels, names, hasProject, onSaved, 
   hasProject: boolean;
   onSaved: (names: Record<string, string>) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(labels.map((l) => [l, names[l] ?? ""])));
   const [remember, setRemember] = useState(false);
@@ -165,7 +167,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
   edited: boolean;
   onRestored: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [revisions, setRevisions] = useState<TranscriptRevision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -183,7 +185,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
       say("The original text is back");
       onClose();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   return (
@@ -203,7 +205,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
 }
 
 /** The call notes of a recording in a project: written on the server, in English or Roman Urdu; a line plays its moment. */
-export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: (text: string) => void }) {
+export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: Say }) {
   const [notes, setNotes] = useState<CallNotes | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<AnswerLanguage>("en");
@@ -232,7 +234,7 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
       setNotes((await api.writeSessionNotes(sessionId, lang)).data);
       setLanguage(lang);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -280,5 +282,35 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
         ))
       )}
     </div>
+  );
+}
+
+/**
+ * Over the transcript while its default view is written: a small spinner and "Converting to Roman Urdu… 60%" (no
+ * percent until the first lines are done). When it could not be written, "Couldn't convert to Roman Urdu" and Try again.
+ */
+export function ConvertingLine({ view, percent = null, failed = false, retrying = false, onRetry }: {
+  view: TranscriptView | null;
+  percent?: number | null;
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
+  if (failed) {
+    return (
+      <span className="el-converting el-converting--failed" role="status" data-testid="convert-failed">
+        <Icon icon={Icons.ErrorIcon} size="sm" />
+        <span className="el-caption">{convertFailedText(view)}</span>
+        {onRetry && <Button size="sm" variant="quiet" loading={retrying} loadingLabel="Starting…" onClick={onRetry}>Try again</Button>}
+      </span>
+    );
+  }
+  return (
+    <span className="el-converting" role="status" data-testid="converting-line">
+      <span className="el-spinner" aria-hidden="true" />
+      <span className="el-caption el-secondary">{convertingText(view, percent)}</span>
+      {/* How far, once lines are written (classic's slim bar). */}
+      {percent !== null && <Progress value={percent} label={convertingText(view, null)} valueText={`${percent}%`} />}
+    </span>
   );
 }

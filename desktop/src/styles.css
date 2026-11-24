@@ -82,6 +82,8 @@
   --radius-field: 12px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  /* Floating cards (the after-call card), as the new design's sheet radius. */
+  --radius-sheet: 16px;
   --radius-full: 999px;
   /* elevation: one shadow for sheets and floating controls; dark uses surface steps and a 1 px border instead */
   --shadow-1: none;
@@ -168,6 +170,26 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--bg); overflow: hidden; }
+
+/* FIX-10: an app, not a web page (every window; lib/nativeFeel.ts takes the web view's menu and keys).
+   - The window's own background follows the theme (no white flash behind the page; the window shows after its first
+     paint, tauri.conf.json visible: false). A floating window's transparent background, below, still wins.
+   - No rubber-band bounce of the whole window; a list that scrolls keeps its own.
+   - The arrow cursor on everything one presses, as native apps have; the hand only on a real link. !important inside
+     :where(), so a page's own cursor rule gives way, but a drag's grabbing cursor (also !important, more specific)
+     doesn't.
+   - UI text (buttons, menus, headers, the rail and sidebars, toasts) can't be selected; content (transcripts, notes,
+     what one types, a message's own words, to copy an error) can.
+   - Pictures, icons and links can't be dragged out of the window by accident.
+   - Focus rings for the keyboard only, never after a click. */
+html { background: var(--bg); }
+html, body { overscroll-behavior: none; }
+:where(button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="switch"], [role="checkbox"], [role="radio"], label, summary, select) { cursor: default !important; }
+a[href] { cursor: pointer; }
+:where(button, [role="button"], [role="tab"], [role="menu"], [role="menuitem"], label, nav, header, .el-rail, .el-panel__head, .el-toast, .el-page__head, .sidebar, .topbar) { -webkit-user-select: none; user-select: none; }
+:where(input, textarea, [contenteditable="true"], .el-toast__message) { -webkit-user-select: text; user-select: text; }
+:where(img, svg, a) { -webkit-user-drag: none; }
+:focus:not(:focus-visible) { outline: none; }
 html[data-window="overlay"] body, html[data-window="dictation"] body,
 html[data-window="pill"] body, html[data-window="review"] body, html[data-window="translate"] body,
 html[data-window="overlay"], html[data-window="dictation"],
@@ -200,6 +222,9 @@ html[data-material]:not([data-sidebar="dark"]):not([data-sidebar="grey"]) .sideb
    top bar is the rest of the title bar (it carries the drag region itself, so its buttons stay clickable). */
 .titlebar-drag { display: none; }
 html[data-platform="macos"] .titlebar-drag { display: block; position: fixed; top: 0; left: 0; width: var(--sidebar-w, 240px); height: 28px; z-index: 40; }
+/* Full screen (no data-titlebar, lib/titlebar.ts): the window cannot be dragged, so the strip goes and frees what was
+   under it (the new design's "Show the panel" button). It is transparent: nothing else changes. */
+html[data-platform="macos"]:not([data-titlebar]) .titlebar-drag { display: none; }
 html[data-platform="macos"] .sidebar { padding-top: 40px; }
 .brand { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-1) var(--space-2) var(--space-2); font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.3px; }
 /* The brand's mark (components/BrandMark.tsx, docs/design/brand): its own tile and indigo, so no background here. */
@@ -433,6 +458,8 @@ select.chip option { color: var(--text); background: var(--surface); }
 .item-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .item-preview { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding-left: 60px; }
+/* A waiting recording put back after a Delete that was still waiting when EchoLedger closed. */
+.item-preview.queue-restored { color: var(--warning); }
 /* App tiles: 44 px, radius 12, the app's colour at 12 %. */
 .avatar { position: relative; width: 44px; height: 44px; border-radius: var(--radius-field); display: grid; place-items: center; flex: none; --tile: var(--tile-voice); background: color-mix(in srgb, var(--tile) 13%, transparent); color: var(--tile); }
 .avatar.app-video { --tile: var(--tile-video); }
@@ -712,6 +739,11 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .overlay-idle .overlay-card { opacity: 0; pointer-events: none; }
 .caption-message { color: var(--danger); }
 .dictation-card { display: block; min-height: 64px; }
+/* A permission kept dictation from starting: the settings button (the pill's text button on the same glass) and the
+   close, at the end of the box's head and at full strength. */
+.dictation-actions { opacity: 1; align-items: center; }
+.overlay-action { height: 24px; padding: 0 var(--space-3); border-radius: 12px; border: 1px solid var(--glass-border); background: var(--glass-hover); color: var(--glass-text); font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.overlay-action:hover { background: var(--glass-press); }
 .listening { display: inline-flex; gap: 3px; align-items: flex-end; height: 12px; }
 /* The bars grow from the bottom by scaling, not by their height (a layout property never moves). */
 .listening span { width: 3px; height: 12px; background: var(--accent); border-radius: 2px; transform-origin: bottom; animation: bar 1s infinite ease-in-out; }
@@ -986,6 +1018,10 @@ audio.player { display: none; }
 .improving-track { height: 3px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
 .improving-track > div { height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; transition: transform var(--motion-base) var(--ease-out); }
 .improving-track > div.indeterminate { transform: scaleX(0.3); }
+.converting-line { display: inline-flex; align-items: center; gap: var(--space-1); }
+.converting-line .spinner { width: 12px; height: 12px; }
+.convert-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+.convert-failed > .small, .item-sub .convert-note { display: inline-flex; align-items: center; gap: var(--space-1); }
 .activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
 
 /* An automatic title (Phase 1C): a quiet note beside it. */
@@ -1317,9 +1353,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .key-steps li { counter-increment: key-step; position: relative; display: grid; gap: var(--space-1); justify-items: start; padding-left: 34px; min-height: 24px; }
 .key-steps li::before { content: counter(key-step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-text); display: grid; place-items: center; font-size: var(--text-xs); font-weight: 700; }
 .key-paste { width: 100%; gap: var(--space-2); }
-.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); }
+.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono); }
 .needs-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }
+/* Your account from the app (2.0.0-l, AccountFlows.tsx): the same flows in both designs. Logical sides only, for Urdu. */
+.account-form { display: grid; gap: var(--space-3); }
+.account-field { gap: var(--space-1); }
+.account-qr { display: block; margin-inline: auto; inline-size: 192px; block-size: 192px; image-rendering: pixelated; border-radius: var(--radius-field); }
+.account-key code, .account-codes code { font-family: var(--font-mono); letter-spacing: 0.04em; user-select: all; }
+.account-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); padding-inline-start: var(--space-5); margin: var(--space-2) 0; }
+.account-said { margin-block-start: var(--space-2); }
+.account-avatar, .account-initials { inline-size: 32px; block-size: 32px; border-radius: 50%; object-fit: cover; }
+.account-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-3); font-weight: 600; font-size: var(--text-sm); }
+.account-passkey .set-end { display: inline-flex; gap: var(--space-1); }
 /* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
 .consent-notice { display: grid; gap: var(--space-1); }
 .consent-notice p { margin: 0; }
@@ -1543,6 +1589,11 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-trail.disclosure.open { transform: rotate(-90deg); }
 .set-sub { display: block; font-size: var(--text-xs); line-height: 16px; color: var(--text-muted); }
 .set-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+/* A choice of a few with a help line each (After each call): one radio per row. */
+.set-choices { margin: 0; padding: 0; border: 0; min-width: 0; }
+.set-choices > .set-choice:first-of-type::before { display: none; }
+.set-choice { cursor: pointer; align-items: flex-start; }
+.set-choice input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .set-main .set-title { flex: none; }
 .set-two { min-height: 60px; }
 .set-danger .set-title { color: var(--danger); }

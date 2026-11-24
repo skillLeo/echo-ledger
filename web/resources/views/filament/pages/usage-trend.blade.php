@@ -1,7 +1,3 @@
-{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
-@php
-    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
-@endphp
 {{-- The last six months, oldest first (since v1.5). --}}
 @php
     $most = max(1, ...array_map(fn (array $m): float => $m['minutes'], $trend));
@@ -15,7 +11,7 @@
                     <tr>
                         <td style="{{ $cell }}white-space:nowrap">{{ $month['label'] }}</td>
                         <td style="{{ $cell }}width:60%">
-                            <div role="img" aria-label="{{ __(':month: :n minutes', ['month' => $iso($month['label']), 'n' => number_format($month['minutes'], 1)]) }}" style="height:.5rem;border-radius:999px;background:var(--gray-200);overflow:hidden">
+                            <div role="img" aria-label="{{ __(':month: :n minutes', ['month' => $month['label'], 'n' => number_format($month['minutes'], 1)]) }}" style="height:.5rem;border-radius:999px;background:var(--gray-200);overflow:hidden">
                                 <div style="height:100%;width:{{ round($month['minutes'] / $most * 100, 1) }}%;background:var(--primary-500);border-radius:999px"></div>
                             </div>
                         </td>

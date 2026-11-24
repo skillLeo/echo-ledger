@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,16 +27,21 @@ import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.share.WhatsAppShare
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.SendSheet
-import com.echoledger.mobile.ui.ShareSheet
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
+import com.echoledger.mobile.ui.v2.components.EchoSplitButton
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 
 /** The Copy ▾ menu's choices. */
 enum class CopyKind { Text, WithTimestamps, WithoutTimestamps, ForAi }
@@ -53,7 +59,11 @@ object RecordingCopy {
         shown: List<String?>?,
         settings: AppSettings,
         screens: List<ScreenDto>,
-        speakerNames: Map<String, String> = emptyMap()
+        speakerNames: Map<String, String> = emptyMap(),
+        /** The view on screen ("roman"…), null for the original words: Copy for AI's Language line names it. */
+        view: String? = null,
+        /** False: no note line (several recordings copied at once have one, [forAiMany]). */
+        withNote: Boolean = true
     ): String {
         val body = TranscriptText.copied(
             segments,
@@ -63,20 +73,36 @@ object RecordingCopy {
             threshold = settings.unsureThreshold,
             noteOn = settings.unsureNote,
             forAi = kind == CopyKind.ForAi,
-            screens = screens
+            screens = screens,
+            withNote = withNote
         )
-        return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames) + "\n\n" + body else body
+        return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames, view) + "\n\n" + body else body
     }
 
-    /** "Title: …", "Date: …", "People: …", "Language: …": only the lines the recording has. */
-    fun aiHeader(item: LibraryItem, segments: List<SegmentDto>, speakerNames: Map<String, String> = emptyMap()): String {
+    /**
+     * Copy for AI of several recordings (Library's selection): the note on unsure words once (none when the console
+     * turned the marks off), then each recording's header and lines ([text] with `withNote = false`), a rule between.
+     */
+    fun forAiMany(parts: List<String>, settings: AppSettings): String {
+        val body = parts.joinToString("\n\n---\n\n")
+        return if (settings.unsureStyle == "off") body else TranscriptText.note(settings.unsureStyle) + "\n\n" + body
+    }
+
+    /** "Title: …", "Date: …", "People: …", "Language: …" (the view's when the text is in one): only the lines it has. */
+    fun aiHeader(
+        item: LibraryItem,
+        segments: List<SegmentDto>,
+        speakerNames: Map<String, String> = emptyMap(),
+        view: String? = null
+    ): String {
         val title = item.title?.takeIf { it.isNotBlank() }
         val date = item.startedAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() }
             ?.format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH))
         val people = segments.map { it.speaker }.distinct().map { label ->
             com.echoledger.mobile.ui.speakerName(speakerNames, label).let { if (it == "Me") "You" else it }
         }.ifEmpty { listOfNotNull("You", item.client?.name) }
-        val language = item.transcript?.finalLanguage?.let(Languages::label) ?: item.languageChip
+        val language = com.echoledger.mobile.ui.ShowAs.languageName(view)
+            ?: item.transcript?.finalLanguage?.let(Languages::label) ?: item.languageChip
         return listOfNotNull(
             title?.let { "Title: $it" },
             date?.let { "Date: $it" },
@@ -86,30 +112,51 @@ object RecordingCopy {
     }
 }
 
-/** Copy ▾: Copy text, Copy with timestamps, Copy without timestamps, Copy for AI (with what its header holds). */
+/**
+ * Copy on the recording page: one split button. Its main part copies the text without timestamps at once ([CopyKind.Text])
+ * and the page confirms; its chevron opens the other ways to copy ([CopyChoices]).
+ */
 @Composable
-fun CopyMenuSheet(onCopy: (CopyKind) -> Unit, onDismiss: () -> Unit) {
-    EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_rec_copy)) {
-        CopyMenuContent(onCopy = {
-            onDismiss()
-            onCopy(it)
-        })
+fun RecordingCopyButton(onCopy: (CopyKind) -> Unit, modifier: Modifier = Modifier) {
+    val look = rememberPageLook()
+    EchoSplitButton(
+        text = stringResource(R.string.v2_rec_copy),
+        onClick = { onCopy(CopyKind.Text) },
+        menuLabel = stringResource(R.string.v2_rec_copy_more),
+        mainLabel = stringResource(R.string.v2_rec_copy_main),
+        icon = RecordingIcons.Copy,
+        modifier = modifier
+    ) { close ->
+        ProvidePageLook(look) {
+            CopyChoices(onCopy = {
+                close()
+                onCopy(it)
+            })
+        }
     }
 }
 
-/** The Copy menu without the sheet (screenshots and tests). */
+/** The split button's other choices: Copy with timestamps, Copy without timestamps, Copy for AI (with what its header holds). */
 @Composable
-fun CopyMenuContent(onCopy: (CopyKind) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        MenuRow(RecordingIcons.Copy, stringResource(R.string.v2_rec_copy_text), { onCopy(CopyKind.Text) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_with), { onCopy(CopyKind.WithTimestamps) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_without), { onCopy(CopyKind.WithoutTimestamps) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_ai), { onCopy(CopyKind.ForAi) })
-        Text(
-            stringResource(R.string.v2_rec_copy_ai_help),
-            style = EchoV2.type.meta,
-            color = EchoV2.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
+fun CopyChoices(onCopy: (CopyKind) -> Unit) {
+    val tint = EchoV2.colors.textPrimary
+    Column {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.v2_rec_copy_with), style = EchoV2.type.body, color = tint) },
+            onClick = { onCopy(CopyKind.WithTimestamps) }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.v2_rec_copy_without), style = EchoV2.type.body, color = tint) },
+            onClick = { onCopy(CopyKind.WithoutTimestamps) }
+        )
+        DropdownMenuItem(
+            text = {
+                Column {
+                    Text(stringResource(R.string.v2_rec_copy_ai), style = EchoV2.type.body, color = tint)
+                    Text(stringResource(R.string.v2_rec_copy_ai_help), style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+                }
+            },
+            onClick = { onCopy(CopyKind.ForAi) }
         )
     }
 }
@@ -125,7 +172,7 @@ fun copiedWords(kind: CopyKind): String = stringResource(
 )
 
 /**
- * Share: the transcript's text to any app; Share link (who may open it, downloads, how long: classic's sheet); Send to a
+ * Share: the transcript's text to any app; Share link (who may open it, downloads, how long: [V2ShareLinkSheet]); Send to a
  * teammate (classic's sheet); and, once the transcript is ready, Send to WhatsApp (or WhatsApp Business): Text only,
  * Text and voice (when the recording has audio), or a Link that works for 7 days. The logic is classic's.
  */
@@ -144,7 +191,7 @@ fun RecordingShareSheet(
     var linkSheet by remember { mutableStateOf(false) }
     var sendSheet by remember { mutableStateOf(false) }
     if (linkSheet) {
-        ShareSheet(vm, sessionId = item.id, clientId = null, title = "this recording", onDismiss = onDismiss)
+        V2ShareLinkSheet(vm, sessionId = item.id, clientId = null, onDismiss = onDismiss)
         return
     }
     if (sendSheet) {
@@ -152,45 +199,71 @@ fun RecordingShareSheet(
         return
     }
     val target = remember { WhatsAppShare.target(WhatsAppShare.installed(context)) }
-    val copiedNote = stringResource(R.string.v2_rec_wa_text_copied)
+    val savingVoice = stringResource(R.string.v2_rec_wa_saving)
+    val loading = EchoV2.strings.loading
+    val say: (String) -> Unit = vm::showMessage
+
+    // The WhatsApp choice being prepared: the sheet stays (its scope with it) until the message is handed over; closed
+    // first, nothing is sent ("Not sent").
+    var working by remember { mutableStateOf<String?>(null) }
+    fun waitNote() {
+        if (working == "voice") say(context.getString(R.string.v2_rec_wa_wait))
+    }
+    fun run(kind: String, block: suspend () -> Unit) {
+        if (working != null) return waitNote()
+        working = kind
+        scope.launch {
+            try {
+                WhatsAppShare.attempt(context, say, block)
+            } finally {
+                working = null
+            }
+            onDismiss()
+        }
+    }
+    fun idle(action: () -> Unit): () -> Unit = { if (working == null) action() else waitNote() }
+    val free = working == null
     EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_rec_share)) {
         Column(Modifier.fillMaxWidth()) {
-            MenuRow(EchoIcons.Share, stringResource(R.string.v2_rec_share_text), {
-                onDismiss()
-                shareTranscript(context, item.title.orEmpty(), shareText())
-            })
-            MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_share_link), { linkSheet = true })
-            MenuRow(RecordingIcons.Send, stringResource(R.string.v2_rec_send), { sendSheet = true })
+            MenuRow(
+                EchoIcons.Share,
+                stringResource(R.string.v2_rec_share_text),
+                idle {
+                    onDismiss()
+                    shareTranscript(context, item.title.orEmpty(), shareText())
+                },
+                enabled = free
+            )
+            MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_share_link), idle { linkSheet = true }, enabled = free)
+            MenuRow(RecordingIcons.Send, stringResource(R.string.v2_rec_send), idle { sendSheet = true }, enabled = free)
             if (transcriptId != null) {
                 EchoSectionHeader(
                     stringResource(if (target == WhatsAppShare.BUSINESS) R.string.v2_rec_whatsapp_business else R.string.v2_rec_whatsapp)
                 )
                 suspend fun transcriptText(): String? = vm.export(transcriptId, "txt", view)?.readText()
                 MenuRow(EchoIcons.WhatsApp, stringResource(R.string.v2_rec_wa_text), {
-                    onDismiss()
-                    scope.launch { transcriptText()?.let { WhatsAppShare.start(context, WhatsAppShare.textIntent(it, target)) } }
-                })
+                    run("text") { transcriptText()?.let { WhatsAppShare.send(context, WhatsAppShare.textIntent(it, target), say) } }
+                }, busy = loading.takeIf { working == "text" }, enabled = free)
                 if (hasAudio) {
                     MenuRow(EchoIcons.VoiceNote, stringResource(R.string.v2_rec_wa_voice), {
-                        onDismiss()
-                        scope.launch {
-                            val text = transcriptText() ?: return@launch
-                            val audio = vm.downloadAudio(item.id, "EchoLedger recording") ?: return@launch
-                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", audio)
-                            // WhatsApp may drop text sent with audio: it is on the clipboard too.
-                            copyToClipboard(context, "Transcript", WhatsAppShare.clip(text))
-                            vm.showMessage(copiedNote)
-                            WhatsAppShare.start(context, WhatsAppShare.voiceIntent(uri, text, target))
+                        run("voice") {
+                            val text = transcriptText() ?: return@run
+                            WhatsAppShare.sendTextAndVoice(
+                                context,
+                                text,
+                                target,
+                                save = { dir -> vm.downloadAudio(item.id, "EchoLedger recording", dir) },
+                                say = say
+                            )
                         }
-                    })
+                    }, busy = savingVoice.takeIf { working == "voice" }, enabled = free)
                 }
                 MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_wa_link), {
-                    onDismiss()
-                    scope.launch {
-                        val link = vm.createShare(item.id, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@launch
-                        WhatsAppShare.start(context, WhatsAppShare.textIntent(link, target))
+                    run("link") {
+                        val link = vm.createShare(item.id, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@run
+                        WhatsAppShare.send(context, WhatsAppShare.textIntent(link, target), say)
                     }
-                })
+                }, busy = loading.takeIf { working == "link" }, enabled = free)
             }
         }
     }
@@ -206,3 +279,53 @@ internal fun shareTranscript(context: Context, title: String, text: String) {
 
 /** A call's source in a sentence ("WhatsApp"), for "Back to WhatsApp". */
 fun sourceLabel(item: LibraryItem): String = item.sourceAppLabel ?: SourceApp.from(item.sourceApp).label
+
+/**
+ * Copy for AI from Library's selection: each recording with a finished transcript, in its default view once that is
+ * ready (Roman Urdu), with its screens; the note once. Puts it on the clipboard and says how many were copied (0: none
+ * of them had a transcript, nothing is copied).
+ */
+internal suspend fun copyForAi(vm: MainViewModel, context: Context, items: List<LibraryItem>, settings: AppSettings): Int {
+    // A few read at once (each needs its transcript, maybe its view and screens), in the selection's order.
+    val reads = kotlinx.coroutines.sync.Semaphore(COPY_AT_ONCE)
+    val parts = kotlinx.coroutines.coroutineScope {
+        items.map { item -> async { reads.withPermit { copyPart(vm, item, settings) } } }.awaitAll()
+    }.filterNotNull()
+    if (parts.isEmpty()) return 0
+    copyToClipboard(context, "Transcript", RecordingCopy.forAiMany(parts, settings))
+    return parts.size
+}
+
+/** How many recordings Copy for AI reads at the same time. */
+internal const val COPY_AT_ONCE = 4
+
+/** One recording's part of Copy for AI (header and lines, no note); null without a finished transcript. */
+private suspend fun copyPart(vm: MainViewModel, item: LibraryItem, settings: AppSettings): String? {
+    run {
+        val summary = item.transcript ?: return null
+        val id = summary.finalTranscriptId?.takeIf { summary.finalStatus == "completed" } ?: return null
+        val transcript = vm.transcript(id)?.takeIf { it.segments.isNotEmpty() } ?: return null
+        val view = summary.views?.takeIf { it.status == "ready" }?.default?.takeIf { it != "original" }
+        val shown = view?.let { key ->
+            vm.transcriptViews(id)?.let { v ->
+                when (key) {
+                    "roman" -> v.roman
+                    "urdu" -> v.urdu
+                    "english" -> v.english
+                    else -> null
+                }
+            }
+        }
+        val screens = if ((item.screenCount ?: 0) > 0) vm.screens(item.id) else emptyList()
+        return RecordingCopy.text(
+            CopyKind.ForAi,
+            item,
+            transcript.segments,
+            shown,
+            settings,
+            screens,
+            view = view.takeIf { shown != null },
+            withNote = false
+        )
+    }
+}

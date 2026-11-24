@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
+use App\Services\Accounts\EmailChange;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\SignUp;
@@ -388,6 +389,12 @@ class WorkspaceSettings extends Page implements HasTable
     private function addWithPassword(string $email, string $name, WorkspaceRole $role): void
     {
         $workspace = $this->workspaceOrFail();
+        // Since the security review of 2.0.0-l: an address reserved for an account's restore window is nobody's.
+        if (EmailChange::isReserved($email)) {
+            Notification::make()->title(__('That address is not available. Use another one.'))->danger()->send();
+
+            return;
+        }
         try {
             app(PlanLimits::class)->assertFeature($workspace->id, 'team', $this->user()->id);
             app(PlanLimits::class)->assertSeat($workspace->id, null, $this->user()->id);

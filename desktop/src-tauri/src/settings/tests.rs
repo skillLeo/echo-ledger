@@ -20,6 +20,10 @@ fn customised() -> Settings {
         ],
         device_id: Some("01JB8Q3R0Z5V1K7M9N2P4S6T8W".into()),
         device_name: Some("Büro-PC 🖥️".into()),
+        menu_bar_icon: false,
+        menu_bar_timer: false,
+        dock_badge: false,
+        sign_in_id: Some("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b".into()),
         install_id: Some("3f1c5e0b7a9d2c4e6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e".into()),
         shortcuts,
         captions_on_record: false,
@@ -37,6 +41,10 @@ fn customised() -> Settings {
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
         after_call_notice: true,
+        ask_when: crate::settings::AskWhen::Start,
+        card_hint_seen: true,
+        card_streak: Some(crate::after_call::CardStreak { choice: crate::after_call::CallChoice::Audio, count: 2 }),
+        always_offered: true,
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
@@ -160,8 +168,10 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "activityNotifications",
             "afterCall",
             "afterCallNotice",
+            "alwaysOffered",
             "appLock",
             "askUnknownApps",
+            "askWhen",
             "assistCardPosition",
             "autoMode",
             "autoRecordApps",
@@ -170,6 +180,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "captionLines",
             "captionStyle",
             "captionsOnRecord",
+            "cardHintSeen",
+            "cardStreak",
             "clientId",
             "consentAcknowledged",
             "deviceId",
@@ -180,12 +192,15 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "dictationReplacements",
             "dictationSnippets",
             "dictationSounds",
+            "dockBadge",
             "farSideWarning",
             "hideFromSharing",
             "inputDevice",
             "installId",
             "lockAfterMinutes",
             "mainShareHide",
+            "menuBarIcon",
+            "menuBarTimer",
             "notificationCategories",
             "notificationSounds",
             "oldWindowsSharing",
@@ -204,12 +219,13 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "shareNotice",
             "shareOneWindow",
             "shortcuts",
+            "signInId",
             "siteRules",
             "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 50, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 58, "section 4.7 of the IPC contract, with the call choice's four keys, the sign-in id and FIX-11's three (the menu bar icon, its timer, the Dock's number)");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
@@ -522,6 +538,36 @@ fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
 }
 
 #[test]
+fn hidden_from_screen_shares_until_i_quit_lasts_the_run_and_the_next_launch_starts_shown() {
+    use crate::privacy::share::{HideFor, HideUntil, MainHideTimer, hide_until, main_hidden};
+    let now = chrono::Local::now();
+    let hide = hide_until(HideFor::UntilQuit, now, false).unwrap();
+    assert_eq!(hide.until, HideUntil::UntilQuit);
+    // While EchoLedger runs: hidden, and nothing ends it by itself (a week later, no call) until Stop Hiding clears it.
+    let mut timer = MainHideTimer::default();
+    for later in [0, 60_000, 7 * 24 * 60 * 60_000] {
+        assert!(main_hidden(Some(&hide), now.timestamp_millis() + later));
+        assert!(!timer.tick(Some(&hide), now.timestamp_millis() + later, false));
+    }
+    assert!(!main_hidden(None, now.timestamp_millis()), "Stop Hiding: shown");
+    // Quit, then launch again: the settings file still says it, but the new run starts shown.
+    let dir = dir();
+    let path = dir.path().join("settings.json");
+    let mut s = Settings { main_share_hide: Some(hide), ..Settings::default() };
+    s.save(&path).unwrap();
+    let relaunched = Settings::load(&path);
+    assert_eq!(relaunched.main_share_hide, None);
+    assert!(!main_hidden(relaunched.main_share_hide.as_ref(), now.timestamp_millis()));
+    // The tray's "until I turn it off" is kept as before.
+    s.main_share_hide = Some(hide_until(HideFor::UntilOff, now, false).unwrap());
+    s.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).main_share_hide.map(|h| h.until), Some(HideUntil::UntilOff));
+    // Its words, and the menu bar's Until I Quit is this hide.
+    assert_eq!(crate::privacy::share::until_words(&hide, now), "until you quit EchoLedger");
+    assert_eq!(crate::native_menu::core_step("live.hideUntilQuit"), Some(crate::native_menu::CoreStep::HideFromShares(HideFor::UntilQuit)));
+}
+
+#[test]
 fn the_hide_all_shortcut_is_added_to_an_older_file() {
     let s = Settings::from_value(json!({"shortcuts": {"toggle_captions": "CommandOrControl+Shift+Space"}}));
     assert_eq!(s.shortcuts.get(&Action::HideAll).map(String::as_str), Some("CommandOrControl+Alt+Shift+P"));
@@ -659,7 +705,7 @@ fn keep_automatically_becoming_ask_me_is_told_once() {
         assert!(!Settings::from_value(json!({"afterCall": choice})).after_call_notice, "{choice}: nothing changed for them");
     }
     assert!(!Settings::from_value(json!({})).after_call_notice, "a new install has nothing to be told");
-    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Always transcribe"));
+    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Transcribe every call"), "it names the button");
 }
 
 #[test]
@@ -805,4 +851,46 @@ fn installs_paired_before_the_wizard_count_as_set_up() {
     assert!(!Settings::from_value(json!({"deviceId": null})).onboarding_done);
     assert!(!Settings::from_value(json!({"deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "onboardingDone": false})).onboarding_done, "an explicit value wins");
     assert!(!Settings::default().onboarding_done);
+}
+
+#[test]
+fn after_each_call_migrates_every_earlier_choice_without_losing_one() {
+    // The call choice reads the files people have today: their After a call becomes the same After each call, "Record
+    // calls automatically" off reads as Don't record calls, and the choice under it is kept for when calls are recorded
+    // again. Nothing is rewritten: the keys stay as they were.
+    let cases = [
+        (json!({"afterCall": "ask"}), AfterEachCall::Ask),
+        (json!({"afterCall": "always_transcribe"}), AfterEachCall::AlwaysTranscribe),
+        (json!({"afterCall": "always_audio"}), AfterEachCall::AlwaysAudio),
+        (json!({"afterCall": "keep"}), AfterEachCall::Ask),
+        (json!({"askBeforeSaving": "never", "decisionTimeout": "keep"}), AfterEachCall::Ask),
+        (json!({}), AfterEachCall::Ask),
+        (json!({"autoMode": false, "afterCall": "always_audio"}), AfterEachCall::Off),
+    ];
+    for (file, want) in cases {
+        let s = Settings::from_value(file.clone());
+        assert_eq!(s.after_each_call(), want, "{file}");
+        assert_eq!((s.ask_when, s.card_hint_seen, s.card_streak, s.always_offered), (AskWhen::After, false, None, false), "{file}: new keys start at their defaults");
+    }
+    let mut off = Settings::from_value(json!({"autoMode": false, "afterCall": "always_audio"}));
+    assert_eq!(off.after_call, AfterCall::AlwaysAudio, "kept under Don't record calls");
+    off.set_after_each_call(AfterEachCall::Off);
+    assert_eq!((off.auto_mode, off.after_call), (false, AfterCall::AlwaysAudio));
+    off.auto_mode = true; // the tray's "Record calls automatically" turned on again
+    assert_eq!(off.after_each_call(), AfterEachCall::AlwaysAudio, "the choice comes back");
+    for value in [AfterEachCall::Ask, AfterEachCall::AlwaysTranscribe, AfterEachCall::AlwaysAudio, AfterEachCall::Off] {
+        let mut s = Settings { after_call_notice: true, ..Settings::default() };
+        s.set_after_each_call(value);
+        assert_eq!(s.after_each_call(), value);
+        assert!(!s.after_call_notice, "choosing answers the one-time notice");
+    }
+    // The new keys survive a save; an unknown "When to ask" costs only that key.
+    let d = dir();
+    let path = d.path().join("settings.json");
+    Settings { ask_when: AskWhen::Start, ..Settings::default() }.save(&path).unwrap();
+    let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(file["askWhen"], "start");
+    assert_eq!(Settings::load(&path).ask_when, AskWhen::Start);
+    let odd = Settings::from_value(json!({"askWhen": "sometimes", "afterCall": "always_transcribe"}));
+    assert_eq!((odd.ask_when, odd.after_call), (AskWhen::After, AfterCall::AlwaysTranscribe));
 }

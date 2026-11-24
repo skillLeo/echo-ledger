@@ -41,7 +41,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,34 @@ fun OnboardingScreen(vm: MainViewModel) {
     // Pairing finished (here or before the process was restarted): carry on with the test.
     LaunchedEffect(settings.paired, step) {
         if (step == OnboardingStep.Pair && settings.paired) saved = OnboardingStep.Test.name
+    }
+    // Before sign-in the flags cannot be read, so the wizard is classic's. Once signed in, the server's flags are read
+    // (a few seconds at most; no answer is classic) and, when they say the new design, the steps left use it.
+    var newDesign by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(settings.paired) {
+        if (settings.paired && newDesign == null) newDesign = com.echoledger.mobile.ui.v2.setup.WizardDesign.afterSignIn(vm)
+    }
+    val afterSignIn = settings.paired && (step == OnboardingStep.Test || step == OnboardingStep.Done)
+    if (afterSignIn && newDesign == null) {
+        val waiting = androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_wiz_one_moment)
+        Box(
+            Modifier.fillMaxSize().semantics {
+                contentDescription = waiting
+                liveRegion = LiveRegionMode.Polite
+            },
+            contentAlignment = Alignment.Center
+        ) { androidx.compose.material3.CircularProgressIndicator() }
+        return
+    }
+    if (afterSignIn && newDesign == true) {
+        com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+            if (step == OnboardingStep.Test) {
+                com.echoledger.mobile.ui.v2.setup.V2WizardTest(onNext = { saved = step.next.name }, onSkip = { vm.finishOnboarding() })
+            } else {
+                com.echoledger.mobile.ui.v2.setup.V2WizardDone(onFinish = { consent -> vm.finishOnboarding(consent) })
+            }
+        }
+        return
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -269,7 +299,8 @@ private fun ColumnScope.TestStep(onNext: () -> Unit, onSkip: () -> Unit) {
         if (testing) LevelBar("Me", level, Brand.Violet)
         result?.let { r ->
             LevelBar("Peak", r.peak, Brand.Violet)
-            Text(micTestVerdict(r), fontSize = 13.sp)
+            // The wizard's own words: there is no playback or microphone choice on this step.
+            Text(if (r.heard) WIZARD_HEARD else WIZARD_NOT_HEARD, fontSize = 13.sp)
         }
         if (failed) {
             Text(
@@ -298,3 +329,7 @@ private fun ColumnScope.DoneStep(onFinish: (Boolean) -> Unit) {
         }
     }
 }
+
+/** What the wizard's 10-second test says (no playback or microphone choice here, unlike Settings' test). */
+internal const val WIZARD_HEARD = "Your microphone is working."
+internal const val WIZARD_NOT_HEARD = "We did not hear your microphone. Check the microphone permission and try again."

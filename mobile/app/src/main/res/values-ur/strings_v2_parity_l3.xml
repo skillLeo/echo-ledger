@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_lt_game">گیم ترجمہ</string>
+    <string name="v2_lt_watch">ویڈیو ترجمہ</string>
+    <string name="v2_lt_lang_en">انگریزی</string>
+    <string name="v2_lt_lang_ur">اردو</string>
+    <string name="v2_lt_lang_ar">عربی</string>
+    <string name="v2_lt_blocked">%1$s۔ جب تک یہ ٹھیک نہ ہو، لائیو ترجمہ خود رک جاتا ہے۔</string>
+    <string name="v2_lt_blocked_credit">کریڈٹ درکار ہے</string>
+    <string name="v2_lt_blocked_not_set_up">سرور پر سیٹ اپ نہیں</string>
+    <string name="v2_lt_blocked_budget">بجٹ ختم ہو گیا</string>
+    <string name="v2_lt_on">آن · %1$s میں ترجمہ</string>
+    <string name="v2_lt_off">بند</string>
+    <string name="v2_lt_how_game_helper">کیپچر ہیلپر کے ذریعے گیم سنتا ہے، وائس چیٹ سمیت۔ ٹچ ہمیشہ گیم تک پہنچتے ہیں۔</string>
+    <string name="v2_lt_how_game">کیپچر ہیلپر کے بغیر اینڈرائیڈ ہر بار آواز شیئر کرنے کا پوچھتا ہے، اور وائس چیٹ شاید نہ سنائی دے۔</string>
+    <string name="v2_lt_how_watch_helper">سب ٹائٹل ویڈیو کے اوپر آتے ہیں۔ جو ایپس کیپشن کی اجازت نہیں دیتیں، وہ بتا دیتی ہیں۔</string>
+    <string name="v2_lt_how_watch">اینڈرائیڈ ہر بار آواز شیئر کرنے کا پوچھتا ہے۔ جو ایپس کیپشن کی اجازت نہیں دیتیں، وہ خاموش رہتی ہیں۔</string>
+    <string name="v2_lt_voice_chat">گیم کی اپنی وائس چیٹ پر کام کرتا ہے؛ لکھی ہوئی چیٹ کا ترجمہ نہیں ہوتا۔</string>
+    <string name="v2_lt_start">شروع کریں</string>
+    <string name="v2_lt_stop">روکیں</string>
+    <string name="v2_lt_before">شروع کرنے سے پہلے</string>
+    <string name="v2_lt_h_overlay">دوسری ایپس کے اوپر دکھائیں</string>
+    <string name="v2_lt_h_helper">کیپچر ہیلپر</string>
+    <string name="v2_lt_h_helper_game">وائس چیٹ سننے کے لیے ضروری ہے۔</string>
+    <string name="v2_lt_h_helper_watch">اس کے بغیر اینڈرائیڈ ہر بار پوچھتا ہے۔</string>
+    <string name="v2_lt_h_notifications">اطلاعات</string>
+    <string name="v2_lt_h_battery">کبھی نہ سونے والی ایپ</string>
+    <string name="v2_lt_h_battery_game">لمبی گیمز میں اسے چلتا رکھتا ہے۔</string>
+    <string name="v2_lt_h_battery_watch">لمبی فلموں میں اسے چلتا رکھتا ہے۔</string>
+    <string name="v2_lt_h_done">ہو گیا</string>
+    <string name="v2_lt_h_needed">توجہ درکار ہے</string>
+    <string name="v2_lt_allow">اجازت دیں</string>
+    <string name="v2_lt_set_up">سیٹ اپ کریں</string>
+    <string name="v2_lt_try">آزمائیں</string>
+    <string name="v2_lt_try_game">عربی کی ایک مختصر لائن چلا کر اس کا ترجمہ کرتا ہے، گیم کی ضرورت نہیں۔</string>
+    <string name="v2_lt_try_watch">انگریزی کی ایک مختصر لائن چلا کر اس کے سب ٹائٹل دکھاتا ہے۔</string>
+    <string name="v2_lt_test">ترجمہ آزمائیں</string>
+    <string name="v2_lt_test_again">دوبارہ آزمائیں</string>
+    <string name="v2_lt_cost">تقریباً $%1$s فی گھنٹہ، اور جب کوئی بول رہا ہو تو فی گھنٹہ %2$d MB تک موبائل ڈیٹا (خاموشی میں کچھ نہیں)۔</string>
+    <string name="v2_lt_settings_game">گیم کی سیٹنگز</string>
+    <string name="v2_lt_settings_watch">ویڈیو کی سیٹنگز</string>
+</resources>

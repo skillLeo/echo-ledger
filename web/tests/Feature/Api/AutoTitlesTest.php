@@ -29,12 +29,18 @@ function fakeTitleWriter(string $title = '"Laptop — 16 vs 32 GB."'): object
 
         public ?string $language = null;
 
+        public ?bool $roman = null;
+
+        public ?string $input = null;
+
         public function __construct(private readonly string $answer) {}
 
-        public function title(string $transcript, string $language): array
+        public function title(string $transcript, string $language, bool $roman = false): array
         {
             $this->calls++;
             $this->language = $language;
+            $this->roman = $roman;
+            $this->input = $transcript;
 
             return ['title' => $this->answer, 'input_tokens' => 300, 'output_tokens' => 20, 'model' => 'claude-haiku-5-5'];
         }

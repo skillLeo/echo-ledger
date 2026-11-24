@@ -3,7 +3,7 @@
 // when it answers.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
-import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
+import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type ExportView, type LibraryItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { MAX_LABEL_CHARS, withLabel } from "../../lib/organise";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
@@ -253,9 +253,11 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
 }
 
 /** Actions for the selected recordings: move, label, pin, export as one zip, delete. */
-export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCreated, onSelectAll }: {
+export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCreated, onSelectAll, view }: {
   /** Ticks every recording the list shows. */
   onSelectAll?: () => void;
+  /** Since U19: the view the list shows them in (Roman Urdu for Urdu calls); the zip is in it. */
+  view?: ExportView;
   ids: string[];
   clients: ClientFolder[];
   knownLabels: string[];
@@ -291,7 +293,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
     setBusy(true);
     try {
       // The core asks where to save the zip; null means the person cancelled there.
-      const path = await api.exportSessions(ids, format);
+      const path = await api.exportSessions(ids, format, view);
       if (path) notify(`Saved ${path}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);

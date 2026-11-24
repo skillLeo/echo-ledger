@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The call choice (before, during and after a call): word for word docs/v2/copy/call-choice.md. values/ is English,
+     values-ur/ Urdu: keep the keys the same (the deck's keys with cc_ in front). -->
+<resources>
+    <string name="cc_transcribe">Transcribe</string>
+    <string name="cc_save_audio_only">Save audio only</string>
+    <string name="cc_delete">Delete</string>
+    <string name="cc_dont_record">Don\'t record</string>
+    <string name="cc_undo">Undo</string>
+    <string name="cc_setting_title">After each call</string>
+    <string name="cc_setting_ask">Ask me</string>
+    <string name="cc_setting_ask_help">A small card after each call.</string>
+    <string name="cc_setting_transcribe">Transcribe every call</string>
+    <string name="cc_setting_transcribe_help">No question.</string>
+    <string name="cc_setting_audio">Save audio only</string>
+    <string name="cc_setting_audio_help">No question. Transcribe later from the Library if you want.</string>
+    <string name="cc_setting_off">Don\'t record calls</string>
+    <string name="cc_setting_off_help">Calls are not recorded. You can still record one from the pill or Record.</string>
+    <string name="cc_when_title">When to ask</string>
+    <string name="cc_when_after">After the call (recommended)</string>
+    <string name="cc_when_start">At the start of the call</string>
+    <string name="cc_pill_transcribe">Transcribe this call</string>
+    <string name="cc_pill_audio">Save audio only</string>
+    <string name="cc_pill_stop_delete">Stop and delete</string>
+    <string name="cc_start_banner">Recording this call</string>
+    <string name="cc_card_meta">%1$s · just now</string>
+    <string name="cc_card_swipe">Swipe away to keep audio only</string>
+    <string name="cc_card_first_hint">You can change this in Settings › After each call.</string>
+    <string name="cc_card_always">Always do this?</string>
+    <string name="cc_card_always_yes">Yes</string>
+    <string name="cc_done_transcribing">Transcribing…</string>
+    <string name="cc_done_audio">Saved as audio</string>
+    <string name="cc_done_deleted">Deleted</string>
+    <string name="cc_grouped_audio">%1$d calls saved as audio</string>
+    <string name="cc_grouped_mixed">%1$d calls</string>
+    <string name="cc_grouped_review">Review</string>
+    <string name="cc_save_audio_all">Save all as audio only</string>
+    <string name="cc_quiet_saved">Saved as audio during quiet hours</string>
+    <string name="cc_restored_delete">Deleted just before EchoLedger closed. Choose again.</string>
+    <string name="cc_not_deleted_yet">Not deleted yet. Choose again.</string>
+    <string name="cc_block_screens">Block screenshots of EchoLedger</string>
+    <string name="cc_block_screens_help">Off: you can take screenshots of the app, except screens that show keys or recovery codes. On: EchoLedger\'s own screens can\'t be captured and are hidden in Recents.</string>
+    <string name="cc_hide_live_words">Hide EchoLedger\'s live words from screenshots and screen shares</string>
+    <string name="cc_hide_live_words_help">On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and screen shares. The recording pill and the after-call card always show. Off: everything shows.</string>
+    <string name="cc_ac_saved">%1$s · call saved</string>
+    <string name="cc_ac_hint">Swipe away to keep the audio only. Change this in Settings › After each call.</string>
+    <string name="cc_ac_grouped">%1$d calls saved</string>
+    <string name="cc_ac_transcribe_all">Transcribe all</string>
+    <string name="cc_ac_always_transcribe">Always transcribe</string>
+    <string name="cc_ac_always_audio">Always audio only</string>
+    <string name="cc_ac_ready">Transcript ready</string>
+    <string name="cc_ac_bar_saved">%1$s · %2$s saved</string>
+    <string name="cc_ac_bar">Show a small bar on screen</string>
+    <string name="cc_ac_bar_help">One small line at the top of the screen for 6 seconds, as well as the notification. Needs the permission to display over other apps.</string>
+    <string name="cc_ac_setting_ask_help">A quiet notification after each call.</string>
+    <plurals name="cc_ac_ready_many">
+        <item quantity="one">%1$d transcript ready</item>
+        <item quantity="other">%1$d transcripts ready</item>
+    </plurals>
+</resources>

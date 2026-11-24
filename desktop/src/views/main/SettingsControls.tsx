@@ -116,6 +116,33 @@ export function SegmentedRow<T extends string>({ id, title = titleOf(id), value,
   );
 }
 
+/** One choice of a few, each on its own row with its help line under its name (After each call): native radios, so
+ * the arrow keys move between them. The section's header names it; the group carries the name for screen readers. */
+export function ChoiceListRow<T extends string>({ id, title = titleOf(id), value, options, onChange }: {
+  id: string;
+  title?: string;
+  value: T;
+  options: readonly { value: T; label: string; hint?: string }[];
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="set-choices" {...rowAttrs(id)}>
+      <legend className="sr-only">{title}</legend>
+      {options.map((o) => (
+        <label key={o.value} className="set-row set-choice">
+          <input type="radio" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)}
+            aria-labelledby={`${name}-${o.value}`} aria-describedby={o.hint ? `${name}-${o.value}-hint` : undefined} />
+          <span className="set-main">
+            <span className="set-title" id={`${name}-${o.value}`}>{o.label}</span>
+            {o.hint && <span className="set-sub" id={`${name}-${o.value}-hint`}>{o.hint}</span>}
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 /** A value on a scale: the value at the right of the title, the slider under it. */
 export function SliderRow({ id, title = titleOf(id), value, min, max, step, format, onChange }: {
   id: string;

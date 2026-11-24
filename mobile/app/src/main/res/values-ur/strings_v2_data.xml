@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Your data page (export, sign out everywhere, delete) and Devices' recent activity. values/ is English, values-ur/ Urdu. -->
+<resources>
+    <string name="v2_data_title">آپ کا ڈیٹا</string>
+    <string name="v2_data_export_help">ایک ZIP جس میں ہر ریکارڈنگ کی آواز، ٹرانسکرپٹس، اسکرینز، پروجیکٹ فائلیں اور نوٹس ہوں۔</string>
+    <string name="v2_data_export">میرا ڈیٹا ایکسپورٹ کریں</string>
+    <string name="v2_data_making">ایکسپورٹ بن رہا ہے… (تیار ہونے پر آپ کو ای میل بھی آئے گی)</string>
+    <string name="v2_data_download">ایکسپورٹ ڈاؤن لوڈ کریں</string>
+    <string name="v2_data_export_failed">ایکسپورٹ نہیں بن سکا۔</string>
+    <string name="v2_data_check_failed">ایکسپورٹ کی صورتحال معلوم نہیں ہو سکی۔ کنکشن دیکھ کر دوبارہ کوشش کریں؛ یہ ابھی بن رہا ہے۔</string>
+    <string name="v2_data_try_again">دوبارہ کوشش کریں</string>
+    <string name="v2_data_signin">سائن ان</string>
+    <string name="v2_data_everywhere">ہر جگہ سے سائن آؤٹ کریں…</string>
+    <string name="v2_data_everywhere_title">ہر جگہ سے سائن آؤٹ کریں؟</string>
+    <string name="v2_data_everywhere_body">اس اکاؤنٹ کے ہر فون، کمپیوٹر اور کنسول سیشن سے سائن آؤٹ ہو جائے گا، اس فون سے بھی۔ اپ لوڈ کے انتظار میں ریکارڈنگز اسی فون پر رہیں گی۔</string>
+    <string name="v2_data_sign_out">سائن آؤٹ</string>
+    <string name="v2_data_delete">میرا اکاؤنٹ حذف کریں…</string>
+    <string name="v2_data_delete_title">اپنا اکاؤنٹ حذف کریں؟</string>
+    <string name="v2_data_delete_body">آپ کی ریکارڈنگز، ٹرانسکرپٹس، اسکرینز، فائلیں اور پروجیکٹس 7 دن بعد حذف ہو جائیں گے۔ تب تک کنسول میں سائن ان کر کے آپ اکاؤنٹ رکھ سکتے ہیں۔</string>
+    <string name="v2_data_code">آپ کی authenticator ایپ کا کوڈ</string>
+    <string name="v2_data_password">آپ کا پاس ورڈ</string>
+    <string name="v2_data_elsewhere_google">Google سے سائن ان ہیں اور پاس ورڈ نہیں؟ ویب پیج پر اکاؤنٹ حذف کریں: وہاں Google سے سائن ان کر کے تصدیق کریں۔</string>
+    <string name="v2_data_elsewhere">پاس ورڈ یا کوڈ پاس نہیں؟ اس کی بجائے ویب پیج پر اکاؤنٹ حذف کریں۔</string>
+    <string name="v2_data_on_web">ویب پیج پر حذف کریں</string>
+    <string name="v2_data_delete_confirm">حذف کریں</string>
+    <string name="v2_data_deletes_on">یہ اکاؤنٹ %1$s کو حذف ہو جائے گا۔ اسے روکنے کے لیے کنسول میں سائن ان کر کے اکاؤنٹ رکھیں چنیں۔</string>
+    <string name="v2_dev_activity">حالیہ سرگرمی</string>
+    <string name="v2_dev_activity_none">ابھی کچھ درج نہیں ہوا۔</string>
+    <string name="v2_dev_by_console">کنسول</string>
+    <string name="v2_dev_by_app">EchoLedger</string>
+    <string name="v2_dev_by_device">ایک ڈیوائس</string>
+    <string name="v2_dev_load_failed">آپ کی ڈیوائسز لوڈ نہیں ہو سکیں۔ کنکشن دیکھیں۔</string>
+</resources>

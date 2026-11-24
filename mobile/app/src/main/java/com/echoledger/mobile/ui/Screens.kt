@@ -109,7 +109,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.BuildConfig
-import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.Bookmarks
 import com.echoledger.mobile.core.DeviceCheck
@@ -236,9 +235,25 @@ fun SessionScreen(
     var views by remember(item.id) { mutableStateOf<TranscriptViewsDto?>(null) }
     LaunchedEffect(showAs, views?.status, t?.id) {
         val id = t?.id ?: return@LaunchedEffect
-        if (showAs != ShowAs.ORIGINAL && views?.status == "making") {
+        // Asked again until it is written, then the lines swap to it.
+        while (showAs != ShowAs.ORIGINAL && views?.status == "making") {
             delay(ShowAs.POLL_MS)
             views = vm.transcriptViews(id) ?: views
+        }
+    }
+    // Once a view it waited for is written, the server gives an automatic Urdu-script title in Roman Urdu: read it again.
+    var waitedForView by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(views?.status) {
+        when (views?.status) {
+            "making" -> waitedForView = true
+
+            "ready" -> if (waitedForView) {
+                waitedForView = false
+                val before = shownTitle
+                vm.refreshQuietly().join()
+                val now = vm.library.value.firstOrNull { it.id == item.id }?.title
+                if (now != null && shownTitle == before) shownTitle = now
+            }
         }
     }
     fun chooseView(view: ShowAs) {
@@ -252,12 +267,8 @@ fun SessionScreen(
             if (state == null) showAs = ShowAs.ORIGINAL
         }
     }
-    // Open in the default view (console setting) when it is made for this recording.
-    LaunchedEffect(t?.id) {
-        val summary = t?.views ?: return@LaunchedEffect
-        val default = ShowAs.of(summary.default)
-        if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) chooseView(default)
-    }
+    // Open in the default view (Roman Urdu for Urdu): at once when it is made, else as soon as it is (U19).
+    LaunchedEffect(t?.id) { ShowAs.autoView(t?.views)?.let { chooseView(it) } }
     val shown = ShowAs.lines(segments, showAs, views)
     val appSettings by vm.settings.collectAsState()
     // Screen moments (since v1.5): what was on the shared screen, after the line it belongs to; asked only when there are some.
@@ -568,10 +579,49 @@ fun SessionScreen(
                 }
 
                 else -> {
-                    // Since v1.6 (P5.4): the transcript can be read while its views are written.
-                    if (steps != null && steps.onlyImproving) {
+                    // Since v1.6 (P5.4): the transcript can be read while its views are written; U19: until the default
+                    // view (Roman Urdu) is on screen.
+                    if (steps != null && steps.onlyImproving && shown == null) {
                         item(key = "improving") {
                             ImprovingBar(steps, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3))
+                        }
+                    }
+                    // U19: the default view could not be made: say so, with Try again (which asks for it again).
+                    val viewStage = com.echoledger.mobile.core.RowProgress.of(live)
+                    if (viewStage?.step == com.echoledger.mobile.core.RowProgress.Step.VIEW_FAILED && views?.status != "making" &&
+                        shown == null
+                    ) {
+                        item(key = "convert-failed") {
+                            InlineBanner(
+                                com.echoledger.mobile.core.RowProgress.convertFailedWords(
+                                    live.transcript?.views?.default.orEmpty(),
+                                    tryAgain = false
+                                ),
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
+                                kind = BannerKind.Warning,
+                                action = "Try again",
+                                onAction = { chooseView(ShowAs.of(live.transcript?.views?.default)) }
+                            )
+                        }
+                    } else if (views?.status == "making" && shown == null && showAs != ShowAs.ORIGINAL &&
+                        !(steps != null && steps.onlyImproving)
+                    ) {
+                        item(key = "converting") {
+                            Row(
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Space.s2)
+                            ) {
+                                com.echoledger.mobile.ui.design.Spinner(14.dp)
+                                val own = views?.progress?.get(showAs.key)?.takeIf {
+                                    it.total > 0
+                                }?.let { (it.done * 100 / it.total).coerceIn(0, 100) }
+                                Text(
+                                    com.echoledger.mobile.core.RowProgress.convertingWords(showAs.key, own),
+                                    style = type.bodyM,
+                                    color = c.textMuted
+                                )
+                            }
                         }
                     }
                     // Since v1.5: made by a backup engine (the preferred one stayed busy or refused it): offer the best one.
@@ -949,24 +999,38 @@ internal fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> 
  * are skipped quietly (shorter than the setting; unanswered and silent calls always are).
  */
 @Composable
+private fun ChoiceRow(selected: Boolean, label: String, help: String?, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Column(Modifier.padding(start = 8.dp)) {
+            Text(label)
+            if (help != null) Text(help, color = Brand.Muted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
+    // After each call and When to ask (since 2.0.5, the call-choice plan): the deck's words.
     SectionCard {
-        Text("After a call", fontWeight = FontWeight.SemiBold)
-        listOf(
-            PostCallPrompt.KEEP to "Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s",
-            PostCallPrompt.ASK to "Ask me — a small after-call card to keep or discard it; kept after 10 s"
-        ).forEach { (value, label) ->
-            Row(
-                Modifier.fillMaxWidth()
-                    .selectable(
-                        selected = settings.afterCall == value,
-                        role = Role.RadioButton,
-                        onClick = { vm.updateSettings { it.copy(afterCall = value) } }
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = settings.afterCall == value, onClick = null)
-                Text(label, modifier = Modifier.padding(start = 8.dp))
+        Text(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_setting_title), fontWeight = FontWeight.SemiBold)
+        val current = com.echoledger.mobile.calls.CallChoice.setting(settings)
+        com.echoledger.mobile.calls.CallChoice.SETTING_WORDS.forEach { (value, label, help) ->
+            ChoiceRow(current == value, androidx.compose.ui.res.stringResource(label), androidx.compose.ui.res.stringResource(help)) {
+                vm.updateSettings { it.copy(afterEachCall = value) }
+            }
+        }
+    }
+    SectionCard {
+        Text(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_when_title), fontWeight = FontWeight.SemiBold)
+        val asking = com.echoledger.mobile.calls.CallChoice.setting(settings) == com.echoledger.mobile.calls.CallChoice.ASK
+        val current = com.echoledger.mobile.calls.CallChoice.whenToAsk(settings)
+        com.echoledger.mobile.calls.CallChoice.WHEN_WORDS.forEach { (value, label) ->
+            ChoiceRow(current == value, androidx.compose.ui.res.stringResource(label), null, enabled = asking) {
+                vm.updateSettings { it.copy(whenToAsk = value) }
             }
         }
     }
@@ -1075,22 +1139,7 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                     Text(label, modifier = Modifier.padding(start = 8.dp))
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Hide content in Recents and screenshots")
-                    Text(
-                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always a black " +
-                            "box in screenshots unless you choose Show in During screen sharing.",
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
-                }
-                Switch(
-                    checked = settings.secureScreen,
-                    onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } },
-                    modifier = Modifier.semantics { contentDescription = "Hide content in Recents and screenshots" }
-                )
-            }
+            // Hiding the app's content in screenshots and Recents is Privacy & data's Block screenshots now (2.0.5).
         }
         // Since v1.6 (Phase 1C I4): the widget can name recordings by their app only. With the lock on it shows none.
         if (!on) {

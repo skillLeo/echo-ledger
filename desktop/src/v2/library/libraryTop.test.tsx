@@ -1,11 +1,12 @@
 // Library as the start screen (PLAN_V2_PARITY 2): Home's get-started checklist as a card that can be hidden, until
-// setup is done, and what needs action as one quiet banner that opens the right view.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// setup is done. What needs the person is the sidebar's Needs you (PLAN_LIBRARY_FILTERS; libraryNav.test.tsx): nothing in
+// the Library's toolbar or top says it, and the old banner's stored dismissals are cleared.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { dismissedKey } from "./LibraryTop";
+import { DISMISSED_PREFIX } from "./LibraryTop";
 import type { Account } from "../../lib/ipc";
 
 const account = (email: string): Account => ({ name: "Ayesha Khan", email, email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
@@ -31,9 +32,50 @@ describe("the top of the Library", () => {
   });
   const show = async (status = makeStatus({ platform: "macos", pendingDecisions: 2 })) => {
     const top = { status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
-    const { unmount } = render(<LibraryV2 top={top} />);
+    const { unmount, rerender } = render(<LibraryV2 top={top} />);
     await act(flushAsync);
-    return Object.assign(top, { unmount });
+    // The app's status moves on (a call waits, a decision is made): the same Library with the new counts.
+    const update = async (next: Parameters<typeof makeStatus>[0]) => {
+      rerender(<LibraryV2 top={{ ...top, status: makeStatus({ platform: "macos", ...next }) }} />);
+      await act(flushAsync);
+    };
+    return Object.assign(top, { unmount, update });
+  };
+  const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+  const needs = () => actions().firstElementChild?.matches(".el-menu-anchor") ? actions().querySelector("button")! : actions().firstElementChild as HTMLElement;
+  const NEEDS = /need you|needs you|not transcribed|waiting|didn't upload|skipped|notification/;
+  /**
+   * Every change to the header's needs button once it is on screen: its words changed, or it went or was swapped for
+   * another (a count it then corrected). Being drawn is not a change. Read from the DOM's own records, so a state that
+   * a later render corrected before the test looks again is caught too.
+   */
+  const watchCorrections = () => {
+    const changes: string[] = [];
+    const host = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest(".el-needs");
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        const inside = host(r.target);
+        if (inside) changes.push(`changed: ${r.type === "characterData" ? `"${r.oldValue}" in ` : ""}"${inside.textContent}"`);
+        r.removedNodes.forEach((n) => {
+          const gone = n instanceof Element ? (n.matches(".el-needs") ? n : n.querySelector(".el-needs")) : null;
+          if (gone) changes.push(`went: "${gone.textContent}"`);
+        });
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true, characterDataOldValue: true });
+    return { changes, stop: () => observer.disconnect() };
+  };
+  /** A command that answers when the test says (`answer`), once per call. */
+  const later = (command: string) => {
+    const waiting: ((value: unknown) => void)[] = [];
+    respondWith(command, () => new Promise((resolve) => waiting.push(resolve)));
+    return {
+      calls: () => waiting.length,
+      answer: async (value: unknown) => {
+        await act(async () => waiting.splice(0).forEach((resolve) => resolve(value)));
+        await act(flushAsync);
+      },
+    };
   };
 
   it("the get-started card until setup is done: each step runs its fix, and Hide keeps it hidden on this computer", async () => {
@@ -51,110 +93,26 @@ describe("the top of the Library", () => {
     expect(window.localStorage.getItem("echoledger-library-setup-hidden")).toBe("1");
   });
 
-  it("one quiet banner for what needs action; Review opens the view", async () => {
-    await show();
-    const banner = screen.getByTestId("needs-action");
-    expect(banner).toHaveTextContent("2 calls wait for your decision · 1 more needs you");
-    fireEvent.click(within(banner).getByRole("button", { name: "Review" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "1 recording isn't transcribed" }));
-    expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
-  });
-
-  it("nothing to do: no card, no banner; without `top` neither shows", async () => {
-    respond("ready_last", { ready: true, checkedAt: "2026-11-17T10:00:00Z", checks: [] });
-    respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos" });
-    respond("library_list", [ITEMS[1]]);
-    respond("library_refresh", [ITEMS[1]]);
-    await show(makeStatus({ platform: "macos" }));
-    expect(screen.queryByRole("region", { name: "Get started" })).toBeNull();
+  it("nothing in the Library's toolbar or top says what needs you: no banner, no button; the sidebar's Needs you does", async () => {
+    await show(makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 }));
     expect(screen.queryByTestId("needs-action")).toBeNull();
+    // The title (the shell's title row's, or this header without one) and row 2 (UX-05): nothing else.
+    const toolbar = document.querySelector(".el-lib-toolbar") as HTMLElement;
+    const row2 = document.querySelector(".el-lib-row2") as HTMLElement;
+    for (const top of [toolbar, row2]) expect(within(top).queryByRole("button", { name: /need you|not transcribed|audio only|waiting|didn't upload/i })).toBeNull();
+    expect(within(toolbar).queryAllByRole("button")).toEqual([]);
+    expect(within(toolbar).getByRole("searchbox", { name: "Search recordings" })).toBeInTheDocument();
+    // Row 2: the kinds on the start side, Filters and Sort & display on the end; nothing else.
+    expect(within(row2).getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual(["All", "Calls", "Meetings", "Voice notes"]);
+    expect(within(row2).getAllByRole("button").map((b) => b.textContent)).toEqual(["Filters", "Sort & display"]);
   });
 
-  describe("the banner's × (Dismiss)", () => {
-    const KEY = dismissedKey("https://ledger.example.test", "ayesha@example.com");
-    const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
-    // Starts with 2 waiting calls and 1 untranscribed recording.
-    const again = (status: Parameters<typeof makeStatus>[0]) => show(makeStatus({ platform: "macos", ...status }));
-
-    it("is a button named Dismiss that the keyboard reaches; it hides the banner and remembers what it said", async () => {
-      await show();
-      const button = within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" });
-      expect(button.tagName).toBe("BUTTON");
-      expect(button.tabIndex).toBe(0);
-      button.focus();
-      expect(document.activeElement).toBe(button);
-      dismiss();
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
-    });
-
-    it("stays hidden after a restart with the same counts, and when a count falls", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      const same = await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      same.unmount();
-      await again({ pendingDecisions: 1 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 1, untranscribed: 1 });
-    });
-
-    it("comes back when a count goes up, also after it fell", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      const fewer = await again({ pendingDecisions: 1 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      fewer.unmount();
-      await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("2 calls wait for your decision · 1 more needs you");
-      expect(window.localStorage.getItem(KEY)).toBeNull();
-    });
-
-    it("comes back when a new kind of notice appears", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      await again({ pendingDecisions: 2, failedUploads: 1 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 2 more need you");
-    });
-
-    it("stays hidden after a restart while the queue shows the waiting calls (it reports that once it has loaded)", async () => {
-      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
-      const first = await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording isn't transcribed");
-      dismiss();
-      first.unmount();
-      await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
-    });
-
-    it("is kept per account: another account on this computer still sees the banner the first one dismissed", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      respond("account_get", account("bilal@example.com"));
-      const other = await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      other.unmount();
-      respond("account_get", account("Ayesha@Example.com"));
-      await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-    });
-
-    it("shows when storage is unavailable", async () => {
-      window.localStorage.setItem(KEY, JSON.stringify({ waiting: 5, untranscribed: 5 }));
-      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-        throw new Error("no storage");
-      });
-      try {
-        await show();
-        expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      } finally {
-        get.mockRestore();
-      }
-    });
+  it("an old needs-action dismissal is cleared once (every account's); other settings stay", async () => {
+    const keys = [`${DISMISSED_PREFIX}:https://ledger.example.test:ayesha@example.com`, `${DISMISSED_PREFIX}:https://ledger.example.test:bilal@example.com`];
+    keys.forEach((key) => window.localStorage.setItem(key, JSON.stringify({ waiting: 5, untranscribed: 5 })));
+    window.localStorage.setItem("echoledger-library-setup-hidden", "1");
+    await show();
+    keys.forEach((key) => expect(window.localStorage.getItem(key)).toBeNull());
+    expect(window.localStorage.getItem("echoledger-library-setup-hidden")).toBe("1");
   });
 });

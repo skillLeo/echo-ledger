@@ -33,18 +33,25 @@ use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Notifications\DatabaseNotification as FilamentDatabaseNotification;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
  * The activity centre (plan B18): "Transcript ready", "Transcription failed", "Upload failed", "Device paired" and
  * "Monthly limit at 80 % / reached", since v1.5 also for the plan's storage and AI credits. One database notification
  * per event: the console bell shows it, the device apps read it with GET /api/activity and turn it into an OS
- * notification that opens the recording.
+ * notification that opens the recording. Since 2.0.0-r (BE-02) an event about a recording that happened before to the
+ * same recording updates its item instead (one item per person, recording and kind: `dedupe_key`), and an upload
+ * failure is resolved once the recording reaches the server.
  */
 final class ActivityFeed
 {
@@ -69,11 +76,17 @@ final class ActivityFeed
         $feed = fn (): self => app(self::class);
         Transcript::created(fn (Transcript $t) => $feed()->transcriptChanged($t, true));
         Transcript::updated(fn (Transcript $t) => $feed()->transcriptChanged($t, false));
+        // Since 2.0.0-r (BE-02 review): a deleted recording's upload failure is over.
+        CaptureSession::deleted(fn (CaptureSession $session) => $feed()->uploadGone($session));
+        // …and one restored from the bin whose upload is still failed needs the person again (BE-02 review).
+        CaptureSession::restored(fn (CaptureSession $session) => $feed()->uploadBack($session));
         Recording::updated(function (Recording $r) use ($feed): void {
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Failed) {
                 $feed()->uploadFailed($r);
             }
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
+                // Since 2.0.0-r (BE-02): an upload that had failed is on the server now.
+                $feed()->uploadResolved($r);
                 $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->first(['id', 'workspace_id', 'user_id']);
                 $session === null || $feed()->planLimitChanged((int) $session->workspace_id, self::LIMIT_STORAGE);
                 // Since v1.6: more hours in a day than the super admin's alert (UnusualUsage).
@@ -81,7 +94,7 @@ final class ActivityFeed
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
-        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->readableName()} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
+        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', self::line(':name signed in', ['name' => $d->readableName()]), self::line('It can now record, sync and see the library.'), null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
         // Since v1.6 (P2.6): the server's monthly budget alert for staff.
         UsageLedgerEntry::created(fn () => app(CostAlerts::class)->check());
@@ -120,7 +133,7 @@ final class ActivityFeed
     /** The bell, and since v1.5 an email for people who turned "Email me when a transcript is ready" on. */
     private function transcriptReady(CaptureSession $session): void
     {
-        $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text');
+        $this->post($session->user, 'transcript_ready', self::line('Transcript ready'), $session->displayTitle(), $session, 'heroicon-o-document-text');
         if (EmailPreferences::wants($session->user, EmailPreferences::TRANSCRIPTION)) {
             Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/app/sessions/'.$session->id)));
         }
@@ -138,7 +151,17 @@ final class ActivityFeed
     /** The body of "Transcription failed": the recording's name, then why in plain words for [$errorCode]. */
     public static function failedBody(string $title, ?string $errorCode): string
     {
-        return $title.': '.TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $errorCode));
+        return self::text(self::failedLine($title, $errorCode), 'en');
+    }
+
+    /**
+     * The same as a line in the reader's language (since W-218).
+     *
+     * @return array{key: string, params: array<string, mixed>}
+     */
+    public static function failedLine(string $title, ?string $errorCode): array
+    {
+        return self::line(':title: :reason', ['title' => $title, 'reason' => self::line(TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $errorCode)))]);
     }
 
     /**
@@ -149,7 +172,7 @@ final class ActivityFeed
     {
         $session ??= $transcript->captureSession()->first();
         if ($session instanceof CaptureSession && ! $session->trashed()) {
-            $this->post($session->user, 'transcript_failed', 'Transcription failed', self::failedBody($session->displayTitle(), $transcript->error_code), $session, 'heroicon-o-exclamation-triangle');
+            $this->post($session->user, 'transcript_failed', self::line('Transcription failed'), self::failedLine($session->displayTitle(), $transcript->error_code), $session, 'heroicon-o-exclamation-triangle');
             app(ReadyNotices::class)->deliver($session, ready: false);
         }
     }
@@ -163,12 +186,12 @@ final class ActivityFeed
         try {
             $user = User::query()->find($missed->user_id);
             if ($user instanceof User) {
-                $notification = self::make('Missed recording', $missed->activityBody(), 'missed_recording', null,
+                $notification = self::make(self::line('Missed recording'), $missed->activityLine(), 'missed_recording', null,
                     extra: ['reason' => $missed->reason, 'missed_recording_id' => $missed->id])->icon('heroicon-o-phone-x-mark');
                 $user->notifyNow($notification->toDatabase());
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A missed recording\'s Activity item was not written');
         }
     }
 
@@ -185,7 +208,7 @@ final class ActivityFeed
                 $user->notifications()->whereIn('data->viewData->missed_recording_id', $chunk)->delete();
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'Missed recordings\' Activity items were not deleted');
         }
     }
 
@@ -193,7 +216,8 @@ final class ActivityFeed
     {
         $session = $recording->captureSession()->first();
         if ($session instanceof CaptureSession && ! $session->trashed()) {
-            $this->post($session->user, 'upload_failed', 'Upload failed — retry', $session->displayTitle().' did not finish uploading. The device that recorded it can send it again.', $session, 'heroicon-o-arrow-up-tray');
+            $this->post($session->user, 'upload_failed', self::line('Upload failed — retry'),
+                self::line(':title did not finish uploading. The device that recorded it can send it again.', ['title' => $session->displayTitle()]), $session, 'heroicon-o-arrow-up-tray');
         }
     }
 
@@ -217,8 +241,9 @@ final class ActivityFeed
                 continue;
             }
             $kind === 'budget_reached'
-                ? $this->post($user, $kind, 'Monthly transcription limit reached', 'New transcripts wait until the limit is raised in Settings or the month ends.', null, 'heroicon-o-no-symbol')
-                : $this->post($user, $kind, "Transcription at {$usage['warn_at_percent']}% of the monthly limit", "{$usage['minutes']} minutes used this month.", null, 'heroicon-o-chart-bar');
+                ? $this->post($user, $kind, self::line('Monthly transcription limit reached'), self::line('New transcripts wait until the limit is raised in Settings or the month ends.'), null, 'heroicon-o-no-symbol')
+                : $this->post($user, $kind, self::line('Transcription at :percent% of the monthly limit', ['percent' => $usage['warn_at_percent']]),
+                    self::plural(':minutes minute used this month.|:minutes minutes used this month.', (int) $usage['minutes'], ['minutes' => $usage['minutes']]), null, 'heroicon-o-chart-bar');
         }
     }
 
@@ -243,10 +268,12 @@ final class ActivityFeed
             if ($kind === null) {
                 return;
             }
-            $name = $limit === self::LIMIT_STORAGE ? 'Storage' : 'AI credits';
+            $storage = $limit === self::LIMIT_STORAGE;
             [$title, $body] = $kind === 'budget_reached'
-                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Project notes and Ask wait until next month or a bigger plan.']
-                : ["{$name} at {$warnAt}% of your plan", $limit === self::LIMIT_STORAGE ? Number::fileSize((int) $used, precision: 1).' used.' : '$'.number_format($used, 2).' used this month.'];
+                ? [self::line($storage ? 'Storage of your plan used up' : 'AI credits of your plan used up'),
+                    self::line($storage ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Project notes and Ask wait until next month or a bigger plan.')]
+                : [self::line($storage ? 'Storage at :percent% of your plan' : 'AI credits at :percent% of your plan', ['percent' => $warnAt]),
+                    $storage ? self::line(':size used.', ['size' => Number::fileSize((int) $used, precision: 1)]) : self::line(':amount used this month.', ['amount' => '$'.number_format($used, 2)])];
             $start = (string) UsagePeriod::current($settings)['start']->toIso8601String();
             foreach ($this->owners($workspaceId) as $user) {
                 if (! $this->sentThisMonth($user, $kind, $start, $limit)) {
@@ -254,7 +281,7 @@ final class ActivityFeed
                 }
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A monthly limit\'s Activity item was not written');
         }
     }
 
@@ -273,8 +300,14 @@ final class ActivityFeed
             ->contains(fn (DatabaseNotification $n): bool => self::kindOf($n) === $kind && ($n->data['viewData']['limit'] ?? null) === $limit);
     }
 
-    /** [$url]: where the bell's card opens (since v1.6.1), when the kind alone does not say (NoticeTargets). */
-    public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon, ?string $limit = null, ?string $url = null): void
+    /**
+     * [$url]: where the bell's card opens (since v1.6.1), when the kind alone does not say (NoticeTargets). [$title] and
+     * [$body] are words as they are (what people wrote) or, since W-218, a line() shown in the reader's language.
+     *
+     * @param  string|array{key: string, params: array<string, mixed>}  $title
+     * @param  string|array{key: string, params: array<string, mixed>}  $body
+     */
+    public function post(User $user, string $kind, string|array $title, string|array $body, ?CaptureSession $session, string $icon, ?string $limit = null, ?string $url = null): void
     {
         try {
             $notification = self::make($title, $body, $kind, $session?->id, $limit, $url)->icon($icon);
@@ -282,24 +315,129 @@ final class ActivityFeed
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
             // Written at once, not queued: the bell, the device poll and the once-a-month checks see it immediately.
-            $user->notifyNow($notification->toDatabase());
+            $session === null ? $user->notifyNow($notification->toDatabase()) : self::upsert($user, $kind, $session->id, $notification->toDatabase()->data);
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'An Activity item was not written');
         }
+    }
+
+    /**
+     * Reports a failed write without what it wrote: a QueryException's message carries its bindings (a title, a name),
+     * so the log gets its class and SQLSTATE only, never the words (BE-02 review).
+     */
+    private static function reportSafely(Throwable $e, string $what): void
+    {
+        $state = $e instanceof QueryException ? ' (SQLSTATE '.((string) ($e->errorInfo[0] ?? $e->getCode())).')' : '';
+        report(new RuntimeException($what.': '.$e::class.$state));
+    }
+
+    /**
+     * One item per person, recording and kind (contract 2.0.0-r, BE-02): the same event again updates the item, newest
+     * words, unread, at the top, `repeat_count` one more, no longer resolved. Two requests at once meet at the unique key.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function upsert(User $user, string $kind, string $sessionId, array $data): void
+    {
+        $key = $kind.':'.$sessionId;
+        $existing = $user->notifications()->where('dedupe_key', $key)->first();
+        if ($existing instanceof DatabaseNotification) {
+            $existing->forceFill(['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $existing->getAttribute('repeat_count') + 1,
+                'created_at' => now(), 'updated_at' => now()])->save();
+
+            return;
+        }
+        try {
+            $user->notifications()->create(['id' => (string) Str::uuid(), 'type' => FilamentDatabaseNotification::class, 'data' => $data,
+                'read_at' => null, 'dedupe_key' => $key, 'repeat_count' => 1]);
+        } catch (UniqueConstraintViolationException) {
+            self::upsert($user, $kind, $sessionId, $data);
+        }
+    }
+
+    /**
+     * The recording of an upload failure reached the server after all (contract 2.0.0-r, BE-02): once no recording of its
+     * session is still failed, the item reads "Uploaded", is read and is resolved, so it leaves the group and never counts
+     * on the badge.
+     */
+    public function uploadResolved(Recording $recording): void
+    {
+        try {
+            $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($recording->capture_session_id)->first();
+            if (! $session instanceof CaptureSession
+                || Recording::query()->where('capture_session_id', $session->id)->where('upload_status', UploadStatus::Failed->value)->exists()) {
+                return;
+            }
+            $item = self::uploadFailureOf($session);
+            if (! $item instanceof DatabaseNotification) {
+                return;
+            }
+            $data = self::make(self::line('Uploaded'), self::line(':title is on the server now.', ['title' => $session->displayTitle()]), 'upload_failed', $session->id)
+                ->icon('heroicon-o-check-circle')->toDatabase()->data;
+            $item->forceFill(['data' => $data, 'read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save();
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not resolved');
+        }
+    }
+
+    /**
+     * A recording deleted (to the undo bin, or for good) has nothing left to upload: its upload failure is resolved and
+     * read, its words kept, so it leaves the group and the badge (BE-02 review).
+     */
+    public function uploadGone(CaptureSession $session): void
+    {
+        try {
+            $item = self::uploadFailureOf($session);
+            if ($item instanceof DatabaseNotification) {
+                $item->forceFill(['read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save();
+            }
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not resolved');
+        }
+    }
+
+    /**
+     * A recording back from the undo bin: when one of its uploads is still failed, its upload failure is unresolved and
+     * unread again, so it is back in the group and on the badge.
+     */
+    public function uploadBack(CaptureSession $session): void
+    {
+        try {
+            if (! Recording::query()->where('capture_session_id', $session->id)->where('upload_status', UploadStatus::Failed->value)->exists()) {
+                return;
+            }
+            DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())->where('notifiable_id', $session->user_id)
+                ->where('dedupe_key', 'upload_failed:'.$session->id)->whereNotNull('resolved_at')->update(['resolved_at' => null, 'read_at' => null]);
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not brought back');
+        }
+    }
+
+    /** The person's unresolved upload failure for a recording, if any. */
+    private static function uploadFailureOf(CaptureSession $session): ?DatabaseNotification
+    {
+        $item = DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())
+            ->where('notifiable_id', $session->user_id)->where('dedupe_key', 'upload_failed:'.$session->id)->whereNull('resolved_at')->first();
+
+        return $item instanceof DatabaseNotification ? $item : null;
     }
 
     /**
      * "Ana sent you Call with Omar" (since v1.5). The recording is in the sender's workspace: the apps open it by
      * `session_id` (they may read what was sent to them), the console's Open goes to Shared with me.
      */
-    public function sharedWithYou(User $recipient, string $title, string $body, ?string $sessionId): void
+    /**
+     * @param  string|array{key: string, params: array<string, mixed>}  $title
+     * @param  string|array{key: string, params: array<string, mixed>}  $body
+     */
+    public function sharedWithYou(User $recipient, string|array $title, string|array $body, ?string $sessionId): void
     {
         try {
             $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'app'), shouldOpenInNewTab: false)->markAsRead()]);
-            $recipient->notifyNow($notification->toDatabase());
+            $sessionId === null ? $recipient->notifyNow($notification->toDatabase()) : self::upsert($recipient, 'shared_with_you', $sessionId, $notification->toDatabase()->data);
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'An Activity item was not written');
         }
     }
 
@@ -316,12 +454,85 @@ final class ActivityFeed
      * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed. [$extra]: what
      * a kind carries besides (a missed recording's reason and id).
      *
+     * Since W-218 a line() is stored twice: in English as the title or body (what the apps and older rows read), and as
+     * its key and params in `viewData.lines`, so the console shows it in the reader's language (localized()).
+     *
+     * @param  string|array{key: string, params: array<string, mixed>}  $title
+     * @param  string|array{key: string, params: array<string, mixed>}  $body
      * @param  array<string, string>  $extra
      */
-    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null, array $extra = []): Notification
+    private static function make(string|array $title, string|array $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null, array $extra = []): Notification
     {
-        return Notification::make()->title(e($title))->body(e($body))
-            ->viewData([...$extra, 'kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : []), ...($url !== null ? ['url' => $url] : [])]);
+        $lines = array_filter(['title' => is_array($title) ? $title : null, 'body' => is_array($body) ? $body : null]);
+
+        return Notification::make()->title(e(self::text($title, 'en')))->body(e(self::text($body, 'en')))
+            ->viewData([...$extra, 'kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : []), ...($url !== null ? ['url' => $url] : []),
+                ...($lines !== [] ? ['lines' => $lines] : [])]);
+    }
+
+    /**
+     * A line of the activity feed to show in the reader's language (W-218): [$key] is the English words with :params,
+     * as lang/ur.json knows them; a param may be a line itself (a reason in plain words). Params that are not lines
+     * are shown as they are (names, titles, numbers).
+     *
+     * @param  array<string, mixed>  $params
+     * @return array{key: string, params: array<string, mixed>}
+     */
+    public static function line(string $key, array $params = []): array
+    {
+        return ['key' => $key, 'params' => $params];
+    }
+
+    /**
+     * A line with singular and plural forms (`one|many`, as trans_choice() takes them), chosen by [$count] in the
+     * reader's language (W-218 follow-up: "1 minute used", and Urdu's own forms).
+     *
+     * @param  array<string, mixed>  $params
+     * @return array{key: string, params: array<string, mixed>, count: int}
+     */
+    public static function plural(string $key, int $count, array $params = []): array
+    {
+        return ['key' => $key, 'params' => $params, 'count' => $count];
+    }
+
+    /**
+     * The words of a line in [$locale] (null: the reader's), or words as they are.
+     *
+     * @param  string|array<array-key, mixed>  $line
+     */
+    public static function text(string|array $line, ?string $locale = null): string
+    {
+        if (is_string($line)) {
+            return $line;
+        }
+        $params = [];
+        foreach ((array) ($line['params'] ?? []) as $name => $value) {
+            $params[(string) $name] = is_array($value) && isset($value['key']) ? self::text($value, $locale) : (is_scalar($value) ? (string) $value : '');
+        }
+
+        if (isset($line['count']) && is_int($line['count'])) {
+            return (string) trans_choice((string) ($line['key'] ?? ''), $line['count'], $params, $locale);
+        }
+
+        return (string) __((string) ($line['key'] ?? ''), $params, $locale);
+    }
+
+    /**
+     * The title and body in the reader's language (W-218): from the stored lines when the notification has them, else
+     * the stored English words, so notifications made before still read as they did. Words as typed, not escaped.
+     *
+     * @return array{title: string, body: string}
+     */
+    public static function localized(DatabaseNotification $n): array
+    {
+        $payload = self::payload($n);
+        $lines = $n->data['viewData']['lines'] ?? null;
+        $valid = fn (mixed $line): bool => is_array($line) && is_string($line['key'] ?? null);
+
+        return [
+            'title' => is_array($lines) && $valid($lines['title'] ?? null) ? self::text($lines['title']) : $payload['title'],
+            'body' => is_array($lines) && $valid($lines['body'] ?? null) ? self::text($lines['body']) : $payload['body'],
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -341,6 +552,10 @@ final class ActivityFeed
             'session_id' => is_string($session) ? $session : null,
             'read' => $n->read_at !== null,
             'at' => $n->created_at?->toAtomString(),
+            // Since 2.0.0-r (BE-02): how many times it happened, its group, and whether what it asked for is done.
+            'repeat_count' => max(1, (int) $n->getAttribute('repeat_count')),
+            'group' => $kind === 'upload_failed' ? 'upload_failed' : null,
+            'resolved' => $n->getAttribute('resolved_at') !== null,
             // Since v1.8 a missed recording also says why, and which one (docs/API.md `POST /api/devices/missed-recordings`).
             ...($kind === 'missed_recording' ? ['reason' => $string('reason'), 'missed_recording_id' => $string('missed_recording_id')] : []),
         ];

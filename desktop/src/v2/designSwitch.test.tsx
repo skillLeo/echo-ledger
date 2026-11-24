@@ -46,6 +46,7 @@ async function classicAppearance() {
 async function v2Appearance() {
   fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "Settings" }));
   await settle();
+  // Settings' groups are its panel's (one place for them): Appearance there.
   fireEvent.click(await screen.findByRole("button", { name: "Appearance" }));
   await settle();
 }

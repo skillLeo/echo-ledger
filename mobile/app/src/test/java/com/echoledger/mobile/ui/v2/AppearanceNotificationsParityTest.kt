@@ -145,7 +145,8 @@ class AppearanceNotificationsParityTest : ScreenTest() {
         val design = "button: Try the new design" to "the other direction: the new design offers Switch back to classic (DesignSwitchTest)"
         // Classic follows the phone's text size and language; the new design offers both (docs/PLAN_V2_PARITY.md section 5).
         val v2Only = listOf("Smaller", "As on the phone", "Larger", "Largest", "English", "اردو")
-            .associate { "radio: $it" to "v2's own Text size and App language (V2AppearanceTest)" }
+            .associate { "radio: $it" to "v2's own Text size and App language (V2AppearanceTest)" } +
+            ("switch: Swipe actions" to "v2's Library swipes can be turned off (V2LibraryFlowParityTest)")
         compare(Step.entries, run, where, search + design, v2Only) {
             defaults(start) { it.copy(themeMode = d.themeMode, phoneFont = d.phoneFont) }
         }

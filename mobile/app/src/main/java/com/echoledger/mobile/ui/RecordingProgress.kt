@@ -92,12 +92,15 @@ fun RecordingStepsBlock(itemId: String, steps: RecordingSteps.Steps, onNotify: (
     }
 }
 
-/** The slim "Improving Roman Urdu… 60%" bar over a transcript that can be read already (since v1.6, P5.4). */
+/** "Converting to Roman Urdu… 60%" with a small spinner and its bar over a transcript that can be read already (U19). */
 @Composable
 fun ImprovingBar(steps: RecordingSteps.Steps, modifier: Modifier = Modifier) {
     val c = LocalEchoColors.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(steps.line, style = LocalEchoType.current.bodyM, color = c.textMuted)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.echoledger.mobile.ui.design.Spinner(14.dp)
+            Text(steps.line, style = LocalEchoType.current.bodyM, color = c.textMuted)
+        }
         ProgressBar(steps.percent)
     }
 }

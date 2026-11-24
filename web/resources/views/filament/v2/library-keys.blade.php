@@ -2,7 +2,7 @@
     The v2.0 Library's keys and mouse (parity plan 3), only under ui_v2.library: J / K move through the list, Enter opens,
     X selects, Esc clears the selection; Ctrl/Cmd+A selects all; Delete (or Backspace) deletes the selection, with Undo
     in the notice; while something is selected a click on a row adds or takes it away and Shift-click takes the range;
-    right-click opens the row's menu, or ⋮ of the selection when the row is part of it.
+    right-click opens the row's menu, or the selection's when the row is part of it (UX-22, filament.v2.context-menu-script).
 --}}
 <script>
     {!! file_get_contents(resource_path('js/library-keys-core.cjs')) !!}
@@ -59,7 +59,7 @@
                 e.preventDefault();
                 on.forEach((b) => b.click());
             } else if (act.do === 'delete') {
-                const del = document.querySelector('[data-selection-delete]');
+                const del = document.querySelector('.v2-sel-actions [data-selection-delete]') || document.querySelector('[data-selection-delete]');
                 if (del) { e.preventDefault(); del.click(); }
             }
         });
@@ -78,14 +78,25 @@
             e.stopPropagation();
             box.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: e.shiftKey }));
         }, true);
-        // Right-click: the row's menu, or ⋮ of the selection when the row is part of it.
+        // Right-click: the row's menu, or the selection's when the row is part of it (UX-22: ours, filament.v2.
+        // context-menu-script); ⋮ of the selection while it is every page's (its rows are not all here), and the row's
+        // ⋯ where the page has no menu of its own.
         document.addEventListener('contextmenu', (e) => {
             const row = e.target instanceof Element ? e.target.closest('.v2-library [data-recording]') : null;
             const lib = library();
             if (! lib) return;
             const box = row && boxOf(row);
             const act = core.contextAction({ target: field(e.target) }, { inRow: !! row, rowChecked: !! (box && box.checked), checked: checked(lib).length });
-            const more = act === 'selection-menu' ? document.querySelector('button[data-selection-more], [data-selection-more] button')
+            const table = lib.list.closest('.fi-ta') || document.querySelector('.fi-ta');
+            const data = table && window.Alpine ? window.Alpine.$data(table) : null;
+            const everyPage = !! (data && data.isTrackingDeselectedRecords);
+            const menu = window.elV2ContextMenu;
+            if (act && menu && ! (act === 'selection-menu' && everyPage)
+                && menu.openFor(act === 'selection-menu' ? menu.rowsFor(row) : [row], { x: e.clientX, y: e.clientY }, lib.wire, false, menu.picked(row))) {
+                e.preventDefault();
+                return;
+            }
+            const more = act === 'selection-menu' ? (document.querySelector('.v2-sel-actions button[data-selection-more], .v2-sel-actions [data-selection-more] button') || document.querySelector('button[data-selection-more], [data-selection-more] button'))
                 : (act === 'row-menu' ? rowOf(row).querySelector('button.fi-ac-icon-btn-group') : null);
             if (! more) return;
             e.preventDefault();

@@ -17,7 +17,6 @@ import com.echoledger.mobile.assist.AssistHub
 import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.ui.v2.assist.AssistAdapter
 import com.echoledger.mobile.ui.v2.assist.V2AssistHost
-import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,8 +25,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The Live Assist card over other apps while this phone's session runs. It reaches the screen only through
- * [PrivateWindows], so it carries FLAG_SECURE (hidden in a screen share or a screenshot) like the other floating windows,
- * and while EchoLedger's text is hidden it is the grey dot. Text only; it never reads another app's screen.
+ * [PrivateWindows], so it carries FLAG_SECURE (a black box in a screen share or a screenshot) while Hide EchoLedger's live
+ * words is on, like the other live-words windows, and while EchoLedger's text is hidden it is the grey dot. Text only; it never reads another app's screen.
  */
 internal object AssistCardWindow {
     private var view: ComposeView? = null
@@ -73,7 +72,7 @@ internal object AssistCardWindow {
                     PrivateDot(onShow = { ShareGuard.setHidden(false) })
                     return@setContent
                 }
-                EchoV2Theme(darkTheme = true) {
+                com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(app)) {
                     V2AssistHost(adapter, Modifier.widthIn(max = MAX_WIDTH_DP.dp).padding(horizontal = 12.dp))
                 }
             }

@@ -1,0 +1,438 @@
+// The Library's places since the redesign (PLAN_LIBRARY_FILTERS §6 and its lead decisions; docs/v2/audit/parity.csv
+// DT-NAV-003, DT-LIB-115, DT-LIB-116, DT-LIB-117): the sidebar's LIBRARY views with their counts (Waiting and Failed
+// uploads are counted in Needs you; Pinned is the Pinned section at the top of every list and Marked › Pinned), and
+// today's smart folders as Source and Project choices (the Inbox is Project › No project, an app is its Source, Imported
+// the server's word). Shell's places list stays for the new shell without the new Library (ui_v2.library off).
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { LibraryItem } from "../../lib/ipc";
+import MainApp from "../../views/main/MainApp";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { LibraryV2 } from "./LibraryV2";
+import { Shell } from "../shell/Shell";
+import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
+
+vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
+vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
+
+const none = { final_status: null, final_transcript_id: null, live_available: false, preview: null };
+const ITEMS: LibraryItem[] = [
+  makeItem("wa", { title: "Bilal on WhatsApp", source_app: "whatsapp", started_at: "2026-11-17T06:00:00Z", client: { id: "p1", name: "Qureshi Textiles" } as LibraryItem["client"], pinned: true }),
+  makeItem("zoom", { title: "Weekly Zoom", source_app: "zoom", started_at: "2026-11-17T05:00:00Z", opened: false }),
+  makeItem("file", { title: "Imported memo", source_app: "voice_note", started_at: "2026-11-17T04:00:00Z", status: "audio_only", transcript: none }),
+  makeItem("bad", { title: "Teams call", source_app: "microsoft_teams", started_at: "2026-11-16T04:00:00Z", status: "failed", transcript: { ...none, final_status: "failed" } }),
+];
+const rows = () => [...screen.getByRole("list", { name: "Recordings" }).querySelectorAll<HTMLButtonElement>("button[data-row-id]")].map((b) => b.dataset.rowId);
+const pills = () => within(screen.getByRole("group", { name: "Filters on" }));
+
+function inTheApp(items: LibraryItem[] = ITEMS, local = { failedUploads: 1, pendingDecisions: 2 }) {
+  respond("app_status", makeStatus(local));
+  respond("library_list", items);
+  respond("library_refresh", items);
+  respond("get_settings", makeSettings());
+  respond("list_clients", { data: [{ id: "p1", name: "Qureshi Textiles" }] });
+  respond("mic_users", []);
+  respond("session_detail", {});
+  respond("bin_list", { data: [] });
+  respond("lists_get", []);
+  respond("library_views", { views: { waiting: 2, pinned: 1, failed: 1 }, labels: [], folders: { inbox: 3, whatsapp: 1, zoom: 1, voice_notes: 1, imported: 1, shared: 0 } });
+  respondWith("library_folder", ({ folder }) => (folder === "imported" ? [ITEMS[2]] : []));
+  respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false });
+  render(<MainApp />);
+}
+const settle = async () => {
+  await act(flushAsync);
+  await act(flushAsync);
+};
+
+describe("the Library's places", () => {
+  beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+    resetTauriMock();
+    resetSyncClock();
+    window.localStorage.clear();
+  });
+
+  it("DT-NAV-003 (the new shell without the new Library): the sidebar lists the places with their counts; the open one is marked; the Inbox takes drops", () => {
+    const open = vi.fn();
+    render(
+      <Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }}
+        places={{ places: [{ key: "waiting", label: "Waiting", count: 2 }, { key: "failed", label: "Failed uploads", count: 1 }, { key: "inbox", label: "Inbox", count: 5, drop: true },
+          { key: "zoom", label: "Zoom", count: 3 }], current: "zoom", open }}><p /></Shell>,
+    );
+    const list = screen.getByRole("list", { name: "Library places" });
+    expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Waiting, 2", "Failed uploads, 1", "Inbox, 5", "Zoom, 3"]);
+    expect(within(list).getByRole("button", { name: "Zoom, 3" })).toHaveAttribute("aria-current", "page");
+    expect(within(list).getByRole("button", { name: "Inbox, 5" }).closest("li")).toHaveAttribute("data-drop-project", "");
+    // With the Inbox listed, no second Inbox appears while dragging.
+    expect(document.querySelector(".el-nav-drop")).toBeNull();
+    fireEvent.click(within(list).getByRole("button", { name: "Waiting, 2" }));
+    expect(open).toHaveBeenCalledWith("waiting");
+  });
+
+  it("DT-LIB-116 and DT-LIB-117: a smart folder asked for (the palette, a notice) opens All with its Source or Project chosen; its pill's × shows all", async () => {
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+    respondWith("library_folder", ({ folder }) => (folder === "imported" ? [ITEMS[2]] : []));
+    const onFolder = vi.fn();
+    const { rerender } = render(<LibraryV2 folder="inbox" onFolder={onFolder} />);
+    await settle();
+    // The Inbox: recordings in no project.
+    expect(rows()).toEqual(["zoom", "file", "bad"]);
+    expect(pills().getByRole("button", { name: "Remove Project: No project" })).toBeInTheDocument();
+    // Taken: the same folder can be asked for again.
+    expect(onFolder).toHaveBeenCalledWith(null);
+    rerender(<LibraryV2 folder="zoom" onFolder={onFolder} />);
+    await settle();
+    expect(rows()).toEqual(["zoom"]);
+    expect(pills().getByRole("button", { name: "Remove Source: Zoom" })).toBeInTheDocument();
+    // Imported is the server's word (asked of a server that sends no facets yet).
+    rerender(<LibraryV2 folder="imported" onFolder={onFolder} />);
+    await settle();
+    expect(callsOf("library_folder")).toContainEqual({ folder: "imported" });
+    expect(rows()).toEqual(["file"]);
+    fireEvent.click(pills().getByRole("button", { name: "Remove Source: Imported" }));
+    await settle();
+    expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+  });
+
+  it("the folders' recordings are each Source's and Project's options, with their counts, in the filter panel", async () => {
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+    respondWith("library_folder", ({ folder }) => (folder === "imported" ? [ITEMS[2]] : []));
+    respond("list_clients", { data: [{ id: "p1", name: "Qureshi Textiles" }, { id: "p2", name: "Empty project" }] });
+    render(<LibraryV2 />);
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    const options = (section: string) => within(within(screen.getByTestId("filter-panel")).getByRole("region", { name: section }))
+      .getAllByRole("checkbox").map((c) => c.closest("label")!.textContent);
+    expect(options("Source")).toEqual(["Imported1", "Teams1", "WhatsApp1", "Zoom1"]);
+    // Every project is offered, an empty one too (dimmed, still a choice); No project is the Inbox.
+    expect(options("Project")).toEqual(["No project3", "Qureshi Textiles1", "Empty project0"]);
+  });
+
+  it("DT-LIB-115: in the app, the sidebar's LIBRARY views have their counts (Needs you with the calls and uploads waiting here) and open the Library there", async () => {
+    inTheApp();
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    // Needs you: the failed one, the two calls waiting and the upload that failed here. Then Shared ▸, which folds.
+    expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(
+      ["All recordings, 4", "Needs you, 4", "Unread, 1", "Important, 0", "Audio only, 1", "Shared"]);
+    // Not transcribed is Audio only since v2.1 (docs/PLAN_V2_1_POLISH.md section 1): one view, never the old name.
+    expect(list).not.toHaveTextContent(/not transcribed|untranscribed/i);
+    // No Library places list any more: these are the LIBRARY section's.
+    expect(screen.queryByRole("list", { name: "Library places" })).toBeNull();
+    expect(within(list).getByRole("button", { name: "All recordings, 4" })).toHaveAttribute("aria-current", "page");
+    // Pinned comes first in its own section at the top of All.
+    expect(screen.getAllByRole("button", { expanded: true }).find((b) => b.classList.contains("el-list-section__button"))).toHaveAccessibleName("Pinned · 1");
+    fireEvent.click(within(list).getByRole("button", { name: "Audio only, 1" }));
+    await settle();
+    expect(within(list).getByRole("button", { name: "Audio only, 1" })).toHaveAttribute("aria-current", "page");
+    expect(rows()).toEqual(["file"]);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Audio only/);
+  });
+
+  it("in the app, Needs you counts and lists the server's waiting recordings (a call waiting for Keep or Discard); no other view has them", async () => {
+    const call = makeItem("call", { title: "Phone call with Bilal", source_app: "phone_call", started_at: "2026-11-17T07:00:00Z", status: "recording", transcript: none });
+    respond("pending_list", []);
+    respond("upload_list", []);
+    inTheApp([...ITEMS, call], { failedUploads: 0, pendingDecisions: 0 });
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    // The failed one and the waiting call; All counts what it lists (not the call).
+    expect(within(list).getByRole("button", { name: /^Needs you, / })).toHaveAccessibleName("Needs you, 2");
+    expect(within(list).getByRole("button", { name: /^All recordings, / })).toHaveAccessibleName("All recordings, 4");
+    expect(rows()).not.toContain("call");
+    fireEvent.click(within(list).getByRole("button", { name: "Needs you, 2" }));
+    await settle();
+    expect(rows()).toEqual(["call", "bad"]);
+    // The glossary's word for it (contract 2.0.0-r `waiting`), in grey: not Audio only.
+    expect(document.querySelector("button[data-row-id=call]")!.closest("li")!.querySelector(".el-rec-state")).toHaveTextContent(/^Waiting$/);
+    expect(document.querySelector("button[data-row-id=call]")!.closest("li")).not.toHaveTextContent("Audio only");
+    // With a filter that the call doesn't have, it is still listed (as the server's Needs you keeps it).
+    await filterBySource("Teams");
+    await settle();
+    expect(rows()).toEqual(["call", "bad"]);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
+    await settle();
+    expect(rows()).toEqual(["call"]);
+  });
+
+  it("in the app, each place comes back as it was left; the Library's rail icon pressed again starts it over (PLAN_NAV_3_LEVELS §6)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    await settle();
+    expect(rows()).toEqual(["zoom"]);
+    // Projects, then the Library again: Unread with Source: Zoom, as left.
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // Pressed again while shown: All recordings, nothing filtered.
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
+  });
+
+  it("in the app, the mouse's back button steps once, also after leaving the Library and coming back (the title row's Back is not run too)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const heading = () => screen.getByRole("heading", { level: 1 });
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    // Projects and back: the Library is drawn again (its listeners too).
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    // One press of the side button: one step, the Library's own, not the places' too (still the Library, not Projects).
+    fireEvent.mouseDown(window, { button: 3 });
+    fireEvent.mouseUp(window, { button: 3 });
+    await settle();
+    expect(heading()).not.toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // And one press forward brings back exactly where it was: one step was taken, no more.
+    fireEvent.mouseDown(window, { button: 4 });
+    fireEvent.mouseUp(window, { button: 4 });
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, ⌘F is the title row's: its field searches this view and says In: All recordings (the Library has no field of its own there)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    expect(screen.getAllByRole("searchbox", { name: "Search recordings" })).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = screen.getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    expect(document.querySelector(".el-titlerow__scope")).toHaveTextContent("In: All recordings");
+    fireEvent.change(field, { target: { value: "weekly" } });
+    await act(() => new Promise((r) => setTimeout(r, 800)));
+    expect(rows()).toEqual(["zoom"]);
+  });
+
+  it("in the app, ⌘[ walks the Library's own steps first: a filter change, then the view, before leaving the place", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // One ⌘[: the filter change goes, the view stays (and the Library stays the place).
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    // The next: the view before it (All recordings), still in the Library.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // ⌘] walks forward again, one step a press.
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+  });
+
+  it("in the app, a view picked in the sidebar is one step: ⌘[ straight after goes back to All recordings, still in the Library", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeDisabled();
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    // Lit at once (the Library's step), no other redraw needed.
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeEnabled();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+  });
+
+  it("in the app, Back then a new view: Forward goes out (nothing ahead any more)", async () => {
+    inTheApp();
+    await settle();
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(titleRow().getByRole("button", { name: "Back" }));
+    await settle();
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Important/);
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeDisabled();
+  });
+
+  it("in the app, back from a recording opened from a scrolled list, by the row's ←, ⌘[ and the side button: the same place, its row tinted (UX-25)", async () => {
+    respond("session_detail", { playback_url: null });
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    // The shell's content area is the box that scrolls (its CSS isn't loaded here).
+    const box = document.querySelector<HTMLElement>(".content")!;
+    box.style.overflowY = "auto";
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const ways: [string, () => void][] = [
+      ["the row's ←", () => fireEvent.click(titleRow().getByRole("button", { name: "Back" }))],
+      ["⌘[", () => fireEvent.keyDown(document.body, { key: "[", metaKey: true })],
+      ["the side button", () => { fireEvent.mouseDown(window, { button: 3 }); fireEvent.mouseUp(window, { button: 3 }); }],
+    ];
+    for (const [way, back] of ways) {
+      box.scrollTop = 700;
+      fireEvent.click(within(screen.getByRole("list", { name: "Recordings" })).getByRole("button", { name: "Imported memo" }));
+      await settle();
+      expect(screen.getByRole("heading", { level: 1, name: "Imported memo" }), way).toBeInTheDocument();
+      box.scrollTop = 0;
+      back();
+      await settle();
+      expect(box.scrollTop, way).toBe(700);
+      expect(document.querySelector(".el-rec--last button[data-row-id]")?.getAttribute("data-row-id"), way).toBe("file");
+    }
+  });
+
+  it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    // The panel is a flyout: open it, choose Unread, filter.
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    fireEvent.click(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Unread, / }));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    await settle();
+    expect(screen.queryByTestId("nav-panel")).toBeNull();
+    await filterBySource("Zoom");
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByTestId("nav-panel")).toHaveClass("el-panel--flyout");
+  });
+
+  it("in the app, another sign-in starts every place afresh: no one's Library view, project or Settings page carries over", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    // Signed out, then someone else signs in (the core's id for the sign-in changes each time).
+    await emitEvent("app:status", makeStatus({ paired: false, signIn: null }));
+    await settle();
+    await emitEvent("app:status", makeStatus({ signIn: "sign-in-2" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+  });
+
+  it("in the app, a link opened after another sign-in shows its recording with no one else's filters or search", async () => {
+    respond("projects_list", { data: [] });
+    respond("links_resolve", { kind: "session", session_id: "zoom" });
+    respond("session_detail", { playback_url: null });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    // A: Unread with Source: Zoom and a search, then Projects, then back to the Library from the rail (as left).
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "weekly" } });
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
+    await settle();
+    // Signed out; B signs in and opens a recording from a link (the Library opens on it).
+    await emitEvent("app:status", makeStatus({ paired: false, signIn: null }));
+    await settle();
+    await emitEvent("app:status", makeStatus({ signIn: "sign-in-2" }));
+    await settle();
+    await emitEvent("main:navigate", { link: "echoledger://open/session/zoom" });
+    await settle();
+    await settle();
+    // Its recording open; back to the list: no filters, no search, All recordings.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("");
+  });
+
+  it("in the app, ⌘K's \"Show WhatsApp recordings\" is All recordings with Source: WhatsApp (a row's mark no longer filters)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
+    await settle();
+    const palette = screen.getByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "show whatsapp" } });
+    // Among the search's Commands (UX-20 groups what it finds).
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Show WhatsApp recordings/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();
+    expect(rows()).toEqual(["wa"]);
+  });
+
+  it("in the app, All after a view shows every recording again", async () => {
+    inTheApp();
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: "Audio only, 1" }));
+    await settle();
+    expect(rows()).toEqual(["file"]);
+    fireEvent.click(within(list).getByRole("button", { name: "All recordings, 4" }));
+    await settle();
+    expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
+    expect(within(list).getByRole("button", { name: "Audio only, 1" })).not.toHaveAttribute("aria-current");
+  });
+});

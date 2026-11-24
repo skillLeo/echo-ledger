@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
+use App\Services\Passkeys;
 use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptConverter;
@@ -20,8 +21,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+use Tests\Feature\Support\SoftAuthenticator;
 
 uses(ApiClient::class);
 
@@ -130,14 +133,15 @@ function cleanSample(mixed $value, ?string $key = null): mixed
         return $out;
     }
     if (is_array($value)) {
-        return array_map(fn (mixed $item): mixed => cleanSample($item), $value);
+        // Since 2.0.0-l: recovery codes are shown once, and never kept in a sample.
+        return array_map(fn (mixed $item): mixed => $key === 'recovery_codes' ? 'sample-recovery-code' : cleanSample($item), $value);
     }
     if (is_string($value)) {
         if ($key !== null && preg_match('/token|secret|password|signature|hash/i', $key) === 1) {
             return 'sample-'.$key;
         }
 
-        return preg_replace('/([?&](?:signature|expires|token)=)[^&"]+/', '$1sample', $value);
+        return preg_replace('/([?&](?:signature|expires|token|secret)=)[^&"]+/', '$1sample', $value);
     }
 
     return $value;
@@ -243,18 +247,48 @@ it('keeps the shape of every answer the apps read', function () {
     $record('upgrade_request_latest', $api()->getJson('/api/upgrade-requests/latest'));
     $record('device_rename', $api()->patchJson('/api/devices/'.$signedIn['device']['id'], ['name' => 'Sample phone']));
 
+    // Since 2.0.0-l: account and security from the apps.
+    $picture = imagecreatetruecolor(300, 300);
+    ob_start();
+    imagepng($picture);
+    $record('account_avatar', $api()->post('/api/account/avatar', ['image' => UploadedFile::fake()->createWithContent('me.png', (string) ob_get_clean())], ['Accept' => 'application/json']));
+    $record('account_update', $api()->patchJson('/api/account', ['name' => 'Sample Owner']));
+    $record('account_email', $api()->postJson('/api/account/email', ['email' => 'sample.new@example.test', 'password' => 'Sample-password-1234']));
+    $record('account_email_confirm', $api()->postJson('/api/account/email/confirm', ['code' => Mail::queued(EmailCodeMail::class)->last()->code]));
+    $begin = $record('account_two_factor', $api()->postJson('/api/account/two-factor', ['password' => 'Sample-password-1234']));
+    $recovery = $record('account_two_factor_confirm', $api()->postJson('/api/account/two-factor/confirm', ['ceremony' => $begin['ceremony'], 'code' => app(Google2FA::class)->getCurrentOtp($begin['secret'])]));
+    // With two-step on, every proof takes an authenticator or recovery code.
+    $fresh = $record('account_recovery_codes', $api()->postJson('/api/account/two-factor/recovery-codes', ['otp' => $recovery['recovery_codes'][0]]));
+    $ceremony = $record('account_passkey_options', $api()->postJson('/api/account/passkeys/options', ['otp' => $fresh['recovery_codes'][0]]));
+    $record('account_passkey', $api()->postJson('/api/account/passkeys', ['ceremony' => $ceremony['ceremony'], 'name' => 'Sample phone',
+        'credential' => (new SoftAuthenticator)->create($ceremony['options'], Passkeys::androidOrigins()[0])]));
+    $record('account_security', $api()->getJson('/api/account/security'));
+
     // The library, with the demo recordings and their transcripts.
     $record('library', $api()->getJson('/api/library?limit=100'));
     $record('library_folder', $api()->getJson('/api/library?folder=whatsapp&limit=100'));
     $record('search', $api()->getJson('/api/search?q=retainer'));
     $record('clients', $api()->getJson('/api/clients'));
     $record('activity', $api()->getJson('/api/activity?limit=20'));
+    // Since 2.0.0-r (BE-04): the one number on the Activity icon.
+    $record('badge', $api()->getJson('/api/badge'));
+    // Since 2.0.0-r (BE-02): the Activity's groups.
+    $record('activity_groups', $api()->getJson('/api/activity/groups'));
+    // Since 2.0.0-r (BE-03): Retry all.
+    $record('activity_retry_all', $api()->postJson('/api/activity/retry-all', ['group' => 'upload_failed']));
 
     $session = unscoped(fn () => CaptureSession::query()->whereHas('transcripts')->firstOrFail());
     $transcript = unscoped(fn () => Transcript::query()->where('capture_session_id', $session->id)->firstOrFail());
     $record('session_update', $api()->patchJson("/api/sessions/{$session->id}", ['title' => 'Retainer check-in, renamed', 'tags' => ['follow-up']]));
     $record('sessions_bulk', $api()->postJson('/api/sessions/bulk', ['ids' => [$session->id], 'action' => 'label', 'label' => 'Sample']));
     $record('library_views', $api()->getJson('/api/library/views'));
+    // Since 2.0.0-m: lists (the label "Sample" above is one already).
+    $record('list_create', $api()->postJson('/api/lists', ['name' => 'Clients', 'color' => '#e15f56']));
+    $record('list_update', $api()->patchJson('/api/lists/clients', ['name' => 'Customers', 'color' => '#458cde']));
+    $record('lists', $api()->getJson('/api/lists'));
+    $record('list_order', $api()->putJson('/api/lists/order', ['keys' => ['customers', 'sample']]));
+    $api()->postJson('/api/lists', ['name' => 'Someday'])->assertCreated();
+    $record('list_delete', $api()->deleteJson('/api/lists/someday'));
     // Since 2.0.0-j: audio only and "Transcribe later", on two of the demo recordings kept as audio.
     $audio = unscoped(fn () => CaptureSession::query()->whereKeyNot($session->id)->whereHas('recordings')->orderBy('id')->limit(2)->pluck('id')->all());
     unscoped(fn () => CaptureSession::query()->whereKey($audio)->update(['status' => 'audio_only', 'transcribe' => false]));
@@ -268,6 +302,10 @@ it('keeps the shape of every answer the apps read', function () {
     unscoped(function () use ($session, $transcript): void {
         $session->update(['pauses' => [['at_ms' => 1000, 'resumed_at_ms' => 2000]], 'language_marks' => [['at_ms' => 0, 'language' => 'ur']]]);
         $transcript->update(['meta' => array_merge($transcript->meta ?? [], ['suggestions' => [['line' => 0, 'from' => 'Omer', 'to' => 'Omar', 'reason' => 'name', 'status' => 'open']]])]);
+        // Since 2.0.0-o: the engine named the first line's language (the demo's other lines are from before, so null).
+        $segments = $transcript->segments ?? [];
+        $segments[0]['language'] = 'en';
+        $transcript->update(['segments' => $segments]);
         Screen::query()->create([
             'workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => 5000, 'width' => 1280, 'height' => 720,
             'trigger' => 'change', 'sha256' => str_repeat('a', 64), 'mime' => 'image/jpeg', 'image_path' => 'screens/sample.jpg', 'thumb_path' => 'screens/sample-thumb.jpg', 'bytes' => 1000, 'stored_bytes' => 1000, 'ocr_text' => 'A slide', 'description' => 'A slide with a price.', 'described_at' => now(),
@@ -320,6 +358,9 @@ it('keeps the shape of every answer the apps read', function () {
     $api()->patchJson("/api/sessions/{$session->id}", ['client_id' => $projectId])->assertSuccessful();
     $record('client_workspace', $api()->getJson("/api/clients/{$projectId}/workspace"));
     $record('client_ask', $api()->postJson("/api/clients/{$projectId}/ask", ['question' => 'What did they choose?', 'language' => 'en']));
+    // Since 2.0.0-o: Ask about one recording, and across the person's recordings.
+    $record('session_ask', $api()->postJson("/api/sessions/{$session->id}/ask", ['question' => 'What did they choose?', 'language' => 'en']));
+    $record('ask', $api()->postJson('/api/ask', ['question' => 'What did they choose?', 'language' => 'roman_urdu']));
     $record('client_bundle', $api()->getJson("/api/clients/{$projectId}/bundle?notes=10"));
 
     // Sharing.

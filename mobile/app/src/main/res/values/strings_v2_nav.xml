@@ -42,8 +42,15 @@
     <string name="v2_lib_setup_title">Finish setting up</string>
     <string name="v2_lib_setup_hide">Hide</string>
     <string name="v2_lib_need_calls_off">Calls are not being recorded</string>
-    <string name="v2_lib_need_waiting_one">1 call waiting for Keep or Discard</string>
-    <string name="v2_lib_need_waiting">%1$d calls waiting for Keep or Discard</string>
+    <string name="v2_lib_need_wont_record">Calls won\'t record</string>
+    <string name="v2_lib_need_wont_record_why">Calls won\'t record: %1$s</string>
+    <string name="v2_lib_need_retry_all">Retry all</string>
+    <plurals name="v2_lib_need_not_uploaded">
+        <item quantity="one">%1$d didn\'t upload</item>
+        <item quantity="other">%1$d didn\'t upload</item>
+    </plurals>
+    <string name="v2_lib_need_waiting_one">1 call waiting: Transcribe or Delete</string>
+    <string name="v2_lib_need_waiting">%1$d calls waiting: Transcribe or Delete</string>
     <string name="v2_lib_need_more">%1$s · %2$d more</string>
     <string name="v2_lib_need_review">Review</string>
     <string name="v2_lib_need_fix">Fix</string>
@@ -53,7 +60,7 @@
     <string name="v2_act_today">Today</string>
     <string name="v2_act_earlier">Earlier</string>
     <string name="v2_act_empty_title">You\'re all caught up</string>
-    <string name="v2_act_empty_body">Finished transcripts, problems and calls waiting for Keep or Discard show up here.</string>
+    <string name="v2_act_empty_body">Finished transcripts, problems and calls waiting for Transcribe or Delete show up here.</string>
     <string name="v2_act_error">Couldn\'t load activity. Check the connection.</string>
     <string name="v2_act_retry">Retry</string>
     <string name="v2_act_dismiss">Dismiss</string>
@@ -91,6 +98,6 @@
     <string name="v2_act_why_line">The phone line could not be opened, so the call was not recorded.</string>
     <string name="v2_act_why_background">Android did not let auto-record start in the background.</string>
     <string name="v2_act_why_not_running">Auto-record was not running when the call started.</string>
-    <string name="v2_act_keep_all">Keep all</string>
-    <string name="v2_act_discard_all">Discard all</string>
+    <string name="v2_act_keep_all">Transcribe all</string>
+    <string name="v2_act_discard_all">Delete all</string>
 </resources>

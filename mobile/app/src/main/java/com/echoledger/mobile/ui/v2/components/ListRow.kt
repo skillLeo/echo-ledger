@@ -61,6 +61,8 @@ fun EchoListRow(
     unread: Boolean = false,
     /** What screen readers hear for [unread] ("Unread"), in the screen's words. */
     unreadLabel: String? = null,
+    /** The title in the regular weight (a Library row its person has opened); semibold otherwise. */
+    plainTitle: Boolean = false,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -87,7 +89,7 @@ fun EchoListRow(
                 }
             )
             .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+            .padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
     ) {
@@ -104,7 +106,7 @@ fun EchoListRow(
                 // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                 Text(
                     title,
-                    style = type.content(title, type.bodyStrong),
+                    style = type.content(title, if (plainTitle) type.body else type.bodyStrong),
                     color = c.textPrimary,
                     maxLines = if (largeText()) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
@@ -147,7 +149,9 @@ fun EchoSettingRow(
     trailing: (@Composable () -> Unit)? = null,
     /** The title and subtitle are people's own words (an Ask source), not the app's. */
     content: Boolean = false,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    /** The icon in the warning colour: something needs the person (the line under the profile card). */
+    warning: Boolean = false
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
@@ -164,7 +168,7 @@ fun EchoSettingRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
         ) {
-            icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary) }
+            icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = if (warning) c.warning else c.textSecondary) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
                 if (content) {
                     Text(title, style = type.content(title, type.body), color = c.textPrimary, textAlign = startAlign())
@@ -229,8 +233,8 @@ fun EchoSectionHeader(text: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                start = EchoTokens.Layout.pagePaddingMobile,
-                end = EchoTokens.Layout.pagePaddingMobile,
+                start = LocalPageMargin.current,
+                end = LocalPageMargin.current,
                 top = EchoTokens.Space.s24,
                 bottom = EchoTokens.Space.s4
             )

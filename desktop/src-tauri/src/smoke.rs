@@ -30,6 +30,8 @@ pub const EXIT_WINDOW_FAILED: i32 = 2;
 pub const EXIT_TIMED_OUT: i32 = 3;
 /// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`). Not 4, 5 or 6, the Share Check's.
 pub const EXIT_MAC_APP: i32 = 7;
+/// Windows: a window's display affinity is not the capture policy's (`windows_capture_problem`).
+pub const EXIT_CAPTURE_POLICY: i32 = 10;
 /// The async runtime (where windows are built and the pages' commands run) made no progress for [`STALL`].
 pub const EXIT_STALLED: i32 = 8;
 /// How long the async runtime may make no progress before the test says it stalled.
@@ -47,17 +49,52 @@ pub const EXIT_PERMISSIONS_HUNG: i32 = 9;
 /// How long the permissions may take to answer: they read the system once, never a prompt.
 pub const PERMISSIONS_WITHIN: Duration = Duration::from_secs(10);
 
-/// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
-/// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
-/// under the default setting, is still hidden from screen capture after its class changed.
-pub fn mac_app_problem(answers_quits: bool, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
+/// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, the main
+/// window must be an ordinary titled window ([`main_window_problem`]), every floating window must be a non-activating
+/// panel (it floats over a full-screen meeting without taking the focus), and every window's sharing type, the main one
+/// included, must be the capture policy's under the default setting after the floating windows' class changed
+/// ([`crate::privacy::policy_problem`]: the windows with live words hidden, the others shown).
+pub fn mac_app_problem(answers_quits: bool, main: &crate::mac_check::WindowFacts, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
     if !answers_quits {
         return Some("the application delegate does not answer applicationShouldTerminate:".into());
+    }
+    if let Some(problem) = main_window_problem(main) {
+        return Some(problem);
     }
     if let Some(w) = windows.iter().find(|w| !w.panel) {
         return Some(format!("the {} window is not a non-activating panel ({})", w.label, w.line()));
     }
-    windows.iter().find(|w| !w.hidden_from_capture()).map(|w| format!("the {} window is not hidden from screen capture ({})", w.label, w.line()))
+    let defaults = crate::privacy::Choice::of(&crate::settings::Settings::default(), false, 0, (false, false));
+    std::iter::once(main).chain(windows).find_map(|w| {
+        let read = w.exists.then(|| if w.hidden_from_capture() { crate::privacy::share::Read::Hidden } else { crate::privacy::share::Read::Shown });
+        crate::privacy::policy_problem(w.label, read, &defaults).map(|problem| format!("{problem} ({})", w.line()))
+    })
+}
+
+/// What is wrong with the windows' capture flags as Windows reads them back (pure): each against the capture policy
+/// under the default setting. `reads`: the window and what `GetWindowDisplayAffinity` says. `supported`: this machine can
+/// keep the flag ([`crate::privacy::win::flags_supported`]); where it cannot (before build 19041, session 0, or a desktop
+/// the window manager does not compose) the windows
+/// the policy hides are not checked, and the ones it shows still are. Anywhere else a flag that did not hold fails.
+pub fn windows_capture_problem(reads: &[(&str, Option<crate::privacy::share::Read>)], supported: bool) -> Option<String> {
+    let defaults = crate::privacy::Choice::of(&crate::settings::Settings::default(), false, 0, (false, false));
+    let hides = |label: &str| crate::privacy::protected(crate::privacy::kind_for(label), &defaults);
+    reads.iter().filter(|(label, _)| supported || !hides(label)).find_map(|(label, read)| crate::privacy::policy_problem(label, *read, &defaults))
+}
+
+/// What is wrong with the main window, if anything (pure). The floating windows are built as panels by swapping NSWindow's
+/// allocator while they are built (`overlay::macos::build_as_panel`), and the smoke test opens them and the main window
+/// at the same time: the main window must still come out an ordinary window (never an `NSPanel`) with its title bar and
+/// its close, minimise and zoom buttons.
+pub fn main_window_problem(main: &crate::mac_check::WindowFacts) -> Option<String> {
+    if !main.exists {
+        return Some("the main window could not be read".into());
+    }
+    if main.ns_panel {
+        return Some(format!("the main window is a panel ({}, style 0x{:x})", main.class, main.style));
+    }
+    let missing = crate::overlay::geometry::mac_missing_buttons(main.style as usize);
+    (!missing.is_empty()).then(|| format!("the main window has no {} ({}, style 0x{:x})", missing.join(", "), main.class, main.style))
 }
 
 /// The test's own folder while it runs; everything that would touch the real one asks here first.
@@ -308,15 +345,36 @@ pub fn drive(app: tauri::AppHandle) {
                 say("failed: a floating window could not be read");
                 finish(&dir, EXIT_MAC_APP);
             }
-            if let Some(problem) = mac_app_problem(crate::app_life::mac::answers_quits(), &windows) {
+            // Built at the same time as the floating panels: still an ordinary window with its buttons.
+            let main = app.get_webview_window(MAIN).and_then(|window| overlay::macos::window_facts(&window, MAIN)).unwrap_or_else(|| crate::mac_check::WindowFacts::missing(MAIN));
+            if let Some(problem) = mac_app_problem(crate::app_life::mac::answers_quits(), &main, &windows) {
                 say(&format!("failed: {problem}"));
                 finish(&dir, EXIT_MAC_APP);
             }
             for window in &windows {
                 say(&format!("  {}: {}", window.label, window.line()));
             }
+            say(&format!("ok: the main window is an ordinary window with its close, minimise and zoom buttons ({}, style 0x{:x})", main.class, main.style));
             let setter = windows.iter().filter(|w| w.activation_setter).count();
-            say(&format!("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels hidden from screen capture (activation setter applied to {setter} of {})", windows.len()));
+            say(&format!("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels (activation setter applied to {setter} of {}); every window's sharing type is the capture policy's", windows.len()));
+        }
+        // Windows: every window's display affinity, read back, is the capture policy's.
+        #[cfg(windows)]
+        {
+            let mut labels = vec![MAIN];
+            labels.extend(overlay::WINDOWS);
+            use crate::privacy::win::Affinity;
+            let reads: Vec<(&str, Option<crate::privacy::share::Read>)> = labels.iter().map(|label| (*label, crate::privacy::read_flag(&app, label))).collect();
+            let (build, session, composed) = (crate::privacy::win::System.build(), crate::privacy::win::session_id(), crate::privacy::win::composition_enabled());
+            let supported = crate::privacy::win::flags_supported(build, session, composed);
+            if !supported {
+                say(&format!("  this machine cannot keep a capture flag (build {build:?}, session {session:?}, composed {composed:?}): the hidden windows are not checked here"));
+            }
+            if let Some(problem) = windows_capture_problem(&reads, supported) {
+                say(&format!("failed: {problem}"));
+                finish(&dir, EXIT_CAPTURE_POLICY);
+            }
+            say(&format!("ok: every window's display affinity is the capture policy's ({})", reads.iter().map(|(l, r)| format!("{l} {r:?}")).collect::<Vec<_>>().join(", ")));
         }
         let _ = std::fs::remove_dir_all(&dir);
         app.exit(0);
@@ -424,19 +482,79 @@ mod tests {
 
     #[test]
     fn the_mac_smoke_test_fails_without_the_quit_answer_the_panels_or_the_capture_flag() {
-        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 };
-        let good = [panel("overlay"), panel("pill")];
-        assert_eq!(mac_app_problem(true, &good), None);
-        assert!(mac_app_problem(false, &good).unwrap().contains("applicationShouldTerminate:"));
-        let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ..panel("pill") };
-        assert!(mac_app_problem(true, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
-        // The capture flag must survive the class change: a panel shown in screen capture fails.
-        let shown = crate::mac_check::WindowFacts { sharing: 1, ..panel("overlay") };
-        assert!(mac_app_problem(true, &[shown, panel("pill")]).unwrap().starts_with("the overlay window is not hidden from screen capture (EchoLedgerFloatingPanel, style 0x80, sharing 1"));
+        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0, server_sharing: Some(0) };
+        // The capture policy: the captions hidden (sharing 0), the recording controls shown (sharing 1).
+        let shown_panel = |label: &'static str| crate::mac_check::WindowFacts { sharing: 1, server_sharing: Some(1), ..panel(label) };
+        let main = main_window();
+        let good = [panel("overlay"), shown_panel("pill")];
+        assert_eq!(mac_app_problem(true, &main, &good), None);
+        assert!(mac_app_problem(false, &main, &good).unwrap().contains("applicationShouldTerminate:"));
+        let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ns_panel: false, ..shown_panel("pill") };
+        assert!(mac_app_problem(true, &main, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
+        // The capture flag must survive the class change: captions shown in screen capture fail.
+        let shown = crate::mac_check::WindowFacts { sharing: 1, server_sharing: Some(1), ..panel("overlay") };
+        assert!(mac_app_problem(true, &main, &[shown, shown_panel("pill")]).unwrap().starts_with("captions: in screen shares and screenshots, but the capture policy hides it (EchoLedgerFloatingPanel, style 0x80, sharing 1 (window server 1)"));
+        // The window server's word counts (kCGWindowSharingState): a window that says none but is listed shared fails.
+        let listed_shared = crate::mac_check::WindowFacts { server_sharing: Some(1), ..panel("overlay") };
+        assert!(mac_app_problem(true, &main, &[listed_shared, shown_panel("pill")]).unwrap().starts_with("captions: in screen shares and screenshots"));
+        let not_listed = crate::mac_check::WindowFacts { server_sharing: None, ..panel("overlay") };
+        assert_eq!(mac_app_problem(true, &main, &[not_listed, shown_panel("pill")]), None, "not in the window list yet: the window's own word");
+        // I-02: the recording controls, the after-call card and the dictation box hidden from the person's screenshots fail.
+        for label in ["pill", "review", "dictation"] {
+            let problem = mac_app_problem(true, &main, &[panel("overlay"), panel(label)]).unwrap();
+            assert!(problem.contains("hidden from screen shares and screenshots, but the capture policy shows it"), "{label}: {problem}");
+        }
+        assert!(mac_app_problem(true, &main, &[panel("overlay"), shown_panel("review"), shown_panel("dictation"), panel("assist")]).is_none(), "the Live Assist card hidden");
+        // The main window too: shown by default.
+        let hidden_main = crate::mac_check::WindowFacts { sharing: 0, server_sharing: Some(0), ..main.clone() };
+        assert!(mac_app_problem(true, &hidden_main, &good).unwrap().starts_with("main window: hidden from screen shares"));
         // Without the activation setter it still passes (the output says how many got it).
-        assert_eq!(mac_app_problem(true, &[crate::mac_check::WindowFacts { activation_setter: false, ..panel("pill") }]), None);
+        assert_eq!(mac_app_problem(true, &main, &[crate::mac_check::WindowFacts { activation_setter: false, ..shown_panel("pill") }]), None);
+        // A main window built as a panel fails, before the floating windows are looked at.
+        let as_panel = crate::mac_check::WindowFacts { class: "EchoLedgerFloatingPanel".into(), ns_panel: true, ..main.clone() };
+        assert_eq!(mac_app_problem(true, &as_panel, &good).unwrap(), "the main window is a panel (EchoLedgerFloatingPanel, style 0x800f)");
         assert_eq!(EXIT_MAC_APP, 7);
         assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_MAC_APP), "its own code");
+    }
+
+    #[test]
+    fn the_windows_smoke_test_reads_every_window_s_affinity_against_the_capture_policy() {
+        use crate::privacy::share::Read::*;
+        let good = [(MAIN, Some(Shown)), ("overlay", Some(Hidden)), ("dictation", Some(Shown)), ("pill", Some(Shown)), ("review", Some(Shown)), ("assist", Some(Hidden))];
+        assert_eq!(windows_capture_problem(&good, true), None);
+        assert_eq!(windows_capture_problem(&[("pill", Some(Hidden))], true).unwrap(), "recording controls: hidden from screen shares and screenshots, but the capture policy shows it");
+        assert_eq!(windows_capture_problem(&[("assist", Some(Shown))], true).unwrap(), "Live Assist card: in screen shares and screenshots, but the capture policy hides it");
+        assert_eq!(windows_capture_problem(&[("overlay", Some(BlackBox))], true), None, "a black box (Windows before 2004) keeps the words out");
+        assert!(windows_capture_problem(&[(MAIN, None)], true).unwrap().contains("could not be read"));
+        // A machine that can keep the flag: a hidden window whose flag did not hold fails (a setter regression).
+        assert!(windows_capture_problem(&[("overlay", Some(Shown))], true).is_some());
+        // One that cannot (before 2004, or session 0): only the windows the policy hides are left out of the check.
+        assert_eq!(windows_capture_problem(&[("overlay", Some(Shown)), ("assist", Some(Shown))], false), None);
+        assert!(windows_capture_problem(&[("overlay", Some(Shown)), ("pill", Some(Hidden))], false).unwrap().starts_with("recording controls"), "the shown ones are still checked");
+        assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_MAC_APP, EXIT_STALLED, EXIT_PERMISSIONS_HUNG, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_CAPTURE_POLICY), "its own code");
+    }
+
+    /// The main window as a Mac builds it: tao's class (KVO's once its content is in), titled, closable, miniaturizable,
+    /// resizable and with its content under the title bar (`titleBarStyle: Overlay`).
+    fn main_window() -> crate::mac_check::WindowFacts {
+        crate::mac_check::WindowFacts { exists: true, visible: true, on_screen: true, class: "NSKVONotifying_TaoWindow".into(), style: 0x800f, sharing: 1, server_sharing: Some(1), ..crate::mac_check::WindowFacts::missing(lifecycle::MAIN) }
+    }
+
+    #[test]
+    fn the_main_window_keeps_its_buttons_and_is_never_a_panel() {
+        let main = main_window();
+        assert_eq!(main_window_problem(&main), None);
+        let as_panel = crate::mac_check::WindowFacts { class: "NSKVONotifying_EchoLedgerFloatingPanel".into(), ns_panel: true, ..main.clone() };
+        assert_eq!(main_window_problem(&as_panel).unwrap(), "the main window is a panel (NSKVONotifying_EchoLedgerFloatingPanel, style 0x800f)");
+        // A panel's style on the main window: no title bar, no buttons, non-activating.
+        let borderless = crate::mac_check::WindowFacts { style: 0x80, ..main.clone() };
+        assert_eq!(main_window_problem(&borderless).unwrap(), "the main window has no title bar, close, minimise, zoom (NSKVONotifying_TaoWindow, style 0x80)");
+        let no_close = crate::mac_check::WindowFacts { style: 0x800d, ..main.clone() };
+        assert_eq!(main_window_problem(&no_close).unwrap(), "the main window has no close (NSKVONotifying_TaoWindow, style 0x800d)");
+        let no_zoom = crate::mac_check::WindowFacts { style: 0x8007, ..main.clone() };
+        assert_eq!(main_window_problem(&no_zoom).unwrap(), "the main window has no zoom (NSKVONotifying_TaoWindow, style 0x8007)");
+        assert_eq!(main_window_problem(&crate::mac_check::WindowFacts::missing(lifecycle::MAIN)).unwrap(), "the main window could not be read");
+        assert_eq!(mac_app_problem(true, &no_close, &[]).unwrap(), "the main window has no close (NSKVONotifying_TaoWindow, style 0x800d)", "the smoke test fails on it");
     }
 
     #[test]

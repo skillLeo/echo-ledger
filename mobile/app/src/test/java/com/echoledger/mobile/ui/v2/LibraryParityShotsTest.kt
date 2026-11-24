@@ -10,6 +10,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.R
 import com.echoledger.mobile.testsupport.FakeServer
@@ -33,7 +34,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Library, classic | v2 side by side (docs/PLAN_V2_PARITY.md section 8): the list, selection mode, selection's ⋮ menu,
- * a filter chip's sheet and Sort and group, light and dark, English and Urdu (classic's half stays English).
+ * the filters (v2's Filters sheet) and Sort and group (v2's ⋮ › Sort & display), light and dark, English and Urdu
+ * (classic's half stays English).
  */
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -132,12 +134,24 @@ class LibraryParityShotsTest : ScreenTest() {
         }
     )
 
+    /** v2's [Filters n] sheet beside classic's Filters panel. */
     @Test
-    fun filters() = assertEquals(all, shoot("library-filters") { tap(*words(R.string.v2_lib_source).toTypedArray(), "Source") })
+    fun filters() = assertEquals(all, shoot("library-filters") { tap(*words(R.string.v2_lf_filters).toTypedArray(), "Filters") })
 
+    /** v2's ⋮ › Sort & display beside classic's View sheet. */
     @Test
     fun sortAndGroup() = assertEquals(
         all,
-        shoot("library-sort-group") { tap(*words(R.string.v2_lib_sort_group).toTypedArray(), "View: group, sort and density") }
+        shoot("library-sort-group") {
+            val classic = hasContentDescription("View: group, sort and density") and hasClickAction()
+            if (compose.onAllNodes(classic).fetchSemanticsNodes().isNotEmpty()) {
+                tap("View: group, sort and density")
+            } else {
+                // The chips row's last chip since v2.1 (UX-14): scrolled to, then tapped.
+                val chip = words(R.string.v2_lf_sort_display).map { hasText(it) }.reduce { a, b -> a or b } and hasClickAction()
+                compose.onAllNodes(chip).onFirst().performScrollTo().performClick()
+                compose.waitForIdle()
+            }
+        }
     )
 }

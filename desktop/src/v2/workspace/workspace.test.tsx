@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { formatWhen } from "../../lib/format";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { getConfig, getRoles } from "@testing-library/dom";
 import { createRequire } from "node:module";
@@ -7,11 +8,11 @@ import MainApp from "../../views/main/MainApp";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { fileDropClaim } from "../../lib/dropTarget";
 import { answerConfirm } from "../../test/confirm";
-import { makeItem, makeScreen, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeScreen, makeSettings, makeStatus } from "../../test/fixtures";
 import { ClientWorkspace as ClientWorkspacePage } from "../../views/main/ClientWorkspace";
 import { RulesSection } from "../../views/main/FilingRules";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
-import { WorkspaceV2, memoryGroups } from "./WorkspaceV2";
+import { WorkspaceV2, latestStart, memoryGroups } from "./WorkspaceV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 // The accessible-name library Testing Library itself loads (the same version, so the same names as its ByRole queries).
@@ -363,7 +364,8 @@ describe("the new project page does what today's does", () => {
 
   it("a plan without AI notes: no Ask or call notes, the reason with its badge, the brief by hand", async () => {
     await show({ aiNotesInPlan: false });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Memory & instructions", "Screens"]);
+    // The tabs that list things show their counts after the name (1 recording, 2 files).
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings1", "Files2", "Memory & instructions", "Screens"]);
     await openTab("Memory & instructions");
     expect(screen.getByTestId("ai-not-in-plan")).toHaveTextContent("not in your workspace's plan");
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
@@ -496,5 +498,32 @@ describe("the app's project page with ui_v2.ask keeps today's actions", () => {
     expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toContain("Delete project…");
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     expect(await screen.findByRole("dialog", { name: "Rename Qureshi Textiles" })).toBeInTheDocument();
+  });
+});
+
+describe("the project's header (parity DT-PRJ-006)", () => {
+  it("says how many recordings and when the last call was, as classic's", async () => {
+    respond("library_list", [
+      makeItem("bilal", { title: "Payment terms", client: { id: "c1", name: "Qureshi Textiles" }, started_at: "2026-11-10T06:42:00Z" }),
+      makeItem("later", { title: "Follow-up", client: { id: "c1", name: "Qureshi Textiles" }, started_at: "2026-11-17T06:42:00Z" }),
+      makeItem("other", { title: "Weekly sales review", client: { id: "c2", name: "Mehran Foods" }, started_at: "2026-11-18T06:42:00Z" }),
+    ]);
+    await show();
+    expect(screen.getByTestId("project-summary")).toHaveTextContent(/^2 recordings · Last call /);
+    expect(screen.getByTestId("project-summary").textContent).toContain(formatWhen("2026-11-17T06:42:00Z").split(" · ")[0]);
+    // By the instant, not the text: 10:00 at +05:00 is before 06:42 UTC.
+    expect(latestStart([{ started_at: "2026-11-17T10:00:00+05:00" }, { started_at: "2026-11-17T06:42:00Z" }, { started_at: null }, { started_at: "soon" }])).toBe("2026-11-17T06:42:00Z");
+  });
+});
+
+describe("a locked tab (parity DT-PRJ-012)", () => {
+  it("Screens carries the plan that has screen moments when the plan leaves them out", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    try {
+      await show();
+      expect(screen.getByRole("tab", { name: /^Screens Pro$/ })).toBeInTheDocument();
+    } finally {
+      resetEntitlementsForTests(null);
+    }
   });
 });

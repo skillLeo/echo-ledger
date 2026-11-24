@@ -2,7 +2,9 @@
 // your own words, get the answer with the recordings and files it comes from (a recording opens at its moment). The
 // server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project. "All
 // recordings" isn't offered or mentioned at all until the server can ask across them.
-import { useState } from "react";
+import { PanelToggle } from "../shell/NavRail";
+import { useEffect, useState } from "react";
+import { notifyWhenAway } from "../../lib/notify";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { Banner, Button, Card, EmptyState, Icons, List, ListRow, ListSection, Loading, Segmented, Select, Skeleton, TextArea } from "../components";
@@ -36,6 +38,8 @@ export type AskV2Props = {
   projects: { id: string; name: string }[];
   /** The project to start on (opened from a project's page). */
   initialProjectId?: string | null;
+  /** A question to start from (the title row's search: Ask about "…"). */
+  initialQuestion?: string;
   onOpenAt: (sessionId: string, atMs: number) => void;
   onOpenProject: (projectId: string) => void;
   onLibrary: () => void;
@@ -46,13 +50,24 @@ export type AskV2Props = {
 /** The answer languages the server takes (POST /api/clients/{id}/ask: en | roman_urdu); Urdu script waits for it. */
 const LANGUAGES: { value: AnswerLanguage; label: string }[] = [{ value: "en", label: "English" }, { value: "roman_urdu", label: "Roman Urdu" }];
 
-export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
+export function AskV2({ projects, initialProjectId = null, initialQuestion = "", onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(initialQuestion);
   const [language, setLanguage] = useState<AnswerLanguage>("en");
   const [state, setState] = useState<AskState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
   const chosen = projects.find((p) => p.id === projectId) ?? projects[0] ?? null;
+  // Whether the server has AI set up, read from the chosen project's workspace: said before anything is asked.
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    setAiReady(null);
+    if (!chosen) return;
+    let live = true;
+    api.clientWorkspace(chosen.id).then((r) => live && setAiReady(r?.data?.ai?.configured !== false), () => live && setAiReady(null));
+    return () => {
+      live = false;
+    };
+  }, [chosen?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Another project: the answer on screen was about the last one.
   const choose = (id: string) => {
     if (id !== chosen?.id) setState({ kind: "idle" });
@@ -62,7 +77,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   if (projects.length === 0) {
     return (
       <div className="el-page el-page--narrow" data-v2="ask">
-        <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>
+        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Ask</h1></header>
         <EmptyState icon={Icons.FolderIcon} title="No projects yet"
           body="Ask works on a project's recordings. Put recordings in a project from Library first."
           action={<Button onClick={onLibrary}>Open Library</Button>} />
@@ -71,12 +86,15 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   }
 
   const ask = async () => {
-    if (!chosen || !question.trim()) return;
+    if (!chosen || !question.trim() || aiReady === false) return;
     setState({ kind: "asking" });
     setCopied(false);
     try {
-      const r = await api.askClient(chosen.id, question.trim(), language);
+      const q = question.trim();
+      const r = await api.askClient(chosen.id, q, language);
       setState(r?.data ? { kind: "answer", answer: r.data } : { kind: "failed", words: TRY_AGAIN });
+      // Asked, then looked elsewhere: the answer says it is ready (classic's).
+      if (r?.data) void notifyWhenAway("Answer ready", q);
     } catch (e) {
       setState({ kind: "failed", words: askFailureWords(e) });
     }
@@ -84,7 +102,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
 
   return (
     <div className={embedded ? "el-ask el-ask--embedded" : "el-page el-page--narrow"} data-v2="ask">
-      {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
+      {!embedded && <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
         {!embedded && <div className="el-field">
           {/* Projects only: asking across all recordings comes when the server can; until then it isn't offered at all. */}
@@ -98,9 +116,14 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
             <span className="el-field__label">Answer in</span>
             <Segmented label="Answer in" options={LANGUAGES} value={language} onChange={setLanguage} />
           </div>
-          <Button variant="primary" disabled={!question.trim()} loading={state.kind === "asking"} loadingLabel="Asking" onClick={() => void ask()}>Ask</Button>
+          <Button variant="primary" disabled={!question.trim() || aiReady === false} loading={state.kind === "asking"} loadingLabel="Asking" onClick={() => void ask()}>Ask</Button>
         </div>
       </Card>
+      {aiReady === false && (
+        <Banner tone="warning" icon={Icons.WarningIcon} testId="ask-no-ai">
+          Ask needs AI set up on the server. Ask the person who runs the console to set it up.
+        </Banner>
+      )}
 
       {state.kind === "idle" && (
         <EmptyState icon={Icons.AskIcon} title="Ask your recordings" body="Pick a project, then ask in your own words. Answers say which recording they come from." />

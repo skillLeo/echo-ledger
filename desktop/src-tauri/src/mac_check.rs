@@ -112,21 +112,27 @@ pub struct WindowFacts {
     /// A non-activating panel that never takes the keyboard: it floats over a full-screen meeting, and a click on it
     /// leaves the meeting in front.
     pub panel: bool,
+    /// An `NSPanel` (or a subclass of it) whatever its style: the floating windows are, the main window never is.
+    pub ns_panel: bool,
     /// The window server was told a click on it must not activate EchoLedger (`overlay::macos::make_panel`).
     pub activation_setter: bool,
     /// Its `NSWindowSharingType`: 0 none (hidden from screen capture), 1 read-only, 2 read-write.
     pub sharing: u64,
+    /// What the window server says of it, `kCGWindowSharingState` in `CGWindowListCopyWindowInfo` (the same numbers);
+    /// none when the window server did not list it. The capture policy is held to this one when it is there.
+    pub server_sharing: Option<u64>,
 }
 
 impl WindowFacts {
     /// A window that could not be read.
     pub fn missing(label: &'static str) -> Self {
-        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false, activation_setter: false, sharing: 0 }
+        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false, ns_panel: false, activation_setter: false, sharing: 0, server_sharing: None }
     }
 
-    /// Left out of screen capture (`NSWindowSharingNone`): the privacy service's flag, kept through the class change.
+    /// Left out of screen capture (`NSWindowSharingNone`): the privacy service's flag, kept through the class change, as
+    /// the window server says it when it does (else as the window says it).
     pub fn hidden_from_capture(&self) -> bool {
-        self.exists && self.sharing == 0
+        self.exists && self.server_sharing.unwrap_or(self.sharing) == 0
     }
 
     /// One line for a report (pure): its class, style and sharing type, and what they mean (Copy diagnostics, the smoke
@@ -137,10 +143,11 @@ impl WindowFacts {
         }
         let yes = |ok: bool, said: &'static str| if ok { said.to_string() } else { format!("not {said}") };
         format!(
-            "{}, style 0x{:x}, sharing {}: {}, {}, {}, {}, {}, {}",
+            "{}, style 0x{:x}, sharing {} (window server {}): {}, {}, {}, {}, {}, {}",
             self.class,
             self.style,
             self.sharing,
+            self.server_sharing.map_or_else(|| "not listed".to_string(), |s| s.to_string()),
             yes(self.panel, "a non-activating panel"),
             yes(self.activation_setter, "kept from activating EchoLedger"),
             yes(self.hidden_from_capture(), "hidden from screen capture"),
@@ -549,7 +556,7 @@ mod tests {
     }
 
     fn good_windows() -> Vec<WindowFacts> {
-        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 }).to_vec()
+        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0, server_sharing: Some(0) }).to_vec()
     }
 
     /// A Mac on which everything works; each test changes what it is about. It records which tests really ran.
@@ -947,12 +954,15 @@ mod tests {
     #[test]
     fn a_window_s_report_line_names_its_class_and_style() {
         let panel = good_windows().remove(1);
-        assert_eq!(panel.line(), "EchoLedgerFloatingPanel, style 0x80, sharing 0: a non-activating panel, kept from activating EchoLedger, hidden from screen capture, above other windows, in every Space and over full screen, on screen");
+        assert_eq!(panel.line(), "EchoLedgerFloatingPanel, style 0x80, sharing 0 (window server 0): a non-activating panel, kept from activating EchoLedger, hidden from screen capture, above other windows, in every Space and over full screen, on screen");
         assert!(panel.hidden_from_capture());
-        let plain = WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, spaces_ok: false, activation_setter: false, sharing: 1, ..panel };
-        assert_eq!(plain.line(), "TaoWindow, style 0x0, sharing 1: not a non-activating panel, not kept from activating EchoLedger, not hidden from screen capture, above other windows, not in every Space and over full screen, on screen");
+        let plain = WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, spaces_ok: false, activation_setter: false, sharing: 1, server_sharing: Some(1), ..panel };
+        assert_eq!(plain.line(), "TaoWindow, style 0x0, sharing 1 (window server 1): not a non-activating panel, not kept from activating EchoLedger, not hidden from screen capture, above other windows, not in every Space and over full screen, on screen");
         assert_eq!(WindowFacts::missing("pill").line(), "not open");
         assert!(!WindowFacts::missing("pill").hidden_from_capture());
+        // The window server's word wins when it lists the window (kCGWindowSharingState).
+        assert!(!WindowFacts { server_sharing: Some(1), ..good_windows().remove(1) }.hidden_from_capture());
+        assert!(WindowFacts { server_sharing: None, ..good_windows().remove(1) }.line().contains("(window server not listed)"));
     }
 
     #[test]

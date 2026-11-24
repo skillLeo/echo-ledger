@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Filament\Support\Notice;
+use App\Http\Requests\BlockEmailChangeRequest;
+use App\Http\Requests\ConfirmEmailChangeRequest;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
@@ -20,6 +22,7 @@ use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\EmailChange;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\Assist\AssistAskAi;
@@ -35,7 +38,9 @@ use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\Entitlements\PromoCodes;
+use App\Services\Health\ServerHealth;
 use App\Services\InterfaceFlags;
+use App\Services\Library\LibraryFacets;
 use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
@@ -51,7 +56,10 @@ use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use App\Support\Brand;
+use App\Support\Translation\IsolatingTranslator;
 use Filament\Actions\Action;
+use Filament\Auth\Http\Requests\BlockEmailChangeVerificationRequest;
+use Filament\Auth\Http\Requests\EmailChangeVerificationRequest;
 use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
@@ -60,6 +68,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Mail\MailManager;
@@ -74,6 +83,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Translation\Translator;
 use Illuminate\Validation\Rules\Password;
 use League\Flysystem\Filesystem;
 use RuntimeException;
@@ -85,9 +95,16 @@ class AppServiceProvider extends ServiceProvider
         // Since v1.9 (L0) the product's name has one place (config/echoledger.php `brand`): what reads `app.name` (Laravel
         // and its packages) reads it too. Cookie and cache names come from APP_NAME in the .env file and do not change.
         config(['app.name' => Brand::name()]);
+        // Since 2.0 (B8): in Urdu and Arabic every :replacement of a translated line is a Unicode isolate, so names and
+        // numbers inside right-to-left sentences keep their direction (IsolatingTranslator). Other languages unchanged.
+        $this->app->extend('translator', fn (Translator $translator): IsolatingTranslator => IsolatingTranslator::from($translator));
         // Since v1.6.1 every toast is a Notice: a target to open, Dismiss, the timer bar, swipe (docs/DESIGN_SYSTEM.md
         // "Notices"). Filament makes its notifications through the container, so every Notification::make() is one.
         $this->app->bind(FilamentNotification::class, Notice::class);
+        // Since 2.0.0-l: "Block" in the notice of an email change also ends a change asked for in an app (EmailChange).
+        $this->app->bind(BlockEmailChangeVerificationRequest::class, BlockEmailChangeRequest::class);
+        // Since the security review of 2.0.0-l: a change confirmed by the console's link tells the old address too.
+        $this->app->bind(EmailChangeVerificationRequest::class, ConfirmEmailChangeRequest::class);
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);
@@ -139,6 +156,16 @@ class AppServiceProvider extends ServiceProvider
         // The interface flags (since 2.0.0-a), decided with Pennant.
         InterfaceFlags::define();
 
+        // `php artisan about` says whether this PHP has what the server needs (W-INC-1124; echoledger:health in full).
+        AboutCommand::add('Server health', static function (): array {
+            $result = app(ServerHealth::class)->check();
+
+            return [
+                'PHP extensions' => $result['missing'] === [] ? 'all loaded' : 'missing: '.implode(', ', $result['missing']),
+                'Recordings cipher' => $result['cipher'] === null ? 'works' : 'fails: '.$result['cipher'],
+            ];
+        });
+
         // Pages and emails write the product's name as @brand (since v1.9, L0), read when they are shown.
         Blade::directive('brand', static fn (): string => '<?php echo e(\App\Support\Brand::name()); ?>');
 
@@ -168,6 +195,8 @@ class AppServiceProvider extends ServiceProvider
         AuditLog::listen();
         // The activity centre (B18).
         ActivityFeed::listen();
+        // Since 2.0.0-p: the Library's filter counts are read again once a recording of the person changes.
+        LibraryFacets::listen();
         Event::listen(JobProcessing::class, function (JobProcessing $event): void {
             // Filament's mails for changing an email are queued notifications.
             if (in_array($event->job->payload()['data']['commandName'] ?? null, [SendQueuedMailable::class, SendQueuedNotifications::class], true)) {
@@ -176,11 +205,15 @@ class AppServiceProvider extends ServiceProvider
         });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // Since the security review of 2.0.0-l: signing in again after "Put my address back" ends its lock at 24 hours.
+        Event::listen(Login::class, fn (Login $event) => $event->user instanceof User ? EmailChange::resetCompleted($event->user) : null);
         // "Forgot password?" is how someone takes an account back (Filament's reset page fires this): whoever else was in
         // it is out, on browsers, devices and connected apps. Changing the password on the profile keeps the rest.
         Event::listen(PasswordReset::class, function (PasswordReset $event): void {
             if ($event->user instanceof User) {
                 app(AccountSessions::class)->signOutEverywhere($event->user);
+                // Since the security review of 2.0.0-l: the reset after "Put my address back" ends its lock (at 24 hours).
+                EmailChange::resetCompleted($event->user);
             }
         });
         // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
@@ -220,6 +253,8 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since 2.0.0-r (BE-03): Retry all asks every device of the person; 6 a minute per device is plenty.
+        RateLimiter::for('retry-all', fn (Request $request) => Limit::perMinute(6)->by('retry-all:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Since v1.9 (L1): the Live Assist relay reports every suggestion; a busy relay sends a few a second.
         RateLimiter::for('assist-relay', fn (Request $request) => Limit::perMinute(3000)->by('assist-relay:'.$request->ip()));
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
@@ -303,6 +338,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
         // The public account pages (since v1.5): /account/delete and the export download.
         RateLimiter::for('account', fn (Request $request) => Limit::perMinute(30)->by('account:'.$request->ip()));
+        // Since 2.0.0-l (docs/API.md "Account and security from the apps"): per person, whichever of their devices asks.
+        $person = fn (Request $request): string => ($u = $request->user()) instanceof Device ? 'u'.$u->user_id : (string) ($u?->getAuthIdentifier() ?? $request->ip());
+        foreach (['account-name' => 10, 'account-avatar' => 10, 'account-email' => 3, 'account-email-code' => 5, 'account-password' => 5,
+            'account-two-factor' => 10, 'account-passkeys' => 10, 'account-proof-code' => 5] as $name => $perHour) {
+            RateLimiter::for($name, fn (Request $request) => Limit::perHour($perHour)->by($name.':'.$person($request)));
+        }
         // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
         RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));

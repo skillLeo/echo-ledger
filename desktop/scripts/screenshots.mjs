@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { FLAGS as V2_FLAGS } from "../src/v2/gallery/cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The sign-in screens show a build with its server built in (v1.6), never a real address: vite.config.ts reads this.
@@ -143,8 +144,7 @@ const SCREENS = [
   }],
   ["controls", "controls", async (page) => {
     await page.waitForSelector(".rec-pill");
-    await page.waitForSelector(".after-pill.saved");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector(".call-card");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
   // D-013, D-014, D-040, D-041, D-044, D-052, D-062: no internal, debug or vendor text.
@@ -291,18 +291,16 @@ const SCREENS = [
       await page.getByRole("alertdialog", { name: "Revoke this link?" }).waitFor();
     }, viewport],
   ]),
-  // D-105: the chip's Discard is a labelled trash, and Discard says Discarded with Undo for 6 s.
+  // The call choice: Delete says Deleted with Undo for 5 s (one message at a time).
   ["controls-discarded", "controls-discarded", async (page) => {
-    await page.waitForSelector(".after-pill.discarded");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector("[data-testid=call-done]");
   }],
   ["controls-discarded-narrow", "controls-discarded", async (page) => {
-    await page.waitForSelector(".after-pill.discarded");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector("[data-testid=call-done]");
   }, { width: 860, height: 560 }],
   ["controls-bluetooth", "controls-bluetooth", async (page) => {
     await page.waitForSelector("[data-testid=bluetooth-notice]");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector(".call-card");
   }],
   // Phase 1B: what runs on a Mac and on an old Windows, and what a recording says about what it holds.
   ["controls-permission", "controls-permission", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
@@ -341,12 +339,20 @@ const SCREENS = [
     await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
     await page.waitForSelector(".whatsapp-sheet");
   }],
-  ["whatsapp-voice", "library", async (page) => {
+  // F6: after Text and voice without the share, the voice saved and on the clipboard (Ctrl+V on Windows, ⌘V on a Mac).
+  ...[["whatsapp-voice", "library"], ["whatsapp-voice-mac", "library-whatsapp-mac"]].map(([name, fixture]) => [name, fixture, async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
     await page.getByRole("button", { name: "Text and voice" }).click();
-    await page.waitForSelector(".whatsapp-done");
-  }],
+    await page.waitForSelector("[data-testid=whatsapp-paste]");
+  }]),
+  // F6: a share whose end is not known: nothing claimed, the fallback offered (Windows 10; a Mac share with no answer).
+  ...[["whatsapp-opened", "library-whatsapp-opened"], ["whatsapp-opened-mac", "library-whatsapp-opened-mac"]].map(([name, fixture]) => [name, fixture, async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
+    await page.getByRole("button", { name: "Text and voice" }).click();
+    await page.waitForSelector("[data-testid=whatsapp-opened]");
+  }]),
   // v1.6.1 (Notices): a toast that goes somewhere, with × and its timer bar (reduced motion keeps the bar still).
   ["toast", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
@@ -655,6 +661,44 @@ const SCREENS = [
   ["record-narrow", "record", async (page) => page.waitForSelector(".record-btn"), { width: 860, height: 560 }],
   ["projects-narrow", "projects", async (page) => page.waitForSelector(".project-tree.on-page"), { width: 860, height: 560 }],
   ["activity-narrow", "activity", async (page) => page.waitForSelector(".activity-item"), { width: 860, height: 560 }],
+  // The v2 sidebar (PLAN_LIBRARY_FILTERS): LIBRARY, MY VIEWS, LABELS and PROJECTS with quiet counts (Needs you's and
+  // Unread's bold), Activity's "needs you" on its accent pill; a label as the current row; a view under the pointer; and
+  // the icon rail, where the Library's icon carries a dot while something needs you.
+  ["v2-sidebar", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("list", { name: "Library views" }).waitFor();
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+  }],
+  ["v2-sidebar-current", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("list", { name: "Labels" }).getByRole("button", { name: /^Kick-off, / }).click();
+    await page.locator(".el-library-nav [aria-current=page]").waitFor();
+  }],
+  ["v2-sidebar-hover", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+    await page.getByRole("list", { name: "Library views" }).getByRole("button", { name: /^Important, / }).hover();
+    return { keepPointer: true };
+  }],
+  ["v2-sidebar-rail", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("list", { name: "Library views" }).waitFor();
+    // The fixture opens a recording: its Back (the last "Library" in the window) shows the list.
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+    await page.getByRole("button", { name: "Collapse sidebar" }).click();
+    await page.locator(".el-sidebar[data-rail=on] .el-nav-item__dot").first().waitFor();
+  }],
+  // The Library's Sort & display ▾ open (the shared menu, floating above the page): whole, inside the window, off the
+  // sidebar, every item's words shown. At 1280 and 800, and at 1280 right to left.
+  ...[[1280, "en"], [800, "en"], [1280, "ur"]].map(([width, lang]) => [`library-sort-menu-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+    await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
+    await page.getByRole("button", { name: "Sort & display" }).click();
+    await page.getByRole("menu", { name: "Sort & display" }).waitFor();
+    await menuWhole(page);
+  }, { width, height: 800 }]),
+  // The recording page's Copy ▾ (SplitButton) open: the shared menu, floating from the whole button, every item whole.
+  ["recording-copy-menu-en", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("button", { name: "More copy options" }).click();
+    await page.getByRole("menu", { name: "More copy options" }).waitFor();
+    await menuWhole(page);
+  }, { width: 1280, height: 800 }],
 ];
 
 /**
@@ -771,9 +815,36 @@ async function openHelp(page) {
   if (outside.length) throw new Error(`Help's buttons are not on screen: ${outside.join(", ")}`);
 }
 
-async function shoot(page, file) {
-  // No hover state left from the last click (a row's menu button, a tooltip).
-  await page.mouse.move(0, 0);
+/**
+ * The open menu is whole: inside the window, off the sidebar (when its button is not in the sidebar), above whatever
+ * is under it, and every item's words shown (none cut or covered). Throws, so the shot is not taken and the run fails.
+ */
+async function menuWhole(page) {
+  const problems = await page.evaluate(() => {
+    const menu = [...document.querySelectorAll("[role=menu]")].pop();
+    if (!menu) return ["no menu open"];
+    const m = menu.getBoundingClientRect();
+    const out = [];
+    if (m.left < 0 || m.top < 0 || m.right > innerWidth || m.bottom > innerHeight) out.push(`outside the window: ${[m.left, m.top, m.right, m.bottom].map(Math.round)}`);
+    const opener = document.querySelector(`[aria-controls="${menu.id}"]`);
+    const sidebar = document.querySelector(".el-shell > .el-sidebar")?.getBoundingClientRect();
+    if (sidebar && !opener?.closest(".el-sidebar") && m.left < sidebar.right && m.right > sidebar.left && m.top < sidebar.bottom && m.bottom > sidebar.top) out.push("over the sidebar");
+    for (const label of menu.querySelectorAll(".el-menu__label")) {
+      const r = label.getBoundingClientRect();
+      if (label.scrollWidth > label.clientWidth + 1 || r.left < m.left - 0.5 || r.right > m.right + 0.5) out.push(`cut: "${label.textContent}"`);
+      for (const x of [r.left + 2, r.left + r.width / 2, r.right - 2]) {
+        const hit = document.elementFromPoint(x, r.top + r.height / 2);
+        if (hit && !menu.contains(hit)) { out.push(`covered: "${label.textContent}"`); break; }
+      }
+    }
+    return out;
+  });
+  if (problems.length) throw new Error(`Menu: ${problems.join("; ")}`);
+}
+
+async function shoot(page, file, keepPointer = false) {
+  // No hover state left from the last click (a row's menu button, a tooltip), unless the hover is the picture.
+  if (!keepPointer) await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
   await page.screenshot({ path: file });
@@ -799,8 +870,9 @@ try {
       const [screenName, ...extra] = screen.split("&");
       await page.goto(`${base}scripts/screens/index.html?screen=${screenName}&theme=${theme}${extra.length ? `&${extra.join("&")}` : ""}`);
       try {
-        await prepare(page);
-        await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+        // A screen whose picture is a hover says so (`{ keepPointer: true }`): the pointer stays where it left it.
+        const kept = await prepare(page);
+        await shoot(page, join(out, `desktop-${name}-${theme}.png`), kept?.keepPointer === true);
       } catch (e) {
         // One screen that cannot be reached says so and the rest are still taken; the run fails at the end.
         failed.push(`${name}-${theme}`);

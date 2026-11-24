@@ -1,0 +1,33 @@
+{
+    "ceremony": "2T9YTik8IpKgIbXpwkGsBhD3xB2Pgyv9YdQwSqW6",
+    "options": {
+        "challenge": "PKzlC6BNuNDWA02PK7vY7nL2W7pzNIZCOznqxRyXmyc",
+        "timeout": 300000,
+        "rp": {
+            "id": "echoledger.test",
+            "name": "EchoLedger"
+        },
+        "user": {
+            "id": "b6lMl_lYwhbf5cgMJk-glNQ7ZuuFj8yhBjDd8zh8TkM",
+            "name": "sample.new@example.test",
+            "displayName": "Sample Owner"
+        },
+        "pubKeyCredParams": [
+            {
+                "type": "public-key",
+                "alg": -7
+            },
+            {
+                "type": "public-key",
+                "alg": -257
+            }
+        ],
+        "authenticatorSelection": {
+            "requireResidentKey": true,
+            "userVerification": "required",
+            "residentKey": "required"
+        },
+        "attestation": "none",
+        "excludeCredentials": []
+    }
+}

@@ -18,6 +18,7 @@ import com.echoledger.mobile.recording.AutoRecordKeeper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class EchoLedgerApp : Application() {
     lateinit var graph: AppGraph
@@ -38,10 +39,28 @@ class EchoLedgerApp : Application() {
         // This phone's Live Assist card comes and goes with its session.
         com.echoledger.mobile.overlay.AssistCardWindow.follow(this, graph.scope)
         // Auto-record comes back on by itself after an update or a restart, without the app being opened.
-        cancelStartCheck = AutoRecordKeeper.onAppStart(this)
+        val autoRecord = AutoRecordKeeper.onAppStart(this)
+        // The settings read once as the app starts, off the main thread, so a window that opens next (the pill, the
+        // after-call card) has them at its first frame (graph.liveSettings).
+        val warm = Runnable {
+            graph.scope.launch(Dispatchers.IO) {
+                runCatching {
+                    // The channels were named in the phone's language a moment ago: in the app's, when it has its own.
+                    if (graph.settings.current().appLanguage != "system") Notifications.createChannels(this@EchoLedgerApp)
+                }
+            }
+        }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        main.postDelayed(warm, SETTINGS_WARM_MS)
+        cancelStartCheck = {
+            autoRecord()
+            main.removeCallbacks(warm)
+        }
+        // Send to WhatsApp's voice copies an hour old or more (WhatsApp has read them by then).
+        graph.scope.launch(Dispatchers.IO) { com.echoledger.mobile.share.WhatsAppShare.clearOldCopies(this@EchoLedgerApp) }
     }
 
-    /** Calls off the auto-record check of this process start (tests set up their own state). */
+    /** Calls off the auto-record check and the settings read of this process start (tests set up their own state). */
     var cancelStartCheck: () -> Unit = {}
         private set
 }
@@ -51,16 +70,76 @@ class AppGraph(val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val secretCipher: SecretCipher by lazy { TinkSecretCipher(context) }
     val recordingCipher: RecordingCipher by lazy { TinkRecordingCipher(context) }
+
+    /** The app language and text size last saved in this process, so a change of either refreshes what Android draws. */
+    @Volatile private var shownLook: Pair<String, String>? = null
+
+    /** Whether the after-call channel was last made (true) or removed (false) in this process; null before the first save. */
+    @Volatile private var shownNotify: Boolean? = null
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val lookRefresh = Dispatchers.Default.limitedParallelism(1)
+
     val settings: SettingsStore by lazy {
-        // Every saved change of During screen sharing reaches the floating windows and ShareGuard's memory at once.
-        SettingsStore(context, secretCipher) { saved ->
-            ShareGuard.setMode(ShareGuard.Mode.of(saved.screenShareMode))
+        // Every saved change of Hide EchoLedger's live words reaches the floating windows and ShareGuard's memory at once.
+        SettingsStore(context, secretCipher, latestSettings) { saved ->
+            ShareGuard.setHideLive(saved.hideLiveWords)
             // The capture journal keeps the choices that decide whether a call should be recorded, as they change.
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
+            // The app language or text size changed (or this process saves for the first time): what Android draws for
+            // the app (the widget, the notification channels' names) follows, as the v2 screens do.
+            // The after-call flag came on or went off (v2.1): its channel follows, whatever page is open.
+            val notify = com.echoledger.mobile.calls.CallChoice.notifies(saved)
+            if (shownNotify != notify) {
+                shownNotify = notify
+                scope.launch(lookRefresh) { runCatching { com.echoledger.mobile.notify.AfterCallNotice.followFlag(context, notify) } }
+            }
+            val look = saved.appLanguage to saved.textSize
+            if (shownLook != look) {
+                // One after another, each with the latest language: a slow one never names them after an older choice.
+                scope.launch(lookRefresh) {
+                    runCatching { com.echoledger.mobile.notify.Notifications.createChannels(context) }
+                    runCatching { com.echoledger.mobile.widget.WidgetStateStore.refresh(context) }
+                }
+            }
+            shownLook = look
         }
     }
+
+    /**
+     * The stored settings, kept hot for the whole process: every read and save of the store updates it, and the app
+     * reads them once as it starts ([EchoLedgerApp.onCreate]). What draws outside the activity starts from its value
+     * at once, never waiting on the store; null only until the store has been read the first time.
+     */
+    val liveSettings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?> get() = latestSettings
+
+    private val settingsAsked = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Before the settings have been read once, reads them now, off the main thread, once (a window drawing again and
+     * again asks only one read; a read that fails can be asked again).
+     */
+    fun readSettingsOnce() {
+        if (latestSettings.value != null || !settingsAsked.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) { if (runCatching { settings.current() }.isFailure) settingsAsked.set(false) }
+    }
+
+    /** Kept here, not in the store: reading [liveSettings] never makes the store (it opens the settings file). */
+    private val latestSettings = kotlinx.coroutines.flow.MutableStateFlow<com.echoledger.mobile.data.AppSettings?>(null)
+
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
+
+    /**
+     * Moves on at each sign-out and each sign-in: what a network call brings back (projects, lists) is kept only when
+     * the account is still the one it was asked for.
+     */
+    val accountEpoch = java.util.concurrent.atomic.AtomicInteger()
+
+    /** My views (contract 2.0.0-p): a copy per account, kept in step with `/api/views`. */
+    val views: com.echoledger.mobile.data.SavedViewsRepository by lazy {
+        com.echoledger.mobile.data.SavedViewsRepository(context, secretCipher, scope) { api() }
+    }
     val helper: HelperConnection by lazy { HelperConnection(context) }
 
     /** When this phone last sent its device report (Help v2's Contact support). */
@@ -87,3 +166,6 @@ class AppGraph(val context: Context) {
         cached = null
     }
 }
+
+/** How soon after the process starts the settings are read for the windows outside the app. */
+private const val SETTINGS_WARM_MS = 50L

@@ -171,7 +171,7 @@ describe("golden queries", () => {
   });
 
   it("values are never searched, and nonsense has no closest matches", () => {
-    expect(ids("on")).not.toContain("calls.auto");
+    expect(ids("on")).not.toContain("calls.ask_unknown");
     expect(ids("on")).not.toContain("captions.enabled");
     const answer = searchSettings("xyzzy");
     expect(answer.settings).toEqual([]);

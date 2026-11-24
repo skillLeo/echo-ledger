@@ -406,7 +406,8 @@ fn dictation_refused_opens_its_box_to_say_why() {
     let refused = &start[start.find("Access::Denied").unwrap()..start.find("dictation_text").unwrap()];
     assert!(refused.contains("set_overlay_visible(app, DICTATION, true)"));
     assert!(refused.contains("NO_DICTATION"));
-    assert!(refused.contains("emit_state(app, false)"), "the box hides by itself after a few seconds");
+    // D-108: the refusal names the permission, so the box stays with the button that opens its settings until closed.
+    assert!(refused.contains("emit_state_with(app, false, Some(\"microphone\"))"), "the box hears which permission refused");
 }
 
 /// What a recording says it is missing is read during the recording, not only before the prompts that settle it.
@@ -416,8 +417,19 @@ fn a_running_recording_looks_at_its_permissions_again() {
     let ticker = &actions[actions.find("fn start_ticker").unwrap()..actions.find("/// Seconds between looks").unwrap()];
     assert!(ticker.contains("read_recording_permissions(&app)"));
     let reader = &actions[actions.find("fn read_recording_permissions").unwrap()..];
-    assert!(reader.contains("missing_during(info.mode, &state.permissions_now())"));
+    // What the system says, with the other side's check (2.0.6) in place of any other line about system audio.
+    assert!(reader.contains("let permissions = state.permissions_now();"));
+    assert!(reader.contains("missing_with(info.mode, &permissions, warning)"));
     assert!(reader.contains("spawn_blocking"), "the ticker never waits for the system");
+    // The other side is looked at every second; what that reads and writes runs beside the ticker too.
+    assert!(ticker.contains("check_system_side(&app)"));
+    let check = &actions[actions.find("fn check_system_side").unwrap()..actions.find("fn system_side_changed").unwrap()];
+    assert!(check.contains("spawn_blocking(move || system_side_changed(&app, verdict))"));
+    assert!(!check.contains("permissions_now"), "no system read on the ticker");
+    // The process list is read by the detection loop's thread, at most every 5 s, never on the ticker.
+    assert!(!check.contains("others_playing"));
+    let detect = include_str!("../src/detect/mod.rs");
+    assert!(detect.contains("lock(&detect.playing).get(Instant::now(), crate::audio::platform::others_playing)"));
 }
 
 /// The sound tests hold `capture_test`; a real call that starts during one must not lose its screen moments for it.

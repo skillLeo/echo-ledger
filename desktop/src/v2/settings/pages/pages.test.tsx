@@ -36,6 +36,10 @@ const SETTINGS = makeSettings({
   dictationSnippets: [{ trigger: "insert signature", text: "Regards,\nAyesha" }],
 });
 const ACCOUNT: Account = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: true, google: false, created_at: null, workspace: null, deletes_at: null };
+/** An account on a server with the account routes of 2.0.0-l (a picture, two-step on). */
+const NATIVE: Account = { ...ACCOUNT, has_password: true, avatar_url: "https://ledger.example.test/a", avatar_version: 3, pending_email: null, passkeys_available: true };
+const NATIVE_SECURITY = { password: true, google: { linked: false, email: null }, passkeys: [{ id: "pk1", name: "Phone", created_at: null, last_used_at: null }],
+  two_factor: { enabled: true, recovery_codes_left: 6 }, browsers: [], devices: [] };
 const HISTORY = [{ at: "2026-11-17T08:00:00Z", text: "Send the proforma today." }];
 const run = <T,>(fn: () => Promise<T>) => fn().catch(() => undefined);
 const CHECK_OK: CheckItem = { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null };
@@ -1004,7 +1008,7 @@ describe("parity with today's Settings pages, in every state", () => {
     ...(["windows", "macos"] as const).flatMap((platform) => [true, false].map((autoMode): Page => ({
       name: `Calls & meetings, ${platform}, auto-record ${autoMode ? "on" : "off"}`, section: "calls", platform, settings: { autoMode },
       today: (st) => <CallsPage settings={st} patch={patch} platform={platform} onSites={() => undefined} consentRead={false} onConsent={() => undefined} />, steps: [reset],
-      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
+      map: { "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
     }))),
     { name: "Call sites", section: "calls.sites", today: (st) => <CallSitesPage rules={st.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] },
       steps: [{ name: "a site typed", today: type("Address or title contains", "meet.jit.si") }] },
@@ -1115,6 +1119,17 @@ describe("parity with today's Settings pages, in every state", () => {
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
+    // Since 2.0.0-l the account is changed in the app: the same rows and the same dialogs in both designs.
+    { name: "Profile, changed in the app", section: "profile", account: NATIVE,
+      today: () => <ProfilePage account={NATIVE} status={makeStatus()} run={run} />,
+      map: { "button: Edit profile, opens in browser": ["button", "Edit profile, opens in browser"] },
+      steps: [{ name: "Change name", today: press("Change name") }, { name: "Change email", today: press("Change email") }, { name: "Remove picture", today: press("Remove picture") }],
+      lines: ["Your teammates see your name and picture.", "This is the name your teammates see.", "Your initials show instead, everywhere."] },
+    { name: "Sign-in & security, changed in the app", section: "security", account: NATIVE,
+      today: () => <SecurityPage account={NATIVE} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
+      steps: [{ name: "Change password", today: press("Change password") }, { name: "Turn off two-step", today: press("Turn off two-step sign-in") },
+        { name: "New recovery codes", today: press("New recovery codes") }, { name: "Remove a passkey", today: press("Remove passkey Phone") }],
+      lines: ["Passkeys sign you in with your phone, fingerprint or face. Add one on the website.", "This computer stays signed in.", "Your old recovery codes stop working."] },
   ];
 
   /** The controls on screen and the confirm questions asked, after `step` (none: the page as it opens). */
@@ -1140,6 +1155,9 @@ describe("parity with today's Settings pages, in every state", () => {
       respond("lock_status", { enabled: !!page.settings?.appLock, locked: false, hasPin: page.lock?.hasPin ?? false, osMethod: "windows_hello", retryAfterSeconds: 0 });
       resetEntitlementsForTests(page.entitlements ?? sampleEntitlements("free"));
       respond("account_get", page.account ?? ACCOUNT);
+      respond("account_call", { ok: true, status: 200, data: NATIVE_SECURITY, code: null, message: null, accepts: [], errorCodes: null, errors: null, retryAfter: null, qr: null });
+      respond("account_avatar_image", null);
+      respond("auth_options", null);
       respond("security_overview", { devices: page.devices ? DEVICES : [], events: [{ id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: "2026-11-17T08:00:00Z" }] });
       respond("update_status", { ...UPDATE_IDLE, ...page.update });
       respond("mac_check_last", page.macLast ?? null);

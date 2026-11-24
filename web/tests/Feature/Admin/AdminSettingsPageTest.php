@@ -443,20 +443,23 @@ it('ignores form keys that are not part of the settings form', function () {
 it('never shows stored API credentials on the settings page', function () {
     $this->signInAsAdmin();
     $vault = app(CredentialVault::class);
-    $vault->put('assemblyai', 'api_key', 'aai-secret-key-1234567890');
-    $vault->put('elevenlabs', 'api_key', 'xi-secret-key-0987654321');
-    $vault->put('whispercpp', 'bearer_token', 'whisper-bearer-abcdef123456');
+    // Each secret ends in four characters no page token can make by chance (tokens are letters and digits), so the
+    // check for a "last four" shown on the page can't be met by a random CSRF or Livewire id containing "4321".
+    $vault->put('assemblyai', 'api_key', 'aai-secret-key-123456~P9q');
+    $vault->put('elevenlabs', 'api_key', 'xi-secret-key-098765~K4z');
+    $vault->put('whispercpp', 'bearer_token', 'whisper-bearer-abcdef~W2m');
 
     $page = $this->get('/admin/settings')->assertOk()->getContent();
     $component = adminSettingsPage($this)->html();
     $saved = adminSettingsPage($this)->fillForm(adminChangedSettings())->call('save')->html();
 
     foreach ([$page, $component, $saved] as $output) {
-        expect($output)->not->toContain('aai-secret-key-1234567890')
-            ->not->toContain('xi-secret-key-0987654321')
-            ->not->toContain('whisper-bearer-abcdef123456')
-            ->not->toContain('7890')
-            ->not->toContain('4321');
+        expect($output)->not->toContain('aai-secret-key-123456~P9q')
+            ->not->toContain('xi-secret-key-098765~K4z')
+            ->not->toContain('whisper-bearer-abcdef~W2m')
+            ->not->toContain('~P9q')
+            ->not->toContain('~K4z')
+            ->not->toContain('~W2m');
     }
 });
 

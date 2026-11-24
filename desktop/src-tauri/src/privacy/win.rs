@@ -36,6 +36,34 @@ pub trait Affinity {
     fn exists(&self, hwnd: isize) -> bool;
 }
 
+/// Whether this machine can keep a window's capture flag (pure): Windows 10 version 2004 or later ([`EXCLUDE_BUILD`]), in
+/// an interactive session (not session 0, where services run) whose desktop the window manager composes
+/// (`SetWindowDisplayAffinity` needs composition). The smoke test skips a window the policy hides only when it cannot;
+/// otherwise a flag that does not hold is a failure.
+pub fn flags_supported(build: Option<u32>, session: Option<u32>, composed: Option<bool>) -> bool {
+    build.is_some_and(|b| b >= EXCLUDE_BUILD) && session.is_some_and(|s| s != 0) && composed == Some(true)
+}
+
+/// Whether the window manager composes this desktop (`DwmIsCompositionEnabled`); none when Windows did not say. Always on
+/// from Windows 8 in a normal session; a session with no desktop to compose can say no.
+#[cfg(windows)]
+pub fn composition_enabled() -> Option<bool> {
+    use windows::Win32::Graphics::Dwm::DwmIsCompositionEnabled;
+    // SAFETY: a plain query; it returns its answer.
+    unsafe { DwmIsCompositionEnabled() }.ok().map(|on| on.as_bool())
+}
+
+/// The session EchoLedger runs in (`ProcessIdToSessionId`); none when Windows did not say.
+#[cfg(windows)]
+pub fn session_id() -> Option<u32> {
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    let mut id = 0u32;
+    // SAFETY: a plain query of this process's session into a local.
+    unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut id) }.ok()?;
+    Some(id)
+}
+
 /// The affinity a window should have (pure).
 pub fn wanted(protect: bool, build: Option<u32>, old: OldWindowsSharing) -> u32 {
     if !protect {
@@ -306,6 +334,16 @@ mod tests {
         fn exists(&self, hwnd: isize) -> bool {
             !self.gone.contains(&hwnd)
         }
+    }
+
+    #[test]
+    fn the_flag_is_kept_only_from_19041_in_an_interactive_composed_session() {
+        assert!(flags_supported(Some(EXCLUDE_BUILD), Some(1), Some(true)));
+        assert!(flags_supported(Some(26_100), Some(2), Some(true)));
+        assert!(!flags_supported(Some(18_363), Some(1), Some(true)), "before Windows 10 version 2004");
+        assert!(!flags_supported(Some(26_100), Some(0), Some(true)), "session 0: no interactive desktop");
+        assert!(!flags_supported(Some(26_100), Some(1), Some(false)), "a desktop the window manager does not compose");
+        assert!(!flags_supported(None, Some(1), Some(true)) && !flags_supported(Some(26_100), None, Some(true)) && !flags_supported(Some(26_100), Some(1), None), "Windows did not say");
     }
 
     #[test]

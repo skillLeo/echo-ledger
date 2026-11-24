@@ -22,7 +22,7 @@
     <string name="v2_no_match_body">Try another word, or clear the filters.</string>
     <string name="v2_load_error_title">Couldn\'t load your recordings</string>
     <string name="v2_load_error_body">Check the internet connection. Recordings on this phone are safe.</string>
-    <string name="v2_offline_banner">Offline. Showing the last synced library.</string>
+    <string name="v2_offline_banner">You\'re offline. Showing the last synced library.</string>
     <string name="v2_try_again">Try again</string>
     <string name="v2_deleted">Recording deleted</string>
     <string name="v2_restored">Restored</string>
@@ -70,9 +70,12 @@
     <string name="v2_not_signed_in">Not signed in</string>
     <string name="v2_clear_search">Clear search</string>
     <string name="v2_close">Close</string>
+    <string name="v2_back_to_top">Back to top</string>
     <string name="v2_loading">Loading</string>
     <string name="v2_undo">Undo</string>
     <string name="v2_selected">Selected</string>
+    <string name="v2_expanded">Expanded</string>
+    <string name="v2_collapsed">Collapsed</string>
     <string name="v2_not_selected">Not selected</string>
     <string name="v2_open_menu">Show choices</string>
     <string name="v2_drag_handle">Drag to resize or close</string>
@@ -119,8 +122,11 @@
     <string name="v2_vm_stop_recording_first">Stop the recording first, then run the test.</string>
     <string name="v2_vm_stopped_sharing">Stopped sharing</string>
     <string name="v2_vm_wrong_sign_in_link">That sign-in link is not for this sign-in. Start again.</string>
-    <string name="v2_vm_audio_download_failed">The audio could not be downloaded. Check the connection and try again.</string>
+    <string name="v2_vm_audio_download_failed">The voice could not be downloaded. Check the connection and try again.</string>
     <string name="v2_vm_change_not_saved">The change could not be saved.</string>
+    <string name="v2_vm_list_not_saved">The list could not be saved.</string>
+    <string name="v2_vm_list_not_deleted">The list could not be deleted.</string>
+    <string name="v2_vm_lists_not_moved">The lists could not be moved.</string>
     <string name="v2_vm_device_not_revoked">The device could not be revoked.</string>
     <string name="v2_vm_export_failed">The export failed.</string>
     <string name="v2_vm_file_unreadable">The file could not be read.</string>
@@ -135,7 +141,7 @@
     <string name="v2_vm_term_not_added">The term could not be added.</string>
     <string name="v2_vm_views_not_started">The views could not be started.</string>
     <string name="v2_vm_signed_out">This phone was signed out on the server. Sign in again.</string>
-    <string name="v2_vm_no_audio_on_server">This recording has no audio on the server.</string>
+    <string name="v2_vm_no_audio_on_server">This recording has no voice on the server.</string>
     <string name="v2_vm_one_updated">1 recording updated</string>
     <string name="v2_vm_welcome">Welcome to EchoLedger</string>
     <string name="v2_vm_ws_it_could_not_be_removed">It could not be removed.</string>
@@ -174,7 +180,7 @@
     <string name="v2_vm_ws_the_suggestion_could_not_be_saved">The suggestion could not be saved.</string>
     <string name="v2_vm_ws_the_text_could_not_be_made">The text could not be made.</string>
     <string name="v2_vm_ws_project_deleted">Project deleted</string>
-    <string name="v2_vm_project_deleted_moved">Project deleted · %1$s moved to the Inbox</string>
+    <string name="v2_vm_project_deleted_moved">Project deleted · %1$s moved to No project</string>
     <string name="v2_vm_key_refused">Groq did not accept that key. Copy it again from console.groq.com.</string>
     <string name="v2_vm_link_not_revoked">The link could not be revoked.</string>
     <string name="v2_vm_not_deleted">The recording could not be deleted.</string>

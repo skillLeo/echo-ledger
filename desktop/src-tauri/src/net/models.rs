@@ -400,6 +400,22 @@ pub struct AccountDto {
     /// Every workspace the person belongs to (v1.6 shell, for the switcher); empty when the server does not list them.
     #[serde(default, deserialize_with = "lenient_list")]
     pub workspaces: Vec<AccountWorkspaceEntry>,
+    /// The person's picture (since 2.0.0-l): a signed link and the version it is kept by; none shows the initials.
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub avatar_version: Option<u64>,
+    /// The account has a password (one made with Google may not); `None` from a server before 2.0.0-l.
+    #[serde(default)]
+    pub has_password: Option<bool>,
+    /// An email change waiting for its code, and until when.
+    #[serde(default)]
+    pub pending_email: Option<String>,
+    #[serde(default)]
+    pub pending_email_expires_at: Option<String>,
+    /// The server takes phone passkeys (the desktop adds them on the website either way).
+    #[serde(default)]
+    pub passkeys_available: Option<bool>,
 }
 
 /// One of the person's workspaces in `account.workspaces` (v1.6 shell).
@@ -682,11 +698,47 @@ pub struct LibraryItem {
     pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
+/// One of the person's lists (contract 2.0.0-m): a label with a name, a colour and its place in the Library's row.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListDto {
+    /// The name in lower case: the list's key in the paths and in every label it matches.
+    pub key: String,
+    pub name: String,
+    /// "#rrggbb", or none (drawn in the neutral colour).
+    pub color: Option<String>,
+    pub position: u32,
+    /// The person's recordings in it, not in Trash.
+    pub count: u64,
+}
+
+/// `GET /api/lists`, `PUT /api/lists/order`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListsResponse {
+    pub data: Vec<ListDto>,
+}
+
+/// `POST /api/lists`, `PATCH /api/lists/{key}`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListResponse {
+    pub data: ListDto,
+}
+
+/// `DELETE /api/lists/{key}`: the recordings that lost the label.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListDeleted {
+    pub key: String,
+    pub changed: u64,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct LibraryResponse {
     pub data: Vec<LibraryItem>,
     pub next_cursor: Option<String>,
     pub server_time: String,
+    /// The person's saved views' version (since 2.0.0-p): when it differs from the one the app has, it reads
+    /// `GET /api/views` again. None from an older server.
+    #[serde(default)]
+    pub views_version: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -779,6 +831,20 @@ pub struct AuthOptions {
     /// Email codes are offered (since v1.6).
     #[serde(default)]
     pub code: bool,
+    /// What a new password needs (since 2.0.0-l), so the app can say it before sending; the server still decides.
+    #[serde(default, alias = "password_rules")]
+    pub password_rules: Option<PasswordRules>,
+}
+
+/// `password_rules` of `GET /api/auth/options` (since 2.0.0-l).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PasswordRules {
+    #[serde(default)]
+    pub min: u32,
+    #[serde(default)]
+    pub letters: bool,
+    #[serde(default)]
+    pub numbers: bool,
 }
 
 fn yes() -> bool {

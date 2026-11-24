@@ -34,12 +34,12 @@ function resolveLink(object $test, string $url): TestResponse
     return $test->asToken($test->token)->getJson('/api/links/resolve?url='.rawurlencode($url));
 }
 
-it('publishes the Android App Links statement as JSON', function () {
+it('publishes the Android App Links statement as JSON, with the passkey relation since 2.0.0-l', function () {
     $response = $this->get('/.well-known/assetlinks.json')->assertOk();
 
     expect($response->headers->get('Content-Type'))->toBe('application/json')
         ->and($response->json())->toBe([[
-            'relation' => ['delegate_permission/common.handle_all_urls'],
+            'relation' => ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'],
             'target' => ['namespace' => 'android_app', 'package_name' => 'com.echoledger.mobile',
                 'sha256_cert_fingerprints' => [
                     '34:AC:18:19:18:77:F6:C3:12:A2:88:3E:07:C8:40:0B:85:C4:71:62:A4:0F:77:B4:FE:2D:4F:27:08:AF:F1:B6',

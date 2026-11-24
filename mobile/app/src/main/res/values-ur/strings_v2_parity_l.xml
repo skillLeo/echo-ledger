@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_lib_option_count">%1$s (%2$d)</string>
+    <string name="v2_lib_source_device">%1$s، %2$s</string>
+    <string name="v2_lib_need_calls_off_why">کالز ریکارڈ نہیں ہو رہیں: %1$s</string>
+    <string name="v2_lib_server_update">ریکارڈنگز بھیجتے رہنے کے لیے EchoLedger اپ ڈیٹ کریں۔</string>
+    <string name="v2_lib_server_refused">سرور اب اس ورژن سے ریکارڈنگز نہیں لیتا۔ EchoLedger اپ ڈیٹ کریں: آپ کی ریکارڈنگز اس فون پر محفوظ ہیں۔</string>
+    <string name="v2_lib_server_maintenance">سرور پر مرمت کا کام جاری ہے۔ آپ کی ریکارڈنگز اس فون پر محفوظ ہیں اور بعد میں بھیج دی جائیں گی۔</string>
+    <string name="v2_lib_server_update_action">اپ ڈیٹ کریں</string>
+    <string name="v2_lib_server_close">بند کریں</string>
+    <string name="v2_ws_last_call">آخری کال %1$s</string>
+</resources>

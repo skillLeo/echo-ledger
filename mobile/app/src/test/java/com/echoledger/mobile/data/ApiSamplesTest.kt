@@ -19,7 +19,17 @@ class ApiSamplesTest {
 
     private val readBy: Map<String, KSerializer<*>> = mapOf(
         "account" to AccountDto.serializer(),
+        "account_avatar" to AvatarDto.serializer(),
+        "account_email" to PendingEmailDto.serializer(),
+        "account_email_confirm" to AccountDto.serializer(),
         "account_export" to AccountExportDto.serializer(),
+        "account_passkey" to AddedPasskeyDto.serializer(),
+        "account_passkey_options" to PasskeyOptionsDto.serializer(),
+        "account_recovery_codes" to RecoveryCodesDto.serializer(),
+        "account_security" to AccountSecurityDto.serializer(),
+        "account_two_factor" to TwoFactorSetupDto.serializer(),
+        "account_two_factor_confirm" to RecoveryCodesDto.serializer(),
+        "account_update" to AccountDto.serializer(),
         "activity" to ActivityResponse.serializer(),
         "activity_read" to UnreadAnswer.serializer(),
         "auth_options" to AuthOptionsDto.serializer(),
@@ -66,6 +76,16 @@ class ApiSamplesTest {
         "session_open" to CreateSessionResponse.serializer(),
         "session_screens" to ScreensResponse.serializer(),
         "sessions_bulk" to BulkAnswer.serializer(),
+        // Audio only and Transcribe later (contract 2.0.0-j).
+        "session_transcribe" to SessionTranscribeAnswer.serializer(),
+        "sessions_transcribe" to TranscribeManyAnswer.serializer(),
+        "sessions_transcribe_estimate" to TranscribeEstimateAnswer.serializer(),
+        // Lists (contract 2.0.0-m).
+        "lists" to ListsResponse.serializer(),
+        "list_create" to ListResponse.serializer(),
+        "list_update" to ListResponse.serializer(),
+        "list_delete" to ListDeletedAnswer.serializer(),
+        "list_order" to ListsResponse.serializer(),
         "share_create" to ShareLinkDto.serializer(),
         "shared_save" to SavedSharedAnswer.serializer(),
         "shared_with_me" to SharedResponse.serializer(),
@@ -80,15 +100,22 @@ class ApiSamplesTest {
         "transcript_views_make" to TranscriptViewsDto.serializer(),
         "session_notes" to CallNotesResponse.serializer(),
         "session_notes_make" to CallNotesResponse.serializer(),
-        "client_ask" to AskResponse.serializer()
+        "client_ask" to AskResponse.serializer(),
+        // Since 2.0.0-o: Ask about one recording, and across all of the person's.
+        "session_ask" to AskResponse.serializer(),
+        "ask" to AskResponse.serializer()
     )
 
     /** Answers the phone sends for and does not read (only whether the call worked). */
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen. */
-    private val notUsedYet = setOf("session_transcribe", "sessions_transcribe", "sessions_transcribe_estimate")
+    /**
+     * Answers the phone does not ask for yet (contract 2.0.0-r, known not to be read yet): the one Activity number
+     * (`badge`), Activity's groups (`activity_groups`) and Retry all (`activity_retry_all`). The phone takes them in
+     * UX-08 and Wave 3; each moves to [readBy] with its model then.
+     */
+    private val notUsedYet = setOf("activity_groups", "activity_retry_all", "badge")
 
     private val everyField = Json {
         encodeDefaults = true
@@ -187,6 +214,8 @@ class ApiSamplesTest {
         "session_finish.session.device.avatar",
         "session_open.session.device.color",
         "session_open.session.device.avatar",
+        "session_transcribe.session.device.color",
+        "session_transcribe.session.device.avatar",
         // Only the page of one recording says who opened it.
         "search.data[0].session.opened",
         "session_create.session.opened",
@@ -200,6 +229,11 @@ class ApiSamplesTest {
         // A citation of a recording has no file or page; a note without a kind is a plain line; saving a recording is not a project.
         "client_ask.data.citations[0].file_id",
         "client_ask.data.citations[0].page",
+        // Since 2.0.0-o a recording's and every recording's Ask cite calls only (never a file).
+        "session_ask.data.citations[0].file_id",
+        "session_ask.data.citations[0].page",
+        "ask.data.citations[0].file_id",
+        "ask.data.citations[0].page",
         "session_notes.data.sections[0].items[0].kind",
         "shared_save.client_id",
         // Since v1.8 (contract 1.8.0-b) only a missed_recording item carries its reason and its row's id.

@@ -8,7 +8,7 @@ use chrono::Utc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use crate::after_call::{AfterCallState, SavedToast};
+use crate::after_call::{AfterCallState, Before, CallChoice, CallDone, CallGroup, Outcome, OutcomeInput};
 use crate::audio::types::Channel;
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
@@ -264,8 +264,15 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
     *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
+    *state.system_watch.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
+    // "When to ask: At the start of the call": "Recording this call · Don't record" beside the pill for 5 s.
+    let settings = state.settings();
+    let banner = crate::after_call::start_banner(settings.after_each_call(), settings.ask_when, auto, RecordingMode::Call);
+    *state.start_banner.lock().unwrap_or_else(|p| p.into_inner()) = banner.then(|| (info.client_ref.clone(), Instant::now()));
+    // The pill opens with the banner under it: its window is built with the room for it.
+    crate::overlay::preset_pill_open(banner);
     on_recording_started(app, &info);
     if captions && let Err(e) = start_captions(app).await {
         let _ = app.emit("app:error", e.to_string());
@@ -447,6 +454,10 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::screens::on_recording_ended(app).await;
     let sides = state.capture.sides_heard();
     let finished = state.capture.stop()?;
+    *state.system_watch.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
+    if let Some(done) = finished.as_ref() {
+        keep_capture_notes(&state, done);
+    }
     if let (Some(heard), Some(done)) = (sides, finished.as_ref()) {
         check_sides(app, done.output.duration_ms, heard);
     }
@@ -457,6 +468,15 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
     Ok(finished.map(|f| (f, session, provider)))
+}
+
+/// What went wrong with a finished recording's capture: in its folder (`capture-notes.txt`, beside its audio) and for
+/// Copy diagnostics. Nothing is written when nothing went wrong.
+fn keep_capture_notes(state: &crate::AppState, done: &crate::audio::FinishedRecording) {
+    *state.last_capture_notes.lock().unwrap_or_else(|p| p.into_inner()) = done.capture_notes.clone();
+    if !done.capture_notes.is_empty() {
+        let _ = std::fs::write(done.output.dir.join("capture-notes.txt"), done.capture_notes.join("\n") + "\n");
+    }
 }
 
 /// After each call (Phase 1C, A5): a side that was never heard is said, with why and how to fix it, as Call capture &
@@ -478,7 +498,7 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     }
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
-        decide_finished(app, finished, session, provider, auto, true)?;
+        decide_finished(app, finished, session, provider, auto, true, None)?;
     }
     clear_captions(app); // after the decision (it reads the buffered turns), so the next session starts empty
     emit_status(app);
@@ -505,9 +525,69 @@ pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
-        decide_finished(app, finished, session, provider, auto, false)?;
+        decide_finished(app, finished, session, provider, auto, false, None)?;
     }
     Ok(())
+}
+
+/// "Stop and delete" on the pill's menu, and "Don't record" on the start banner: the recording ends and goes as the
+/// card's Delete does, "Deleted · Undo" for 5 s and its files only once that time is over; Undo brings its card back.
+pub async fn stop_and_delete(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_recording() {
+        return Err(AppError::msg("Nothing is recording."));
+    }
+    let auto = state.auto_started.load(Ordering::SeqCst);
+    if let Some((finished, session, provider)) = end_capture(app).await? {
+        decide_finished(app, finished, session, provider, auto, true, Some(CallChoice::Delete))?;
+    }
+    clear_captions(app);
+    emit_status(app);
+    emit_recording_state(app);
+    Ok(())
+}
+
+/// The pill's menu during a call or meeting: "Transcribe this call" or "Save audio only" is what happens when it ends,
+/// with no card then (chosen again, the last one counts); "Stop and delete" ends it now.
+pub async fn call_choice_now(app: &AppHandle, choice: CallChoice) -> AppResult<()> {
+    if choice == CallChoice::Delete {
+        return stop_and_delete(app).await;
+    }
+    let state = app.state::<crate::AppState>();
+    let Some(info) = state.capture.info() else { return Err(AppError::msg("Nothing is recording.")) };
+    *state.call_choice.lock().unwrap_or_else(|p| p.into_inner()) = Some((info.client_ref.clone(), choice));
+    *state.start_banner.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    emit_recording_state(app);
+    Ok(())
+}
+
+/// The choice made on the pill for the running recording `client_ref`.
+pub fn call_choice_of(state: &crate::AppState, client_ref: &str) -> Option<CallChoice> {
+    state.call_choice.lock().unwrap_or_else(|p| p.into_inner()).as_ref().filter(|(r, _)| r == client_ref).map(|(_, c)| *c)
+}
+
+/// Whether the start banner shows for the running recording `client_ref` now: its first 5 s, no choice made yet.
+pub fn start_banner_shows(state: &crate::AppState, client_ref: &str) -> bool {
+    let banner = state.start_banner.lock().unwrap_or_else(|p| p.into_inner());
+    banner.as_ref().is_some_and(|(r, at)| r == client_ref && at.elapsed() < Duration::from_secs(crate::after_call::START_BANNER_SECONDS))
+        && call_choice_of(state, client_ref).is_none()
+}
+
+/// Takes the pill's choice for `client_ref` (and its start banner) when the recording ends.
+fn take_call_choice(state: &crate::AppState, client_ref: &str) -> Option<CallChoice> {
+    let mut banner = state.start_banner.lock().unwrap_or_else(|p| p.into_inner());
+    if banner.as_ref().is_some_and(|(r, _)| r == client_ref) {
+        *banner = None;
+    }
+    drop(banner);
+    let mut choice = state.call_choice.lock().unwrap_or_else(|p| p.into_inner());
+    match choice.take() {
+        Some((r, c)) if r == client_ref => Some(c),
+        other => {
+            *choice = other;
+            None
+        }
+    }
 }
 
 /// Stop and discard at once (the pill's Cancel): nothing is kept, uploaded or transcribed; no card.
@@ -546,13 +626,15 @@ pub fn discards(expected: Option<&str>, running: Option<&str>) -> bool {
     }
 }
 
-/// What a finished recording does next (v1.5 "After a call"): kept at once with the "Saved · Undo" toast, or asked
-/// about with the chip, which keeps it by itself after 10 s. `interactive` is false when the app quits in the middle
-/// of a call: nothing is shown, and a recording that would be asked about waits in the Library for the next start.
-fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option<String>, provider: Option<String>, auto: bool, interactive: bool) -> AppResult<()> {
+/// What a finished recording does next (the call choice, `after_call::outcome`): the card, a confirmation with Undo, or
+/// kept at once. `interactive` is false when the app quits in the middle of a call: nothing is shown, and a recording
+/// that would be asked about waits in the Library for the next start. `forced` is the pill's Stop and delete.
+fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option<String>, provider: Option<String>, auto: bool, interactive: bool, forced: Option<CallChoice>) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let client_ref = finished.info.client_ref.clone();
     let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
+    // Chosen on the pill during the call (taken whatever comes next, so it never reaches another recording).
+    let pill = forced.or_else(|| take_call_choice(&state, &client_ref));
     // A container with (almost) no audio frames means nothing was heard: tell the user instead of keeping a
     // recording the server would reject (the server enforces the same floor).
     let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
@@ -564,7 +646,10 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
-        crate::refusal::say(app, silent_recording_message(withheld), crate::refusal::Asked::Other);
+        // Deleted on purpose: nothing to say about what it held.
+        if pill != Some(CallChoice::Delete) {
+            crate::refusal::say(app, silent_recording_message(withheld), crate::refusal::Asked::Other);
+        }
         return Ok(());
     }
 
@@ -589,17 +674,32 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     // Another account signed in while it ran: it stays the account's that made it.
     decision.owner = take_recording_owner(&state, &client_ref);
     let output = &finished.output;
-    if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
+    // Short or silent automatic calls go quietly, unless the person chose for this one.
+    if pill.is_none()
+        && let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms)
+    {
         return skip_finished(app, decision, late, reason, now);
     }
     // A Live Assist session from a prep saves its call without the after-call card (docs/API_ASSIST.md `auto_saved`).
     let assist_saved = take_assist_saved(&state, &client_ref);
-    let at_once = if assist_saved { Some(true) } else { pending::after_call(settings.after_call, mode).keeps_at_once() };
-    let ask = at_once.is_none();
-    let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
+    let quiet = crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, crate::notifications::local_minutes());
+    let outcome = crate::after_call::outcome(OutcomeInput { setting: settings.after_call, ask_when: settings.ask_when, mode, pill, assist_saved, interactive, quiet });
     let id = decision.id.clone();
+    // The card, or (back to back: something else holds the window) one grouped card with this call saved as audio.
+    let before = (outcome == Outcome::Ask && interactive).then(|| surfaces(&state).arrive(&id, !settings.card_hint_seen, Instant::now()));
+    let card = before == Some(Before::Nothing);
+    let decision = match outcome {
+        Outcome::Ask if card => decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)),
+        Outcome::Ask if before.is_some() => decision.chosen_at(CallChoice::Audio, applied_at(now, CallChoice::Audio)),
+        Outcome::Confirm(choice) => decision.chosen_at(choice, applied_at(now, choice)),
+        _ => decision,
+    };
     let keep_at = decision.keep_at();
-    let toast = (!ask && interactive && !assist_saved).then(|| SavedToast::of(&decision, now));
+    let done = match outcome {
+        Outcome::Confirm(choice) => Some(CallDone::of(&decision, choice, now)),
+        Outcome::Ask if !card => Some(CallDone::of(&decision, CallChoice::Audio, now)),
+        _ => None,
+    };
     {
         let files = DecisionFiles::in_dir(&state.data_dir);
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -608,20 +708,119 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             files.set_server_session(&id, &late)?;
         }
     }
-    if let Some(transcribe) = at_once {
-        keep_decision_as(app, &id, transcribe)?;
-        if let Some(toast) = toast {
-            show_saved(app, toast);
+    match outcome {
+        Outcome::KeepNow { transcribe } => return keep_decision_as(app, &id, transcribe),
+        Outcome::Confirm(choice) => {
+            let at = applied_at(now, choice);
+            if choice == CallChoice::Delete { schedule_discard(app, at) } else { schedule_keep(app, at) }
+            if interactive && let Some(done) = done {
+                // Never hidden: with something else in the window (another call's card above all), both are grouped.
+                show_or_group(app, done);
+            }
         }
-        return Ok(());
-    }
-    if let Some(at) = keep_at {
-        surfaces(&state).show_chip(id);
-        schedule_keep(app, at);
+        Outcome::Ask if card => {
+            // The first card says where to change it, once.
+            if !settings.card_hint_seen {
+                let _ = state.update_settings(|s| s.card_hint_seen = true);
+            }
+            if let Some(at) = keep_at {
+                schedule_keep(app, at);
+            }
+        }
+        Outcome::Ask => {
+            if let (Some(before), Some(done)) = (before, done) {
+                fold_into_group(app, before, done);
+            }
+        }
+        Outcome::Wait => {}
     }
     emit_pending(app);
     refresh_after_call(app);
     Ok(())
+}
+
+/// Back to back: `newest` needs the window while `before` holds it. Both go into the one grouped card, each call with its
+/// Undo (a counting card's call saved as audio), and every choice in it is applied when the grouped card goes, so no
+/// Undo shown there is ever too late.
+fn fold_into_group(app: &AppHandle, before: Before, newest: CallDone) {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let store = DecisionFiles::in_dir(&state.data_dir).load();
+    let calls = crate::after_call::grouped(before, |id| store.find(id).map(|d| CallDone::of(d, CallChoice::Audio, now)), newest);
+    show_group(app, calls);
+}
+
+/// The grouped card with `calls` for 8 s: each call's choice is applied when it goes, a Delete's files a little later.
+fn show_group(app: &AppHandle, calls: Vec<CallDone>) {
+    let state = app.state::<crate::AppState>();
+    let at = Utc::now() + chrono::Duration::seconds(crate::after_call::GROUP_SECONDS as i64);
+    let calls = set_apply_time(&state, calls, at);
+    if calls.is_empty() {
+        return;
+    }
+    surfaces(&state).group_with(calls, Instant::now());
+    schedule_keep(app, at);
+    schedule_discard(app, at + discard_slack());
+    refresh_after(app, Duration::from_secs(crate::after_call::GROUP_SECONDS));
+}
+
+fn discard_slack() -> chrono::Duration {
+    chrono::Duration::from_std(crate::after_call::DISCARD_SLACK).unwrap_or_default()
+}
+
+/// Sets when each listed call's choice is applied (`at`; a Delete's files a little later) and returns the calls still
+/// waiting, each saying so in its `until`.
+fn set_apply_time(state: &crate::AppState, mut calls: Vec<CallDone>, at: chrono::DateTime<Utc>) -> Vec<CallDone> {
+    let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+    let files = DecisionFiles::in_dir(&state.data_dir);
+    for call in &mut calls {
+        call.until = at.to_rfc3339();
+        call.offer_always = None;
+        let applied = if call.kind == CallChoice::Delete { files.discard_later(&call.id, at + discard_slack()) } else { files.choose(&call.id, call.kind, at) };
+        if let Err(e) = applied {
+            eprintln!("[echoledger] the grouped card's call {}: {e}", call.id);
+        }
+    }
+    let store = files.load();
+    calls.retain(|c| store.find(&c.id).is_some());
+    calls
+}
+
+/// A card went (answered, timed out, opened or kept elsewhere): the rows held under it come back as the grouped card,
+/// with `newest` (the card's own answer) when there is one; else `newest` alone shows as usual.
+fn after_card(app: &AppHandle, held: Vec<CallDone>, newest: Option<CallDone>) {
+    match (held.is_empty(), newest) {
+        (true, Some(done)) => show_or_group(app, done),
+        (true, None) => {}
+        (false, newest) => show_group(app, held.into_iter().chain(newest).collect()),
+    }
+}
+
+/// Applies a listed call's choice now (the grouped card's ×, Review's non-deletes).
+fn apply_now(app: &AppHandle, call: &CallDone) {
+    let done = if call.kind == CallChoice::Delete { discard_decision(app, &call.id) } else { keep_decision_as(app, &call.id, call.kind == CallChoice::Transcribe) };
+    if let Err(e) = done {
+        eprintln!("[echoledger] applying {}: {e}", call.id);
+    }
+}
+
+/// When a choice made at `now` is applied: once its confirmation's Undo time is over (a deletion's files a little
+/// later still, so an Undo pressed at the last moment finds them).
+fn applied_at(now: chrono::DateTime<Utc>, choice: CallChoice) -> chrono::DateTime<Utc> {
+    let mut wait = Duration::from_secs(crate::after_call::CONFIRM_SECONDS);
+    if choice == CallChoice::Delete {
+        wait += crate::after_call::DISCARD_SLACK;
+    }
+    now + chrono::Duration::from_std(wait).unwrap_or_else(|_| chrono::Duration::seconds(7))
+}
+
+/// Tells the after-call window again once `after` is over (a confirmation or the grouped card has gone).
+fn refresh_after(app: &AppHandle, after: Duration) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(after + Duration::from_millis(100)).await;
+        refresh_after_call(&app);
+    });
 }
 
 fn surfaces(state: &crate::AppState) -> std::sync::MutexGuard<'_, crate::after_call::Surfaces> {
@@ -727,48 +926,98 @@ fn keep_decision_as(app: &AppHandle, id: &str, transcribe: bool) -> AppResult<()
     Ok(())
 }
 
-/// Discard: files deleted, nothing uploaded, no transcript requested; an open server session is deleted.
-/// Discard on the after-call chip: one click, so nothing is deleted yet. The recording leaves the chip, the lists and
-/// the counts, "Discarded · … · Undo" shows for 6 s, and its files go only once that time (and a little more) is over
-/// (`discard_due`), also when the app restarts meanwhile.
-pub fn discard_from_chip(app: &AppHandle, id: &str) -> AppResult<()> {
+/// The card's answer: Transcribe, its × / Esc / swipe (Save audio only) or Delete. Chosen now and applied once the
+/// confirmation's 5 s are over, so Undo brings the card back with nothing uploaded or deleted. The same choice three
+/// times in a row offers "Always do this?" once.
+pub fn card_answer(app: &AppHandle, id: &str, choice: CallChoice) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let now = Utc::now();
-    let window = Duration::from_secs(crate::after_call::DISCARDED_SECONDS) + crate::after_call::DISCARD_SLACK;
-    let at = now + chrono::Duration::from_std(window).unwrap_or_else(|_| chrono::Duration::seconds(8));
+    let at = applied_at(now, choice);
     let decision = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).discard_later(id, at)?
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        if choice == CallChoice::Delete { files.discard_later(id, at)? } else { files.choose(id, choice, at)? }
     };
-    {
-        let mut surfaces = surfaces(&state);
-        surfaces.clear_chip(id);
-        surfaces.show_discarded(SavedToast::of(&decision, now), Instant::now());
+    let mut offer = None;
+    if let Err(e) = state.update_settings(|s| {
+        let streak = crate::after_call::next_streak(s.card_streak, choice);
+        s.card_streak = Some(streak);
+        offer = crate::after_call::offers_always(streak, s.always_offered, s.after_each_call());
+        s.always_offered |= offer.is_some();
+    }) {
+        eprintln!("[echoledger] counting the card's answers: {e}");
     }
-    schedule_discard(app, at);
+    let held = surfaces(&state).clear_card(id).unwrap_or_default();
+    if choice == CallChoice::Delete { schedule_discard(app, at) } else { schedule_keep(app, at) }
+    after_card(app, held, Some(CallDone { offer_always: offer, ..CallDone::of(&decision, choice, now) }));
     emit_pending(app);
     refresh_after_call(app);
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(crate::after_call::DISCARDED_SECONDS) + Duration::from_millis(100)).await;
-        refresh_after_call(&app);
-    });
     Ok(())
 }
 
-/// Undo on "Discarded": the recording is back on its chip, counting again from the start (kept by itself when nobody
-/// answers, as before). An error when its time was already over.
-pub fn undo_chip_discard(app: &AppHandle, id: &str) -> AppResult<()> {
-    let state = app.state::<crate::AppState>();
-    let at = Utc::now() + chrono::Duration::seconds(pending::CHIP_SECONDS);
-    {
-        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).undo_discard(id, at).map_err(|_| AppError::msg(DISCARD_TOO_LATE))?;
+/// A confirmation in the window; when something else holds it (another call's card, confirmation or the grouped card),
+/// the two are grouped instead, so no confirmation or Undo is ever hidden.
+fn show_or_group(app: &AppHandle, done: CallDone) {
+    let before = surfaces(&app.state::<crate::AppState>()).show_done(done.clone(), Instant::now());
+    if before == Before::Nothing {
+        refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
+    } else {
+        fold_into_group(app, before, done);
     }
+}
+
+/// Transcribe on "Saved as audio": it is transcribed instead, with "Transcribing… · Undo" for 5 s.
+pub fn done_transcribe(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let at = applied_at(now, CallChoice::Transcribe);
+    let decision = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).choose(id, CallChoice::Transcribe, at).map_err(|_| AppError::msg(TRANSCRIBE_TOO_LATE))?
+    };
+    let done = CallDone::of(&decision, CallChoice::Transcribe, now);
+    // On a row (the grouped card, or under a card) it changes in place, applied when that row's time comes.
+    let listed = surfaces(&state).listed(id, Instant::now()).map(|c| c.until.clone());
+    match listed {
+        Some(until) => {
+            if let Ok(row_at) = chrono::DateTime::parse_from_rfc3339(&until) {
+                let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let _ = DecisionFiles::in_dir(&state.data_dir).choose(id, CallChoice::Transcribe, row_at.with_timezone(&Utc));
+            }
+            surfaces(&state).update_listed(CallDone { until, ..done });
+        }
+        None => show_or_group(app, done),
+    }
+    schedule_keep(app, at);
+    emit_pending(app);
+    refresh_after_call(app);
+    refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
+    Ok(())
+}
+
+/// Undo on a confirmation ("Transcribing…", "Saved as audio", "Deleted") or on a row: nothing was applied yet, so the call
+/// is back on its card, which counts its 8 s again (then saves the audio only). Whatever else was on screen (the rest of
+/// the grouped card) stays under the card with its own Undo, and none of it is applied until the card is answered. An
+/// error when its time was already over.
+pub fn call_undo(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let at = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    let store = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        files.ask_again(id, at).map_err(|_| AppError::msg(UNDO_TOO_LATE))?;
+        files.load()
+    };
+    let held = surfaces(&state).ask_again(id, |other| store.find(other).map(|d| CallDone::of(d, CallChoice::Audio, now)), Instant::now());
+    // Paused: the rows under the card wait past its 8 s and the grouped card it comes back as.
+    let paused = at + chrono::Duration::seconds(crate::after_call::GROUP_SECONDS as i64 + 1);
+    let held = set_apply_time(&state, held, paused);
     {
         let mut surfaces = surfaces(&state);
-        surfaces.clear_discarded(id);
-        surfaces.show_chip(id.to_string());
+        for row in held {
+            surfaces.update_listed(row);
+        }
     }
     schedule_keep(app, at);
     emit_pending(app);
@@ -776,8 +1025,90 @@ pub fn undo_chip_discard(app: &AppHandle, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Undo pressed after the recording was already deleted.
-pub const DISCARD_TOO_LATE: &str = "Too late to undo: this recording was already discarded.";
+/// "Always do this?" › Yes on a confirmation: After each call becomes that choice (Don't record calls for Delete).
+pub fn call_always(app: &AppHandle, id: &str, value: crate::settings::AfterEachCall) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let settings = state.update_settings(|s| s.set_after_each_call(value))?;
+    surfaces(&state).drop_offer(id);
+    let _ = app.emit("settings:changed", &settings);
+    emit_status(app);
+    refresh_after_call(app);
+    Ok(())
+}
+
+/// The grouped card's Review: the Library, where each call can be transcribed or deleted. What is kept is applied now
+/// and shows there; a Delete is never applied out of sight, so its row stays in the grouped card with its Undo.
+pub fn group_review(app: &AppHandle) {
+    let rows = surfaces(&app.state::<crate::AppState>()).take_group(Instant::now());
+    let (deletes, kept): (Vec<CallDone>, Vec<CallDone>) = rows.into_iter().partition(|c| c.kind == CallChoice::Delete);
+    for call in &kept {
+        apply_now(app, call);
+    }
+    show_group(app, deletes);
+    emit_pending(app);
+    refresh_after_call(app);
+    navigate(app, "library", None, false);
+}
+
+/// The grouped card's ×: a deliberate dismiss, so every choice in it is applied now.
+pub fn group_close(app: &AppHandle) {
+    let rows = surfaces(&app.state::<crate::AppState>()).take_group(Instant::now());
+    for call in &rows {
+        apply_now(app, call);
+    }
+    emit_pending(app);
+    refresh_after_call(app);
+}
+
+/// The card's Delete (kept for older windows): the same as `card_answer` with Delete.
+pub fn discard_from_chip(app: &AppHandle, id: &str) -> AppResult<()> {
+    card_answer(app, id, CallChoice::Delete)
+}
+
+/// The waiting list's Delete and Delete all: the recordings leave the list now and their files go once "Deleted · Undo"
+/// has had its time (5 s, and a little more), never at once. Returns how many are on their way out.
+pub fn pending_delete(app: &AppHandle, ids: &[String]) -> AppResult<usize> {
+    let state = app.state::<crate::AppState>();
+    let at = applied_at(Utc::now(), CallChoice::Delete);
+    let mut done = 0;
+    let mut last = None;
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        for id in ids {
+            match files.discard_later(id, at) {
+                Ok(_) => done += 1,
+                Err(e) => last = Some(e),
+            }
+        }
+    }
+    if done == 0 && let Some(e) = last {
+        return Err(e);
+    }
+    schedule_discard(app, at);
+    emit_pending(app);
+    Ok(done)
+}
+
+/// Undo on the waiting list's "Deleted · Undo": every recording still on its way out is back in the list.
+pub fn pending_delete_undo(app: &AppHandle, ids: &[String]) -> AppResult<usize> {
+    let state = app.state::<crate::AppState>();
+    let back = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        ids.iter().filter(|id| files.restore_waiting(id).is_ok()).count()
+    };
+    emit_pending(app);
+    if back == 0 && !ids.is_empty() {
+        return Err(AppError::msg(UNDO_TOO_LATE));
+    }
+    Ok(back)
+}
+
+/// Undo pressed after the choice was already applied.
+pub const UNDO_TOO_LATE: &str = "Too late to undo: it was already done.";
+/// Transcribe pressed on "Saved as audio" after it was saved.
+pub const TRANSCRIBE_TOO_LATE: &str = "This call is already saved as audio. Transcribe it from the Library.";
 
 /// Deletes every recording discarded from the chip whose Undo time is over, and sets the timer for the next one.
 pub fn discard_due(app: &AppHandle) {
@@ -845,7 +1176,8 @@ fn held_owner<'a>(state: &crate::AppState, owner: Option<&'a crate::owner::Owner
 }
 
 fn after_decision(app: &AppHandle, id: &str) {
-    surfaces(&app.state::<crate::AppState>()).clear_chip(id);
+    let held = surfaces(&app.state::<crate::AppState>()).clear_card(id).unwrap_or_default();
+    after_card(app, held, None);
     emit_pending(app);
     refresh_after_call(app);
     emit_status(app);
@@ -863,33 +1195,24 @@ pub fn emit_pending(app: &AppHandle) {
     emit_status(app);
 }
 
-/// What the after-call window shows now: the Saved toast while it lasts, and the chip while its recording counts down.
+/// What the after-call window shows now: the card while its call counts, else the one confirmation or the grouped card.
 pub fn after_call_state(app: &AppHandle) -> AfterCallState {
     let state = app.state::<crate::AppState>();
-    let (saved, discarded, chip) = {
+    let (card, hint, held, done, group) = {
         let surfaces = surfaces(&state);
         let now = Instant::now();
-        (surfaces.saved(now).cloned(), surfaces.discarded(now).cloned(), surfaces.chip().map(str::to_string))
+        (surfaces.card().map(str::to_string), surfaces.hint(), surfaces.held().to_vec(), surfaces.done(now).cloned(), surfaces.group_calls(now).map(|(calls, left)| (calls.to_vec(), left)))
     };
     let screens = crate::screens::store::ScreenStore::in_dir(&state.data_dir);
-    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(|d| d.item_with_screens(&screens)));
-    AfterCallState { saved, discarded, ask }
+    let ask = card.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting() && d.chosen().is_none()).map(|d| d.item_with_screens(&screens)));
+    let group = group.map(|(calls, left)| CallGroup { count: calls.len(), until: (Utc::now() + chrono::Duration::from_std(left).unwrap_or_default()).to_rfc3339(), calls });
+    let held = if ask.is_some() { held } else { Vec::new() };
+    AfterCallState { hint: hint && ask.is_some(), ask, held, done, group }
 }
 
 /// Puts the after-call window in line with `after_call_state` (built when something is to be shown, let go when not).
 pub fn refresh_after_call(app: &AppHandle) {
     crate::overlay::show_after_call(app, &after_call_state(app));
-}
-
-/// "Saved · … · Undo" for 6 s; the window is told again once the time is over.
-fn show_saved(app: &AppHandle, toast: SavedToast) {
-    surfaces(&app.state::<crate::AppState>()).show_saved(toast, Instant::now());
-    refresh_after_call(app);
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(crate::after_call::SAVED_SECONDS) + Duration::from_millis(100)).await;
-        refresh_after_call(&app);
-    });
 }
 
 /// Undo on the Saved toast: as if the recording had been discarded. Still on this computer (queued or uploading), its
@@ -931,6 +1254,7 @@ pub async fn undo_saved(app: &AppHandle, id: &str) -> AppResult<()> {
 pub fn keep_due(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     let now = Utc::now();
+    time_out_card(app, now);
     let (done, next) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         let files = DecisionFiles::in_dir(&state.data_dir);
@@ -942,12 +1266,11 @@ pub fn keep_due(app: &AppHandle) {
     }
     match done {
         Ok(done) if !done.is_empty() => {
-            {
+            let held: Vec<CallDone> = {
                 let mut surfaces = surfaces(&state);
-                for id in &done {
-                    surfaces.clear_chip(id);
-                }
-            }
+                done.iter().filter_map(|id| surfaces.clear_card(id)).flatten().collect()
+            };
+            after_card(app, held, None);
             state.upload_notify.notify_one();
             emit_pending(app);
             emit_uploads(app);
@@ -956,6 +1279,32 @@ pub fn keep_due(app: &AppHandle) {
         Ok(_) => {}
         Err(e) => eprintln!("[echoledger] keeping after the chip: {e}"),
     }
+}
+
+/// The card on screen whose 8 s are over with no choice: "Saved as audio · Transcribe · Undo" for 5 s, saved as audio
+/// only once that is over. (A card whose time ran out while the app was closed is saved at the next start, quietly.)
+fn time_out_card(app: &AppHandle, now: chrono::DateTime<Utc>) {
+    let state = app.state::<crate::AppState>();
+    let Some(id) = surfaces(&state).card().map(str::to_string) else { return };
+    let at = applied_at(now, CallChoice::Audio);
+    let decision = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        match files.time_out_card(&id, now, at) {
+            Ok(true) => files.load().find(&id).cloned(),
+            Ok(false) => None,
+            Err(e) => {
+                eprintln!("[echoledger] saving the card's call as audio: {e}");
+                None
+            }
+        }
+    };
+    let Some(decision) = decision else { return };
+    let held = surfaces(&state).clear_card(&id).unwrap_or_default();
+    schedule_keep(app, at);
+    after_card(app, held, Some(CallDone::of(&decision, CallChoice::Audio, now)));
+    emit_pending(app);
+    refresh_after_call(app);
 }
 
 /// Wakes up when a chip's time is over and keeps what is due then.
@@ -969,16 +1318,23 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
 }
 
 /// At start: a recording whose chip time ran out while the app was closed is kept as its chip promised (audio only, or
-/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 12 s) gets its
-/// timer (`keep_due`); a chip's Discard is finished once its Undo time is over
-/// (`discard_due`). Recordings that wait for the person stay as they are, whatever
-/// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
+/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 8 s) gets its
+/// timer, and a pending Transcribe or Save audio only is applied when due (`keep_due`). A Delete chosen before the quit
+/// and not applied is never applied out of sight: it goes back to the Library's waiting list
+/// (`restore_unapplied_deletes`). Recordings that wait for the person stay as they are, whatever the setting. Skipped
+/// calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
     keep_due(app);
-    // A chip's Discard whose Undo time ran out while the app was closed is finished now; one still within it (a
-    // restart within seconds) waits for the rest of its time.
-    discard_due(app);
     let state = app.state::<crate::AppState>();
+    let back = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).restore_unapplied_deletes()
+    };
+    match back {
+        Ok(ids) if !ids.is_empty() => eprintln!("[echoledger] {} deletion(s) not applied before the quit wait in the Library again", ids.len()),
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] putting unapplied deletions back in the waiting list: {e}"),
+    }
     purge_skipped(app);
     for call in SkippedFiles::in_dir(&state.data_dir).load().items {
         schedule_purge(app, call.expires_at());
@@ -1163,7 +1519,8 @@ pub fn pending_open(app: &AppHandle, id: &str, rename: bool) -> AppResult<()> {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         DecisionFiles::in_dir(&state.data_dir).stop_countdown(id)?;
     }
-    surfaces(&state).clear_chip(id);
+    let held = surfaces(&state).clear_card(id).unwrap_or_default();
+    after_card(app, held, None);
     emit_pending(app);
     refresh_after_call(app);
     navigate(app, "library", Some(id.to_string()), rename);
@@ -1246,10 +1603,13 @@ fn start_ticker(app: &AppHandle) {
                 break;
             }
             ticks = ticks.wrapping_add(1);
+            // The menu bar icon's time and its menu's status line (FIX-11).
+            crate::tray::tick(&app);
             if ticks.is_multiple_of(READ_PERMISSIONS_EVERY) {
                 read_recording_permissions(&app);
             }
             take_device_notices(&app);
+            check_system_side(&app);
             // The Record page hears of a device note when it comes and when it goes (news lasts a few seconds).
             let note = state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(Instant::now());
             if note != shown_note {
@@ -1273,7 +1633,9 @@ fn read_recording_permissions(app: &AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<crate::AppState>();
         let Some(info) = state.capture.info() else { return };
-        let next = crate::permissions::missing_during(info.mode, &state.permissions_now());
+        let permissions = state.permissions_now();
+        let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+        let next = crate::permissions::missing_with(info.mode, &permissions, warning);
         // The same recording: a very short one may have ended while the system was asked.
         if state.capture.info().is_some_and(|i| i.client_ref == info.client_ref) {
             let mut missing = state.recording_missing.lock().unwrap_or_else(|p| p.into_inner());
@@ -1283,6 +1645,76 @@ fn read_recording_permissions(app: &AppHandle) {
             }
         }
     });
+}
+
+/// Whether the running call recording records the other side (a Mac: macOS lets a copy of EchoLedger it no longer
+/// allows open a tap that delivers nothing, while its privacy call still says yes). Looked at every second: within
+/// about 3 s of the start a system side that failed, delivered nothing, or only digital silence while the microphone
+/// hears sound is said on the pill and in the main window, in the recording's notes, the log and Copy diagnostics. The
+/// microphone records on. Windows' loopback delivers nothing while nothing plays, so it is not looked at there.
+fn check_system_side(app: &AppHandle) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let state = app.state::<crate::AppState>();
+    let Some(side) = state.capture.system_side() else { return };
+    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(&side);
+    if verdict == crate::audio::health::SystemVerdict::Same {
+        return;
+    }
+    // What a change does reads the system and writes a file: beside the ticker, so it never waits for them.
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || system_side_changed(&app, verdict));
+}
+
+/// What a change of the system-side check does: says it in the log and the recording's notes, keeps what was found for
+/// Setup and the Mac check, and puts the warning on the pill and in the main window, or takes it away once the other
+/// side is heard.
+fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVerdict) {
+    use crate::audio::health::SystemVerdict;
+    let state = app.state::<crate::AppState>();
+    // A later look may have changed it meanwhile (the other side heard a moment after it went missing): an old verdict
+    // never shows the warning again, or clears it. The watch stays held while what was found is kept, so two such
+    // jobs keep it in the order of their looks.
+    let watch = state.system_watch.lock().unwrap_or_else(|p| p.into_inner());
+    if !watch.still(&verdict) {
+        return;
+    }
+    match verdict {
+        SystemVerdict::Same => return,
+        SystemVerdict::Missing(problem) => {
+            let reason = problem.reason();
+            eprintln!("[echoledger] capture: the other side isn't being recorded: {reason}; the microphone records on");
+            state.capture.note(&format!("Other side not recorded: {reason}"));
+            // Setup, the Mac check and the next recording say System Audio Recording is missing.
+            state.system_audio_checked(Some(Err(reason)));
+        }
+        SystemVerdict::Recording => {
+            if state.permission_memory_now().system_audio_failing.is_some() {
+                eprintln!("[echoledger] capture: the other side is being recorded again");
+            }
+            state.system_audio_checked(Some(Ok(())));
+        }
+    }
+    drop(watch);
+    let Some(info) = state.capture.info() else { return };
+    let permissions = state.permissions_now();
+    let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = crate::permissions::missing_with(info.mode, &permissions, warning);
+    emit_status(app);
+}
+
+/// "Try again" on the warning: opens the system side once more (System Audio Recording allowed meanwhile). False when
+/// only quitting and reopening EchoLedger would. The warning stays until the other side is heard; when the check after
+/// the try still finds it missing, it says to quit and reopen.
+pub fn retry_system_audio(app: &AppHandle) -> bool {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.retry_system() {
+        return false;
+    }
+    state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).retry();
+    eprintln!("[echoledger] capture: trying the system side again");
+    true
 }
 
 /// What the capture says about its devices (a headset came or went, Phase 1B) goes to the pill and the Record page; a

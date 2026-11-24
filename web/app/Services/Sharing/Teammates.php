@@ -9,6 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Api\ConfigController;
+use App\Http\Resources\LibraryItemResource;
 use App\Mail\ShareReceivedMail;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -19,6 +20,7 @@ use App\Models\SentItem;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Accounts\Avatars;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
@@ -70,7 +72,10 @@ final class Teammates
         }
         $note = $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 500) : null;
         $kind = $target instanceof Client ? 'project' : 'session';
+        // Teammates of the workspace may see the person called (docs/API.md "Title from the person"); the audit log,
+        // which support staff can read, never names them (outsideTitle).
         $title = mb_substr($target instanceof Client ? $target->name : $target->displayTitle(), 0, 200);
+        $audited = mb_substr($target instanceof Client ? $target->name : $target->outsideTitle(), 0, 200);
 
         DB::transaction(function () use ($sender, $target, $people, $note, $kind, $title): void {
             $held = $target instanceof Client ? $this->heldBy($target) : null;
@@ -82,7 +87,7 @@ final class Teammates
                     'client_id' => $target instanceof Client ? $target->id : null,
                 ]);
                 $item->fill(['workspace_id' => $target->workspace_id, 'from_user_id' => $sender->id, 'session_ids' => $held, 'title' => $title, 'note' => $note, 'sent_at' => now()])->save();
-                app(ActivityFeed::class)->sharedWithYou($person, "{$sender->name} sent you {$title}", $note ?? 'Open it in Shared with me.', $target instanceof CaptureSession ? $target->id : null);
+                app(ActivityFeed::class)->sharedWithYou($person, ActivityFeed::line(':name sent you :title', ['name' => $sender->name, 'title' => $title]), $note ?? ActivityFeed::line('Open it in Shared with me.'), $target instanceof CaptureSession ? $target->id : null);
             }
         });
         // Since v1.5 each person also gets an email, and the sending is in the sender's audit log.
@@ -91,7 +96,7 @@ final class Teammates
                 Mail::to($person->email)->queue(new ShareReceivedMail($sender->name, $title, $kind === 'project', url('/app/shared-with-me'), $note));
             }
         }
-        app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$title.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
+        app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$audited.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
 
         return count($wanted);
     }
@@ -142,7 +147,8 @@ final class Teammates
         return [
             'id' => $item->id,
             'kind' => $item->kind,
-            'to' => ['name' => $item->recipient->name, 'email' => $item->recipient->email],
+            // Since 2.0.0-l with the person's picture (null = initials).
+            'to' => ['name' => $item->recipient->name, 'email' => $item->recipient->email, ...Avatars::of($item->recipient)],
             'title' => $item->title,
             'note' => $item->note,
             'sent_at' => $item->sent_at->toAtomString(),
@@ -332,7 +338,9 @@ final class Teammates
             'client_ref' => (string) Str::uuid(),
             'source_device' => $original->source_device,
             'source_app' => $original->source_app,
-            'title' => $original->displayTitle(),
+            // The stored title and its kind (since 2.0.0-k): the copy works out "Call with …" from the caller fields itself.
+            'title' => $original->title,
+            'title_auto' => $original->title_auto,
             'language' => $original->language,
             'started_at' => $original->started_at,
             'ended_at' => $original->ended_at,
@@ -346,7 +354,7 @@ final class Teammates
             'transcribe' => $original->status !== SessionStatus::AudioOnly,
             'final_provider' => $original->final_provider,
         ]);
-        $copy->forceFill(['caller_name' => $original->caller_name, 'caller_number' => $original->caller_number, 'caller_source' => $original->caller_source]);
+        $copy->forceFill(['title_by_person' => $original->title_by_person, 'caller_name' => $original->caller_name, 'caller_number' => $original->caller_number, 'caller_source' => $original->caller_source]);
         $copy->save();
 
         foreach ($original->recordings()->get() as $recording) {
@@ -405,8 +413,11 @@ final class Teammates
     public function payloads(Collection $items, callable $sessionPayload): array
     {
         $items->loadMissing(['captureSession.transcripts', 'captureSession.markers:id,capture_session_id,tag,at_ms', 'captureSession.labels']);
-        // Since v1.5 each recording's screen_count, counted for all of them at once.
-        (new Collection($items->pluck('captureSession')->filter()->values()->all()))->loadCount('screens');
+        // Since v1.5 each recording's screen_count, counted for all of them at once; since 2.0.0-p whether an upload of it
+        // failed (its `facets.status`), for all of them at once too.
+        $sessions = (new Collection($items->pluck('captureSession')->whereInstanceOf(CaptureSession::class)->values()->all()))->loadCount('screens');
+        // Since 2.0.0-p also when its latest upload began (`processing_since`).
+        LibraryItemResource::loadUploadState($sessions);
         /** @var Collection<int, Client> $projects */
         $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
         $projects->loadCount('keyterms');
@@ -419,7 +430,7 @@ final class Teammates
             return [
                 'id' => $item->id,
                 'kind' => $item->kind,
-                'from' => ['name' => $item->sender->name, 'email' => $item->sender->email],
+                'from' => ['name' => $item->sender->name, 'email' => $item->sender->email, ...Avatars::of($item->sender)],
                 'note' => $item->note,
                 'title' => $item->title,
                 'sent_at' => $item->sent_at->toAtomString(),

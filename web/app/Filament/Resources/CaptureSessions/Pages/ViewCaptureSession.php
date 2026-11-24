@@ -25,6 +25,7 @@ use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\Shell;
 use App\Filament\Support\StopsSharing;
+use App\Filament\Support\V2CopyForAi;
 use App\Filament\Support\V2RecordingRow;
 use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
@@ -57,6 +58,7 @@ use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
+use App\Support\Translation\IsolatingTranslator;
 use App\Support\UnsureMarkers;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -79,6 +81,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
+use Livewire\Attributes\Locked;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
 
@@ -104,12 +107,22 @@ class ViewCaptureSession extends ViewRecord
     public bool $viewsMaking = false;
 
     /**
-     * Since v1.5 (Phase 1C): the slim "Improving Roman Urdu… 60 %" bar while the view the page opens in is made; it
-     * stays (as "Roman Urdu is ready") once the view is in, so the transcript below never moves.
+     * Since v1.5 (Phase 1C): the slim bar while the view the page opens in is made ("Converting to Roman Urdu… 60%"
+     * since U19, from the moment the transcript is there); it stays (as "Roman Urdu is ready") once the view is in, so
+     * the transcript below never moves. Since U19 also "Couldn't convert to Roman Urdu" with Try again (`failed`).
      *
-     * @var array{label: string, percent: int}|null
+     * @var array{label: string, percent: int, failed?: bool}|null
      */
     public ?array $viewsBar = null;
+
+    /**
+     * Since U9b part 2: Previous / Next recording, worked out once when the page opens (and again when Pin moves this
+     * one), not on every poll of the page.
+     *
+     * @var array{previous: string|null, next: string|null}
+     */
+    #[Locked]
+    public array $v2Neighbours = ['previous' => null, 'next' => null];
 
     /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
     public function mount(int|string $record): void
@@ -121,9 +134,12 @@ class ViewCaptureSession extends ViewRecord
         }
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
-        $this->viewsBar = RecordingProgress::improvingBar($this->session());
+        $this->viewsBar = RecordingProgress::pageBar($this->session());
         // Send to WhatsApp sends the view being read: the one the player opens in, until it says otherwise.
         $this->readingView = WhatsAppMessage::defaultView($this->session()) ?? 'original';
+        if (ConsoleV2::library()) {
+            $this->v2Neighbours = $this->v2NeighbourUrls();
+        }
     }
 
     public function getTitle(): string
@@ -189,7 +205,7 @@ class ViewCaptureSession extends ViewRecord
         // The transcript is readable at once; the view it opens in may still be being made (then the bar shows).
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
-        $this->viewsBar = RecordingProgress::improvingBar($session);
+        $this->viewsBar = RecordingProgress::pageBar($session);
         $this->pushPlayer();
         match ($session->finalTranscript?->status) {
             TranscriptStatus::Completed => Notification::make()->title('The transcript is ready')->success()->send(),
@@ -365,13 +381,35 @@ class ViewCaptureSession extends ViewRecord
             $this->viewsMaking = false;
             if ($this->viewsBar !== null) {
                 $view = $transcript !== null ? app(TranscriptViews::class)->state($transcript) : null;
+                // Ready: the bar says so in its place; failed (or went quiet): "Couldn't convert … · Try again".
                 $this->viewsBar = $view !== null && $view['status'] === 'ready'
-                    ? ['label' => (TranscriptViews::VIEWS[$view['default']] ?? 'The view').' is ready', 'percent' => 100] : null;
+                    ? ['label' => __(':view is ready', ['view' => __(TranscriptViews::VIEWS[$view['default']] ?? 'The view')]), 'percent' => 100, 'failed' => false]
+                    : RecordingProgress::pageBar($this->session()->refresh());
             }
             $this->pushPlayer();
         } elseif ($this->viewsMaking) {
-            $this->viewsBar = RecordingProgress::improvingBar($this->session()->refresh()) ?? $this->viewsBar;
+            $this->viewsBar = RecordingProgress::pageBar($this->session()->refresh()) ?? $this->viewsBar;
         }
+    }
+
+    /** Since U19: Try again beside "Couldn't convert to Roman Urdu": the view the page opens in is made again. */
+    public function retryViews(): void
+    {
+        $this->assertCanChange();
+        $transcript = $this->editableTranscript();
+        if ($transcript === null) {
+            return;
+        }
+        try {
+            app(TranscriptViews::class)->request($transcript);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+            return;
+        }
+        $this->viewsMaking = app(TranscriptViews::class)->state($transcript->refresh())['status'] === 'making';
+        $this->viewsBar = RecordingProgress::pageBar($this->session()->refresh());
+        $this->pushPlayer();
     }
 
     /** The upgrade sheet for the Show as views (since v1.6.2), from the player's Roman Urdu · اردو · English. */
@@ -439,6 +477,26 @@ class ViewCaptureSession extends ViewRecord
         $session = app(LibraryOrganiser::class)->update($this->session(), ['pinned' => ! $this->session()->pinned]);
         Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')
             ->url($session->pinned ? CaptureSessionResource::getUrl('index', ['tab' => 'pinned']) : null)->success()->send();
+        // Pinned or not, it has other neighbours in the Library's order.
+        if (ConsoleV2::library()) {
+            $this->v2Neighbours = $this->v2NeighbourUrls();
+        }
+    }
+
+    /**
+     * Mark important (U9, parity plan 4): the flag the Library row and the apps show, set through the same update as
+     * PATCH /api/sessions/{id}; Unmark important when it is already flagged.
+     */
+    private function importantAction(): Action
+    {
+        return Action::make('important')
+            ->label(fn (): string => $this->session()->important ? __('Unmark important') : __('Mark important'))
+            ->icon(Heroicon::OutlinedFlag)
+            ->action(function (): void {
+                $this->assertCanChange();
+                $session = app(LibraryOrganiser::class)->update($this->session(), ['important' => ! $this->session()->important]);
+                Notification::make()->title($session->important ? __('Marked important') : __('No longer important'))->success()->send();
+            });
     }
 
     public function toggleKeep(): void
@@ -528,6 +586,7 @@ class ViewCaptureSession extends ViewRecord
                     ->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
                 ActionGroup::make([
                     ActionGroup::make([
+                        $this->editTextAction(),
                         $this->speakersAction(),
                         $this->replaceAction(),
                         $this->historyAction(),
@@ -536,10 +595,11 @@ class ViewCaptureSession extends ViewRecord
                         $this->downloadAction(),
                         $this->wrongScriptAction(),
                         $this->showAsAction(),
-                        WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label('WhatsApp'),
+                        WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label(__('WhatsApp')),
                     ])->dropdown(false),
                     ActionGroup::make([
                         CaptureSessionsTable::renameAction(),
+                        $this->importantAction(),
                         SharingActions::send(fn (): CaptureSession => $this->session()),
                         SharingActions::sentTo(fn (): CaptureSession => $this->session()),
                         $this->retryAction(),
@@ -587,6 +647,52 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /**
+     * Edit text in the new page's More (U9b part 2, WEB-REC-015): it turns on the player's own line editing (the same as
+     * its Edit text button, classic's), saved line by line through saveSegment; the player's Done editing ends it.
+     */
+    private function editTextAction(): Action
+    {
+        return Action::make('editText')->label(__('Edit text'))->icon(Heroicon::OutlinedPencil)
+            ->alpineClickHandler('window.elV2EditText()');
+    }
+
+    /**
+     * Previous / Next recording on the new page (U9b part 2, WEB-REC-007), at the end of the "‹ Library" line above the
+     * title (filament.v2.back-link): the recordings above and below this one in the Library's default order (pinned
+     * first, then newest first), among the person's own; a read-only console has them too, as they only open pages.
+     * The Library keeps its filters and order in the page itself, so the recording page can't know them: it always
+     * walks the default order.
+     *
+     * @return array{previous: string|null, next: string|null}
+     */
+    private function v2NeighbourUrls(): array
+    {
+        [$previous, $next] = $this->v2Neighbours();
+        $url = fn (?string $id): ?string => $id !== null ? CaptureSessionResource::getUrl('view', ['record' => $id]) : null;
+
+        return ['previous' => $url($previous), 'next' => $url($next)];
+    }
+
+    /** @return array{0: string|null, 1: string|null} the ids of the recordings before and after this one */
+    private function v2Neighbours(): array
+    {
+        $session = $this->session();
+        $pinned = $session->pinned ? 1 : 0;
+        $at = $session->started_at;
+        $id = (string) $session->getKey();
+        $query = fn () => CaptureSessionResource::getEloquentQuery()->withoutEagerLoads();
+        // Before it in the list: pinned while it is not, or the same and newer (the id breaks a tie, as the list's order).
+        $previous = $query()->where(fn ($q) => $q->where('pinned', '>', $pinned)->orWhere(fn ($q) => $q->where('pinned', $pinned)
+            ->where(fn ($q) => $q->where('started_at', '>', $at)->orWhere(fn ($q) => $q->where('started_at', $at)->where('id', '>', $id)))))
+            ->orderBy('pinned')->orderBy('started_at')->orderBy('id')->value('id');
+        $next = $query()->where(fn ($q) => $q->where('pinned', '<', $pinned)->orWhere(fn ($q) => $q->where('pinned', $pinned)
+            ->where(fn ($q) => $q->where('started_at', '<', $at)->orWhere(fn ($q) => $q->where('started_at', $at)->where('id', '<', $id)))))
+            ->orderByDesc('pinned')->orderByDesc('started_at')->orderByDesc('id')->value('id');
+
+        return [$previous !== null ? (string) $previous : null, $next !== null ? (string) $next : null];
+    }
+
+    /**
      * Copy ▾ of the new recording page (parity plan 4): the words, who said what, with timestamps, and Copy for AI with a
      * short header (title, date, people, language). The player on the page writes the text (filament.v2.copy).
      */
@@ -603,25 +709,23 @@ class ViewCaptureSession extends ViewRecord
             ->visible(fn (): bool => $this->session()->finalTranscript?->status === TranscriptStatus::Completed);
     }
 
-    /** Copy for AI's first lines: what the transcript is, so an AI reads it in context. */
+    /**
+     * Copy for AI's first lines: what the transcript is, so an AI reads it in context. The same header as the desktop
+     * and phone apps and the Library's Copy for AI (V2CopyForAi): title; date, time, source, length; people; language.
+     */
     private function copyHeader(): string
     {
         $session = $this->session();
-        $people = array_values(array_unique(array_filter([...array_values((array) ($session->speaker_names ?? [])), $session->caller_name])));
 
-        return implode("\n", array_filter([
-            __('Recording: :title', ['title' => $session->displayTitle()]),
-            __('Date: :date', ['date' => $session->started_at->copy()->timezone(app(SettingsRepository::class)->displayTimezone())->format('j M Y, H:i')]),
-            $people !== [] ? __('People: :people', ['people' => implode(', ', $people)]) : null,
-            __('Language: :language', ['language' => LanguageChoice::label($session->finalTranscript->language ?? $session->language)]),
-        ]));
+        // Copy for AI is read by a machine: no isolate marks around the values, even in Urdu (B8).
+        return IsolatingTranslator::strip(V2CopyForAi::header($session, V2CopyForAi::people(V2CopyForAi::lines($session, UnsureMarkers::settings()['threshold']))));
     }
 
     /** Download: the audio, and the transcript as a file in the chosen Show as view (unsure words keep their marks). */
     private function downloadAction(): Action
     {
         return Action::make('download')
-            ->label('Download')->labeledFrom('sm')
+            ->label(__('Download'))->labeledFrom('sm')
             ->icon(Heroicon::OutlinedArrowDownTray)
             ->button()
             ->color('gray')
@@ -659,8 +763,8 @@ class ViewCaptureSession extends ViewRecord
                 $pack[$view][] = ['label' => 'Meeting pack with audio (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip', 'include_audio' => 1])];
             }
         }
-        // Opens in the view the player opens in (Settings → Transcription), when it is made.
-        $default = $transcript !== null ? app(TranscriptViews::class)->state($transcript)['default'] : 'original';
+        // Since U19 the view being read (the player tells the page; it opens in the default view once that is made).
+        $default = $this->readingView;
 
         return [
             'audio' => $recording?->isReady() === true ? [
@@ -708,7 +812,7 @@ class ViewCaptureSession extends ViewRecord
             return PlanLock::sheet('show_as', 'views', 'Show as…')->visible($visible);
         }
 
-        return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
+        return Action::make('show_as')->label(__('Show as…'))->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
             ->visible($visible)
             ->action(function (): void {
                 $transcript = $this->editableTranscript();
@@ -729,7 +833,7 @@ class ViewCaptureSession extends ViewRecord
     private function speakersAction(): Action
     {
         return Action::make('speakers')
-            ->label('Rename speakers')
+            ->label(__('Rename speakers'))
             ->icon(Heroicon::OutlinedUserGroup)
             ->fillForm(function (): array {
                 $names = app(TranscriptEditor::class)->speakerNames($this->session());
@@ -758,7 +862,7 @@ class ViewCaptureSession extends ViewRecord
     private function replaceAction(): Action
     {
         return Action::make('replace')
-            ->label('Find and replace')
+            ->label(__('Find and replace'))
             ->icon(Heroicon::OutlinedMagnifyingGlass)
             ->schema([
                 TextInput::make('find')->label('Find')->required()->maxLength(200),
@@ -782,7 +886,7 @@ class ViewCaptureSession extends ViewRecord
     private function historyAction(): Action
     {
         return Action::make('history')
-            ->label('History')
+            ->label(__('History'))
             ->icon(Heroicon::OutlinedClock)
             ->modalHeading('Transcript history')
             ->modalContent(fn (): View => view('filament.pages.transcript-history', [
@@ -806,7 +910,7 @@ class ViewCaptureSession extends ViewRecord
     private function shareAction(): Action
     {
         return SharingActions::share(fn (): CaptureSession => $this->session(), fn (): array => $this->readyViews(),
-            fn (): bool => $this->session()->primaryRecording?->isReady() === true)
+            fn (): bool => $this->session()->primaryRecording?->isReady() === true, fn (): string => $this->readingView)
             ->visible(fn (): bool => ! $this->session()->hasNoAudio());
     }
 
@@ -818,7 +922,7 @@ class ViewCaptureSession extends ViewRecord
     private function wrongScriptAction(): Action
     {
         return Action::make('wrong_script')
-            ->label(fn (CaptureSession $record): string => 'Wrong script detected'.($this->nextEngine($record) !== null ? ' · Transcribe with the next engine' : ''))
+            ->label(fn (CaptureSession $record): string => __('Wrong script detected').($this->nextEngine($record) !== null ? ' · '.__('Transcribe with the next engine') : ''))
             ->icon(Heroicon::OutlinedExclamationTriangle)
             ->color('warning')
             ->visible(fn (CaptureSession $record): bool => is_string($record->finalTranscript?->meta['script_warning'] ?? null))
@@ -866,7 +970,7 @@ class ViewCaptureSession extends ViewRecord
     private function compareEnginesAction(): Action
     {
         return Action::make('compare_engines')
-            ->label('Compare engines')
+            ->label(__('Compare engines'))
             ->icon(Heroicon::OutlinedScale)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->primaryRecording?->isReady() === true)
             ->modalHeading('Compare engines')
@@ -876,7 +980,7 @@ class ViewCaptureSession extends ViewRecord
                 'engines' => array_map(fn (SttProviderKey $k): string => $k->value, array_slice(app(LanguageRouter::class)->candidates(app(LanguageRouter::class)->languageFor($record) ?? 'en+ur', $record), 0, EngineComparison::MAX_ENGINES)),
             ])
             ->schema([
-                Select::make('language')->label('Language')->options(array_filter(LanguageChoice::OFFERED, fn (string $k): bool => $k !== '', ARRAY_FILTER_USE_KEY))->required()->live(),
+                Select::make('language')->label('Language')->options(array_filter(LanguageChoice::offered(), fn (string $k): bool => $k !== '', ARRAY_FILTER_USE_KEY))->required()->live(),
                 CheckboxList::make('engines')->label('Engines (up to 3)')
                     ->options(fn (CaptureSession $record, $get): array => collect(app(LanguageRouter::class)->candidates((string) $get('language'), $record))
                         ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all())
@@ -907,7 +1011,7 @@ class ViewCaptureSession extends ViewRecord
             ->maxSize((int) (ReferenceText::MAX_BYTES / 1024));
 
         return Action::make('accuracy_reference')
-            ->label(fn (): string => $this->session()->hasReference() ? 'Edit the Accuracy Lab reference' : 'Use as Accuracy Lab reference')
+            ->label(fn (): string => $this->session()->hasReference() ? __('Edit the Accuracy Lab reference') : __('Use as Accuracy Lab reference'))
             ->icon(Heroicon::OutlinedBeaker)
             ->visible(fn (): bool => self::isOwner() && $this->editableTranscript() !== null)
             ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names: correct the transcript below, or paste or upload a corrected text (TurboScribe\'s .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view on its own. Every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
@@ -956,7 +1060,7 @@ class ViewCaptureSession extends ViewRecord
 
     private function clearReferenceAction(): Action
     {
-        return Action::make('accuracy_reference_clear')->label('Remove the Accuracy Lab reference')->icon(Heroicon::OutlinedXMark)
+        return Action::make('accuracy_reference_clear')->label(__('Remove the Accuracy Lab reference'))->icon(Heroicon::OutlinedXMark)
             ->visible(fn (): bool => self::isOwner() && $this->session()->hasReference())
             ->requiresConfirmation()
             ->action(function (): void {
@@ -977,7 +1081,7 @@ class ViewCaptureSession extends ViewRecord
     private function engineResultsAction(): Action
     {
         return Action::make('engine_results')
-            ->label('Engine results')
+            ->label(__('Engine results'))
             ->icon(Heroicon::OutlinedTableCells)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->trials()->exists())
             ->slideOver()
@@ -1032,13 +1136,13 @@ class ViewCaptureSession extends ViewRecord
     private function retryAction(): Action
     {
         return Action::make('retry')
-            ->label('Transcribe again')
+            ->label(__('Transcribe again'))
             ->icon(Heroicon::OutlinedArrowPath)
             ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady()
                 && in_array($record->finalTranscript?->status, [null, TranscriptStatus::Failed], true))
             ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])
             ->schema([
-                Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false),
+                Select::make('language')->label('Language')->options(LanguageChoice::offered())->selectablePlaceholder(false),
             ])
             ->action(function (array $data, CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
                 $before = $record->language;
@@ -1051,7 +1155,8 @@ class ViewCaptureSession extends ViewRecord
                         app(TranscribeLater::class)->startFor($person instanceof User ? $person : throw new ApiError(403, 'not_allowed', 'Sign in again.'), (int) $record->workspace_id, $record->id);
                     } catch (ApiError $e) {
                         $record->update(['language' => $before]);
-                        Notification::make()->title('Not transcribed')->body($e->getMessage())->danger()->send();
+                        // The glossary's words (docs/PLAN_V2_1_POLISH.md section 1): the recording stays Audio only.
+                        Notification::make()->title(__('Still audio only'))->body($e->getMessage())->danger()->send();
 
                         return;
                     }
@@ -1066,7 +1171,7 @@ class ViewCaptureSession extends ViewRecord
     private function retranscribeAsAction(): Action
     {
         return Action::make('retranscribe_as')
-            ->label('Re-transcribe as…')
+            ->label(__('Re-transcribe as…'))
             ->icon(Heroicon::OutlinedLanguage)
             ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true && ! $record->hasNoAudio())
             ->modalDescription('The current transcript stays until the new one is ready, then the new one is shown and the old one is kept as the other version.')
@@ -1126,7 +1231,7 @@ class ViewCaptureSession extends ViewRecord
     private function secondEngineAction(): Action
     {
         return Action::make('second_engine')
-            ->label('Transcribe with another engine')
+            ->label(__('Transcribe with another engine'))
             ->icon(Heroicon::OutlinedBeaker)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->finalTranscript?->status === TranscriptStatus::Completed
                 && $record->primaryRecording?->isReady() === true)
@@ -1136,7 +1241,7 @@ class ViewCaptureSession extends ViewRecord
                 Select::make('provider')->label('Engine')->required()->options(collect(SttProviderKey::cases())
                     ->reject(fn (SttProviderKey $k): bool => $k->value === $record->finalTranscript?->provider)
                     ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all()),
-                Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false),
+                Select::make('language')->label('Language')->options(LanguageChoice::offered())->selectablePlaceholder(false),
             ])
             ->action(function (array $data, CaptureSession $record): void {
                 try {
@@ -1153,7 +1258,7 @@ class ViewCaptureSession extends ViewRecord
     private function compareAction(): Action
     {
         return Action::make('compare')
-            ->label('Compare versions')
+            ->label(__('Compare versions'))
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->visible(fn (CaptureSession $record): bool => $this->alternate() !== null)
             ->slideOver()
@@ -1247,13 +1352,17 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /**
-     * Since v2.0 (ui_v2.library): back to the Library, above the title, as the apps.
+     * Since v2.0 (ui_v2.library): back to the Library, above the title, as the apps; since U9b part 2 with Previous /
+     * Next recording at the end of the same line.
      *
-     * @return array{label: string, url: string}|null
+     * @return array{label: string, url: string, neighbours: array{previous: string|null, next: string|null}}|null
      */
     public function v2BackLink(): ?array
     {
-        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index')] : null;
+        // UX-25: the recording it is (filament.v2.keep-place notes it was opened, and takes the link back to the list as
+        // it was left).
+        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2Neighbours,
+            'recording' => (string) $this->getRecord()->getKey()] : null;
     }
 
     /** "Sessions > Title", without a trailing "View" (C3). */

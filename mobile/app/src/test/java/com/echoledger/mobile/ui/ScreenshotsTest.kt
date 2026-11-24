@@ -33,8 +33,6 @@ import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
-import com.echoledger.mobile.overlay.AfterCallChip
-import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.overlay.PillDot
 import com.echoledger.mobile.overlay.PillToolbar
 import com.echoledger.mobile.overlay.PillView
@@ -52,6 +50,7 @@ import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.simulateBiometrics
 import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.design.DesignGallery
+import com.echoledger.mobile.util.AppClock
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -379,13 +378,17 @@ class ScreenshotsTest : ScreenTest() {
         capture("settings-general")
     }
 
-    /** Settings → Privacy & data, with During screen sharing: Private (black box) or Show (since v1.8.1). */
+    /**
+     * Settings → Privacy & data, with Block screenshots of EchoLedger (off by default) and Hide EchoLedger's live words
+     * (on by default; both since 2.0.5).
+     */
     @Test
     fun settingsPrivacy() {
         runBlocking { app.pairLocally(server) }
         shoot { SettingsScreen(vm, onSetup = {}) }
         compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
-        compose.onNodeWithText("Private (black box)").assertExists()
+        compose.onNodeWithText("Block screenshots of EchoLedger").assertExists()
+        compose.onNodeWithText("Hide EchoLedger's live words from screenshots and screen shares").assertExists()
         capture("settings-privacy")
     }
 
@@ -494,7 +497,7 @@ class ScreenshotsTest : ScreenTest() {
         capture("translate-hidden")
     }
 
-    /** Settings → App lock: the floating windows are left out of screenshots unless During screen sharing is Show. */
+    /** Settings → App lock with the lock on: Lock after (hiding content in screenshots is Privacy & data's since 2.0.5). */
     @Test
     fun settingsAppLock() {
         runBlocking {
@@ -509,7 +512,7 @@ class ScreenshotsTest : ScreenTest() {
             }
         }
         compose.onNodeWithText("App lock").performScrollTo().performClick()
-        compose.onNodeWithText("Hide content in Recents and screenshots", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Lock after", useUnmergedTree = true).assertExists()
         capture("settings-lock")
     }
 
@@ -628,7 +631,17 @@ class ScreenshotsTest : ScreenTest() {
      */
     @Test
     fun activityMissed() {
-        val now = System.currentTimeMillis()
+        // The same day and times on every day it runs (F2): the picture is compared with a saved one.
+        AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try {
+            activityMissedAtFixedTime()
+        } finally {
+            AppClock.reset()
+        }
+    }
+
+    private fun activityMissedAtFixedTime() {
+        val now = AppClock.millis()
         val missed = listOf(
             com.echoledger.mobile.calls.MissedItem(
                 "r1",
@@ -649,7 +662,7 @@ class ScreenshotsTest : ScreenTest() {
                 now
             )
         )
-        val today = java.time.LocalDate.now().toString()
+        val today = AppClock.today().toString()
         val items = listOf(
             ActivityItemDto(
                 "a1",
@@ -880,7 +893,7 @@ class ScreenshotsTest : ScreenTest() {
         app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000)
         app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 36_000, startedAt = "2026-10-23T18:30:00Z")
         shoot { WaitingScreen(vm, onBack = {}) }
-        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Keep all").assertExists() }.isSuccess }
+        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Save all as audio only").assertExists() }.isSuccess }
         capture("waiting")
     }
 
@@ -928,13 +941,18 @@ class ScreenshotsTest : ScreenTest() {
                 PillDot(PillState(mode = PillState.Mode.DOT))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR"))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, stopArmedTicks = 2))
-                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.SAVED, 6_000, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
-                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
-                // Since v1.8.1 (P-003): after Discard, the call can come back for 5 s before anything is deleted.
-                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.DISCARDED, DecisionPopup.DISCARDED_MS, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
+                // Since 2.0.5 (the call-choice plan): a call's menu starts with its three choices.
+                PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, call = true, choice = "audio"))
+                // The after-call card and two of its lines (CallChoiceCardTest has every size and language).
+                com.echoledger.mobile.ui.v2.theme.EchoV2Theme(darkTheme = themeMode == "dark") {
+                    listOf(
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Ask("Omar Khan", 252_000, "whatsapp"),
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO),
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.DELETE)
+                    ).forEach { screen ->
+                        com.echoledger.mobile.ui.v2.live.CallChoiceCard(screen, {}, {}, {}, {}, still = true)
+                    }
+                }
             }
         }
         capture("pill")

@@ -3,8 +3,10 @@ package com.echoledger.mobile.ui.v2
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
@@ -12,9 +14,11 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.testsupport.FakeServer
@@ -85,7 +89,10 @@ class V2NavigationTest : ScreenTest() {
         runBlocking { app.graph.library.refresh() }
     }
 
-    private fun shell(flags: UiFlags = v2) = show {
+    private fun shell(flags: UiFlags = v2) = show { shellContent(flags) }
+
+    @androidx.compose.runtime.Composable
+    private fun shellContent(flags: UiFlags = v2) {
         EchoV2Shell(
             vm,
             flags,
@@ -106,8 +113,16 @@ class V2NavigationTest : ScreenTest() {
     fun theBarIsLibraryProjectsRecordLiveAskAndLibraryComesFirst() {
         seed()
         shell()
-        // The page is called what its tab is called.
-        compose.onNode(hasText("Library") and isHeading()).assertExists()
+        // The page says what it shows, All recordings first, and its title opens the menu of the Library's places.
+        compose.onNode(hasText("All recordings") and isHeading()).assertExists()
+        compose.onNode(
+            hasText("All recordings") and
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    androidx.compose.ui.semantics.SemanticsProperties.Role,
+                    androidx.compose.ui.semantics.Role.DropdownList
+                )
+        ).assertExists()
+        // The bar's tabs, and no other (the Library's chips under the search are choices of the page's own).
         val tabs = compose.onAllNodes(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(
                 androidx.compose.ui.semantics.SemanticsProperties.Role,
@@ -122,6 +137,33 @@ class V2NavigationTest : ScreenTest() {
         compose.onNodeWithContentDescription("New project").assertExists()
         // Settings from the avatar on every main screen.
         compose.onNodeWithContentDescription("Account and settings").assertExists()
+    }
+
+    /** v2.1 FIX-03: the app's messages (an after-call choice's line too) sit just above the bottom bar, never on it. */
+    @Test
+    fun aMessageSitsJustAboveTheBottomBar() {
+        seed()
+        shell()
+        com.echoledger.mobile.testsupport.pumpUntil("the shell takes the after-call lines") {
+            com.echoledger.mobile.calls.CallLines.host !=
+                null
+        }
+        compose.runOnIdle {
+            com.echoledger.mobile.calls.CallLines.host!!.show(
+                com.echoledger.mobile.calls.CallLines.Line("call-1", com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE),
+                com.echoledger.mobile.calls.CallLines.LONG_MS,
+                com.echoledger.mobile.calls.CallLines.Actions(action = {})
+            )
+        }
+        val message = compose.onNodeWithText("Transcribing…").fetchSemanticsNode().boundsInRoot
+        val barTop = compose.onAllNodes(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.Role,
+                androidx.compose.ui.semantics.Role.Tab
+            )
+        ).fetchSemanticsNodes().minOf { it.boundsInRoot.top }
+        assertTrue("above the bar: ${message.bottom} <= $barTop", message.bottom <= barTop)
+        assertTrue("just above it: ${barTop - message.bottom}", barTop - message.bottom < 64f)
     }
 
     @Test
@@ -233,7 +275,55 @@ class V2NavigationTest : ScreenTest() {
         }
         compose.onNodeWithText("Caller 060", substring = true).assertDoesNotExist()
         compose.onAllNodesWithText("Caller 05", substring = true).fetchSemanticsNodes()
-        compose.onNode(hasText("Library") and isHeading()).assertIsDisplayed()
+        compose.onNode(hasText("All recordings") and isHeading()).assertIsDisplayed()
+    }
+
+    /** PLAN_NAV_3_LEVELS §0: from any view, the Library tab tapped again is All recordings, with the filters cleared. */
+    @Test
+    fun theLibraryTabTappedAgainIsAllRecordingsWithTheFiltersCleared() {
+        seed(rows = 3)
+        server.on("POST", "/api/sessions/.+/opened", FakeServer.empty(204))
+        shell()
+        // Unread, then a filter on (Marked › Pinned: nothing has it).
+        compose.onNode(hasText("All recordings") and isHeading()).performClick()
+        compose.onNode(hasContentDescription("Unread", substring = true) and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("Unread") and isHeading()).assertExists()
+        compose.onNode(hasContentDescription("Filters") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("Pinned") and androidx.compose.ui.test.isToggleable()).performScrollTo().performClick()
+        compose.onNode(hasText("Show 0 results")).performClick()
+        compose.onNodeWithText("No recordings match these filters").assertExists()
+        compose.onNode(hasText("Clear filters")).assertExists()
+        // The tab tapped again: All recordings, nothing filtered.
+        compose.onNode(hasText("Library") and !isHeading()).performClick()
+        pumpUntil("all recordings again") {
+            compose.onAllNodes(hasText("All recordings") and isHeading()).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("Caller 00", substring = true).fetchSemanticsNodes().size == 3
+        }
+        compose.onAllNodes(hasContentDescription("Filters, 1 on")).assertCountEquals(0)
+    }
+
+    /** Opening a recording and coming back keeps where Library was: its view, filters, tab and search. */
+    @Test
+    fun aRecordingOpenedAndClosedKeepsWhereLibraryWas() {
+        seed(rows = 3)
+        server.on("POST", "/api/sessions/.+/opened", FakeServer.empty(204))
+        server.on("GET", "/api/sessions/.+", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        var back: androidx.activity.OnBackPressedDispatcher? = null
+        show {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            shellContent()
+        }
+        compose.onNode(hasContentDescription("Filters") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("WhatsApp") and isToggleable()).performScrollTo().performClick()
+        compose.onNode(hasText("Show 3 results")).performClick()
+        compose.onNode(hasContentDescription("Filters, 1 on")).assertExists()
+        compose.onAllNodesWithText("Caller 001", substring = true).onFirst().performClick()
+        pumpUntil("the recording") { compose.onAllNodes(hasContentDescription("Filters, 1 on")).fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { back!!.onBackPressed() }
+        pumpUntil("back in Library, as it was") {
+            compose.onAllNodes(hasContentDescription("Filters, 1 on")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Source: WhatsApp").assertExists()
     }
 
     @Test
@@ -246,16 +336,15 @@ class V2NavigationTest : ScreenTest() {
             compose.onAllNodes(hasContentDescription("Activity, 1 needs you")).fetchSemanticsNodes().isNotEmpty()
         }
         // One quiet banner. Calls are not recorded on this test phone, but the setup card's "Call recording ready" row
-        // and the chip say so already: the banner says the next thing, the call waiting.
+        // says so already: the banner says the next thing, the call waiting. No Calls chip since v2.1 (UX-14).
         compose.onNodeWithText("Call recording ready").assertExists()
-        compose.onNodeWithText("Calls are not being recorded", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("1 call waiting for Keep or Discard").assertExists()
-        compose.onNodeWithText("Not ready · Fix").performClick()
-        assertEquals(listOf(false), readyChecks)
+        compose.onNodeWithText("Calls won't record", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("1 call waiting: Transcribe or Delete").assertExists()
+        compose.onNodeWithText("Not ready · Fix").assertDoesNotExist()
         compose.onNodeWithContentDescription("Activity, 1 needs you").performClick()
         compose.onNodeWithText("Needs action").assertExists()
-        compose.onNodeWithText("Keep").assertExists()
-        compose.onNodeWithText("Discard").assertExists()
+        compose.onNodeWithText("Transcribe").assertExists()
+        compose.onNodeWithText("Delete").assertExists()
     }
 
     @Test
@@ -290,11 +379,14 @@ class V2NavigationTest : ScreenTest() {
     }
 
     @Test
-    fun theCallsChipSaysHowCallsStandAndOpensTheReadyCheck() {
+    fun callsThatWontRecordAreOneLineInTheListWhoseFixOpensTheReadyCheck() {
         seed()
+        runBlocking { app.graph.settings.update { it.copy(setupCardHidden = true) } }
         shell()
-        // This test phone's helper isn't running: "Not ready · Fix", as classic's chip.
-        compose.onNodeWithText("Not ready · Fix").performClick()
+        // This test phone's helper isn't running: one line in the list (v2.1 UX-14), no chip in the header.
+        pumpUntil("the line") { compose.onAllNodesWithText("Calls won't record", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Not ready · Fix").assertDoesNotExist()
+        compose.onNode(hasText("Fix") and hasClickAction()).performClick()
         assertEquals(listOf(false), readyChecks)
     }
 

@@ -16,7 +16,7 @@
             <ul class="list">
                 @foreach ($sessions as $session)
                     <li>
-                        <a href="{{ url('/p/'.$token.'/'.$session->id) }}" dir="auto">{{ $session->displayTitle() }}</a>
+                        <a href="{{ url('/p/'.$token.'/'.$session->id) }}" dir="auto">{{ $session->outsideTitle() }}</a>
                         <span class="muted">
                             {{ $session->started_at->copy()->setTimezone($zone)->format('j M Y, H:i') }}
                             @if ($session->duration_ms) · {{ \App\Services\TranscriptExporter::clock($session->duration_ms) }} @endif

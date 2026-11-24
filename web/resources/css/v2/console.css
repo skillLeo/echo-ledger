@@ -172,6 +172,15 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     font-size: var(--el-text-body-strong-size);
 }
 
+/* BE-06: the person's initials on their colour (the background is set beside it), or their photo. */
+.v2-avatar.is-coloured {
+    color: var(--el-role-avatar-text);
+}
+
+.v2-avatar.is-photo {
+    object-fit: cover;
+}
+
 @media (min-width: 1024px) {
     .v2-sb .v2-sb-close {
         display: none;
@@ -924,6 +933,37 @@ button.v2-row:hover {
     height: var(--el-icon-sm);
 }
 
+/* Since U19: the small spinner of "Converting to Roman Urdu… 60%". */
+.v2-spinner {
+    flex: none;
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    border: var(--el-space-2) solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: var(--el-radius-full);
+    animation: v2-spin 0.8s linear infinite;
+}
+
+.v2-row-retry {
+    flex: none;
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    color: var(--el-role-accent-text);
+    text-decoration: underline;
+}
+
+@keyframes v2-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-spinner {
+        animation-duration: 2.4s;
+    }
+}
+
 .v2-status.is-warning {
     color: var(--el-role-warning-default);
 }
@@ -938,6 +978,16 @@ button.v2-row:hover {
 
 .v2-status.is-neutral {
     color: var(--el-role-text-secondary);
+}
+
+/* Audio only and Waiting to upload: plain grey text, no icon (docs/PLAN_V2_1_POLISH.md section 1: no chip). */
+.v2-status.is-quiet {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-status.is-quiet .v2-icon {
+    display: none;
 }
 
 .v2-banner {
@@ -1156,6 +1206,78 @@ button.v2-row:hover {
 .v2-library .fi-ta-record:hover,
 .v2-library .fi-ta-record.el-current {
     background-color: var(--el-role-bg-subtle);
+}
+
+/* UX-25 (PLAN_V2_1_POLISH, an owner request): the recording you came back from keeps a light grey tint for a minute
+   (filament.v2.keep-place), never the selection's colour; a little stronger in dark. */
+.v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 6%, transparent);
+}
+
+html.dark .v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 9%, transparent);
+}
+
+/* Back to top: a small round ↑ at the bottom corner of a long list once it is more than a screen down; on a phone above
+   the bottom bar. It fades in and out. */
+.v2-back-top {
+    position: fixed;
+    inset-block-end: var(--el-space-16);
+    inset-inline-end: var(--el-space-16);
+    z-index: var(--el-layer-dock);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-40);
+    block-size: var(--el-space-40);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    box-shadow: var(--el-shadow-1);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--el-motion-base) var(--el-motion-ease-out), visibility var(--el-motion-base);
+}
+
+/* A 48 px place to touch around the 40 px button. */
+.v2-back-top::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--el-space-4));
+}
+
+.v2-back-top.is-shown {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.v2-back-top:hover {
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-back-top:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-width);
+}
+
+.v2-back-top .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+@media (max-width: 720px) {
+    .v2-back-top {
+        inset-block-end: calc(var(--el-component-list-row-height-mobile) + var(--el-space-16) + env(safe-area-inset-bottom));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-back-top {
+        transition: none;
+    }
 }
 
 .v2-lib-row {
@@ -1796,4 +1918,1601 @@ html[dir='rtl'] .v2-row-title {
 
 .fi-ta-filter-indicators-badges-ctn .fi-badge .fi-badge-delete-btn {
     color: var(--el-role-accent-text);
+}
+
+/* A recording's source mark (filament/v2/components/source-logo.blade.php) with the device it came from in a small
+   badge on the end side, as on the phone and the desktop app. The mark draws itself; only its frame is ours. */
+.v2-source {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-space-32);
+    block-size: var(--el-space-32);
+}
+
+.v2-source--sm {
+    inline-size: var(--el-space-24);
+    block-size: var(--el-space-24);
+}
+
+.v2-source-mark {
+    inline-size: 100%;
+    block-size: 100%;
+}
+
+.v2-source-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device {
+    position: absolute;
+    inset-block-end: calc(-1 * var(--el-space-2));
+    inset-inline-end: calc(-1 * var(--el-space-2));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-16);
+    block-size: var(--el-space-16);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device svg {
+    inline-size: var(--el-space-12);
+    block-size: var(--el-space-12);
+}
+
+/* A recording row's marks (U9): the unread dot before the title, and its labels' colour dots (DESIGN_SYSTEM "Label
+   colours"). A label whose stored colour is one of the eight takes .v2-label-dot--<name>; any other colour comes in
+   as --label-own on .v2-label-dot--other and draws the dot alone, with a hairline ring, never as text or fill. */
+.v2-unread-dot,
+.v2-label-dot {
+    display: inline-block;
+    flex: none;
+    inline-size: var(--el-component-status-dot-size);
+    block-size: var(--el-component-status-dot-size);
+    border-radius: var(--el-radius-full);
+}
+
+.v2-unread-dot {
+    background-color: var(--el-role-accent-default);
+}
+
+.v2-label-dot--grey { background-color: var(--el-role-label-grey-dot); }
+.v2-label-dot--red { background-color: var(--el-role-label-red-dot); }
+.v2-label-dot--orange { background-color: var(--el-role-label-orange-dot); }
+.v2-label-dot--amber { background-color: var(--el-role-label-amber-dot); }
+.v2-label-dot--green { background-color: var(--el-role-label-green-dot); }
+.v2-label-dot--teal { background-color: var(--el-role-label-teal-dot); }
+.v2-label-dot--blue { background-color: var(--el-role-label-blue-dot); }
+.v2-label-dot--pink { background-color: var(--el-role-label-pink-dot); }
+
+.v2-label-dot--other {
+    border: var(--el-border-hairline) solid var(--el-role-border-strong);
+    background-color: var(--label-own, var(--el-role-bg-subtle));
+}
+
+/* Selection on the Library list (U9): a selected row is tinted, never marked with a coloured start bar (anti-template
+   rule 4), and Filament's red "Clear" link goes: the selection bar's × already clears it, and red is for deleting. */
+.v2-library .fi-ta-record.fi-selected::before {
+    content: none;
+}
+
+.v2-library .fi-ta-record.fi-selected {
+    background-color: var(--el-role-accent-soft);
+}
+
+.v2-library .fi-ta-selection-indicator-actions-ctn .fi-link.fi-color-danger {
+    display: none;
+}
+
+/* "Show 50 more" at the end of the Library list: centred, with room around it. */
+.v2-lib-more {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--el-space-16);
+}
+
+/* A row being swiped at phone width (U9b): what lets go will do shows under it. Delete on the end side in the danger
+   colour, Pin on the start side in the accent's tint. The swipe script sets data-swipe ("delete" | "pin") and
+   data-swipe-label (the word, in the console's language) on the record while the finger moves, and clears them after. */
+.v2-library .fi-ta-record[data-swipe] {
+    position: relative;
+    overflow: hidden;
+}
+
+.v2-library .fi-ta-record[data-swipe]::after {
+    content: attr(data-swipe-label);
+    position: absolute;
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--el-space-16);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete'] {
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete']::after {
+    inset-inline-end: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe='pin'] {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-library .fi-ta-record[data-swipe='pin']::after {
+    inset-inline-start: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe] .v2-lib-row {
+    position: relative;
+    z-index: 1;
+    background-color: var(--el-role-bg-canvas);
+}
+
+/* A split button (Copy): the main part acts, the chevron part opens the other choices; one shape, a hairline between. */
+.v2-split {
+    display: inline-flex;
+    align-items: stretch;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-split > button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-layout-control-touch-min);
+    padding-inline: var(--el-space-16) var(--el-space-12);
+    border: 0;
+    background: transparent;
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-split > button + button {
+    padding-inline: var(--el-space-12);
+    border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-split > button:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-split > button:hover {
+    background-color: var(--el-role-bg-canvas);
+}
+
+/* ================================================================== 4b. the Library's filters and views (2.0.0-p)
+   docs/PLAN_LIBRARY_FILTERS.md: one toolbar row (the view's name, Search, Filters, Sort & display), the pills on a
+   second row only while filters are on, and the filter panel left of the list (280: seven of space-40), closed until
+   opened; under the panel breakpoint (the page's Alpine adds .is-drawer) it is a drawer over the list. Logical
+   properties throughout, so Urdu mirrors it. */
+
+/* Filament draws the group as a grid of columns: the panel's keeps its width, the list's takes the rest. */
+.v2-lib-shell > .fi-sc {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-16);
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col {
+    flex: none;
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-library) {
+    flex: 1 1 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-lib-panel[style*='display: none']) {
+    display: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    position: absolute;
+    inset: 0;
+    z-index: var(--el-layer-dialog);
+    pointer-events: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-panel,
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-scrim {
+    pointer-events: auto;
+}
+
+.v2-lib-panel {
+    position: sticky;
+    top: var(--el-space-16);
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    inline-size: calc(var(--el-space-40) * 7);
+    max-block-size: calc(100dvh - var(--el-space-64) - var(--el-space-32));
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+}
+
+/* Under --el-breakpoint-panel the panel is a drawer over the list (not over the sidebar), with a scrim on the list. */
+.v2-lib-shell {
+    position: relative;
+}
+
+.v2-lib-shell.is-drawer .v2-lib-panel {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-dialog);
+    box-shadow: var(--el-shadow-3);
+}
+
+.v2-lib-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--el-layer-dialog) - 1);
+    background-color: var(--el-role-bg-canvas);
+    opacity: 0.72;
+}
+
+.v2-lib-panel-head,
+.v2-lib-panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+    padding: var(--el-space-12) var(--el-space-16);
+}
+
+.v2-lib-panel-head {
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-foot {
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-title {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-lib-panel-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--el-space-4) var(--el-space-16) var(--el-space-16);
+}
+
+.v2-lib-sec {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    padding-block: var(--el-space-12);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-sec:last-child {
+    border-block-end: 0;
+}
+
+.v2-lib-sec.is-target {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+}
+
+.v2-lib-sec-title {
+    margin: 0;
+    font-size: var(--el-text-body-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-lib-op {
+    align-self: flex-start;
+}
+
+.v2-lib-find {
+    inline-size: 100%;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-lib-opts {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-lib-opts > li.is-child {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-lib-opt {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-block-size: var(--el-space-32);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-sm);
+    cursor: pointer;
+}
+
+.v2-lib-opt:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-opt input {
+    flex: none;
+    accent-color: var(--el-role-accent-default);
+}
+
+.v2-lib-opt-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-lib-opt-parts {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-lib-opt-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-range {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-lib-range input {
+    display: block;
+    inline-size: 100%;
+    margin-block-start: var(--el-space-4);
+    padding: var(--el-space-4) var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* The view's name at the start of the one toolbar row, where the page's heading was. */
+/* "Library / Unread": the breadcrumb that leads the toolbar row; Library goes back to All recordings. */
+.v2-lib-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    min-width: 0;
+    margin-inline-end: var(--el-space-8);
+}
+
+.v2-lib-crumbs nav {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-lib-crumb:hover,
+.v2-lib-crumb:focus-visible {
+    color: var(--el-role-text-primary);
+    text-decoration: underline;
+}
+
+.v2-lib-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The pills: a second row only while filters are on. */
+.v2-lib-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-8);
+    padding-block-end: var(--el-space-8);
+}
+
+.v2-pill {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    border: var(--el-border-hairline) solid var(--el-role-accent-default);
+    border-radius: var(--el-component-chip-radius);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-pill-main {
+    display: inline-flex;
+    gap: var(--el-space-4);
+    padding-inline: var(--el-space-12) var(--el-space-4);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-pill-key {
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-pill-values {
+    max-inline-size: calc(var(--el-space-64) * 4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-pill-x {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-4) var(--el-space-8);
+    color: inherit;
+}
+
+.v2-pill-x .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* The sidebar's Library: groups with a quiet heading, counts quiet but for Needs you and Unread. */
+.v2-sb-lib {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+}
+
+.v2-sb-lib .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-sb-subcount.is-strong {
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* MY VIEWS and LABELS: a quiet heading that folds its group, with + at its end. */
+.v2-sb-group {
+    position: relative;
+}
+
+.v2-sb-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12) var(--el-space-40);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-group > .v2-sb-add {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+}
+
+.v2-sb-view {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-sb-view > .v2-sb-subitem {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* A view's open ⋯ menu sits above the rows after it (they come later on the page, at the same level), so Rename, Move
+   and Delete are what a click there reaches, in the sidebar and in the panel or its flyout alike. */
+.v2-sb-view:focus-within,
+.v2-sb-view:has(.v2-sb-more[aria-expanded='true']) {
+    z-index: var(--el-layer-menu);
+}
+
+.v2-sb-view > .fi-dropdown {
+    position: absolute;
+    inset-inline-end: var(--el-space-4);
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.v2-sb-more {
+    opacity: 0;
+}
+
+.v2-sb-view:hover .v2-sb-subcount,
+.v2-sb-view:focus-within .v2-sb-subcount {
+    visibility: hidden;
+}
+
+.v2-sb-view:hover .v2-sb-more,
+.v2-sb-view:focus-within .v2-sb-more,
+.v2-sb-more[aria-expanded='true'] {
+    opacity: 1;
+}
+
+.v2-sb-empty {
+    padding: var(--el-space-4) var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-sb-caret {
+    margin-inline-start: auto;
+}
+
+.v2-sb-fold > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.v2-sb-fold > summary::-webkit-details-marker {
+    display: none;
+}
+
+.v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(90deg);
+}
+
+/* ● Record ▾: Record a voice note, and the menu with Import audio files; one accent button in two parts. */
+.v2-sb-split {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-2);
+    margin-inline: var(--el-space-4);
+}
+
+.v2-sb-split > .v2-sb-record {
+    flex: 1 1 auto;
+    margin-inline: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+
+.v2-sb-split > .fi-dropdown,
+.v2-sb-split > .fi-dropdown > .fi-dropdown-trigger {
+    display: flex;
+}
+
+.v2-sb-record-more {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-8);
+    border-start-end-radius: var(--el-radius-md);
+    border-end-end-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-sb-record-more:hover,
+.v2-sb-record-more[aria-expanded='true'] {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-sb-record-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb.v2-rail .v2-sb-record-more {
+    display: none;
+}
+
+/* The Library's sidebar places: the one you are on has a quiet fill, never a bold row among bold rows. */
+.v2-sb-lib .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-weight);
+}
+
+/* The new Library starts high: no header, the one toolbar row just under the top bar (2.0.0-p: the list within 120). */
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-header-main-ctn {
+    padding-block-start: var(--el-space-8);
+}
+
+/* The one toolbar row sits close to the list, and the first group's heading close to the toolbar. */
+.v2-lib-shell .v2-library .fi-ta-header-toolbar {
+    padding-block-end: var(--el-space-4);
+}
+
+.v2-lib-shell .v2-library .fi-ta-content > .fi-ta-group-header:first-child {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The search is as tall as the row's chips (32), so the row is one line of equal controls. */
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input-wrp {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input {
+    padding-block: var(--el-space-4);
+}
+
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-content > .fi-sc {
+    row-gap: 0;
+}
+
+/* The row's content may shrink to the list's width (beside the filter panel too), so a long snippet ends in "…" and the
+   time stays in view. */
+.v2-library .fi-ta-record-content-ctn > * {
+    min-width: 0;
+}
+
+/* The select box has its own place before the source's mark (2.0.0-p), so a click on the mark filters by it. */
+.v2-library .fi-ta-record > .fi-ta-record-checkbox {
+    inset-inline-start: var(--el-space-4);
+}
+
+.v2-library .v2-lib-row {
+    padding-inline-start: var(--el-space-32);
+}
+
+.v2-library .fi-ta-record:hover .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:checked) .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:focus-visible) .v2-row-tile,
+.v2-library .fi-ta-ctn:has(.fi-ta-record-checkbox:checked) .v2-row-tile {
+    visibility: visible;
+}
+
+button.v2-row-tile {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+}
+
+button.v2-row-tile:focus-visible,
+.v2-label-quick:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-label-quick {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--el-space-2);
+    border: 0;
+    border-radius: var(--el-radius-full);
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Compact density: one line less on each row. */
+:root[data-density='compact'] .v2-library .v2-lib-row {
+    min-height: auto;
+    padding-block: var(--el-space-4);
+}
+
+:root[data-density='compact'] .v2-library [data-snippet] {
+    display: none;
+}
+
+/* A menu's group names (Sort & display's View, Sort, Group by, Density; the selection's Organise, Export): quiet
+   headings, never items. */
+.fi-dropdown-header[data-menu-heading] {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The new Library's sidebar is denser (docs/PLAN_LIBRARY_FILTERS.md section 4: items 32 tall) so more of it shows. */
+.v2-sb:has(.v2-sb-lib) .v2-sb-item {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-sb-lib .v2-sb-sub,
+.v2-sb-folding .v2-sb-sub {
+    margin-block: var(--el-space-2);
+}
+
+.v2-sb-lib {
+    gap: var(--el-space-4);
+}
+
+/* PROJECTS folds with the arrow at the end of its row; the row itself still opens the Projects page. */
+.v2-sb-folding {
+    position: relative;
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle:hover {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(90deg);
+}
+
+.v2-sb.v2-rail .v2-sb-fold-toggle,
+.v2-sb.v2-rail .v2-sb-group,
+.v2-sb.v2-rail .v2-sb-scroll span {
+    display: none;
+}
+
+/* The scrolling middle says when there is more: "More" at its foot (and an arrow back at its top), on the sidebar's own
+   background, above what scrolls under it. */
+.v2-sb-inner,
+.v2-sb-nav {
+    background-color: inherit;
+}
+
+.v2-sb-nav {
+    position: relative;
+    /* The sticky "More" and back-to-top bars never cover the item the keyboard moved to. */
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-sb-scroll {
+    position: sticky;
+    z-index: var(--el-layer-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-4);
+    inline-size: 100%;
+    min-block-size: var(--el-space-24);
+    border: 0;
+    background-color: inherit;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    cursor: pointer;
+}
+
+.v2-sb-scroll:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-sb-scroll .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-scroll.is-down {
+    inset-block-end: 0;
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up {
+    inset-block-start: 0;
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up .v2-icon {
+    transform: rotate(180deg);
+}
+
+/* ================================================================== the three levels: rail, panel, page
+   docs/PLAN_NAV_3_LEVELS.md: the rail (72), the place's panel (260; folded, the rail alone), then the page. Filament's
+   sidebar is both: open, its width is the rail and the panel; folded, the rail. Under the flyout width the panel opens
+   over the page from a rail icon; on a phone the whole frame is the menu's drawer. Right to left it all mirrors. */
+:root:has(.v2-frame) {
+    --sidebar-width: calc(var(--el-space-24) * 3 + var(--el-space-20) * 13);
+    --collapsed-sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+:root:has(.v2-frame[data-place='home']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+.v2-frame {
+    overflow: visible;
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-frame-inner {
+    position: relative;
+    display: flex;
+    height: 100%;
+}
+
+.v2-rail {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: calc(var(--el-space-24) * 3);
+    padding-block: var(--el-space-12);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-rail-logo {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    margin-block-end: var(--el-space-8);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-rail-logo::before {
+    content: attr(data-initial);
+}
+
+.v2-rail-logo:hover,
+.v2-rail-logo.is-on {
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+/* ● Record: the round accent button, the only primary action; its menu on the small chevron at its corner. */
+.v2-rail-record {
+    position: relative;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    margin-block-end: var(--el-space-8);
+}
+
+.v2-rail-rec {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-rail-rec:hover .v2-rail-rec-dot,
+.v2-rail-rec.is-on .v2-rail-rec-dot {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-rail-record > .fi-dropdown {
+    position: absolute;
+    inset-block-start: var(--el-space-24);
+    inset-inline-end: calc(var(--el-space-4) * -1);
+}
+
+.v2-rail-rec-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-20);
+    height: var(--el-space-20);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-rail-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-rail-list > li {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.v2-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    width: calc(var(--el-space-32) * 2);
+    padding-block: var(--el-space-8) var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-rail-item:hover {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* Selected: a soft accent tint, the icon and its name in the accent. */
+.v2-rail-item.is-on {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-rail-item.is-off {
+    color: var(--el-role-text-disabled);
+    cursor: not-allowed;
+}
+
+.v2-rail-icon {
+    position: relative;
+    display: inline-flex;
+}
+
+.v2-rail-icon .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+.v2-rail-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-rail-badge {
+    position: absolute;
+    inset-block-start: var(--el-space-2);
+    inset-inline-start: calc(50% + var(--el-space-4));
+    min-width: var(--el-icon-sm);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--el-text-caption-line);
+    text-align: center;
+}
+
+.v2-rail-dot {
+    position: absolute;
+    inset-block-start: calc(var(--el-space-2) * -1);
+    inset-inline-end: calc(var(--el-space-2) * -1);
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-warning-default);
+}
+
+.v2-rail-foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+}
+
+.v2-rail-avatar {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
+.v2-panels {
+    flex: none;
+    width: calc(var(--el-space-20) * 13);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    min-height: 100%;
+    padding: var(--el-space-12) var(--el-space-8) var(--el-space-16);
+}
+
+.v2-panel[hidden] {
+    display: none;
+}
+
+.v2-panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-layout-control-height);
+    padding-inline: var(--el-space-8) 0;
+}
+
+.v2-panel-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.v2-panel-title a:hover {
+    text-decoration: underline;
+}
+
+.v2-panel-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    margin: 0;
+    padding-inline: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-panel .v2-sb-sub {
+    margin-block: 0;
+    padding-inline-start: 0;
+}
+
+.v2-panel .v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-24);
+}
+
+.v2-panel .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-panel .v2-sb-group-title {
+    padding-inline-start: var(--el-space-8);
+}
+
+.v2-panel-foot {
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-panel-find,
+.v2-panel-search input {
+    width: 100%;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-panel-find {
+    margin-block-end: var(--el-space-4);
+}
+
+.v2-panel-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-panel-search > .v2-icon {
+    position: absolute;
+    inset-inline-start: var(--el-space-8);
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+    pointer-events: none;
+}
+
+.v2-panel-search input {
+    padding-inline-start: var(--el-space-32);
+}
+
+@media (min-width: 1024px) {
+    /* Folded: the rail alone; under the flyout width the panel opens over the page from a rail icon (its ⊟ closes it). */
+    .v2-frame:not(.fi-sidebar-open) .v2-panels {
+        display: none;
+    }
+
+    .v2-frame .v2-frame-inner.is-flyout .v2-panels {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: calc(var(--el-space-24) * 3);
+        z-index: var(--el-layer-overlay);
+        display: block;
+        box-shadow: var(--el-shadow-3);
+    }
+}
+
+/* A page's inner list (Settings' groups of several pages): the group's pages, the open one as a card. */
+.v2-inner-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+}
+
+.v2-inner-list-title {
+    margin: 0 0 var(--el-space-4);
+    padding-inline: var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-inner-item {
+    display: flex;
+    align-items: center;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid transparent;
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-inner-item:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-inner-item.is-on {
+    border-color: var(--el-role-border-default);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* A page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): the Library's All · Calls · Meetings · Voice notes · Other
+   with their counts, Live Assist's Upcoming · Past reports · Practice. The open one is underlined. */
+.v2-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-16);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.v2-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-2);
+    border-block-end: var(--el-focus-width) solid transparent;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-tab:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-tab.is-on {
+    border-block-end-color: var(--el-role-text-primary);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-tab-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-lib-tabs {
+    margin-inline-end: var(--el-space-8);
+}
+
+/* The page's tabs under its heading (Live Assist). */
+.v2-page-tabs {
+    margin-block: var(--el-space-4) var(--el-space-8);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* With the three levels (docs/PLAN_NAV_3_LEVELS.md section 4): the filters come from the end side (the right; the left
+   in Urdu), 320 wide (eight of space-40); beside the list from --el-breakpoint-wide, over it below. */
+.v2-lib-shell.is-right > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    order: 2;
+}
+
+.v2-lib-shell.is-right .v2-lib-panel {
+    inline-size: calc(var(--el-space-40) * 8);
+}
+
+.v2-lib-shell.is-right.is-drawer .v2-lib-panel {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+}
+
+/* With the three levels the toolbar row also holds the tabs: on a computer it stays one line, the search giving way
+   first, and narrower than --el-breakpoint-wide Sort & display keeps its icon (its name in the tooltip and for screen
+   readers). */
+.v2-lib-shell.is-right .v2-library .fi-ta-search-field {
+    flex: 0 1 calc(var(--el-space-40) * 5);
+    min-inline-size: calc(var(--el-space-40) * 3);
+}
+
+@media (min-width: 1024px) {
+    .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+        flex-wrap: nowrap;
+    }
+}
+
+/* The breadcrumb keeps its words; the tabs scroll sideways when the row is short (the filters beside the list). */
+.v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    display: flex;
+    flex: none;
+}
+
+.v2-lib-shell.is-right .v2-lib-tabs {
+    flex: 0 1 auto;
+}
+
+.v2-lib-shell.is-right.is-pushing [data-menu='display'] .v2-chip-words {
+    position: absolute;
+    width: var(--el-border-hairline);
+    height: var(--el-border-hairline);
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 1440px) {
+    .v2-lib-shell.is-right [data-menu='display'] .v2-chip-words {
+        position: absolute;
+        width: var(--el-border-hairline);
+        height: var(--el-border-hairline);
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+/* Settings › Appearance › Sidebar style for the rail and its panels: Soft grey (their own), Light, or Dark (the light
+   theme's frame drawn in its text colour; under the dark theme it is dark already). */
+.v2-frame[data-style='light'],
+.v2-frame[data-style='light'] .v2-rail,
+.v2-frame[data-style='light'] .v2-panels {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-frame[data-style='light'] .v2-rail-item:hover,
+.v2-frame[data-style='light'] .v2-sb-subitem:hover,
+.v2-frame[data-style='light'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'],
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panels {
+    border-inline-end-color: var(--el-role-text-primary);
+    background-color: var(--el-role-text-primary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-rec,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-group-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subcount {
+    color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item.is-on,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-text-secondary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-foot {
+    border-block-start-color: var(--el-role-text-secondary);
+}
+
+/* Setup & health is the rail's own place, with no panel: the rail alone, as on Home. */
+:root:has(.v2-frame[data-place='setup']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+/* The Library's count in its header under the wide width, where the table's own count folds away with its narrower
+   box, so it never depends on the table's foot (while the filters push the list, their panel's title says it). */
+.v2-lib-total {
+    display: none;
+    flex: none;
+    margin-inline-end: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 1440px) {
+    .v2-lib-shell.is-right .v2-lib-total {
+        display: block;
+    }
+}
+
+/* Settings' home: "Show groups" while the panel isn't beside the page (folded, or under the flyout width). */
+.el-set-show-groups {
+    margin-block-end: var(--el-space-16);
+    cursor: pointer;
+}
+
+:root:has(.v2-frame.fi-sidebar-open) .el-set-show-groups {
+    display: none;
+}
+
+/* The Projects overview: a card per project (its counts, its last activity, pinned), the tree being the panel's. */
+.v2-projects-overview .v2-project-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-12);
+    min-width: 0;
+}
+
+.v2-project-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+    min-width: 0;
+}
+
+.v2-project-card-name {
+    overflow: hidden;
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+    line-height: var(--el-text-body-strong-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-project-card-meta {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-body-line);
+}
+
+.v2-project-card-pin {
+    flex: none;
+    margin-inline-start: auto;
+    padding-inline: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    padding-inline: var(--el-space-8);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record::after {
+    display: none;
+}
+
+/* The filter panel's title says how many the list holds (with the three levels; beside the list the toolbar has no
+   room for it), and the toolbar's count goes while the panel pushes the list. */
+.v2-lib-panel-total {
+    margin-inline-start: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-shell.is-right.is-pushing .v2-lib-total {
+    display: none;
+}
+
+/* The tabs give way after the search, so every tab stays in sight while there is room; beside the filters (no room
+   for both) they scroll sideways first, as before. */
+.v2-lib-shell.is-right:not(.is-pushing) .v2-library .fi-ta-header-toolbar .v2-lib-tabs {
+    flex-shrink: 0;
+}
+
+/* UX-22 (PLAN_V2_1_POLISH 3b): a Library row's right-click menu (filament.v2.context-menu-script), the desktop's on
+   Windows: Windows 11's menu with 8 px corners, 32 px rows and 16 px glyphs, a hairline between groups, a greyed title
+   for several, light and dark from the tokens. In its own layer above the page, never wider or taller than the window. */
+.v2-ctx-layer {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-overlay);
+}
+
+.v2-ctx {
+    position: fixed;
+    min-inline-size: calc(var(--el-space-64) * 3.5);
+    max-inline-size: min(calc(var(--el-space-64) * 5), calc(100% - var(--el-space-16)));
+    max-block-size: calc(100% - var(--el-space-16));
+    overflow-y: auto;
+    padding: var(--el-space-4);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background: var(--el-role-bg-surface);
+    box-shadow: var(--el-shadow-2);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+    outline: none;
+}
+
+.v2-ctx.is-sub {
+    min-inline-size: calc(var(--el-space-64) * 3);
+}
+
+.v2-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-12);
+    min-block-size: var(--el-space-32);
+    padding-block: var(--el-space-4);
+    padding-inline: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-sm);
+    cursor: default;
+    user-select: none;
+}
+
+.v2-ctx-item:focus,
+.v2-ctx-item[aria-expanded='true'] {
+    outline: none;
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-ctx-item:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-ctx-item.is-danger {
+    color: var(--el-role-danger-default);
+}
+
+.v2-ctx-icon,
+.v2-ctx-more {
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-icon-sm);
+    block-size: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-icon .v2-icon,
+.v2-ctx-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-ctx-item.is-danger .v2-ctx-icon {
+    color: inherit;
+}
+
+.v2-ctx-item[aria-checked='true'] .v2-ctx-icon {
+    color: var(--el-role-accent-text);
+}
+
+.v2-ctx-label {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.v2-ctx-more {
+    margin-inline-start: var(--el-space-16);
+}
+
+.v2-ctx-title {
+    padding: var(--el-space-4) var(--el-space-8);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-sep {
+    block-size: 0;
+    margin-block: var(--el-space-4);
+    margin-inline: calc(-1 * var(--el-space-4));
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
 }

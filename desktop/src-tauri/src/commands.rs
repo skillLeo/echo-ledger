@@ -26,6 +26,8 @@ pub struct AppStatus {
     pub paired: bool,
     pub server_url: Option<String>,
     pub device_name: Option<String>,
+    /// This sign-in's id, made at each sign-in (none while signed out): see Settings.sign_in_id.
+    pub sign_in: Option<String>,
     pub pinned: bool,
     pub recording: Option<crate::audio::RecordingInfo>,
     pub captions_live: bool,
@@ -85,17 +87,23 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
-        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::tray_line(&hide, chrono::Local::now())),
-        None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
+        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::menu_line(&hide, chrono::Local::now())),
+        None => crate::tray::MainShare::Shown,
     });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
     let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pending_decisions, switches.clone(), state.viewer_refusal());
+    // The Dock icon's number follows the calls waiting (FIX-11).
+    crate::dock::follow_with(app, pending_decisions);
+    // With the main window closed, the menu bar's own commands follow the status too (Pause or Resume Recording…).
+    #[cfg(target_os = "macos")]
+    crate::app_menu::core_follow(app);
     AppStatus {
         paired: state.is_paired(),
+        sign_in: state.sign_in_id(),
         server_url: settings.server_url.clone(),
         device_name: settings.device_name.clone(),
         pinned: !settings.pins.is_empty(),
@@ -201,12 +209,11 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     }
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
-    state.update_settings(|s| {
-        s.server_url = Some(api.base_url().to_string());
-        s.pins = final_pins.clone();
-        s.device_id = Some(registered.device.id.clone());
-        s.device_name = Some(registered.device.name.clone());
-    })?;
+    // Another account may be signing in: the last one's WhatsApp share copies and kept pictures go.
+    forget_whatsapp_shares(app);
+    forget_avatars(app);
+    // A new sign-in: what the window kept for the last one is not this one's (a fresh sign-in id).
+    state.note_sign_in(api.base_url(), &final_pins, &registered.device.id, &registered.device.name)?;
     state.apply_config(registered.config);
     state.upload_notify.notify_one();
     let _ = refresh_library_inner(app).await;
@@ -443,13 +450,14 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
+    // First, so the share copies, kept pictures and copied recovery codes go even when a later step (the keychain) fails.
+    forget_whatsapp_shares(&app);
+    forget_avatars(&app);
+    crate::secret_copy::clear_now(&app).await;
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
-    state.update_settings(|s| {
-        s.device_id = None;
-        s.device_name = None;
-    })?;
+    state.note_sign_out()?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();
     Ok(status(&app))
@@ -516,11 +524,128 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
     app.opener().open_url(url.trim(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
+// ---- Your account from the app (contract 2.0.0-l) ------------------------------------------------------------------
+
+/// One account action (`my_account::ACTIONS`) with its body (a proof, a name, a code…), answered whole so the window
+/// can say each refusal in its own words. Only a signed-out computer is an error.
+#[tauri::command]
+pub async fn account_call(app: AppHandle, action: String, id: Option<String>, body: Option<serde_json::Value>) -> AppResult<crate::my_account::AccountReply> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let (method, path) = crate::my_account::route(&action, id.as_deref())?;
+    let body = body.unwrap_or(serde_json::Value::Null);
+    if !body.is_null() && !body.is_object() {
+        return Err(AppError::msg("That is not something this app can change."));
+    }
+    let reply = state.api()?.account_request(method, &path, &body).await?;
+    // The name, the picture or the email changed: the shell's avatar and name follow.
+    if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm") {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(reply)
+}
+
+/// Change picture…: the person picks a photo here; it is made ready (a JPEG, PNG or WebP of at most 5 MB, with no
+/// place or camera details; HEIC turned into a JPEG on a Mac) and sent. `None` when they cancel the picker.
+#[tauri::command]
+pub async fn account_avatar_choose(app: AppHandle) -> AppResult<Option<crate::my_account::AccountReply>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let Some(path) = crate::files::pick_avatar(&app).await else { return Ok(None) };
+    // A file over 50 MB is not read at all (and no more than that is read of a file that grows meanwhile).
+    let too_large = || AppError::msg(crate::my_account::FILE_TOO_LARGE);
+    if tokio::fs::metadata(&path).await?.len() > crate::my_account::MAX_AVATAR_INPUT as u64 {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    {
+        use tokio::io::AsyncReadExt as _;
+        tokio::fs::File::open(&path).await?.take(crate::my_account::MAX_AVATAR_INPUT as u64 + 1).read_to_end(&mut bytes).await?;
+    }
+    if bytes.len() > crate::my_account::MAX_AVATAR_INPUT {
+        return Err(too_large());
+    }
+    let picture = tokio::task::spawn_blocking(move || crate::my_account::prepare_avatar(bytes, crate::my_account::heif_to_jpeg))
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?
+        .map_err(AppError::msg)?;
+    let reply = state.api()?.upload_avatar(&picture).await?;
+    if reply.ok {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(Some(reply))
+}
+
+/// A person's picture as a `data:` URL for the window (its pictures come from the app only), kept on this computer by
+/// server, person and version (`my_account::avatar_cache_path`) until sign-out, so it shows again without a download.
+/// `None` when there is none to show (the window draws the initials).
+#[tauri::command]
+pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: u64) -> AppResult<Option<String>> {
+    use base64::Engine as _;
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let Some(url) = url else { return Ok(None) };
+    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
+    // Kept by server, person and version: another account's or server's picture is never this one.
+    let Some(cached) = crate::my_account::avatar_cache_path(&state.data_dir, &server, &url, version) else { return Ok(None) };
+    let to_url = |bytes: &[u8]| {
+        let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
+        format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    };
+    if let Ok(bytes) = tokio::fs::read(&cached).await {
+        return Ok(Some(to_url(&bytes)));
+    }
+    if !crate::account::on_server(&url, &server) {
+        return Ok(None);
+    }
+    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    if crate::receipts::sniff(&bytes).is_none() {
+        return Ok(None);
+    }
+    if let Some(dir) = cached.parent() {
+        let _ = tokio::fs::create_dir_all(dir).await;
+        let _ = tokio::fs::write(&cached, &bytes).await;
+    }
+    Ok(Some(to_url(&bytes)))
+}
+
+/// Save the recovery codes as a text file where the person chooses; `None` when they cancel.
+#[tauri::command]
+pub async fn account_recovery_codes_save(app: AppHandle, codes: Vec<String>, email: String) -> AppResult<Option<String>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to save.")?;
+    let Some(path) = crate::files::ask_save_path(&app, "EchoLedger recovery codes.txt", "Text").await else { return Ok(None) };
+    tokio::fs::write(&path, crate::my_account::recovery_codes_text(&codes, &email)).await?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Copy codes: the recovery codes on the clipboard, marked so clipboard history and clipboard managers keep no copy,
+/// and emptied after a minute if nothing was copied since (`secret_copy`).
+#[tauri::command]
+pub async fn account_recovery_codes_copy(app: AppHandle, codes: Vec<String>) -> AppResult<()> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to copy.")?;
+    let text = codes.iter().map(|c| c.trim()).collect::<Vec<_>>().join("\n");
+    crate::secret_copy::copy_concealed(&app, text).await.map_err(|e| {
+        eprintln!("[account] clipboard: {e}");
+        AppError::msg("Could not copy. Save them as a file instead.")
+    })
+}
+
+/// Recovery codes as the server makes them: 1 to 32 of them, none longer than 64.
+fn recovery_codes_ok(codes: &[String], refusal: &str) -> AppResult<()> {
+    if codes.is_empty() || codes.len() > 32 || codes.iter().any(|c| c.len() > 64 || c.trim().is_empty()) {
+        return Err(AppError::msg(refusal));
+    }
+    Ok(())
+}
+
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
 /// The server's pages the apps open in the browser (v1.6): the staff's admin panel (`admin`, the avatar menu, only for
 /// the super admin) and the customer app's workspace and profile pages (`app/…`, the workspace switcher and Account →
-/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect).
-const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile"];
+/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect), and since
+/// 2.0.0-l the passkeys page (the desktop adds passkeys on the website).
+const SERVER_PAGES: [&str; 8] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile", "app/settings/security/passkeys"];
 
 /// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
 /// signed-in server.
@@ -768,6 +893,9 @@ pub struct SettingsPatch {
     share_one_window: Option<bool>,
     send_diagnostics: Option<bool>,
     autostart: Option<bool>,
+    menu_bar_icon: Option<bool>,
+    menu_bar_timer: Option<bool>,
+    dock_badge: Option<bool>,
     dictation_output: Option<String>,
     /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
     #[serde(default, deserialize_with = "double_option")]
@@ -778,8 +906,10 @@ pub struct SettingsPatch {
     /// Full replacement of the user rules (built-ins are never stored).
     site_rules: Option<Vec<crate::detect::sites::SiteRule>>,
     browser_automation: Option<bool>,
-    /// `keep` (Saved · Undo) or `ask` (the chip).
+    /// `ask` (the card), `always_transcribe` or `always_audio` (v1.5's `keep` reads as `ask`).
     after_call: Option<crate::settings::AfterCall>,
+    /// "When to ask" under Ask me: `after` (the card) or `start` (the banner beside the pill).
+    ask_when: Option<crate::settings::AskWhen>,
     /// 0, 5, 10, 20 or 30; anything else is refused.
     skip_calls_shorter_than_s: Option<u32>,
     /// 2, 3 or 5; anything else is refused.
@@ -835,6 +965,9 @@ impl SettingsPatch {
         if let Some(v) = self.share_one_window { s.share_one_window = v; }
         if let Some(v) = self.send_diagnostics { s.send_diagnostics = v; }
         if let Some(v) = self.autostart { s.autostart = v; }
+        if let Some(v) = self.menu_bar_icon { s.menu_bar_icon = v; }
+        if let Some(v) = self.menu_bar_timer { s.menu_bar_timer = v; }
+        if let Some(v) = self.dock_badge { s.dock_badge = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &self.client_id { s.client_id = v.clone(); }
         if let Some(v) = self.consent_acknowledged { s.consent_acknowledged = v; }
@@ -844,6 +977,7 @@ impl SettingsPatch {
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
         // Choosing After a call answers the one-time notice about it.
         if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
+        if let Some(v) = self.ask_when { s.ask_when = v; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
@@ -927,6 +1061,10 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
+    // FIX-11: the menu bar icon shown or not, its timer, the Dock's number.
+    if patch.menu_bar_icon.is_some() || patch.menu_bar_timer.is_some() || patch.dock_badge.is_some() {
+        crate::tray::follow_settings(&app);
+    }
     crate::readiness::wake(&app);
     if patch.hide_from_sharing.is_some() || patch.old_windows_sharing.is_some() {
         crate::privacy::apply_all(&app);
@@ -1124,10 +1262,7 @@ pub fn hide_captions(app: AppHandle) -> AppStatus {
 /// with the batch's client and language (none = automatic). Hashing and copying run off the main thread.
 #[tauri::command]
 pub async fn import_voice_notes(app: AppHandle, paths_list: Vec<String>, client_id: Option<String>, language: Option<String>) -> AppResult<crate::files::ImportSummary> {
-    ensure_unlocked(&app.state::<AppState>())?;
-    if let Some(refusal) = app.state::<AppState>().viewer_refusal() {
-        return Err(AppError::Message(refusal));
-    }
+    may_import(&app.state::<AppState>())?;
     let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
     let language = crate::settings::language_or_none(language.as_deref());
     let sources: Vec<std::path::PathBuf> = paths_list.iter().map(std::path::PathBuf::from).collect();
@@ -1295,6 +1430,10 @@ pub struct RecordingState {
     pub device_note: Option<crate::audio::devices::DeviceNote>,
     /// Who the call is with, once its meeting window's title says (since v1.2's caller names); none until then.
     pub caller_name: Option<String>,
+    /// Chosen on the pill's menu: what happens when the call ends (no card then).
+    pub call_choice: Option<crate::after_call::CallChoice>,
+    /// "Recording this call · Don't record" shows beside the pill (its first 5 s, "At the start of the call").
+    pub start_banner: bool,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -1333,6 +1472,8 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         missing: if info.is_some() { state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clone() } else { Vec::new() },
         device_note: if info.is_some() { state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()) } else { None },
         caller_name: info.as_ref().and_then(|i| crate::pending::running_caller_name(state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref(), &i.client_ref)),
+        call_choice: info.as_ref().and_then(|i| crate::actions::call_choice_of(&state, &i.client_ref)),
+        start_banner: info.as_ref().is_some_and(|i| crate::actions::start_banner_shows(&state, &i.client_ref)),
     }
 }
 
@@ -1496,17 +1637,48 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
 /// a dialog, so the person can attach it in WhatsApp; returns its path.
 #[tauri::command]
 pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<String> {
+    audio_to_downloads(&app, &id).await
+}
+
+async fn audio_to_downloads(app: &AppHandle, id: &str) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    let audio = audio_source(app, id).await?;
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &audio.name);
+    state.api()?.download_audio(&audio.url, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The recording's audio as the server has it now.
+struct AudioSource {
+    url: String,
+    name: String,
+    /// The audio's version and size (`share_sheet::audio_version`).
+    version: String,
+    size: Option<u64>,
+}
+
+/// The recording's audio link, file name and version; an error when the audio is not on the server.
+async fn audio_source(app: &AppHandle, id: &str) -> AppResult<AudioSource> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    let api = state.api()?;
-    let detail = api.session(&id).await?;
+    let detail = state.api()?.session(id).await?;
     let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
         return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
     };
-    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
-    let path = export_target(&dir, &crate::files::audio_file_name(&detail));
-    api.download_audio(&url, &path).await?;
-    Ok(path.to_string_lossy().into_owned())
+    let (version, size) = crate::share_sheet::audio_version(&detail);
+    Ok(AudioSource { url, name: crate::files::audio_file_name(&detail), version, size })
+}
+
+/// The pictures kept on this computer (2.0.0-l) are this account's: removed on sign-out and when an account signs in.
+fn forget_avatars(app: &AppHandle) {
+    crate::my_account::clear_avatars(&app.state::<AppState>().data_dir);
+}
+
+/// Send to WhatsApp's share copies (F6) are this account's: removed on sign-out and when an account signs in.
+fn forget_whatsapp_shares(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    crate::share_sheet::clear_all(&crate::share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir));
 }
 
 /// Send to WhatsApp (v1.6, P5.5): opens `wa.me` with the text (WhatsApp, else WhatsApp Web). True when the text was
@@ -1522,12 +1694,53 @@ pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
     Ok(cut)
 }
 
+/// Send to WhatsApp → Text and voice (F6): the audio kept in the app's cache (one copy per recording and audio version,
+/// used again on a retry; the others removed once this share has settled, and all of them on sign-out), then the text and the file handed to the system's share (WhatsApp's share on the Mac, the Share window on
+/// Windows). When that cannot be used, or `share` is false (the window's "Open WhatsApp with the text instead"): the
+/// voice in Downloads (one copy per recording), wa.me with the text as before, and the file on the clipboard to paste
+/// into the chat (`share_sheet`).
+#[tauri::command]
+pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, share: Option<bool>) -> AppResult<crate::share_sheet::ShareOutcome> {
+    use crate::share_sheet::{self, ShareOutcome};
+    if text.trim().is_empty() {
+        return Err(AppError::msg("There is nothing to send yet."));
+    }
+    let audio = audio_source(&app, &id).await?;
+    let state = app.state::<AppState>();
+    let root = share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir);
+    let key = share_sheet::cache_key(&id, &audio.version);
+    let cached = root.join(&key).join(&audio.name);
+    if !share_sheet::is_cached(&cached, audio.size) {
+        // The folder is this audio version's own; whatever is in it is a copy that did not finish.
+        let _ = std::fs::remove_dir_all(root.join(&key));
+        std::fs::create_dir_all(root.join(&key))?;
+        state.api()?.download_audio(&audio.url, &cached).await?;
+    }
+    let outcome = async {
+        if share.unwrap_or(true)
+            && let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &cached.to_string_lossy()).await)
+        {
+            return Ok(outcome);
+        }
+        let downloads = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+        let path = share_sheet::downloads_copy(&downloads, &audio.name, &cached)?.to_string_lossy().into_owned();
+        let file_on_clipboard = share_sheet::file_to_clipboard(&app, &path).await;
+        let text_cut = whatsapp_open(app.clone(), text)?;
+        AppResult::Ok(ShareOutcome::Fallback { path, file_on_clipboard, text_cut, paste_keys: share_sheet::paste_keys(std::env::consts::OS).into() })
+    }
+    .await;
+    // Settled: the copies of earlier shares go (one still open until now could have been reading its copy).
+    share_sheet::clear_other_shares(&root, &key);
+    outcome
+}
+
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
 /// `consentAcknowledged` stays out too: the recording-laws notice is acknowledged by the person using this install, never by a file.
-/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one.
-pub const NOT_PORTABLE: [&str; 8] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "clientId", "onboardingDone", "consentAcknowledged"];
+/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one. `signInId`
+/// (2.0.0-p) is this sign-in's: imported, the window would read what it kept for another sign-in as this one's.
+pub const NOT_PORTABLE: [&str; 9] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "signInId", "clientId", "onboardingDone", "consentAcknowledged"];
 /// The `format` marker of an exported settings file.
 pub const SETTINGS_FORMAT: &str = "echoledger-settings";
 
@@ -1631,6 +1844,20 @@ pub fn lock_status_of(state: &AppState) -> LockStatus {
 }
 
 /// Library, transcript and export commands refuse to answer while the app is locked.
+/// What stops an import (pure): a locked EchoLedger ("EchoLedger is locked."), or a viewer's computer (its sentence).
+pub fn import_refusal(locked: bool, viewer: Option<String>) -> Option<String> {
+    if locked { Some("EchoLedger is locked.".into()) } else { viewer }
+}
+
+/// Every import's guard, one for all (the Import button and a drop on the window; Open With and a drop on the Dock icon,
+/// dock::opened): nothing is uploaded on the person's account while EchoLedger is locked, nor from a viewer's computer.
+pub fn may_import(state: &AppState) -> AppResult<()> {
+    match import_refusal(state.lock.is_locked(), state.viewer_refusal()) {
+        Some(refusal) => Err(AppError::Message(refusal)),
+        None => Ok(()),
+    }
+}
+
 pub fn ensure_unlocked(state: &AppState) -> AppResult<()> {
     if state.lock.is_locked() { Err(AppError::msg("EchoLedger is locked.")) } else { Ok(()) }
 }
@@ -1652,8 +1879,15 @@ pub fn lock_now(app: AppHandle) -> LockStatus {
     if state.settings().app_lock {
         state.lock.set_locked(true);
         emit_lock(&app);
+        clear_copied_codes(&app);
     }
     lock_status_of(&state)
+}
+
+/// Recovery codes copied before a lock leave the clipboard with it (secret_copy.rs).
+fn clear_copied_codes(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { crate::secret_copy::clear_now(&app).await });
 }
 
 /// The UI saw the person use the app; resets the lock-after timer.
@@ -1724,6 +1958,7 @@ pub fn spawn_idle_lock(app: AppHandle) {
             if !state.lock.is_locked() && crate::lock::idle_expired(settings.app_lock, settings.lock_after_minutes, state.lock.last_activity(), std::time::Instant::now()) {
                 state.lock.set_locked(true);
                 emit_lock(&app);
+                crate::secret_copy::clear_now(&app).await;
             }
         }
     });
@@ -1799,7 +2034,8 @@ fn main_window_handle(app: &AppHandle) -> isize {
 /// `language` (since v1.2) changes the recording's language without re-transcribing it.
 pub const SESSION_PATCH_KEYS: [&str; 6] = ["title", "client_id", "pinned", "keep", "labels", "language"];
 pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
-pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
+/// `important` and `unimportant` since UX-22 (Mark as important; the server has taken them since contract 2.0.0-i).
+pub const BULK_ACTIONS: [&str; 10] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "important", "unimportant", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
 pub const MAX_BULK: usize = 200;
@@ -1953,6 +2189,210 @@ pub fn when_available(answer: AppResult<serde_json::Value>) -> AppResult<Option<
 /// An IANA time zone name as the webview reports it (`Asia/Karachi`, `UTC`, `Etc/GMT+5`).
 pub fn is_time_zone(zone: &str) -> bool {
     (1..=64).contains(&zone.len()) && zone.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'))
+}
+
+// ---- Lists (contract 2.0.0-m) -------------------------------------------------------------------------------------
+
+/// The longest list name (a list is a label).
+pub const MAX_LIST_NAME: usize = 40;
+
+/// A list name as the server stores it: trimmed, single spaces, 1 to 40 characters.
+pub fn list_name(name: &str) -> AppResult<String> {
+    let clean = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() {
+        return Err(AppError::msg("Type a name for the list."));
+    }
+    if clean.chars().count() > MAX_LIST_NAME {
+        return Err(AppError::msg(format!("A list name is at most {MAX_LIST_NAME} characters.")));
+    }
+    Ok(clean)
+}
+
+/// "#rrggbb", or an error.
+pub fn list_colour(color: &str) -> AppResult<String> {
+    let ok = color.len() == 7 && color.starts_with('#') && color[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if ok { Ok(color.to_ascii_lowercase()) } else { Err(AppError::msg("Choose one of the list colours.")) }
+}
+
+/// The person's lists in their order; `None` on a server without lists yet (the Library shows its fixed chips only).
+#[tauri::command]
+pub async fn lists_get(app: AppHandle) -> AppResult<Option<Vec<crate::net::models::ListDto>>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.lists().await {
+        Ok(answer) => Ok(Some(answer.data)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// "+" in the Library's list row: a new, empty list at the end; without a colour the server picks the least used.
+#[tauri::command]
+pub async fn list_create(app: AppHandle, name: String, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let name = list_name(&name)?;
+    let color = color.as_deref().map(list_colour).transpose()?;
+    match state.api()?.create_list(&name, color.as_deref()).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
+}
+
+/// Rename… and Change colour… on a list chip. A rename or a recolour changes every recording in the list: the Library
+/// syncs once afterwards (the page asks for it), not here as well.
+#[tauri::command]
+pub async fn list_update(app: AppHandle, key: String, name: Option<String>, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let mut patch = serde_json::Map::new();
+    if let Some(name) = name.as_deref() {
+        patch.insert("name".into(), list_name(name)?.into());
+    }
+    if let Some(color) = color.as_deref() {
+        patch.insert("color".into(), list_colour(color)?.into());
+    }
+    if patch.is_empty() {
+        return Err(AppError::msg("There is nothing to change."));
+    }
+    let answer = match state.api()?.update_list(&key, &serde_json::Value::Object(patch)).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.data)
+}
+
+/// Delete list…: the label comes off its recordings (they stay); returns how many changed. The page syncs the Library
+/// once afterwards.
+#[tauri::command]
+pub async fn list_delete(app: AppHandle, key: String) -> AppResult<u64> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = match state.api()?.delete_list(&key).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.changed)
+}
+
+/// The person opened a recording here (`POST /api/sessions/{id}/opened`, since v1.3): it is no longer unread, on
+/// every device. The saved Library says so at once, as the server doesn't send the recording again for it. A server
+/// before v1.3 has no unread recordings: nothing to do.
+#[tauri::command]
+pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_opened(&id).await {
+        Err(e) if e.is_missing_route() => return Ok(()),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_opened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
+/// Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t): the person's own open taken back, on every
+/// device. The saved Library says so at once, as the server doesn't send the recording again for it. A server before
+/// 2.0.0-t has the route for opening only (405): it says it needs a newer server.
+#[tauri::command]
+pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_unopen(&id).await {
+        Err(AppError::Server { status: 405, .. }) => return Err(needs_newer_server("Mark as unread")),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_unopened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
+/// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps
+/// a copy and works offline (v2/library/myViews.ts); these send its changes and read the server's list. The server
+/// checks every field; the core passes the JSON through. `None` from `views_get` on a server without saved views yet.
+#[tauri::command]
+pub async fn views_get(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.views().await {
+        Ok(answer) => Ok(Some(answer)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// What these routes say about a view change itself, for good: the change can never go as it is. Any other answer
+/// (another 4xx such as 403 `account_suspended`, a 4xx without a code from a captive portal or a proxy, 429, 426, 5xx,
+/// offline) is not about the view, so it stays an error and the change waits to be sent again.
+const VIEW_REFUSALS: [&str; 3] = ["validation_failed", "views_limit", "view_not_found"];
+
+/// A view change the server refused for good comes back as data, `{"refused": {"status", "code", "message"}}` (the
+/// message in the app's words), so the page's sync drops or restores that one view and goes on with the next.
+pub(crate) fn view_answer(result: AppResult<serde_json::Value>) -> AppResult<serde_json::Value> {
+    match result {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        Err(e @ AppError::Server { .. }) if e.code().is_some_and(|c| VIEW_REFUSALS.contains(&c)) => {
+            Ok(serde_json::json!({ "refused": { "status": e.status(), "code": e.code(), "message": e.to_string() } }))
+        }
+        other => other,
+    }
+}
+
+/// Save as view: `{name, filters, search, sort, group, density, client_ref}`; the same `client_ref` again answers the
+/// view it made, so a view saved offline and sent twice is made once.
+#[tauri::command]
+pub async fn view_create(app: AppHandle, view: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.create_view(&view).await)
+}
+
+/// Rename… or Save changes on a view: any of its fields.
+#[tauri::command]
+pub async fn view_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.update_view(&id, &patch).await)
+}
+
+/// Delete view…
+#[tauri::command]
+pub async fn view_delete(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.delete_view(&id).await)
+}
+
+/// A view dragged, or Move up / Move down: every view's id once, in the new order.
+#[tauri::command]
+pub async fn views_order(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.order_views(&ids).await)
+}
+
+/// The saved views' version the last library sync carried (None before a sync did, or from an older server): the page
+/// reads `GET /api/views` again when it differs from its own.
+#[tauri::command]
+pub async fn library_views_version(app: AppHandle) -> AppResult<Option<u64>> {
+    let state = app.state::<AppState>();
+    let cache = state.library.lock().await;
+    Ok(cache.views_version)
+}
+
+/// Move left / Move right on a list chip: every list's key once, in the new order.
+#[tauri::command]
+pub async fn lists_order(app: AppHandle, keys: Vec<String>) -> AppResult<Vec<crate::net::models::ListDto>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.order_lists(&keys).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
 }
 
 /// Deletes a project. Nothing in it is lost: its recordings go to the Inbox and its subfolders up a level (its files,
@@ -2618,8 +3058,28 @@ pub async fn permission_request(app: AppHandle, kind: crate::permissions::Kind) 
     let refused = crate::mac_check::refusal(app.state::<AppState>().capture.is_recording(), crate::dictation::is_active(&app), false);
     if refused.is_none() {
         tauri::async_runtime::spawn_blocking(move || crate::permissions::request(kind)).await.map_err(|e| AppError::msg(e.to_string()))?;
+        if kind == crate::permissions::Kind::SystemAudio {
+            verify_system_audio(&app).await;
+        }
     }
     permissions_status(app).await
+}
+
+/// Records system audio for a moment to see whether macOS lets this copy of EchoLedger through, and keeps the answer
+/// (the privacy call can say yes for a copy macOS no longer lets record). Only while nothing records, and only when the
+/// privacy call says yes: otherwise it says what is missing itself.
+pub async fn verify_system_audio(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.capture.is_recording() || crate::dictation::is_active(app) || crate::permissions::read().system_audio != crate::permissions::Access::Allowed {
+        return;
+    }
+    let checked = app.clone();
+    if let Ok(result) = tauri::async_runtime::spawn_blocking(crate::permissions::probe_system_audio).await {
+        if let Some(Err(why)) = &result {
+            eprintln!("[echoledger] permissions: macOS says system audio is allowed, but {why}");
+        }
+        checked.state::<AppState>().system_audio_checked(result);
+    }
 }
 
 /// "Quit & reopen": Screen Recording allowed in System Settings while EchoLedger ran takes effect when it opens again.
@@ -2816,13 +3276,24 @@ pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
     match (kind, macos) {
         ("microphone", false) => Some("ms-settings:privacy-microphone"),
         ("microphone", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"),
-        ("system_audio", true) | ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
+        // System Audio Recording has a pane of its own (macOS 14.4+).
+        ("system_audio", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture"),
+        ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
         ("screen", false) => Some("ms-settings:privacy-graphicscapturewithoutborder"),
         ("automation", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
         ("sound", true) => Some("x-apple.systempreferences:com.apple.Sound-Settings.extension"),
         ("software_update", true) => Some("x-apple.systempreferences:com.apple.Software-Update-Settings.extension"),
         _ => None,
     }
+}
+
+/// "Try again" on "The other side isn't being recorded": opens the system side of the running call again. False when
+/// only quitting and reopening EchoLedger would (the warning then says so).
+#[tauri::command]
+pub fn capture_retry_system(app: AppHandle) -> bool {
+    let tried = crate::actions::retry_system_audio(&app);
+    crate::actions::emit_recording_state(&app);
+    tried
 }
 
 #[tauri::command]
@@ -3047,10 +3518,69 @@ pub fn after_call_discard(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::discard_from_chip(&app, &id)
 }
 
-/// Undo on "Discarded": the recording is back on its chip.
+/// Undo on "Deleted": the call is back on its card.
 #[tauri::command]
 pub fn after_call_discard_undo(app: AppHandle, id: String) -> AppResult<()> {
-    crate::actions::undo_chip_discard(&app, &id)
+    crate::actions::call_undo(&app, &id)
+}
+
+/// The card's answer: `transcribe`, `audio` (its ×, Esc or a swipe: Save audio only) or `delete`. Applied once the
+/// confirmation's 5 s are over.
+#[tauri::command]
+pub fn call_card_answer(app: AppHandle, id: String, choice: crate::after_call::CallChoice) -> AppResult<()> {
+    crate::actions::card_answer(&app, &id, choice)
+}
+
+/// The waiting list's Delete / Delete all: gone from the list now, the files only once "Deleted · Undo" has had its time.
+#[tauri::command]
+pub fn pending_delete(app: AppHandle, ids: Vec<String>) -> AppResult<usize> {
+    crate::actions::pending_delete(&app, &ids)
+}
+
+/// Undo on the waiting list's "Deleted · Undo": the recordings are back in the list.
+#[tauri::command]
+pub fn pending_delete_undo(app: AppHandle, ids: Vec<String>) -> AppResult<usize> {
+    crate::actions::pending_delete_undo(&app, &ids)
+}
+
+/// Undo on any confirmation: the call is back on its card, nothing was uploaded or deleted.
+#[tauri::command]
+pub fn call_undo(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::call_undo(&app, &id)
+}
+
+/// Transcribe on "Saved as audio".
+#[tauri::command]
+pub fn call_done_transcribe(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::done_transcribe(&app, &id)
+}
+
+/// "Always do this?" › Yes: After each call becomes `value`.
+#[tauri::command]
+pub fn call_always(app: AppHandle, id: String, value: crate::settings::AfterEachCall) -> AppResult<()> {
+    crate::actions::call_always(&app, &id, value)
+}
+
+/// The grouped card: Review (the Library) or × (`review: false`).
+#[tauri::command]
+pub fn call_group_close(app: AppHandle, review: bool) {
+    if review { crate::actions::group_review(&app) } else { crate::actions::group_close(&app) }
+}
+
+/// The pill page opens or closes the call choice's menu or the start banner: its window grows for it (this returns once
+/// it has, so the page draws the menu into the room it needs) and shrinks back after.
+/// `warning`: a warning row (the other side not being recorded) shows under the pill as well.
+#[tauri::command]
+pub async fn pill_expanded(app: AppHandle, expanded: bool, warning: Option<bool>) {
+    crate::overlay::set_pill_expanded(&app, expanded, warning.unwrap_or(false));
+}
+
+/// The pill's menu during a call: `transcribe` (Transcribe this call), `audio` (Save audio only) or `delete` (Stop and
+/// delete; also the start banner's Don't record).
+#[tauri::command]
+pub async fn call_choice(app: AppHandle, choice: crate::after_call::CallChoice) -> AppResult<AppStatus> {
+    crate::actions::call_choice_now(&app, choice).await?;
+    Ok(status(&app))
 }
 
 #[tauri::command]

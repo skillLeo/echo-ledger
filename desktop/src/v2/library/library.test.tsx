@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { forgetPictures } from "../../lib/screens";
-import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
+import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowDuration, rowModel, rowWhen, TIME_ONLY_GROUPS, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
+import type { LibraryScope } from "./scope";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -54,14 +55,44 @@ describe("the Library's rules", () => {
     expect(dayGroups(viewItems(ITEMS, "all", "", NOW), NOW).map((g) => [g.label, g.items.length])).toEqual([["Today", 3], ["Yesterday", 1]]);
   });
 
-  it("a row: who, the first words or the state, the time today or the date before, and the length", () => {
-    expect(rowModel(ITEMS[0], NOW)).toMatchObject({ title: "Bilal Qureshi · Qureshi Textiles", meta: "Payment terms for the March shipment", badge: null, when: "11:42 am", duration: "18:24", app: "whatsapp" });
+  it("a row: who, the first words or the state in the glossary's words, when, and how long (UX-06)", () => {
+    expect(rowModel(ITEMS[0], NOW)).toMatchObject({ title: "Bilal Qureshi · Qureshi Textiles", meta: "Payment terms for the March shipment", state: null, when: "11:42 am", duration: "18m 24s", app: "whatsapp", kind: "call" });
     expect(rowModel(ITEMS[0], NOW).screens).toBe(3);
-    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ meta: "Voice note", badge: { tone: "warning", text: "Untranscribed" }, screens: 0 });
-    expect(rowModel(ITEMS[2], NOW)).toMatchObject({ meta: "Phone call · Transcription failed", badge: { tone: "danger", text: "Failed" } });
-    expect(rowModel(ITEMS[3], NOW).when).toBe("16 Nov");
+    // docs/PLAN_V2_1_POLISH.md section 1: Audio only, Transcribing…, Failed · Retry (the only red), Waiting to upload.
+    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ title: "Voice note", meta: "Audio only", state: { key: "audio_only", tone: "quiet" }, screens: 0, kind: "voice_note" });
+    expect(rowModel(ITEMS[2], NOW)).toMatchObject({ meta: "Failed · Retry", state: { key: "failed", tone: "danger" } });
     const transcribing = makeItem("t", { status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } });
-    expect(rowModel(transcribing, NOW)).toMatchObject({ meta: "Zoom · Transcribing…", badge: null });
+    expect(rowModel(transcribing, NOW)).toMatchObject({ meta: "Transcribing…", state: { key: "transcribing" }, kind: "meeting" });
+    expect(rowModel(makeItem("u", { status: "uploading", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } }), NOW)).toMatchObject({ meta: "Waiting to upload", state: { key: "waiting_to_upload", tone: "quiet" } });
+    // A call still waiting for the person's choice (the session is `recording`) is Waiting, not Audio only (contract 2.0.0-r).
+    const deciding = makeItem("w", { source_app: "phone_call", status: "recording", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } });
+    expect(rowModel(deciding, NOW)).toMatchObject({ meta: "Waiting", state: { key: "waiting", tone: "quiet" } });
+    // The server's state, when it sent one, is the row's.
+    expect(rowModel({ ...deciding, facets: { state: "audio_only" } } as typeof deciding, NOW)).toMatchObject({ state: { key: "audio_only" } });
+    // Never "Untranscribed" or "Not transcribed", and no chips.
+    for (const item of ITEMS.slice(0, 4)) expect(JSON.stringify(rowModel(item, NOW))).not.toMatch(/untranscribed|not transcribed/i);
+  });
+
+  it("when: the time today, Yesterday, then the date (its year when another); only the time inside a date group", () => {
+    expect(rowModel(ITEMS[3], NOW).when).toBe("Yesterday");
+    expect(rowModel(ITEMS[3], NOW, undefined, true).when).toBe("4:30 pm");
+    expect(rowWhen(at(12, 9), NOW)).toBe("12 Nov");
+    expect(rowWhen(new Date(2025, 10, 12, 9).toISOString(), NOW)).toBe("12 Nov 2025");
+    expect(TIME_ONLY_GROUPS).toEqual(new Set(["date:Today", "date:Yesterday", "date:This week"]));
+  });
+
+  it("how long: 44s, 2m 38s, 1h 04m, never a clock that reads like the time", () => {
+    expect([44_000, 158_000, 3_840_000, 1_104_000, 0].map((ms) => rowDuration(ms))).toEqual(["44s", "2m 38s", "1h 04m", "18m 24s", ""]);
+  });
+
+  it("the name without Call with, an untitled call is an unknown caller, a voice note takes its first words", () => {
+    expect(rowModel(makeItem("c", { title: "Call with +92 300 1234567", source_app: "whatsapp" }), NOW)).toMatchObject({ title: "+92 300 1234567", avatar: { initials: null, icon: "person" } });
+    expect(rowModel(makeItem("o", { title: "Call with Hammad Bhai Uol", source_app: "whatsapp" }), NOW)).toMatchObject({ title: "Hammad Bhai Uol", avatar: { initials: "HU" } });
+    expect(rowModel(makeItem("x", { title: "", source_app: "phone_call" }), NOW).title).toBe("Unknown caller");
+    const said = makeItem("v", { title: "Voice note", source_app: "voice_note",
+      transcript: { final_status: "completed", final_transcript_id: "t", live_available: false, preview: "Call the customs agent about the Port Qasim container today" } });
+    expect(rowModel(said, NOW)).toMatchObject({ title: "Call the customs agent about the…", avatar: { icon: "mic" } });
+    expect(rowModel(ITEMS[3], NOW).avatar).toMatchObject({ initials: null, icon: "calendar" });
   });
 });
 
@@ -85,8 +116,17 @@ describe("LibraryV2", () => {
     respond("bin_list", { data: BIN });
   });
 
+  // The sidebar chooses what the Library shows (LibraryNav): `go` does what pressing a sidebar row does.
+  let shown: Parameters<typeof LibraryV2>[0] = {};
+  let again: (ui: React.ReactElement) => void = () => undefined;
+  let seq = 0;
   const show = async (props: Parameters<typeof LibraryV2>[0] = {}) => {
-    render(<LibraryV2 {...props} />);
+    shown = props;
+    again = render(<LibraryV2 {...props} />).rerender;
+    await act(flushAsync);
+  };
+  const go = async (scope: LibraryScope) => {
+    again(<LibraryV2 {...shown} scopeRequest={{ scope, seq: ++seq }} />);
     await act(flushAsync);
   };
 
@@ -94,7 +134,7 @@ describe("LibraryV2", () => {
     await show();
     const list = screen.getByRole("list", { name: "Recordings" });
     const row = within(list).getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" });
-    expect(row).toHaveAccessibleDescription(/^3 screens Payment terms for the March shipment.*11:42 am.*18:24/);
+    expect(row).toHaveAccessibleDescription(/^3 screens Payment terms for the March shipment.*11:42 am.*18m 24s/);
     // The screens mark only on a recording with screens.
     expect(within(list).getByRole("button", { name: "Voice note" })).not.toHaveAccessibleDescription(/screen/);
     expect(within(list).getByText("Today")).toBeInTheDocument();
@@ -103,16 +143,22 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("the saved views Today and Untranscribed, with their counts, from Views ▾", async () => {
+  it("Audio only from the sidebar (Not transcribed merged into it), and Date: Today from the filters, with their counts", async () => {
     await show();
-    const pick = (name: RegExp) => {
-      fireEvent.click(screen.getByRole("button", { name: /^(Views|Today|Untranscribed)$/ }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name }));
-    };
-    pick(/^Untranscribed/);
-    const list = screen.getByRole("list", { name: "Recordings" });
-    expect(rowButtons(list)).toHaveLength(2);
-    pick(/^Today/);
+    // Audio only: no transcript and none on its way; the failed one is in Needs you (facets.ts).
+    await go({ kind: "view", view: "audio_only" });
+    expect(screen.getByRole("heading", { level: 1, name: /^Audio only/ })).toHaveTextContent("Audio only1");
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["voice"]);
+    await go({ kind: "view", view: "needs" });
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["usman"]);
+    await go({ kind: "view", view: "all" });
+    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    const date = within(screen.getByRole("region", { name: "Date" }));
+    expect(date.getByRole("radio", { name: /^Today/ }).closest("label")).toHaveTextContent("Today3");
+    fireEvent.click(date.getByRole("radio", { name: /^Today/ }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 
@@ -275,6 +321,11 @@ describe("LibraryV2", () => {
     await show();
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
     await act(flushAsync);
+    // The glossary's word, grey (no warning chip): never "Untranscribed" or "Not transcribed yet".
+    const page = document.querySelector(".el-page__meta") as HTMLElement;
+    expect(within(page).getByText("Audio only")).not.toHaveClass("el-badge--warning");
+    expect(screen.getByRole("heading", { name: "Audio only" })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/untranscribed|not transcribed/i);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "Transcribe this recording?" });
@@ -360,9 +411,9 @@ describe("LibraryV2", () => {
     respond("session_restore", { data: ITEMS[0] });
     respond("bin_erase", null);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
-    expect(screen.getByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
+    // Trash is at the sidebar's foot now.
+    await go({ kind: "trash" });
+    expect(screen.getByRole("heading", { level: 1, name: /^Trash/ })).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Deleted recordings" });
     expect(within(list).getByText("Sadia Hassan · Zamzam Travels")).toBeInTheDocument();
     expect(screen.getByText("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.")).toBeInTheDocument();
@@ -375,21 +426,24 @@ describe("LibraryV2", () => {
     const empty = screen.getByRole("region", { name: "Trash is empty" });
     expect(empty).toHaveTextContent("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
     expect(document.body).not.toHaveTextContent(/30 days/);
-    // The header's Trash button stays pressed while Trash is open; pressing it again goes back to the recordings.
-    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
-    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    // All, from the sidebar, goes back to the recordings.
+    await go({ kind: "view", view: "all" });
+    expect(screen.getByRole("heading", { level: 1, name: /^All/ })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "false");
   });
 
   describe("parity rows that had no test (docs/v2/audit/parity.csv)", () => {
-    it("Import, clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
+    it("Import (an empty Library's; the sidebar's ● Record ▾ has it too), clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
       const onImport = vi.fn();
+      respond("library_list", []);
+      respond("library_refresh", []);
       await show({ onImport });
-      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      fireEvent.click(within(screen.getByRole("region", { name: "No recordings yet" })).getByRole("button", { name: "Import" }));
       expect(onImport).toHaveBeenCalled();
+      cleanup();
+      respond("library_list", ITEMS);
+      respond("library_refresh", ITEMS);
+      await show({ onImport });
       const search = screen.getByRole("searchbox", { name: "Search recordings" });
       fireEvent.change(search, { target: { value: "zzz nothing" } });
       const none = screen.getByRole("region", { name: "No recordings match" });
@@ -410,6 +464,11 @@ describe("LibraryV2", () => {
       respond("session_detail", { playback_url: null });
       await show();
       expect(screen.getByRole("list", { name: "Recordings" })).toHaveTextContent("No audio");
+      // Grey like the other states: only Failed · Retry is red on a row (PLAN_V2_1_POLISH section 1).
+      const state = screen.getByRole("list", { name: "Recordings" }).querySelector(".el-rec-state[data-state=no_audio]");
+      expect(state).toHaveClass("el-rec-state--quiet");
+      expect(state).not.toHaveClass("el-rec-state--danger");
+      expect(rowModel(quiet, NOW).state).toMatchObject({ key: "no_audio", tone: "quiet" });
       fireEvent.click(screen.getByRole("button", { name: "Quiet call" }));
       await act(flushAsync);
       expect(screen.getByRole("region", { name: "Nothing was heard" })).toBeInTheDocument();
@@ -418,12 +477,10 @@ describe("LibraryV2", () => {
     it("Trash: a list that didn't load says so with Try again; All goes back to the recordings (DT-LIB-112, 113)", async () => {
       fail("bin_list", "The server is out of reach");
       await show();
-      fireEvent.click(screen.getByRole("button", { name: /^Trash/ }));
-      await act(flushAsync);
+      await go({ kind: "trash" });
       expect(screen.getByRole("alert")).toHaveTextContent("Trash didn't load");
       expect(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /^All/ }));
-      await act(flushAsync);
+      await go({ kind: "view", view: "all" });
       expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
     });
 
@@ -459,8 +516,7 @@ describe("LibraryV2", () => {
   it("Restore from Trash says so and offers to open it", async () => {
     respond("session_restore", { data: ITEMS[0] });
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
+    await go({ kind: "trash" });
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "old" }]);

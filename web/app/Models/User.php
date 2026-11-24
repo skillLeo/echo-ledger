@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
+use App\Services\Accounts\EmailChange;
 use App\Services\Staff\StaffAccess;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
@@ -26,6 +27,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
 
@@ -39,7 +41,9 @@ use Laravel\Passport\HasApiTokens;
  * @property string $name
  * @property string $email
  * @property Carbon|null $email_verified_at
+ * @property Carbon|null $retry_requested_at the person's latest Retry all (since 2.0.0-r, BE-03)
  * @property bool $is_super_admin
+ * @property int $views_version moves with every change of the person's saved Library views (contract 2.0.0-p)
  * @property int|null $current_workspace_id
  * @property string|null $google_id the linked Google account (its stable `sub`), since v1.5
  * @property Carbon|null $deletion_requested_at
@@ -61,13 +65,19 @@ use Laravel\Passport\HasApiTokens;
  * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
  * @property string|null $ui_design since 2.0.0-g: classic | v2 | null (never chose); ui_classic is kept equal to "classic"
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
+ * @property string|null $email_restore_address the reserved address of the open window (users.email's collation)
+ * @property Carbon|null $email_restore_until until when it is reserved
+ * @property Carbon|null $recovery_codes_generated_at since 2.0.0-l: when the two-step recovery codes were last made (any path)
+ * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
+ * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials
+ * @property int|null $avatar_color since 2.0.0-r §6 (BE-06): the initials' colour the person chose, 0 to 7; null = their id's (avatarColor())
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  * @property-read StaffRole|null $staffRole
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
+#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides', 'email_restore', 'email_restore_address'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -76,9 +86,21 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     protected static function booted(): void
     {
         // What was confirmed is the old address (the profile page changes it at once).
+        // Since the security review of 2.0.0-l: an address reserved for another account's restore window is nobody's,
+        // however it would be given (sign-up, a member added, staff, the console's change).
+        static::saving(function (User $user): void {
+            if (($user->isDirty('email') || ! $user->exists) && EmailChange::isReserved((string) $user->email, $user->exists ? $user->id : null)) {
+                throw ValidationException::withMessages(['email' => __('That address is not available. Use another one.')]);
+            }
+        });
         static::updating(function (User $user): void {
             if ($user->isDirty('email') && ! $user->isDirty('email_verified_at')) {
                 $user->email_verified_at = null;
+            }
+            // Since 2.0.0-l: when the recovery codes were last made, whichever path made them (the console's Filament
+            // actions, the apps, staff); EmailChange::twoStepIsOld() reads it.
+            if ($user->isDirty('app_authentication_recovery_codes') && ! $user->isDirty('recovery_codes_generated_at')) {
+                $user->recovery_codes_generated_at = $user->app_authentication_recovery_codes === null ? null : now();
             }
             // Since v1.6: a password set later (the reset link, the profile) is one the owner knows.
             if ($user->isDirty('password') && ! $user->isDirty('has_password')) {
@@ -165,6 +187,18 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     }
 
     /** @return array<string, string> */
+    /** Avatar colours (contract 2.0.0-r §6, named in 2.0.0-u): 0 to 7, teal, blue, cyan, olive, pink, orange, green, slate. */
+    public const AVATAR_COLORS = 8;
+
+    /**
+     * The colour of the person's initials' circle (BE-06): the one they chose, else their id's, so it is theirs from
+     * sign-up and the same on every device without anything stored.
+     */
+    public function avatarColor(): int
+    {
+        return $this->avatar_color ?? ((int) $this->id % self::AVATAR_COLORS);
+    }
+
     protected function casts(): array
     {
         return [
@@ -175,11 +209,17 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'deletion_requested_at' => 'datetime',
             'deletes_at' => 'datetime',
             'consent_seen_at' => 'datetime',
+            'retry_requested_at' => 'datetime',
             'notify_transcript_ready' => 'boolean',
             'email_preferences' => 'array',
             'console_preferences' => 'array',
             'assist_settings' => 'array',
             'has_password' => 'boolean',
+            'avatar_version' => 'integer',
+            'avatar_color' => 'integer',
+            'email_restore' => 'encrypted:array',
+            'email_restore_until' => 'datetime',
+            'recovery_codes_generated_at' => 'datetime',
             'entitlement_overrides' => 'array',
             'transcription_key' => 'encrypted',
             'transcription_key_checked_at' => 'datetime',

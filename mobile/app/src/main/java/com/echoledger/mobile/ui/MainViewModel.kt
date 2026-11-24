@@ -36,6 +36,8 @@ import com.echoledger.mobile.update.UpdatePrefs
 import com.echoledger.mobile.update.UpdateStatus
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,11 +46,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The stored settings, or the fact that they have not been read yet (a cold start reads DataStore after the first frame). */
 sealed interface SettingsState {
@@ -69,6 +74,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .map { (it as? SettingsState.Loaded)?.settings ?: AppSettings() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val library: StateFlow<List<LibraryItem>> = graph.library.items
+
+    /** The person's calls still waiting for Keep or Discard on any device (since 2.0.0-p): Needs you lists them. */
+    val libraryWaiting: StateFlow<List<LibraryItem>> = graph.library.waiting
+
+    /** When [refreshQuietly] last read the waiting calls (elapsed realtime); null before it has. */
+    @Volatile private var waitingReadAt: Long? = null
     val helper: StateFlow<HelperConnection.State> = graph.helper.state
 
     private val _pending = MutableStateFlow<List<LocalRecording>>(emptyList())
@@ -118,6 +129,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         SelfUpdate.restore(app)
+        // My views are the account's own (the server, the email and the workspace), as this sign-in's account read
+        // says (confirmViews). Until it has, only this sign-in's remembered copy shows, and nothing is sent or read.
+        viewModelScope.launch {
+            graph.settings.settings.map { com.echoledger.mobile.data.SavedViewsRepository.signIn(it) }.distinctUntilChanged()
+                .collect { signIn -> graph.views.use(graph.views.lastAccount(signIn), confirmed = false) }
+        }
+    }
+
+    /** My views (contract 2.0.0-p): the account's saved filter sets, in their order; empty until the account is known. */
+    val savedViews: StateFlow<List<com.echoledger.mobile.data.MyView>> = graph.views.views
+
+    /** Whether My views can show and change (the account is known). */
+    val savedViewsReady: StateFlow<Boolean> = graph.views.ready
+
+    /** A change to My views the server refused for good: given back or dropped, and said once. */
+    val viewProblems: kotlinx.coroutines.flow.SharedFlow<com.echoledger.mobile.data.ViewProblem> = graph.views.problems
+
+    /** Makes one of My views; throws [com.echoledger.mobile.data.ViewError] when it can't be made. */
+    fun createView(name: String, spec: com.echoledger.mobile.data.ViewSpec): com.echoledger.mobile.data.MyView =
+        graph.views.create(name, spec)
+
+    fun renameView(id: String, name: String) = graph.views.rename(id, name)
+
+    fun updateView(id: String, spec: com.echoledger.mobile.data.ViewSpec) = graph.views.update(id, spec)
+
+    fun deleteView(id: String) = graph.views.remove(id)
+
+    fun moveView(id: String, delta: Int) = graph.views.move(id, delta)
+
+    /**
+     * Signed out: the library, My views, the projects and the lists of the person go, and what a network call still on
+     * its way brings back for them is dropped ([sameAccount]). On the main thread, as every write of the projects and
+     * the lists is, so a check and its write never have a sign-out between them.
+     */
+    private suspend fun forgetAccount() = withContext(Dispatchers.Main.immediate) {
+        newAccount()
+        graph.library.clear()
+        graph.views.clear()
+    }
+
+    /** Another account from now on (a sign-out, or a sign-in's start): its projects and lists go. Main thread only. */
+    private fun newAccount() {
+        graph.accountEpoch.incrementAndGet()
+        _clients.value = emptyList()
+        _lists.value = emptyList()
+    }
+
+    /**
+     * Writes the projects or the lists after a network call: on the main thread, and only when no sign-out or sign-in
+     * came since [epoch] (taken before the call). The check and the write run together there, where every sign-out
+     * runs too ([forgetAccount]), so the last person's project or list never comes back.
+     */
+    private suspend fun sameAccount(epoch: Int, write: () -> Unit) = withContext(Dispatchers.Main.immediate) {
+        if (epoch == graph.accountEpoch.get()) write()
+    }
+
+    /** Whether the account is still the one of [epoch] (for a read again that guards its own write). */
+    private fun stillAccount(epoch: Int): Boolean = epoch == graph.accountEpoch.get()
+
+    /** After a library sync: My views sent and read again when the sync's `views_version` is not the copy's. */
+    private suspend fun syncViews() {
+        runCatching { confirmViews() }
+        runCatching { graph.views.sync(graph.library.viewsVersion.value) }
+    }
+
+    /**
+     * Whose My views are, from this sign-in's own account read (`GET /api/account`: the email and the workspace), never
+     * from what the settings kept of an earlier sign-in. Asked once a sign-in, until it answers. An answer for an
+     * earlier sign-in (read with its token, still on its way when the next one began) confirms nothing.
+     */
+    private suspend fun confirmViews() {
+        val before = graph.settings.current()
+        val signIn = com.echoledger.mobile.data.SavedViewsRepository.signIn(before) ?: return
+        if (graph.views.confirmedFor(signIn)) return
+        val answer = withContext(Dispatchers.IO) { graph.api()?.account() } ?: return
+        val key = com.echoledger.mobile.data.SavedViewsRepository.accountKey(before.serverUrl, answer.email, answer.workspace?.id) ?: return
+        if (com.echoledger.mobile.data.SavedViewsRepository.signIn(graph.settings.current()) == signIn) graph.views.confirm(signIn, key)
     }
 
     /** Since v1.5: the website build's own updates (the Google Play build always stays idle). */
@@ -187,6 +275,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         email: String? = null
     ) {
         val previous = graph.settings.current().let { it.account ?: it.serverUrl?.let { url -> Owner.of(url, null) } }
+        // A new sign-in shows no one's views until its own account read says whose they are (confirmViews), and is
+        // counted before its token is saved: an account read of the sign-in before it, landing from now on, confirms
+        // nothing. Counted again once the new token is in use (below).
+        graph.views.use(null)
+        graph.settings.update { it.copy(signIns = it.signIns + 1) }
+        // No project or list of the last person stays, nor comes back from a read still on its way.
+        withContext(Dispatchers.Main.immediate) { newAccount() }
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {
@@ -204,6 +299,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         graph.invalidateApi()
+        // Counted again once its token is the one in use: a read begun between the two counts (with the token before
+        // it, the client not renewed yet) confirms nothing either (confirmViews).
+        graph.settings.update { it.copy(signIns = it.signIns + 1) }
         // Since v1.5: whose account this is (the typed email, else the server's answer; an older server has none), and
         // recordings made under another account wait for it instead of uploading into this one.
         val known = email ?: withContext(Dispatchers.IO) { runCatching { graph.api()?.account()?.email }.getOrNull() }
@@ -464,7 +562,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun signOutEverywhere(): Boolean {
         workspaceCall("Signing out failed.") { it.signOutEverywhere() } ?: return false
         graph.settings.clearPairing()
-        graph.library.clear()
+        forgetAccount()
         return true
     }
 
@@ -487,7 +585,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unpair() = viewModelScope.launch {
         graph.settings.clearPairing()
-        graph.library.clear()
+        forgetAccount()
         graph.invalidateApi()
         WidgetStateStore.refresh(getApplication())
     }
@@ -514,7 +612,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
-        runCatching { graph.library.refresh() }
+        if (runCatching { graph.library.refresh() }.isSuccess) {
+            // The live status asks every 5 s while something moves: the waiting calls at most every 30 s of it.
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (waitingReadAt.let { it == null || now - it >= WAITING_EVERY_MS }) {
+                waitingReadAt = now
+                runCatching { graph.library.refreshWaiting() }
+            }
+            syncViews()
+        }
         // Since v1.6: the widget's "Transcribing · part 2 of 3" moves with the app's.
         WidgetStateStore.refresh(getApplication())
     }
@@ -561,17 +667,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
                 }
                 graph.library.refresh()
+                // The calls waiting for Keep or Discard on any device, which the sync leaves out (Needs you lists them).
+                waitingReadAt = android.os.SystemClock.elapsedRealtime()
+                runCatching { graph.library.refreshWaiting() }
+                syncViews()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
             com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication(), graph.settings.current())
             SelfUpdate.schedule(getApplication())
-            _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
+            val epoch = graph.accountEpoch.get()
+            val clients = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
+            sameAccount(epoch) { _clients.value = clients }
             WidgetStateStore.refresh(getApplication())
             _offline.value = false
         } catch (e: NotPairedException) {
             // Revoked on the server: back to the pairing screen. Recordings waiting to upload stay on the phone.
             graph.settings.clearPairing()
-            graph.library.clear()
+            forgetAccount()
             graph.invalidateApi()
             WidgetStateStore.refresh(getApplication())
             _message.value = "This phone was signed out on the server. Sign in again."
@@ -604,6 +716,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Show as (since v1.2): the Roman Urdu and English views and their state; null when they cannot be read now. */
     suspend fun transcriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
+    }
+
+    private val viewsRechecking = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * A row still `making` long after its transcript finished: its views are read (when the Library opens, then about
+     * 5 and 15 minutes on: [com.echoledger.mobile.ui.v2.library.LibraryModel.VIEWS_RECHECKS]), and the row takes what
+     * they say (failed after 20 minutes with nothing done, or ready), since that change does not reach a sync. One read
+     * at a time per row.
+     */
+    fun recheckViews(item: LibraryItem) {
+        val id = item.transcript?.finalTranscriptId ?: return
+        if (!viewsRechecking.add(item.id)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Taken before the server is asked: a sign-out meanwhile makes the answer the last person's.
+                val gen = graph.library.generation()
+                val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
+                val was = item.transcript?.views ?: return@launch
+                if (now.status != was.status) {
+                    graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress), gen)
+                }
+            } finally {
+                viewsRechecking.remove(item.id)
+            }
+        }
     }
 
     /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
@@ -646,26 +784,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The recording's audio (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, from its temporary
-     * signed address; null with a message when it could not be fetched.
+     * The recording's voice (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, or in [dir] (Send to
+     * WhatsApp's share folder), from its temporary signed address, named after [title] with the extension its type
+     * gives (.m4a, .ogg, .mp3, .wav). Null with a message when it could not be fetched, and no half-written file left.
+     * Cancelling (the share closed) stops the download at once.
      */
-    suspend fun downloadAudio(sessionId: String, title: String): File? = withContext(Dispatchers.IO) {
+    suspend fun downloadAudio(sessionId: String, title: String, dir: File? = null): File? = withContext(Dispatchers.IO) {
+        var file: File? = null
         try {
             val api = graph.api() ?: return@withContext null
             val url = sessionDetail(sessionId)?.playbackUrl ?: run {
-                _message.value = "This recording has no audio on the server."
+                _message.value = "This recording has no voice on the server."
                 return@withContext null
             }
-            val dir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
-            val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60) + ".ogg"
-            val file = File(dir, name)
-            api.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { resp ->
-                if (!resp.isSuccessful) throw java.io.IOException("The audio could not be downloaded (${resp.code}).")
-                file.outputStream().use { out -> resp.body.byteStream().copyTo(out) }
+            val folder = (dir ?: File(getApplication<Application>().cacheDir, "exports")).apply { mkdirs() }
+            val base = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60)
+            val known = url.toHttpUrlOrNull()?.pathSegments?.lastOrNull()?.substringAfterLast('.', "")
+            val call = api.http.newCall(okhttp3.Request.Builder().url(url).build())
+            suspendCancellableCoroutine { cont ->
+                cont.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = cont.resumeWithException(e)
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        try {
+                            response.use { resp ->
+                                if (!resp.isSuccessful) throw java.io.IOException("The voice could not be downloaded (${resp.code}).")
+                                val ext = com.echoledger.mobile.share.WhatsAppShare.voiceExtension(resp.header("Content-Type"), known)
+                                val out = File(folder, "$base.$ext").also { file = it }
+                                if (!cont.isActive) return
+                                out.outputStream().use { o -> resp.body.byteStream().copyTo(o) }
+                            }
+                            cont.resume(Unit)
+                        } catch (e: Exception) {
+                            if (!cont.isActive) file?.delete()
+                            cont.resumeWithException(e)
+                        }
+                    }
+                })
             }
             file
         } catch (e: Exception) {
-            _message.value = "The audio could not be downloaded. Check the connection and try again."
+            file?.delete()
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _message.value = "The voice could not be downloaded. Check the connection and try again."
             null
         }
     }
@@ -702,14 +864,115 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         clearClient: Boolean = false,
         labels: List<String>? = null,
         keep: Boolean? = null,
-        title: String? = null
+        title: String? = null,
+        important: Boolean? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not signed in") }
+            runCatching {
+                graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title, important)
+                    ?: error("Not signed in")
+            }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
         }
         if (ok) refresh()
         return ok
+    }
+
+    // ---- Lists (D14, contract 2.0.0-m) --------------------------------------------------------------------------------
+
+    private val _lists = MutableStateFlow<List<com.echoledger.mobile.data.ListDto>>(emptyList())
+
+    /** The person's lists in the chip row's order (empty until read, or offline). */
+    val lists: StateFlow<List<com.echoledger.mobile.data.ListDto>> = _lists.asStateFlow()
+
+    /** Reads the lists again (on opening the Library and after each sync). */
+    suspend fun loadLists() {
+        val epoch = graph.accountEpoch.get()
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.lists() }.getOrNull() }?.let { sameAccount(epoch) { _lists.value = it } }
+    }
+
+    /** What went wrong with a list's name, in the server's codes: the screen words them. */
+    enum class ListProblem { Reserved, Exists, Other }
+
+    private fun listProblem(e: Throwable): ListProblem = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "name_reserved" -> ListProblem.Reserved
+        "list_exists" -> ListProblem.Exists
+        else -> ListProblem.Other.also { _message.value = com.echoledger.mobile.core.Problems.text(e, "The list could not be saved.") }
+    }
+
+    /** `POST /api/lists`: the new list, or what was wrong with its name. */
+    suspend fun createList(name: String, color: String?): Result<com.echoledger.mobile.data.ListDto> {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.createList(name, color) ?: error("Not signed in") }
+        }.onSuccess { made ->
+            sameAccount(epoch) { _lists.value = (_lists.value.filterNot { it.key == made.key } + made).sortedBy { it.position } }
+        }
+    }
+
+    fun problemOf(e: Throwable): ListProblem = listProblem(e)
+
+    /** `PATCH /api/lists/{key}`: a new name or colour; the library follows (every recording's label changed). */
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): Result<com.echoledger.mobile.data.ListDto> {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) { runCatching { graph.api()?.updateList(key, name, color) ?: error("Not signed in") } }
+            .onSuccess { changed ->
+                sameAccount(epoch) {
+                    _lists.value = _lists.value.map { if (it.key == key) changed else it }
+                    if (name != null) refreshQuietly()
+                }
+            }
+            // Another device may have changed or removed it: read the lists again.
+            .onFailure { if (stillAccount(epoch)) loadLists() }
+    }
+
+    /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
+    suspend fun deleteList(key: String): Boolean {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
+        }.also { ok ->
+            if (ok) {
+                sameAccount(epoch) {
+                    _lists.value = _lists.value.filterNot { it.key == key }
+                    refreshQuietly()
+                }
+            } else if (stillAccount(epoch)) {
+                loadLists()
+            }
+        }
+    }
+
+    /** `PUT /api/lists/order`: [key] one place earlier ([delta] −1) or later (+1). */
+    suspend fun moveList(key: String, delta: Int): Boolean {
+        val keys = com.echoledger.mobile.core.LibraryLists.moved(_lists.value, key, delta) ?: return false
+        val epoch = graph.accountEpoch.get()
+        val ordered = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
+        } ?: return false.also { if (stillAccount(epoch)) loadLists() }
+        sameAccount(epoch) { _lists.value = ordered }
+        return true
+    }
+
+    /**
+     * Puts [ids] in [list] or takes them out (bulk label / unlabel, no toast of its own); the ids that changed, or null
+     * when it failed (with a message). Only those come back on Undo.
+     */
+    suspend fun label(ids: List<String>, list: com.echoledger.mobile.data.ListDto, add: Boolean): List<String>? {
+        if (ids.isEmpty()) return emptyList()
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                graph.api()?.bulk(ids.take(Organise.MAX_BULK), if (add) "label" else "unlabel", null, list.name)
+                    ?: error("Not signed in")
+            }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
+        }
+        if (!ok) return null
+        withContext(Dispatchers.IO) { runCatching { graph.library.refresh() } }
+        loadLists()
+        return ids.take(Organise.MAX_BULK)
     }
 
     /** One action for the selected recordings; how many changed, or null (with a message) when it failed. */
@@ -738,6 +1001,62 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * empty and the screen says "N deleted" without Undo.
      */
     data class Deleted(val went: List<String>, val changed: Int)
+
+    /** What a Transcribe (one recording, or the selection) came to (2.0.0-j); the screen says it in its own words. */
+    sealed interface TranscribeOutcome {
+        /** Started: [started] ids, [skipped] ones with why, [minutes] of the plan they use. */
+        data class Started(val started: List<String>, val skipped: List<com.echoledger.mobile.data.TranscribeSkipped>, val minutes: Long) :
+            TranscribeOutcome
+
+        /** The month's minutes can't cover it; nothing started. */
+        data class Budget(val needed: Long?, val left: Long?) : TranscribeOutcome
+
+        /** Free without an own key: nothing started. */
+        data object NeedsKey : TranscribeOutcome
+
+        /** Already transcribed, or still uploading. */
+        data object NotAudioOnly : TranscribeOutcome
+
+        /** Any other refusal, in the server's or the app's words (null: the screen's own "could not be transcribed"). */
+        data class Failed(val words: String?) : TranscribeOutcome
+    }
+
+    private fun transcribeRefused(e: Throwable): TranscribeOutcome = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "budget_exceeded" -> TranscribeOutcome.Budget(e.minutesNeeded, e.minutesLeft)
+        "needs_transcription_key" -> TranscribeOutcome.NeedsKey
+        "not_audio_only" -> TranscribeOutcome.NotAudioOnly
+        else -> TranscribeOutcome.Failed(com.echoledger.mobile.core.Problems.text(e, "").ifBlank { null })
+    }
+
+    /** `POST /api/sessions/transcribe-estimate`: the minutes transcribing [ids] would use, null when it can't be asked. */
+    suspend fun transcribeEstimate(ids: List<String>): com.echoledger.mobile.data.TranscribeEstimateAnswer? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeEstimate(ids) }.getOrNull()
+    }
+
+    /** "Transcribe selected": starts every audio-only one among [ids] (all or nothing for the minutes), then syncs. */
+    suspend fun transcribeMany(ids: List<String>): TranscribeOutcome = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeSessions(ids) ?: error("Not signed in") }.fold(
+            onSuccess = {
+                refreshQuietly()
+                TranscribeOutcome.Started(it.started, it.skipped, it.minutes)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
+
+    /** Transcribe on an audio-only recording: its first transcript starts; the Library takes the answer at once. */
+    suspend fun transcribeOne(id: String): TranscribeOutcome = withContext(Dispatchers.IO) {
+        // Taken before the server is asked: a sign-out meanwhile makes the answer the last person's.
+        val gen = graph.library.generation()
+        runCatching { graph.api()?.transcribeSession(id) ?: error("Not signed in") }.fold(
+            onSuccess = { answer ->
+                graph.library.upsertLocally(answer.session, gen)
+                refreshQuietly()
+                TranscribeOutcome.Started(listOf(id), emptyList(), answer.session.transcribeEstimate?.minutes ?: 0)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
 
     /**
      * Library v2's Delete (one or many), on classic's path (`POST /api/sessions/bulk` with "delete", at most
@@ -792,11 +1111,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** A new client folder, added to the list right away. */
-    suspend fun createClient(name: String): ClientDto? = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.createClient(name.trim()) }
-            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.") }.getOrNull()
-            ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+    /**
+     * A new client folder, added to the list right away: the server is asked on IO, and the list changed once back
+     * (on the main thread, at once for a caller already there, also one blocking it with runBlocking).
+     */
+    suspend fun createClient(name: String): ClientDto? {
+        val epoch = graph.accountEpoch.get()
+        val created = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.createClient(name.trim()) }
+                .onFailure {
+                    _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.")
+                }.getOrNull()
+        } ?: return null
+        sameAccount(epoch) { _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+        return created
     }
 
     // ---- Projects, filing rules and sharing (since v1.5) -----------------------------------------------------------
@@ -811,7 +1139,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun reloadClients() {
-        withContext(Dispatchers.IO) { runCatching { graph.api()?.clients()?.data }.getOrNull() }?.let { _clients.value = it }
+        val epoch = graph.accountEpoch.get()
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.clients()?.data }.getOrNull() }?.let {
+            sameAccount(epoch) {
+                _clients.value =
+                    it
+            }
+        }
     }
 
     /** A new project, inside [parentId] when given; the list is reloaded so the counts and paths are the server's. */
@@ -829,12 +1163,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         (workspaceCall("The project could not be moved.") { it.updateProject(id, parentId = parentId, toTop = parentId == null) } != null)
             .also { if (it) reloadClients() }
 
-    /** Deletes a project: its recordings go to the Inbox and its subfolders up a level (said in the message). */
+    /** Deletes a project: its recordings go to No project and its subfolders up a level (said in the message). */
     suspend fun deleteProject(id: String): Boolean {
         val answer = workspaceCall("The project could not be deleted.") { it.deleteProject(id) } ?: return false
         _message.value = buildString {
             append("Project deleted")
-            if (answer.movedSessions > 0) append(" · ${countLabel(answer.movedSessions)} moved to the Inbox")
+            if (answer.movedSessions > 0) append(" · ${countLabel(answer.movedSessions)} moved to No project")
         }
         reloadClients()
         refresh()
@@ -1008,9 +1342,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Ask for the v2 screen (P-089): the answer, or the failure itself (offline or not, the server's status and code,
      * and words for people), never null plus a message elsewhere. The classic screen keeps [ask].
      */
-    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
+    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome =
+        askOutcome(AskScope.Project(clientId), question, language)
+
+    /** Ask a project, one recording or all of the person's recordings (since 2.0.0-o); the same outcomes. */
+    suspend fun askOutcome(scope: AskScope, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
         try {
-            AskOutcome.Answer((graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)).ask(clientId, question, language))
+            val api = graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)
+            AskOutcome.Answer(
+                when (scope) {
+                    is AskScope.Project -> api.ask(scope.id, question, language)
+                    is AskScope.Recording -> api.askRecording(scope.id, question, language)
+                    AskScope.Everywhere -> api.askEverywhere(question, language)
+                }
+            )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1055,8 +1400,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         if (item.opened != false) return
+        val gen = graph.library.generation()
         viewModelScope.launch(Dispatchers.IO) {
-            graph.library.markOpenedLocally(item.id)
+            graph.library.markOpenedLocally(item.id, gen)
             runCatching { graph.api()?.markOpened(item.id) }
         }
     }
@@ -1193,11 +1539,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun importFiles(
         files: List<com.echoledger.mobile.share.FileImport.Picked>,
         clientId: String?,
-        language: String?
+        language: String?,
+        /** False: the screen says the outcome in its own words (the v2 import sheet). */
+        say: Boolean = true
     ): com.echoledger.mobile.share.FileImport.Summary = withContext(Dispatchers.IO) {
         com.echoledger.mobile.share.FileImport.import(getApplication(), graph, files, clientId, language).also {
             reloadLocal()
-            _message.value = it.message()
+            if (say) _message.value = it.message()
         }
     }
 
@@ -1215,7 +1563,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UploadWorker.cancel(getApplication(), id)
         Decisions.apply(getApplication(), id, keep = false)
         reloadLocal()
-        _message.value = RECORDING_DELETED
+        _message.value = "Recording deleted"
     }
 
     /** Removes a row that only reported something (an import the Library already had). */
@@ -1334,15 +1682,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val asked = _learn.value ?: return@launch
         _learn.value = null
         if (!yes) return@launch
+        val epoch = graph.accountEpoch.get()
         runCatching { graph.api()?.setClientLanguage(asked.clientId, asked.language) }
-            .onSuccess { _clients.value = _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it } }
+            .onSuccess {
+                sameAccount(epoch) {
+                    _clients.value =
+                        _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it }
+                }
+            }
             .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be updated.") }
     }
 
-    /** Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it. */
-    fun decide(id: String, keep: Boolean, title: String? = null) = viewModelScope.launch(Dispatchers.IO) {
+    /**
+     * Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it.
+     * [transcribe] false keeps the audio only (Save all as audio only, 2.0.5); null leaves the server's default.
+     */
+    fun decide(id: String, keep: Boolean, title: String? = null, transcribe: Boolean? = null) = viewModelScope.launch(Dispatchers.IO) {
         if (keep && title != null) graph.recordings.update(id) { it.copy(title = title.trim().take(200).ifBlank { null }) }
-        Decisions.apply(getApplication(), id, keep)
+        Decisions.apply(getApplication(), id, keep, transcribe)
         reloadLocal()
     }
 
@@ -1356,6 +1713,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }
 
     // ---- Onboarding and settings files (B19) ------------------------------------------------------------------------
+
+    /**
+     * The server's interface flags, read now and kept as the config read keeps them (the first-run wizard, after sign-in,
+     * decides its design from them); null when signed out or the server does not answer.
+     */
+    suspend fun interfaceFlags(): com.echoledger.mobile.ui.v2.shell.UiFlags? {
+        val config = withContext(Dispatchers.IO) { runCatching { graph.api()?.config() }.getOrNull() } ?: return null
+        graph.settings.update { it.copy(uiFlags = config.uiFlags, uiClassic = config.uiClassic, uiDesign = config.uiDesign) }
+        return com.echoledger.mobile.ui.v2.shell.UiFlags(config.uiFlags, config.uiClassic, server = config.uiDesign)
+    }
 
     /** Ends the first-run wizard for good; the consent box of its last step is recorded when ticked. */
     fun finishOnboarding(consent: Boolean = false) = updateSettings {
@@ -1816,13 +2183,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** How often the live status reads the waiting calls at most. */
+        const val WAITING_EVERY_MS = 30_000L
+
         /** Recordings remembered for Sort by Recently opened. */
         private const val OPENED_KEEP = 300
 
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
-
-        const val RECORDING_DELETED = "Recording deleted"
 
         /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
         const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."
@@ -1830,19 +2198,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         /** The same sentence as the classic Ask's. */
         const val ASK_FAILED = "The AI assistant could not answer right now. Try again in a minute."
 
+        /** `409 no_transcript` (since 2.0.0-o). */
+        const val NOTHING_TO_ASK = "There is nothing transcribed to ask about yet. Ask again once a transcript is ready."
+
         /**
          * A failed Ask in words for people: by its code, else [com.echoledger.mobile.core.Problems] (a bare status such
          * as "Request failed (502)" or a connection's own text never shows).
          */
         internal fun askFailure(e: Throwable): AskOutcome.Failed {
             val refused = e as? ApiException
-            val words = if (refused?.code == "ai_unavailable") AI_NOT_SET_UP else com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            val words = when (refused?.code) {
+                "ai_unavailable" -> AI_NOT_SET_UP
+
+                // Since 2.0.0-o: a recording (or every recording) with no finished transcript.
+                "no_transcript" -> NOTHING_TO_ASK
+
+                else -> com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            }
             val offline = refused == null && words == com.echoledger.mobile.core.Problems.OFFLINE
             return AskOutcome.Failed(offline = offline, status = refused?.status, code = refused?.code, words = words)
         }
 
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Account → Devices → Sign in a device."
     }
+}
+
+/** What Ask is about: a project, one recording, or all of the person's own recordings (since 2.0.0-o). */
+sealed interface AskScope {
+    data class Project(val id: String) : AskScope
+
+    data class Recording(val id: String) : AskScope
+
+    data object Everywhere : AskScope
 }
 
 /** What Ask got back (P-089). */

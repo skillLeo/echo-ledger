@@ -98,7 +98,6 @@ import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
 import com.echoledger.mobile.core.SettingsIndex
-import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
@@ -136,7 +135,7 @@ private fun pageValue(id: String, s: AppSettings): String? = when (id) {
 
     "captions" -> if (s.captionsEnabled) "On" else "Off"
 
-    "voice" -> if (s.dictationMode == "hold") "Hold to talk" else "Tap to start"
+    "voice" -> if (s.dictationMode == "push_to_talk") "Hold to talk" else "Tap to start"
 
     "language" -> s.transcriptionLanguage?.let { code ->
         com.echoledger.mobile.core.Languages.OPTIONS.firstOrNull { it.code == code }?.menu
@@ -868,54 +867,36 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
 }
 
 /**
- * Settings → Privacy & data → During screen sharing (since v1.8.1; names from docs/DESIGN_SYSTEM.md "Screen-share
- * privacy names"): Private (black box), the default, stored as "hide" (the v1.8.1 "black_box" reads as Private too), or
- * Show. Android never says when a floating window is in a screen share, so the black box does not wait for a signal.
+ * Settings → Privacy & data (since 2.0.5, the owner's decision; words from docs/v2/copy/call-choice.md): Block
+ * screenshots of EchoLedger (the app's own screens, off by default) and Hide EchoLedger's live words from screenshots and
+ * screen shares (captions, Live Assist and Live Translate, on by default; the pill and the after-call card always show).
+ * They replace During screen sharing.
  */
 @Composable
 private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
-    val choices = listOf(
-        Triple(
-            ShareGuard.Mode.PRIVATE,
-            "Private (black box)",
-            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual."
-        ),
-        Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
-    )
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens_help),
+        settings.blockScreens
+    ) { v -> vm.updateSettings { it.copy(blockScreens = v) } }
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words_help),
+        settings.hideLiveWords
+    ) { v -> vm.updateSettings { it.copy(hideLiveWords = v) } }
+}
+
+/** One switch of Privacy & data with its words and line; TalkBack reads the words. */
+@Composable
+private fun ScreenSwitch(title: String, line: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     SectionCard {
-        Text("During screen sharing", fontWeight = FontWeight.SemiBold)
-        Text(
-            "EchoLedger's floating windows are the recording controls, captions, the after-call card and Live Translate.",
-            color = Brand.Muted,
-            fontSize = 13.sp
-        )
-        val current = ShareGuard.Mode.of(settings.screenShareMode)
-        Column(Modifier.selectableGroup()) {
-            choices.forEach { (mode, title, line) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .selectable(
-                            selected = current == mode,
-                            role = Role.RadioButton,
-                            onClick = { vm.updateSettings { it.copy(screenShareMode = mode.wire) } }
-                        )
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = current == mode, onClick = null)
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(title)
-                        Text(line, color = Brand.Muted, fontSize = 12.sp)
-                    }
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title)
+                Text(line, color = Brand.Muted, fontSize = 12.sp)
             }
+            Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.semantics { contentDescription = title })
         }
-        Text(
-            "Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless " +
-                "you choose Show.",
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
     }
 }
 

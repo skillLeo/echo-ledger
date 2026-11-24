@@ -5,6 +5,7 @@
     only shows while files are dragged over the page, and Upload opens the picker.
 --}}
 @include('filament.library.uploader-script')
+@php /* W-213: the words in the console's language (English writes the same script as before). */ $w = \App\Filament\Support\ScriptWords::class; @endphp
 <div wire:ignore @class(['el-uploader', 'el-uploader-compact' => $compact ?? false]) data-uploader
     x-data="elUploader(@js(\Illuminate\Support\Arr::except($config, ['clients', 'languages'])))"
     x-on:el-upload-pick.window="pick()"
@@ -20,21 +21,21 @@
 
     <button type="button" class="el-drop" x-on:click="pick()" x-bind:data-dragging="dragging ? '' : null">
         <x-filament::icon icon="heroicon-o-arrow-up-tray" class="el-drop-icon" />
-        <span class="el-drop-title">Drop sound or video files here, or <span class="el-drop-link">choose files</span></span>
+        <span class="el-drop-title">{{ __('Drop sound or video files here, or') }} <span class="el-drop-link">{{ __('choose files') }}</span></span>
         <span class="el-drop-hint">
             {{ collect($config['extensions'])->map(fn (string $e): string => '.'.$e)->implode(' ') }}
-            · each file becomes its own recording, titled from its name
+            · {{ __('each file becomes its own recording, titled from its name') }}
         </span>
     </button>
 
     <div class="el-batch" x-show="waiting.length" x-cloak>
-        <p class="el-batch-title" x-text="'For ' + (waiting.length === 1 ? 'this file' : 'these ' + waiting.length + ' files')"></p>
+        <p class="el-batch-title" x-text="{!! $w::say('For :files', ['files' => '(waiting.length === 1 ? '.$w::say('this file').' : '.$w::say('these :count files', ['count' => 'waiting.length']).')']) !!}"></p>
         <div class="el-batch-fields">
             <label class="el-field">
-                <span>Project</span>
+                <span>{{ __('Project') }}</span>
                 <x-filament::input.wrapper>
                     <x-filament::input.select x-model="clientId">
-                        <option value="">No project</option>
+                        <option value="">{{ __('No project') }}</option>
                         @foreach ($config['clients'] as $client)
                             <option value="{{ $client['value'] }}">{{ $client['label'] }}</option>
                         @endforeach
@@ -42,7 +43,7 @@
                 </x-filament::input.wrapper>
             </label>
             <label class="el-field">
-                <span>Language</span>
+                <span>{{ __('Language') }}</span>
                 <x-filament::input.wrapper>
                     <x-filament::input.select x-model="language">
                         @foreach ($config['languages'] as $group => $choice)
@@ -63,13 +64,13 @@
         {{-- wire:target names no Livewire action: the list's refreshes must not grey these buttons out. --}}
         <div class="el-batch-actions">
             <x-filament::button x-on:click="start()" icon="heroicon-o-arrow-up-tray" :loading-indicator="false" wire:target="elUploaderStart">
-                <span x-text="'Upload ' + plural(waiting.length)">Upload</span>
+                <span x-text="{!! $w::say('Upload :files', ['files' => 'plural(waiting.length)']) !!}">{{ __('Upload') }}</span>
             </x-filament::button>
-            <x-filament::button color="gray" x-on:click="clearWaiting()" :loading-indicator="false" wire:target="elUploaderClear">Clear</x-filament::button>
+            <x-filament::button color="gray" x-on:click="clearWaiting()" :loading-indicator="false" wire:target="elUploaderClear">{{ __('Clear') }}</x-filament::button>
         </div>
     </div>
 
-    <ul class="el-files" x-show="files.length" x-cloak aria-label="Files">
+    <ul class="el-files" x-show="files.length" x-cloak aria-label="{{ __('Files') }}">
         <template x-for="f in files" :key="f.key">
             <li class="el-file" x-bind:data-state="f.state">
                 <div class="el-file-head">
@@ -77,17 +78,17 @@
                     <span class="el-file-size" x-text="size(f.size)"></span>
                 </div>
                 <div class="el-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" x-show="hasBar(f)"
-                    x-bind:aria-valuenow="percent(f)" x-bind:aria-label="'Progress of ' + f.name">
+                    x-bind:aria-valuenow="percent(f)" x-bind:aria-label="{!! $w::say('Progress of :name', ['name' => $w::name('f.name')]) !!}">
                     <span x-bind:style="'width: ' + percent(f) + '%'"></span>
                 </div>
                 <div class="el-file-foot">
                     <span class="el-file-status" role="status" x-bind:class="'el-tone-' + tone(f)" x-text="status(f)"></span>
                     <span class="el-file-actions">
-                        <a class="el-link" x-show="f.url && ['done', 'duplicate'].includes(f.state)" x-bind:href="f.url">Open</a>
-                        <button type="button" class="el-link" x-show="canRetry(f)" x-on:click="retry(f)">Retry</button>
-                        <button type="button" class="el-link" x-show="canCancel(f)" x-on:click="cancel(f)">Cancel</button>
+                        <a class="el-link" x-show="f.url && ['done', 'duplicate'].includes(f.state)" x-bind:href="f.url">{{ __('Open') }}</a>
+                        <button type="button" class="el-link" x-show="canRetry(f)" x-on:click="retry(f)">{{ __('Retry') }}</button>
+                        <button type="button" class="el-link" x-show="canCancel(f)" x-on:click="cancel(f)">{{ __('Cancel') }}</button>
                         <button type="button" class="el-link" x-show="canDismiss(f)" x-on:click="dismiss(f)"
-                            x-bind:aria-label="'Remove ' + f.name + ' from this list'">Remove</button>
+                            x-bind:aria-label="{!! $w::say('Remove :name from this list', ['name' => $w::name('f.name')]) !!}">{{ __('Remove') }}</button>
                     </span>
                 </div>
             </li>
@@ -96,6 +97,6 @@
 
     <div class="el-summary" x-show="summary" x-cloak>
         <span role="status" x-text="summary"></span>
-        <button type="button" class="el-link" x-on:click="clearFinished()">Clear the list</button>
+        <button type="button" class="el-link" x-on:click="clearFinished()">{{ __('Clear the list') }}</button>
     </div>
 </div>

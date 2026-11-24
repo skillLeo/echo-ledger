@@ -182,6 +182,8 @@
   inset-block-start: calc(100% + var(--el-space-4));
   inset-inline-start: 0;
   min-inline-size: 100%;
+  /* A long item wraps (to two lines) inside this width rather than being cut. */
+  max-inline-size: calc(var(--el-space-64) * 5);
   max-block-size: calc(var(--el-space-64) * 9);
   overflow-y: auto;
   padding: var(--el-space-4);
@@ -190,9 +192,12 @@
   border-radius: var(--el-component-menu-radius);
   box-shadow: var(--el-shadow-1);
 }
+/* Windows 11's menus (UX-22): 8 px corners, 32 px rows, 16 px icons, shortcuts at the end; a Mac's right-click menus are
+   the system's own (actions/popup.ts). */
 .el-menu__option {
   display: flex; align-items: center; gap: var(--el-space-8);
-  min-block-size: var(--el-component-field-height);
+  min-block-size: var(--el-space-32);
+  padding-block: var(--el-space-4);
   padding-inline: var(--el-space-8);
   border-radius: var(--el-radius-sm);
   cursor: pointer;
@@ -211,7 +216,7 @@
 .el-menu__section { display: contents; }
 .el-menu__section > ul { margin: 0; padding: 0; }
 .el-menu__section:first-child .el-menu__group { padding-block-start: var(--el-space-4); }
-.el-menu__label { flex: 1; }
+.el-menu__label { flex: 1; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
 .el-menu__option[aria-disabled="true"] { color: var(--el-role-text-disabled); cursor: default; }
@@ -221,6 +226,11 @@
 .el-menu--inline { position: static; inset: auto; transform: none; min-inline-size: 0; border: 0; box-shadow: none; padding: 0; padding-inline-start: var(--el-space-16); background: transparent; }
 .el-menu[data-up] { inset-block-start: auto; inset-block-end: calc(100% + var(--el-space-4)); }
 .el-menu--context { position: fixed; inset: auto; min-inline-size: calc(var(--el-space-64) * 3.5); }
+/* A button's menu, a right-click's: in their own layer at the end of the page, above the app shell (the sidebar, a
+   panel that clips) and its dialogs, placed from the button (Menu.tsx placeMenu). Never wider than the window. */
+.el-layer { position: fixed; inset-block-start: 0; inset-inline-start: 0; inline-size: 0; block-size: 0; z-index: var(--el-layer-overlay); background: transparent; }
+.el-menu--floating, .el-menu--floating[data-up] { position: fixed; inset: auto; }
+.el-menu--floating, .el-menu--context { max-inline-size: min(calc(var(--el-space-64) * 5), calc(100% - var(--el-space-16))); }
 
 /* ---- ListRow ------------------------------------------------------------------------------------------------ */
 .el-list { display: flex; flex-direction: column; }
@@ -316,7 +326,7 @@
   cursor: pointer;
 }
 .el-chip:hover { background: var(--el-role-bg-subtle); }
-.el-chip[aria-pressed="true"] {
+.el-chip[aria-pressed="true"], .el-listchip[aria-current="true"] {
   background: var(--el-role-accent-soft);
   border-color: var(--el-role-accent-default);
   color: var(--el-role-accent-text);
@@ -325,6 +335,8 @@
 .el-chip--menu { padding-inline-end: var(--el-space-8); }
 .el-chip--on { background: var(--el-role-accent-soft); border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
 .el-chip-group { display: inline-flex; align-items: center; }
+/* Urdu chips take Nastaliq's taller line (D4 3.2: 28 + 2 × 4), so the letters sit in the middle, descenders clear. */
+:lang(ur) .el-chip { min-block-size: calc(var(--el-text-urdu-caption-line) + var(--el-space-8)); line-height: var(--el-text-urdu-caption-line); padding-block: 0; }
 .el-chip-clear { margin-inline-start: calc(-1 * var(--el-space-4)); }
 .el-list-section__button { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .el-list-section__button .el-icon { transition: transform var(--el-motion-fast); }
@@ -441,6 +453,9 @@
 .el-status--setup .el-status__dot { color: var(--el-role-warning-default); }
 .el-status--recording .el-status__dot { color: var(--el-role-record-default); animation: el-pulse var(--el-component-recording-dot-pulse) ease-in-out infinite; }
 .el-status--idle .el-status__dot { color: var(--el-role-text-secondary); }
+/* Something needs you: a small dot in the accent, as the sidebar's counts that need attention (the Library header's
+   needs button leads with it). Over 3:1 on the page and on a quiet button's hover, in both themes. */
+.el-attention-dot { display: block; inline-size: var(--el-component-status-dot-size); block-size: var(--el-component-status-dot-size); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); flex: none; }
 @keyframes el-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
   .el-status--recording .el-status__dot { animation: none; }
@@ -494,6 +509,8 @@
 .el-check-box > .el-check:checked + .el-icon { visibility: visible; }
 .el-radio-group { display: flex; flex-direction: column; gap: var(--el-space-8); border: 0; margin: 0; padding: 0; }
 .el-radio-group > legend { padding: 0; margin-block-end: var(--el-space-4); font-weight: var(--el-text-body-strong-weight); }
+.el-choice-setting { list-style: none; padding: var(--el-space-12) var(--el-space-16); }
+.el-choice-setting .el-radio-group { gap: var(--el-space-12); }
 
 /* ---- EmptyState --------------------------------------------------------------------------------------------- */
 .el-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--el-space-8); padding: var(--el-space-48) var(--el-space-24); }
@@ -550,8 +567,9 @@
   border: var(--el-border-hairline) solid var(--el-role-border-default);
   border-radius: var(--el-component-card-radius);
 }
+/* The avatar: a circle with the initials, or the photo filling it. Classic keeps its neutral circle. */
 .el-avatar {
-  flex: none;
+  position: relative; flex: none; overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center;
   inline-size: var(--el-space-48); block-size: var(--el-space-48);
   border-radius: var(--el-radius-full);
@@ -559,12 +577,30 @@
   color: var(--el-role-text-primary);
   font-size: var(--el-text-title-s-size);
   font-weight: var(--el-text-title-s-weight);
+  user-select: none;
 }
-.el-avatar--sm { inline-size: var(--el-space-32); block-size: var(--el-space-32); font-size: var(--el-text-caption-size); }
+.el-avatar > img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+/* DES-08, in the three levels and the account menu: initials on one of 8 solid colours (role.avatar.*, the server's
+   avatar_color) and a 1 px inner ring over the colour or the photo, so neither melts into the background. */
+:is(.el-shell--nav, .el-account-head) .el-avatar { color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 var(--el-desktop-avatar-ring) var(--el-role-avatar-ring); pointer-events: none; }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="0"] { background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="1"] { background: var(--el-role-avatar-1); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="2"] { background: var(--el-role-avatar-2); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="3"] { background: var(--el-role-avatar-3); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="4"] { background: var(--el-role-avatar-4); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="5"] { background: var(--el-role-avatar-5); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="6"] { background: var(--el-role-avatar-6); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="7"] { background: var(--el-role-avatar-7); }
+.el-avatar--sm, .el-avatar--list { inline-size: var(--el-desktop-avatar-list); block-size: var(--el-desktop-avatar-list); font-size: var(--el-text-caption-size); }
+.el-avatar--rail { inline-size: var(--el-desktop-avatar-rail); block-size: var(--el-desktop-avatar-rail); font-size: var(--el-desktop-text-avatar-rail-size); font-weight: var(--el-desktop-text-avatar-rail-weight); }
+.el-avatar--menu { inline-size: var(--el-desktop-avatar-menu); block-size: var(--el-desktop-avatar-menu); font-size: var(--el-desktop-text-avatar-menu-size); font-weight: var(--el-desktop-text-avatar-menu-weight); }
+.el-avatar--profile { inline-size: var(--el-desktop-avatar-profile); block-size: var(--el-desktop-avatar-profile); font-size: var(--el-text-title-l-size); font-weight: var(--el-text-title-l-weight); }
+.el-avatar--img { inline-size: var(--el-space-32); block-size: var(--el-space-32); object-fit: cover; padding: 0; }
 
 .el-sidebar {
   display: flex; flex-direction: column; gap: var(--el-space-2);
-  inline-size: calc(var(--el-space-64) * 3.5);
+  inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5));
   flex: none;
   padding: var(--el-space-16) var(--el-space-8);
   background: var(--el-role-bg-subtle);
@@ -583,6 +619,12 @@
 .el-nav-item:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
 .el-nav-item[aria-current="page"] { background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-default); }
 .el-nav-item__count { margin-inline-start: auto; }
+.el-nav-item__dot {
+  display: none; position: absolute; inset-block-start: var(--el-space-4); inset-inline-end: var(--el-space-8);
+  box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-subtle);
+}
+.el-nav-item:hover .el-nav-item__dot { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-border-default); }
+.el-nav-item[aria-current="page"] .el-nav-item__dot { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-surface); }
 
 .el-player { display: flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-12) var(--el-space-16); }
 .el-player__play.el-button { border-radius: var(--el-radius-full); min-inline-size: var(--el-space-40); min-block-size: var(--el-space-40); }
@@ -612,6 +654,19 @@
 /* The recording page's tools: Show as above the transcript, the action row under the player. */
 .el-recording__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
 .el-recording__viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); margin-block-end: var(--el-space-8); }
+/* "Converting to Roman Urdu… 60%" over the transcript and on a row while the default view is written (U19): a small
+   ring that turns, still with reduced motion; "Couldn't convert" with Try again when it could not be written. */
+.el-converting { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-converting--failed { color: var(--el-role-text-secondary); }
+.el-converting .el-progress { inline-size: calc(var(--el-space-64) * 2); flex: none; }
+.el-converting--danger { color: var(--el-role-danger-default); }
+.el-spinner {
+  flex: none; inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full);
+  border: var(--el-space-2) solid var(--el-role-border-default); border-block-start-color: var(--el-role-accent-default);
+  animation: el-spin calc(var(--el-motion-slow) * 3) linear infinite;
+}
+@keyframes el-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .el-spinner { animation: none; } }
 .el-recording__toggles { display: flex; flex-wrap: wrap; gap: var(--el-space-16); padding: 0 var(--el-space-16) var(--el-space-12); }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
 
@@ -622,7 +677,6 @@
 .el-shell__record { display: flex; gap: var(--el-border-hairline); margin-block-end: var(--el-space-12); }
 .el-shell__record > .el-button { flex: 1; justify-content: flex-start; border-start-end-radius: 0; border-end-end-radius: 0; }
 .el-shell__record > .el-menu-anchor > .el-button { border-start-start-radius: 0; border-end-start-radius: 0; }
-.el-shell__record .el-menu { inset-inline-start: auto; inset-inline-end: 0; min-inline-size: calc(var(--el-space-64) * 3); }
 .el-nav-item__count { min-inline-size: var(--el-space-20); padding-inline: var(--el-space-4); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); text-align: center; }
 .el-shell__keys { margin-inline-start: auto; font-family: inherit; color: var(--el-role-text-secondary); }
 .el-shell__foot { margin-block-start: auto; display: flex; flex-direction: column; gap: var(--el-space-4); }
@@ -702,25 +756,120 @@ button.el-step__head { cursor: pointer; }
 .el-pill__controls { display: inline-flex; align-items: center; gap: var(--el-space-2); padding-inline-start: var(--el-space-4); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-pill__controls .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
 .el-pill__ask { padding-inline: var(--el-space-8); }
-.el-aftercall-stack { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-8); }
+/* The call choice: the card, a confirmation or the grouped card, next to the pill. A solid surface, radius 16, the
+   app's font; it slides in over 200 ms and its 8 s line is the only animation; both stop under Reduce motion. */
+.el-aftercall-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-8); inline-size: 100%; min-inline-size: 0; box-sizing: border-box; padding: var(--el-space-8); }
 .el-aftercall-stack .el-toast-region { position: static; }
 .el-aftercall {
-  display: flex; flex-direction: column; gap: var(--el-space-12);
-  padding: var(--el-space-12);
+  display: flex; flex-direction: column; gap: var(--el-space-8);
+  box-sizing: border-box; inline-size: 100%; max-inline-size: 100%;
+  padding: var(--el-space-12) var(--el-space-16);
   background: var(--el-role-bg-overlay);
+  color: var(--el-role-text-primary);
+  font-family: var(--el-font-family-sans);
   border: var(--el-border-hairline) solid var(--el-role-border-default);
-  border-radius: var(--el-component-card-radius);
+  border-radius: var(--el-radius-sheet);
   box-shadow: var(--el-shadow-2);
+  touch-action: pan-y;
+  animation: el-aftercall-in var(--el-motion-base) var(--el-motion-ease-out) both;
 }
+@keyframes el-aftercall-in { from { transform: translateY(calc(var(--el-space-12) * -1)); opacity: 0; } }
 .el-aftercall__head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; }
+.el-aftercall__logo { display: inline-flex; flex: none; }
 .el-aftercall__name {
-  display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0;
-  padding: 0; border: 0; background: transparent; text-align: start; cursor: pointer;
+  display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0;
+  padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer;
 }
 .el-aftercall__name:hover .el-aftercall__title { text-decoration: underline; }
 .el-aftercall__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.el-aftercall__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
-.el-aftercall .el-progress { block-size: var(--el-space-2); }
+.el-aftercall__close { flex: none; margin-inline-end: calc(var(--el-space-8) * -1); }
+.el-aftercall__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-aftercall__line { display: block; block-size: var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-bg-subtle); overflow: hidden; }
+.el-aftercall__line > span {
+  display: block; block-size: 100%; background: var(--el-role-accent-default); transform-origin: left center;
+  animation: el-aftercall-line linear both;
+}
+[dir="rtl"] .el-aftercall__line > span { transform-origin: right center; }
+@keyframes el-aftercall-line { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
+.el-aftercall__close-line { margin: 0; }
+/* The rest of a grouped card under a reopened card: each row with its own Undo, apart from the card's own choices. */
+.el-aftercall__held { display: flex; flex-direction: column; gap: var(--el-space-4); padding-block-start: var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+/* Taller than the window allows (many Delete rows): the window's root scrolls (controls.css .review-root), every row
+   still there. */
+/* The desktop's words are English (lang="en"): English metrics, also in a window laid out right to left. */
+.el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en), .el-pill-warning:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
+.el-aftercall:lang(en) .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-aftercall p { margin: 0; }
+.el-aftercall--done { gap: var(--el-space-4); padding-block: var(--el-space-8); }
+.el-aftercall__done { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+/* What was done on one line, the name on its own line under it (never cut to a few letters by the buttons). */
+/* The text column takes the free space and starts at the card's start, in either direction. */
+.el-aftercall__done-text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
+.el-aftercall__done-text > * { min-inline-size: 0; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The grouped card's first line wraps rather than clip, in either direction. */
+.el-aftercall__headline { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.el-aftercall__done-name { text-align: start; }
+.el-aftercall__done > .el-button { flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .el-aftercall { animation: none; }
+  .el-aftercall__line > span { animation: none; transform: scaleX(var(--from, 1)); }
+}
+
+/* The pill's menu (Transcribe this call, Save audio only, Stop and delete) and the start banner, under the pill. */
+.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); max-inline-size: 100%; min-inline-size: 0; flex-shrink: 0; }
+.el-pill-stack > * { flex-shrink: 0; }
+.el-pill-menu {
+  display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: calc(var(--el-space-64) * 3);
+  padding: var(--el-space-4);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-radius-lg);
+  box-shadow: var(--el-shadow-2);
+}
+.el-pill-menu__item {
+  display: flex; align-items: center; gap: var(--el-space-8);
+  min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-inline: var(--el-space-8);
+  border: 0; border-radius: var(--el-radius-md); background: transparent; color: var(--el-role-text-primary);
+  font: inherit; text-align: start; cursor: pointer;
+}
+.el-pill-menu__item:hover { background: var(--el-role-bg-subtle); }
+.el-pill-menu__item[aria-checked="true"] { color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
+.el-pill-menu__item--danger { color: var(--el-role-danger-default); }
+.el-pill-menu__mark { display: inline-flex; inline-size: var(--el-space-16); }
+/* A waiting recording put back after a Delete that was still waiting when EchoLedger closed: its own line. */
+.el-queue-restored { display: block; color: var(--el-role-warning-default); }
+
+/* The other side not being recorded (2.0.6): a warning row under the pill, kept above the open menu or banner. */
+.el-pill-warning {
+  display: flex; align-items: center; gap: var(--el-space-4); box-sizing: border-box; max-inline-size: 100%; min-inline-size: 0;
+  padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  color: var(--el-role-text-primary);
+  border: var(--el-border-hairline) solid var(--el-role-warning-default);
+  border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2);
+  white-space: nowrap;
+}
+.el-pill-warning__line { display: flex; flex: 1 1 auto; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-pill-warning__line > svg { flex: none; color: var(--el-role-warning-default); }
+.el-pill-warning__text { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.el-pill-warning > .el-button { flex: none; }
+/* The other side not being recorded: the sentence on a line of its own, never cut, and its two buttons under it. */
+.el-pill-warning--stacked { flex-direction: column; align-items: stretch; gap: var(--el-space-2); padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-lg); white-space: normal; }
+.el-pill-warning--stacked .el-pill-warning__text { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.el-pill-warning__buttons { display: flex; justify-content: flex-end; gap: var(--el-space-4); }
+.el-pill-banner {
+  display: inline-flex; align-items: center; gap: var(--el-space-8);
+  padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2);
+  white-space: nowrap;
+  animation: el-aftercall-in var(--el-motion-base) var(--el-motion-ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) { .el-pill-banner { animation: none; } }
 
 /* ---- Live Assist card (a floating layer) ------------------------------------------------------------------- */
 .el-assist-root { display: flex; justify-content: center; padding: var(--el-space-8); }
@@ -831,28 +980,61 @@ button.el-step__head { cursor: pointer; }
    Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
 @media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+  /* Opened in a narrow window (its Expand button or "["): its own width and names, until the window is wide again. */
+  .el-sidebar[data-rail="off"] { inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)); align-items: stretch; }
   /* The rail keeps the brand's end control (Search) at its top; the name goes. */
-  .el-sidebar__brand { justify-content: center; padding-inline: 0; }
-  .el-sidebar__brand-name { display: none; }
-  .el-sidebar__brand-end { margin-inline-start: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-name { display: none; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-end { margin-inline-start: 0; }
   /* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
      its menu under it, both 40 px squares. */
-  .el-sidebar .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
-  .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
-  .el-shell__record > .el-button, .el-shell__record > .el-menu-anchor > .el-button {
+  .el-sidebar:not([data-rail="off"]) .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+  .el-sidebar:not([data-rail="off"]) .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button, .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-menu-anchor > .el-button {
     inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
   }
-  .el-shell__record > .el-button > span:not(.el-icon) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button > span:not(.el-icon) {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
-  .el-shell__me { justify-content: center; padding-inline: 0; }
-  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child, .el-shell__me-text {
+  .el-sidebar:not([data-rail="off"]) .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__me { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item__label, .el-sidebar:not([data-rail="off"]) .el-nav-item__count, .el-sidebar:not([data-rail="off"]) .el-status > span:last-child, .el-sidebar:not([data-rail="off"]) .el-shell__me-text {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item { position: relative; }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item__dot { display: block; }
 }
+/* The rail chosen in the sidebar (its Collapse button or "["): the same, at any window width. A sidebar opened
+   in a narrow window (data-rail="off") keeps its names. */
+.el-sidebar[data-rail="on"] { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+/* The rail keeps the brand's end control (Search) at its top; the name goes. */
+.el-sidebar[data-rail="on"] .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-name { display: none; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-end { margin-inline-start: 0; }
+/* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
+   its menu under it, both 40 px squares. */
+.el-sidebar[data-rail="on"] .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+.el-sidebar[data-rail="on"] .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button, .el-sidebar[data-rail="on"] .el-shell__record > .el-menu-anchor > .el-button {
+  inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
+}
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-sidebar[data-rail="on"] .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+.el-sidebar[data-rail="on"] .el-shell__me { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-nav-item__label, .el-sidebar[data-rail="on"] .el-nav-item__count, .el-sidebar[data-rail="on"] .el-status > span:last-child, .el-sidebar[data-rail="on"] .el-shell__me-text {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+/* A count that needs attention (Activity's) is a small accent dot on the icon's top end in the rail, ringed in the row's
+   own background so it stands off the icon; the number stays for assistive tools. Place counts are under Library,
+   which the rail leaves out. */
+.el-sidebar[data-rail="on"] .el-nav-item { position: relative; }
+.el-sidebar[data-rail="on"] .el-nav-item__dot { display: block; }
 
 /* ---- Skeleton, Loading, Progress ---------------------------------------------------------------------------- */
 /* Still shapes in the hairline colour, so they read on the canvas and on a card in both themes; nothing moves. */
@@ -1100,9 +1282,13 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-palette .palette-item { display: grid; gap: var(--el-space-2); padding: var(--el-space-8); border-radius: var(--el-radius-sm); color: var(--el-role-text-primary); }
 .el-palette .palette-item.active { background: var(--el-role-accent-soft); }
 .el-palette .palette-detail, .el-palette .palette-empty, .el-palette .palette-foot { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
-.el-palette .palette-detail mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
+.el-palette :is(.palette-detail, .palette-label) mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 .el-palette .palette-empty { padding: var(--el-space-12) var(--el-space-8); }
 .el-palette .palette-foot { padding: var(--el-space-8) var(--el-space-16); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+/* From the title row (UX-20): the field grows into the search, its results drop down under it, 560 px wide. */
+.el-palette.el-palette--row { padding: 0; background: color-mix(in srgb, var(--el-role-scrim-default) 25%, transparent); }
+.el-palette--row .palette { translate: -50% 0; margin: 0; inline-size: min(var(--el-desktop-search-results-width), calc(100% - var(--el-space-16))); }
+.el-palette--row .palette-input { padding: var(--el-space-8) 0; font-size: var(--el-desktop-text-body-size); }
 
 /* The top of the Library (plan 2): the get-started card until setup is done, and the needs-action banner. */
 .el-library-top { display: flex; flex-direction: column; gap: var(--el-space-12); }
@@ -1240,6 +1426,64 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-label-chip__name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .el-label-chip > .el-chip__remove { color: inherit; }
 .el-label-chip > .el-chip__remove:hover { background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; }
+/* ---- Lists (D14): the list chip row, the colour picker, the new-list dialog --------------------------------- */
+.el-listchips { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+/* Below 1280 px one line that scrolls sideways: no wrap, no fade, no scrollbar drawn. The padding keeps the focus
+   ring, which the scroller would otherwise cut, inside it; the negative margin gives the room back. */
+.el-listchips__scroll {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: var(--el-space-8);
+  flex: 0 1 auto; min-inline-size: 0;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  padding: calc(var(--el-focus-width) + var(--el-focus-offset));
+  margin: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
+}
+.el-listchips__scroll::-webkit-scrollbar { display: none; }
+/* From 1280 px the chips and "+" wrap together, "+" straight after the last chip. */
+.el-listchips--wrap { flex-wrap: wrap; }
+.el-listchips--wrap > .el-listchips__scroll { display: contents; }
+.el-listchip { flex: none; max-inline-size: calc(var(--el-space-64) * 4); }
+/* Clipped sideways only, for the ellipsis: Nastaliq strokes rise above the line and must not be cut. */
+.el-listchip__name { min-inline-size: 0; overflow-x: clip; overflow-y: visible; text-overflow: ellipsis; }
+.el-listchips__add {
+  flex: none; justify-content: center;
+  inline-size: calc(var(--el-space-24) + var(--el-space-4)); padding-inline: 0;
+  color: var(--el-role-text-secondary);
+}
+.el-listchips__add:hover { color: var(--el-role-text-primary); }
+/* In Urdu the chips are taller (D4); "+" stays square at their height. */
+:lang(ur) .el-listchips__add { inline-size: calc(var(--el-text-urdu-caption-line) + var(--el-space-8)); }
+
+.el-colour-picker { display: flex; flex-direction: column; gap: var(--el-space-4); }
+/* 44 px targets around 32 px dots: the first dot lines up with the label's start. */
+.el-colour-picker__options {
+  display: flex; flex-wrap: wrap;
+  margin-inline-start: calc((var(--el-space-32) - var(--el-space-40) - var(--el-space-4)) / 2);
+}
+.el-colour-picker__option {
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: calc(var(--el-space-40) + var(--el-space-4)); block-size: calc(var(--el-space-40) + var(--el-space-4));
+  padding: 0; border: 0; border-radius: var(--el-radius-full);
+  background: transparent; cursor: pointer;
+}
+.el-colour-picker__dot.el-label-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-space-32); block-size: var(--el-space-32);
+  color: var(--el-role-text-primary);
+}
+.el-colour-picker__option:hover .el-colour-picker__dot { outline: var(--el-border-hairline) solid var(--el-role-border-strong); outline-offset: var(--el-space-2); }
+/* The chosen colour: a 2 px ring in the primary text colour and a check, which is over 4:1 on every dot in both themes (3:1 is the bar for a graphic). */
+.el-colour-picker__option[aria-checked="true"] .el-colour-picker__dot { outline: var(--el-border-strong) solid var(--el-role-text-primary); outline-offset: var(--el-space-2); }
+
+.el-newlist { display: flex; flex-direction: column; gap: var(--el-space-16); }
+/* A several-things menu's title ("3 recordings"): not an item. */
+.el-menu__title { list-style: none; padding: var(--el-space-4) var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-menu__separator {
+  list-style: none; block-size: 0;
+  margin-block: var(--el-space-4); margin-inline: calc(-1 * var(--el-space-4));
+  border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
 /* Urdu never goes below urdu.caption (14/28): Nastaliq at the 12 px caption size cannot be read (D4 §2). Numbers,
    times and code inside keep their own LTR face and size (.el-num, .el-code). */
 :lang(ur) :is(.el-button--sm, .el-field__hint, .el-field__error, .el-badge, .el-segment__note, .el-markdown table,
@@ -1248,3 +1492,828 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   font-size: var(--el-text-urdu-caption-size);
   line-height: var(--el-text-urdu-caption-line);
 }
+
+/* ---- SplitButton (Copy on the recording page): the main part acts, the chevron part opens the other choices ---- */
+.el-split { display: inline-flex; align-items: stretch; vertical-align: middle; }
+/* A focused part draws its ring above its neighbour. */
+.el-split > :focus-visible { position: relative; z-index: calc(var(--el-layer-base) + 1); }
+.el-split > :is(.el-split__main, .el-split__more) {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--el-space-8);
+  min-block-size: calc(var(--el-space-40) + var(--el-space-4));
+  margin: 0;
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary);
+  font-weight: var(--el-text-body-strong-weight);
+  cursor: pointer;
+}
+/* Only the outer corners are round; the hairline between the parts is drawn on the chevron's start edge. */
+.el-split > .el-split__main {
+  padding-inline: var(--el-component-button-padding-x) var(--el-space-16);
+  border-inline-end: 0;
+  border-start-start-radius: var(--el-component-button-radius); border-end-start-radius: var(--el-component-button-radius);
+  border-start-end-radius: 0; border-end-end-radius: 0;
+}
+.el-split > .el-split__more {
+  position: relative;
+  border-inline-start: 0;
+  min-inline-size: calc(var(--el-space-40) + var(--el-space-4));
+  padding-inline: var(--el-space-12);
+  border-start-end-radius: var(--el-component-button-radius); border-end-end-radius: var(--el-component-button-radius);
+  border-start-start-radius: 0; border-end-start-radius: 0;
+}
+.el-split > .el-split__more::before {
+  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: var(--el-border-hairline);
+  background: var(--split-divider, var(--el-role-border-strong)); pointer-events: none;
+}
+.el-split--secondary > :is(.el-split__main, .el-split__more):hover:not(:disabled),
+.el-split--secondary > .el-split__more[aria-expanded="true"] { background: var(--el-role-bg-subtle); }
+.el-split--primary > :is(.el-split__main, .el-split__more) { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); color: var(--el-role-text-on-accent); }
+.el-split--primary { --split-divider: color-mix(in srgb, var(--el-role-text-on-accent) 40%, var(--el-role-accent-default)); }
+.el-split--primary > :is(.el-split__main, .el-split__more):hover:not(:disabled),
+.el-split--primary > .el-split__more[aria-expanded="true"] { background: var(--el-role-accent-hover); border-color: var(--el-role-accent-hover); }
+.el-split > :is(.el-split__main, .el-split__more):disabled {
+  cursor: default; color: var(--el-role-text-disabled); background: var(--el-role-bg-subtle); border-color: var(--el-role-border-default);
+}
+.el-split:has(> :disabled) { --split-divider: var(--el-role-border-default); }
+
+/* The recording page's labels, each with its × (parity DT-REC-045). */
+.el-recording__labels { display: flex; flex-wrap: wrap; gap: var(--el-space-4); list-style: none; margin: 0; padding: 0; }
+
+/* Rename by clicking the recording's title (parity DT-REC-004): the title reads as text until it is pressed. */
+.el-recording__title { all: unset; cursor: text; border-radius: var(--el-radius-sm); }
+.el-recording__title:hover { background: var(--el-role-bg-subtle); }
+.el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }
+
+/* What the engine was not sure of, kept as heard (parity DT-REC-111), and suggested fixes (DT-REC-106, 107). */
+.el-word { all: unset; cursor: pointer; }
+.el-word--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-text-secondary); text-underline-offset: var(--el-space-2); }
+.el-word:focus-visible, .el-suggest:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-segment__text--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-border-strong); }
+.el-segment__check { display: block; margin-block-start: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-suggest { all: unset; cursor: pointer; text-decoration: underline wavy; text-decoration-color: var(--el-role-accent); text-underline-offset: var(--el-space-2); }
+.el-suggest[aria-expanded="true"] { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); }
+.el-suggest-pop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-suggestions { display: flex; align-items: center; gap: var(--el-space-8); }
+
+/* The word being heard now, on the line being played (parity DT-REC-110). */
+.el-word--on { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); box-shadow: 0 0 0 var(--el-space-2) var(--el-role-accent-soft); }
+@media (prefers-reduced-motion: no-preference) { .el-word--on { transition: background-color var(--el-motion-fast); } }
+
+/* The player's waveform (parity DT-REC-129, DT-REC-053): who speaks when, the bookmarks, how far it has played. */
+.el-wave { position: relative; display: flex; align-items: center; gap: var(--el-border-hairline); block-size: var(--el-space-40); padding-inline: var(--el-space-16); cursor: pointer; }
+.el-wave__bar { flex: 1; min-inline-size: var(--el-border-hairline); block-size: var(--el-wave-level); border-radius: var(--el-radius-sm); background: var(--el-role-label-teal-dot); opacity: 0.45; }
+.el-wave__bar--2 { background: var(--el-role-label-amber-dot); }
+.el-wave__bar--played { opacity: 1; }
+.el-wave__mark { position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-space-16) + (100% - var(--el-space-16) * 2) * var(--el-wave-at)); inline-size: var(--el-border-hairline); background: var(--el-role-text-primary); pointer-events: none; }
+
+/* Moving recordings by dragging them (parity DT-LIB-082, 083, DT-PRJ-014): the drop targets in the sidebar. */
+.el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
+.dragging-recordings .el-nav-drop { display: flex; }
+/* A view being dragged in MY VIEWS: the grabbing hand, and no text picked on the way. */
+body.dragging-views, body.dragging-views * { cursor: grabbing !important; user-select: none; }
+.el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+
+/* The Library's places under Library in the sidebar (parity DT-NAV-003, DT-LIB-115..117), each with its count. */
+.el-nav-item--place { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+/* A smart folder's count (the Library's places) is quiet text, as a chat app's folder counts: no pill, the secondary
+   colour on whatever its row shows (the sidebar, its hover, the current row). The accent pill is only for counts that
+   need attention (Activity's "needs you"). */
+.el-nav-item--place .el-nav-item__count { min-inline-size: 0; padding-inline: 0; border-radius: 0; background: none; color: var(--el-role-text-secondary); }
+
+/* Every project as a tree under Projects (parity DT-LIB-123, DT-PRJ-004, DT-NAV-016): folds kept on this computer. */
+.el-nav-tree { list-style: none; margin: 0; padding: 0; }
+.el-nav-tree__row { display: flex; align-items: center; padding-inline-start: calc(var(--el-space-16) + var(--el-space-12) * var(--el-tree-depth)); border-radius: var(--el-radius-sm); }
+.el-nav-tree__fold { all: unset; display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); flex: none; cursor: pointer; border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
+.el-nav-tree__fold:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-nav-tree__name.el-nav-item--sub { padding-inline-start: var(--el-space-4); }
+.el-shell .el-nav-tree__row.drop-over { background: var(--el-role-accent-soft); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+
+/* What the plan leaves out on a recording, with the plan that has it (parity DT-REC-043, 073, 083). */
+.el-recording__locked { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-recording__locked:empty { display: none; }
+
+/* The recording page's progress steps (Upload · Transcribe · Improve) and Notify me when ready. */
+.el-rec-steps-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-16); margin-block: var(--el-space-8); }
+.el-rec-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-16); margin: 0; padding: 0; list-style: none; }
+.el-rec-step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-rec-step__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-rec-step--done .el-rec-step__dot { background: var(--el-role-success-default); border-color: var(--el-role-success-default); }
+.el-rec-step--active { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-rec-step--active .el-rec-step__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-rec-step--failed { color: var(--el-role-danger-default); }
+.el-rec-step--failed .el-rec-step__dot { border-color: var(--el-role-danger-default); }
+@media (prefers-reduced-motion: no-preference) {
+  .el-rec-step--active .el-rec-step__dot { animation: el-pulse var(--el-motion-pulse) ease-in-out infinite; }
+}
+
+/* The backup engine's line, and the offers after an edit (always write it this way, add to the vocabulary). */
+.el-recording__note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-recording__offer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-end: var(--el-space-8); padding: var(--el-space-8) var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-accent-soft); }
+
+/* A speaker's turn: the avatar and name once at its start; the lines after it sit close under it. */
+.el-segment__name { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-segment--cont { padding-block-start: 0; }
+.el-segment:has(+ .el-segment--cont) { border-block-end-color: transparent; }
+
+/* The Record page's recording section: the state with its controls and levels, captions and voice notes side by side,
+   the drop card and the uploads waiting to retry. */
+.el-record { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-record__now { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-record__controls, .el-record__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-record__meters { display: grid; gap: var(--el-space-8); }
+.el-rec-level { display: flex; align-items: center; gap: var(--el-space-12); }
+.el-rec-level__label { inline-size: var(--el-space-48); flex: none; color: var(--el-role-text-secondary); }
+.el-rec-level .el-meter { flex: 1; }
+.el-record__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
+.el-record__card, .el-record__drop, .el-record__errors { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; }
+.el-record__drop { border-style: dashed; }
+.el-record__error-list { margin: 0; padding-inline-start: var(--el-space-16); display: grid; gap: var(--el-space-4); }
+
+/* The sidebar's edge (drag to resize, 200 to 320 px) and the uploads line at its foot; the rail has neither. */
+.el-shell { position: relative; }
+.el-shell__edge {
+  position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)) - var(--el-space-4));
+  inline-size: var(--el-space-8); cursor: col-resize; touch-action: none;
+}
+.el-shell__edge:hover, .el-shell__edge:focus-visible { background: var(--el-role-accent-soft); }
+.el-shell__edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+body.resizing-sidebar { cursor: col-resize; user-select: none; }
+.el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
+.el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__uploads { display: none; }
+  .el-shell:not(:has(> .el-sidebar[data-rail="off"])) > .el-shell__edge { display: none; }
+}
+
+/* Help › Shortcuts: each key beside what it does, then the screenshot and support tip. */
+.el-help-keys { display: flex; flex-direction: column; gap: var(--el-space-12); align-items: flex-start; }
+.el-keys { display: grid; gap: var(--el-space-8); margin: 0; inline-size: 100%; }
+.el-keys__row { display: grid; grid-template-columns: minmax(calc(var(--el-space-64) * 2), max-content) 1fr; gap: var(--el-space-12); align-items: baseline; }
+.el-keys__row > dd { margin: 0; }
+.el-help-keys__tip { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; inline-size: 100%; }
+.el-sidebar[data-rail="on"] .el-shell__time { display: none; }
+@media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__time { display: none; } }
+
+/* The workspace menu at the sidebar's foot: its name and role; the rail keeps its icon. */
+.el-shell__workspace > .el-menu-anchor, .el-shell__workspace .el-button { inline-size: 100%; justify-content: flex-start; min-inline-size: 0; }
+.el-shell__workspace .el-button > span:not(.el-icon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: start; }
+.el-sidebar[data-rail="on"] .el-shell__workspace .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__workspace .el-button > span:not(.el-icon) {
+    position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+
+/* Breadcrumbs above a page's title, and the count after a tab's name. */
+.el-crumbs__list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-4); margin: 0 0 var(--el-space-4); padding: 0; list-style: none; }
+.el-crumbs__step { display: inline-flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-crumbs__link { border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-accent-text); cursor: pointer; }
+.el-crumbs__link:hover { text-decoration: underline; }
+.el-crumbs__here { color: var(--el-role-text-primary); }
+.el-tab__count { margin-inline-start: var(--el-space-4); color: var(--el-role-text-secondary); }
+
+/* A Library group's header stays at the top while its group scrolls (classic's); while recordings are being picked
+   the selection bar holds the top instead. */
+[data-v2="library"]:not(:has(.el-selectbar)) .el-list > .el-list-section {
+  position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas);
+}
+/* Stuck, it covers the content area's top padding above it too (its height is set from the box that scrolls), so no
+   row shows over the heading while the list scrolls under it (UX-25 review). */
+[data-v2="library"] .el-selectbar[data-stuck]::before,
+[data-v2="library"]:not(:has(.el-selectbar)) .el-lib-list > .el-list-section[data-stuck]::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--el-sticky-cover, 0); background: var(--el-role-bg-canvas);
+}
+
+/* The import sheet's files, and the hint over the window while files are dragged over it. */
+.el-import__files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-8); max-block-size: calc(var(--el-space-64) * 3); overflow-y: auto; }
+.el-import__file { display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+.el-import__file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-import__file--no { color: var(--el-role-text-secondary); }
+.el-drop-hint {
+  position: fixed; inset: 0; z-index: var(--el-layer-overlay); display: flex; align-items: center; justify-content: center;
+  background: var(--el-role-accent-soft); pointer-events: none;
+}
+.el-drop-hint__card {
+  display: inline-flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-24) var(--el-space-32);
+  border: var(--el-border-hairline) dashed var(--el-role-accent-default); border-radius: var(--el-radius-md);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The Projects page's tree: a project's folders under it, indented by level; the fold button before each name. */
+.el-projects__row { gap: var(--el-space-8); padding-inline-start: calc(var(--el-space-12) + var(--el-tree-depth, 0) * var(--el-space-24)); }
+.el-projects__fold { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); flex: none; border: 0; padding: 0; background: transparent; color: var(--el-role-text-secondary); border-radius: var(--el-radius-sm); cursor: pointer; }
+span.el-projects__fold { cursor: default; }
+.el-projects__open { flex: 1; display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; border: 0; padding: var(--el-space-4) 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-projects__open:hover .el-body-strong { text-decoration: underline; }
+.el-projects__text { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-projects__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-app-toast--error .el-toast { border-color: var(--el-role-danger-default); }
+.el-toast__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-toast__open:hover { text-decoration: underline; }
+
+/* The main window's banners in the new design's look (components/Notice.tsx's BannerV2): one at a time above every
+   page; a banner about something is itself the button that goes there; its own buttons look like the new design's. */
+.el-app-banners .el-banner { margin-inline: var(--el-space-16); }
+.el-banner__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-banner__open:hover { text-decoration: underline; }
+.el-banner__details { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-banner__actions { display: inline-flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-banner--app .btn {
+  display: inline-flex; align-items: center; gap: var(--el-space-4); min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-inline: var(--el-space-8); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-component-button-radius);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font: inherit; font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight); cursor: pointer;
+}
+.el-banner--app .btn.primary { background: var(--el-role-accent-default); border-color: transparent; color: var(--el-role-text-on-accent); }
+.el-banner--app .btn:hover:not(:disabled) { background: var(--el-role-bg-subtle); }
+.el-banner--app .btn.primary:hover:not(:disabled) { background: var(--el-role-accent-hover, var(--el-role-accent-default)); }
+
+/* The first-run wizard (OnboardingV2): one card in the middle of the window, the steps across its top. */
+.el-wizard { min-block-size: 100%; display: flex; align-items: center; justify-content: center; padding: var(--el-space-32) var(--el-space-16); background: var(--el-role-bg-canvas); }
+.el-wizard__card { inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 9); display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-wizard__brand { margin: 0; font-weight: var(--el-text-body-strong-weight); color: var(--el-role-accent-text); }
+.el-wizard__steps { display: flex; flex-wrap: wrap; gap: var(--el-space-8) var(--el-space-16); margin: 0; padding: 0; list-style: none; }
+.el-wizard__step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-wizard__step--current { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-wizard__step--done { color: var(--el-role-success-default); }
+.el-wizard__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-wizard__step--current .el-wizard__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-wizard__body { display: flex; flex-direction: column; gap: var(--el-space-12); align-items: flex-start; }
+.el-wizard__body > .el-title-l:focus { outline: none; }
+.el-wizard__body > .el-title-l:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+.el-wizard__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); }
+.el-wizard__consent { padding: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); align-self: stretch; }
+.el-wizard__consent > p { margin: 0; }
+.el-wizard__consent > .el-wizard__legal { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-start: var(--el-space-8); }
+.el-wizard__group { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; align-self: stretch; }
+.el-wizard__verdict { margin: 0; padding-inline-start: var(--el-space-20); }
+.el-wizard__actions { display: flex; justify-content: space-between; align-items: center; gap: var(--el-space-12); align-self: stretch; margin-block-start: var(--el-space-8); }
+.el-wizard__actions--end { justify-content: flex-end; }
+
+/* ---- The Library's filters and views (PLAN_LIBRARY_FILTERS) ------------------------------------------------------- */
+/* The sidebar: section headers in small capitals of the caption size, rows 32 px with 16 px icons, the current row on a
+   quiet fill (never bold), counts muted, only Needs you's and Unread's bold. */
+.el-library-nav { display: flex; flex-direction: column; gap: var(--el-space-8); margin-block-end: var(--el-space-8); }
+.el-nav-section { display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-nav-section__head { display: flex; align-items: center; gap: var(--el-space-2); min-block-size: var(--el-space-24); padding-inline: var(--el-space-8) var(--el-space-2); }
+.el-nav-section__title, .el-nav-section__link {
+  display: inline-flex; align-items: center; gap: var(--el-space-4); border: 0; padding: 0; background: transparent; font: inherit; cursor: pointer;
+  color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight);
+  text-transform: uppercase;
+}
+span.el-nav-section__title { cursor: default; }
+.el-nav-section__head > .el-nav-section__title:first-child, .el-nav-section__link { flex: 1; text-align: start; }
+.el-nav-section__fold { display: inline-flex; flex: none; border: 0; padding: 0; background: transparent; color: var(--el-role-text-secondary); cursor: pointer; }
+.el-nav-section__fold + .el-nav-section__link { margin-inline-start: var(--el-space-4); }
+.el-nav-section__link[aria-current="page"] { color: var(--el-role-text-primary); }
+.el-nav-section__head .el-button { min-block-size: var(--el-space-24); min-inline-size: var(--el-space-24); padding: 0; }
+.el-nav-list { display: flex; flex-direction: column; gap: var(--el-border-hairline); }
+.el-nav-list--sub .el-nav-item--row { padding-inline-start: calc(var(--el-space-8) + var(--el-space-24)); }
+.el-nav-item--row { inline-size: 100%; min-block-size: var(--el-space-32); gap: var(--el-space-8); font-size: var(--el-text-body-size); }
+.el-nav-item--row .el-icon > svg { inline-size: var(--el-icon-sm); block-size: var(--el-icon-sm); }
+.el-nav-item--row[aria-current="page"] { background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-weight); box-shadow: none; }
+.el-nav-item--row .el-nav-item__label { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-nav-item--row .el-nav-item__count { min-inline-size: 0; padding-inline: 0; border-radius: 0; background: none; color: var(--el-role-text-secondary); }
+.el-nav-item--row .el-nav-item__count--strong { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-nav-item__fold { display: inline-flex; margin-inline-start: auto; color: var(--el-role-text-secondary); }
+.el-nav-item--add { color: var(--el-role-text-secondary); }
+.el-nav-item--add .el-nav-item__label { color: inherit; }
+.el-nav-row { position: relative; display: flex; align-items: center; }
+.el-nav-row > .el-nav-item { flex: 1; min-inline-size: 0; }
+.el-nav-row__more.el-button { position: absolute; inset-inline-end: var(--el-space-2); min-block-size: var(--el-space-24); min-inline-size: var(--el-space-24); padding: 0; opacity: 0; }
+.el-nav-row:hover .el-nav-row__more, .el-nav-row:focus-within .el-nav-row__more, .el-nav-row__more[aria-expanded="true"] { opacity: 1; }
+.el-nav-row:hover .el-nav-item__count, .el-nav-row:focus-within .el-nav-item__count { visibility: hidden; }
+/* Where a dragged view lands: the soft accent fill dropping on a project shows too. */
+.el-nav-row--drop { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); }
+.el-shell__foot-start { display: flex; flex-direction: column; gap: var(--el-border-hairline); padding-block-end: var(--el-space-4); margin-block-end: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-library-foot { display: flex; flex-direction: column; gap: var(--el-border-hairline); }
+.el-shell__synced { color: var(--el-role-text-secondary); }
+.el-shell__synced .el-nav-item__label { font-size: var(--el-text-caption-size); }
+/* The sidebar with the Library's sections: Record, Live and Ask at the top and the foot (Trash, the sync line, Activity,
+   Settings…) stay on screen at any window height; only the middle scrolls. */
+.el-sidebar__flow { display: contents; }
+.el-shell--library > .el-sidebar { overflow: hidden; min-block-size: 0; }
+.el-sidebar__middle { flex: 1 1 auto; min-block-size: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--el-space-2); margin-block: var(--el-space-8) var(--el-space-4); }
+.el-shell--library .el-shell__foot { flex: none; margin-block-start: 0; gap: var(--el-space-2); padding-block-start: var(--el-space-4); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-shell--library .el-shell__foot .el-nav-item, .el-shell--library .el-sidebar > .el-nav-item { min-block-size: var(--el-space-32); }
+.el-shell__tools { display: flex; align-items: center; gap: var(--el-space-2); padding-inline: var(--el-space-4); }
+.el-shell__actions, .el-shell__who { display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+/* The middle's edges shade where there is more to scroll to (Projects below the fold says so): a soft inner shadow,
+   as a scroll edge does (no gradients in v2). */
+.el-sidebar__middle {
+  --el-edge-shade: color-mix(in srgb, var(--el-role-text-secondary) 40%, transparent);
+  --el-edge-below: inset 0 calc(-1 * var(--el-space-16)) var(--el-space-16) calc(-1 * var(--el-space-12)) var(--el-edge-shade);
+  --el-edge-above: inset 0 var(--el-space-16) var(--el-space-16) calc(-1 * var(--el-space-12)) var(--el-edge-shade);
+}
+.el-sidebar__middle[data-more-below] { box-shadow: var(--el-edge-below); }
+.el-sidebar__middle[data-more-above] { box-shadow: var(--el-edge-above); }
+.el-sidebar__middle[data-more-above][data-more-below] { box-shadow: var(--el-edge-above), var(--el-edge-below); }
+/* A short window: Activity and Settings join the tools as icons (their names still said), the workspace and the
+   avatar share a row. */
+.el-shell--short .el-shell__actions { flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--el-space-2); padding-inline: var(--el-space-4); }
+.el-shell--short .el-shell__actions > .el-nav-item { position: relative; flex: none; inline-size: auto; min-block-size: var(--el-space-32); padding: var(--el-space-4) var(--el-space-8); }
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__label {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__count {
+  position: absolute; inset-block-start: 0; inset-inline-end: 0; min-inline-size: var(--el-space-16); padding-inline: var(--el-space-2); font-size: var(--el-text-caption-size);
+}
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__dot { display: none; }
+.el-shell--short .el-shell__actions > .el-shell__tools { padding-inline: 0; }
+.el-shell--short .el-shell__who { flex-direction: row; align-items: center; }
+.el-shell--short .el-shell__who > :first-child { flex: 1 1 auto; min-inline-size: 0; }
+.el-shell--short .el-shell__who .el-shell__me { flex: none; padding: var(--el-space-4); }
+.el-shell--short .el-shell__who .el-shell__me-text {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-sidebar[data-rail="on"] .el-shell__tools { flex-direction: column; padding-inline: 0; }
+@media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__tools { flex-direction: column; padding-inline: 0; } }
+.el-shell__rail-only { display: none; }
+.el-sidebar[data-rail="on"] .el-shell__rail-only { display: block; }
+.el-sidebar[data-rail="on"] .el-shell__full-only { display: none; }
+.el-sidebar[data-rail="on"] .el-shell__foot-start .el-nav-item__label { position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.el-sidebar[data-rail="on"] .el-shell__foot-start .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__rail-only { display: block; }
+  .el-sidebar:not([data-rail="off"]) .el-shell__full-only { display: none; }
+  .el-sidebar:not([data-rail="off"]) .el-shell__foot-start .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+}
+
+/* The Library: the filter panel (280 px) on the start side of the list, or a drawer over it under 1280 px. */
+.el-lib { display: flex; align-items: flex-start; gap: var(--el-space-24); }
+.el-lib__main { flex: 1; min-inline-size: 0; order: 1; }
+/* The Library's list rows sit close under its controls (UX-05): no gap of the page's own between them. */
+.el-lib__main.el-page { gap: 0; }
+/* Row 2 (UX-05), 40 px: the kinds on the start side, [Filters n] and Sort & display on the end; the selection bar in its
+   place while selecting, its box lined up with the rows' boxes. A hairline under it. */
+.el-lib-row2 {
+  display: flex; align-items: center; gap: var(--el-space-8);
+  min-block-size: var(--el-space-40);
+  border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+.el-lib-row2__end { display: flex; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
+.el-lib-row2.el-selectbar { padding-inline-start: var(--el-space-16); }
+.el-lib-row2.el-selectbar .el-lib-toolbar__all { margin: 0; }
+.el-lib-row2__selected { margin-block: 0; margin-inline-start: var(--el-space-4); font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
+/* The page's tabs: All · Calls · Meetings · Voice notes (· Other) with their counts, grey with tabular figures. */
+.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); }
+.el-lib-tabs__tab {
+  display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer;
+  padding-block: 0; padding-inline: var(--el-space-12); color: var(--el-role-text-secondary); border-block-end: var(--el-border-strong) solid transparent; margin-block-end: calc(-1 * var(--el-border-hairline));
+}
+.el-lib-tabs__tab:hover { color: var(--el-role-text-primary); }
+.el-lib-tabs__tab[aria-selected="true"] { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); border-block-end-color: var(--el-role-accent-default); }
+.el-lib-tabs__count { font-size: var(--el-text-caption-size); color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); font-variant-numeric: tabular-nums; }
+
+/* ---- The Library's rows (UX-06 + DES-04) ------------------------------------------------------------------------- */
+/* Section headings: 28 px, 12 px semibold grey, no band (sticky but while picking: the rule above); the fold chevron
+   shows on hover and focus. */
+.el-lib-list .el-list-section {
+  display: flex; align-items: center; min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-block: 0; padding-inline: var(--el-space-16);
+  background: var(--el-role-bg-canvas);
+  font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-secondary);
+}
+/* The fold chevron sits in the heading's start padding, so the words line up with the rows' marks. */
+.el-lib-list .el-list-section__button .el-icon { position: absolute; inset-inline-start: 0; opacity: 0; }
+.el-lib-list .el-list-section:hover .el-list-section__button .el-icon,
+.el-lib-list .el-list-section__button:focus-visible .el-icon,
+.el-lib-list .el-list-section__button[aria-expanded="false"] .el-icon { opacity: 1; }
+/* A row: 56 px (44 px compact), 16 px start padding, the 32 px mark, then two lines with when and how long at their ends. */
+.el-rec {
+  position: relative;
+  display: flex; align-items: center; gap: var(--el-space-12);
+  block-size: var(--el-layout-row-comfortable);
+  padding-inline: var(--el-space-16);
+  border-radius: var(--el-radius-md);
+}
+.el-rec--compact { block-size: var(--el-layout-row-compact); }
+.el-rec:hover { background: var(--el-role-bg-subtle); }
+.el-rec--selected { background: var(--el-role-accent-soft); }
+/* UX-25: the recording you came back from keeps a quiet neutral grey (Mail's last-viewed row): the text colour at 6%, so
+   it is never the accent of a selection and never a tick; it goes when another row is opened or pressed, the view
+   changes, or after 60 s. */
+.el-rec--last { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-rec-last-mix), transparent); }
+.el-rec--last:hover { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-rec-last-hover-mix), transparent); }
+/* 6% (9% on hover) in light; in dark 9% (12%), as 6% there is a row's own hover grey. */
+:root { --el-rec-last-mix: 6%; --el-rec-last-hover-mix: 9%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --el-rec-last-mix: 9%; --el-rec-last-hover-mix: 12%; } }
+:root[data-theme="dark"] { --el-rec-last-mix: 9%; --el-rec-last-hover-mix: 12%; }
+.el-rec__hit { position: absolute; inset: 0; border: 0; padding: 0; background: transparent; border-radius: inherit; cursor: pointer; }
+.el-rec__hit:focus-visible { outline-offset: calc(var(--el-focus-offset) * -1); }
+/* The box: on hover and keyboard focus, always while selecting; it takes no room otherwise. */
+.el-rec__pick { position: relative; display: none; flex: none; }
+.el-rec:hover .el-rec__pick, .el-rec:focus-within .el-rec__pick, .el-rec--picking .el-rec__pick, .el-rec--selected .el-rec__pick { display: inline-flex; }
+.el-rec:hover .el-rec__mark, .el-rec:focus-within .el-rec__mark { display: none; }
+.el-rec--picking .el-rec__mark { display: none; }
+.el-rec__mark { position: relative; flex: none; display: inline-flex; }
+.el-rec-avatar {
+  position: relative; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-space-32); block-size: var(--el-space-32); border-radius: var(--el-radius-full);
+  font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight);
+  background: var(--el-role-label-grey-fill); color: var(--el-role-label-grey-text);
+}
+.el-rec-avatar--tint-0 { background: var(--el-role-label-teal-fill); color: var(--el-role-label-teal-text); }
+.el-rec-avatar--tint-1 { background: var(--el-role-label-blue-fill); color: var(--el-role-label-blue-text); }
+.el-rec-avatar--tint-2 { background: var(--el-role-label-green-fill); color: var(--el-role-label-green-text); }
+.el-rec-avatar--tint-3 { background: var(--el-role-label-orange-fill); color: var(--el-role-label-orange-text); }
+.el-rec-avatar--tint-4 { background: var(--el-role-label-pink-fill); color: var(--el-role-label-pink-text); }
+.el-rec-avatar--tint-5 { background: var(--el-role-label-amber-fill); color: var(--el-role-label-amber-text); }
+.el-rec-avatar--tint-6 { background: var(--el-role-label-grey-fill); color: var(--el-role-label-grey-text); }
+/* The app's 14 px badge on the mark's end corner, ringed in the page's colour. */
+.el-rec-avatar__badge {
+  position: absolute; inset-block-end: calc(-1 * var(--el-space-4)); inset-inline-end: calc(-1 * var(--el-space-4));
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: calc(var(--el-space-12) + var(--el-space-2)); block-size: calc(var(--el-space-12) + var(--el-space-2));
+  border-radius: var(--el-radius-sm); overflow: hidden;
+  background: var(--el-role-bg-surface); color: var(--el-role-text-secondary);
+  box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-canvas);
+}
+.el-rec-avatar__badge > .source-logo, .el-rec-avatar__badge > svg { inline-size: 100%; block-size: 100%; }
+.el-rec-avatar__badge > .el-icon > svg { inline-size: var(--el-space-12); block-size: var(--el-space-12); }
+.el-rec__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-rec__line { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-rec__line--2 { color: var(--el-role-text-secondary); }
+.el-rec__title { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--el-text-body-strong-weight); }
+/* Not opened yet (the web's and the phone's dot): the accent, before the title. */
+.el-rec__unread { flex: none; inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); }
+.el-rec__meta { flex: 1; min-inline-size: 0; overflow: hidden; display: flex; align-items: center; gap: var(--el-space-8); }
+.el-rec__end { flex: none; margin-inline-start: auto; color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); font-variant-numeric: tabular-nums; }
+.el-rec__label { position: relative; flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; cursor: pointer; }
+/* The hover actions take when and how long's place; the row keeps its height. */
+.el-rec__actions { position: absolute; inset-block: 0; inset-inline-end: var(--el-space-12); display: none; align-items: center; gap: var(--el-space-2); }
+.el-rec--actions:hover .el-rec__actions, .el-rec--actions:focus-within .el-rec__actions, .el-rec__actions:has([aria-expanded="true"]) { display: flex; }
+.el-rec--actions:hover .el-rec__end, .el-rec--actions:focus-within .el-rec__end, .el-rec--actions:has(.el-rec__actions [aria-expanded="true"]) .el-rec__end { visibility: hidden; }
+/* Line 2's state: grey words; Failed · Retry and No audio in the danger colour (the only red on a row). */
+.el-rec-state { display: inline-flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; max-inline-size: 100%; }
+.el-rec-state > span[dir] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-rec-state--danger { color: var(--el-role-danger-default); }
+.el-rec-state .el-icon { flex: none; }
+/* Numbers in the list, its tabs and its title use the app's font with tabular figures, never the monospace one (UX-05,
+   UX-06); they still read left to right in right-to-left text. */
+.el-lib-list .el-num, .el-lib-row2 .el-num, .el-lib-toolbar__count.el-num {
+  font-family: inherit; font-size: inherit; line-height: inherit;
+  font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate;
+}
+/* When and how long keep the row's direction (their place is its end side); their words are isolated (<bdi>). */
+.el-rec__end { font-size: var(--el-text-caption-size); }
+.el-lib--panel .el-lib__main { margin-inline: 0; }
+/* The filters: a drawer from the end side (the right; the left in right to left), 320 px; from 1440 px it pushes the
+   list (a column at the list's end), below that it slides over it. */
+.el-filter {
+  display: flex; flex-direction: column; flex: none; order: 2;
+  inline-size: calc(var(--el-space-64) * 5);
+  /* As tall as the window leaves it (--el-lib-room: the window's height, set by the Library), its sections scrolling. */
+  position: sticky; inset-block-start: 0; max-block-size: calc(var(--el-lib-room, 100%) - var(--el-space-64));
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
+}
+.el-filter--drawer {
+  position: absolute; inset-block: 0; inset-inline-end: 0; z-index: var(--el-layer-dialog); max-block-size: none;
+  border-radius: 0; border-block: 0; border-inline-end: 0; box-shadow: var(--el-shadow-2);
+}
+.el-filter-scrim { position: absolute; inset: 0; z-index: var(--el-layer-dialog); background: var(--el-role-scrim-default); }
+.el-filter__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); padding: var(--el-space-8) var(--el-space-8) var(--el-space-8) var(--el-space-16); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-filter__on { margin-inline-start: var(--el-space-8); color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
+.el-filter__sections { flex: 1; min-block-size: 0; overflow-y: auto; padding-block: var(--el-space-4); }
+.el-filter__section { padding-block: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-filter__section:last-child { border-block-end: 0; }
+.el-filter__section-head { display: flex; align-items: center; gap: var(--el-space-4); padding-inline: var(--el-space-8); }
+.el-filter__section-head .el-button { min-block-size: var(--el-space-24); }
+.el-filter__title { flex: 1; display: inline-flex; align-items: center; gap: var(--el-space-8); min-block-size: var(--el-space-32); border: 0; padding: 0; background: transparent; color: var(--el-role-text-primary); font: inherit; font-weight: var(--el-text-body-strong-weight); cursor: pointer; text-align: start; }
+.el-filter__title .el-icon { color: var(--el-role-text-secondary); }
+.el-filter__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); }
+.el-filter__options { display: flex; flex-direction: column; gap: var(--el-border-hairline); padding: var(--el-space-2) var(--el-space-8) var(--el-space-8) calc(var(--el-space-8) + var(--el-space-16)); max-block-size: calc(var(--el-space-64) * 5); overflow-y: auto; }
+.el-filter__option { display: flex; align-items: center; gap: var(--el-space-8); min-block-size: var(--el-space-32); padding-inline: var(--el-space-4); border-radius: var(--el-radius-sm); cursor: pointer; }
+.el-filter__option:hover { background: var(--el-role-bg-subtle); }
+.el-filter__option > input { accent-color: var(--el-role-accent-default); margin: 0; flex: none; }
+.el-filter__label { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-filter__count { color: var(--el-role-text-secondary); }
+.el-filter__option--none .el-filter__label { color: var(--el-role-text-secondary); }
+.el-filter__search { margin-block-end: var(--el-space-4); }
+.el-filter__range { display: flex; gap: var(--el-space-8); padding-block-start: var(--el-space-4); }
+.el-filter__day { display: flex; flex-direction: column; gap: var(--el-space-2); flex: 1; min-inline-size: 0; }
+.el-filter__date { inline-size: 100%; min-block-size: var(--el-space-32); padding-inline: var(--el-space-4); }
+.el-filter__foot { padding: var(--el-space-12) var(--el-space-16); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-filter__save { inline-size: 100%; }
+
+/* The page's own header where the window has no title row (UX-20): the place, its count and the search, in one line. */
+.el-lib-toolbar { display: flex; align-items: center; gap: var(--el-space-8); min-block-size: var(--el-space-40); }
+.el-lib-toolbar__all { margin-inline: var(--el-space-12) var(--el-space-4); }
+.el-lib-toolbar__title { display: inline-flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; flex: none; max-inline-size: calc(var(--el-space-64) * 4); }
+.el-lib-toolbar__title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-lib-toolbar__count { font-size: var(--el-text-body-size); font-weight: var(--el-text-body-weight); }
+.el-lib-toolbar__search { flex: 1; min-inline-size: calc(var(--el-space-64) * 2.5); max-inline-size: calc(var(--el-space-64) * 8); margin-inline-start: auto; }
+.el-lib-toolbar__n { display: inline-flex; align-items: center; justify-content: center; min-inline-size: var(--el-space-20); margin-inline-start: var(--el-space-4); padding-inline: var(--el-space-4); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); font-size: var(--el-text-caption-size); }
+.el-lib-toolbar__filters--on { border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); }
+.el-lib-toolbar.el-selectbar .el-lib-toolbar__end { margin-inline-start: auto; }
+
+/* The pills row, only while filters are on: each section's pill (opens to edit it), Clear all, Save as view. */
+.el-fpills { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-fpill { display: inline-flex; align-items: center; min-block-size: var(--el-space-32); border: var(--el-border-hairline) solid var(--el-role-accent-default); border-radius: var(--el-radius-full); background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
+.el-fpill__edit { border: 0; background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-12) var(--el-space-4); min-block-size: var(--el-space-32); cursor: pointer; max-inline-size: calc(var(--el-space-64) * 5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-fpill__remove { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); margin-inline-end: var(--el-space-4); border: 0; border-radius: var(--el-radius-full); background: transparent; color: inherit; cursor: pointer; }
+.el-fpill__remove:hover, .el-fpill__edit:hover { background: color-mix(in srgb, var(--el-role-accent-default) 12%, transparent); }
+.el-fpill-editor { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-12); min-inline-size: calc(var(--el-space-64) * 4); }
+.el-fpill-editor .el-filter__options { padding: 0; }
+.el-fpill-editor__foot { display: flex; justify-content: flex-end; }
+
+/* Rows: a checkbox on hover (or while something is picked), the source logo and a label filter by themselves. */
+.el-row__pick { position: relative; z-index: calc(var(--el-layer-base) + 1); flex: none; display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-16); opacity: 0; }
+.el-row--pick:hover .el-row__pick, .el-row--pick:focus-within .el-row__pick, .el-row--picking .el-row__pick, .el-row--selected .el-row__pick { opacity: 1; }
+/* A row's box: 16 px drawn, 24 px to press (a transparent border takes the press; the box is its inside). */
+.el-row__pick .el-check, .el-table__pick .el-check {
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); margin: calc(-1 * var(--el-space-4));
+  border: var(--el-space-4) solid transparent; background-clip: padding-box; border-radius: calc(var(--el-radius-sm) + var(--el-space-4));
+  box-shadow: inset 0 0 0 var(--el-border-hairline) var(--el-role-border-strong);
+}
+.el-row__pick .el-check-box > .el-check:checked, .el-table__pick .el-check-box > .el-check:checked,
+.el-row__pick .el-check-box > .el-check:indeterminate, .el-table__pick .el-check-box > .el-check:indeterminate {
+  border-color: transparent; box-shadow: none;
+}
+.el-row__source { position: relative; z-index: calc(var(--el-layer-base) + 1); flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; border-radius: var(--el-radius-md); cursor: pointer; }
+.el-row__source:hover { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-border-default); }
+button.el-row__label { position: relative; z-index: calc(var(--el-layer-base) + 1); display: inline-flex; align-items: center; gap: var(--el-space-4); border: 0; font: inherit; font-size: var(--el-text-caption-size); cursor: pointer; }
+button.el-row__label:hover { color: var(--el-role-text-primary); }
+.el-table__pick { inline-size: var(--el-space-32); }
+.el-table__pick .el-check-box { opacity: 0; }
+.el-table thead .el-table__pick .el-check-box { opacity: 1; }
+.el-table__row:hover .el-table__pick .el-check-box, .el-table__row:focus-within .el-table__pick .el-check-box, .el-table__row--picking .el-table__pick .el-check-box, .el-table__row--picked .el-table__pick .el-check-box { opacity: 1; }
+.el-check-box > .el-check:indeterminate { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-check-box:has(> .el-check:indeterminate)::after { content: ""; position: absolute; inset-inline: var(--el-space-4); inset-block-start: 50%; block-size: var(--el-border-strong); margin-block-start: calc(var(--el-border-strong) / -2); background: var(--el-role-text-on-accent); pointer-events: none; }
+
+/* ---- The three levels (PLAN_NAV_3_LEVELS): rail · panel · page, under one title row (UX-20) --------------------------
+   The rail and the panel run to the very top; the page's column starts with the title row (TitleRow.tsx). On a Mac the
+   window's buttons sit in the rail's top cell, as tall as the row; full screen hides them and the cell shrinks. */
+.el-shell--nav { display: grid; grid-template-columns: auto auto minmax(0, 1fr); block-size: 100%; position: relative; }
+.el-shell--nav > .el-shell__main { grid-column: 3; }
+/* DES-01: 72 px, a label under every icon, never scrolling (a short window moves Help and Setup into the avatar's menu). */
+.el-rail {
+  grid-column: 1; display: flex; flex-direction: column; align-items: center; gap: var(--el-space-2);
+  inline-size: var(--el-desktop-rail-width); padding-block: var(--el-space-8); min-block-size: 0; overflow: hidden;
+  background: var(--el-role-bg-subtle); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+.el-rail__top { display: none; flex: none; align-self: stretch; }
+[data-platform="macos"] .el-shell--nav .el-rail { padding-block-start: 0; }
+[data-platform="macos"] .el-rail__top { display: block; block-size: var(--el-desktop-titlerow-height); }
+/* The buttons' own spot (and 4 px round them), always at the window's left whatever the page's direction. */
+.el-rail__lights {
+  position: fixed; z-index: var(--el-layer-sticky); left: var(--el-desktop-titlerow-lights-left); top: var(--el-desktop-titlerow-lights-top);
+  inline-size: var(--el-desktop-titlerow-lights-width); block-size: var(--el-desktop-titlerow-lights-height);
+}
+[data-platform="macos"]:not([data-titlebar]) .el-rail__lights { display: none; }
+[data-platform="macos"]:not([data-titlebar]) .el-rail__top { block-size: var(--el-desktop-titlerow-rail-top-fullscreen); }
+/* DES-02: Record, a joined 56×40 pill: the 40 px circle with its red dot records now; the 16 px chevron behind a hairline
+   opens its menu; "Record" under it. Red with ■ and the time while recording. */
+.el-rail__record { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); flex: none; margin-block: var(--el-space-4) var(--el-space-8); }
+.el-record__pill {
+  display: flex; box-sizing: border-box; inline-size: var(--el-desktop-record-width); block-size: var(--el-desktop-record-height);
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-full); background: var(--el-role-bg-surface);
+}
+.el-record__now, .el-record__more { display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--el-role-text-secondary); }
+.el-record__now { flex: 1 1 auto; border-radius: var(--el-radius-full); }
+.el-record__more { flex: none; inline-size: var(--el-desktop-record-chevron); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); border-start-end-radius: var(--el-radius-full); border-end-end-radius: var(--el-radius-full); }
+.el-record__now:hover, .el-record__more:hover, .el-record__more[aria-expanded="true"] { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); color: var(--el-role-text-primary); }
+.el-record__now:focus-visible, .el-record__more:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: calc(-1 * var(--el-focus-width)); }
+.el-record__now[aria-disabled="true"] { cursor: progress; }
+.el-record__dot { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full); background: var(--el-role-record-default); }
+.el-record__stop { inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__pill { background: var(--el-role-record-default); border-color: var(--el-role-record-default); }
+.el-rail__record--on .el-record__now, .el-rail__record--on .el-record__more { color: var(--el-role-text-on-accent); }
+.el-rail__record--on .el-record__more { border-inline-start-color: color-mix(in srgb, var(--el-role-text-on-accent) 40%, transparent); }
+.el-rail__record--on .el-record__now:hover, .el-rail__record--on .el-record__more:hover { background: color-mix(in srgb, var(--el-role-text-on-accent) 16%, transparent); }
+.el-rail__record .el-rail__label { color: var(--el-role-text-secondary); }
+.el-rail__record--on .el-rail__label { color: var(--el-role-record-default); font-weight: var(--el-text-body-strong-weight); font-variant-numeric: tabular-nums; }
+.el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: 0; inline-size: 100%; }
+.el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-4); }
+/* An item: 56 px, the 20 px icon in a 48×28 pill (the accent's tint when selected, 8% on hover), 4 px, the 11 px label. */
+.el-rail__item, .el-rail__me .el-button.el-rail__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--el-space-4);
+  inline-size: 100%; min-block-size: var(--el-desktop-rail-item-height); padding: 0; border: 0; border-radius: 0;
+  background: transparent; color: var(--el-role-text-secondary); cursor: pointer; font: inherit;
+}
+.el-rail__item:hover, .el-rail__me .el-button.el-rail__item:hover { background: transparent; color: var(--el-role-text-primary); }
+.el-rail__item:focus-visible { outline: none; }
+.el-rail__icon {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-desktop-rail-pill-width); block-size: var(--el-desktop-rail-pill-height); border-radius: var(--el-radius-full);
+}
+.el-rail__item:hover .el-rail__icon { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
+.el-rail__item:focus-visible .el-rail__icon { box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-focus); }
+.el-rail__item[aria-current="page"] .el-rail__icon { background: var(--el-role-accent-soft); }
+.el-rail__item[aria-current="page"] { color: var(--el-role-accent-text); }
+/* Never clipped: the labels are short (9 letters at most), and Urdu's line box is taller than its 14 px. */
+.el-rail__label {
+  max-inline-size: 100%; white-space: nowrap;
+  font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); font-weight: var(--el-desktop-text-rail-label-weight);
+}
+.el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+/* Badges: on the icon's top-right corner, cut out of it by a ring in the rail's colour. The number (Activity's only):
+   16 px tall, 10 px semibold tabular figures, the accent with its text colour; a dot: 8 px (Live's red, recording). */
+.el-rail__count {
+  position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-height) / 2);
+  inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-height) / 2);
+  min-inline-size: var(--el-desktop-badge-height); block-size: var(--el-desktop-badge-height); padding-inline: var(--el-desktop-badge-padding); box-sizing: border-box;
+  border-radius: var(--el-radius-full); background: var(--el-role-accent-default); color: var(--el-role-text-on-accent);
+  box-shadow: 0 0 0 var(--el-desktop-badge-ring) var(--el-role-bg-subtle);
+  font-size: var(--el-desktop-text-badge-size); line-height: var(--el-desktop-text-badge-line); font-weight: var(--el-desktop-text-badge-weight);
+  font-family: var(--el-desktop-text-badge-font); font-variant-numeric: tabular-nums; text-align: center;
+}
+.el-rail__dot {
+  position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
+  inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
+  inline-size: var(--el-desktop-badge-dot); block-size: var(--el-desktop-badge-dot); border-radius: var(--el-radius-full);
+  background: var(--el-role-accent-default); box-shadow: 0 0 0 var(--el-desktop-badge-ring) var(--el-role-bg-subtle);
+}
+.el-rail__dot--live { background: var(--el-role-danger-default); }
+/* The avatar (DES-08): 28 px in a 40 px click area, labelled Account like every item. */
+.el-rail__me { inline-size: 100%; }
+.el-rail__me .el-menu-anchor { inline-size: 100%; }
+.el-rail__me .el-rail__icon { inline-size: var(--el-desktop-avatar-rail-hit); block-size: var(--el-desktop-avatar-rail-hit); }
+.el-rail__me .el-rail__item[aria-expanded="true"] .el-avatar { box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-default); }
+.el-rail__me .el-rail__item:hover .el-rail__icon { background: transparent; }
+.el-rail__me .el-rail__item:hover .el-avatar { box-shadow: 0 0 0 var(--el-space-4) color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
+.el-rail__me .el-button.el-rail__item > span { display: contents; }
+/* The account menu's head: the 40 px avatar, the name, the email, the plan. */
+.el-menu__header { list-style: none; padding: var(--el-space-8) var(--el-space-12) var(--el-space-12); margin-block-end: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-account-head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: calc(var(--el-space-64) * 4); }
+.el-account-head__who { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-account-head__name { font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-primary); }
+.el-account-head__line { font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line); color: var(--el-role-text-secondary); }
+/* A tooltip (Tip.tsx): beside its control, above everything. */
+.el-tip {
+  position: fixed; z-index: var(--el-layer-overlay); translate: 0 -50%; pointer-events: none; white-space: nowrap;
+  padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-sm);
+  background: var(--el-role-text-primary); color: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-1);
+  font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line);
+}
+
+/* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
+   52 px: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in grey; the one
+   search field centred in the column (28 px, 280–400 px wide, the place in its placeholder, ⌘K at its end); the status
+   items at the end. No line under it until the page has scrolled. */
+.el-titlerow {
+  flex: none; display: grid; align-items: center; gap: var(--el-space-8);
+  grid-template-columns: minmax(0, 1fr) minmax(var(--el-desktop-search-min-width), var(--el-desktop-search-max-width)) minmax(0, 1fr);
+  block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
+  border-block-end: var(--el-border-hairline) solid transparent;
+}
+.el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
+.el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
+.el-titlerow__end { justify-content: flex-end; }
+.el-titlerow__history { display: inline-flex; flex: none; }
+.el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
+.el-titlerow__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-role-text-primary);
+  font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
+}
+.el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
+.el-titlerow__middle { display: flex; justify-content: center; min-inline-size: 0; }
+/* No room for the field: a ⌕ button, and its column gives its width back. */
+.el-titlerow--compact { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.el-titlerow__search {
+  display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
+  inline-size: 100%; block-size: var(--el-desktop-search-height);
+  padding-inline: var(--el-space-8); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font: inherit; font-size: var(--el-desktop-text-secondary-size); cursor: text;
+}
+.el-titlerow__search:hover { border-color: var(--el-role-border-strong); }
+.el-titlerow__search:focus-within { border-color: var(--el-role-accent-default); box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-focus); background: var(--el-role-bg-surface); }
+.el-titlerow__search--button { text-align: start; }
+.el-titlerow__placeholder { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-titlerow__field { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-text-primary); outline: none; }
+.el-titlerow__keys { flex: none; font: inherit; font-size: var(--el-desktop-text-small-size); color: var(--el-role-text-secondary); }
+.el-titlerow__scope {
+  display: inline-flex; align-items: center; gap: var(--el-space-2); flex: none; max-inline-size: 50%;
+  padding-inline: var(--el-space-8) var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-accent-soft); color: var(--el-role-accent-text);
+  font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line); white-space: nowrap;
+}
+.el-titlerow__scope > span { overflow: hidden; text-overflow: ellipsis; }
+.el-titlerow__unscope { display: inline-flex; border: 0; padding: var(--el-space-2); border-radius: var(--el-radius-full); background: transparent; color: inherit; cursor: pointer; }
+.el-titlerow__unscope:hover { background: color-mix(in srgb, var(--el-role-accent-default) 12%, transparent); }
+/* On a Mac nothing that can be clicked sits within 80 px of the window's left edge in this row: with the panel hidden,
+   ⊟ comes right after the rail (72 px) and the row's own start. */
+[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: calc(var(--el-desktop-titlerow-keep-clear) - var(--el-desktop-rail-width)); }
+/* Right to left the rail is on the right, but the window's buttons stay at the window's left (the system's side): the
+   row's end keeps the 80 px clear there. */
+[data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: var(--el-desktop-titlerow-keep-clear); }
+
+/* The panel: the place's name, its ⋯ and ⊟; group titles in sentence case; under 1100 px a flyout over the page. */
+.el-panel {
+  grid-column: 2; display: flex; flex-direction: column; min-block-size: 0; inline-size: calc(var(--el-space-64) * 4 + var(--el-space-4));
+  background: var(--el-role-bg-canvas); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+/* Its containing block is the grid's second column, which starts where the rail ends. */
+.el-panel--flyout { position: absolute; inset-block: 0; inset-inline-start: 0; z-index: var(--el-layer-overlay); box-shadow: var(--el-shadow-2); }
+/* The panel's top cell of the title row (UX-20): as tall as the row, the place's name and ⊟. */
+.el-panel__head { flex: none; display: flex; align-items: center; gap: var(--el-space-4); block-size: var(--el-desktop-titlerow-height); box-sizing: border-box; padding: 0 var(--el-space-8) 0 var(--el-space-16); }
+.el-panel__title { flex: 1; margin: 0; font-size: var(--el-text-title-m-size); font-weight: var(--el-text-body-strong-weight); }
+.el-panel__body { flex: 1 1 auto; min-block-size: 0; overflow-y: auto; padding: 0 var(--el-space-8) var(--el-space-8); display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-panel__foot { flex: none; display: flex; flex-direction: column; gap: var(--el-space-2); padding: var(--el-space-4) var(--el-space-8) var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-panel__search { margin-inline: var(--el-space-4); }
+.el-panel__none { margin: var(--el-space-4) var(--el-space-8); }
+.el-panel .el-nav-section__title, .el-panel .el-nav-section__link { text-transform: none; letter-spacing: normal; color: var(--el-role-text-secondary); }
+.el-panel .el-nav-item__count--quiet { background: transparent; color: var(--el-role-text-secondary); }
+/* UX-02 (v21_panel_flyout, .el-shell--flyouts): the panel 240 px wide; the flyout over a light scrim, sliding in from the
+   rail; hidden, the panel takes no column and its toggle sits at the start of the page header (PanelToggle). */
+.el-panel-scrim {
+  grid-column: 2 / -1; grid-row: 1; position: absolute; inset: 0; z-index: calc(var(--el-layer-overlay) - 1);
+  background: color-mix(in srgb, var(--el-role-scrim-default) 30%, transparent);
+}
+.el-shell--flyouts .el-panel { inline-size: calc(var(--el-space-64) * 4 - var(--el-space-16)); }
+.el-shell--flyouts .el-panel--flyout { animation: el-panel-in var(--el-motion-base) var(--el-motion-ease-out); }
+@keyframes el-panel-in { from { opacity: 0; translate: calc(-1 * var(--el-space-12)) 0; } }
+:dir(rtl) .el-shell--flyouts .el-panel--flyout { animation-name: el-panel-in-rtl; }
+@keyframes el-panel-in-rtl { from { opacity: 0; translate: var(--el-space-12) 0; } }
+@media (prefers-reduced-motion: reduce) { .el-shell--flyouts .el-panel--flyout { animation: none; } }
+.el-page__toggle { display: inline-flex; flex: none; }
+.el-page__head > .el-page__toggle + * { margin-inline-end: auto; }
+/* Where dragged recordings go, shown only while dragging. */
+.el-panel-drops { display: none; }
+.dragging-recordings .el-panel-drops { display: flex; flex-direction: column; gap: var(--el-space-4); padding-block-start: var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-panel-drops__title { margin: 0 var(--el-space-8); }
+.el-panel-drops .el-nav-drop { display: flex; }
+
+/* Settings with the three levels: the group's sections in an inner list beside the page. */
+.el-settings-split { display: flex; align-items: flex-start; gap: var(--el-space-16); min-block-size: 0; }
+.el-settings-split__list { flex: none; inline-size: calc(var(--el-space-64) * 3); padding: var(--el-space-24) var(--el-space-8) 0 var(--el-space-16); position: sticky; inset-block-start: 0; }
+.el-settings-split__title { margin: 0 var(--el-space-8) var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-settings-split > .el-settings-page { flex: 1; min-inline-size: 0; }
+/* ---- macOS: the title-bar strip in a normal window (D-214, lib/titlebar.ts) ---------------------------------------------
+   The window's own close, minimize and zoom sit in an empty strip across the top, as tall as their native row, in the
+   chrome's colour: nothing of ours under or beside them. It drags the window and zooms it on a double click
+   (data-tauri-drag-region). The shell starts below it, so the rail and the older sidebar give back the room they kept
+   for the buttons. Full screen has no data-titlebar: none of this applies and 2.0.12's [data-platform="macos"] rules
+   stand, as they were. */
+.el-titlebar { display: none; }
+[data-titlebar="strip"] .el-titlebar {
+  display: block; position: fixed; inset-block-start: 0; inset-inline: 0; block-size: var(--el-layout-titlebar-macos); z-index: var(--el-layer-sticky);
+  background: var(--el-role-bg-subtle); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+/* Its own drag region replaces the classic strip over the sidebar's top (MainApp puts the two side by side). */
+[data-titlebar="strip"] .el-titlebar + .titlebar-drag { display: none; }
+[data-titlebar="strip"] .el-shell:not(.el-shell--nav) { margin-block-start: var(--el-layout-titlebar-macos); block-size: calc(100% - var(--el-layout-titlebar-macos)); }
+[data-titlebar="strip"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-16); }
+/* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
+.el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
+.el-project-card {
+  display: flex; flex-direction: column; gap: var(--el-space-8); inline-size: 100%; padding: var(--el-space-16); text-align: start; font: inherit; cursor: pointer;
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md); color: inherit;
+}
+.el-project-card:hover { border-color: var(--el-role-border-strong); }
+.el-project-card__head { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-project-card__name { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
+.el-shell--nav > .el-shell__main:focus { outline: none; }
+.el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
+
+/* ---- Back to top (UX-25) ----------------------------------------------------------------------------------------- */
+/* After a long list, inside the box that scrolls: it sticks 16 px above the window's foot, and its 40 px round button
+   sits 16 px in from the content area's end edge, in the list's end padding (a page with it keeps 12 px more there,
+   .el-back-top-room, so a row's when and how long and its hover actions are never under it). It fades in after one screen down. */
+.el-back-top-room { padding-inline-end: var(--el-space-12); }
+.el-back-top {
+  position: sticky; inset-block-end: var(--el-space-16); block-size: 0; z-index: var(--el-layer-sticky);
+  pointer-events: none;
+}
+.el-back-top__button.el-button {
+  position: absolute; inset-block-end: 0; inset-inline-end: calc(-1 * (var(--el-space-12) + var(--el-space-16)));
+  inline-size: var(--el-space-40); block-size: var(--el-space-40); padding: 0; border-radius: var(--el-radius-full);
+  background: var(--el-role-bg-surface); box-shadow: var(--el-shadow-1);
+  pointer-events: auto; transition: opacity var(--el-motion-fast), visibility var(--el-motion-fast);
+}
+.el-back-top[data-shown="false"] .el-back-top__button { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- The selected-words bar (UX-22) --------------------------------------------------------------------------- */
+/* Above the words selected in a transcript, centred on them: Play from here, Ask about this, Copy with time, Share. */
+.el-selection-bar {
+  position: fixed; z-index: var(--el-layer-menu); transform: translate(-50%, calc(-100% - var(--el-space-8)));
+  display: flex; gap: var(--el-space-2); padding: var(--el-space-4);
+  background: var(--el-role-bg-overlay); border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-menu-radius); box-shadow: var(--el-shadow-1);
+}
+
+/* ---- DES-03: the desktop's base sizes (PLAN_V2_1_POLISH, a proposal for the owner to pick from) ---------------------
+   100% looks like the 90-95% the owner asked for, without a default zoom: in the three levels' shell only (the floating
+   windows, and classic's sidebar, keep their own sizes). Body 14, secondary 13, small 12; page titles 18, the panel's 15 semibold, rail labels
+   11; panel items 32, rows 56/44, buttons and fields 32 (28 small); icons 16, 20 in the rail. Urdu and Arabic titles keep
+   their own sizes and line heights (Nastaliq and Naskh are taller). */
+.el-shell--nav {
+  --el-component-button-height: var(--el-desktop-control-height);
+  --el-component-field-height: var(--el-desktop-control-height);
+}
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)),
+.el-shell--nav :is(.el-lib-crumbs__root, .el-lib-crumbs__sep):not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-page-title-size); line-height: var(--el-desktop-text-page-title-line);
+}
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)) { font-weight: var(--el-desktop-text-page-title-weight); }
+.el-shell--nav .el-panel__title:not(:lang(ur), :lang(ar)) {
+  font-size: var(--el-desktop-text-panel-title-size); line-height: var(--el-desktop-text-panel-title-line); font-weight: var(--el-desktop-text-panel-title-weight);
+}
+.el-shell--nav .el-rail__label { font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); }
+.el-shell--nav .el-row__meta.el-caption:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
+.el-shell--nav .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
+.el-shell--nav .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
+.el-shell--nav .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }

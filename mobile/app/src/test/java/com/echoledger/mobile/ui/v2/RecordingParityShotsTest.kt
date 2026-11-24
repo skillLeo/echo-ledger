@@ -221,7 +221,7 @@ class RecordingParityShotsTest : ScreenTest() {
     })
 
     @Test
-    fun theCopyMenu() = everyVariant("copy-menu", {}, { press(if (urdu) "کاپی کریں" else "Copy") })
+    fun theCopyMenu() = everyVariant("copy-menu", {}, { press(if (urdu) "کاپی کے مزید طریقے" else "More ways to copy") })
 
     @Test
     fun theTabs() {

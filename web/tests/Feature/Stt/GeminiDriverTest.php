@@ -302,6 +302,16 @@ describe('long recordings and the schema', function () {
             ->and($segments[2]->endMs)->toBe(661_000);
     });
 
+    it('gives each line the language its chunk was heard in, and none for a language it does not know (since 2.0.0-o)', function () {
+        $heard = GeminiDriver::toSegments([['start_s' => 0.0, 'end_s' => 1.0, 'text' => 'Hello there.']], ['start' => 0.0, 'end' => 60.0], 1, 1, 'en');
+        $hindi = GeminiDriver::toSegments([['start_s' => 0.0, 'end_s' => 1.0, 'text' => 'ٹھیک ہے']], ['start' => 0.0, 'end' => 60.0], 1, 1, 'hi');
+        $unknown = GeminiDriver::toSegments([['start_s' => 0.0, 'end_s' => 1.0, 'text' => 'Hm.']], ['start' => 0.0, 'end' => 60.0], 1, 1, null);
+
+        expect($heard[0]->language)->toBe('en')->and($heard[0]->toArray()['language'])->toBe('en')
+            ->and($hindi[0]->language)->toBe('ur')
+            ->and($unknown[0]->language)->toBeNull()->and($unknown[0]->toArray())->not->toHaveKey('language');
+    });
+
     it('uses the model chosen in Settings, and the current Pro model when the setting is not a model id', function () {
         $this->answers = [['language' => 'en', 'segments' => [['start_s' => 0.0, 'end_s' => 1.0, 'text' => 'Hi.']]]];
         app(SettingsRepository::class)->set('gemini.model', 'gemini-4-argon');

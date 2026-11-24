@@ -14,6 +14,7 @@ use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\ProviderCapabilities;
+use App\Stt\Data\Segment;
 use App\Stt\Data\StreamingGrant;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
@@ -233,7 +234,7 @@ final class SonioxDriver implements ClipTranscriber, SttProvider
             $tokens = array_values(array_filter((array) ($data['tokens'] ?? []), 'is_array'));
             if ($perChannel) {
                 $channel = $index + 1;
-                array_push($segments, ...TranscriptNormalizer::segmentWords(self::words($tokens), $channel, TranscriptNormalizer::speakerFor($channel, 2)));
+                array_push($segments, ...self::withLanguages(TranscriptNormalizer::segmentWords(self::words($tokens), $channel, TranscriptNormalizer::speakerFor($channel, 2)), $tokens));
 
                 continue;
             }
@@ -245,7 +246,7 @@ final class SonioxDriver implements ClipTranscriber, SttProvider
             foreach ($bySpeaker as $speaker => $speakerTokens) {
                 $channel = $diarized && (string) $speaker !== '1' ? 2 : 1;
                 $label = $diarized ? 'Speaker '.($speaker === '' ? '1' : $speaker) : 'Speaker';
-                array_push($segments, ...TranscriptNormalizer::segmentWords(self::words($speakerTokens), $channel, $label));
+                array_push($segments, ...self::withLanguages(TranscriptNormalizer::segmentWords(self::words($speakerTokens), $channel, $label), $speakerTokens));
             }
         }
         $segments = TranscriptNormalizer::sortByStart($segments);
@@ -267,6 +268,45 @@ final class SonioxDriver implements ClipTranscriber, SttProvider
             LanguageChoice::normalize($language) ?? $detected,
             ['model' => (string) $this->settings->get('soniox.async_model', 'stt-async-v5'), 'audio_channels' => $perChannel ? 2 : 1],
         );
+    }
+
+    /**
+     * Since 2.0.0-o: each line in the language most of its tokens were heard in (Soniox names one per token when it
+     * identifies languages); a line with none stays unknown.
+     *
+     * @param  list<Segment>  $segments  lines made from [$tokens]
+     * @param  list<array<string, mixed>>  $tokens
+     * @return list<Segment>
+     */
+    public static function withLanguages(array $segments, array $tokens): array
+    {
+        $heard = [];
+        foreach ($tokens as $token) {
+            $language = LanguageChoice::fromDetected($token['language'] ?? null);
+            if ($language !== null && trim((string) ($token['text'] ?? '')) !== '') {
+                $heard[] = [(int) ($token['start_ms'] ?? 0), $language];
+            }
+        }
+        if ($heard === []) {
+            return $segments;
+        }
+        // The lines of one side come in order and do not overlap: one pass over the tokens in time order.
+        usort($heard, fn (array $a, array $b): int => $a[0] <=> $b[0]);
+        $next = 0;
+        $out = [];
+        foreach ($segments as $segment) {
+            while ($next < count($heard) && $heard[$next][0] < $segment->startMs) {
+                $next++;
+            }
+            $count = [];
+            for ($i = $next; $i < count($heard) && $heard[$i][0] <= $segment->endMs; $i++) {
+                $count[$heard[$i][1]] = ($count[$heard[$i][1]] ?? 0) + 1;
+            }
+            arsort($count);
+            $out[] = $count === [] ? $segment : $segment->withLanguage((string) array_key_first($count));
+        }
+
+        return $out;
     }
 
     /**

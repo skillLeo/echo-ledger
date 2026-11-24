@@ -1095,3 +1095,148 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
 - **Waiting for re-review:** b-phone-parity-recording 5ea084d9. b-phone-parity e7b12b6c needs a status check first.
 - **Parity:** desktop 62% (372/603), phone 36% (103/285), web audit just started. Source: docs/v2/audit/parity.csv.
 - **Caption latency, real provider:** p50 0.56 s / p90 1.11 s English; p50 0.77 s / p90 1.20 s Urdu+English.
+
+## 2026-11-22 06:00 PKT — production web deploy v1.1 2bc45fc3
+- **Live:** v1.1 2bc45fc3 (from f3b0f7a2): 204 web files, 0 deleted, `public/build` rebuilt; 5 migrations in one batch
+  (2026_12_22 assist_relay_checks, 2026_12_23 transcribe later, 2026_12_24 title_by_person, 2026_12_25 label_lists,
+  2026_12_26 avatar/email-restore columns). Contracts 2.0.0-j…o (Audio only, person titles, account, lists, Roman Urdu
+  default, Ask everywhere).
+- **Safety:** backup `~/echoledger-backups/pre-v1.1-2bc45fc3-20261122-005909` (db, web.tgz, env, SHA256SUMS, plus
+  `db-at-down.sql.gz` taken in maintenance); Mac copy `~/echoledger-backups/pre-v1.1-2bc45fc3/db.sql.gz`. Rehearsal on
+  that dump: REHEARSAL PASSED (5 up, down, up; counts 3 273 245 0 0). Downtime 65 s.
+- **After:** counts unchanged; no pending migrations; `/app/login` 200, `/api/config` 401, `/.env` 403, assetlinks 200;
+  `/up` answers 403 from Hostinger's edge (not the app); no new errors. `assist:relay-check` is scheduled.
+- **One-time:** `echoledger:roman-titles` rewrote 111 automatic Urdu-script titles in Roman Urdu (title writer; person
+  titles untouched; a dry run now finds 0).
+- **Open:** `ECHOLEDGER_ANDROID_FINGERPRINTS` is empty on production, so phone App Links and phone passkeys stay off
+  until the release key's SHA-256 is set in `.env`. hPanel cron for `schedule:run` still to be confirmed by Hassam.
+
+## 2026-11-22 10:30 PKT — releases 2.0.4 (both apps) and phone 2.0.5; phone parity closed
+
+- **Merged to v1.1:** phone parity P7–P11 (348d8d9a), P12 (2d1aa723), P13 (c1412db8), P14 (3e87ff81), each reviewed
+  to "approve" and run on the full phone suite. Failures in the full runs were load flakes only, and each passed alone:
+  SystemBarsThemeTest, OnboardingTest and V2LibraryFlowParityTest (P-103, P-107).
+- **Parity (docs/v2/audit/parity.csv):** desktop 603/603, web 152/152, phone 284/285. PH-REC-032 stays partial on
+  purpose. Stated exceptions are in the rows:
+  - notifications drawn by Android's own templates keep the phone's text size;
+  - Activity titles come from the server in English;
+  - the widget keeps the phone's direction.
+- **2.0.4:** release/v2.0.4 7aedfb46, tag v2.0.4.
+  - Desktop: CI built Windows and Mac (signed with the pinned EchoLedger Development Signing; check-mac-signature
+    --pinned passes).
+  - Mac: installed to /Applications without opening it. The earlier 2.0.3 was ad hoc (D-168, silent mic) and is kept
+    in ~/EchoLedger-backups. macOS asks for mic and screen permission once.
+  - Phone: 2.0.4 (code 24) installed with `install -r`, data kept.
+- **Phone 2.0.5 (code 25):** release/v2.0.5 8a25e681, tag phone-v2.0.5. No v* tag, so no desktop builds; desktop
+  stays 2.0.4. Installed with `install -r` (no call, nothing recording); auto-record re-armed.
+- **Backlog:** P-104..P-107 (P14 review minors and flakes) are in docs/v2/audit/bugs.csv.
+- **Needs Hassam:**
+  - open EchoLedger 2.0.4 on the Mac, allow mic and screen, test one call;
+  - D12 "rows OK";
+  - the 20:00 walkthrough, then "ship";
+  - confirm the hPanel cron;
+  - send the release key's SHA-256 for ECHOLEDGER_ANDROID_FINGERPRINTS;
+  - change the VPS root password.
+
+## 2026-11-23 01:30 PKT — call choice on both apps; desktop 2.0.6–2.0.8, phone 2.0.6–2.0.8
+
+- **PLAN_CALL_CHOICE** (local, owner priority before "ship"): built, reviewed and merged on both apps.
+  - "After each call" (Ask me / Transcribe every call / Save audio only / Don't record calls) and "When to ask".
+  - The pill menu.
+  - The 5 s "At the start" banner (phone).
+  - One calm card with Undo; the grouped line.
+  - Words from docs/v2/copy/call-choice.md.
+  - Old "keep" migrates to Ask me on both apps.
+- **Owner decision on phone screenshots.** AOSP's screen-recording callback never covers overlay windows (S25 confirmed). So the pill and the after-call card carry no FLAG_SECURE. Only captions, Live Assist and Live Translate stay protected, behind "Hide EchoLedger's live words…" (on by default). "During screen sharing" is removed.
+- **Data-loss rule held by review on both apps:** a Delete is never applied while its Undo can't be reached.
+  - Grouped and held lines.
+  - A pending Delete at quit or crash returns as "Choose again", never kept or uploaded by a timer.
+  - Notification-first ordering.
+  - No-permission fallbacks.
+- **Mac 2.0.4 incident.** The signature changed (ad hoc → pinned), so macOS dropped every permission. System audio recorded 0 bytes in silence, and a client meeting went unrecorded.
+  - 2.0.6 warns within 3 s ("The other side isn't being recorded") and keeps the mic.
+  - It re-checks grants after an update.
+  - 2.0.7 puts the warning on both pills.
+- **Releases:**
+  - desktop v2.0.6 (ad13c731), v2.0.7 (75579012), v2.0.8 (35471d08), all signed and smoke-tested in CI;
+  - phone 2.0.6 (code 26, installed), 2.0.7 (27) and 2.0.8 (28, built, not installed: wireless adb off).
+- **Needs Hassam:**
+  - "mac free" for 2.0.8 and the 1-minute both-sides test;
+  - Wireless debugging for phone 2.0.8;
+  - the call-choice device batch;
+  - VISUAL-OK on docs/design/screens/call-choice/;
+  - "rows OK" (D12);
+  - make the GitHub repo private (still public);
+  - the hPanel cron;
+  - the Android fingerprint;
+  - the VPS root password.
+
+## 2026-11-23 07:34 PKT — production web deploy of v1.1 78a3fcb5 (contract 2.0.0-p, Library filters, NAV §0)
+
+- **What went out:** 2bc45fc3 → 78a3fcb5 (110 commits).
+  - Web: 23 files added, 55 modified, 1 deleted (`resources/views/filament/v2/library-views.blade.php`, removed by hand).
+  - Uploaded: 53 files plus public/build. Bundle SHA-256 26559c13…3348.
+- **What it brings:**
+  - LF1/LF2: the facet counts, saved views (`/api/views`, `views_version`), and `facets` / `processing_since` on library items.
+  - The console's new Library (filter panel, pills, My views; Urdu-folded search across title, transcript and project path).
+  - NAV §0: All recordings first, the ways back, Clear all, ⌘[ / ⌘].
+  - Stuck counted from the current attempt.
+- **Migrations:** 2 in batch 22.
+  - `2026_12_27_000001_create_saved_views`: 0.48 s.
+  - `2026_12_28_000001_add_attempt_started_at`: 0.47 s; the transcripts rebuild at 252 rows.
+- **Downtime:** about 80 s, down 02:33 to up 02:34:22 server time.
+- **Backup:** `~/echoledger-backups/pre-2.0.0-p-20261123-023043` on the server (db.sql.gz, db-after-down.sql.gz, web.tgz, env.backup, SHA256SUMS). The dump is also on the Mac, in ~/echoledger-backups/pre-2.0.0-p/.
+- **Rehearsal:** on that dump with deploy/checks/2.0.0-p.sql, REHEARSAL PASSED (up, down, up).
+- **Checks after:**
+  - /app/login 200; /api/config and /api/views 401 without a token; /.env 403. /up 403 is the Hostinger edge, as before.
+  - Counts unchanged: 3 users, 281 sessions, 252 transcripts. failed_jobs 0, saved_views 0, no new log errors.
+  - A read-only service check for the owner's account: facets total 211 with 9 sections, Needs you 5 failed; views [].
+- **Not done:** the device-token API round trip, because the lead keeps no tokens. It is covered when the owner's desktop 2.0.10 syncs a saved view.
+- **Open, as before:** ECHOLEDGER_ANDROID_FINGERPRINTS is empty; the hPanel cron is unconfirmed.
+
+## 2026-11-23 22:10 PKT — phone 2.0.10, Mac 2.0.11 installed; web ready for 2026-11-24
+- **Phone 2.0.10 (code 30)**, tag `phone-v2.0.10` on release/v2.0.11:
+  - the phone's Library filters and saved views (merge ebe1a02b);
+  - signing out now leaves nothing of the last person behind: every write after a server call is checked against the account (generation and epoch) and made on the main thread.
+  - The full suite passed 2684 + 11; SystemBarsThemeTest (known flake) passed alone.
+  - Installed on the S25 at 21:46 with `install -r`. Checked first: mCallState=0, and the recording service was only "Ready to record WhatsApp calls". The ready service came back on its own.
+- **Mac 2.0.11** was installed at 21:46 after "mac free". It was quit cleanly first, with no audio files open. The pinned signature was checked, and 2.0.8 is backed up in ~/EchoLedger-backups.
+  - **Known (D-211, S2):** after opening, the window kept the old look although production answers every ui_v2 flag for the account (checked with InterfaceFlags::for). The window reads the flags before the core's first config and never listens to `ui:flags`.
+  - Workaround: open another screen. The fix is on fix/D-flags-at-start, for 2.0.12.
+- **Web on v1.1 for the 2026-11-24 deploy:**
+  - b2cd2710: the frame keeps its place, dialogs from the flyout keep it open, menus sit above the next row, meters in Urdu;
+  - 9a636b8b: `$here` locked, https kept, the request restored in a `finally`.
+  - Full suite 7665 passed. The runbook is ~/EchoLedgerTeam/handover/deploy-nav3.md.
+- **After the deploy:** fix/W-forward-filters @ bfa51ddd (⌘] Forward), approved in four review rounds.
+- **Checking:** the S2 "fix now" bugs W-001–003 (provider costs and engine tools seen by customers, a credential name in an error). They join tomorrow's deploy if they are real and ready.
+
+## 2026-11-24 03:20 PKT — incident: uploads failed for 9 hours (sodium missing on the host); fixed
+- **What:** at 11:44 UTC on 2026-11-23, the hosting account's PHP selection changed. ~/.cl.selector/defaults.cfg was rewritten, the account default became 8.2, and the per-user PHP 8.4 extension set lost `sodium`. We did not make this change; it came from the host or from another site on the account.
+  - From 13:04:50 UTC every upload crashed in RecordingCipher.php:34 ("Undefined constant SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES"): 48 errors and 12 failed AssembleRecordingJob runs.
+  - `failed()` discarded the parts of 6 of the owner's recordings: 4 from the phone (2 calls and 2 voice notes) and 1 from the Mac, all from 2026-11-23, plus one more.
+- **Fix, 22:19 UTC:** `selectorctl --interpreter=php --version=8.4 --enable-user-extensions=sodium`, with the old cfg backed up as ~/.cl.selector/alt_php84.cfg.bak-20261124.
+  - Web PHP 8.4.28 and CLI 8.4 both load sodium, and there have been no errors since.
+  - The account default (8.2) was left alone, because other sites share the account. The site runs on 8.4 through its own setting.
+- **Recovery:** the audio is still on the devices, and each device sends it again with Retry (phone: Library › "didn't upload" › Review › Retry). A server-side retry can't recover it, because the parts were discarded.
+- **So it can't happen silently again (fix/W-required-extensions):**
+  - a health check every 5 minutes, with an admin banner and an email;
+  - a deploy check for the required extensions;
+  - parts kept, rather than discarded, after an environment fault;
+  - a clear message from RecordingCipher.
+
+## 2026-11-24 04:45 PKT — production web deploy of v1.1 80ff7788 (nav3 + W-INC-1124)
+- **What went out:** 78a3fcb5 → 80ff7788, three-level navigation on the console (NAV web, W-nav-minors) and W-INC-1124: a health check every 5 minutes with an admin banner and an email, a deploy check for both PHPs, and kept parts after a server fault, bounded at 48 h or 8 rounds.
+  - 69 web files, 26 added and 43 modified, none deleted.
+  - Bundle sha256 0cd48ebe…71f7. The clean build needs the vendor folder (Filament's theme.css), so it was built with vendor linked from merge-web; composer.lock is identical.
+- **Backup:** ~/echoledger-backups/pre-nav3-20261123-234206 (db.sql.gz, web.tgz, env.backup, SHA256SUMS).
+- **Rehearsal:** on a copy of that dump on the Mac, migration 2026_12_29_000001 ran up, down, up, all W-INC-1124.sql checks were ok, and the counts were unchanged. The local copy was deleted afterwards.
+- **Deploy:**
+  - Maintenance 23:43:50–23:45:09 UTC (about 80 s).
+  - `migrate --force` ran 1 migration (13.77 ms) with nothing pending afterwards, then optimize and filament:optimize.
+- **Checks:**
+  - Addresses: /app/login 200; /api/config and /api/views 401; /.env 403; /health/php `{"ok":true}` 200.
+  - check-php.sh: PASS for the CLI 8.4 (all extensions, cipher works) and for the web PHP. FAIL for /usr/bin/php, as expected: it is the account default 8.2, which can't boot the app.
+  - `about --only=server_health`: all loaded, cipher works.
+  - Counts equal step 2: 3 users, 289 sessions, 251 transcripts, 219 recordings, 0 saved views, 0 failed_jobs. No new errors.
+- **Scheduler, now confirmed by evidence:** yesterday's assembly jobs ran a few seconds after minute boundaries, within seconds of each upload, so a per-minute `schedule:run` on PHP 8.4 is firing. That closes the old "hPanel cron unconfirmed" item. A manual `schedule:run` on 8.4 runs all 7 tasks. The health check writes its cache entry only when it fails, so an empty entry means healthy.
+- **Merged since, for 2026-11-25:** eef23198 (BE-01 Other tab with one name per state, and the health check's report), b69cd8c7 (contract 2.0.0-r and the five v21 flags). Runbook: ~/EchoLedgerTeam/handover/deploy-2026-11-25.md, including adding the owner to the v21 flag lists.

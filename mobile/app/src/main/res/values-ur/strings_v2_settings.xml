@@ -56,8 +56,7 @@
     <string name="v2_set_item_notifications_activity">سرگرمی کی اطلاعات</string>
     <string name="v2_set_item_notifications_quiet">خاموش اوقات</string>
     <string name="v2_set_item_lock_app">ایپ لاک</string>
-    <string name="v2_set_item_lock_hide">حالیہ ایپس میں چھپائیں</string>
-    <string name="v2_set_item_privacy_share">اسکرین شیئرنگ کے دوران</string>
+    <string name="v2_set_item_lock_hide">ویجیٹ پر عنوانات</string>
     <string name="v2_set_item_storage_space">استعمال شدہ جگہ</string>
     <string name="v2_set_item_storage_kept">ریکارڈنگز کب تک رکھی جاتی ہیں</string>
     <string name="v2_set_item_plan_usage">پلان اور استعمال</string>
@@ -105,6 +104,7 @@
     <string name="v2_set_activity_help">تیار ٹرانسکرپٹس، ناکام اپ لوڈز، نئی ڈیوائسز</string>
     <string name="v2_set_quiet_help">%1$s سے %2$s تک اطلاعات خاموشی سے آئیں گی</string>
     <string name="v2_set_sign_out">سائن آؤٹ</string>
+    <string name="v2_set_audio_kept">محفوظ آڈیو: %1$s · %2$s بعد خود بخود صاف ہو جاتی ہے</string>
     <string name="v2_set_sign_out_title">اس فون سے سائن آؤٹ کریں؟</string>
     <string name="v2_set_sign_out_body">جو ریکارڈنگز ابھی اپ لوڈ نہیں ہوئیں وہ دوبارہ سائن ان تک اسی فون پر رہیں گی۔</string>
     <string name="v2_set_theme">تھیم</string>

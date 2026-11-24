@@ -13,7 +13,7 @@ import { recordingName } from "../../lib/library";
 import { confirmAction } from "../../lib/confirm";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { SHARED_TABS, type SharedTab } from "../../views/main/Sidebar";
-import { Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
+import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
@@ -104,7 +104,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     const names = new Map((projects ?? []).map((p) => [p.id, p.name]));
     return (link: ShareLink) => (link.session_id ? recordings.get(link.session_id) ?? "A recording" : link.client_id ? `Project: ${names.get(link.client_id) ?? "a project"}` : "A link");
   }, [library, projects]);
-  const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : "The Inbox");
+  const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : null);
 
   const save = async (item: SharedItem) => {
     if (busy) return;
@@ -250,7 +250,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     const items = requestMenu(link);
     return (
       <ListRow key={link.id} rowId={link.id} icon={Icons.InboxIcon} title={title}
-        meta={[`Into ${projectName(link.client_id)}`, receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
+        meta={[projectName(link.client_id) ? `Into ${projectName(link.client_id)}` : "Into no project", receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
         endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
         badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
         onContextMenu={rowMenu(`Actions for ${title}`, items)}
@@ -266,7 +266,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   );
 
   return (
-    <div className="el-page" data-v2="shared">
+    <div className="el-page el-back-top-room" data-v2="shared">
       <header className="el-page__head">
         <div className="el-page__titles">
           <h1 className="el-title-l">Shared</h1>
@@ -293,6 +293,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
         <RequestLinkSheet projects={projects ?? []} notify={notify} onShowLinks={() => onTab("requests")}
           onMade={() => void loadRequests()} onClose={() => { setNewRequest(false); void loadRequests(); }} />
       )}
+      <BackToTop first=".el-row__hit" />
     </div>
   );
 }

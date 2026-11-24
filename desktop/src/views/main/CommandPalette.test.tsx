@@ -90,6 +90,26 @@ describe("command palette (B9)", () => {
     expect(paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders }).some((c) => c.id.startsWith("folder-"))).toBe(false);
   });
 
+  it("in the new design, an app's folder is its Source: \"Show WhatsApp recordings\" (v2.1: the row's mark no longer filters)", () => {
+    const openFolder = vi.fn();
+    const folders = [
+      { folder: "inbox" as const, label: "Inbox" }, { folder: "whatsapp" as const, label: "WhatsApp" }, { folder: "phone" as const, label: "SIM" },
+      { folder: "voice_notes" as const, label: "Voice notes" }, { folder: "imported" as const, label: "Imported" }, { folder: "shared" as const, label: "Shared with me" },
+    ];
+    const v2 = paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders, openFolder, v2: true }).filter((c) => c.id.startsWith("folder-"));
+    expect(v2.map((c) => c.label)).toEqual([
+      "Show recordings in no project", "Show WhatsApp recordings", "Show SIM calls", "Show voice notes", "Show imported recordings", "Go to Shared with me",
+    ]);
+    // Found by what people type: the app's name, "source", "filter".
+    const whatsapp = v2.find((c) => c.id === "folder-whatsapp")!;
+    expect(paletteMatches("show whatsapp", whatsapp)).toBe(true);
+    expect(paletteMatches("source", whatsapp)).toBe(true);
+    whatsapp.run();
+    expect(openFolder).toHaveBeenCalledWith("whatsapp");
+    // Classic keeps its words.
+    expect(paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders, openFolder }).find((c) => c.id === "folder-whatsapp")!.label).toBe("Go to WhatsApp");
+  });
+
   function renderPalette(status = makeStatus()) {
     const props = { onClose: vi.fn(), onGo: vi.fn(), run: vi.fn(), onOpenRecording: vi.fn() };
     render(<CommandPalette status={status} {...props} />);

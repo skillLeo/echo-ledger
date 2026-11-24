@@ -16,16 +16,17 @@ const to = playerSource.indexOf('// A line on screen as text parts');
 assert.ok(from > 0 && to > from, 'the player still has markedLine and transcriptText');
 const methods = vm.runInNewContext('({' + playerSource.slice(from, to) + '})');
 
-function player() {
+function player(view = 'original') {
     const segments = [
         { speaker: 'A', start_ms: 0, text: 'Assalam o alaikum, the proforma is ready.', words: [{ t: 'proforma', u: true }] },
         { speaker: 'B', start_ms: 65000, text: 'Forty percent advance this time.', words: [] },
     ];
     return Object.assign(Object.create(methods), {
-        view: 'original',
-        d: { segments, unsure: { style: 'brackets', note: true, note_text: '' }, screens: [{ index: 1, at_ms: 30000, description: 'The invoice' }] },
-        viewReady: () => false,
-        lineText: (i) => segments[i].text,
+        view,
+        d: { segments, unsure: { style: 'brackets', note: true, note_text: '' }, screens: [{ index: 1, at_ms: 30000, description: 'The invoice' }],
+            views: { roman: ['Assalam o alaikum, proforma tayyar hai.', 'Is dafa chalees percent advance.'] } },
+        viewReady: (v) => view !== 'original' && v === view,
+        lineText: (i) => (view === 'roman' ? ['Assalam o alaikum, proforma tayyar hai.', 'Is dafa chalees percent advance.'][i] : segments[i].text),
         name: (s) => (s.speaker === 'A' ? 'Bilal' : 'Sana'),
         clock: (ms) => Math.floor(ms / 60000) + ':' + String(Math.floor(ms / 1000) % 60).padStart(2, '0'),
         shotLine: (s) => '[Screen ' + s.index + ': ' + s.description + ']',
@@ -33,8 +34,8 @@ function player() {
 }
 
 // Runs the v2 script with a page that has that player, and returns what it puts on the clipboard.
-async function v2Copy(mode, header = '') {
-    const p = player();
+async function v2Copy(mode, header = '', view = 'original') {
+    const p = player(view);
     let clip = null;
     const notice = { title() { return this; }, success() { return this; }, danger() { return this; }, send() {} };
     const page = {
@@ -70,4 +71,17 @@ test('Copy for AI is classic\'s Copy for AI after the header', async () => {
     const { clip, classic } = await v2Copy('ai', header);
     assert.equal(clip, header + '\n\n' + classic.transcriptText(false, true));
     assert.ok(clip.includes('[Screen 1: The invoice]'));
+});
+
+test('U19: every copy is in the view the player shows, and Copy for AI\'s header then names it', async () => {
+    const header = '# Payment terms\n16 November 2026, 4:30 pm · Voice note\nPeople: Bilal, Sana\nLanguage: UR';
+    const ai = await v2Copy('ai', header, 'roman');
+    assert.equal(ai.clip, header.replace('Language: UR', 'Language: Roman Urdu') + '\n\n' + ai.classic.transcriptText(false, true));
+    assert.ok(ai.clip.includes('Sana: Is dafa chalees percent advance.'));
+    const text = await v2Copy('text', '', 'roman');
+    assert.equal(text.clip, text.classic.transcriptText(false));
+    assert.ok(text.clip.includes('Bilal: Assalam o alaikum, proforma tayyar hai.'));
+    // The original words: the header as the server wrote it.
+    const original = await v2Copy('ai', header);
+    assert.ok(original.clip.startsWith(header + '\n\n'));
 });
