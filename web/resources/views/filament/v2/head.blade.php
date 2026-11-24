@@ -61,4 +61,6 @@
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.copy')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.recording-markers')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-selection')
+{{-- UX-25: the Library keeps your place coming back from a recording, and Back to top on the long lists. --}}
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.keep-place')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library() && ! \App\Services\Workspaces\ConsoleAccess::readOnly(), 'filament.v2.library-swipe')

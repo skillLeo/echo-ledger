@@ -1199,6 +1199,78 @@ button.v2-row:hover {
     background-color: var(--el-role-bg-subtle);
 }
 
+/* UX-25 (PLAN_V2_1_POLISH, an owner request): the recording you came back from keeps a light grey tint for a minute
+   (filament.v2.keep-place), never the selection's colour; a little stronger in dark. */
+.v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 6%, transparent);
+}
+
+html.dark .v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 9%, transparent);
+}
+
+/* Back to top: a small round ↑ at the bottom corner of a long list once it is more than a screen down; on a phone above
+   the bottom bar. It fades in and out. */
+.v2-back-top {
+    position: fixed;
+    inset-block-end: var(--el-space-16);
+    inset-inline-end: var(--el-space-16);
+    z-index: var(--el-layer-dock);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-40);
+    block-size: var(--el-space-40);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    box-shadow: var(--el-shadow-1);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--el-motion-base) var(--el-motion-ease-out), visibility var(--el-motion-base);
+}
+
+/* A 48 px place to touch around the 40 px button. */
+.v2-back-top::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--el-space-4));
+}
+
+.v2-back-top.is-shown {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.v2-back-top:hover {
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-back-top:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-width);
+}
+
+.v2-back-top .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+@media (max-width: 720px) {
+    .v2-back-top {
+        inset-block-end: calc(var(--el-component-list-row-height-mobile) + var(--el-space-16) + env(safe-area-inset-bottom));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-back-top {
+        transition: none;
+    }
+}
+
 .v2-lib-row {
     display: flex;
     align-items: center;
