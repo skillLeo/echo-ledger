@@ -711,6 +711,8 @@ fn draw(app: &AppHandle, generation: u64, state: TrayState, shape: MenuShape) {
     }
     if let Some(state) = state {
         let recording = matches!(state, TrayState::Recording | TrayState::Paused);
+        // FIX-12: the taskbar icon's red dot while recording (Windows).
+        crate::taskbar::overlay(app, recording);
         if !recording {
             // The recording ended: no time beside the icon.
             let _ = tray.set_title(None::<&str>);

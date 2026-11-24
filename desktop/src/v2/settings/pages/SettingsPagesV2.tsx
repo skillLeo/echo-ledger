@@ -85,7 +85,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
-      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
+      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} threeLevels={threeLevels} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements

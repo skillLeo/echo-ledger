@@ -6,7 +6,7 @@ import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffe
 import { folderLabel, inFolderHere, LIBRARY_VIEWS, type LibraryView as LibraryViewKey } from "../../lib/folders";
 import { PageHeader } from "../../components/Page";
 import { Menu } from "../../components/Menu";
-import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
+import { changePreferences, DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { WhatsAppSheet } from "./WhatsAppSheet";
 import { StateBanner } from "../../components/StateBanner";
@@ -226,10 +226,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return () => window.removeEventListener(PREFERENCES_EVENT, follow);
   }, []);
   const chooseDensity = (next: Density) => {
-    const prefs = { ...loadPreferences(), density: next };
-    savePreferences(prefs);
+    changePreferences({ density: next });
     setDensity(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
   };
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   useEffect(() => {
@@ -1487,7 +1485,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             <>
               <div className="detail-body">
                 {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
-                {!tableView && <ItemBar title={recordingName(current.title)} onBack={backToList} />}
+                {/* Keyed by the recording: another recording opens with its own bar, untitled until its header scrolls under. */}
+                {!tableView && <ItemBar key={current.id} title={recordingName(current.title)} onBack={backToList} />}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1801,8 +1800,10 @@ function ItemBar({ title, onBack }: { title: string; onBack: () => void }) {
   useEffect(() => {
     const check = () => {
       const el = bar.current;
-      const head = el?.closest(".detail-body")?.querySelector(".detail-title");
-      if (!el || !head) return;
+      // Hidden on a wide page: nothing to measure on every scroll.
+      if (!el || el.offsetParent === null) return;
+      const head = el.closest(".detail-body")?.querySelector(".detail-title");
+      if (!head) return;
       setTitled(head.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom);
     };
     // The page scrolls (.content), not the window: scroll events don't bubble, so listen while they come down.
