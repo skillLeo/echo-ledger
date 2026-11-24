@@ -25,11 +25,14 @@ import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowSettings
 
 /**
- * After each call (the call-choice plan, 2.0.5): in Ask me the after-call card asks; Transcribe, Delete, a swipe or 8 s
- * without a choice (audio only) each become one line with Undo for 5 s, and Undo really undoes all three: the call
- * waits for the question again, its upload called off or its file kept. Back-to-back calls get one grouped line. The
- * other settings, and a choice made on the pill, ask nothing. Without the overlay permission a notification asks with
- * the same three words.
+ * After each call (the call-choice plan, 2.0.5; v2.1 FIX-03): in Ask me the after-call card asks; Transcribe, Delete, a
+ * swipe or 8 s without a choice (audio only) each become one line with Undo, and Undo really undoes all three: the call
+ * waits for the question again, its upload called off or its file kept. Since v2.1 a choice closes the card at once and
+ * its line is never a floating window: inside the app it is the app's snackbar ([CallLines]), outside the app the
+ * after-call notification, updated in place. Only when neither can show it (the app not on screen, notifications not
+ * allowed: [cardOnly]) does the line stay on the card for 5 s. Back-to-back calls get one grouped line. The other
+ * settings, and a choice made on the pill, ask nothing. Without the overlay permission a notification asks with the
+ * same three words.
  */
 class PostCallPromptTest : AppTest() {
     @Before
@@ -45,6 +48,7 @@ class PostCallPromptTest : AppTest() {
 
     @After
     fun closeCard() {
+        host?.let(CallLines::detach)
         DecisionPopup.resetForTest()
         // Every step this test asked for runs now, under its own stand-ins, and what it posts goes with this test.
         DecisionPopup.drainForTest()
@@ -82,6 +86,56 @@ class PostCallPromptTest : AppTest() {
         assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
     }
 
+    /** Neither the app on screen nor notifications allowed: the only case where a choice's line stays on the card. */
+    private fun cardOnly() = shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+
+    /** The windows over other apps that are open (the after-call card is one while it shows). */
+    private fun overlayWindows(): Int = org.robolectric.shadow.api.Shadow
+        .extract<org.robolectric.shadows.ShadowWindowManagerImpl>(app.getSystemService(android.view.WindowManager::class.java))
+        .views.count {
+            (it.layoutParams as? android.view.WindowManager.LayoutParams)?.type ==
+                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        }
+
+    /** The notification posted for [id]: the after-call question, or the line that took its place. */
+    private fun lineOf(id: String = "call-1"): android.app.Notification? =
+        shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(id.hashCode())
+
+    private fun title(n: android.app.Notification?) = n?.let { shadowOf(it).contentTitle?.toString() }
+
+    private fun actions(n: android.app.Notification?) = n?.actions.orEmpty().map { it.title.toString() }
+
+    /** Taps [action] in a notification, as the shade would. */
+    private fun tap(action: String, id: String = "call-1") {
+        app.sendBroadcast(
+            android.content.Intent(app, SaveDecisionReceiver::class.java).setAction(action).putExtra(SaveDecisionReceiver.EXTRA_ID, id)
+        )
+    }
+
+    /** The app on screen, as its snackbar host: it shows what it is given and runs what the test asks of it. */
+    private class AppLines : CallLines.Host {
+        class Shown(val line: CallLines.Line, val lineMs: Long, val actions: CallLines.Actions)
+
+        val shown = mutableListOf<Shown>()
+        val cancelled = mutableListOf<String?>()
+
+        override fun show(line: CallLines.Line, lineMs: Long, actions: CallLines.Actions): Long {
+            shown += Shown(line, lineMs, actions)
+            return lineMs
+        }
+
+        override fun cancel(id: String?) {
+            cancelled += id
+        }
+    }
+
+    private var host: AppLines? = null
+
+    private fun inApp(): AppLines = AppLines().also {
+        host = it
+        CallLines.attach(it)
+    }
+
     @Test
     fun `Ask me shows the card and no notification on top of it`() {
         asked()
@@ -91,7 +145,8 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `nothing chosen for 8 seconds keeps the audio only, then Saved as audio goes after 5 seconds`() {
+    fun `on the card only, nothing chosen for 8 seconds keeps the audio only, then Saved as audio goes after 5 seconds`() {
+        cardOnly()
         asked()
         after(DecisionPopup.ASK_MS - 100)
         assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
@@ -105,6 +160,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a swipe keeps the audio only, as the 8 seconds do`() {
+        cardOnly()
         asked()
         DecisionPopup.audio(app, chosen = true)
         assertEquals(CallCardScreen.Done(Pick.AUDIO), DecisionPopup.shown)
@@ -113,6 +169,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `Transcribe keeps the call to be transcribed, and its Undo asks again with nothing decided`() {
+        cardOnly()
         asked()
         DecisionPopup.transcribe(app)
         assertEquals(CallCardScreen.Done(Pick.TRANSCRIBE), DecisionPopup.shown)
@@ -131,6 +188,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `Undo on Saved as audio asks again, and its Transcribe turns it into a transcript`() {
+        cardOnly()
         asked()
         DecisionPopup.audio(app, chosen = false)
         pumpUntil("kept as audio") { app.peekRecording("call-1")?.state == "queued" }
@@ -147,6 +205,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `Delete deletes nothing until Deleted and its Undo are over, and the file outlasts the line`() {
+        cardOnly()
         asked()
         DecisionPopup.delete(app)
         assertEquals(CallCardScreen.Done(Pick.DELETE), DecisionPopup.shown)
@@ -170,6 +229,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `Undo on Deleted brings the question back, with its keep timer running again`() {
+        cardOnly()
         asked()
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
@@ -185,6 +245,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a quick Undo right after Delete is applied after it, never before`() {
+        cardOnly()
         asked()
         // Both taps before the store has done anything: its steps run in the order they were asked for.
         DecisionPopup.delete(app)
@@ -198,6 +259,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a call that ends while Deleted shows is asked about only after that line, and the Undo stays reachable`() {
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
@@ -218,6 +280,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a call that ends while Deleted shows waits, and call-1 is deleted only when its line is over`() {
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
@@ -272,6 +335,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a held call's backstop waits for its question, and is never kept before it was asked`() {
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
@@ -296,6 +360,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `several calls held behind a Deleted line are asked in order, the later ones on the grouped line`() {
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
@@ -314,11 +379,13 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a Delete that ends a call never replaces another call's line, and its Undo goes in a notification then`() {
-        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // call-1's Deleted line on the card (no notification could carry it then).
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
 
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
         assertEquals("call-1's line stays", "call-1", DecisionPopup.showingFor)
         assertEquals(DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
@@ -328,8 +395,14 @@ class PostCallPromptTest : AppTest() {
             notifications().any { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
         }
 
-        // With the card free, the line is on the card and its Undo is this process's.
+        // With the card free, notifications still win: never a floating line while one can be posted.
         DecisionPopup.hide()
+        assertFalse(DecisionPopup.deleted(app, call("call-4"), "dark", 3_000))
+        assertFalse(DecisionPopup.isShowing)
+        pumpUntil("call-4's Undo in its notification") { title(lineOf("call-4")) == "Deleted · WhatsApp call · 0:44" }
+
+        // Only when no notification can be posted is the line on the card, its Undo this process's.
+        cardOnly()
         assertTrue(DecisionPopup.deleted(app, call("call-3"), "dark", 3_000))
         assertEquals(DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
         pumpUntil("call-3 on its way out") { app.peekRecording("call-3")?.state == Decisions.DISCARDING }
@@ -353,9 +426,11 @@ class PostCallPromptTest : AppTest() {
             kotlinx.coroutines.awaitCancellation()
         }
         DecisionPopup.stepTimeoutMs = 300
+        cardOnly()
         asked("call-1")
         DecisionPopup.delete(app)
         // call-2 ends while call-1's Deleted line shows: its "Deleted · Undo" goes in a notification.
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
 
         pumpUntil("call-2's step to reach the widget") { atCall2Refresh.get() != null }
@@ -499,6 +574,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `the card's follow-up runs before the widget, so a slow widget never delays or skips it`() {
+        cardOnly()
         // A widget refresh that takes the whole step time.
         val refreshing = java.util.concurrent.CountDownLatch(1)
         val ended = java.util.concurrent.CountDownLatch(1)
@@ -553,7 +629,8 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `back-to-back calls get one grouped line, never a stack of cards`() {
+    fun `on the card only, back-to-back calls get one grouped line, never a stack of cards`() {
+        cardOnly()
         asked("call-1")
         PostCallPrompt.show(app, call("call-2"), "dark")
         assertEquals(DecisionPopup.Mode.GROUPED, DecisionPopup.showingMode)
@@ -567,7 +644,8 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `a confirmation still showing gives way to the next call's question`() {
+    fun `on the card only, a confirmation still showing gives way to the next call's question`() {
+        cardOnly()
         asked("call-1")
         DecisionPopup.transcribe(app)
         PostCallPrompt.show(app, call("call-2"), "dark")
@@ -587,6 +665,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `after three identical choices the next card offers Always do this once, and Yes sets the setting`() {
+        cardOnly()
         runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
         listOf("call-1", "call-2", "call-3").forEach { id ->
             asked(id)
@@ -606,6 +685,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a choice taken back with Undo does not count toward Always do this`() {
+        cardOnly()
         runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
         asked("call-1")
         DecisionPopup.transcribe(app)
@@ -710,6 +790,7 @@ class PostCallPromptTest : AppTest() {
 
     @Test
     fun `a call sent meanwhile is not taken back by Undo`() {
+        cardOnly()
         asked()
         DecisionPopup.transcribe(app)
         pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
@@ -725,5 +806,382 @@ class PostCallPromptTest : AppTest() {
         PostCallPrompt.show(app, note, "dark")
         assertFalse(DecisionPopup.isShowing)
         after(Duration.ofSeconds(1).toMillis())
+    }
+
+    // v2.1 FIX-03: a choice's line is never a floating window.
+
+    @Test
+    fun `outside the app a choice closes the card at once and its line takes the call's notification`() {
+        asked()
+        assertEquals("the question is the one window", 1, overlayWindows())
+        DecisionPopup.transcribe(app)
+        assertEquals("the choice closes it at once: no floating line", 0, overlayWindows())
+        assertFalse(DecisionPopup.isShowing)
+        pumpUntil("Transcribing… in the call's notification") { title(lineOf()) == "Transcribing…" }
+        val line = lineOf()!!
+        assertEquals("WhatsApp call · 0:44", shadowOf(line).contentText.toString())
+        assertEquals(listOf("Undo"), actions(line))
+        assertEquals("gone when its upload goes", DecisionPopup.DONE_MS, line.timeoutAfter)
+        assertEquals("one notification for the call", 1, notifications().size)
+        pumpUntil("kept to be transcribed") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == true } == true }
+        val upload = uploadWork("call-1").single { it.state == WorkInfo.State.ENQUEUED }
+        assertTrue("the upload waits for the line", upload.initialDelayMillis >= DecisionPopup.DONE_MS)
+    }
+
+    @Test
+    fun `outside the app, after an Undo flow no overlay window is left`() {
+        asked()
+        DecisionPopup.transcribe(app)
+        pumpUntil("its line") { actions(lineOf()) == listOf("Undo") }
+        tap(SaveDecisionReceiver.ACTION_UNDO_CHOICE)
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        pumpUntil("waiting again, with nothing decided") { app.peekRecording("call-1")?.state == "pending_decision" }
+        assertNull(app.peekRecording("call-1")?.transcribe)
+        pumpUntil("nothing is sent") { noUpload("call-1") }
+        assertNull("the line went with its Undo", lineOf())
+
+        DecisionPopup.delete(app)
+        assertEquals(0, overlayWindows())
+        pumpUntil("Deleted · Undo in its place") { title(lineOf()) == "Deleted · WhatsApp call · 0:44" }
+        tap(SaveDecisionReceiver.ACTION_UNDO_DISCARD)
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        pumpUntil("back, its file kept") { app.peekRecording("call-1")?.state == "pending_decision" }
+
+        // Nothing chosen this time: kept as audio after 8 s, and still nothing floats.
+        after(DecisionPopup.ASK_MS + 1)
+        assertEquals(0, overlayWindows())
+        pumpUntil("Saved as audio in the notification") { title(lineOf()) == "Saved as audio" }
+        after(DecisionPopup.DONE_MS + 1)
+        assertEquals("no overlay window after the Undo flow", 0, overlayWindows())
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `outside the app Saved as audio offers Transcribe, which turns it into a transcript`() {
+        asked()
+        DecisionPopup.audio(app, chosen = true)
+        pumpUntil("its line") { title(lineOf()) == "Saved as audio" }
+        assertEquals(listOf("Transcribe", "Undo"), actions(lineOf()))
+        pumpUntil("kept as audio") { app.peekRecording("call-1")?.transcribe == false }
+        lineOf()!!.actions.first { it.title.toString() == "Transcribe" }.actionIntent.send()
+        pumpUntil("to be transcribed after all") { app.peekRecording("call-1")?.transcribe == true }
+        assertNull("the line goes with it", lineOf())
+    }
+
+    @Test
+    fun `outside the app Delete deletes nothing until its notification's Undo is over`() {
+        asked()
+        DecisionPopup.delete(app)
+        assertEquals(0, overlayWindows())
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals(listOf("Undo"), actions(lineOf()))
+        assertNull("its Undo is in the shade, which outlives the process", app.peekRecording("call-1")?.undoIn)
+        assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
+        val work = discardWork("call-1").single()
+        assertTrue("the file outlasts the line", work.initialDelayMillis > DecisionPopup.DISCARDED_MS)
+        runDiscardWork("call-1")
+        pumpUntil("deleted") { app.graph.recordings.get("call-1") == null }
+    }
+
+    @Test
+    fun `outside the app back-to-back calls give one grouped notification and no window`() {
+        asked("call-1")
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertEquals("no stack of cards, and no floating line", 0, overlayWindows())
+        val nm = shadowOf(app.getSystemService(NotificationManager::class.java))
+        pumpUntil("one line for both") { nm.getNotification(com.echoledger.mobile.notify.Notifications.GROUPED_ID) != null }
+        PostCallPrompt.show(app, call("call-3"), "dark")
+        assertEquals("a third call within the time joins them", 0, overlayWindows())
+        val grouped = nm.getNotification(com.echoledger.mobile.notify.Notifications.GROUPED_ID)
+        assertEquals("3 calls saved as audio", title(grouped))
+        assertEquals(listOf("Review"), actions(grouped))
+        listOf("call-1", "call-2", "call-3").forEach { id ->
+            pumpUntil("$id kept as audio") { app.peekRecording(id)?.let { it.state == "queued" && it.transcribe == false } == true }
+            assertNull("$id has no notification of its own", lineOf(id))
+        }
+        // Once the group's time is over, the next call is asked about again.
+        after(DecisionPopup.ASK_MS + 1)
+        asked("call-4")
+    }
+
+    @Test
+    fun `an Undo while another call is asked about waits for that question, then asks again`() {
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("call-1 on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        asked("call-2")
+        tap(SaveDecisionReceiver.ACTION_UNDO_DISCARD, "call-1")
+        pumpUntil("call-1 back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        pumpUntil("call-1 held for its own question") { DecisionPopup.answersFor("call-1") }
+        assertEquals("call-2's question stays", "call-2", DecisionPopup.showingFor)
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
+        assertEquals("never folded into a group", "pending_decision", app.peekRecording("call-2")?.state)
+
+        DecisionPopup.transcribe(app)
+        pumpUntil("call-1 asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        pumpUntil("call-2 kept to be transcribed") { app.peekRecording("call-2")?.transcribe == true }
+    }
+
+    @Test
+    fun `outside the app three identical choices offer Always do this, and one taken back with Undo does not count`() {
+        runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
+        asked("call-0")
+        DecisionPopup.transcribe(app)
+        pumpUntil("its line") { lineOf("call-0") != null }
+        tap(SaveDecisionReceiver.ACTION_UNDO_CHOICE, "call-0")
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-0" }
+        DecisionPopup.hide()
+        listOf("call-1", "call-2", "call-3").forEach { id ->
+            asked(id)
+            assertNull((DecisionPopup.shown as CallCardScreen.Ask).always)
+            DecisionPopup.transcribe(app)
+            // A choice counts once its line is over without Undo.
+            after(DecisionPopup.DONE_MS + 1)
+        }
+        pumpUntil("three in a row, the one taken back not among them") { app.graph.liveSettings.value?.callChoiceStreakCount == 3 }
+        asked("call-4")
+        assertEquals(Pick.TRANSCRIBE, (DecisionPopup.shown as CallCardScreen.Ask).always)
+    }
+
+    @Test
+    fun `in the app the line is the app's snackbar for 10 seconds, its upload waits for it, and nothing floats`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.transcribe(app)
+        assertEquals(0, overlayWindows())
+        val shown = lines.shown.single()
+        assertEquals(CallLines.Line("call-1", Pick.TRANSCRIBE), shown.line)
+        assertEquals("Material 3's Long", CallLines.LONG_MS, shown.lineMs)
+        pumpUntil("kept to be transcribed") { app.peekRecording("call-1")?.transcribe == true }
+        assertTrue("no notification on top of it", notifications().isEmpty())
+        assertTrue(uploadWork("call-1").single { it.state == WorkInfo.State.ENQUEUED }.initialDelayMillis >= CallLines.LONG_MS)
+
+        // Undo: the question again, with nothing decided.
+        shown.actions.action()
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        pumpUntil("waiting again") { app.peekRecording("call-1")?.state == "pending_decision" }
+        pumpUntil("nothing is sent") { noUpload("call-1") }
+
+        // Delete: its file outlasts the snackbar, whose Undo is this process's.
+        DecisionPopup.delete(app)
+        assertEquals(0, overlayWindows())
+        assertEquals(CallLines.Line("call-1", Pick.DELETE), lines.shown.last().line)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue(discardWork("call-1").single().initialDelayMillis >= CallLines.LONG_MS + Decisions.DISCARD_GRACE_MS)
+        lines.shown.last().actions.ended()
+        after(DecisionPopup.DONE_MS + 1)
+        assertEquals("no overlay window after the Undo flow", 0, overlayWindows())
+        assertTrue("the swipe or the end deletes nothing early", app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `when the app leaves the screen a running line goes on in the notification for the time it had left`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("Deleted · Undo in the shade") { title(lineOf()) == "Deleted · WhatsApp call · 0:44" }
+        assertEquals(4_000L, lineOf()!!.timeoutAfter)
+        tap(SaveDecisionReceiver.ACTION_UNDO_DISCARD)
+        pumpUntil("back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    /** Review of FIX-03: the shade outlives the process, so a moved Delete no longer names it and is applied at its time. */
+    @Test
+    fun `a Delete moved to the notification is applied at its time even when EchoLedger closes meanwhile`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("its Undo on this process's screen", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("Deleted · Undo in the shade") { title(lineOf()) == "Deleted · WhatsApp call · 0:44" }
+        pumpUntil("its Undo is the shade's now") { app.peekRecording("call-1")?.undoIn == null }
+        // EchoLedger closed meanwhile: a call still naming a process would be taken back; this one is not.
+        app.graph.recordings.update("call-1") { it.copy(undoIn = it.undoIn?.let { "a process that has gone" }) }
+        runDiscardWork("call-1")
+        pumpUntil("deleted once its time is over") { app.graph.recordings.get("call-1") == null }
+    }
+
+    @Test
+    fun `with notifications denied a moved Delete shows on the card, or is left to choose again, never deleted unseen`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        cardOnly()
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("the rest of the line on the card") {
+            DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED
+        }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        DecisionPopup.undo(app)
+        pumpUntil("taken back") { app.peekRecording("call-1")?.state == "pending_decision" }
+
+        // No overlay either: nothing can show the Undo, so the delete is taken back and the call waits for the person.
+        DecisionPopup.hide()
+        val again = inApp()
+        DecisionPopup.deleted(app, app.peekRecording("call-1")!!, "dark", 5_000)
+        pumpUntil("on its way out again") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        ShadowSettings.setCanDrawOverlays(false)
+        val timersBefore = timeoutWork("call-1").map { it.id }.toSet()
+        CallLines.detach(again)
+        again.shown.single().actions.away(4_000)
+        pumpUntil("left to choose again") {
+            app.peekRecording("call-1")?.let { it.state == "pending_decision" && it.restoredDelete } == true
+        }
+        assertTrue("not deleted yet", app.peekRecording("call-1")!!.notDeletedYet)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        pumpUntil("its delete called off") { discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED } }
+        // Taken back and left to the person in one write: no "kept after 10 s" was ever started for it, so a process
+        // that dies at any point of the take-back can never keep or send the call.
+        DecisionPopup.drainForTest()
+        assertEquals("no keep timer started", timersBefore, timeoutWork("call-1").map { it.id }.toSet())
+        assertTrue(timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED })
+        // Even its own Delete running late (as after a death) finds nothing to delete and keeps nothing.
+        runBlocking { Decisions.finishDiscard(app, "call-1") }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(noUpload("call-1"))
+    }
+
+    /** Review of FIX-03: the person's last choice was Delete, so a take-back never sends anything. */
+    @Test
+    fun `a kept call whose Delete could not show its Undo waits on the phone, and nothing is sent`() {
+        val kept = call("call-1", state = "queued")
+        val lines = inApp()
+        assertTrue(DecisionPopup.deleted(app, kept, "dark", 5_000))
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        cardOnly()
+        ShadowSettings.setCanDrawOverlays(false)
+        val timersBefore = timeoutWork("call-1").map { it.id }.toSet()
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("left to choose again") {
+            app.peekRecording("call-1")?.let { it.state == "pending_decision" && it.restoredDelete && it.notDeletedYet } == true
+        }
+        DecisionPopup.drainForTest()
+        assertTrue("nothing sent", noUpload("call-1"))
+        assertTrue(
+            "no upload work at all",
+            uploadWork("call-1").none {
+                it.state == WorkInfo.State.ENQUEUED ||
+                    it.state == WorkInfo.State.RUNNING
+            }
+        )
+        assertEquals("no keep timer started", timersBefore, timeoutWork("call-1").map { it.id }.toSet())
+        assertNull("nothing decided", app.peekRecording("call-1")?.transcribe)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    /** Blocks the calls' decision channel in Android's settings (the permission itself stays granted). */
+    private fun blockDecisions() {
+        val nm = app.getSystemService(NotificationManager::class.java)
+        nm.deleteNotificationChannel(com.echoledger.mobile.notify.Notifications.CHANNEL_DECISIONS)
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(
+                com.echoledger.mobile.notify.Notifications.CHANNEL_DECISIONS,
+                "Calls",
+                NotificationManager.IMPORTANCE_NONE
+            )
+        )
+    }
+
+    @Test
+    fun `with the decisions channel blocked a choice's line stays on the card, never in a notification nobody sees`() {
+        blockDecisions()
+        asked()
+        DecisionPopup.delete(app)
+        assertEquals("on the card", DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue(notifications().isEmpty())
+    }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [31])
+    fun `below Android 13 with notifications switched off a moved Delete shows on the card, and its Undo never counts`() {
+        runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
+        shadowOf(app.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(false)
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("the rest of the line on the card") {
+            DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED
+        }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue("nothing posted", notifications().isEmpty())
+        DecisionPopup.undo(app)
+        pumpUntil("taken back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        after(5_000)
+        DecisionPopup.drainForTest()
+        assertTrue("an undone Delete never counts", app.graph.liveSettings.value?.callChoiceStreak != Pick.DELETE.wire)
+    }
+
+    @Test
+    fun `with the card busy a moved Delete waits for its own line on the card, never deleted unseen`() {
+        val lines = inApp()
+        assertTrue(DecisionPopup.deleted(app, call("call-2"), "dark", 5_000))
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        cardOnly()
+        asked("call-1")
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("held, not deleted yet") {
+            app.peekRecording("call-2")?.let { it.state == "pending_decision" && it.notDeletedYet } == true
+        }
+        assertTrue("held behind call-1's question", DecisionPopup.answersFor("call-2"))
+        assertEquals("call-1", DecisionPopup.showingFor)
+        assertTrue(app.graph.recordings.encryptedFile("call-2").exists())
+
+        // call-1 answered (its line on the card, nothing else can show it), and over: call-2's own Deleted line shows.
+        DecisionPopup.transcribe(app)
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2's line") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+        pumpUntil("call-2 on its way out with this Undo") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-2")?.undoIn)
+    }
+
+    @Test
+    fun `in the app a choice decided elsewhere meanwhile takes its snackbar away`() {
+        val lines = inApp()
+        asked()
+        app.graph.recordings.update("call-1") { it.copy(state = "uploaded") }
+        DecisionPopup.delete(app)
+        pumpUntil("its snackbar taken away") { lines.cancelled == listOf("call-1") }
+        assertEquals("uploaded", app.peekRecording("call-1")?.state)
+    }
+
+    @Test
+    fun `in the app back-to-back calls are one snackbar with Review`() {
+        val lines = inApp()
+        asked("call-1")
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertEquals(0, overlayWindows())
+        assertEquals(CallLines.Line(null, null, 2), lines.shown.last().line)
+        PostCallPrompt.show(app, call("call-3"), "dark")
+        assertEquals(CallLines.Line(null, null, 3), lines.shown.last().line)
+        assertTrue(notifications().isEmpty())
+    }
+
+    @Test
+    fun `in the app a Stop and delete that ends a call is its snackbar for the time that was left`() {
+        val lines = inApp()
+        assertTrue(DecisionPopup.deleted(app, call("call-1"), "dark", 3_000))
+        assertEquals(0, overlayWindows())
+        assertEquals(3_000L, lines.shown.single().lineMs)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue(discardWork("call-1").single().initialDelayMillis in 3_000..3_000 + Decisions.DISCARD_GRACE_MS)
+        assertTrue(notifications().isEmpty())
     }
 }
