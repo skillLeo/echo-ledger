@@ -8,6 +8,7 @@
 //   remove, add), instructions;
 // - Call notes and Screens, as today;
 // and Share and the project menu, whose dialogs stay the Projects page's.
+import { PanelToggle } from "../shell/NavRail";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type BriefSections, type ClientFolder, type ClientWorkspace, type LibraryItem, type MemoryKind, type MemoryLine } from "../../lib/ipc";
 import { formatDuration, formatWhen, rowDate, timestamp } from "../../lib/format";
@@ -177,6 +178,7 @@ export function WorkspaceV2({
     <div className="el-page el-page--narrow" data-v2="workspace">
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{parent ? parent.name : "Projects"}</Button>
       <header className="el-page__head el-page__head--top">
+        <PanelToggle />
         <div className="el-page__titles">
           {/* Projects › the folders it sits in › this project: each step opens its page. */}
           {onProjects && <Breadcrumbs label="Where this project is" crumbs={[
