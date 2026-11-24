@@ -11,11 +11,22 @@
 use tauri::{Runtime, WebviewWindow};
 
 /// The entries WebView2's own menu keeps (on a field or a selection, which the page lets through): the names WebView2
-/// gives them. Everything else it would offer (Print, Share, Web capture, Save as, Inspect…) goes.
+/// gives them (ICoreWebView2ContextMenuItem::Name, the English label in lower camel case). Everything else it would
+/// offer (Print, Share, Web capture, Save as, Inspect…) goes.
 pub const MENU_KEEPS: [&str; 4] = ["cut", "copy", "paste", "selectAll"];
 
-/// Turns WebView2's browser keys, autofill and password saving off in this window, and trims its own right-click menu
-/// to Cut, Copy, Paste and Select All (Windows only; nothing elsewhere).
+/// And in a field the person types in, what typing needs: Undo, Redo, Paste as plain text, Emoji, and the spelling
+/// suggestions (WebView2 names every spellcheck item "spellCheck").
+pub const FIELD_KEEPS: [&str; 6] = ["undo", "redo", "pasteAndMatchStyle", "pasteAsPlainText", "emoji", "spellCheck"];
+
+/// Whether WebView2's own menu keeps an entry (pure): Cut, Copy, Paste and Select All; in a field the typing ones too.
+pub fn menu_keeps(name: &str, editable: bool) -> bool {
+    MENU_KEEPS.contains(&name) || (editable && FIELD_KEEPS.contains(&name))
+}
+
+/// Turns WebView2's browser keys, autofill and password saving off in this window, and, in a release build, trims its
+/// own right-click menu to what `menu_keeps` keeps (Windows only; nothing elsewhere). A development build keeps the
+/// whole menu, Inspect with it, as it keeps the keys.
 pub fn quiet_browser<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(windows)]
     {
@@ -37,12 +48,22 @@ pub fn quiet_browser<R: Runtime>(window: &WebviewWindow<R>) {
                     let _ = forms.SetIsPasswordAutosaveEnabled(false);
                     let _ = forms.SetIsGeneralAutofillEnabled(false);
                 }
-                // Its menu on a field or a selection: Cut, Copy, Paste and Select All only (MENU_KEEPS).
-                if let Ok(core11) = core.cast::<ICoreWebView2_11>() {
+                // Its menu on a field or a selection (release builds): Cut, Copy, Paste and Select All, and in a field
+                // Undo, Redo, Emoji and the spelling suggestions too (menu_keeps).
+                if !cfg!(debug_assertions)
+                    && let Ok(core11) = core.cast::<ICoreWebView2_11>()
+                {
                     let mut token = 0i64;
                     let _ = core11.add_ContextMenuRequested(
                         &ContextMenuRequestedEventHandler::create(Box::new(|_, args| {
                             let Some(args) = args else { return Ok(()) };
+                            let editable = args
+                                .ContextMenuTarget()
+                                .map(|target| {
+                                    let mut editable = windows::core::BOOL::default();
+                                    target.IsEditable(&mut editable).is_ok() && editable.as_bool()
+                                })
+                                .unwrap_or(false);
                             let items = args.MenuItems()?;
                             let mut count = 0u32;
                             items.Count(&mut count)?;
@@ -50,7 +71,7 @@ pub fn quiet_browser<R: Runtime>(window: &WebviewWindow<R>) {
                                 let item = items.GetValueAtIndex(index)?;
                                 let mut name = PWSTR::null();
                                 item.Name(&mut name)?;
-                                if !MENU_KEEPS.contains(&take_pwstr(name).as_str()) {
+                                if !menu_keeps(&take_pwstr(name), editable) {
                                     items.RemoveValueAtIndex(index)?;
                                 }
                             }
@@ -73,6 +94,30 @@ mod tests {
         assert_eq!(super::MENU_KEEPS, ["cut", "copy", "paste", "selectAll"]);
         let code = include_str!("native_feel.rs");
         assert!(code.contains("add_ContextMenuRequested") && code.contains("RemoveValueAtIndex"));
+    }
+
+    #[test]
+    fn in_a_field_its_menu_keeps_what_typing_needs_and_on_a_selection_only_the_four() {
+        use super::menu_keeps;
+        for name in ["cut", "copy", "paste", "selectAll"] {
+            assert!(menu_keeps(name, false) && menu_keeps(name, true), "{name}");
+        }
+        for name in ["undo", "redo", "pasteAndMatchStyle", "pasteAsPlainText", "emoji", "spellCheck"] {
+            assert!(menu_keeps(name, true), "{name} in a field");
+            assert!(!menu_keeps(name, false), "{name} on a selection");
+        }
+        for name in ["print", "saveAs", "share", "webCapture", "inspectElement", "reload", "back", "createQrCode", "extension", "custom"] {
+            assert!(!menu_keeps(name, true) && !menu_keeps(name, false), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_development_build_keeps_webview2_s_whole_menu() {
+        let code = include_str!("native_feel.rs").split("#[cfg(test)]").next().unwrap();
+        let trim = code.find("add_ContextMenuRequested").unwrap();
+        let gate = code[..trim].rfind("if !cfg!(debug_assertions)").expect("the menu is trimmed in a release build only");
+        assert!(code[gate..trim].contains("core.cast::<ICoreWebView2_11>()"), "the same gate as the menu's");
+        assert!(code[trim..].contains("ContextMenuTarget()") && code[trim..].contains("IsEditable("), "a field is told apart");
     }
 
     #[test]

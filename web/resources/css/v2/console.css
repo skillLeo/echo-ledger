@@ -3332,3 +3332,106 @@ button.v2-row-tile:focus-visible,
 .v2-lib-shell.is-right:not(.is-pushing) .v2-library .fi-ta-header-toolbar .v2-lib-tabs {
     flex-shrink: 0;
 }
+
+/* UX-22 (PLAN_V2_1_POLISH 3b): a Library row's right-click menu (filament.v2.context-menu-script), the desktop's on
+   Windows: Windows 11's menu with 8 px corners, 32 px rows and 16 px glyphs, a hairline between groups, a greyed title
+   for several, light and dark from the tokens. In its own layer above the page, never wider or taller than the window. */
+.v2-ctx-layer {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-overlay);
+}
+
+.v2-ctx {
+    position: fixed;
+    min-inline-size: calc(var(--el-space-64) * 3.5);
+    max-inline-size: min(calc(var(--el-space-64) * 5), calc(100% - var(--el-space-16)));
+    max-block-size: calc(100% - var(--el-space-16));
+    overflow-y: auto;
+    padding: var(--el-space-4);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background: var(--el-role-bg-surface);
+    box-shadow: var(--el-shadow-2);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+    outline: none;
+}
+
+.v2-ctx.is-sub {
+    min-inline-size: calc(var(--el-space-64) * 3);
+}
+
+.v2-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-12);
+    min-block-size: var(--el-space-32);
+    padding-block: var(--el-space-4);
+    padding-inline: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-sm);
+    cursor: default;
+    user-select: none;
+}
+
+.v2-ctx-item:focus,
+.v2-ctx-item[aria-expanded='true'] {
+    outline: none;
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-ctx-item:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-ctx-item.is-danger {
+    color: var(--el-role-danger-default);
+}
+
+.v2-ctx-icon,
+.v2-ctx-more {
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-icon-sm);
+    block-size: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-icon .v2-icon,
+.v2-ctx-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-ctx-item.is-danger .v2-ctx-icon {
+    color: inherit;
+}
+
+.v2-ctx-item[aria-checked='true'] .v2-ctx-icon {
+    color: var(--el-role-accent-text);
+}
+
+.v2-ctx-label {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.v2-ctx-more {
+    margin-inline-start: var(--el-space-16);
+}
+
+.v2-ctx-title {
+    padding: var(--el-space-4) var(--el-space-8);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-sep {
+    block-size: 0;
+    margin-block: var(--el-space-4);
+    margin-inline: calc(-1 * var(--el-space-4));
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}

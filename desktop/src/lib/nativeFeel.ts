@@ -6,17 +6,11 @@
 // combination is the app's (⌃⌘S the sidebar), and on a Mac only ⌘ counts (Ctrl+P, Ctrl+F, Ctrl+H edit text there).
 // Answered after every listener of the page and the shell, wherever they listen and whenever they were added: whatever
 // they took is left alone. Windows also turns WebView2's own browser keys off at the source (native_feel.rs), with its
-// autofill and password saving, and trims its own menu to Cut, Copy, Paste and Select All.
-import { ACTIONS, matchesShortcut } from "../v2/actions/registry";
-
+// autofill and password saving, and trims its own menu to Cut, Copy, Paste and Select All. No key the app's commands
+// have (actions.json) is one of these but the two answered here, Sync Now and Print Transcript (nativeFeel.test.ts keeps
+// it so); this file depends on nothing of the app's, so it runs before the app.
 /** What a browser would do with a key press, or null when it isn't one of the browser's keys. */
 export type BrowserKey = "reload" | "print" | "devtools" | "navigate";
-
-/** The app's own keys (actions.json) are never the browser's, but for the two this guard answers itself. */
-const ANSWERED_HERE = new Set(["file.syncNow", "file.printTranscript"]);
-const appKey = (e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">, mac: boolean) =>
-  ACTIONS.some((a) => !ANSWERED_HERE.has(a.id) && [mac ? a.mac : a.win, ...(mac ? a.macAlso : a.winAlso)]
-    .some((keys) => !!keys && matchesShortcut(e as KeyboardEvent, keys)));
 
 const isMacPlatform = () => typeof navigator !== "undefined" && /mac/i.test(navigator.platform || navigator.userAgent);
 
@@ -28,7 +22,6 @@ export function browserKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" 
   // The letter on the key, whatever the keyboard's layout types with it (Urdu, Arabic): e.code's KeyR, as LibraryNav does.
   const typed = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const key = e.key.length === 1 && !/^[a-z0-9]$/.test(typed) && /^Key[A-Z]$/.test(e.code ?? "") ? e.code!.slice(3).toLowerCase() : typed;
-  if (appKey({ key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey }, mac)) return null;
   if (e.metaKey && e.ctrlKey) return null;
   const mod = mac ? e.metaKey : e.ctrlKey;
   const other = mac ? e.ctrlKey : e.metaKey;
@@ -51,17 +44,36 @@ const editable = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest("input, textarea, select, [contenteditable='true']"));
 /**
  * A press on the selected text itself (a transcript's words): the system's menu stays (Look Up, Translate, Copy,
- * Share, Speech). Only where the selection is drawn, not on what merely holds it (its list, a paragraph's blank end, the
- * page after Select All).
+ * Share, Speech). Only where selected text is drawn, not on what merely holds it (its list, a paragraph's blank end,
+ * the page after Select All): a range's own rects also hold the boxes of every element inside it, so each selected
+ * text node's part is measured by itself.
  */
 function onSelection(e: MouseEvent, win: Window): boolean {
   const selection = win.getSelection?.();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  const doc = win.document;
+  const hit = (part: Range) => {
+    // A web view always draws a range; a document that draws nothing (a test's) has nothing to press on.
+    for (const box of typeof part.getClientRects === "function" ? part.getClientRects() : []) {
+      if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) return true;
+    }
+    return false;
+  };
   for (let i = 0; i < selection.rangeCount; i++) {
     const range = selection.getRangeAt(i);
-    // A web view always draws a range; a document that draws nothing (a test's) has nothing to press on.
-    for (const box of typeof range.getClientRects === "function" ? range.getClientRects() : []) {
-      if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) return true;
+    const root = range.commonAncestorContainer;
+    if (root.nodeType === Node.TEXT_NODE) {
+      if (hit(range)) return true;
+      continue;
+    }
+    const texts = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = texts.nextNode(); node; node = texts.nextNode()) {
+      if (!range.intersectsNode(node) || !node.textContent?.trim()) continue;
+      const part = doc.createRange();
+      part.selectNodeContents(node);
+      if (node === range.startContainer) part.setStart(node, range.startOffset);
+      if (node === range.endContainer) part.setEnd(node, range.endOffset);
+      if (!part.collapsed && hit(part)) return true;
     }
   }
   return false;
