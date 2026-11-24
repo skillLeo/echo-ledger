@@ -130,14 +130,20 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(checkMenu(drawn, "windows")).toEqual([]);
   });
 
-  it("the list's empty space: New recording · Import… (when they can run) | Sort by › · Group by › · As list · As table · Density › | Select all", async () => {
+  it("the list's empty space: New recording · New voice note · Import… (when they can run) | Sort by › · Group by › · As list · As table · Density › | Select all", async () => {
+    respond("toggle_mic_note", null);
     render(<LibraryV2 onImport={() => undefined} onRecord={() => undefined} />);
     await act(flushAsync);
     fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
     const menu = screen.getByRole("menu", { name: "List actions" });
-    expect(groups(menu)).toEqual([["New recording", "Import audio files…"], ["Sort by", "Group by", "As list", "As table", "Density"], ["Select all"]]);
-    expect(within(menu).getByRole("menuitemcheckbox", { name: "As list" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "As table" }));
+    expect(groups(menu)).toEqual([["New recording", "New voice note", "Import audio files…"], ["Sort by", "Group by", "As list", "As table", "Density"], ["Select all"]]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "New voice note" }));
+    await act(flushAsync);
+    expect(callsOf("toggle_mic_note")).toHaveLength(1);
+    fireEvent.contextMenu(document.querySelector(".el-lib__main") as HTMLElement, { clientX: 400, clientY: 500 });
+    const again = screen.getByRole("menu", { name: "List actions" });
+    expect(within(again).getByRole("menuitemcheckbox", { name: "As list" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(again).getByRole("menuitemcheckbox", { name: "As table" }));
     await act(flushAsync);
     expect(document.querySelector(".el-lib-list")).toBeNull();
   });

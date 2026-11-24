@@ -1290,6 +1290,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     },
     "recording.moveToTrash": (c) => deleteOrAsk(c.targets ?? []),
     "file.newRecording": onRecord ? () => onRecord() : undefined,
+    // A voice note from the microphone (3b's New voice note), where this computer can record.
+    "file.newVoiceNote": onRecord ? () => void api.toggleMicNote().catch((e) => say(errorMessage(e))) : undefined,
     "file.importAudio": onImport ? () => onImport() : undefined,
     "view.sortBy": (c) => { if (c.value) setChoice({ ...choice, sort: c.value as SortKey }); },
     "view.groupBy": (c) => { if (c.value) setChoice({ ...choice, group: c.value as LibraryViewChoice["group"] }); },
