@@ -301,13 +301,13 @@ trait ManagesAccountPages
     public function revokeDevice(string $id): void
     {
         $done = app(AccountSessions::class)->revokeDevice($this->account(), $id);
-        Notification::make()->title($done ? 'Device signed out' : 'That device was already signed out')->success()->send();
+        Notification::make()->title($done ? __('Device signed out') : __('That device was already signed out'))->success()->send();
     }
 
     public function removeDevice(string $id): void
     {
         $done = app(AccountSessions::class)->removeDevice($this->account(), $id);
-        Notification::make()->title($done ? 'Removed from the list' : 'That device was already removed')->success()->send();
+        Notification::make()->title($done ? __('Removed from the list') : __('That device was already removed'))->success()->send();
     }
 
     /** Devices › Connected apps › Disconnect, confirmed. */

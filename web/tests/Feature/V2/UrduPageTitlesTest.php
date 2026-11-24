@@ -217,6 +217,9 @@ it('words Settings › Devices\' button and each device\'s window (name, sign ou
     expect((string) $settings()->mountAction([$window, TestAction::make('forgetDevice')])->instance()->getMountedAction()->getModalHeading())
         ->toContain('کو فہرست سے ہٹائیں؟')->toContain($name);
     $settings()->callAction([$window, TestAction::make('forgetDevice')])->assertNotified('فہرست سے ہٹا دی گئی');
+    // The page's own list buttons say the same in Urdu (revokeDevice / removeDevice).
+    $settings()->call('removeDevice', $device->id)->assertNotified('یہ ڈیوائس پہلے ہی ہٹا دی گئی تھی');
+    $settings()->call('revokeDevice', $device->id)->assertNotified('یہ ڈیوائس پہلے ہی سائن آؤٹ تھی');
 });
 
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {
