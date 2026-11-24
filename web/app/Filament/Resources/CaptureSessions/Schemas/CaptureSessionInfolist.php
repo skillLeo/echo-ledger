@@ -83,39 +83,39 @@ final class CaptureSessionInfolist
 
     private static function details(): Section
     {
-        return Section::make('Details')->compact()->extraAttributes(['class' => 'el-details-card'])->schema([
+        return Section::make(__('Details'))->compact()->extraAttributes(['class' => 'el-details-card'])->schema([
             Grid::make(['default' => 2])->schema([
-                TextEntry::make('source_device')->label('Source')->badge(),
-                TextEntry::make('source_app')->label('App')->badge(),
-                TextEntry::make('started_at')->label('Started')->dateTime('M j, Y · g:i A')->columnSpan(2),
-                TextEntry::make('duration_ms')->label('Duration')
+                TextEntry::make('source_device')->label(__('Source'))->badge(),
+                TextEntry::make('source_app')->label(__('App'))->badge(),
+                TextEntry::make('started_at')->label(__('Started'))->dateTime('M j, Y · g:i A')->columnSpan(2),
+                TextEntry::make('duration_ms')->label(__('Duration'))
                     ->state(fn (CaptureSession $r): string => CaptureSessionsTable::duration($r->duration_ms) ?: '—'),
-                TextEntry::make('client.name')->label('Project')->placeholder('—'),
+                TextEntry::make('client.name')->label(__('Project'))->placeholder('—'),
                 // Caller names (since v1.2): who the recording was with, and where the device saw the name.
-                TextEntry::make('caller_name')->label('With')->placeholder('—')->columnSpan(2)
+                TextEntry::make('caller_name')->label(__('With'))->placeholder('—')->columnSpan(2)
                     ->formatStateUsing(fn (?string $state, CaptureSession $record): string => trim(($state ?? '').' '.($record->caller_number !== null ? '('.$record->caller_number.')' : '')))
                     ->helperText(fn (CaptureSession $record): ?string => match ($record->caller_source) {
-                        'whatsapp_notification' => 'From the WhatsApp call notification',
-                        'window_title' => 'From the meeting window',
-                        'calendar' => 'From the calendar',
-                        'contacts', 'phone' => "From the phone's contacts",
+                        'whatsapp_notification' => __('From the WhatsApp call notification'),
+                        'window_title' => __('From the meeting window'),
+                        'calendar' => __('From the calendar'),
+                        'contacts', 'phone' => __("From the phone's contacts"),
                         default => null,
                     }),
-                TextEntry::make('device.name')->label('Device')->columnSpan(2)
+                TextEntry::make('device.name')->label(__('Device'))->columnSpan(2)
                     ->state(fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r)),
                 TextEntry::make('status')->badge()->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
-                TextEntry::make('no_audio')->label('Status')->badge()->color('gray')->icon('heroicon-o-speaker-x-mark')
-                    ->state('No audio')->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
-                TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started')
+                TextEntry::make('no_audio')->label(__('Status'))->badge()->color('gray')->icon('heroicon-o-speaker-x-mark')
+                    ->state(__('No audio'))->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
+                TextEntry::make('finalTranscript.status')->label(__('Transcript'))->badge()->placeholder(__('Not started'))
                     ->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
                 // Which engine wrote it and the engine's own error text are for the server's operator only (since v1.8.1,
                 // D-129): everyone else reads the banner's plain words above the transcript.
-                TextEntry::make('finalTranscript.provider')->label('Transcribed by')->placeholder('—')
+                TextEntry::make('finalTranscript.provider')->label(__('Transcribed by'))->placeholder('—')
                     ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state)
                     ->visible(fn (): bool => ConsoleAccess::operator()),
-                TextEntry::make('finalTranscript.language')->label('Language')->placeholder('Automatic')
+                TextEntry::make('finalTranscript.language')->label(__('Language'))->placeholder(__('Automatic'))
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::offered()[(string) $state] ?? (string) $state),
-                TextEntry::make('finalTranscript.error')->label('Error')->color('danger')->placeholder('—')
+                TextEntry::make('finalTranscript.error')->label(__('Error'))->color('danger')->placeholder('—')
                     ->visible(fn (CaptureSession $r): bool => ConsoleAccess::operator() && filled($r->finalTranscript?->error) && ! $r->hasNoAudio())->columnSpan(2),
             ]),
         ]);
