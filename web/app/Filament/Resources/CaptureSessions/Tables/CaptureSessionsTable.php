@@ -161,13 +161,18 @@ final class CaptureSessionsTable
             ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label(__('Open'))] : [
                 // Since v1.6 (P5.3): in Failed uploads, Retry where something here can fix it, and Delete.
                 ...self::failedActions(),
-                ActionGroup::make([
-                    ViewAction::make()->label(__('Open')),
-                    self::renameAction(),
-                    // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
-                    WhatsAppActions::send(),
-                    DeleteAction::make()->label(__('Delete'))->modalDescription(__('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()])),
-                ])->label(__('More'))->tooltip(__('More'))->color('gray'),
+                // UX-22: the new Library's ⋯ opens the row's one menu, the same as a right-click and Shift+F10
+                // (filament.v2.context-menu-script; WhatsApp is under its Share ›). Its Delete stays for a phone's left
+                // swipe (filament.v2.library-swipe), which asks first, and is not drawn.
+                ...(ConsoleV2::library() ? [self::rowMenuAction(), self::rowDeleteAction()->extraAttributes(['hidden' => true])] : [
+                    ActionGroup::make([
+                        ViewAction::make()->label(__('Open')),
+                        self::renameAction(),
+                        // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
+                        WhatsAppActions::send(),
+                        self::rowDeleteAction(),
+                    ])->label(__('More'))->tooltip(__('More'))->color('gray'),
+                ]),
             ])
             // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
             ->toolbarActions(ConsoleAccess::readOnly() ? [] : self::bulkBar())
@@ -644,7 +649,8 @@ final class CaptureSessionsTable
      */
     private static function rowTranscriptColumns(mixed $final): mixed
     {
-        $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'completed_at', 'edited_at', 'updated_at'])
+        // error_code: a failure with nothing heard says No audio (V2RecordingRow::status), and has nothing to share (UX-22).
+        $final->select(['id', 'capture_session_id', 'kind', 'status', 'error_code', 'language', 'provider', 'completed_at', 'edited_at', 'updated_at'])
             ->selectRaw('SUBSTR(text, 1, 600) AS text')
             ->selectRaw("CASE WHEN meta LIKE '%\"making\"%' OR meta LIKE '%\"failed\"%' THEN meta ELSE NULL END AS meta")
             ->selectRaw("CASE WHEN JSON_VALID(meta) THEN (CASE WHEN JSON_EXTRACT(meta, '$.views') IS NOT NULL THEN 1 ELSE 0 END) ELSE 0 END AS has_views")
@@ -834,6 +840,23 @@ final class CaptureSessionsTable
                 app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
                 Notification::make()->title(__('Renamed to “:title”', ['title' => $record->displayTitle()]))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
             });
+    }
+
+    /** A row's Delete, with its question: classic's More, and the new Library's left swipe on a phone. */
+    public static function rowDeleteAction(): DeleteAction
+    {
+        return DeleteAction::make()->label(__('Delete'))->modalDescription(__('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()]));
+    }
+
+    /**
+     * UX-22: the new Library row's ⋯, which opens the row's one menu where the button is (filament.v2.context-menu-script):
+     * the same items as a right-click on the row.
+     */
+    public static function rowMenuAction(): Action
+    {
+        return Action::make('rowMenu')->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
+            ->alpineClickHandler('window.elV2ContextMenu && window.elV2ContextMenu.openFromButton($el, $event)')
+            ->extraAttributes(['data-row-menu' => true, 'aria-haspopup' => 'menu']);
     }
 
     /** The title the recording shows without one of its own ("WhatsApp call", "Call with Omar Khan"). */

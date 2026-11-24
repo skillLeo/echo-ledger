@@ -13,13 +13,19 @@
         root.ElContextMenuCore = core;
     }
 })(typeof self !== 'undefined' ? self : this, function () {
-    /** One recording (3b): Open · Transcribe (Audio only) | Pin · Important · Unread · Labels › · Move › | Rename… · Export › | Move to trash. */
+    /**
+     * One recording (3b): Open · Transcribe (Audio only) | Pin · Important · Unread · Labels › · Move › | Rename… · Share ›
+     * · Export › | Move to trash.
+     */
     const RECORDING_ONE = [
         'recording.open', 'recording.transcribe',
         '-', 'recording.pin', 'recording.important', 'recording.unread', 'recording.labels', 'recording.moveToProject',
-        '-', 'file.rename', 'recording.exportAs',
+        '-', 'file.rename', 'file.share', 'recording.exportAs',
         '-', 'recording.moveToTrash',
     ];
+    /** Share › (3b), one recording at a time: Copy link, Share with people…, Send to WhatsApp… (these two need its audio). */
+    const SHARE = ['file.copyLink', 'file.shareWithPeople', 'file.sendToWhatsApp'];
+    const NEEDS_AUDIO = ['file.copyLink', 'file.sendToWhatsApp'];
     /** Several (titled "3 recordings"): Transcribe | Pin · Important · Unread · Labels › · Move › | Export › | Move to trash. */
     const RECORDING_MANY = [
         'recording.transcribe',
@@ -99,20 +105,29 @@
      * The menu of the rows it was opened on (each as the page draws it: {id, pinned, important, opened, state, project,
      * labels}) with the page's choices (data: ListCaptureSessions::menuData). Pin says Unpin, Mark as unread says Mark as
      * read, and a tick shows, only when every one is so; Transcribe is there while one of them is Audio only; Labels › ticks each label every one has, then
-     * New label…; Move to project › ticks where every one is (No project when none is in one); Export › lists the
-     * formats. Several are titled with their count. Returns {items, title, targets}.
+     * New label…; Move to project › ticks where every one is (No project when none is in one); Share › is one
+     * recording's; Export › lists the formats. Several are titled with their count; more than the console takes at a time
+     * (data.max) get one greyed line saying how many to unselect, and nothing to pick. Returns {items, title, targets}.
      */
     function recordingMenu(data, rows) {
         const n = rows.length;
         const every = (f) => n > 0 && rows.every(f);
         const targets = rows.map((r) => String(r.id));
-        const runnable = (data.runnable || []).filter((id) => id !== 'recording.transcribe' || rows.some((r) => r.state === 'audio_only'));
+        const words = data.words || {};
+        const many = title(n, words.many || ':count');
+        if (data.max && n > data.max) {
+            const limit = (words.limit || 'Up to :max at a time: unselect :count').replace(':max', String(data.max)).replace(':count', String(n - data.max));
+            return { items: [{ label: limit, disabled: true }], title: many, targets };
+        }
+        const silent = rows.some((r) => r.audio === false);
+        const runnable = (data.runnable || []).filter((id) => (id !== 'recording.transcribe' || rows.some((r) => r.state === 'audio_only'))
+            && ! (silent && NEEDS_AUDIO.includes(id)));
         const ctx = { targets, runnable, say: data.say };
         const has = (r, value) => (r.labels || []).includes(String(value).toLowerCase());
         const labels = choices('recording.labels', (data.labels || []).map((l) => ({ value: l.value, label: l.label, checked: every((r) => has(r, l.value)) })));
         const fresh = menu(data.actions, ['label.new'], ctx).map((item, at) => (at === 0 && labels.length ? { ...item, separator: true } : item));
-        const words = data.words || {};
         const children = {
+            'file.share': menu(data.actions, SHARE, ctx),
             'recording.labels': [...labels, ...fresh],
             'recording.moveToProject': choices('recording.moveToProject', [
                 { value: 'none', label: words.noProject || 'No project', checked: every((r) => ! r.project) },
@@ -123,7 +138,7 @@
         const state = { pinned: every((r) => r.pinned), important: every((r) => r.important), unread: every((r) => r.opened === false) };
         const items = menu(data.actions, n > 1 ? RECORDING_MANY : RECORDING_ONE, { ...ctx, state, children });
 
-        return { items, title: title(n, words.many || ':count'), targets };
+        return { items, title: many, targets };
     }
 
     /** Where focus goes in a menu of `count` items from `at` on a key: arrows wrap, Home and End go to the ends. */
@@ -141,5 +156,5 @@
         return { x: Math.max(0, Math.min(x, W - w - 4)), y: Math.max(0, Math.min(y, H - h - 4)) };
     }
 
-    return { RECORDING_ONE, RECORDING_MANY, menu, choices, title, label, recordingMenu, move, place };
+    return { RECORDING_ONE, RECORDING_MANY, SHARE, menu, choices, title, label, recordingMenu, move, place };
 });

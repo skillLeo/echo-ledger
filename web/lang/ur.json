@@ -1103,5 +1103,8 @@
     ":count recordings": ":count ریکارڈنگز",
     "Recording actions": "ریکارڈنگ کے اختیارات",
     "Mark as unread": "نہ پڑھی گئی کریں",
-    "Mark as read": "پڑھا ہوا کریں"
+    "Mark as read": "پڑھا ہوا کریں",
+    "Copy link": "لنک کاپی کریں",
+    "Share with people…": "لوگوں کے ساتھ شیئر کریں…",
+    "Up to :max at a time: unselect :count": "ایک وقت میں زیادہ سے زیادہ :max: :count کا انتخاب ہٹائیں"
 }
