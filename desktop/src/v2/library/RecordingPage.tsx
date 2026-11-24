@@ -37,7 +37,7 @@ import { choiceItems, type ActionContext } from "../actions/registry";
 import { useActions } from "../actions/useActions";
 import { SourceAvatar } from "./SourceAvatar";
 import { rowState, STATE_WORDS } from "./model";
-import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
+import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, RenameDialog, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "notes" | "details";
@@ -104,17 +104,10 @@ const inField = (target: EventTarget | null) =>
 
 export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onItemChanged }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
-  // Rename by clicking the title (classic's): Enter or leaving the field saves, Esc cancels.
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const renameDone = useRef(false);
-  // After Enter or Esc the keyboard is back on the title it came from.
+  // Rename by pressing the title (a click, a tap, or Enter on it): the Rename dialog, as the Library's Rename… and the
+  // other apps have it, pre-filled only with the person's own title. Closed, the keyboard is back on the title.
+  const [renaming, setRenaming] = useState(false);
   const titleButton = useRef<HTMLButtonElement>(null);
-  const focusTitle = useRef(false);
-  useEffect(() => {
-    if (renaming !== null || !focusTitle.current) return;
-    focusTitle.current = false;
-    titleButton.current?.focus();
-  }, [renaming]);
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[]; sizeBytes: number | null }>>({ state: "loading" });
   // An expired playback link is asked for again once (classic's); a second failure says so.
@@ -475,24 +468,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const failureCode = tDetail?.status === "failed" ? tDetail.error_code ?? null : item.transcript?.final_error_code ?? null;
   const liveLine = tDetail?.kind === "live"
     ? `Live captions (final transcript pending${partsText(item.transcript?.final_progress) ? ` · ${partsText(item.transcript?.final_progress)}` : ""})` : null;
-  const saveTitle = async () => {
-    if (renaming === null || renameDone.current) return;
-    renameDone.current = true;
-    const next = renaming.trim();
-    focusTitle.current = true;
-    setRenaming(null);
-    if (next === (item.title?.trim() ?? "")) return;
-    try {
-      const saved = await api.organiseSession(item.id, { title: next || null });
-      onItemChanged?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
-      onMessage("Renamed");
-    } catch (e) {
-      sayProblem(onMessage, errorMessage(e));
-    }
-  };
-  const startRename = () => {
-    renameDone.current = false;
-    setRenaming(item.title?.trim() ?? "");
+  const closeRename = () => {
+    setRenaming(false);
+    titleButton.current?.focus();
   };
   /** Try again after a failed transcription: the same language as before (classic's). */
   const tryAgain = async () => {
@@ -854,20 +832,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
           <span className="el-visually-hidden" id="el-recording-rename-hint">Press the title to rename the recording</span>
-          {renaming !== null ? (
-            <input className="el-title-l el-recording__title-field" aria-label="Recording title" dir="auto" value={renaming} autoFocus maxLength={200}
-              onChange={(e) => setRenaming(e.target.value)} onBlur={() => void saveTitle()} onFocus={(e) => e.currentTarget.select()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); void saveTitle(); }
-                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renameDone.current = true; focusTitle.current = true; setRenaming(null); }
-              }} />
-          ) : (
-            <h1 className="el-title-l" dir="auto">
-              <button type="button" ref={titleButton} className="el-recording__title" title="Click to rename" aria-describedby="el-recording-rename-hint" onClick={startRename}>
-                {item.title?.trim() || "Recording"}
-              </button>
-            </h1>
-          )}
+          <h1 className="el-title-l" dir="auto">
+            <button type="button" ref={titleButton} className="el-recording__title" title="Rename" aria-describedby="el-recording-rename-hint" aria-haspopup="dialog"
+              onClick={() => setRenaming(true)}>
+              {item.title?.trim() || "Recording"}
+            </button>
+          </h1>
           <p className="el-page__meta el-secondary">
             <SourceAvatar item={item} size="sm" />
             <span dir="auto">{meta}</span>
@@ -1084,6 +1054,10 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           view={exportView} onClose={() => setSharing(false)} notify={(t, error) => onMessage(t, undefined, error)} />
       )}
       {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
+      {renaming && (
+        <RenameDialog item={item} onClose={closeRename} say={onMessage}
+          onRenamed={(saved) => onItemChanged?.({ id: item.id, title: saved.title, title_auto: saved.title_auto ?? false, title_source: saved.title_source })} />
+      )}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}
       {screenOpen !== null && screens?.[screenOpen] && (
         <ScreenViewerV2 screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}

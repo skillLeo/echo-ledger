@@ -1543,7 +1543,6 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-recording__title { all: unset; cursor: text; border-radius: var(--el-radius-sm); }
 .el-recording__title:hover { background: var(--el-role-bg-subtle); }
 .el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
-.el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }
 
 /* What the engine was not sure of, kept as heard (parity DT-REC-111), and suggested fixes (DT-REC-106, 107). */
 .el-word { all: unset; cursor: pointer; }

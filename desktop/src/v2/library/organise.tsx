@@ -263,14 +263,25 @@ export function LabelDialog({ ids, known, onClose, say }: { ids: readonly string
   );
 }
 
+/** Whether the rename box starts with the title (pure): only a title the person gave (2.0.0-k `title_source` "own"); an
+ * older server's item without it, a title that wasn't named from what was said. Never "Call with …", an automatic or an
+ * app's title, which the person would otherwise have to clear first. */
+export function renamePrefill(item: Pick<LibraryItem, "title" | "title_source" | "title_auto">): string {
+  const own = item.title_source === undefined ? !item.title_auto : item.title_source === "own";
+  return own ? item.title ?? "" : "";
+}
+
 /** Renames a recording; an empty title asks the server for its automatic one again. */
 export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryItem; onClose: () => void; say: Say; onRenamed?: (item: LibraryItem) => void }) {
-  const [title, setTitle] = useState(item.title ?? "");
+  // Pre-filled only with the person's own title (as the other apps do); otherwise empty, the title now its placeholder.
+  const start = renamePrefill(item);
+  const [title, setTitle] = useState(start);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const save = async () => {
     const text = title.trim();
-    if (text === (item.title ?? "").trim()) {
+    // Nothing typed: nothing changes (an empty box that started empty is not a request for the automatic title).
+    if (text === (item.title ?? "").trim() || (!start && !text)) {
       onClose();
       return;
     }
@@ -290,7 +301,8 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
       actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => void save()}>Save</Button></>}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <TextField ref={input} label="Title" maxLength={MAX_TITLE_CHARS} value={title} onChange={(e) => setTitle(e.target.value)}
-          onFocus={(e) => e.currentTarget.select()} hint="Leave it empty for an automatic title from what was said." />
+          placeholder={start ? undefined : item.title?.trim() || undefined}
+          onFocus={(e) => e.currentTarget.select()} hint={start ? "Leave it empty for an automatic title from what was said." : undefined} />
       </form>
     </Dialog>
   );

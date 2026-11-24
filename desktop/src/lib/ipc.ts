@@ -890,6 +890,8 @@ export interface LibraryItem {
   title?: string;
   /** The server named it from what was said (Phase 1C); false or missing for a title a person set. */
   title_auto?: boolean;
+  /** Which step gave the title (2.0.0-k): the person's own, the person called, the automatic one, or the app's. */
+  title_source?: "own" | "person" | "auto" | "app";
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
