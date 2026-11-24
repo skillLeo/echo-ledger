@@ -119,6 +119,14 @@
     { "id": "trash.empty", "label": "Empty trash…", "icon": "TrashIcon", "destructive": true, "confirm": "Empty the trash? Its recordings can't be brought back." },
     { "id": "trash.restore", "label": "Restore", "icon": "RefreshIcon", "appliesTo": "oneOrMany" },
 
+    { "id": "player.playFromHere", "label": "Play from here", "icon": "PlayIcon", "when": ["hasAudio"] },
+    { "id": "player.copyMomentLink", "label": "Copy link to this moment", "icon": "LinkIcon" },
+    { "id": "speaker.rename", "label": "Rename speaker…", "icon": "RenameIcon" },
+    { "id": "speaker.mergeWith", "label": "Merge with", "icon": "UsersIcon", "submenu": true },
+    { "id": "text.copyWithTime", "label": "Copy with time", "icon": "CopyIcon", "when": ["hasTranscript"] },
+    { "id": "text.ask", "label": "Ask about this", "icon": "AskIcon", "when": ["hasTranscript"] },
+    { "id": "text.share", "label": "Share", "icon": "ShareIcon" },
+
     { "id": "live.stopRecording", "label": "Stop recording", "menu": "Live", "icon": "StopIcon", "mac": "⌘.", "win": "Ctrl+.", "when": ["recording"] },
     { "id": "live.pauseRecording", "label": "Pause recording", "menu": "Live", "mac": "⌥⌘.", "win": "Ctrl+Shift+.", "when": ["recording"], "state": { "key": "paused", "on": "Resume recording" } },
     { "id": "live.startAssist", "label": "Start Live Assist…", "menu": "Live", "icon": "SparkleIcon" },

@@ -18,7 +18,7 @@ describe("the action list (actions.json)", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBeGreaterThan(100);
     for (const a of ACTIONS) {
-      expect(a.id, a.id).toMatch(/^(app|file|edit|view|go|recording|live|window|help|account|place|label|trash)\.[a-z][A-Za-z0-9]*$/);
+      expect(a.id, a.id).toMatch(/^(app|file|edit|view|go|recording|live|window|help|account|place|label|trash|player|speaker|text)\.[a-z][A-Za-z0-9]*$/);
       // Sentence case: a capital first, no Title Case words after it but names the file keeps (EchoLedger, Live Assist…).
       const rest = list.titleCase.keep.reduce((text, name) => text.split(name).join(""), a.label.slice(1));
       expect(a.label[0], a.label).toBe(a.label[0].toLocaleUpperCase());
