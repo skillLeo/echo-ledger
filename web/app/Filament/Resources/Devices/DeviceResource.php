@@ -137,8 +137,8 @@ class DeviceResource extends Resource
             // Since v1.6: the person's own device that is signed out, revoked or expired comes back on its row.
             Action::make('signInAgain')->label(__('Sign in again'))->icon(Heroicon::OutlinedQrCode)->color('gray')
                 ->visible(fn (Device $record): bool => $record->user_id === (int) auth()->id() && $record->status() !== Device::ACTIVE)
-                ->modalHeading(fn (Device $record): string => 'Sign in '.$record->readableName().' again')
-                ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.')
+                ->modalHeading(fn (Device $record): string => __('Sign in :name again', ['name' => $record->readableName()]))
+                ->modalDescription(__('Open the :app app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.', ['app' => Brand::name()]))
                 ->fillForm(fn (Device $record, ListDevices $livewire): array => $livewire->signInAgainForm($record))
                 ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
                 ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md'),

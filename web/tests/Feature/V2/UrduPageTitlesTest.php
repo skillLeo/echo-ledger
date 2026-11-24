@@ -8,6 +8,7 @@ use App\Filament\Support\SettingsContext;
 use App\Models\Device;
 use App\Models\RequestLink;
 use App\Services\Sharing\RequestLinks;
+use App\Support\Brand;
 use Filament\Actions\Action;
 use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
@@ -137,8 +138,16 @@ it('opens a device row\'s Sign in again window from the new frame\'s own copy in
 
     $as(true, 'ur');
     expect($window()['pairing']->getView())->toBe('filament.v2.pair-device');
+    $page = Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out');
+    $page->assertActionExists(TestAction::make('signInAgain')->table($device->fresh()), fn (Action $a): bool => str_contains((string) $a->getModalHeading(), 'کو دوبارہ سائن اِن کریں')
+        && str_contains((string) $a->getModalHeading(), $device->fresh()->readableName())
+        && str_contains((string) $a->getModalDescription(), 'اس ڈیوائس پر') && str_contains((string) $a->getModalDescription(), '10 منٹ'));
+
     $as(false, 'en');
     expect($window()['pairing']->getView())->toBe('filament.pair-device');
+    Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out')
+        ->assertActionExists(TestAction::make('signInAgain')->table($device->fresh()), fn (Action $a): bool => $a->getModalHeading() === 'Sign in '.$device->fresh()->readableName().' again'
+            && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.');
 });
 
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {
