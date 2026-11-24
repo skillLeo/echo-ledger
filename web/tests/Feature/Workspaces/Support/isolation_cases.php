@@ -343,6 +343,13 @@ function isoApiCases(array $b): array
         'api.sessions.show' => ['GET', "/api/sessions/{$s}", [], 404],
         'api.sessions.opened' => ['POST', "/api/sessions/{$s}/opened", [], 404],
         'api.sessions.unopened' => ['DELETE', "/api/sessions/{$s}/opened", [], 404],
+        // Since 2.0.0-y: B's recording among many is listed back as not found, never marked, never an error.
+        'api.sessions.opened.many' => ['POST', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
+        'api.sessions.unopened.many' => ['DELETE', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
         // Live Translate holds no workspace data; without a Soniox key it says so and leaks nothing of the other one.
         'api.live-translate.token' => ['POST', '/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'],
             fn (TestResponse $r): bool => $r->status() === 503 && $r->json('code') === 'provider_not_configured'],

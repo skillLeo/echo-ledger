@@ -93,11 +93,7 @@ const SERVED_BEFORE_DOCUMENTED = [
 
 // Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served, and since 2.0.0-r's BE-02, BE-03 and BE-04 those of
 // 2.0.0-r: nothing documented waits for the router.
-// Contract 2.0.0-y (bulk Mark as read / unread): documented ahead of the build; each line goes in the change that serves it.
-const NOT_SERVED_YET = [
-    'POST /api/sessions/opened',
-    'DELETE /api/sessions/opened',
-];
+const NOT_SERVED_YET = [];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
