@@ -1938,6 +1938,8 @@ span.el-nav-section__title { cursor: default; }
 .el-rec__line { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
 .el-rec__line--2 { color: var(--el-role-text-secondary); }
 .el-rec__title { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--el-text-body-strong-weight); }
+/* Not opened yet (the web's and the phone's dot): the accent, before the title. */
+.el-rec__unread { flex: none; inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); }
 .el-rec__meta { flex: 1; min-inline-size: 0; overflow: hidden; display: flex; align-items: center; gap: var(--el-space-8); }
 .el-rec__end { flex: none; margin-inline-start: auto; color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); font-variant-numeric: tabular-nums; }
 .el-rec__label { position: relative; flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; cursor: pointer; }

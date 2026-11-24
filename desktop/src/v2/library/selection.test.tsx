@@ -296,7 +296,7 @@ describe("the row ⋮ and the right-click menu", () => {
     await act(flushAsync);
   };
 
-  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
+  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Unread · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
     respond("library_refresh", pinned);
@@ -304,7 +304,7 @@ describe("the row ⋮ and the right-click menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
     const words = () => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
-    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
+    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Mark as unread", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
     // Hairlines between 3b's groups, no group headers; every item without a tick has its icon.
     expect(menu.querySelectorAll(".el-menu__separator")).toHaveLength(3);
     expect(menu.querySelectorAll(".el-menu__group")).toHaveLength(0);

@@ -1094,6 +1094,12 @@ impl ApiClient {
         Self::ok_empty(resp).await
     }
 
+    /// `DELETE /api/sessions/{id}/opened` (since 2.0.0-t): Mark as unread, the person's own open taken back; `204`.
+    pub async fn session_unopen(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
     /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
     fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
         let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
