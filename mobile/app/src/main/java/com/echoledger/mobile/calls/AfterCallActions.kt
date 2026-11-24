@@ -32,6 +32,8 @@ object AfterCallActions {
     /** Asks about [rec], which waits, after its call (main thread). */
     fun ask(context: Context, rec: LocalRecording, settings: AppSettings) {
         val app = context.applicationContext
+        // Its channel exists only while the flag is on: made now if the flag has just come on.
+        AfterCallNotice.ensureChannel(app)
         if (!AfterCallNotice.canShow(app)) {
             // Notifications off (or this channel): nothing shows, and the call is kept as audio only.
             scope.launch { Decisions.apply(app, rec.id, keep = true, transcribe = false) }
@@ -54,13 +56,20 @@ object AfterCallActions {
         counted(context, Pick.TRANSCRIBE)
     }
 
-    /** A swipe: the calls still waiting are kept as audio only. */
-    suspend fun swiped(context: Context, ids: List<String>) {
+    /**
+     * The notification went away (a swipe, Clear all, or its hour over): the calls still waiting are kept as audio only.
+     * Only a swipe or a Clear all within the hour (posted at [postedAt]) is the person's choice and counts toward
+     * "Always audio only"; the hour running out is nobody choosing, as the backstop is.
+     */
+    suspend fun swiped(context: Context, ids: List<String>, postedAt: Long? = null, now: Long = System.currentTimeMillis()) {
         val waiting = ids.mapNotNull { graph(context).recordings.get(it) }.filter { it.state == WAITING }
         if (waiting.isEmpty()) return
         waiting.forEach { Decisions.apply(context, it.id, keep = true, transcribe = false) }
-        counted(context, Pick.AUDIO)
+        if (postedAt == null || now - postedAt < CallChoice.NOTICE_MS - TIMEOUT_SLACK_MS) counted(context, Pick.AUDIO)
     }
+
+    /** How early before the hour Android may time a notification out (its alarm is not exact). */
+    private const val TIMEOUT_SLACK_MS = 60_000L
 
     /** "Always transcribe" or "Always audio only": After each call becomes that choice, and this call gets it too. */
     suspend fun always(context: Context, id: String, pick: Pick) {

@@ -53,4 +53,8 @@
     <string name="cc_ac_bar">اسکرین پر ایک چھوٹی پٹی دکھائیں</string>
     <string name="cc_ac_bar_help">نوٹیفکیشن کے ساتھ اسکرین کے اوپر 6 سیکنڈ کے لیے ایک چھوٹی لائن۔ دوسری ایپس کے اوپر دکھانے کی اجازت چاہیے۔</string>
     <string name="cc_ac_setting_ask_help">ہر کال کے بعد ایک خاموش نوٹیفکیشن۔</string>
+    <plurals name="cc_ac_ready_many">
+        <item quantity="one">%1$d ٹرانسکرپٹ تیار ہے</item>
+        <item quantity="other">%1$d ٹرانسکرپٹ تیار ہیں</item>
+    </plurals>
 </resources>
