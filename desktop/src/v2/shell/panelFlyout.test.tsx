@@ -17,7 +17,7 @@ const setWidth = (width: number) => {
   window.dispatchEvent(new Event("resize"));
 };
 
-function App({ flag = true, layoutFor, page }: { flag?: boolean; layoutFor?: string | null; page?: ReactNode }) {
+function App({ flag = true, layoutFor = "server|me@x.com|w1", page }: { flag?: boolean; layoutFor?: string | null; page?: ReactNode }) {
   const [place, setPlace] = useState<Place | null>("library");
   const panel = (name: string) => <ul aria-label={`${name} views`}><li><button type="button">First {name} view</button></li><li><button type="button">Second {name} view</button></li></ul>;
   return (
@@ -230,11 +230,65 @@ describe("the panel can always be opened (UX-02)", () => {
     expect(panel()).not.toHaveClass("el-panel--flyout");
   });
 
-  it("an account's first start keeps what this computer had before (the layout saved for no account)", () => {
+  it("the layout kept before accounts had their own moves to the account that used this computer last, once; another gets the defaults", () => {
+    setWidth(1440);
+    // Kept by an earlier version for the whole computer, and My views' record of whose this computer was last.
+    window.localStorage.setItem("echoledger-nav-panels", JSON.stringify(["library"]));
+    window.localStorage.setItem("echoledger-nav-pinned-small", "1");
+    window.localStorage.setItem("echoledger-my-views-account", JSON.stringify({ server: "server", signIn: "s1", account: "server|a@x.com|w1", accounts: ["server|a@x.com|w1"] }));
+    const a = render(<App layoutFor="server|a@x.com|w1" />);
+    expect(panel()).toBeNull();
+    // Moved: now A's own, and the computer-wide copies are gone.
+    expect(window.localStorage.getItem("echoledger-nav-panels:server|a@x.com|w1")).toBe(JSON.stringify(["library"]));
+    expect(window.localStorage.getItem("echoledger-nav-pinned-small:server|a@x.com|w1")).toBe("1");
+    expect(window.localStorage.getItem("echoledger-nav-panels")).toBeNull();
+    expect(window.localStorage.getItem("echoledger-nav-pinned-small")).toBeNull();
+    a.unmount();
+    // B, next on this computer: the defaults, nothing of A's.
+    render(<App layoutFor="server|b@x.com|w1" />);
+    expect(panel()).not.toBeNull();
+  });
+
+  it("another account than the one that used this computer last never gets the old layout", () => {
     setWidth(1440);
     window.localStorage.setItem("echoledger-nav-panels", JSON.stringify(["library"]));
-    render(<App layoutFor="server|a@x.com|w1" />);
+    window.localStorage.setItem("echoledger-my-views-account", JSON.stringify({ server: "server", signIn: "s1", account: "server|a@x.com|w1", accounts: ["server|a@x.com|w1"] }));
+    render(<App layoutFor="server|b@x.com|w1" />);
+    expect(panel()).not.toBeNull();
+    // A's to move later, untouched.
+    expect(window.localStorage.getItem("echoledger-nav-panels")).toBe(JSON.stringify(["library"]));
+  });
+
+  it("while the account isn't known the layout changes in memory only: nothing is written, nothing old is read", () => {
+    setWidth(1440);
+    window.localStorage.setItem("echoledger-nav-panels", JSON.stringify(["projects"]));
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    const { rerender } = render(<App layoutFor={null} />);
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Hide panel" }));
     expect(panel()).toBeNull();
+    act(() => setWidth(1024));
+    fireEvent.click(toggle()!);
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Pin the panel" }));
+    expect(writes).not.toHaveBeenCalled();
+    writes.mockRestore();
+    expect(window.localStorage.getItem("echoledger-nav-panels")).toBe(JSON.stringify(["projects"]));
+    // Once known, the account's own (here none yet: the defaults).
+    rerender(<App layoutFor="server|a@x.com|w1" />);
+    expect(panel()).toBeNull();
+    act(() => setWidth(1440));
+    expect(panel()).not.toBeNull();
+  });
+
+  it("a flyout left open while the window was wide does not open again by itself when it narrows", () => {
+    setWidth(1024);
+    render(<App />);
+    fireEvent.click(toggle()!);
+    expect(panel()).toHaveClass("el-panel--flyout");
+    act(() => setWidth(1300));
+    expect(panel()).not.toHaveClass("el-panel--flyout");
+    act(() => setWidth(1024));
+    expect(panel()).toBeNull();
+    expect(screen.queryByTestId("panel-scrim")).toBeNull();
   });
 
   it("the slide-in belongs to the flag: the shell says when it is on", () => {

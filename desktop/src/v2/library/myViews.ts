@@ -440,6 +440,12 @@ function remembered(): Remembered | null {
   }
 }
 
+/** Whose views this computer showed last, whatever the sign-in (null: none kept): the one an earlier version's
+ * computer-wide layout belongs to (the shell's panels). */
+export function lastAccountHere(): string | null {
+  return remembered()?.account ?? null;
+}
+
 /** Keeps whose views were shown last in this sign-in, to show them (on this computer only) while the account can't be read. */
 export function rememberViewsAccount(server: string | null | undefined, account: string, signIn: string | null | undefined) {
   if (!signIn) return;

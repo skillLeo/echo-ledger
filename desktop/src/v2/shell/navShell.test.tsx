@@ -27,7 +27,7 @@ function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn() }: { o
       onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} callRecording={{ on: true, toggle: toggleCalls }} onSearch={() => undefined} searchKeys="⌘K"
       me={{ name: "Ayesha Khan", email: "ayesha@example.test", plan: null }} account={[{ label: "Sign out", onPick: () => undefined }]}
       panels={{ library: panel("Library"), projects: panel("Projects"), live: panel("Live"), ask: panel("Ask"), activity: panel("Activity"), settings: panel("Settings") }}
-      feet={{ library: <p>Synced just now</p> }}>
+      feet={{ library: <p>Synced just now</p> }} layoutFor="ledger.example.test|ayesha@example.test|w1">
       <p>The page</p>
     </NavShell>
   );
@@ -85,7 +85,7 @@ describe("the three levels", () => {
     expect(onPlace).toHaveBeenLastCalledWith("library", false);
     fireEvent.keyDown(window, { key: "\\", metaKey: true });
     expect(panel()).toBeNull();
-    expect(JSON.parse(window.localStorage.getItem("echoledger-nav-panels")!)).toEqual(["library"]);
+    expect(JSON.parse(window.localStorage.getItem("echoledger-nav-panels:ledger.example.test|ayesha@example.test|w1")!)).toEqual(["library"]);
     // Another place keeps its own: shown.
     fireEvent.click(rail().getByRole("button", { name: "Projects" }));
     expect(panel()).not.toBeNull();
