@@ -35,15 +35,19 @@ describe("the avatar (DES-08)", () => {
     expect(avatarColour(-1, "x")).toBe(avatarColour(null, "x"));
   });
 
-  it("each colour is a token, with white initials, and there is no grey circle left", () => {
+  it("in the three levels and the account menu each colour is a token, with white initials and the inner ring; classic keeps its circle", () => {
+    const where = ":is(.el-shell--nav, .el-account-head) .el-avatar";
     for (let n = 0; n < AVATAR_COLOURS; n++) {
-      expect(css).toContain(`.el-avatar[data-colour="${n}"] { background: var(--el-role-avatar-${n}); }`);
+      expect(css).toContain(`${where}[data-colour="${n}"] { background: var(--el-role-avatar-${n}); }`);
     }
-    expect(css).toMatch(/\.el-avatar \{[^}]*color: var\(--el-role-avatar-text\)/);
-    expect(css).not.toMatch(/\.el-avatar \{[^}]*background: var\(--el-role-bg-subtle\)/);
-    expect(css).not.toContain(".el-sidebar .el-avatar { background: var(--el-role-border-default); }");
+    expect(css).toContain(`${where} { color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); }`);
     // The inner ring, over a photo too.
-    expect(css).toMatch(/\.el-avatar::after \{[^}]*box-shadow: inset 0 0 0 var\(--el-desktop-avatar-ring\) var\(--el-role-avatar-ring\)/);
+    expect(css).toMatch(/:is\(\.el-shell--nav, \.el-account-head\) \.el-avatar::after \{[^}]*box-shadow: inset 0 0 0 var\(--el-desktop-avatar-ring\) var\(--el-role-avatar-ring\)/);
+    // Classic (the sidebar shell, the old views): as it was.
+    expect(css).toMatch(/\n\.el-avatar \{[^}]*background: var\(--el-role-bg-subtle\);[^}]*color: var\(--el-role-text-primary\)/);
+    expect(css).toContain(".el-sidebar .el-avatar { background: var(--el-role-border-default); }");
+    // Nothing coloured outside those two.
+    expect(css.match(/[^\n]*\.el-avatar\[data-colour[^\n]*/g)!.every((line) => line.startsWith(where))).toBe(true);
   });
 
   it("a photo fills the circle; one that fails to load shows the initials, never a broken image", () => {

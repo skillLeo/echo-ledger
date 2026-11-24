@@ -137,6 +137,38 @@ describe("the title row in the shell (UX-20)", () => {
     expect(within(row()).getByRole("button", { name: "Back" })).toBeDisabled();
   });
 
+  it("usePageHistory: true in the shell, false outside it; the page mounted last is asked first, with its newest functions", () => {
+    setSize(1440);
+    const outside: boolean[] = [];
+    function Alone() {
+      outside.push(usePageHistory({ back: () => undefined }));
+      return null;
+    }
+    const { unmount } = render(<Alone />);
+    expect(outside.at(-1)).toBe(false);
+    unmount();
+    const calls: string[] = [];
+    const inside: boolean[] = [];
+    function Steps({ name, v, back = true }: { name: string; v: number; back?: boolean }) {
+      inside.push(usePageHistory(back ? { back: () => calls.push(`${name}${v}`) } : null));
+      return null;
+    }
+    const shell = (outer: { v: number; back?: boolean }, inner: boolean) => (
+      <App page={() => <><Steps name="outer" {...outer} />{inner && <Steps name="inner" v={1} />}</>} />
+    );
+    const { rerender } = render(shell({ v: 1 }, true));
+    expect(inside.at(-1)).toBe(true);
+    fireEvent.click(within(row()).getByRole("button", { name: "Back" }));
+    expect(calls).toEqual(["inner1"]);
+    // The inner one goes: the outer one, with the functions of its newest render.
+    rerender(shell({ v: 2 }, false));
+    fireEvent.click(within(row()).getByRole("button", { name: "Back" }));
+    expect(calls).toEqual(["inner1", "outer2"]);
+    // A page with no step now keeps its turn; with none anywhere, Back is greyed (no place visited before).
+    rerender(shell({ v: 3, back: false }, false));
+    expect(within(row()).getByRole("button", { name: "Back" })).toBeDisabled();
+  });
+
   it("⌘F searches the page's view in the row (with its scope); a page that takes ⌘F itself keeps it", () => {
     setSize(1440);
     const onSearch = vi.fn();
@@ -239,6 +271,8 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     expect(head.textContent).toContain("Ayesha Khan");
     expect(head.textContent).toContain("ayesha@example.test");
     expect(head.textContent).toContain("Free · 12 of 30 min used this month");
+    // Said with the menu: who it is.
+    expect(menu).toHaveAccessibleDescription("Ayesha Khan ayesha@example.test Free · 12 of 30 min used this month");
     expect([...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(["Theme", "Sign out"]);
   });
 
@@ -248,10 +282,13 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     expect(rail().queryByRole("button", { name: "Help" })).toBeNull();
     expect(rail().queryByRole("button", { name: /^Setup/ })).toBeNull();
     expect(rail().getByRole("button", { name: "Library" }).querySelector(".el-rail__label")).toBeVisible();
-    fireEvent.click(rail().getByRole("button", { name: "Account, Ayesha Khan" }));
+    // Setup's dot sits on the avatar now, and its name says so.
+    fireEvent.click(rail().getByRole("button", { name: "Account, Ayesha Khan, needs setup" }));
     const items = [...screen.getByRole("menu", { name: "Account, Ayesha Khan" }).querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent);
     expect(items).toEqual(["Setup & health", "Help", "Theme", "Sign out"]);
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Account, Ayesha Khan" }), { key: "Escape" });
     act(() => setSize(1440, RAIL_FULL_FROM));
     expect(rail().getByRole("button", { name: "Help" })).toBeInTheDocument();
+    expect(rail().getByRole("button", { name: "Account, Ayesha Khan" })).toBeInTheDocument();
   });
 });

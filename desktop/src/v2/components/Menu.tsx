@@ -125,6 +125,7 @@ export function Layer({ from, children }: { from: Element | null; children: Reac
 export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", header }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
+  const headerId = useId();
   const own = useRef<HTMLUListElement | null>(null);
   const setRef = (el: HTMLUListElement | null) => {
     own.current = el;
@@ -269,8 +270,9 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
 
   const list = (
     <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
+      aria-describedby={header ? headerId : undefined}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
-      {header && <li role="none" className="el-menu__header">{header}</li>}
+      {header && <li role="none" id={headerId} className="el-menu__header">{header}</li>}
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
         if (!group) return rows;

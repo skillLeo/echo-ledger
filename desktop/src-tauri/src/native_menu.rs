@@ -6,7 +6,7 @@
 
 use serde::Deserialize;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, LogicalPosition, Window};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Window};
 
 /// What a native item's id starts with: the rest is the action id.
 pub const PREFIX: &str = "action:";

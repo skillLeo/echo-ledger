@@ -565,29 +565,31 @@
   border: var(--el-border-hairline) solid var(--el-role-border-default);
   border-radius: var(--el-component-card-radius);
 }
-/* The avatar (DES-08): initials on one of 8 solid colours (role.avatar.*, the server's avatar_color), or the photo
-   filling the circle; a 1 px inner ring over both, so neither melts into the background. */
+/* The avatar: a circle with the initials, or the photo filling it. Classic keeps its neutral circle. */
 .el-avatar {
   position: relative; flex: none; overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center;
   inline-size: var(--el-space-48); block-size: var(--el-space-48);
   border-radius: var(--el-radius-full);
-  background: var(--el-role-avatar-0);
-  color: var(--el-role-avatar-text);
+  background: var(--el-role-bg-subtle);
+  color: var(--el-role-text-primary);
   font-size: var(--el-text-title-s-size);
   font-weight: var(--el-text-title-s-weight);
   user-select: none;
 }
-.el-avatar::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 var(--el-desktop-avatar-ring) var(--el-role-avatar-ring); pointer-events: none; }
 .el-avatar > img { inline-size: 100%; block-size: 100%; object-fit: cover; }
-.el-avatar[data-colour="0"] { background: var(--el-role-avatar-0); }
-.el-avatar[data-colour="1"] { background: var(--el-role-avatar-1); }
-.el-avatar[data-colour="2"] { background: var(--el-role-avatar-2); }
-.el-avatar[data-colour="3"] { background: var(--el-role-avatar-3); }
-.el-avatar[data-colour="4"] { background: var(--el-role-avatar-4); }
-.el-avatar[data-colour="5"] { background: var(--el-role-avatar-5); }
-.el-avatar[data-colour="6"] { background: var(--el-role-avatar-6); }
-.el-avatar[data-colour="7"] { background: var(--el-role-avatar-7); }
+/* DES-08, in the three levels and the account menu: initials on one of 8 solid colours (role.avatar.*, the server's
+   avatar_color) and a 1 px inner ring over the colour or the photo, so neither melts into the background. */
+:is(.el-shell--nav, .el-account-head) .el-avatar { color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 var(--el-desktop-avatar-ring) var(--el-role-avatar-ring); pointer-events: none; }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="0"] { background: var(--el-role-avatar-0); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="1"] { background: var(--el-role-avatar-1); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="2"] { background: var(--el-role-avatar-2); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="3"] { background: var(--el-role-avatar-3); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="4"] { background: var(--el-role-avatar-4); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="5"] { background: var(--el-role-avatar-5); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="6"] { background: var(--el-role-avatar-6); }
+:is(.el-shell--nav, .el-account-head) .el-avatar[data-colour="7"] { background: var(--el-role-avatar-7); }
 .el-avatar--sm, .el-avatar--list { inline-size: var(--el-desktop-avatar-list); block-size: var(--el-desktop-avatar-list); font-size: var(--el-text-caption-size); }
 .el-avatar--rail { inline-size: var(--el-desktop-avatar-rail); block-size: var(--el-desktop-avatar-rail); font-size: var(--el-desktop-text-avatar-rail-size); font-weight: var(--el-desktop-text-avatar-rail-weight); }
 .el-avatar--menu { inline-size: var(--el-desktop-avatar-menu); block-size: var(--el-desktop-avatar-menu); font-size: var(--el-desktop-text-avatar-menu-size); font-weight: var(--el-desktop-text-avatar-menu-weight); }
@@ -683,6 +685,7 @@
   background: transparent; text-align: start; cursor: pointer; min-inline-size: 0;
 }
 .el-shell__me:hover { background: var(--el-role-border-default); }
+.el-sidebar .el-avatar { background: var(--el-role-border-default); }
 .el-shell__me-text { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-2); min-inline-size: 0; }
 .el-shell__me-name { font-weight: var(--el-text-body-strong-weight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-inline-size: 100%; }
 .el-shell__main { position: relative; display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; overflow: hidden; }
@@ -2158,24 +2161,24 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
 
 /* ---- DES-03: the desktop's base sizes (PLAN_V2_1_POLISH, a proposal for the owner to pick from) ---------------------
-   100% looks like the 90-95% the owner asked for, without a default zoom: in the main window's shell only (the floating
-   windows keep their own sizes). Body 14, secondary 13, small 12; page titles 18, the panel's 15 semibold, rail labels
+   100% looks like the 90-95% the owner asked for, without a default zoom: in the three levels' shell only (the floating
+   windows, and classic's sidebar, keep their own sizes). Body 14, secondary 13, small 12; page titles 18, the panel's 15 semibold, rail labels
    11; panel items 32, rows 56/44, buttons and fields 32 (28 small); icons 16, 20 in the rail. Urdu and Arabic titles keep
    their own sizes and line heights (Nastaliq and Naskh are taller). */
-.el-shell {
+.el-shell--nav {
   --el-component-button-height: var(--el-desktop-control-height);
   --el-component-field-height: var(--el-desktop-control-height);
 }
-.el-shell h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)),
-.el-shell :is(.el-lib-crumbs__root, .el-lib-crumbs__sep):not(:lang(ur), :lang(ar)) {
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)),
+.el-shell--nav :is(.el-lib-crumbs__root, .el-lib-crumbs__sep):not(:lang(ur), :lang(ar)) {
   font-size: var(--el-desktop-text-page-title-size); line-height: var(--el-desktop-text-page-title-line);
 }
-.el-shell h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)) { font-weight: var(--el-desktop-text-page-title-weight); }
-.el-shell .el-panel__title:not(:lang(ur), :lang(ar)) {
+.el-shell--nav h1:is(.el-title-l, .el-title-m):not(:lang(ur), :lang(ar)) { font-weight: var(--el-desktop-text-page-title-weight); }
+.el-shell--nav .el-panel__title:not(:lang(ur), :lang(ar)) {
   font-size: var(--el-desktop-text-panel-title-size); line-height: var(--el-desktop-text-panel-title-line); font-weight: var(--el-desktop-text-panel-title-weight);
 }
-.el-shell .el-rail__label { font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); }
-.el-shell .el-row__meta.el-caption:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
-.el-shell .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
-.el-shell .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
-.el-shell .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }
+.el-shell--nav .el-rail__label { font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); }
+.el-shell--nav .el-row__meta.el-caption:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
+.el-shell--nav .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
+.el-shell--nav .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
+.el-shell--nav .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }

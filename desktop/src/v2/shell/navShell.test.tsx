@@ -196,16 +196,17 @@ describe("the three levels", () => {
     render(<App />);
     expect(640).toBeLessThan(RAIL_FULL_FROM);
     expect(document.querySelector(".el-shell")).toHaveClass("el-shell--short");
-    for (const name of ["Library", "Activity, 2", "Settings", "Account, Ayesha Khan"]) {
+    // Setup's dot moves onto the avatar with Setup: its name says so.
+    for (const name of ["Library", "Activity, 2", "Settings", "Account, Ayesha Khan, needs setup"]) {
       expect(rail().getByRole("button", { name })).toBeInTheDocument();
     }
     expect(rail().queryByRole("button", { name: "Help" })).toBeNull();
     expect(rail().queryByRole("button", { name: /^Setup/ })).toBeNull();
     // Every label stays under its icon (no icons-only rail any more).
-    for (const [name, label] of [["Library", "Library"], ["Projects", "Projects"], ["Live, recording", "Live"], ["Ask", "Ask"], ["Activity, 2", "Activity"], ["Settings", "Settings"], ["Account, Ayesha Khan", "Account"]]) {
+    for (const [name, label] of [["Library", "Library"], ["Projects", "Projects"], ["Live, recording", "Live"], ["Ask", "Ask"], ["Activity, 2", "Activity"], ["Settings", "Settings"], ["Account, Ayesha Khan, needs setup", "Account"]]) {
       expect(rail().getByRole("button", { name }).querySelector(".el-rail__label")!.textContent).toBe(label);
     }
-    fireEvent.click(rail().getByRole("button", { name: "Account, Ayesha Khan" }));
+    fireEvent.click(rail().getByRole("button", { name: "Account, Ayesha Khan, needs setup" }));
     expect(within(screen.getByRole("menu", { name: "Account, Ayesha Khan" })).getByRole("menuitem", { name: "Setup & health" })).toBeInTheDocument();
     expect(within(screen.getByRole("menu", { name: "Account, Ayesha Khan" })).getByRole("menuitem", { name: "Help" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("menu", { name: "Account, Ayesha Khan" }), { key: "Escape" });

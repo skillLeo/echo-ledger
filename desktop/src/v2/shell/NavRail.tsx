@@ -77,18 +77,27 @@ export const PanelToggleContext = createContext<{ label: string; expanded?: bool
 
 /** The panel's toggle at the start of a page header ([▯]): nothing while the panel is shown or the page has none. */
 /**
- * A page's own steps back and forward (an open recording closes before the place changes; the Library's views): the
- * title row's ← → and ⌘[ ⌘] take them first, then the places visited. Null, or a step left out: none.
+ * A page's own steps back and forward, for the title row's ← → (UX-20), ⌘[ ⌘] (Alt+← → on Windows) and the mouse's
+ * side buttons. The shell takes a page's step first, then walks the places visited.
+ *
+ *   const inShell = usePageHistory({ back: canGoBack ? goBack : null, forward: canGoForward ? goForward : null });
+ *
+ * - Give a step only while it can be taken: null (or left out) greys that arrow, unless the places have somewhere to go.
+ *   Pass null for none at all. Every render publishes what is given now; the newest functions are the ones called.
+ * - Several pages at once (a page inside a page): the one mounted last is asked first, then the next.
+ * - It returns true inside the shell (the three levels): the page then leaves ⌘[ ⌘] and the side buttons to it. False
+ *   anywhere else (classic, a test without the shell): the page answers them itself, as before.
  */
 export type PageHistory = { back?: (() => void) | null; forward?: (() => void) | null };
-export const PageHistoryContext = createContext<{ set: (id: string, steps: PageHistory | null) => void } | null>(null);
-export function usePageHistory(steps: PageHistory | null) {
+export const PageHistoryContext = createContext<{ set: (id: string, steps: PageHistory | null) => void; withdraw: (id: string) => void } | null>(null);
+export function usePageHistory(steps: PageHistory | null): boolean {
   const slot = useContext(PageHistoryContext);
   const id = useId();
   useEffect(() => {
     slot?.set(id, steps);
   });
-  useEffect(() => () => slot?.set(id, null), [slot, id]);
+  useEffect(() => () => slot?.withdraw(id), [slot, id]);
+  return !!slot;
 }
 
 export function PanelToggle() {

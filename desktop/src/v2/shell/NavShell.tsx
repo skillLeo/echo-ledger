@@ -219,13 +219,20 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   // Back and Forward (UX-20): a page's own step first (usePageHistory), else the places visited, Home among them.
   const steps = useRef(new Map<string, PageHistory>());
   const [, setStepsSeen] = useState("");
-  const historySlot = useMemo(() => ({
-    set(id: string, given: PageHistory | null) {
-      if (given && (given.back || given.forward)) steps.current.set(id, given);
-      else steps.current.delete(id);
-      setStepsSeen([...steps.current].map(([k, v]) => `${k}:${v.back ? "b" : ""}${v.forward ? "f" : ""}`).join("|"));
-    },
-  }), []);
+  // In the order the pages were mounted (a page that has no step now keeps its place); the last is asked first.
+  const historySlot = useMemo(() => {
+    const seen = () => setStepsSeen([...steps.current].map(([k, v]) => `${k}:${v.back ? "b" : ""}${v.forward ? "f" : ""}`).join("|"));
+    return {
+      set(id: string, given: PageHistory | null) {
+        steps.current.set(id, given ?? {});
+        seen();
+      },
+      withdraw(id: string) {
+        steps.current.delete(id);
+        seen();
+      },
+    };
+  }, []);
   const pageStep = (way: "back" | "forward") => [...steps.current.values()].reverse().find((h) => h[way])?.[way] ?? null;
   const [visits, setVisits] = useState<{ back: (Place | null)[]; forward: (Place | null)[]; at: Place | null }>({ back: [], forward: [], at: place });
   if (place !== visits.at) setVisits((v) => (place === v.at ? v : { back: [...v.back, v.at], forward: [], at: place }));
@@ -454,13 +461,14 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                   <div className="el-account-head">
                     <Avatar initials={initials(me.name, me.email)} size="menu" color={me.color} seed={me.email} photo={me.photo} />
                     <div className="el-account-head__who">
+                      {/* The spaces between the lines are for assistive tools (the menu's description); a column draws none. */}
                       <span className="el-account-head__name" dir="auto">{me.name}</span>
-                      {me.name !== me.email && <span className="el-account-head__line" dir="auto">{me.email}</span>}
-                      {(me.plan || me.usage) && <span className="el-account-head__line" dir="auto">{[me.plan, me.usage].filter(Boolean).join(" · ")}</span>}
+                      {me.name !== me.email && <>{" "}<span className="el-account-head__line" dir="auto">{me.email}</span></>}
+                      {(me.plan || me.usage) && <>{" "}<span className="el-account-head__line" dir="auto">{[me.plan, me.usage].filter(Boolean).join(" · ")}</span></>}
                     </div>
                   </div>
                 )}
-                button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": `Account, ${me.name}`, ...meTip,
+                button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": `Account, ${me.name}${short && setupAttention ? ", needs setup" : ""}`, ...meTip,
                   text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
                     {short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
                     <span className="el-rail__label" aria-hidden="true">Account</span></> }} />
