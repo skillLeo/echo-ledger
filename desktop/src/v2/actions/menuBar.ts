@@ -96,16 +96,20 @@ export const CORE_ACTIONS: ReadonlySet<string> = new Set(["app.settings", "app.q
  */
 const menuKey = (shortcut: string | null) => (shortcut && /^[⌃⌥⇧⌘]/.test(shortcut) ? accelerator(shortcut) : null);
 
-/** The menu bar for this moment (pure): the app's state in `ctx`, the sub-menus' choices from the pages. */
-export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}): NativeMenuBar {
+/**
+ * The menu bar for this moment (pure): the app's state in `ctx`, the sub-menus' choices from the pages, and the kinds
+ * of thing the focused page's commands are for (each item greyed by whether something answers it for one of them).
+ */
+export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}, kinds: readonly string[] = []): NativeMenuBar {
   const at = { ...ctx, platform: "macos" as const };
+  const runs = (id: string) => kinds.some((kind) => canRun(id, kind)) || canRun(id, ctx.kind);
   const entry = (layout: Layout): NativeEntry => {
     if (layout === LINE) return { kind: "separator" };
     if (typeof layout === "string") {
       const action = findAction(layout);
       if (!action) throw new Error(`${layout} is not in actions.json`);
       if (action.native && !CORE_ACTIONS.has(action.id)) return { kind: "native", action: action.id, native: action.native };
-      const enabled = CORE_ACTIONS.has(action.id) || (canRun(action.id, at.kind) && available(action.id, at));
+      const enabled = CORE_ACTIONS.has(action.id) || (runs(action.id) && available(action.id, at));
       return {
         kind: "item", action: action.id, label: actionLabel(action.id, at), accelerator: menuKey(action.mac), enabled,
         checked: action.state?.check ? !!at.state?.[action.state.check] : null,
@@ -114,7 +118,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}): Nat
     const label = layout.title ?? (layout.action ? actionLabel(layout.action, at) : "");
     if (layout.choices && layout.action) {
       const id = layout.action;
-      const can = canRun(id, at.kind) && available(id, at);
+      const can = runs(id) && available(id, at);
       const items: NativeEntry[] = (choices[id] ?? []).map((c) => ({
         kind: "item", action: id, value: c.value, label: c.label, accelerator: null, enabled: can, checked: !!c.checked,
       }));

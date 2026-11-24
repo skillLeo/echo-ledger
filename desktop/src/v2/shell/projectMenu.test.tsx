@@ -7,7 +7,8 @@ import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { Shell, type SidebarProject } from "./Shell";
 import { registerAction } from "../actions/registry";
 import { PROJECT_MENU } from "./ProjectMenu";
-import { listenToMenuPicks } from "../actions/menuState";
+import { listenToMenuPicks, setPickedHandler } from "../actions/menuState";
+import { runPicked } from "../actions/popup";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -74,21 +75,24 @@ describe("a project's menu in the panel (3b)", () => {
     expect(screen.getByRole("menu", { name: "Mehran Foods" })).toBeInTheDocument();
   });
 
-  it("on a Mac the system draws it, in Title Case, each item carrying its project; a pick runs for that project", async () => {
-    document.documentElement.dataset.platform = "macos";
+  it("on a Mac the system draws it (a numbered right-click menu, Title Case); its pick runs for the project right-clicked", async () => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
     respond("native_menu_popup", null);
     const requestFiles = vi.fn();
     offs.push(registerAction("project.open", () => undefined), registerAction("project.requestFiles", requestFiles), registerAction("project.delete", () => undefined));
+    offs.push(setPickedHandler(runPicked));
     show();
     fireEvent.contextMenu(project("Mehran Foods"), { clientX: 40, clientY: 100 });
     await act(async () => undefined);
     expect(screen.queryByRole("menu")).toBeNull();
     const [call] = callsOf("native_menu_popup");
-    const items = call.items as { action: string | null; label?: string; enabled?: boolean; target?: string }[];
-    expect(items.map((i) => i.label ?? "-")).toEqual(["Open", "-", "Request Files…", "-", "Delete Project…"]);
-    expect(items.filter((i) => i.action).every((i) => i.target === "m" && i.enabled)).toBe(true);
-    await act(() => emitEvent("menu:action", "project.requestFiles@m"));
+    const items = call.items as { action: string | null; label?: string; enabled?: boolean }[];
+    expect(items.map((i) => i.label || "-")).toEqual(["Open", "-", "Request Files…", "-", "Delete Project…"]);
+    expect(items.filter((i) => i.action).every((i) => i.enabled)).toBe(true);
+    expect(typeof call.menu).toBe("number");
+    await act(() => emitEvent("menu:action", `project.requestFiles~${call.menu}`));
     expect(requestFiles).toHaveBeenCalledTimes(1);
     expect(requestFiles).toHaveBeenCalledWith(expect.objectContaining({ targets: ["m"] }));
+    Object.defineProperty(navigator, "platform", { value: "", configurable: true });
   });
 });

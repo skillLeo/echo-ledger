@@ -26,7 +26,8 @@ import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from ".
 import { SignInView } from "./SignInView";
 import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
 import { MenuBar } from "../../v2/actions/useMenuBar";
-import { listenToMenuPicks, menuPicksReady, useMenuPart } from "../../v2/actions/menuState";
+import { listenToMenuPicks, menuPicksReady, setPickedHandler, useMenuPart } from "../../v2/actions/menuState";
+import { runPicked } from "../../v2/actions/popup";
 import { registerAction } from "../../v2/actions/registry";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
@@ -274,6 +275,8 @@ export default function MainApp() {
   const menuPlatform = useRef<"macos" | "windows">("windows");
   menuPlatform.current = status?.platform === "macos" ? "macos" : "windows";
   useEffect(() => listenToMenuPicks(() => menuPlatform.current), []);
+  // A right-click menu's (numbered) picks are its own (actions/popup.ts): run by the item they came from.
+  useEffect(() => setPickedHandler(runPicked), []);
   const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
   // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
   const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });

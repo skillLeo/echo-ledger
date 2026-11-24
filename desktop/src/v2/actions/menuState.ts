@@ -9,18 +9,21 @@ import { canRun, runAction, watchHandlers, type ActionContext } from "./registry
 import type { MenuChoices } from "./menuBar";
 
 type State = NonNullable<ActionContext["state"]>;
-/** One part's say: its state, its sub-menus' choices, and (the focused page) what is selected and what kind it is. */
-type Part = { state?: State; choices?: MenuChoices; targets?: readonly string[]; kind?: string };
+/**
+ * One part's say: its state, its sub-menus' choices, and (the focused page) what is selected and the kinds of thing its
+ * commands are for, the selection's first ("recording", then the list's own "list": As Table, Sort By…).
+ */
+type Part = { state?: State; choices?: MenuChoices; targets?: readonly string[]; kind?: string | readonly string[] };
 const parts = new Map<string, Part>();
 const subscribers = new Set<() => void>();
-let snapshot: { state: State; choices: MenuChoices; targets: readonly string[]; kind?: string } = { state: {}, choices: {}, targets: [] };
+let snapshot: { state: State; choices: MenuChoices; targets: readonly string[]; kinds: readonly string[] } = { state: {}, choices: {}, targets: [], kinds: [] };
 
 /** The merged state's contents, the same whatever order the parts said it in. */
 const contents = (s: typeof snapshot) => JSON.stringify([
   Object.entries(s.state).sort(([a], [b]) => a.localeCompare(b)),
   Object.entries(s.choices).sort(([a], [b]) => a.localeCompare(b)),
   s.targets,
-  s.kind ?? null,
+  s.kinds,
 ]);
 
 /** Merges what the parts say; only a real change makes a new snapshot and tells the subscribers (the menu bar). */
@@ -28,17 +31,17 @@ function recompute() {
   const state: State = {};
   const choices: MenuChoices = {};
   let targets: readonly string[] = [];
-  let kind: string | undefined;
+  let kinds: readonly string[] = [];
   for (const part of parts.values()) {
     Object.assign(state, part.state);
     Object.assign(choices, part.choices);
     // The latest part with a selection is the focused page's: its things and their kind go together.
     if (part.targets) {
       targets = part.targets;
-      kind = part.kind;
+      kinds = part.kind === undefined ? [] : typeof part.kind === "string" ? [part.kind] : part.kind;
     }
   }
-  const next = { state, choices, targets, ...(kind !== undefined ? { kind } : {}) };
+  const next = { state, choices, targets, kinds };
   if (contents(next) === contents(snapshot)) return;
   snapshot = next;
   subscribers.forEach((notify) => notify());
@@ -75,10 +78,19 @@ export function useMenuSnapshot() {
 }
 export const menuSnapshot = () => snapshot;
 
-/** The context the menu bar is drawn and its picks run with: the app's state, the focused page's selection and its kind, the choice. */
-export function menuContext(platform: ActionContext["platform"], value?: string): ActionContext {
+/** The kind an action runs for here (pure on the snapshot): the first of the focused page's kinds something answers it for. */
+export function kindFor(id: string, kinds: readonly string[] = snapshot.kinds): string | undefined {
+  return kinds.find((kind) => canRun(id, kind));
+}
+
+/**
+ * The context the menu bar is drawn and its picks run with: the app's state, the focused page's selection, the kind
+ * the action `id` runs for there, the choice.
+ */
+export function menuContext(platform: ActionContext["platform"], value?: string, id?: string): ActionContext {
   const now = menuSnapshot();
-  return { platform, state: now.state, targets: now.targets, ...(now.kind !== undefined ? { kind: now.kind } : {}), ...(value !== undefined ? { value } : {}) };
+  const kind = id === undefined ? now.kinds[0] : kindFor(id, now.kinds);
+  return { platform, state: now.state, targets: now.targets, ...(kind !== undefined ? { kind } : {}), ...(value !== undefined ? { value } : {}) };
 }
 
 /**
@@ -147,7 +159,7 @@ export function setPickedHandler(handler: PickedHandler | null): () => void {
 
 /** The context a numberless pick runs with: the focused page's, or its own thing's (`@target`, no selection's kind). */
 function pickContext(pick: MenuPick, platform: ActionContext["platform"]): ActionContext {
-  const ctx = menuContext(platform, pick.value);
+  const ctx = menuContext(platform, pick.value, pick.id);
   if (pick.target === undefined) return ctx;
   return { platform: ctx.platform, state: ctx.state, targets: [pick.target], ...(pick.value !== undefined ? { value: pick.value } : {}) };
 }

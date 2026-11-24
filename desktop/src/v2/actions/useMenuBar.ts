@@ -44,7 +44,7 @@ export function useMenuBar(platform: string | null | undefined) {
   useSyncExternalStore(watchHandlers, handlersVersion, handlersVersion);
   const now = useMenuSnapshot();
   // Greyed and run as the focused page's selection, of its kind (the Library's Pin, Labels, Move… are a recording's).
-  const bar = mac ? JSON.stringify(menuBarModel({ platform: "macos", state: now.state, targets: now.targets, ...(now.kind !== undefined ? { kind: now.kind } : {}) }, now.choices)) : null;
+  const bar = mac ? JSON.stringify(menuBarModel({ platform: "macos", state: now.state, targets: now.targets }, now.choices, now.kinds)) : null;
   useEffect(() => {
     if (!bar) return;
     window.clearTimeout(backToClassic);

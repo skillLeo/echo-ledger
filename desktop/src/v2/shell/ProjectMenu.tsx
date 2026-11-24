@@ -2,11 +2,12 @@
 // Open · Pin | Rename… · Instructions & Memory… · Request Files… · Members… | Archive | Delete Project…, every item an
 // action of actions.json. A right-click menu holds only what fits (3b, as contextMenus.ts): what nothing here can do is
 // left out, not greyed (only the menu bar greys), and a group left empty takes its line with it. On a Mac the system
-// draws it (native_menu_popup); elsewhere it is the page's own menu.
+// draws it (popupNative, as every right-click menu: its numbered picks run the item they came from, for the project
+// right-clicked); elsewhere it is the page's own menu.
 import { useState, type ReactNode } from "react";
 import { ContextMenu, menuPointFor } from "../components/Menu";
-import { api } from "../../lib/ipc";
-import { canRun, menuItems, nativeItems, type ActionContext } from "../actions/registry";
+import { canRun, menuItems, type ActionContext } from "../actions/registry";
+import { currentPlatform, popupNative } from "../actions/popup";
 
 export const PROJECT_MENU = [
   "project.open", "project.pin", "-",
@@ -15,7 +16,7 @@ export const PROJECT_MENU = [
   "project.delete",
 ] as const;
 
-const mac = () => typeof document !== "undefined" && document.documentElement.dataset.platform === "macos";
+const mac = () => currentPlatform() === "macos";
 
 /**
  * Its items for one project: only what something here can run and what fits (a right-click menu, `context`), with no
@@ -34,8 +35,7 @@ export function useProjectMenu(): { openAt: (project: { id: string; name: string
     // Nothing here can do anything for a project: no menu.
     if (!items.length) return;
     if (mac()) {
-      const lines = nativeItems(items).map((i) => (i.action ? { ...i, target: project.id } : i));
-      void api.nativeMenuPopup(lines, at.x, at.y).catch(() => setOpen({ name: project.name, ctx, at }));
+      void popupNative(items, at).then((shown) => { if (!shown) setOpen({ name: project.name, ctx, at }); });
       return;
     }
     setOpen({ name: project.name, ctx, at });
