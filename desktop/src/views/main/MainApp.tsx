@@ -280,13 +280,35 @@ export default function MainApp() {
   const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
   // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
   const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });
-  // The main window hidden from screen shares (Settings' choice): Live › Stop Hiding follows it.
-  const [hidingFromShares, setHidingFromShares] = useState(false);
+  // What Live's hiding items follow, as the core works it out (privacy_status): the main window hidden from screen
+  // shares now (an expired 15 minutes is not), the person's Hide EchoLedger windows, and its shortcut.
+  const [privacyNow, setPrivacyNow] = useState({ hiding: false, windowsHidden: false, hideAllShortcut: "" });
   useMenuPart({ state: {
     themeLight: theme === "light", themeDark: theme === "dark", themeSystem: theme === "system",
     paused: !!status?.paused, captionsShown: !!status?.captionsLive, pillShown: !!status?.recording && !status.pillHidden,
-    hiding: hidingFromShares,
+    hiding: privacyNow.hiding, windowsHidden: privacyNow.windowsHidden, hideAllShortcut: privacyNow.hideAllShortcut,
   } });
+  useEffect(() => {
+    let alive = true;
+    let expiry = 0;
+    const read = () => {
+      void Promise.all([api.privacyStatus(), api.settings()]).then(([p, s]) => {
+        if (!alive) return;
+        setPrivacyNow({ hiding: !!p.mainHide, windowsHidden: !!p.hiddenByShortcut, hideAllShortcut: s.shortcuts?.hide_all ?? "" });
+        // A hide for a time is read again when its time comes.
+        window.clearTimeout(expiry);
+        const until = p.mainHide?.until;
+        if (until?.kind === "at") expiry = window.setTimeout(read, Math.max(0, until.at_ms - Date.now()) + 1000);
+      }).catch(() => undefined);
+    };
+    read();
+    const offs = [listenTo("privacy:changed", read), listenTo("settings:changed", read)];
+    return () => {
+      alive = false;
+      window.clearTimeout(expiry);
+      offs.forEach((off) => void off.then((f) => f()).catch(() => undefined));
+    };
+  }, []);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
   const [palette, setPalette] = useState(false);
@@ -353,13 +375,8 @@ export default function MainApp() {
 
   // First-run wizard (B19): shown until it is finished or skipped.
   useEffect(() => {
-    const follow = (s: { onboardingDone?: boolean; mainShareHide?: unknown } | null | undefined) => {
-      if (!s) return;
-      setSetupDone(s.onboardingDone !== false);
-      setHidingFromShares(!!s.mainShareHide);
-    };
-    api.settings().then(follow).catch(() => undefined);
-    const un = listenTo("settings:changed", follow);
+    api.settings().then((s) => setSetupDone(s.onboardingDone !== false)).catch(() => undefined);
+    const un = listenTo("settings:changed", (s) => s && setSetupDone(s.onboardingDone !== false));
     return () => {
       un.then((f) => f()).catch(() => undefined);
     };

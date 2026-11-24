@@ -108,7 +108,7 @@ describe("the Mac menu bar (FIX-05)", () => {
     expect([...listed.matchAll(/"([a-z]+\.[A-Za-z0-9]+)"/g)].map((m) => m[1])).toEqual([...CORE_RUNS]);
     // Nothing on the page answers them: still enabled (the core does), by their conditions.
     const live = (state: ActionContext["state"] = {}) => menu("Live", { ...mac, state }).items;
-    for (const id of ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.hideWordsNow", "live.captions", "live.autoRecord"]) {
+    for (const id of ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.hideWindowsNow", "live.captions", "live.autoRecord"]) {
       expect(find(live(), id), id).toMatchObject({ enabled: true });
     }
     expect(find(live(), "live.stopHiding")).toMatchObject({ enabled: false });
@@ -129,6 +129,20 @@ describe("the Mac menu bar (FIX-05)", () => {
       for (const key of [...a.when, a.state?.key, a.state?.check].filter(Boolean) as string[]) expect(known, `${id}: ${key}`).toContain(key);
       for (const key of a.when) expect(Object.keys(CONDITIONS), `${id}: ${key}`).toContain(key);
     }
+  });
+
+  it("the panic hide says what it hides: Hide EchoLedger Windows Now with its shortcut, then Show EchoLedger Windows while it is on", () => {
+    const live = (state: ActionContext["state"] = {}) => menu("Live", { ...mac, state }).items;
+    const at = (state: ActionContext["state"] = {}) => labels(live(state));
+    expect(at().slice(at().indexOf("Hide EchoLedger Windows Now"), at().indexOf("Hide EchoLedger Windows Now") + 2)).toEqual(["Hide EchoLedger Windows Now", "Show EchoLedger Windows"]);
+    // The shortcut the person set, as it is now; none when it was cleared.
+    expect(find(live({ hideAllShortcut: "CommandOrControl+Alt+Shift+P" }), "live.hideWindowsNow")).toMatchObject({ accelerator: "CommandOrControl+Alt+Shift+P", enabled: true });
+    expect(find(live({ hideAllShortcut: "" }), "live.hideWindowsNow")).toMatchObject({ accelerator: null });
+    // Show EchoLedger Windows only while that hide is on; the core keeps it so with no page.
+    expect(find(live(), "live.showWindows")).toMatchObject({ enabled: false, core: { when: ["windowsHidden"] } });
+    expect(find(live({ windowsHidden: true }), "live.showWindows")).toMatchObject({ enabled: true });
+    // No item says "live words" any more: the words say which windows go.
+    expect(JSON.stringify(menuBarModel(mac))).not.toMatch(/live words/i);
   });
 
   it("Space, ⌘← and ⌘→ are greyed while typing, so they keep their text meaning", () => {

@@ -70,7 +70,7 @@ export const MENU_BAR: readonly { title: string; role?: "window" | "help"; items
       "live.translate", "live.captions", "live.dictation", LINE,
       "live.autoRecord", LINE,
       { action: "live.hideFromShares", items: ["live.hide15", "live.hide60", "live.hideUntilQuit", LINE, "live.stopHiding"] },
-      "live.hideWordsNow", "live.shareCheck",
+      "live.hideWindowsNow", "live.showWindows", "live.shareCheck",
     ],
   },
   { title: "Window", role: "window", items: ["window.minimize", "window.zoom", LINE, "window.pill", "window.captions", "window.assistCard", LINE, "window.bringAllToFront"] },
@@ -96,8 +96,20 @@ export const CORE_ACTIONS: ReadonlySet<string> = new Set(["app.settings", "app.q
  */
 export const CORE_RUNS: readonly string[] = [
   "live.stopRecording", "live.pauseRecording", "live.captions", "live.autoRecord", "live.hideFromShares", "live.hide15",
-  "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "window.pill",
+  "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWindowsNow", "live.showWindows", "window.pill",
 ];
+
+/**
+ * A system-wide shortcut the person set (Settings › Shortcuts), shown on its item as it is now: Hide EchoLedger Windows
+ * Now carries the hide-all shortcut (Tauri's form, "CommandOrControl+Alt+Shift+P", from the status), none when cleared.
+ */
+const GLOBAL_KEYS: Readonly<Record<string, string>> = { "live.hideWindowsNow": "hideAllShortcut" };
+function globalKey(id: string, at: ActionContext): string | null | undefined {
+  const key = GLOBAL_KEYS[id];
+  if (!key) return undefined;
+  const keys = at.state?.[key];
+  return typeof keys === "string" && keys ? keys : null;
+}
 
 /** A core command's look rule for the core (app_menu.rs CoreItem): its conditions, the state its words follow, its tick. */
 function coreItem(id: string, at: ActionContext) {
@@ -129,7 +141,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}, kind
       const core = CORE_RUNS.includes(action.id);
       const enabled = CORE_ACTIONS.has(action.id) || ((core || runs(action.id)) && available(action.id, at));
       return {
-        kind: "item", action: action.id, label: actionLabel(action.id, at), accelerator: menuKey(action.mac), enabled,
+        kind: "item", action: action.id, label: actionLabel(action.id, at), accelerator: globalKey(action.id, at) ?? menuKey(action.mac), enabled,
         checked: action.state?.check ? !!at.state?.[action.state.check] : null,
         ...(core ? { core: coreItem(action.id, at) } : {}),
       };

@@ -237,6 +237,12 @@ pub fn show(app: &AppHandle, label: &'static str, reason: &'static str) {
     }
 }
 
+/// The main window's phase now, or none while the lifecycle's lock is held (by this thread too): never waits for it.
+pub fn main_phase_now(app: &AppHandle) -> Option<Phase> {
+    let slots = app.state::<WindowLifecycle>().inner().slots.try_lock().ok()?;
+    Some(slots.phase(MAIN))
+}
+
 /// `reason` no longer needs `label`; an overlay nothing needs is destroyed after `HIDE_GRACE`.
 pub fn hide(app: &AppHandle, label: &'static str, reason: &'static str) {
     let generation = slots(app).hide(label, reason);

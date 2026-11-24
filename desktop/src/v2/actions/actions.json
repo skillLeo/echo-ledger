@@ -143,7 +143,8 @@
     { "id": "live.hide60", "label": "For 1 hour", "menu": "Live" },
     { "id": "live.hideUntilQuit", "label": "Until I quit", "menu": "Live" },
     { "id": "live.stopHiding", "label": "Stop hiding", "menu": "Live", "when": ["hiding"] },
-    { "id": "live.hideWordsNow", "label": "Hide live words now", "menu": "Live", "global": true },
+    { "id": "live.hideWindowsNow", "label": "Hide EchoLedger windows now", "menu": "Live", "global": true },
+    { "id": "live.showWindows", "label": "Show EchoLedger windows", "menu": "Live", "when": ["windowsHidden"] },
     { "id": "live.shareCheck", "label": "Share check…", "menu": "Live", "icon": "ScreenIcon" },
     { "id": "live.toggleRecording", "label": "Start or stop recording", "global": true, "mac": "⌃⌥⌘R", "win": "Ctrl+Alt+Shift+R" },
 

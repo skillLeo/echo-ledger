@@ -154,11 +154,13 @@ pub struct CoreState {
     pub pill_shown: bool,
     pub auto_record: bool,
     pub hiding: bool,
+    /// The person's Hide EchoLedger windows is on.
+    pub windows_hidden: bool,
 }
 
 /// The state and condition names the core follows (the same as the page's, v2/actions/registry.ts CONDITIONS and the
 /// menus' state).
-pub const CORE_KEYS: [&str; 7] = ["recording", "notRecording", "paused", "captionsShown", "pillShown", "autoRecord", "hiding"];
+pub const CORE_KEYS: [&str; 8] = ["recording", "notRecording", "paused", "captionsShown", "pillShown", "autoRecord", "hiding", "windowsHidden"];
 
 impl CoreState {
     /// Whether a condition or a state holds now (pure); one it doesn't know never does.
@@ -171,6 +173,7 @@ impl CoreState {
             "pillShown" => self.pill_shown,
             "autoRecord" => self.auto_record,
             "hiding" => self.hiding,
+            "windowsHidden" => self.windows_hidden,
             _ => false,
         }
     }
@@ -210,15 +213,17 @@ pub fn page_gone(app: &AppHandle) {
 }
 
 /// The status changed: with no page, the core's own commands follow it (Pause or Resume Recording, Stop Hiding…).
-/// Posted to the main thread, never waited for.
+/// Posted to the main thread, never waited for, and takes no lock here: whether there is a page is read there, without
+/// waiting for the window lifecycle's lock (`lifecycle::main_phase_now`), so no caller of the status can be holding it.
 #[cfg(target_os = "macos")]
 pub fn core_follow(app: &AppHandle) {
-    use crate::lifecycle::{MAIN, Phase};
-    if !matches!(crate::lifecycle::phases(app, &[MAIN])[0].1, Phase::Absent | Phase::Closing) {
-        return;
-    }
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || mac::follow(&handle));
+    let _ = app.run_on_main_thread(move || {
+        use crate::lifecycle::Phase;
+        if matches!(crate::lifecycle::main_phase_now(&handle), Some(Phase::Absent | Phase::Closing)) {
+            mac::follow(&handle);
+        }
+    });
 }
 
 /// What an item or a sub-menu shows that can change in place: its words, whether it can be picked, its tick.
@@ -235,10 +240,15 @@ pub fn structure(bar: &MenuBar) -> String {
     fn strip(items: &mut [BarEntry]) {
         for item in items {
             match item {
-                BarEntry::Item { label, enabled, checked, .. } => {
+                BarEntry::Item { label, enabled, checked, core, .. } => {
                     label.clear();
                     *enabled = false;
                     *checked = checked.map(|_| false);
+                    // A core command's words follow the language too: changed in place, as its label is.
+                    if let Some(core) = core {
+                        core.off = None;
+                        core.on = None;
+                    }
                 }
                 BarEntry::Submenu { label, enabled, items, .. } => {
                     label.clear();
@@ -278,9 +288,35 @@ pub fn looks(bar: &MenuBar) -> Vec<Look> {
     out
 }
 
+/// Each item's core rule in drawing order, `None` for a sub-menu or a page item (pure): the same places as [`looks`].
+pub fn cores(bar: &MenuBar) -> Vec<Option<CoreItem>> {
+    fn walk(items: &[BarEntry], out: &mut Vec<Option<CoreItem>>) {
+        for item in items {
+            match item {
+                BarEntry::Item { core, .. } => out.push(core.clone()),
+                BarEntry::Submenu { items, .. } => {
+                    out.push(None);
+                    walk(items, out);
+                }
+                BarEntry::Native { .. } | BarEntry::Separator => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for menu in &bar.menus {
+        walk(&menu.items, &mut out);
+    }
+    out
+}
+
 /// The places whose look changed (pure).
 pub fn changed(before: &[Look], now: &[Look]) -> Vec<usize> {
     now.iter().zip(before).enumerate().filter(|(_, (n, b))| n != b).map(|(at, _)| at).collect()
+}
+
+/// Whether a bar sent by the page is drawn (pure): only while its window is there or being built.
+pub fn page_draws(main: crate::lifecycle::Phase) -> bool {
+    matches!(main, crate::lifecycle::Phase::Creating | crate::lifecycle::Phase::Ready)
 }
 
 /// The page's menu bar (FIX-05), with the new design's shell: drawn by the system, macOS's own items for the standard
@@ -293,6 +329,12 @@ pub fn changed(before: &[Look], now: &[Look]) -> Vec<usize> {
 pub fn app_menu_set(app: AppHandle, bar: Option<MenuBar>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        // A bar sent late by a page that has gone (its debounce ran out while the window closed) would enable what
+        // page_gone greyed: only a page that is there, or being built, draws the bar.
+        let main = crate::lifecycle::phases(&app, &[crate::lifecycle::MAIN])[0].1;
+        if bar.is_some() && !page_draws(main) {
+            return Ok(());
+        }
         mac::set(&app, bar.as_ref()).map_err(|e| e.to_string())
     }
     #[cfg(not(target_os = "macos"))]
@@ -304,7 +346,7 @@ pub fn app_menu_set(app: AppHandle, bar: Option<MenuBar>) -> Result<(), String> 
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{BarEntry, CoreItem, CoreState, Look, MenuBar, bar_item_id, changed, looks, pageless_look, structure};
+    use super::{BarEntry, CoreItem, CoreState, Look, MenuBar, bar_item_id, changed, cores, looks, pageless_look, structure};
     use std::sync::Mutex;
     use tauri::menu::{AboutMetadata, CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
     use tauri::{AppHandle, Wry};
@@ -400,6 +442,7 @@ mod mac {
             pill_shown: recording && !state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
             auto_record: settings.auto_mode,
             hiding: crate::privacy::share::main_hidden(settings.main_share_hide.as_ref(), crate::privacy::now_ms()),
+            windows_hidden: app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.hidden_for(crate::privacy::HideReason::Person)),
         }
     }
 
@@ -436,6 +479,10 @@ mod mac {
                     && changed(&d.looks, &now).into_iter().try_for_each(|at| d.handles[at].handle.relabel(&d.looks[at], &now[at])).is_ok() =>
             {
                 d.looks = now;
+                // The core rules' words follow the new bar (a language change), as the labels did.
+                for (slot, core) in d.handles.iter_mut().zip(cores(bar)) {
+                    slot.core = core;
+                }
                 d
             }
             _ => draw(app, bar, shape, now)?,
@@ -627,6 +674,24 @@ mod tests {
     }
 
     #[test]
+    fn a_core_command_s_words_change_in_place_with_the_language() {
+        let bar = |off: &str, on: &str| -> MenuBar {
+            serde_json::from_str(&format!(
+                r#"{{"menus":[{{"title":"Live","items":[
+                    {{"kind":"item","action":"live.pauseRecording","label":"{off}","accelerator":null,"enabled":true,"checked":null,
+                      "core":{{"when":["recording"],"state":"paused","off":"{off}","on":"{on}","check":null}}}}]}}]}}"#
+            ))
+            .unwrap()
+        };
+        let english = bar("Pause Recording", "Resume Recording");
+        let urdu = bar("ریکارڈنگ روکیں", "ریکارڈنگ جاری رکھیں");
+        assert_eq!(structure(&english), structure(&urdu), "updated in place, not drawn again");
+        assert_eq!(cores(&urdu)[0].as_ref().and_then(|c| c.on.clone()).as_deref(), Some("ریکارڈنگ جاری رکھیں"));
+        let code = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
+        assert!(code.contains("for (slot, core) in d.handles.iter_mut().zip(cores(bar))"), "the rules follow the new bar");
+    }
+
+    #[test]
     fn classic_gets_its_own_bar_back_and_the_mac_keeps_what_it_drew_to_update_it() {
         // The page sends null with the new design's shell off: classic's bar, as at start (`build`).
         let none: Option<MenuBar> = serde_json::from_str("null").unwrap();
@@ -669,7 +734,7 @@ mod tests {
         assert!(!pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", true, None), &idle).enabled);
         assert!(pageless_look(Some("live.stopHiding"), Some(&stop_hiding), &drawn("Stop Hiding", false, None), &CoreState { hiding: true, ..idle }).enabled);
         // Every key the core follows holds when its state does; one it doesn't know never does.
-        let all = CoreState { recording: true, paused: true, captions: true, pill_shown: true, auto_record: true, hiding: true };
+        let all = CoreState { recording: true, paused: true, captions: true, pill_shown: true, auto_record: true, hiding: true, windows_hidden: true };
         for key in CORE_KEYS {
             assert_eq!(all.holds(key), key != "notRecording", "{key}");
         }
@@ -677,6 +742,24 @@ mod tests {
         // Wired: the page going away greys, and the status keeps the core's own in step while there is no page.
         assert!(include_str!("lifecycle.rs").contains("crate::app_menu::page_gone(app);"));
         assert!(include_str!("commands.rs").contains("crate::app_menu::core_follow(app);"));
+        // The status path takes no lock of the lifecycle's: the phase is read on the main thread, without waiting.
+        let source = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
+        let follow_now = &source[source.find("pub fn core_follow(app: &AppHandle)").unwrap()..];
+        let follow_now = &follow_now[..follow_now.find("\n}\n").unwrap()];
+        let posted = follow_now.find("run_on_main_thread").unwrap();
+        assert!(!follow_now[..posted].contains("phases(") && !follow_now[..posted].contains("slots("));
+        assert!(follow_now[posted..].contains("main_phase_now(&handle)"));
+        let lifecycle = include_str!("lifecycle.rs");
+        let now = &lifecycle[lifecycle.find("pub fn main_phase_now(").unwrap()..];
+        assert!(now[..now.find("\n}\n").unwrap()].contains("try_lock()"), "never waits for the lock");
+        // A late bar from a page that has gone is not drawn.
+        use crate::lifecycle::Phase;
+        assert!(page_draws(Phase::Ready) && page_draws(Phase::Creating));
+        assert!(!page_draws(Phase::Closing) && !page_draws(Phase::Absent));
+        // Show EchoLedger Windows only while the person's hide is on.
+        let show = CoreItem { when: vec!["windowsHidden".into()], state: None, off: None, on: None, check: None };
+        assert!(!pageless_look(Some("live.showWindows"), Some(&show), &drawn("Show EchoLedger Windows", true, None), &idle).enabled);
+        assert!(pageless_look(Some("live.showWindows"), Some(&show), &drawn("Show EchoLedger Windows", false, None), &CoreState { windows_hidden: true, ..idle }).enabled);
         let code = include_str!("app_menu.rs").split("#[cfg(test)]").next().unwrap();
         let follow = &code[code.find("pub fn follow(app: &AppHandle)").unwrap()..];
         let follow = &follow[..follow.find("\n    }\n").unwrap()];

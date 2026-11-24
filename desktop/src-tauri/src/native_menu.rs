@@ -190,9 +190,10 @@ pub fn acts_outside_main(action: &str) -> bool {
 }
 
 /// The menu bar's commands the core answers itself, with or without the main window's page, as the tray does: the
-/// recording's, the captions', the pill's, Auto-record, and hiding from screen shares (Hide from Screen Shares is its
-/// times' sub-menu). The page enables them by their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
-pub const CORE_RUNS: [&str; 11] = [
+/// recording's, the captions', the pill's, Auto-record, hiding from screen shares (Hide from Screen Shares is its
+/// times' sub-menu), and the person's Hide EchoLedger Windows and Show EchoLedger Windows. The page enables them by
+/// their conditions alone (v2/actions/menuBar.ts CORE_RUNS, the same list).
+pub const CORE_RUNS: [&str; 12] = [
     "live.stopRecording",
     "live.pauseRecording",
     "live.captions",
@@ -202,7 +203,8 @@ pub const CORE_RUNS: [&str; 11] = [
     "live.hide60",
     "live.hideUntilQuit",
     "live.stopHiding",
-    "live.hideWordsNow",
+    "live.hideWindowsNow",
+    "live.showWindows",
     "window.pill",
 ];
 
@@ -219,6 +221,8 @@ pub enum CoreStep {
     StopHiding,
     /// Every EchoLedger window off the screen at once (the person's hide, as the shortcut and the tray's).
     HideWindows,
+    /// The person's hide undone, and nothing else (a share's hide or a hide from shares stays).
+    ShowWindows,
     TogglePill,
 }
 
@@ -234,7 +238,8 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
         "live.hide60" => CoreStep::HideFromShares(HideFor::Hour1),
         "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilQuit),
         "live.stopHiding" => CoreStep::StopHiding,
-        "live.hideWordsNow" => CoreStep::HideWindows,
+        "live.hideWindowsNow" => CoreStep::HideWindows,
+        "live.showWindows" => CoreStep::ShowWindows,
         "window.pill" => CoreStep::TogglePill,
         _ => return None,
     })
@@ -253,6 +258,10 @@ async fn run_core(app: &AppHandle, step: CoreStep) -> crate::error::AppResult<()
         CoreStep::StopHiding => crate::privacy::show_main_in_shares(app, None),
         CoreStep::HideWindows => {
             crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, true);
+            Ok(())
+        }
+        CoreStep::ShowWindows => {
+            crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, false);
             Ok(())
         }
         CoreStep::TogglePill => {
@@ -441,7 +450,7 @@ mod tests {
         use std::time::Instant;
         // The core's own commands run in the core, page or not (the tray has them too).
         for phase in [Phase::Absent, Phase::Closing, Phase::Creating, Phase::Ready] {
-            for action in ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "live.captions", "live.autoRecord", "live.pauseRecording", "live.stopRecording", "window.pill"] {
+            for action in ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWindowsNow", "live.showWindows", "live.captions", "live.autoRecord", "live.pauseRecording", "live.stopRecording", "window.pill"] {
                 assert_eq!(route(action, phase), Route::Core, "{action} {phase:?}");
             }
         }
@@ -511,6 +520,7 @@ mod tests {
             "CoreStep::HideFromShares(choice) => crate::privacy::hide_main(app, choice)",
             "CoreStep::StopHiding => crate::privacy::show_main_in_shares(app, None)",
             "crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, true)",
+            "crate::privacy::set_hidden(app, crate::privacy::HideReason::Person, false)",
             "crate::actions::stop_recording(app, false)",
             "CoreStep::TogglePause => crate::actions::toggle_pause(app)",
             "CoreStep::ToggleCaptions => crate::actions::toggle_captions(app)",

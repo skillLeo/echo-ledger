@@ -85,6 +85,8 @@ export const CONDITIONS: Readonly<Record<string, (c: ActionContext) => boolean>>
   canGoBack: (c) => !!c.state?.canGoBack,
   canGoForward: (c) => !!c.state?.canGoForward,
   hiding: (c) => !!c.state?.hiding,
+  /** The person's Hide EchoLedger windows is on (the panic hide: the shortcut, the tray, Settings, the menu bar). */
+  windowsHidden: (c) => !!c.state?.windowsHidden,
   noPhoto: (c) => !c.state?.photo,
 };
 
