@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
-/** docs/API.md "Call rules (since 2.0.0-v)": the device's person's own rules, for the whole account. */
+/** docs/API.md "Call rules (since 2.0.0-w)": the device's person's own rules, for the whole account. */
 final class CallRulesController extends Controller
 {
     public function __construct(private readonly CallRules $rules) {}

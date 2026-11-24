@@ -44,7 +44,7 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
         'v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane',
         // Since 2.0.0-s.
         'v21_win_titlebar',
-        // Since 2.0.0-v.
+        // Since 2.0.0-w.
         'call_rules',
     ])->and($classic)->toBeFalse();
 });
@@ -155,7 +155,7 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist,
 
     $api->putJson('/api/account/ui', ['classic' => true])->assertOk()
         // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them (since
-        // 2.0.0-v call_rules too).
+        // 2.0.0-w call_rules too).
         ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21, InterfaceFlags::CALL_RULES]), 'ui_classic' => true,
             // A person who went back to classic can try the new design again.
             'ui_design' => ['choice' => 'classic', 'current' => 'classic', 'can_try' => true, 'can_switch_back' => false]]);

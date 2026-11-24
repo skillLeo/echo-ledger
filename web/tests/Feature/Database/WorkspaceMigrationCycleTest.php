@@ -1480,7 +1480,7 @@ it('maps classic to the design choice, opens the new screens on opt-in, and goes
     expect($db->getSchemaBuilder()->hasColumn('users', 'ui_design'))->toBeTrue();
 });
 
-/** Migrations after the initials' colour (BE-06, 2.0.0-r §6): 2027_01_03_000001 (call rules, 2.0.0-v). */
+/** Migrations after the initials' colour (BE-06, 2.0.0-r §6): 2027_01_03_000001 (call rules, 2.0.0-w). */
 const AFTER_AVATAR_COLOR = 1;
 
 it('adds the initials\' colour with every earlier person left null and coloured by their id, and takes it away again', function () {
@@ -1509,7 +1509,7 @@ it('adds the initials\' colour with every earlier person left null and coloured 
         ->and($db->table('users')->whereNotNull('avatar_color')->count())->toBe(0);
 });
 
-/** Migrations after the call rules (B5, 2.0.0-v); add later ones here. */
+/** Migrations after the call rules (B5, 2.0.0-w); add later ones here. */
 const AFTER_CALL_RULES = 0;
 
 it('adds the call rules table and the settings column empty, and takes both away again', function () {

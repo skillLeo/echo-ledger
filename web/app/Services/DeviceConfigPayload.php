@@ -106,7 +106,7 @@ final class DeviceConfigPayload
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),
-            // Since 2.0.0-v (docs/API.md "Call rules"): the person's After each call settings and the rules' version, only
+            // Since 2.0.0-w (docs/API.md "Call rules"): the person's After each call settings and the rules' version, only
             // while the call_rules flag is on for them.
             ...(app(InterfaceFlags::class)->active(InterfaceFlags::CALL_RULES, $device->user, $device->workspace_id)
                 ? ['call_rules' => app(CallRules::class)->settings($device->user)] : []),

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One of a person's call rules (contract 2.0.0-v, docs/API.md "Call rules"): for a contact (a number, or a name when
+ * One of a person's call rules (contract 2.0.0-w, docs/API.md "Call rules"): for a contact (a number, or a name when
  * there is none), a contact group or a Source, what happens to the call. The person's own, account-wide.
  *
  * @property string $id

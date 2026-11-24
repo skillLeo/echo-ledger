@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * The call rules' routes exist only for a person the `call_rules` interface flag is on for (contract 2.0.0-v): for
+ * The call rules' routes exist only for a person the `call_rules` interface flag is on for (contract 2.0.0-w): for
  * everyone else they answer `404 not_found`, as a route that is not there (like Live Assist's, EnsureLiveAssist).
  */
 final class EnsureCallRules

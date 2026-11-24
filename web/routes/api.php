@@ -118,7 +118,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
         // Since 2.0.0-g: the design switch, read on its own.
         Route::get('account/ui', [AccountController::class, 'showUi'])->middleware('abilities:config:read')->name('api.account.ui.show');
-        // Since 2.0.0-v (B5, docs/API.md "Call rules"): the person's call rules, only while the call_rules flag is on.
+        // Since 2.0.0-w (B5, docs/API.md "Call rules"): the person's call rules, only while the call_rules flag is on.
         Route::get('call-rules', [CallRulesController::class, 'index'])->middleware(['abilities:config:read', EnsureCallRules::class])->name('api.call-rules');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
@@ -212,7 +212,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
                 Route::post('upgrade-requests/{id}/cancel', [UpgradeRequestController::class, 'cancel'])->name('api.upgrade-requests.cancel');
             });
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
-            // Since 2.0.0-v (B5): changing the call rules, only while the call_rules flag is on; 60 a minute per person.
+            // Since 2.0.0-w (B5): changing the call rules, only while the call_rules flag is on; 60 a minute per person.
             Route::middleware([EnsureCallRules::class, 'throttle:call-rules'])->group(function (): void {
                 Route::put('call-rules/settings', [CallRulesController::class, 'settings'])->name('api.call-rules.settings');
                 Route::post('call-rules', [CallRulesController::class, 'store'])->name('api.call-rules.store');

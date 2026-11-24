@@ -22,7 +22,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 uses(InteractsWithDeviceApi::class);
 
 /*
- * docs/API.md "Call rules (since 2.0.0-v)", B5 (docs/PLAN_CALL_RULES.md): the person's After each call settings and
+ * docs/API.md "Call rules (since 2.0.0-w)", B5 (docs/PLAN_CALL_RULES.md): the person's After each call settings and
  * rules per contact, group and Source, for the whole account, behind the `call_rules` flag.
  */
 

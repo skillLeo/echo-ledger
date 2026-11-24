@@ -119,7 +119,7 @@ final class AccountEraser
         LabelColor::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
         // Since 2.0.0-m: their lists.
         LabelList::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
-        // Since 2.0.0-v: their call rules, with the numbers and names of the people in them (the account's own column
+        // Since 2.0.0-w: their call rules, with the numbers and names of the people in them (the account's own column
         // goes with the row).
         CallRule::query()->where('user_id', $user->id)->delete();
 

@@ -130,7 +130,7 @@ final class AccountExporter
                 'projects' => $this->projects($user, $work),
                 'live_assist' => $this->liveAssist($user),
                 'library' => $this->library($user),
-                // Since 2.0.0-v: the call rules, as GET /api/call-rules gives them.
+                // Since 2.0.0-w: the call rules, as GET /api/call-rules gives them.
                 'call_rules' => $this->callRules($user),
             ];
             $this->addText('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -380,7 +380,7 @@ final class AccountExporter
     }
 
     /** Adds text to the ZIP through a file of the working folder. */
-    /** Since 2.0.0-v: the person's call rules and After each call settings, as GET /api/call-rules gives them. */
+    /** Since 2.0.0-w: the person's call rules and After each call settings, as GET /api/call-rules gives them. */
     private function callRules(User $user): ?string
     {
         if ($user->call_settings === null && ! CallRule::query()->where('user_id', $user->id)->exists()) {

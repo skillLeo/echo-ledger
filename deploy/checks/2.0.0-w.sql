@@ -1,4 +1,4 @@
--- Contract 2.0.0-v (migration 2027_01_03_000001, call rules): each line must answer 1 after migrate; "-- after-rollback:"
+-- Contract 2.0.0-w (migration 2027_01_03_000001, call rules): each line must answer 1 after migrate; "-- after-rollback:"
 -- lines must answer 1 after the rollback. Used by deploy/rehearse-migrations.sh --checks.
 -- On a production copy both start empty: the call_rules flag is off for everyone, so nobody has rules or settings yet.
 select count(*) = 1 from information_schema.tables where table_schema = database() and table_name = 'call_rules';

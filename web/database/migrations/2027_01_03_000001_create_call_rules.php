@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * B5, contract 2.0.0-v "Call rules": the person's rules for the whole account (contact, contact group, Source) and
+ * B5, contract 2.0.0-w "Call rules": the person's rules for the whole account (contact, contact group, Source) and
  * their After each call settings (users.call_settings: after_call, ask_when, short_calls, version). Both start empty;
  * the release before ignores them, so the rollback only drops them.
  */

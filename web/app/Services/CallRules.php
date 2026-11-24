@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
- * A person's call rules (contract 2.0.0-v, docs/API.md "Call rules", B5; docs/PLAN_CALL_RULES.md): the After each call
+ * A person's call rules (contract 2.0.0-w, docs/API.md "Call rules", B5; docs/PLAN_CALL_RULES.md): the After each call
  * default, When to ask and the short-call setting (users.call_settings), and the rules per contact, contact group and
  * Source (call_rules). Account-wide: the same on every device, whichever workspace it is in. The apps apply them (a
  * `dont_record` is decided on the device before capture); resolve() is the order they follow, kept here once.

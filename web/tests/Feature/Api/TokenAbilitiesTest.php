@@ -25,7 +25,7 @@ function abilityRoutes(): array
         'config' => ['GET', '/api/config', 'config:read'],
         'switch back to classic' => ['PUT', '/api/account/ui', 'config:read'],
         'the design switch, read' => ['GET', '/api/account/ui', 'config:read'],
-        // Since 2.0.0-v: call rules (404 while the call_rules flag is off, after the token's ability).
+        // Since 2.0.0-w: call rules (404 while the call_rules flag is off, after the token's ability).
         'call rules' => ['GET', '/api/call-rules', 'config:read'],
         'call rules settings' => ['PUT', '/api/call-rules/settings', 'sessions:write'],
         'call rule add' => ['POST', '/api/call-rules', 'sessions:write'],
