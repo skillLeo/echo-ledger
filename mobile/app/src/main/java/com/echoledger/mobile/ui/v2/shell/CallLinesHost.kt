@@ -86,7 +86,8 @@ internal class ShellCallLines(private val toasts: EchoToastState, private val sc
     /** Lines a host before this one handed over (a rotation): each shows again until its own end time. */
     fun resume(lines: List<CallLines.Carried>) {
         val now = toasts.clock()
-        lines.forEach { c -> if (c.endsAt > now) put(c.line, c.endsAt, c.actions) else c.actions.ended() }
+        // In the order they end, so the earliest shows first and none waits past its end behind a later one.
+        lines.sortedBy { it.endsAt }.forEach { c -> if (c.endsAt > now) put(c.line, c.endsAt, c.actions) else c.actions.ended() }
     }
 
     private fun put(line: CallLines.Line, endsAt: Long, actions: CallLines.Actions) {
@@ -110,7 +111,7 @@ internal class ShellCallLines(private val toasts: EchoToastState, private val sc
     /** The activity is being made again (a rotation): the lines still running wait for the next host, unchanged. */
     fun handOver() {
         CallLines.detach(this)
-        val left = out.values.toList()
+        val left = out.values.sortedBy { it.endsAt }
         out.clear()
         left.forEach { it.job.cancel() }
         CallLines.carry(left.map { CallLines.Carried(it.line, it.endsAt, it.actions) }, toasts.clock)

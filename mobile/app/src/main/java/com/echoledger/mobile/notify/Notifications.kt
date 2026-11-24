@@ -116,6 +116,18 @@ object Notifications {
     fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    /**
+     * Whether a call's decision notification (its question, a choice's line, "Deleted · Undo") is really seen: allowed
+     * (Android 13+), the app's notifications not switched off (any version), and its channel not blocked. Only then may
+     * an Undo live there; otherwise it belongs on a screen of this process.
+     */
+    fun decisionsShow(context: Context): Boolean {
+        if (!canPost(context)) return false
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        if (!manager.areNotificationsEnabled()) return false
+        return manager.getNotificationChannel(CHANNEL_DECISIONS)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
     @SuppressLint("MissingPermission") // checked by canPost() first
     fun test(context: Context, category: NotifyCategory): Boolean {
@@ -514,7 +526,7 @@ object Notifications {
         /** How long it stays: the time its file waits, less the delete's slack. */
         timeoutMs: Long = com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS
     ): Boolean {
-        if (!canPost(context)) return false
+        if (!decisionsShow(context)) return false
         val undo = PendingIntent.getBroadcast(
             context,
             rec.id.hashCode() + 3,
@@ -566,7 +578,7 @@ object Notifications {
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
     fun choiceLine(context: Context, rec: LocalRecording, transcribe: Boolean, timeoutMs: Long): Boolean {
-        if (!canPost(context)) return false
+        if (!decisionsShow(context)) return false
         val words = com.echoledger.mobile.notify.AppWords.resources(context)
         fun said(id: Int) = com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(id))
         val undo = PendingIntent.getBroadcast(
@@ -621,7 +633,7 @@ object Notifications {
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
     fun groupedLine(context: Context, count: Int, timeoutMs: Long): Boolean {
-        if (!canPost(context)) return false
+        if (!decisionsShow(context)) return false
         val words = com.echoledger.mobile.notify.AppWords.resources(context)
         val title = com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(R.string.cc_grouped_audio, count))
         val review = openLibrary(context)

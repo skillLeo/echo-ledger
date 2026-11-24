@@ -1039,7 +1039,79 @@ class PostCallPromptTest : AppTest() {
         assertTrue("not deleted yet", app.peekRecording("call-1")!!.notDeletedYet)
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
         pumpUntil("its delete called off") { discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED } }
-        assertTrue("never kept by itself either", timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED })
+        // Its backstop is called off right after the mark (never kept by itself either).
+        pumpUntil("never kept by itself either") { timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED } }
+    }
+
+    /** Blocks the calls' decision channel in Android's settings (the permission itself stays granted). */
+    private fun blockDecisions() {
+        val nm = app.getSystemService(NotificationManager::class.java)
+        nm.deleteNotificationChannel(com.echoledger.mobile.notify.Notifications.CHANNEL_DECISIONS)
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(
+                com.echoledger.mobile.notify.Notifications.CHANNEL_DECISIONS,
+                "Calls",
+                NotificationManager.IMPORTANCE_NONE
+            )
+        )
+    }
+
+    @Test
+    fun `with the decisions channel blocked a choice's line stays on the card, never in a notification nobody sees`() {
+        blockDecisions()
+        asked()
+        DecisionPopup.delete(app)
+        assertEquals("on the card", DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue(notifications().isEmpty())
+    }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [31])
+    fun `below Android 13 with notifications switched off a moved Delete shows on the card, and its Undo never counts`() {
+        runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
+        shadowOf(app.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(false)
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("the rest of the line on the card") {
+            DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED
+        }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        assertTrue("nothing posted", notifications().isEmpty())
+        DecisionPopup.undo(app)
+        pumpUntil("taken back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        after(5_000)
+        DecisionPopup.drainForTest()
+        assertTrue("an undone Delete never counts", app.graph.liveSettings.value?.callChoiceStreak != Pick.DELETE.wire)
+    }
+
+    @Test
+    fun `with the card busy a moved Delete waits for its own line on the card, never deleted unseen`() {
+        val lines = inApp()
+        assertTrue(DecisionPopup.deleted(app, call("call-2"), "dark", 5_000))
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        cardOnly()
+        asked("call-1")
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("held, not deleted yet") {
+            app.peekRecording("call-2")?.let { it.state == "pending_decision" && it.notDeletedYet } == true
+        }
+        assertTrue("held behind call-1's question", DecisionPopup.answersFor("call-2"))
+        assertEquals("call-1", DecisionPopup.showingFor)
+        assertTrue(app.graph.recordings.encryptedFile("call-2").exists())
+
+        // call-1 answered (its line on the card, nothing else can show it), and over: call-2's own Deleted line shows.
+        DecisionPopup.transcribe(app)
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2's line") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+        pumpUntil("call-2 on its way out with this Undo") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-2")?.undoIn)
     }
 
     @Test

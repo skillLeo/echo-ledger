@@ -102,7 +102,7 @@ object DecisionPopup {
 
     private fun home(app: Context): Home = when {
         CallLines.host != null -> Home.APP
-        Notifications.canPost(app) -> Home.NOTIFICATION
+        Notifications.decisionsShow(app) -> Home.NOTIFICATION
         else -> Home.CARD
     }
 
@@ -257,7 +257,7 @@ object DecisionPopup {
         // Never over another call's question or Deleted line.
         val busy = isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)
         // Outside the app the Undo goes in a notification whenever one can be posted: never a floating line then.
-        val notify = Notifications.canPost(app)
+        val notify = Notifications.decisionsShow(app)
         if (!busy && !notify) commitPick(app)
         val shown = !busy && !notify && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
         if (shown) {
@@ -540,6 +540,8 @@ object DecisionPopup {
         val rec = current ?: return
         val was = showingMode
         picked = null
+        // A moved line's choice (the rest of an app's Deleted line on the card) no longer counts either.
+        choices.remove(rec.id)
         val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
         go(app, Mode.ASK, question)
         step(app, {
@@ -610,8 +612,10 @@ object DecisionPopup {
      * Undo must stay reachable all the while ([deleted]'s rule):
      * - posted: its Undo is in the shade, which outlives the process, so the call no longer names this process
      *   ([LocalRecording.undoIn]) and the delete is applied at its time even if EchoLedger is closed meanwhile;
-     * - not posted (notifications not allowed): the rest of the line on the card when it can show it;
-     * - else the delete is taken back and the call is left to the person to choose again, nothing deleted unseen.
+     * - not posted (notifications not allowed, switched off, or their channel blocked): the rest of the line on the card
+     *   when it can show it;
+     * - else the delete is taken back and the call is left to the person to choose again, nothing deleted unseen; with
+     *   the card busy, its line shows on the card once the one there is over.
      * A kept call's line that cannot be posted just ends: the call stays kept, as chosen.
      */
     private suspend fun moveOut(app: Context, id: String, pick: Pick, leftMs: Long) {
@@ -626,8 +630,16 @@ object DecisionPopup {
                 val onCard = withContext(Dispatchers.Main) { deletedOnCard(app, rec, leftMs) }
                 if (onCard) return
                 choices.remove(id)
+                // Not deleted meanwhile: the call waits for the person ("Not deleted yet"); with the card busy (another
+                // call's question or line), its own "Deleted · Undo" shows once that one is over, as [deleted] holds one.
                 val back = Decisions.undoDiscard(app, id, widget = false) ?: return
-                if (back.state == "pending_decision") Decisions.chooseAgain(app, id, notDeletedYet = true)
+                if (back.state != "pending_decision") return
+                withContext(Dispatchers.Main) {
+                    if (isShowing && android.provider.Settings.canDrawOverlays(app)) {
+                        waiting += Held(back, settings(app).themeMode, deleteLineMs = leftMs)
+                    }
+                }
+                Decisions.chooseAgain(app, id, notDeletedYet = true)
             }
 
             pick != Pick.DELETE && rec.state == "queued" -> Notifications.choiceLine(app, rec, pick == Pick.TRANSCRIBE, leftMs)

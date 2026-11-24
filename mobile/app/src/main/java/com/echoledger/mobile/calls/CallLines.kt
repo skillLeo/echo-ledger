@@ -65,7 +65,8 @@ object CallLines {
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val left = lines.filter { carried.remove(it) }
             val now = clock()
-            left.forEach { c -> (c.endsAt - now).takeIf { it > 0 }?.let(c.actions.away) }
+            // Still running: on in the notification; over meanwhile: its choice stands.
+            left.forEach { c -> if (c.endsAt > now) c.actions.away(c.endsAt - now) else c.actions.ended() }
         }, CARRY_MS)
     }
 
