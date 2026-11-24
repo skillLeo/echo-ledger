@@ -5,7 +5,7 @@
 // other menu (registry.ts).
 import { useEffect, useId, useSyncExternalStore } from "react";
 import { listenTo } from "../../lib/ipc";
-import { runAction, type ActionContext } from "./registry";
+import { canRun, runAction, watchHandlers, type ActionContext } from "./registry";
 import type { MenuChoices } from "./menuBar";
 
 type State = NonNullable<ActionContext["state"]>;
@@ -145,26 +145,61 @@ export function setPickedHandler(handler: PickedHandler | null): () => void {
   };
 }
 
+/** The context a numberless pick runs with: the focused page's, or its own thing's (`@target`, no selection's kind). */
+function pickContext(pick: MenuPick, platform: ActionContext["platform"]): ActionContext {
+  const ctx = menuContext(platform, pick.value);
+  if (pick.target === undefined) return ctx;
+  return { platform: ctx.platform, state: ctx.state, targets: [pick.target], ...(pick.value !== undefined ? { value: pick.value } : {}) };
+}
+
+/** How long a pick nothing here answers yet waits for its command (the window built again, the app coming into use). */
+export const PICK_HOLD_MS = 5000;
+/** The latest such pick, run once its command is registered, let go after PICK_HOLD_MS (the lock screen, sign-in). */
+let held: { pick: MenuPick; platform: () => ActionContext["platform"]; stop: () => void } | null = null;
+
+function letGo() {
+  held?.stop();
+  held = null;
+}
+
+function hold(pick: MenuPick, platform: () => ActionContext["platform"]) {
+  letGo();
+  const timer = window.setTimeout(letGo, PICK_HOLD_MS);
+  let soon = 0;
+  // Told when a command is registered; tried a moment later, once the screen that registered it has settled.
+  const unwatch = watchHandlers(() => {
+    window.clearTimeout(soon);
+    soon = window.setTimeout(() => {
+      if (!held || held.pick !== pick || !canRun(pick.id, pickContext(pick, platform()).kind)) return;
+      letGo();
+      runAction(pick.id, pickContext(pick, platform()));
+    }, 0);
+  });
+  held = { pick, platform, stop: () => { window.clearTimeout(timer); window.clearTimeout(soon); unwatch(); } };
+}
+
 /**
  * One pick from a menu the system drew. A numbered one is a context menu's: only its handler may run it, and one nobody
  * claims (a menu let go, an earlier one's) is dropped, never run through the registry. Any other (the menu bar,
  * Record's menu, the tree's project menu) runs through the registry with the focused page's state, selection and kind;
- * a pick on a thing (`@target`) runs on that thing instead of the selection.
+ * a pick on a thing (`@target`) runs on that thing instead of the selection. One whose command nothing here answers
+ * yet (the window was just built, the app isn't in use yet) waits for it, the latest only, for PICK_HOLD_MS.
  */
-function runPick(payload: string, platform: ActionContext["platform"]) {
+function runPick(payload: string, platform: () => ActionContext["platform"]) {
   const pick = parsePick(payload);
   if (!pick) return;
   if (pick.menu !== undefined) {
     pickedHandler?.(payload, pick);
     return;
   }
-  const ctx = menuContext(platform, pick.value);
-  if (pick.target === undefined) {
-    runAction(pick.id, ctx);
+  // A newer pick replaces one still waiting.
+  letGo();
+  const ctx = pickContext(pick, platform());
+  if (!canRun(pick.id, ctx.kind)) {
+    hold(pick, platform);
     return;
   }
-  // Its own thing, not the selection: the selection's kind is not its kind.
-  runAction(pick.id, { platform: ctx.platform, state: ctx.state, targets: [pick.target], ...(pick.value !== undefined ? { value: pick.value } : {}) });
+  runAction(pick.id, ctx);
 }
 
 type Platform = ActionContext["platform"];
@@ -184,7 +219,7 @@ export function listenToMenuPicks(platform: Platform | (() => Platform)): () => 
       const p = listening?.platform ?? platform;
       return typeof p === "function" ? p() : p;
     };
-    const off = listenTo("menu:action", (payload) => runPick(payload, now()));
+    const off = listenTo("menu:action", (payload) => runPick(payload, now));
     listening = { count: 1, platform, ready: off, stop: () => void off.then((stop) => stop()).catch(() => undefined) };
   }
   let done = false;
@@ -194,6 +229,8 @@ export function listenToMenuPicks(platform: Platform | (() => Platform)): () => 
     if (--listening.count === 0) {
       listening.stop();
       listening = null;
+      // No window to run it in any more.
+      letGo();
     }
   };
 }

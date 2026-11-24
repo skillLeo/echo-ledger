@@ -175,14 +175,53 @@ pub fn picked_action(id: &str) -> Option<&str> {
     parse_item_id(id).map(|_| &id[PREFIX.len()..])
 }
 
-/// A pick from a native menu or the menu bar: the main window runs its action ("view.sortBy=newest" with a choice). The
-/// window comes to the front first, whatever its state (shown, unminimised and focused; built when there is none; built
-/// again when it is being closed), so the pick is sent to its page, or kept for it until it listens, never dropped.
-pub fn picked(app: &AppHandle, id: &str) {
-    if let Some(action) = picked_action(id) {
-        crate::lifecycle::show_main(app);
-        crate::lifecycle::emit(app, crate::lifecycle::MAIN, EVENT, action);
+/// The live items that open something in the main window; every other `live.*` acts outside it (the recording, the
+/// floating windows, hiding from shares), as every `window.*` does.
+const LIVE_IN_MAIN: [&str; 3] = ["live.startAssist", "live.practice", "live.pastReports"];
+
+/// A pick that acts outside the main window (pure): Hide from Screen Shares and its times, Stop Hiding, Hide Live Words
+/// Now, the recording's and the captions' toggles, the floating windows (Window › Show Recording Pill…).
+pub fn acts_outside_main(action: &str) -> bool {
+    action.starts_with("window.") || (action.starts_with("live.") && !LIVE_IN_MAIN.contains(&action))
+}
+
+/// What a pick does with the main window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// Its page takes it (built or being built): the core shows nothing.
+    Send,
+    /// No page can take it (no window, or one being closed): opened quietly, the pick kept for its page.
+    OpenQuietly,
+    /// It acts outside the main window and no page can take it: let go, never a reason to bring the window up.
+    Drop,
+}
+
+/// Where a pick goes (pure). The core never reveals the main window for a pick: a person's Hide EchoLedger Windows,
+/// Hide from Screen Shares and a whole-screen share stay as they are (`show_main` would end them, as an open by the
+/// person does). Only when no page can take the pick is the window opened, quietly (`show_main_quietly`: what keeps
+/// it off still does), and never for a pick that acts outside it.
+pub fn route(action: &str, main: crate::lifecycle::Phase) -> Route {
+    use crate::lifecycle::Phase;
+    match main {
+        Phase::Creating | Phase::Ready => Route::Send,
+        Phase::Absent | Phase::Closing if acts_outside_main(action) => Route::Drop,
+        Phase::Absent | Phase::Closing => Route::OpenQuietly,
     }
+}
+
+/// A pick from a native menu or the menu bar: the main window's page runs its action ("view.sortBy=newest" with a
+/// choice), by [`route`].
+pub fn picked(app: &AppHandle, id: &str) {
+    let (Some(pick), Some(payload)) = (parse_item_id(id), picked_action(id)) else { return };
+    #[cfg(target_os = "macos")]
+    crate::app_menu::keep_tick(id);
+    let main = crate::lifecycle::phases(app, &[crate::lifecycle::MAIN])[0].1;
+    match route(&pick.action, main) {
+        Route::Drop => return,
+        Route::OpenQuietly => crate::lifecycle::show_main_quietly(app),
+        Route::Send => {}
+    }
+    crate::lifecycle::emit(app, crate::lifecycle::MAIN, EVENT, payload);
 }
 
 /// Opens the page's menu at `x`, `y` (CSS pixels from the window's top left), drawn by the system.
@@ -282,17 +321,38 @@ mod tests {
     }
 
     #[test]
-    fn a_pick_brings_the_window_to_the_front_and_is_kept_while_it_is_being_closed() {
-        use crate::lifecycle::{Delivery, MAIN, Slots};
+    fn a_pick_never_reveals_the_main_window_and_is_kept_while_it_is_being_closed() {
+        use crate::lifecycle::{Delivery, MAIN, Phase, Slots};
         use std::time::Instant;
-        // picked(): the window is shown first, whatever its state, then the pick is sent.
+        // Its page takes it: nothing shown, whatever the pick (hiding stays hidden, a share stays clean).
+        for action in ["go.library", "live.hide15", "live.stopHiding", "live.hideWordsNow", "window.pill", "live.captions"] {
+            assert_eq!(route(action, Phase::Ready), Route::Send, "{action}");
+            assert_eq!(route(action, Phase::Creating), Route::Send, "{action}");
+        }
+        // No page: an in-window command opens it quietly; one that acts outside it is let go.
+        for phase in [Phase::Absent, Phase::Closing] {
+            for action in ["go.library", "file.newRecording", "view.sidebar", "live.startAssist", "live.pastReports"] {
+                assert_eq!(route(action, phase), Route::OpenQuietly, "{action} {phase:?}");
+            }
+            for action in ["live.hide15", "live.hide60", "live.hideUntilQuit", "live.stopHiding", "live.hideWordsNow", "live.captions", "live.autoRecord", "live.pauseRecording", "live.stopRecording", "window.pill", "window.captions", "window.assistCard"] {
+                assert_eq!(route(action, phase), Route::Drop, "{action} {phase:?}");
+            }
+        }
+        // picked(): never show_main (it ends a person's hide and shows the window in a share), only the quiet open.
         let code = include_str!("native_menu.rs");
         let body = &code[code.find("pub fn picked(app: &AppHandle, id: &str) {").unwrap()..];
         let body = &body[..body.find("\n}\n").unwrap()];
-        let show = body.find("crate::lifecycle::show_main(app);").expect("shows the window");
-        assert!(show < body.find("crate::lifecycle::emit(").unwrap());
-        assert!(!body.contains("is_none()"), "shown whether or not it exists");
-        // While the window is being closed, the show asks for a new one, so the pick waits for its page.
+        assert!(body.contains("crate::lifecycle::show_main_quietly(app)"));
+        assert!(!body.contains("show_main(app)") && !body.contains("opened_by_person"));
+        // A quiet open keeps the window off while the person hid it, and during a whole-screen share.
+        use crate::privacy::{Choice, HideReason, Privacy};
+        let choice = Choice { hiding: crate::settings::ShareHiding::All, demo: false, main_hidden: true, show_card: false, show_captions: false };
+        for reason in [HideReason::Person, HideReason::Share] {
+            let privacy = Privacy::new();
+            privacy.set_hidden(reason, true);
+            assert!(!privacy.may_show_main(&choice, true), "{reason:?}: stays hidden");
+        }
+        // While the window is being closed, the quiet open asks for a new one, so the pick waits for its page.
         let now = Instant::now();
         let mut slots = Slots::default();
         assert!(slots.show(MAIN, "open", now));

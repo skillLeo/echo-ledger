@@ -6,7 +6,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { canRun, registerAction } from "./registry";
 import { MENU_BAR_SETTLE_MS, MenuBar, useMenuBar } from "./useMenuBar";
-import { listenToMenuPicks, menuPicksReady, menuSnapshot, parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
+import { PICK_HOLD_MS, listenToMenuPicks, menuPicksReady, menuSnapshot, parsePick, setMenuPart, setPickedHandler, useMenuPart } from "./menuState";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,37 @@ describe("the menu bar in step with the app (FIX-05)", () => {
     await act(() => emitEvent("menu:action", "project.rename@p@1"));
     expect(sort).toHaveBeenCalledTimes(1);
     expect(rename).toHaveBeenCalledTimes(1);
+  });
+
+  it("a pick whose command isn't there yet (the window just built) waits for it, runs once, and is let go after a while", async () => {
+    render(<App platform="macos" />);
+    // New Recording picked while the window was being built: nothing here answers it yet.
+    const record = vi.fn();
+    await act(() => emitEvent("menu:action", "file.newRecording"));
+    expect(record).not.toHaveBeenCalled();
+    // The shell registers its commands: it runs, once.
+    act(() => { offs.push(registerAction("file.newRecording", record)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(record).toHaveBeenCalledTimes(1);
+    act(() => { offs.push(registerAction("go.projects", () => undefined)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(record).toHaveBeenCalledTimes(1);
+    // Only the latest waits: an older one is replaced.
+    const library = vi.fn();
+    const trash = vi.fn();
+    await act(() => emitEvent("menu:action", "go.library"));
+    await act(() => emitEvent("menu:action", "go.trash"));
+    act(() => { offs.push(registerAction("go.library", library), registerAction("go.trash", trash)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(library).not.toHaveBeenCalled();
+    expect(trash).toHaveBeenCalledTimes(1);
+    // Nothing comes for it (the lock screen): let go after a while, never run later.
+    const shared = vi.fn();
+    await act(() => emitEvent("menu:action", "go.shared"));
+    act(() => { vi.advanceTimersByTime(PICK_HOLD_MS + 1); });
+    act(() => { offs.push(registerAction("go.shared", shared)); });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(shared).not.toHaveBeenCalled();
   });
 
   it("a context menu's pick (numbered) goes to its menu only, never through the registry; others never go to it", async () => {

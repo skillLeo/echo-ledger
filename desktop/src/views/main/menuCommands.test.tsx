@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import MainApp from "./MainApp";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { resetSyncClock } from "../../v2/library/syncClock";
@@ -38,6 +38,7 @@ function app(over: { status?: Parameters<typeof makeStatus>[0]; lock?: typeof un
 }
 
 beforeEach(() => {
+  localStorage.clear();
   resetTauriMock();
   resetSyncClock();
   resetEntitlementsForTests(makeEntitlements());
@@ -83,6 +84,33 @@ describe("the window's menu commands (FIX-05)", () => {
     await settle();
     dialog.remove();
     expect(callsOf("library_refresh").length).toBe(before + 1);
+  });
+
+  it("a pick made before the app is in use (the window just built) runs once it is", async () => {
+    let answer: (status: unknown) => void = () => undefined;
+    respondWith("app_status", () => new Promise((done) => { answer = done; }));
+    respond("set_window_theme", null);
+    respond("get_settings", makeSettings());
+    respond("lock_status", unlocked);
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respond("bin_list", { data: [] });
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false });
+    render(<MainApp />);
+    await settle();
+    // View › Theme › Dark, kept by the core while the window was built: nothing answers it yet.
+    await act(() => emitEvent("menu:action", "view.themeDark"));
+    await settle();
+    expect(canRun("view.themeDark")).toBe(false);
+    expect(callsOf("set_window_theme")).toHaveLength(0);
+    // The core answers; the app comes into use and registers its commands: the pick runs, once.
+    await act(async () => answer(makeStatus()));
+    await settle();
+    await screen.findByRole("navigation", { name: "Main" });
+    await settle();
+    expect(callsOf("set_window_theme")).toEqual([{ theme: "dark" }]);
   });
 
   it("the bar is drawn on a Mac only with the new design's shell; classic keeps the core's own", async () => {

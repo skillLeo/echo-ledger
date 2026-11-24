@@ -124,6 +124,12 @@ pub fn bar_item_id(action: &str, value: Option<&str>) -> Option<String> {
     }
 }
 
+/// After a pick from the menu bar: a ticked item keeps the tick the app drew (macOS flips it on the click).
+#[cfg(target_os = "macos")]
+pub fn keep_tick(id: &str) {
+    mac::keep_tick(id);
+}
+
 /// What an item or a sub-menu shows that can change in place: its words, whether it can be picked, its tick.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
@@ -265,6 +271,23 @@ mod mac {
     }
 
     static DRAWN: Mutex<Option<Drawn>> = Mutex::new(None);
+
+    /// A picked item with a tick: the system flipped it on the click, but the tick is the app's state, so it goes back
+    /// to what was drawn (ticking View › Theme › System again leaves it ticked); a pick that changes the state redraws it.
+    pub fn keep_tick(id: &str) {
+        let ticked = {
+            let drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner());
+            drawn.as_ref().and_then(|d| {
+                d.handles.iter().zip(&d.looks).find_map(|(handle, look)| match handle {
+                    Handle::Check(item) if item.id().0 == id => Some((item.clone(), look.checked.unwrap_or(false))),
+                    _ => None,
+                })
+            })
+        };
+        if let Some((item, checked)) = ticked {
+            let _ = item.set_checked(checked);
+        }
+    }
 
     pub fn set(app: &AppHandle, bar: Option<&MenuBar>) -> tauri::Result<()> {
         // What was drawn is taken out first: no lock is held while the menu changes on the main thread.
