@@ -89,7 +89,7 @@ fun EchoListRow(
                 }
             )
             .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+            .padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
     ) {
@@ -233,8 +233,8 @@ fun EchoSectionHeader(text: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                start = EchoTokens.Layout.pagePaddingMobile,
-                end = EchoTokens.Layout.pagePaddingMobile,
+                start = LocalPageMargin.current,
+                end = LocalPageMargin.current,
                 top = EchoTokens.Space.s24,
                 bottom = EchoTokens.Space.s4
             )

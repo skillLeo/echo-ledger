@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,7 +26,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -59,6 +66,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
+import com.echoledger.mobile.ui.v2.components.LocalPageMargin
 import com.echoledger.mobile.ui.v2.components.formatClock
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.V2Text
@@ -614,7 +622,7 @@ fun V2LibraryScreen(
                 )
             },
             filterRow = {
-                LibraryKindRow(kind, kindCounts, filters.count, { kindKey = it.name }) {
+                LibraryKindRow(kind, kindCounts, filters.count, { kindKey = it.name }, onSortDisplay = { sortOpen = true }) {
                     filtersAt = null
                     filtersOpen = true
                 }
@@ -910,222 +918,244 @@ fun V2LibraryContent(
         onQuery("")
         focus.clearFocus(force = true)
     }
-    androidx.activity.compose.BackHandler(enabled = !selecting && (searchFocused || query.isNotEmpty())) { leaveSearch() }
-    Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        if (selecting) {
-            tools!!.selectionBar()
-        } else {
-            // With the full Library the title says what the list shows and opens the menu of places (All recordings ▾).
-            EchoTopBar(
-                tools?.title ?: stringResource(R.string.v2_library),
-                large = tools?.onTitle == null,
-                onTitleClick = tools?.onTitle,
-                titleClickLabel = stringResource(R.string.v2_lf_choose_view)
-            ) {
-                onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
-                if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
-                extras?.actions?.invoke()
-                if (tools != null) {
+    // The full Library (v2.1 UX-14): search is the ⌕ in the title row and opens over the page; a query left in keeps it.
+    var searchOpen by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
+    val compactHeader = tools != null
+
+    // The full Library's avatar opens its menu (Select, Sync now, Settings); the simple page's opens Settings.
+    val onAvatar: () -> Unit = if (compactHeader) ({ menu = true }) else onAccount
+
+    fun closeSearch() {
+        leaveSearch()
+        searchOpen = false
+    }
+    androidx.activity.compose.BackHandler(enabled = !selecting && (searchFocused || query.isNotEmpty() || searchOpen)) {
+        if (compactHeader) closeSearch() else leaveSearch()
+    }
+    // The chips' row hides while the list scrolls down and comes back as it scrolls up (UX-14), never while searching.
+    val chips = remember { ChipsOffset() }
+    CompositionLocalProvider(LocalPageMargin provides if (compactHeader) EchoTokens.Layout.pagePaddingPhone else LocalPageMargin.current) {
+        // While the list scrolls, the chips' row follows it (not while searching).
+        val follow = if (compactHeader && !searchOpen) Modifier.nestedScroll(chips) else Modifier
+        Column(modifier.fillMaxSize().background(c.bgCanvas).then(follow)) {
+            if (selecting) {
+                tools!!.selectionBar()
+            } else if (compactHeader && searchOpen) {
+                // Search over the page: ← and the field, "Search in All recordings", focused.
+                SearchBar(
+                    query,
+                    onQuery,
+                    stringResource(R.string.v2_lib_search_in, tools?.title ?: stringResource(R.string.v2_library)),
+                    onBack = ::closeSearch,
+                    onFocus = { searchFocused = it },
+                    onSearch = { tools?.onKeepSearch?.invoke(it) }
+                )
+            } else {
+                // With the full Library the title says what the list shows and opens the menu of places (All recordings ▾);
+                // then search, the bell and the avatar, whose menu has Select, Sync now and Settings (no ⋮).
+                EchoTopBar(
+                    tools?.title ?: stringResource(R.string.v2_library),
+                    large = tools?.onTitle == null,
+                    onTitleClick = tools?.onTitle,
+                    titleClickLabel = stringResource(R.string.v2_lf_choose_view)
+                ) {
+                    onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
+                    if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
+                    if (tools != null) EchoIconButton(EchoIcons.Search, text.searchRecordings, { searchOpen = true })
+                    extras?.actions?.invoke()
+                    // The avatar last, at the top end, as on every main screen.
                     Box {
-                        EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
-                        val look = rememberPageLook()
-                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            ProvidePageLook(look) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lib_select), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.SelectAll, null) },
-                                    onClick = {
+                        Box(
+                            Modifier
+                                .size(EchoTokens.Layout.controlTouchMin)
+                                .clickable(onClickLabel = text.accountAndSettings, onClick = onAvatar)
+                                .semantics { contentDescription = text.accountAndSettings },
+                            contentAlignment = Alignment.Center
+                        ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
+                        if (tools != null) {
+                            val look = rememberPageLook()
+                            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                ProvidePageLook(look) {
+                                    AvatarItem(stringResource(R.string.v2_lib_select), EchoIcons.SelectAll) {
                                         menu = false
                                         tools.onSelect()
                                     }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lib_sync), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sync, null) },
-                                    onClick = {
+                                    AvatarItem(stringResource(R.string.v2_lib_sync), EchoIcons.Sync) {
                                         menu = false
                                         tools.onSync()
                                     }
-                                )
-                                // Sort & display (PLAN_LIBRARY_FILTERS §2); Trash is in the title's menu.
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lf_sort_display), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sort, null) },
-                                    onClick = {
+                                    AvatarItem(stringResource(R.string.v2_settings), EchoIcons.Settings) {
                                         menu = false
-                                        tools.onSortGroup()
+                                        onAccount()
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
-                // The avatar last, at the top end, as on every main screen.
-                Box(
-                    Modifier
-                        .size(EchoTokens.Layout.controlTouchMin)
-                        .clickable(onClickLabel = text.accountAndSettings, onClick = onAccount)
-                        .semantics { contentDescription = text.accountAndSettings },
-                    contentAlignment = Alignment.Center
-                ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
             }
-        }
-        if (!selecting && extras != null) {
-            Box(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile).padding(bottom = EchoTokens.Space.s8)) {
-                extras.status()
+            // The Calls chip only on the simple page; the full Library says what is wrong in one line inside the list.
+            if (!selecting && extras != null && !compactHeader) {
+                Box(Modifier.padding(horizontal = LocalPageMargin.current).padding(bottom = EchoTokens.Space.s8)) {
+                    extras.status()
+                }
             }
-        }
-        if (!selecting) {
-            Row(
-                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
-            ) {
-                EchoSearchField(
-                    query,
-                    onQuery,
-                    text.searchRecordings,
-                    Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
-                    onSearch = { tools?.onKeepSearch?.invoke(it) }
-                )
+            if (!selecting && !compactHeader) {
+                Row(
+                    Modifier.padding(horizontal = LocalPageMargin.current),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+                ) {
+                    EchoSearchField(
+                        query,
+                        onQuery,
+                        text.searchRecordings,
+                        Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
+                        onSearch = { tools?.onKeepSearch?.invoke(it) }
+                    )
+                }
             }
-            if (tools != null) {
-                tools.filterRow()
-            } else {
-                EchoFilterBar(
-                    filters = listOf(
-                        EchoFilter(SavedView.Today.name, text.today),
-                        EchoFilter(SavedView.Untranscribed.name, text.untranscribed)
-                    ),
-                    selected = views.map { it.name }.toSet(),
-                    onToggle = { onToggleView(SavedView.valueOf(it)) },
-                    modifier = Modifier.padding(vertical = EchoTokens.Space.s4)
-                )
+            if (!selecting) {
+                if (tools != null) {
+                    if (!searchOpen) Box(Modifier.collapsing(chips)) { Column { tools.filterRow() } }
+                } else {
+                    EchoFilterBar(
+                        filters = listOf(
+                            EchoFilter(SavedView.Today.name, text.today),
+                            EchoFilter(SavedView.Untranscribed.name, text.untranscribed)
+                        ),
+                        selected = views.map { it.name }.toSet(),
+                        onToggle = { onToggleView(SavedView.valueOf(it)) },
+                        modifier = Modifier.padding(vertical = EchoTokens.Space.s4)
+                    )
+                }
             }
-        }
-        when (state) {
-            LibraryState.Loading -> EchoSkeletonList(7, Modifier.weight(1f))
+            when (state) {
+                LibraryState.Loading -> EchoSkeletonList(7, Modifier.weight(1f))
 
-            LibraryState.Error -> Box(Modifier.weight(1f)) {
-                EchoErrorState(text.loadErrorTitle, text.loadErrorBody, actionLabel = text.tryAgain, onAction = onRetry)
-            }
+                LibraryState.Error -> Box(Modifier.weight(1f)) {
+                    EchoErrorState(text.loadErrorTitle, text.loadErrorBody, actionLabel = text.tryAgain, onAction = onRetry)
+                }
 
-            is LibraryState.Ready -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-                isRefreshing = tools?.refreshing == true,
-                onRefresh = { tools?.onSync?.invoke() ?: onRetry() },
-                modifier = Modifier.weight(1f)
-            ) {
-                LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
-                    val recent = tools?.recent.orEmpty()
-                    if (searchFocused && query.isEmpty() && recent.isNotEmpty()) {
-                        item(key = "h-recent") { SearchHeader(stringResource(R.string.v2_lib_recent_searches)) }
-                        items(recent, key = { "recent-$it" }) { words ->
-                            EchoListRow(
-                                title = words,
-                                leading = { androidx.compose.material3.Icon(EchoIcons.Search, null, tint = c.textSecondary) },
-                                onClickLabel = text.searchRecordings,
-                                onClick = { onQuery(words) }
-                            )
-                        }
-                    }
-                    if (state.offline) {
-                        item {
-                            EchoBanner(
-                                text.offlineBanner,
-                                EchoBannerKind.Info,
-                                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                                actionLabel = text.tryAgain,
-                                onAction = onRetry
-                            )
-                        }
-                    }
-                    items(state.uploads, key = { "local-" + it.id }) { up ->
-                        UploadingRow(
-                            up,
-                            onRetry = { onRetryUpload(up.id) },
-                            onDismiss = { onDismissUpload(up.id) },
-                            onMenu = { uploadMenu = up },
-                            onReview = onReviewWaiting
-                        )
-                    }
-                    if (state.rows.isEmpty() && state.uploads.isEmpty()) {
-                        item {
-                            when {
-                                tools?.emptyList != null && tools.filtered != true && query.isBlank() -> EchoEmptyState(
-                                    stringResource(R.string.v2_lists_empty_title, tools.emptyList),
-                                    stringResource(R.string.v2_lists_empty_body),
-                                    icon = EchoIcons.Label
+                is LibraryState.Ready -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    isRefreshing = tools?.refreshing == true,
+                    onRefresh = { tools?.onSync?.invoke() ?: onRetry() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
+                        val recent = tools?.recent.orEmpty()
+                        if (searchFocused && query.isEmpty() && recent.isNotEmpty()) {
+                            item(key = "h-recent") { SearchHeader(stringResource(R.string.v2_lib_recent_searches)) }
+                            items(recent, key = { "recent-$it" }) { words ->
+                                EchoListRow(
+                                    title = words,
+                                    leading = { androidx.compose.material3.Icon(EchoIcons.Search, null, tint = c.textSecondary) },
+                                    onClickLabel = text.searchRecordings,
+                                    onClick = { onQuery(words) }
                                 )
-
-                                tools?.filtered == true -> EchoEmptyState(
-                                    stringResource(R.string.v2_lf_no_match),
-                                    stringResource(R.string.v2_lf_no_match_body),
-                                    icon = EchoIcons.Search,
-                                    actionLabel = stringResource(R.string.v2_lib_clear_filters),
-                                    onAction = tools.onClearFilters
-                                )
-
-                                state.anyAtAll -> EchoEmptyState(text.noMatchTitle, text.noMatchBody, icon = EchoIcons.Search)
-
-                                else -> EchoEmptyState(text.noRecordingsTitle, text.noRecordingsBody, icon = EchoIcons.Library)
                             }
                         }
-                    }
-                    if (tools == null) {
-                        items(state.rows, key = { it.id }) { row ->
-                            LibraryRow(row, selected = null, compact = false, onOpen = { onOpen(row) }, onLongClick = { actionsFor = row })
+                        if (state.offline) {
+                            item {
+                                EchoBanner(
+                                    text.offlineBanner,
+                                    EchoBannerKind.Info,
+                                    Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
+                                    actionLabel = text.tryAgain,
+                                    onAction = onRetry
+                                )
+                            }
                         }
-                    } else {
-                        val searching = query.trim().length >= 2
-                        if (searching &&
-                            state.rows.isNotEmpty()
-                        ) {
-                            item(key = "h-titles") { SearchHeader(stringResource(R.string.v2_lib_titles)) }
+                        items(state.uploads, key = { "local-" + it.id }) { up ->
+                            UploadingRow(
+                                up,
+                                onRetry = { onRetryUpload(up.id) },
+                                onDismiss = { onDismissUpload(up.id) },
+                                onMenu = { uploadMenu = up },
+                                onReview = onReviewWaiting
+                            )
                         }
-                        tools.groups.forEach { g ->
-                            val showHeader = g.name.isNotEmpty() && !searching
-                            if (showHeader) {
-                                item(key = "h-" + g.key) {
-                                    val ids = g.rows.map { it.id }
-                                    SectionHeader(
-                                        g.name,
-                                        g.rows.size,
-                                        g.key in tools.folded,
-                                        selecting,
-                                        tools.selected.containsAll(ids),
-                                        onFold = { tools.onFold(g.key) },
-                                        onSelect = { tools.onSelectGroup(g) }
+                        if (state.rows.isEmpty() && state.uploads.isEmpty()) {
+                            item {
+                                when {
+                                    tools?.emptyList != null && tools.filtered != true && query.isBlank() -> EchoEmptyState(
+                                        stringResource(R.string.v2_lists_empty_title, tools.emptyList),
+                                        stringResource(R.string.v2_lists_empty_body),
+                                        icon = EchoIcons.Label
                                     )
+
+                                    tools?.filtered == true -> EchoEmptyState(
+                                        stringResource(R.string.v2_lf_no_match),
+                                        stringResource(R.string.v2_lf_no_match_body),
+                                        icon = EchoIcons.Search,
+                                        actionLabel = stringResource(R.string.v2_lib_clear_filters),
+                                        onAction = tools.onClearFilters
+                                    )
+
+                                    state.anyAtAll -> EchoEmptyState(text.noMatchTitle, text.noMatchBody, icon = EchoIcons.Search)
+
+                                    else -> EchoEmptyState(text.noRecordingsTitle, text.noRecordingsBody, icon = EchoIcons.Library)
                                 }
                             }
-                            if (!showHeader || g.key !in tools.folded) {
-                                items(g.rows, key = { it.id }) { row ->
-                                    SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
-                                        tools.onPin(row)
-                                    }, onDelete = { onDelete(row) }) {
-                                        LibraryRow(
-                                            row,
-                                            selected = if (selecting) row.id in tools.selected else null,
-                                            compact = tools.compact,
-                                            onOpen = { onOpen(row) },
-                                            onLongClick = { tools.onToggle(row) }
+                        }
+                        if (tools == null) {
+                            items(state.rows, key = { it.id }) { row ->
+                                LibraryRow(row, selected = null, compact = false, onOpen = {
+                                    onOpen(row)
+                                }, onLongClick = { actionsFor = row })
+                            }
+                        } else {
+                            val searching = query.trim().length >= 2
+                            if (searching &&
+                                state.rows.isNotEmpty()
+                            ) {
+                                item(key = "h-titles") { SearchHeader(stringResource(R.string.v2_lib_titles)) }
+                            }
+                            tools.groups.forEach { g ->
+                                val showHeader = g.name.isNotEmpty() && !searching
+                                if (showHeader) {
+                                    item(key = "h-" + g.key) {
+                                        val ids = g.rows.map { it.id }
+                                        SectionHeader(
+                                            g.name,
+                                            g.rows.size,
+                                            g.key in tools.folded,
+                                            selecting,
+                                            tools.selected.containsAll(ids),
+                                            onFold = { tools.onFold(g.key) },
+                                            onSelect = { tools.onSelectGroup(g) }
                                         )
                                     }
                                 }
+                                if (!showHeader || g.key !in tools.folded) {
+                                    items(g.rows, key = { it.id }) { row ->
+                                        SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
+                                            tools.onPin(row)
+                                        }, onDelete = { onDelete(row) }) {
+                                            LibraryRow(
+                                                row,
+                                                selected = if (selecting) row.id in tools.selected else null,
+                                                compact = tools.compact,
+                                                onOpen = { onOpen(row) },
+                                                onLongClick = { tools.onToggle(row) }
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        if (searching && tools.matches.isNotEmpty()) {
-                            item(key = "h-transcripts") { SearchHeader(stringResource(R.string.v2_lib_transcripts)) }
-                            items(tools.matches, key = { "t-" + it.row.id + "-" + it.atMs }) { m ->
-                                EchoListRow(
-                                    title = m.row.title,
-                                    meta = m.snippet,
-                                    titleEnd = formatClock(m.atMs),
-                                    leading = { RowSourceLogo(m.row) },
-                                    tall = true,
-                                    onClick = { tools.onOpenAt(m) }
-                                )
+                            if (searching && tools.matches.isNotEmpty()) {
+                                item(key = "h-transcripts") { SearchHeader(stringResource(R.string.v2_lib_transcripts)) }
+                                items(tools.matches, key = { "t-" + it.row.id + "-" + it.atMs }) { m ->
+                                    EchoListRow(
+                                        title = m.row.title,
+                                        meta = m.snippet,
+                                        titleEnd = formatClock(m.atMs),
+                                        leading = { RowSourceLogo(m.row) },
+                                        tall = true,
+                                        onClick = { tools.onOpenAt(m) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1174,6 +1204,78 @@ fun V2LibraryContent(
 
 @Composable
 private fun SearchHeader(words: String) = EchoSectionHeader(words)
+
+/** One item of the avatar's menu (Select, Sync now, Settings). */
+@Composable
+private fun AvatarItem(words: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(words, style = EchoV2.type.body) },
+        leadingIcon = { androidx.compose.material3.Icon(icon, null) },
+        onClick = onClick
+    )
+}
+
+/**
+ * Search over the page (v2.1 UX-14): ← and the field ("Search in All recordings"), focused as it opens; the list
+ * under it shows what the words find, and the recent searches while it is empty.
+ */
+@Composable
+private fun SearchBar(
+    query: String,
+    onQuery: (String) -> Unit,
+    placeholder: String,
+    onBack: () -> Unit,
+    onFocus: (Boolean) -> Unit,
+    onSearch: (String) -> Unit
+) {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = EchoTokens.Space.s64)
+            .padding(start = EchoTokens.Space.s4, end = LocalPageMargin.current),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+    ) {
+        EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack)
+        EchoSearchField(
+            query,
+            onQuery,
+            placeholder,
+            Modifier.weight(1f).focusRequester(focus).onFocusChanged { onFocus(it.isFocused) },
+            onSearch = onSearch
+        )
+    }
+}
+
+/**
+ * How far the chips' row is pushed up (0 to its whole height): the list scrolling down takes it away, scrolling up
+ * brings it back, as a collapsing toolbar does. Nothing is consumed: the list scrolls as before.
+ */
+@androidx.compose.runtime.Stable
+internal class ChipsOffset : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+    var height by androidx.compose.runtime.mutableIntStateOf(0)
+    var offset by androidx.compose.runtime.mutableFloatStateOf(0f)
+
+    override fun onPreScroll(
+        available: androidx.compose.ui.geometry.Offset,
+        source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+    ): androidx.compose.ui.geometry.Offset {
+        offset = (offset + available.y).coerceIn(-height.toFloat(), 0f)
+        return androidx.compose.ui.geometry.Offset.Zero
+    }
+}
+
+/** Lays the chips' row out as tall as what is left of it, pushed up by [chips]' offset. */
+private fun Modifier.collapsing(chips: ChipsOffset): Modifier = this
+    .clipToBounds()
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints.copy(minHeight = 0))
+        chips.height = placeable.height
+        val shown = (placeable.height + chips.offset.toInt()).coerceIn(0, placeable.height)
+        layout(placeable.width, shown) { placeable.placeRelative(0, chips.offset.toInt()) }
+    }
 
 /**
  * A recording on its way to the server (classic's UploadingRow): "Waiting to upload", "Uploading 40%", Failed (a tap

@@ -157,6 +157,9 @@ object EchoTokens {
     object Layout {
         val pagePaddingDesktop = 24.dp
         val pagePaddingMobile = 16.dp
+
+        /** One UI's minimum side margin (v2.1 UX-14): the Library's header, chips and rows. */
+        val pagePaddingPhone = 24.dp
         val rowComfortable = 56.dp
         val rowCompact = 44.dp
         val rowMobile = 64.dp

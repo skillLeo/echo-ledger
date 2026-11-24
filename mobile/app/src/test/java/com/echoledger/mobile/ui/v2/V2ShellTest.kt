@@ -129,7 +129,9 @@ class V2ShellTest : ScreenTest() {
     fun settingsFromTheAvatarOffersClassicLook() {
         seed()
         shell(v2)
+        // The Library's avatar opens its menu (UX-14); Settings is in it.
         compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Switch back to classic").performClick()
         assertEquals(listOf(true), switched)
         compose.onNodeWithText("All settings").performClick()
@@ -394,7 +396,7 @@ class V2ShellTest : ScreenTest() {
     fun sortAndGroupIsRememberedForTheView() {
         seed()
         shell(v2)
-        compose.onNodeWithContentDescription("More").performClick()
+        // The chips row's last chip (v2.1 UX-14; it was in ⋮).
         compose.onNode(hasText("Sort & display") and hasClickAction()).performClick()
         compose.onNode(hasText("Name A–Z") and isSelectable()).performSemanticsAction(SemanticsActions.OnClick)
         pumpUntil("sort saved") { vm.settings.value.libraryViews.values.any { it.sort == "title" } }
