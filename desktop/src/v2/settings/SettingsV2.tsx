@@ -11,7 +11,7 @@ import { SETTINGS, breadcrumbOf, titleV2, type SettingEntry } from "../../lib/se
 import { ROOT_ICONS } from "../../components/Icons";
 import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
-import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType } from "../components";
+import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType, Select } from "../components";
 import { AccountCard } from "./AccountCard";
 import { SHOW_PANEL_EVENT } from "../shell/NavRail";
 
@@ -29,7 +29,7 @@ export const GOAL_GROUPS: readonly { title: string; icon: IconType; description:
   { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
   { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
   { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, opening EchoLedger when you sign in, and its icons.",
-    ids: ["shortcuts", "app.autostart", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] },
+    ids: ["shortcuts", "app.autostart", "app.on_close", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] },
   { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
 ];
 
@@ -176,6 +176,15 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
     const ICON_SWITCHES: Record<string, "menuBarIcon" | "menuBarTimer" | "dockBadge"> = {
       "app.menu_bar_icon": "menuBarIcon", "app.menu_bar_timer": "menuBarTimer", "app.dock_badge": "dockBadge",
     };
+    // FIX-12 (Windows): what ✕ does.
+    if (id === "app.on_close") {
+      return (
+        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
+          control={settings ? <Select label={entry.title} hideLabel value={settings.closeQuits ? "quit" : "keep"}
+            options={[{ value: "keep", label: "Keep running in the background (recommended)" }, { value: "quit", label: "Quit" }]}
+            onChange={(v) => void api.updateSettings({ closeQuits: v === "quit" }).then(setSettings, () => undefined)} /> : undefined} />
+      );
+    }
     const key = ICON_SWITCHES[id];
     if (key) {
       return (

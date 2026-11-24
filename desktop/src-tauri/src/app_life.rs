@@ -100,6 +100,18 @@ pub async fn may_quit(app: &tauri::AppHandle) -> bool {
     quit_goes_on(recording, false, Some(ask(app).await))
 }
 
+/// A quit of the person's own from outside a menu (FIX-12: ✕ with "When I close the window" set to Quit): asked first
+/// while recording, then as the tray's Quit (the recording kept, then exit).
+pub async fn quit(app: &tauri::AppHandle) {
+    if !may_quit(app).await {
+        return;
+    }
+    crate::actions::save_before_quit(app).await;
+    if !terminate_pending() {
+        app.exit(0);
+    }
+}
+
 /// The question itself: true for Stop and Quit.
 async fn ask(app: &tauri::AppHandle) -> bool {
     #[cfg(target_os = "macos")]

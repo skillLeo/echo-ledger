@@ -277,6 +277,8 @@ pub fn ready(app: &AppHandle, label: &str) {
     }
     if label == MAIN && phase == Phase::Ready {
         reveal_main(app, quiet_open(app));
+        // FIX-12: a window built while recording shows the taskbar's red dot too (Windows).
+        crate::taskbar::overlay(app, app.state::<crate::AppState>().capture.is_recording());
     }
     if let Some(generation) = ready.expire {
         schedule_expiry(app, label, generation);

@@ -16,6 +16,7 @@ import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import type { ShellStatus } from "./status";
+import { changePreferences, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../lib/shell";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
 export const FLYOUT_BELOW = 1100;
@@ -59,6 +60,11 @@ function savePinned(account: string | null | undefined, pinned: boolean) {
  * and never scrolls (720×560 at the least, FIX-08).
  */
 export const RAIL_FULL_FROM = 680;
+/**
+ * The same for the compact rail (icons only, 44 px items): 126 px less (nine items 12 px shorter, and Record's name and
+ * its 4 px gap), so all of it shows from the least window height (720×560, FIX-08).
+ */
+export const RAIL_FULL_FROM_COMPACT = 554;
 const PRESS_HOLD_MS = 3000;
 /** The actions whose keys the window answers here (the menu bar's, once FIX-05 draws it, take them first on a Mac). */
 const RECORD_KEYS = ["file.newRecording", "file.newVoiceNote", "file.importAudio", "live.stopRecording"] as const;
@@ -142,8 +148,16 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const small = width < (panelFlyout ? DOCK_FROM : FLYOUT_BELOW);
   // A small window's panel is a flyout, unless pinned there (v21_panel_flyout).
   const narrow = small && !(panelFlyout && pinned);
+  // The compact rail (Settings › Appearance, View › Theme): icons only, each keeping its name for assistive tools and in
+  // its tooltip ("Library ⌘1"); kept on this computer, followed at once.
+  const [compactRail, setCompactRail] = useState(() => loadPreferences().compactRail);
+  useEffect(() => {
+    const follow = (e: Event) => setCompactRail(!!(e as CustomEvent<Preferences>).detail?.compactRail);
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
   // A short window: Help and Setup move into the avatar's menu; every place keeps its name.
-  const short = height < RAIL_FULL_FROM;
+  const short = height < (compactRail ? RAIL_FULL_FROM_COMPACT : RAIL_FULL_FROM);
   const [hidden, setHidden] = useState<Set<Place>>(() => loadHidden(layoutFor));
   // Another account: its own layout.
   const [layoutOf, setLayoutOf] = useState(layoutFor);
@@ -400,6 +414,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       registerAction("view.sidebar", () => r.current.togglePanel()),
       registerAction("edit.find", () => (r.current.hasSearch ? r.current.find() : r.current.onSearch?.())),
       registerAction("edit.searchEverything", () => r.current.onSearch?.()),
+      // View › Theme › Compact rail: the same choice as Settings › Appearance's.
+      registerAction("view.compactRail", () => changePreferences({ compactRail: !loadPreferences().compactRail })),
     ];
     return () => offs.forEach((off) => off());
   }, []);
@@ -407,7 +423,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   // menuState.ts) to the actions registered here.
   useMenuPart({ state: {
     canGoBack: canWalk("back"), canGoForward: canWalk("forward"), sidebarHidden: hasPanel && !shown,
-    canRecord: !!onRecord, recording: !!recording, autoRecord: !!callRecording?.on,
+    canRecord: !!onRecord, recording: !!recording, autoRecord: !!callRecording?.on, compactRail,
   } });
   // ⊟ in the title row (UX-20, right after the window's buttons) while the panel is off the screen, and in a small window
   // while its flyout is open (expanded: focus goes back to it); in a small window, the pin (UX-02).
@@ -459,7 +475,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const scrim = shown && narrow && panelFlyout;
   return (
     <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
-      <nav className="el-rail" aria-label="Main">
+      <nav className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main">
         {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
             it moves the window. 8 px in full screen; none on Windows, under its own title bar. */}
         <div className="el-rail__top" data-tauri-drag-region="deep" aria-hidden="true">

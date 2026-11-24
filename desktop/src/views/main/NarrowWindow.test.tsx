@@ -139,12 +139,31 @@ describe("a recording on a narrow page (the half-screen window)", () => {
     expect(bar).not.toHaveClass("titled");
     // The header's title scrolls up past the bar's bottom edge: the bar shows the title.
     vi.spyOn(bar, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 48, height: 48 } as DOMRect);
+    // jsdom lays nothing out: the bar is shown on a narrow page (offsetParent set), as in the window.
+    Object.defineProperty(bar, "offsetParent", { configurable: true, get: () => document.body });
     vi.spyOn(document.querySelector(".detail .detail-title")!, "getBoundingClientRect").mockReturnValue({ top: -20, bottom: 10, height: 30 } as DOMRect);
     fireEvent.scroll(document.querySelector(".content")!);
     await flushAsync();
     expect(bar).toHaveClass("titled");
     expect(prop(".app.narrow .library.has-open .item-bar", "position")).toBe("sticky");
     expect(prop(".app.narrow .library.has-open .item-bar", "background")).toBe("var(--surface)");
+  });
+
+  it("opens another recording with its own bar, untitled until that one's header scrolls under it", async () => {
+    const list = await renderNarrow();
+    await open(list, "Zoom with Acme");
+    const bar = () => document.querySelector(".item-bar")!;
+    vi.spyOn(bar(), "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 48, height: 48 } as DOMRect);
+    vi.spyOn(document.querySelector(".detail .detail-title")!, "getBoundingClientRect").mockReturnValue({ top: -20, bottom: 10, height: 30 } as DOMRect);
+    Object.defineProperty(bar(), "offsetParent", { configurable: true, get: () => document.body });
+    fireEvent.scroll(document.querySelector(".content")!);
+    await flushAsync();
+    expect(bar()).toHaveClass("titled");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await flushAsync();
+    await open(list, "Payment plan میں loan کی واپسی");
+    expect(bar()).not.toHaveClass("titled");
+    expect(bar().querySelector(".item-bar-title")).toHaveTextContent("Payment plan میں loan کی واپسی");
   });
 
   it("gives the bar's height to the page's scroll padding and stacks the find bar under it", async () => {

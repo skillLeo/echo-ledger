@@ -577,7 +577,7 @@ describe("Appearance v2", () => {
     fireEvent.click(group("Density").getByRole("radio", { name: "Compact" }));
     fireEvent.click(group("Times").getByRole("radio", { name: "24-hour" }));
     expect(getThemeChoice()).toBe("dark");
-    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24", compactRail: false });
     expect(document.documentElement.dataset.density).toBe("compact");
     expect(followed).toHaveBeenCalledTimes(3);
     expect(group("Theme").getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
@@ -585,8 +585,34 @@ describe("Appearance v2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     await act(flushAsync);
     expect(getThemeChoice()).toBe("system");
-    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false });
     window.removeEventListener("echoledger:preferences", followed);
+  });
+
+  it("Compact rail (icons only): only where the window has the rail, off by default, followed at once; Reset turns it off", async () => {
+    localStorage.clear();
+    await show("appearance");
+    expect(screen.queryByRole("switch", { name: "Compact rail (icons only)" })).toBeNull();
+    cleanup();
+    const followed = vi.fn();
+    const listen = (e: Event) => followed((e as CustomEvent).detail.compactRail);
+    window.addEventListener("echoledger:preferences", listen);
+    try {
+      render(<div className="el-root"><SettingsPagesV2 section={{ id: "appearance", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} threeLevels /></div>);
+      await act(flushAsync);
+      const toggle = screen.getByRole("switch", { name: "Compact rail (icons only)" });
+      expect(toggle).not.toBeChecked();
+      fireEvent.click(toggle);
+      expect(loadPreferences().compactRail).toBe(true);
+      expect(followed).toHaveBeenLastCalledWith(true);
+      answerConfirm().mockReturnValue(true);
+      fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+      await act(flushAsync);
+      expect(loadPreferences().compactRail).toBe(false);
+      expect(screen.getByRole("switch", { name: "Compact rail (icons only)" })).not.toBeChecked();
+    } finally {
+      window.removeEventListener("echoledger:preferences", listen);
+    }
   });
 
   it("the app's theme is the one shown, and a change goes to the app (the top bar's toggle agrees)", async () => {
@@ -1070,7 +1096,7 @@ describe("parity with today's Settings pages, in every state", () => {
     { name: "Never capture these apps", section: "screen.excluded", today: (st) => <ExcludedAppsPage settings={st} patch={patch} platform="windows" />,
       steps: [{ name: "an app typed", today: type("App or process name", "Signal.exe") }] },
     { name: "Appearance", section: "appearance",
-      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset],
+      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false }} setPref={() => undefined} />, steps: [reset],
       otherSide: { "button: Try the new design": "classic's side of the design switch; the new design's Appearance has Switch back to classic (v2/designSwitch.test.tsx)" } },
     ...(["windows", "macos"] as const).map((platform): Page => ({
       name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,

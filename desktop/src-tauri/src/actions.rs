@@ -1921,7 +1921,9 @@ pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
 /// for all of them. A file whose SHA-256 is already in the upload queue is skipped; the server skips files it holds.
 pub fn import_files(app: &AppHandle, sources: &[std::path::PathBuf], client_id: Option<String>, language: Option<String>) -> crate::files::ImportSummary {
     let mut summary = crate::files::ImportSummary::default();
-    for source in sources {
+    for (done, source) in sources.iter().enumerate() {
+        // FIX-12: the taskbar shows how far a long import is.
+        crate::taskbar::import_progress(app, done, sources.len());
         if !crate::files::is_importable(source) || !source.is_file() {
             summary.unsupported += 1;
             continue;
@@ -1935,6 +1937,7 @@ pub fn import_files(app: &AppHandle, sources: &[std::path::PathBuf], client_id: 
             }
         }
     }
+    crate::taskbar::import_progress(app, sources.len(), sources.len());
     summary
 }
 
@@ -2280,6 +2283,11 @@ pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
     if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {
         return;
     }
+    // FIX-12: a Jump List task runs as the menu bar's command; audio files (Open with) are imported, then shown.
+    if crate::taskbar::run_jump_task(app, args) {
+        return;
+    }
+    crate::dock::opened(app, crate::taskbar::opened_files(args));
     if handle_links(app, args) {
         return;
     }

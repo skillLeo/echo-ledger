@@ -1240,3 +1240,25 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - Counts equal step 2: 3 users, 289 sessions, 251 transcripts, 219 recordings, 0 saved views, 0 failed_jobs. No new errors.
 - **Scheduler, now confirmed by evidence:** yesterday's assembly jobs ran a few seconds after minute boundaries, within seconds of each upload, so a per-minute `schedule:run` on PHP 8.4 is firing. That closes the old "hPanel cron unconfirmed" item. A manual `schedule:run` on 8.4 runs all 7 tasks. The health check writes its cache entry only when it fails, so an empty entry means healthy.
 - **Merged since, for 2026-11-25:** eef23198 (BE-01 Other tab with one name per state, and the health check's report), b69cd8c7 (contract 2.0.0-r and the five v21 flags). Runbook: ~/EchoLedgerTeam/handover/deploy-2026-11-25.md, including adding the owner to the v21 flag lists.
+
+## 2026-11-25 00:10 PKT — production web deploy of v1.1 923e7c4e (v2.1 server set) and incident W-INC-1125
+- **What went out:** 80ff7788 → 923e7c4e (48 files, `public/build` whole, bundle sha256 03830e68…): BE-01 (Other tab,
+  one name per state), the health-check report, the v21 flags (2.0.0-q, -r, -s), BE-02 Activity dedupe and groups,
+  BE-03 upload retries and Retry all, BE-04 badge, BE-05 states, 2.0.0-t Mark as unread, UX-22 web right-click menus
+  with Share › and ⋯, UX-25 web keep-place and Back to top, the pre-deploy minors. No composer or npm change.
+- **Backup:** ~/echoledger-backups/pre-1125-20261124-190716 (db.sql.gz, web.tgz, env.backup, SHA256SUMS).
+- **Rehearsal:** on a copy of that dump on the Mac, 2026_12_30_000001 and 2026_12_31_000001 up, down, up; every
+  2.0.0-r-activity and -retry check 1; counts unchanged; the local dump deleted.
+- **Live:** down 19:09:30 → up 19:10:36 UTC; migrate --force ran both (batch 24); 0 pending. Checks: /app/login 200,
+  /api/config, /api/views and /api/badge 401, /.env 403; no new log errors. Counts: 3 users, 328 sessions,
+  281 transcripts, failed_jobs 53 (unchanged); notifications 306 → 298 (the dedupe merged 8 repeats into their first).
+- **Decision 5 done:** the owner (super admin) is on the People list of v21_aftercall_notify, v21_aftercall_card,
+  v21_panel_flyout, v21_zoom and v21_preview_pane, each still "Off — only the lists"; v21_win_titlebar untouched;
+  checked: the owner resolves all five on, the two other accounts none. Audit-logged.
+- **W-INC-1125 (S0), found by deploy/check-php.sh after the deploy:** PHP 8.4 had lost sodium again (CLI and web), so
+  recordings couldn't be encrypted: sodium errors in the log from 2026-11-23 13:04 to 2026-11-24 19:06 UTC, and no
+  recording reached "ready" after 03:13 UTC on 11-24 (10 left "assembling"). Fixed at 19:12 UTC with the same
+  `selectorctl --interpreter=php --version=8.4 --enable-user-extensions=sodium` (config backed up first);
+  check-php.sh then PASS for CLI and web. The 5-minute `recordings:recover` job takes the stuck ones; the apps'
+  upload retries resend the rest. Root cause outside the code: the hosting's PHP selector drops user extensions
+  (twice in two days). Follow-up: an alert to the owner when the scheduled PHP check fails (EL-Backend).

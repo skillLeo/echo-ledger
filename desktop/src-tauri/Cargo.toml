@@ -115,6 +115,9 @@ windows = { version = "0.62.2", features = [
   "Storage_Streams",
   "Foundation_Collections",
   "Win32_UI_Shell",
+  # FIX-12: the Jump List's Tasks (IObjectCollection, a task's title as a PROPVARIANT).
+  "Win32_UI_Shell_Common",
+  "Win32_System_Variant",
   "Win32_System_DataExchange",
   "Win32_System_Ole",
 ] }

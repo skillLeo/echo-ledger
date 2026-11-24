@@ -321,7 +321,9 @@ async function keyboardRows(page) {
 async function selfTest(base) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=light`);
-  await page.waitForTimeout(1500);
+  // The rows, not a guess: on a busy computer 1.5 s wasn't enough and the self-test found no row title.
+  await page.waitForSelector(".item-title", { timeout: 60_000 });
+  await page.waitForTimeout(500);
   const caught = await page.evaluate(({ problems, covered, textProblems }) => {
     const run = (src) => (0, eval)(`(${src})`)();
     const results = {};
@@ -408,7 +410,10 @@ try {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message.split("\n")[0]));
     await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}${lang === "ur" ? "&lang=ur" : ""}`);
-    await page.waitForTimeout(1500);
+    // Drawn first (the root has content), then a moment for fonts and layout to settle: a fixed wait alone missed the
+    // first paint on a busy computer.
+    await page.waitForFunction(() => (document.getElementById("root")?.textContent ?? "").trim().length > 0, null, { timeout: 60_000 }).catch(() => undefined);
+    await page.waitForTimeout(1000);
     try {
       if (step) await step(page);
     } catch (e) {
@@ -423,7 +428,9 @@ try {
     if (name === "recording-scrolled") {
       const back = await page.evaluate(() => {
         const el = document.querySelector(".detail .detail-back");
-        if (!el || getComputedStyle(el).display === "none") return "ok";
+        const narrow = !!document.querySelector(".app.narrow .library.has-open");
+        // On a narrow page the recording takes the list's place: no Back there is a fault, not a pass.
+        if (!el || getComputedStyle(el).display === "none") return narrow ? "no Back on a narrow recording page" : "ok";
         const r = el.getBoundingClientRect();
         const top = r.bottom > 0 && r.top < innerHeight ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
         return top && (el === top || el.contains(top)) ? "ok" : `Back out of sight after scrolling (${Math.round(r.top)} px)`;
