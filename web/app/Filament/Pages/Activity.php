@@ -16,6 +16,7 @@ use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\UploadRetries;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -80,6 +81,16 @@ class Activity extends Page
     protected function getHeaderActions(): array
     {
         return [
+            // Since 2.0.0-r (BE-03): the devices hold the files, so Retry all asks them, as the apps' Retry all does.
+            Action::make('retryAll')->label(__('Retry all uploads'))->color('gray')->icon(Heroicon::OutlinedArrowPath)
+                ->visible(fn (): bool => ($user = $this->user()) instanceof User && UploadRetries::failedCount($user) > 0)
+                ->action(function (): void {
+                    $user = $this->user();
+                    if ($user instanceof User) {
+                        $count = app(UploadRetries::class)->requestAll($user)['count'];
+                        Notification::make()->title(trans_choice('Your devices will send 1 recording again.|Your devices will send :count recordings again.', $count))->success()->send();
+                    }
+                }),
             Action::make('markAllRead')->label(__('Mark all as read'))->color('gray')->icon(Heroicon::OutlinedCheck)
                 ->visible(fn (): bool => $this->user()?->unreadNotifications()->exists() === true)
                 ->action(fn () => $this->user()?->unreadNotifications()->update(['read_at' => now()])),

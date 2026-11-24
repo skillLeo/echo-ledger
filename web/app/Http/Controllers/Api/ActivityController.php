@@ -8,10 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\ActivityFeed;
+use App\Services\UploadRetries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Validation\Rule;
 
 /** The activity centre for device apps (since v1.1, plan B18). */
 final class ActivityController extends Controller
@@ -33,6 +34,8 @@ final class ActivityController extends Controller
         return response()->json([
             'data' => $items->map(fn (DatabaseNotification $n): array => ActivityFeed::payload($n))->values(),
             'unread_count' => $user->unreadNotifications()->count(),
+            // Since 2.0.0-r (BE-03): the person's latest Retry all; an app newer than its own last run retries.
+            'retry_requested_at' => UploadRetries::requestedAt($user),
         ]);
     }
 
@@ -53,7 +56,18 @@ final class ActivityController extends Controller
             }
         }
 
-        return response()->json(['data' => $groups]);
+        return response()->json(['data' => $groups, 'retry_requested_at' => UploadRetries::requestedAt($user)]);
+    }
+
+    /**
+     * POST /api/activity/retry-all (contract 2.0.0-r, BE-03): `{"group": "upload_failed"}`. The devices hold the files,
+     * so this asks them: `retry_requested_at` becomes now, and each app retries every failed upload it holds once.
+     */
+    public function retryAll(Request $request, UploadRetries $retries): JsonResponse
+    {
+        $request->validate(['group' => ['required', 'string', Rule::in(self::GROUPS)]]);
+
+        return response()->json($retries->requestAll($this->owner($request)), 202);
     }
 
     /** POST /api/activity/read — the given ids, or everything when no ids are sent. */

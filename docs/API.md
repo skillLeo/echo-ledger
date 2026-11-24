@@ -2429,7 +2429,7 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 - `GET /api/config` gains `"upload_retry": {"after_seconds": [60, 300, 1800], "then": ["network_change", "app_start"]}`.
   The apps retry a failed upload on their own 1, 5 and 30 minutes after it failed, and after that on a network change
   or when the app starts. The server says it, so every app follows the same schedule; the uploads stay the device's.
-- `POST /api/activity/retry-all` — `library:read`: takes `{"group": "upload_failed"}` and answers
+- `POST /api/activity/retry-all` — `sessions:write`, throttled (6/min/device): takes `{"group": "upload_failed"}` and answers
   `202 {"retry_requested_at": "…", "count": 3}`. Only the devices hold the files, so the server asks them: from then on,
   `GET /api/activity` and `GET /api/activity/groups` carry `"retry_requested_at"` (the person's latest Retry all, or
   `null`). An app that sees it newer than its own last run retries every failed upload it holds at once, then
