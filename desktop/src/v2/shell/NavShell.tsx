@@ -7,7 +7,6 @@ import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { BrandMark } from "../../components/BrandMark";
 import { initials } from "../settings/initials";
-import { lastAccountHere } from "../library/myViews";
 import { PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
 import type { ShellStatus } from "./status";
 
@@ -21,19 +20,14 @@ const PIN_KEY = "echoledger-nav-pinned-small";
 /**
  * A layout choice is each account's own on this computer (`account`: the server, the email and the workspace, as for My
  * views). While the account isn't known it is kept in memory only: nothing is read or written. What an earlier version
- * kept for the whole computer (`key` alone) moves, once, to the account that used this computer last (My views' record
- * of it); any other account starts from the defaults.
+ * kept for the whole computer (`key` alone) can't be told apart by account, so it is removed, unread, once an account is
+ * known: every account starts from the defaults.
  */
 function readKept(key: string, account: string | null | undefined): string | null {
   if (!account) return null;
   try {
-    const own = localStorage.getItem(`${key}:${account}`);
-    if (own !== null) return own;
-    const old = localStorage.getItem(key);
-    if (old === null || lastAccountHere() !== account) return null;
-    localStorage.setItem(`${key}:${account}`, old);
-    localStorage.removeItem(key);
-    return old;
+    if (localStorage.getItem(key) !== null) localStorage.removeItem(key);
+    return localStorage.getItem(`${key}:${account}`);
   } catch {
     return null;
   }
