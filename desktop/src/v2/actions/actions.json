@@ -115,7 +115,7 @@
     { "id": "view.delete", "label": "Delete view…", "icon": "TrashIcon", "destructive": true, "confirm": "Delete this view? Its recordings stay in your Library; only the saved filters go." },
     { "id": "label.showRecordings", "label": "Show recordings", "icon": "LabelIcon" },
     { "id": "label.colour", "label": "Colour", "submenu": true },
-    { "id": "label.delete", "label": "Delete label", "icon": "TrashIcon", "destructive": true },
+    { "id": "label.delete", "label": "Delete label…", "icon": "TrashIcon", "destructive": true, "confirm": "Delete this label? Its recordings stay; only the label goes." },
     { "id": "trash.empty", "label": "Empty trash…", "icon": "TrashIcon", "destructive": true, "confirm": "Empty the trash? Its recordings can't be brought back." },
     { "id": "trash.restore", "label": "Restore", "icon": "RefreshIcon", "appliesTo": "oneOrMany" },
 
