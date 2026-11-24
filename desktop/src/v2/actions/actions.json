@@ -81,7 +81,7 @@
     { "id": "go.myViews", "label": "My views", "menu": "Go", "submenu": true },
     { "id": "go.recordPage", "label": "Record page", "icon": "HomeIcon" },
 
-    { "id": "recording.open", "label": "Open", "menu": "Recording", "appliesTo": "one", "mac": "↩", "win": "Enter" },
+    { "id": "recording.open", "label": "Open", "menu": "Recording", "icon": "TranscriptIcon", "appliesTo": "one", "mac": "↩", "win": "Enter" },
     { "id": "recording.details", "label": "Recording details", "menu": "Recording", "icon": "InfoIcon", "appliesTo": "one", "mac": "⌘I", "win": "Alt+Enter" },
     { "id": "recording.playPause", "label": "Play", "menu": "Recording", "appliesTo": "one", "mac": "Space", "win": "Space", "when": ["notTyping", "hasAudio"], "state": { "key": "playing", "on": "Pause" } },
     { "id": "recording.skipBack", "label": "Skip back 10 seconds", "menu": "Recording", "appliesTo": "one", "mac": "⌘←", "win": "Ctrl+←", "when": ["notTyping", "hasAudio"] },
