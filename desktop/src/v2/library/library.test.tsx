@@ -459,6 +459,11 @@ describe("LibraryV2", () => {
       respond("session_detail", { playback_url: null });
       await show();
       expect(screen.getByRole("list", { name: "Recordings" })).toHaveTextContent("No audio");
+      // Grey like the other states: only Failed · Retry is red on a row (PLAN_V2_1_POLISH section 1).
+      const state = screen.getByRole("list", { name: "Recordings" }).querySelector(".el-rec-state[data-state=no_audio]");
+      expect(state).toHaveClass("el-rec-state--quiet");
+      expect(state).not.toHaveClass("el-rec-state--danger");
+      expect(rowModel(quiet, NOW).state).toMatchObject({ key: "no_audio", tone: "quiet" });
       fireEvent.click(screen.getByRole("button", { name: "Quiet call" }));
       await act(flushAsync);
       expect(screen.getByRole("region", { name: "Nothing was heard" })).toBeInTheDocument();

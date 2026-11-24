@@ -15,7 +15,7 @@ import { ScreensMark } from "./screens";
 
 const AVATAR_ICONS = { mic: Icons.MicIcon, calendar: Icons.CalendarIcon, person: Icons.UserIcon, file: Icons.WaveIcon } as const;
 
-/** Line 2's words: the first words, or the state (grey; Failed · Retry and No audio in the danger colour). */
+/** Line 2's words: the first words, or the state (grey; only Failed · Retry is in the danger colour, with its icon). */
 export function RowMetaText({ r }: { r: Pick<RowModel, "meta" | "state" | "converting"> }) {
   const tone = r.state?.tone === "danger" ? " el-rec-state--danger" : r.state ? " el-rec-state--quiet" : "";
   return (

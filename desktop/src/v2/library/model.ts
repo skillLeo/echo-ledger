@@ -61,7 +61,7 @@ export function dayGroups(items: LibraryItem[], now: Date = new Date()): { label
 /**
  * A row's state, in the glossary's words (docs/PLAN_V2_1_POLISH.md section 1; contract 2.0.0-r `facets.state`): Audio
  * only, Transcribing…, Failed · Retry (the only red on a row), Waiting to upload, Waiting (a call waiting for the person's
- * choice after it), and No audio (nothing was heard: Retry would not help). A transcribed recording has none: its row
+ * choice after it), and No audio, grey too (nothing was heard: Retry would not help). A transcribed recording has none: its row
  * shows its first words.
  */
 export type RowStateKey = "audio_only" | "transcribing" | "failed" | "no_audio" | "waiting_to_upload" | "waiting";
@@ -73,7 +73,7 @@ const SERVER_STATES = new Set(["audio_only", "transcribing", "failed", "waiting_
 
 /** A recording's state (null: transcribed): the server's `facets.state` when it sent one, else from its one Status. */
 export function rowState(item: LibraryItem): RowState | null {
-  const state = (key: RowStateKey): RowState => ({ key, text: STATE_WORDS[key], tone: key === "failed" || key === "no_audio" ? "danger" : "quiet" });
+  const state = (key: RowStateKey): RowState => ({ key, text: STATE_WORDS[key], tone: key === "failed" ? "danger" : "quiet" });
   if (item.transcript?.final_error_code === "no_audio") return state("no_audio");
   const sent = facetsOf(item)?.state;
   if (sent === "transcribed") return null;
