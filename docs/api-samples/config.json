@@ -241,7 +241,8 @@
         "v21_aftercall_card": false,
         "v21_panel_flyout": false,
         "v21_zoom": false,
-        "v21_preview_pane": false
+        "v21_preview_pane": false,
+        "v21_win_titlebar": false
     },
     "ui_classic": false,
     "ui_design": {
