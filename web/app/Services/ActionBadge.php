@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Notifications\DatabaseNotification;
 
 /**
@@ -17,9 +18,6 @@ use Illuminate\Notifications\DatabaseNotification;
 final class ActionBadge
 {
     public const UPGRADE_REPLIES = ['upgrade_approved', 'upgrade_declined', 'upgrade_receipt_requested'];
-
-    /** How many unread notifications are read for the number (newest first): more than "99+" ever needs. */
-    private const LOOK_AT = 200;
 
     /**
      * A problem the person has to look at: the phone's rule (fail, error, problem), the monthly limit reached and, since
@@ -57,11 +55,30 @@ final class ActionBadge
      */
     public function badge(User $user, int $workspaceId): array
     {
-        $kinds = $user->unreadNotifications()->latest()->limit(self::LOOK_AT)->get()
-            ->map(fn (DatabaseNotification $n): ?string => ActivityFeed::kindOf($n))->filter(fn (?string $kind): bool => self::needsAction($kind));
-        $count = $kinds->count() + ($workspaceId > 0 ? app(LibraryOrganiser::class)->waitingCount($workspaceId) : 0);
+        // Counted by the database, so the number is exact however many there are, and no item is read (BE-04 review).
+        $count = $this->unread($user, false)->count() + ($workspaceId > 0 ? app(LibraryOrganiser::class)->waitingCount($workspaceId) : 0);
 
-        return ['count' => $count, 'label' => self::label($count), 'tone' => $kinds->contains(fn (?string $kind): bool => self::isFailure($kind)) ? 'danger' : 'accent'];
+        return ['count' => $count, 'label' => self::label($count), 'tone' => $this->unread($user, true)->exists() ? 'danger' : 'accent'];
+    }
+
+    /**
+     * The person's unread items that need action (needsAction's rule, in SQL on the item's kind), or only the failures
+     * (isFailure's).
+     *
+     * @return MorphMany<DatabaseNotification, User>
+     */
+    private function unread(User $user, bool $failuresOnly): MorphMany
+    {
+        $kind = 'data->viewData->kind';
+        $query = $user->unreadNotifications();
+        $query->where(function ($q) use ($kind, $failuresOnly): void {
+            $q->where($kind, 'like', '%fail%')->orWhere($kind, 'like', '%error%');
+            if (! $failuresOnly) {
+                $q->orWhere($kind, 'like', '%problem%')->orWhereIn($kind, ['budget_reached', 'missed_recording', ...self::UPGRADE_REPLIES]);
+            }
+        });
+
+        return $query;
     }
 
     /** Nothing at 0, the number up to 99, then "99+" (since 2.0.0-r; "9+" above nine before). */

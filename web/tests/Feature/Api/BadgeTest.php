@@ -65,11 +65,26 @@ it('counts what needs action and the calls waiting, the same number as the web c
     expect(badgeOf($me))->toBe(['count' => 1, 'label' => '1', 'tone' => 'accent']);
 });
 
-it('says 99+ above 99, and the count stays the number', function () {
+it('says 99+ above 99, and the count stays the number, exact above 200 too', function () {
     $me = Fx::user();
     badgePost($me, 'transcript_failed', 101);
-
     expect(badgeOf($me))->toBe(['count' => 101, 'label' => '99+', 'tone' => 'danger']);
+
+    badgePost($me, 'missed_recording', 130);
+    badgePost($me, 'transcript_ready', 40);
+    expect(badgeOf($me))->toBe(['count' => 231, 'label' => '99+', 'tone' => 'danger']);
+});
+
+it('is red only while a failure is unread among what it counts', function () {
+    $me = Fx::user();
+    badgePost($me, 'missed_recording');
+    badgePost($me, 'upgrade_approved');
+    expect(badgeOf($me))->toBe(['count' => 2, 'label' => '2', 'tone' => 'accent']);
+
+    badgePost($me, 'upload_failed');
+    expect(badgeOf($me)['tone'])->toBe('danger');
+    $me->unreadNotifications()->get()->filter(fn ($n): bool => ActivityFeed::kindOf($n) === 'upload_failed')->each->markAsRead();
+    expect(badgeOf($me))->toBe(['count' => 2, 'label' => '2', 'tone' => 'accent']);
 });
 
 it('counts only the person\'s own: a teammate\'s and another workspace\'s never show', function () {
