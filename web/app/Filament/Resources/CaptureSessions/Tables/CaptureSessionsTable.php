@@ -162,15 +162,17 @@ final class CaptureSessionsTable
                 // Since v1.6 (P5.3): in Failed uploads, Retry where something here can fix it, and Delete.
                 ...self::failedActions(),
                 // UX-22: the new Library's ⋯ opens the row's one menu, the same as a right-click and Shift+F10
-                // (filament.v2.context-menu-script); WhatsApp is under its Share ›.
-                ...(ConsoleV2::library() ? [self::rowMenuAction()] : []),
-                ActionGroup::make([
-                    ViewAction::make()->label(__('Open')),
-                    self::renameAction(),
-                    // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
-                    WhatsAppActions::send(),
-                    DeleteAction::make()->label(__('Delete'))->modalDescription(__('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()])),
-                ])->label(__('More'))->tooltip(__('More'))->color('gray')->hidden(fn (): bool => ConsoleV2::library()),
+                // (filament.v2.context-menu-script; WhatsApp is under its Share ›). Its Delete stays for a phone's left
+                // swipe (filament.v2.library-swipe), which asks first, and is not drawn.
+                ...(ConsoleV2::library() ? [self::rowMenuAction(), self::rowDeleteAction()->extraAttributes(['hidden' => true])] : [
+                    ActionGroup::make([
+                        ViewAction::make()->label(__('Open')),
+                        self::renameAction(),
+                        // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
+                        WhatsAppActions::send(),
+                        self::rowDeleteAction(),
+                    ])->label(__('More'))->tooltip(__('More'))->color('gray'),
+                ]),
             ])
             // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
             ->toolbarActions(ConsoleAccess::readOnly() ? [] : self::bulkBar())
@@ -838,6 +840,12 @@ final class CaptureSessionsTable
                 app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
                 Notification::make()->title(__('Renamed to “:title”', ['title' => $record->displayTitle()]))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
             });
+    }
+
+    /** A row's Delete, with its question: classic's More, and the new Library's left swipe on a phone. */
+    public static function rowDeleteAction(): DeleteAction
+    {
+        return DeleteAction::make()->label(__('Delete'))->modalDescription(__('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()]));
     }
 
     /**

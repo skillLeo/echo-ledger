@@ -290,8 +290,10 @@ it('leaves the person\'s own selection as it was after a menu on another row, do
 it('opens the same menu from the row\'s ⋯ as from a right-click: Filament\'s group is gone from the new Library\'s rows', function () {
     $page = Livewire::test(ListCaptureSessions::class);
     $actions = collect($page->instance()->getTable()->getRecordActions());
-    expect($actions->filter(fn ($a): bool => $a instanceof Action)->map(fn (Action $a): string => (string) $a->getName())->values()->all())->toContain('rowMenu')
-        ->and($actions->filter(fn ($a): bool => $a instanceof ActionGroup)->every(fn (ActionGroup $g): bool => $g->isHidden()))->toBeTrue();
+    // ⋯, and the swipe's Delete (not drawn); no group.
+    expect($actions->filter(fn ($a): bool => $a instanceof Action)->map(fn (Action $a): string => (string) $a->getName())->values()->all())->toContain('rowMenu', 'delete')
+        ->and($actions->filter(fn ($a): bool => $a instanceof ActionGroup)->all())->toBe([])
+        ->and($actions->first(fn ($a): bool => $a instanceof Action && $a->getName() === 'delete')->getExtraAttributes())->toHaveKey('hidden', true);
     $html = $page->html();
     expect($html)->toContain('window.elV2ContextMenu.openFromButton($el, $event)')->toContain('data-row-menu');
 
