@@ -488,10 +488,11 @@ describe("My views in the sidebar and the Library", () => {
     await act(flushAsync);
     expect(nav().getByRole("button", { name: "Unread, 1" })).toHaveAttribute("aria-current", "page");
     expect(rows()).toEqual(["wa2"]);
-    fireEvent.keyDown(window, { key: "7", code: "Digit7", altKey: true });
+    // Five library views since v2.1 (Audio only took in Not transcribed), so the first of My views is Alt+6.
+    fireEvent.keyDown(window, { key: "6", code: "Digit6", altKey: true });
     await act(flushAsync);
     expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
-    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+7");
+    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+6");
     // Typed in a field, Alt+1 is the field's (a character on some keyboards), never a view.
     const field = screen.getByRole("searchbox", { name: "Search recordings" });
     field.focus();

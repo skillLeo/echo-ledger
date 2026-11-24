@@ -1,13 +1,14 @@
 // Home in the new look (ui_v2.home, IA 1): the status strip, the get-started checklist until everything is done, what
 // needs action (failed uploads, calls waiting for a decision, untranscribed recordings, missed calls), the last five
 // recordings and the month's minutes. Everything comes from data the app already reads.
+import { RowMetaText } from "../library/RecordingRow";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type LibraryItem, type SkippedItem } from "../../lib/ipc";
 import { useReadyReport } from "../../views/main/ReadyCheck";
 import { accessOf, usePermissions } from "../../views/main/Permissions";
 import { permissionKinds } from "../setup/SetupHealth";
 import { useEntitlements } from "../../lib/entitlements";
-import { Badge, Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
+import { Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
 import { isUntranscribed, rowModel } from "../library/model";
 import { minutesLine } from "../settings/AccountCard";
@@ -186,8 +187,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
               {recent.map((item) => {
                 const r = rowModel(item);
                 return (
-                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
+                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={<RowMetaText r={r} />}
+            
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     onClick={() => onOpenRecording(item.id)} />
                 );

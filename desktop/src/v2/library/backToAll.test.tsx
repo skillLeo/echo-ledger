@@ -1,7 +1,8 @@
 // The way back to all recordings (PLAN_NAV_3_LEVELS §0): "All recordings" first and chosen at the start; from every
-// view, the sidebar's "Library" and the breadcrumb's "Library" both go back to All recordings with the filters and the
-// search cleared; Clear all whenever a filter is on; Back and Forward (⌘[ ⌘], the mouse's side buttons) walk the
-// places shown with their filters and search.
+// view, the sidebar's "All recordings" goes back to All recordings with the filters and the search cleared (the rail's
+// Library pressed again does the same: navShell.test.tsx); Clear all whenever a filter is on; Back and Forward (⌘[ ⌘],
+// the mouse's side buttons) walk the places shown with their filters and search. Since v2.1 there are no breadcrumbs:
+// the title row says where (docs/PLAN_V2_1_POLISH.md UX-05, UX-20).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
@@ -52,7 +53,6 @@ function App() {
   );
 }
 const nav = () => within(screen.getByRole("navigation", { name: "Main" }));
-const crumbs = () => within(screen.getByRole("navigation", { name: "Breadcrumbs" }));
 const rows = () => [...(screen.queryByRole("list", { name: "Recordings" })?.querySelectorAll<HTMLButtonElement>("button[data-row-id]") ?? [])].map((b) => b.dataset.rowId);
 const title = () => screen.getByRole("heading", { level: 1 });
 const search = () => screen.queryByRole("searchbox", { name: "Search recordings" });
@@ -86,18 +86,18 @@ describe("the way back to all recordings", () => {
     viewsStore.use("https://ledger.example.test|me@example.test|1");
   });
 
-  it("All recordings is first in the Library and chosen at the start; the Library says Library / All recordings", async () => {
+  it("All recordings is first in the Library and chosen at the start; no breadcrumbs, the title says where", async () => {
     render(<App />);
     await settle();
     const views = within(nav().getByRole("list", { name: "Library views" })).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(views[0]).toBe("All recordings, 3");
-    expect(crumbs().getByRole("button", { name: "Library" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Breadcrumbs" })).toBeNull();
     atAll();
     // No "Inbox" anywhere: recordings in no project are Project › No project.
     expect(document.body).not.toHaveTextContent(/Inbox/);
   });
 
-  it("from every view, the panel's All recordings and the breadcrumb's Library both go back to All recordings, filters and search cleared", async () => {
+  it("from every view, the panel's All recordings goes back to All recordings, filters and search cleared", async () => {
     render(<App />);
     await settle();
     await act(async () => {
@@ -108,18 +108,16 @@ describe("the way back to all recordings", () => {
       ["Needs you", () => nav().getByRole("button", { name: /^Needs you, / })],
       ["Unread", () => nav().getByRole("button", { name: /^Unread, / })],
       ["Important", () => nav().getByRole("button", { name: /^Important, / })],
-      ["Not transcribed", () => nav().getByRole("button", { name: /^Not transcribed, / })],
       ["Audio only", () => nav().getByRole("button", { name: /^Audio only, / })],
       ["WhatsApp", () => within(nav().getByRole("list", { name: "My views" })).getByRole("button", { name: "WhatsApp" })],
       ["Clients", () => within(nav().getByRole("list", { name: "Labels" })).getByRole("button", { name: /^Clients, / })],
       ["Trash", () => nav().getByRole("button", { name: "Trash" })],
     ];
     for (const [name, place] of places) {
-      for (const way of ["sidebar", "breadcrumb"] as const) {
+      for (let twice = 0; twice < 2; twice++) {
         fireEvent.click(place());
         await settle();
         expect(title(), name).toHaveTextContent(new RegExp(`^${name}`));
-        expect(crumbs().getByRole("button", { name: "Library" })).toBeInTheDocument();
         if (search()) {
           // A filter and a search on as well.
           fireEvent.change(search()!, { target: { value: "zz" } });
@@ -130,8 +128,7 @@ describe("the way back to all recordings", () => {
           expect(screen.getByRole("group", { name: "Filters on" })).toBeInTheDocument();
         }
         // The panel's All recordings (the rail's Library pressed again does the same: navShell.test.tsx).
-        if (way === "sidebar") fireEvent.click(nav().getByRole("button", { name: /^All recordings, / }));
-        else fireEvent.click(crumbs().getByRole("button", { name: "Library" }));
+        fireEvent.click(nav().getByRole("button", { name: /^All recordings, / }));
         await settle();
         atAll();
       }

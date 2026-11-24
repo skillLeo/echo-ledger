@@ -1,6 +1,7 @@
 // A project's Recordings tab in the new look, with everything today's has: search (titles, and what was said in its
 // transcripts), the sort, "Include its folders", its folders, dragging a recording onto another project in the
 // sidebar (moved there), and its filing rules.
+import { RowMetaText } from "../library/RecordingRow";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type ClientFolder, type LibraryItem, type SearchResult } from "../../lib/ipc";
 import { recordingName, searchItems, sortItems, type SortKey } from "../../lib/library";
@@ -8,7 +9,7 @@ import { projectRecordings } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
 import { timestamp } from "../../lib/format";
-import { Badge, Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
+import { Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
 import { dayGroups, rowModel } from "../library/model";
 import { ScreensMark } from "../library/screens";
 
@@ -58,8 +59,8 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
     const r = rowModel(item);
     const inFolder = item.client && item.client.id !== project.id ? item.client.name : null;
     return (
-      <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={inFolder ? `${inFolder} · ${r.meta}` : r.meta}
-        badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
+      <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={<>{inFolder ? `${inFolder} · ` : null}<RowMetaText r={r} /></>}
+ mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
         endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
         onPointerDown={onMoveRecordings ? (e) => beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title]) }), onMoveRecordings) : undefined}
         onClick={() => { if (!dragJustEnded()) onOpenRecording(item.id); }} />

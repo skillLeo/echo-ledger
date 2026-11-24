@@ -14,7 +14,7 @@ import type { LibraryScope } from "./scope";
 import { useSyncClock } from "./syncClock";
 
 const VIEW_ICONS: Record<LibraryViewId, IconType> = {
-  all: Icons.LibraryIcon, needs: Icons.ErrorIcon, unread: Icons.MailIcon, important: Icons.StarIcon, not_transcribed: Icons.TranscriptIcon, audio_only: Icons.WaveIcon,
+  all: Icons.LibraryIcon, needs: Icons.ErrorIcon, unread: Icons.MailIcon, important: Icons.StarIcon, audio_only: Icons.WaveIcon,
 };
 /** A group of the sidebar folded or open, kept on this computer (each group by its own key). */
 export function useFolded(key: string, start = false): [boolean, () => void] {

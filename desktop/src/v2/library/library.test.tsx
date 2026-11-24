@@ -5,7 +5,7 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondW
 import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { forgetPictures } from "../../lib/screens";
-import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
+import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowDuration, rowModel, rowWhen, TIME_ONLY_GROUPS, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
 import type { LibraryScope } from "./scope";
 
@@ -55,14 +55,44 @@ describe("the Library's rules", () => {
     expect(dayGroups(viewItems(ITEMS, "all", "", NOW), NOW).map((g) => [g.label, g.items.length])).toEqual([["Today", 3], ["Yesterday", 1]]);
   });
 
-  it("a row: who, the first words or the state, the time today or the date before, and the length", () => {
-    expect(rowModel(ITEMS[0], NOW)).toMatchObject({ title: "Bilal Qureshi · Qureshi Textiles", meta: "Payment terms for the March shipment", badge: null, when: "11:42 am", duration: "18:24", app: "whatsapp" });
+  it("a row: who, the first words or the state in the glossary's words, when, and how long (UX-06)", () => {
+    expect(rowModel(ITEMS[0], NOW)).toMatchObject({ title: "Bilal Qureshi · Qureshi Textiles", meta: "Payment terms for the March shipment", state: null, when: "11:42 am", duration: "18m 24s", app: "whatsapp", kind: "call" });
     expect(rowModel(ITEMS[0], NOW).screens).toBe(3);
-    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ meta: "Voice note", badge: { tone: "warning", text: "Untranscribed" }, screens: 0 });
-    expect(rowModel(ITEMS[2], NOW)).toMatchObject({ meta: "Phone call · Transcription failed", badge: { tone: "danger", text: "Failed" } });
-    expect(rowModel(ITEMS[3], NOW).when).toBe("16 Nov");
+    // docs/PLAN_V2_1_POLISH.md section 1: Audio only, Transcribing…, Failed · Retry (the only red), Waiting to upload.
+    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ title: "Voice note", meta: "Audio only", state: { key: "audio_only", tone: "quiet" }, screens: 0, kind: "voice_note" });
+    expect(rowModel(ITEMS[2], NOW)).toMatchObject({ meta: "Failed · Retry", state: { key: "failed", tone: "danger" } });
     const transcribing = makeItem("t", { status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } });
-    expect(rowModel(transcribing, NOW)).toMatchObject({ meta: "Zoom · Transcribing…", badge: null });
+    expect(rowModel(transcribing, NOW)).toMatchObject({ meta: "Transcribing…", state: { key: "transcribing" }, kind: "meeting" });
+    expect(rowModel(makeItem("u", { status: "uploading", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } }), NOW)).toMatchObject({ meta: "Waiting to upload", state: { key: "waiting_to_upload", tone: "quiet" } });
+    // A call still waiting for the person's choice (the session is `recording`) is Waiting, not Audio only (contract 2.0.0-r).
+    const deciding = makeItem("w", { source_app: "phone_call", status: "recording", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } });
+    expect(rowModel(deciding, NOW)).toMatchObject({ meta: "Waiting", state: { key: "waiting", tone: "quiet" } });
+    // The server's state, when it sent one, is the row's.
+    expect(rowModel({ ...deciding, facets: { state: "audio_only" } } as typeof deciding, NOW)).toMatchObject({ state: { key: "audio_only" } });
+    // Never "Untranscribed" or "Not transcribed", and no chips.
+    for (const item of ITEMS.slice(0, 4)) expect(JSON.stringify(rowModel(item, NOW))).not.toMatch(/untranscribed|not transcribed/i);
+  });
+
+  it("when: the time today, Yesterday, then the date (its year when another); only the time inside a date group", () => {
+    expect(rowModel(ITEMS[3], NOW).when).toBe("Yesterday");
+    expect(rowModel(ITEMS[3], NOW, undefined, true).when).toBe("4:30 pm");
+    expect(rowWhen(at(12, 9), NOW)).toBe("12 Nov");
+    expect(rowWhen(new Date(2025, 10, 12, 9).toISOString(), NOW)).toBe("12 Nov 2025");
+    expect(TIME_ONLY_GROUPS).toEqual(new Set(["date:Today", "date:Yesterday", "date:This week"]));
+  });
+
+  it("how long: 44s, 2m 38s, 1h 04m, never a clock that reads like the time", () => {
+    expect([44_000, 158_000, 3_840_000, 1_104_000, 0].map((ms) => rowDuration(ms))).toEqual(["44s", "2m 38s", "1h 04m", "18m 24s", ""]);
+  });
+
+  it("the name without Call with, an untitled call is an unknown caller, a voice note takes its first words", () => {
+    expect(rowModel(makeItem("c", { title: "Call with +92 300 1234567", source_app: "whatsapp" }), NOW)).toMatchObject({ title: "+92 300 1234567", avatar: { initials: null, icon: "person" } });
+    expect(rowModel(makeItem("o", { title: "Call with Hammad Bhai Uol", source_app: "whatsapp" }), NOW)).toMatchObject({ title: "Hammad Bhai Uol", avatar: { initials: "HU" } });
+    expect(rowModel(makeItem("x", { title: "", source_app: "phone_call" }), NOW).title).toBe("Unknown caller");
+    const said = makeItem("v", { title: "Voice note", source_app: "voice_note",
+      transcript: { final_status: "completed", final_transcript_id: "t", live_available: false, preview: "Call the customs agent about the Port Qasim container today" } });
+    expect(rowModel(said, NOW)).toMatchObject({ title: "Call the customs agent about the…", avatar: { icon: "mic" } });
+    expect(rowModel(ITEMS[3], NOW).avatar).toMatchObject({ initials: null, icon: "calendar" });
   });
 });
 
@@ -104,7 +134,7 @@ describe("LibraryV2", () => {
     await show();
     const list = screen.getByRole("list", { name: "Recordings" });
     const row = within(list).getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" });
-    expect(row).toHaveAccessibleDescription(/^3 screens Payment terms for the March shipment.*11:42 am.*18:24/);
+    expect(row).toHaveAccessibleDescription(/^3 screens Payment terms for the March shipment.*11:42 am.*18m 24s/);
     // The screens mark only on a recording with screens.
     expect(within(list).getByRole("button", { name: "Voice note" })).not.toHaveAccessibleDescription(/screen/);
     expect(within(list).getByText("Today")).toBeInTheDocument();
@@ -113,11 +143,11 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("Not transcribed from the sidebar, and Date: Today from the filters, with their counts", async () => {
+  it("Audio only from the sidebar (Not transcribed merged into it), and Date: Today from the filters, with their counts", async () => {
     await show();
-    // Not transcribed: no transcript and none on its way; the failed one is in Needs you (facets.ts).
-    await go({ kind: "view", view: "not_transcribed" });
-    expect(screen.getByRole("heading", { level: 1, name: /^Not transcribed/ })).toHaveTextContent("Not transcribed1");
+    // Audio only: no transcript and none on its way; the failed one is in Needs you (facets.ts).
+    await go({ kind: "view", view: "audio_only" });
+    expect(screen.getByRole("heading", { level: 1, name: /^Audio only/ })).toHaveTextContent("Audio only1");
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["voice"]);
     await go({ kind: "view", view: "needs" });
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["usman"]);

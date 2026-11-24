@@ -104,7 +104,8 @@ describe("Find in the Library", () => {
     await show();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings\s*4$/);
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F /");
-    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search titles, transcripts and projects \(/));
+    // The placeholder names the place, the key at its end (UX-20).
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings (⌘|Ctrl\+)F$/));
     expect(filtersButton()).toHaveAttribute("aria-expanded", "false");
     expect(filtersButton()).toHaveAttribute("aria-keyshortcuts", "F");
     expect(screen.getByRole("button", { name: "Sort & display" })).toHaveAttribute("aria-haspopup", "menu");
@@ -114,9 +115,9 @@ describe("Find in the Library", () => {
     expect(screen.queryByRole("button", { name: "Sync" })).toBeNull();
     // Narrower, the search says less (its box is shorter).
     act(() => setWidth(1100));
-    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings \((⌘|Ctrl\+)F\)$/));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings (⌘|Ctrl\+)F$/));
     act(() => setWidth(900));
-    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search \((⌘|Ctrl\+)F\)$/));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search (⌘|Ctrl\+)F$/));
   });
 
   it("sections with counts that fold and unfold", async () => {
@@ -191,7 +192,7 @@ describe("Find in the Library", () => {
     expect(options("Device")).toEqual(["Phone2", "Desktop2"]);
     expect(options("Project")).toEqual(["Acme2", "No project2"]);
     expect(options("Language")).toEqual(["Urdu2", "English1", "Unknown1"]);
-    expect(options("Status")).toEqual(["Transcribed2", "Not transcribed1", "Processing0", "Failed1"]);
+    expect(options("Status")).toEqual(["Transcribed2", "Audio only1", "In progress0", "Failed1"]);
     expect(options("Labels")).toEqual(["Q41"]);
     expect(options("Marked")).toEqual(["Pinned1", "Important0", "Keep forever0"]);
     expect(options("Bookmarks")).toEqual(["Any bookmark1", "Price1"]);
@@ -227,8 +228,8 @@ describe("Find in the Library", () => {
     expect(options("Source")).toEqual(["WhatsApp2", "Voice notes0", "Zoom0"]);
     expect(options("Device")).toEqual(["Phone2", "Desktop0"]);
     // An option's count is what the list shows with it.
-    expect(options("Status")).toEqual(["Transcribed1", "Not transcribed1", "Processing0", "Failed0"]);
-    fireEvent.click(option("Status", /^Not transcribed/));
+    expect(options("Status")).toEqual(["Transcribed1", "Audio only1", "In progress0", "Failed0"]);
+    fireEvent.click(option("Status", /^Audio only/));
     await followed();
     expect(rows()).toEqual(["c"]);
     expect(tabs().getByRole("tab", { name: /^Calls/ })).toHaveTextContent("Calls1");
@@ -238,6 +239,26 @@ describe("Find in the Library", () => {
     fireEvent.click(section("Status").getByRole("button", { name: "Clear Status" }));
     await followed();
     expect(options("Source")).toEqual(["WhatsApp2", "Voice notes1", "Zoom1"]);
+  });
+
+  it("row 2: Other (an imported file, an app no kind names) shows only while it has recordings, and the tabs add up to All", async () => {
+    const facetime = makeItem("e", { title: "Eman", source_app: "facetime", source_app_label: "FaceTime", source_device: "desktop", started_at: at(18, 8), duration_ms: 90_000, transcript: done("three") });
+    respond("library_list", [...ITEMS, facetime]);
+    respond("library_refresh", [...ITEMS, facetime]);
+    await show();
+    const tabs = () => within(screen.getByRole("tablist", { name: "Kinds of recording" }));
+    // In row 2 (40 px), on its start side; Filters and Sort & display on its end.
+    expect(screen.getByRole("tablist", { name: "Kinds of recording" }).closest(".el-lib-row2")).toContainElement(filtersButton());
+    expect(tabs().getAllByRole("tab").map((t) => t.textContent)).toEqual(["All5", "Calls2", "Meetings1", "Voice notes1", "Other1"]);
+    fireEvent.click(tabs().getByRole("tab", { name: /^Other/ }));
+    expect(rows()).toEqual(["e"]);
+    expect(tabs().getByRole("tab", { name: /^Other/ })).toHaveAttribute("aria-selected", "true");
+    // A search that leaves Other empty keeps its tab while it is open, at 0.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "Ali" } });
+    await followed();
+    expect(tabs().getByRole("tab", { name: /^Other/ })).toHaveTextContent("Other0");
+    fireEvent.click(tabs().getByRole("tab", { name: /^All/ }));
+    expect(tabs().queryByRole("tab", { name: /^Other/ })).toBeNull();
   });
 
   it("an option at 0 is dimmed but can be ticked; each section's Clear; nothing matching says so with Clear filters", async () => {

@@ -41,7 +41,7 @@ export function scopeName(scope: LibraryScope, names: { saved?: (id: string) => 
 export function fromOldView(view: SavedView): { scope: LibraryScope; filters: FilterSpec } {
   switch (view) {
     case "trash": return { scope: { kind: "trash" }, filters: {} };
-    case "untranscribed": return { scope: { kind: "view", view: "not_transcribed" }, filters: {} };
+    case "untranscribed": return { scope: { kind: "view", view: "audio_only" }, filters: {} };
     case "waiting":
     case "failed": return { scope: { kind: "view", view: "needs" }, filters: {} };
     case "today": return { scope: ALL_SCOPE, filters: { date: { op: "is", values: ["today"] } } };

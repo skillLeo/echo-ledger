@@ -15,14 +15,15 @@ import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Button, Card, Dialog, Icon, LabelDot, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
-import { ScreensMark } from "./screens";
-import { binHours, binSentence, isUntranscribed, rowModel, type SavedView } from "./model";
+import { binHours, binSentence, isUntranscribed, rowModel, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
+import { RecordingRow } from "./RecordingRow";
+import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, LIBRARY_TABS, matchesSearch, prepare, searchWords, sourceOf, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, sourceOf, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
@@ -37,7 +38,6 @@ import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove
 import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
-import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
 import { QueueV2 } from "./QueueV2";
 import { useLibraryQueue } from "../../views/main/LibraryQueue";
@@ -82,17 +82,17 @@ const HISTORY_MAX = 50;
 export type LibraryPlaceState = { scope: LibraryScope; spec: FilterSpec; query: string; tab: LibraryTab };
 /** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
 type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
-/** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
- * --el-breakpoint-medium. */
-const WIDE = 1440;
-/** …and with the filters pushing the list (the rail and the place's panel take their room too). */
+/** The search box names its place where it has room: from --el-breakpoint-medium, and with the filters pushing the
+ * list (the rail and the place's panel take their room too) from this width. */
 const WIDE_WITH_PANEL = 1800;
 const NARROW = 1024;
-/** The search's placeholder for the room its box has. */
-function placeholderFor(width: number, filtersBeside: boolean): string {
-  if (width >= (filtersBeside ? WIDE_WITH_PANEL : WIDE)) return `Search titles, transcripts and projects (${MOD}F)`;
-  if (width >= NARROW && !filtersBeside) return `Search recordings (${MOD}F)`;
-  return `Search (${MOD}F)`;
+/**
+ * The search's placeholder (UX-20: it names what it searches): "Search recordings ⌘F"; "Search ⌘F" where its box is
+ * narrow (under 1024 px, or with the filters beside it below WIDE_WITH_PANEL).
+ */
+export function placeholderFor(width: number, filtersBeside: boolean): string {
+  if (width >= (filtersBeside ? WIDE_WITH_PANEL : NARROW)) return `Search recordings ${MOD}F`;
+  return `Search ${MOD}F`;
 }
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -133,8 +133,8 @@ const EMPTY_VIEW: Partial<Record<LibraryViewId, { title: string; body: string }>
   needs: { title: "Nothing needs you", body: "Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here." },
   unread: { title: "You've opened every recording", body: "New recordings show here until you open them." },
   important: { title: "Nothing marked important yet", body: "Recordings you mark important show here." },
-  not_transcribed: { title: "Everything is transcribed", body: "Recordings without a transcript show here." },
-  audio_only: { title: "No audio-only recordings", body: "Calls saved as audio only show here, to transcribe later." },
+  // Since v2.1 one view (Not transcribed merged into it): every recording kept without a transcript.
+  audio_only: { title: "No audio-only recordings", body: "Recordings kept as audio, without a transcript, show here to transcribe later." },
 };
 
 export type LibraryV2Props = {
@@ -595,6 +595,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // place, the filters and the search.
   const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
   const tabCount = useMemo(() => tabCounts(filtered), [filtered]);
+  // Other only while it has recordings, or is open (contract 2.0.0-q: the tabs add up to All).
+  const tabsShown = useMemo(() => shownTabs(tabCount, tab), [tabCount, tab]);
   const shownItems = useMemo(() => [...waitingHere, ...filtered.filter((f) => inTab(f, tab)).map((f) => f.item)], [waitingHere, filtered, tab]);
   // Kept by the window while another place is shown, to come back to as it was.
   const placeNow = useRef(onPlace);
@@ -779,6 +781,28 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     return list.map(({ key: _key, ...item }) => item);
   };
 
+  /**
+   * A row's actions on hover and keyboard focus (UX-06), in place of when and how long: Transcribe for Audio only, Pin or
+   * Unpin, Label, then ⋯ (the whole menu, as a right-click).
+   */
+  const rowActions = (item: LibraryItem, r: RowModel): ReactNode => (
+    <>
+      {r.state?.key === "audio_only" && (
+        <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} aria-label={`Transcribe ${r.title}`} title="Transcribe"
+          onClick={() => setOrganise({ kind: "transcribe", ids: [item.id] })}>Transcribe</Button>
+      )}
+      <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={`${item.pinned ? "Unpin" : "Pin"} ${r.title}`} title={item.pinned ? "Unpin" : "Pin"}
+        onClick={() => void bulk([item.id], item.pinned ? "unpin" : "pin", item.pinned ? "Unpinned" : "Pinned")} />
+      {lists ? (
+        <Menu label={`Label ${r.title}`} button={{ variant: "quiet", size: "sm", icon: Icons.LabelIcon, title: "Label" }}
+          items={() => addToListMenu({ lists, chosen: [item], onToggle: (list, on) => void putInList([item.id], list, on), onNew: () => setNewLabel({ ids: [item.id] }) }).items ?? []} />
+      ) : (
+        <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={`Label ${r.title}`} title="Label" onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
+      )}
+      <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+    </>
+  );
+
   const restore = async (b: BinItem) => {
     try {
       await api.restoreSession(b.id);
@@ -882,7 +906,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setContext({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
   };
   /** A row's checkbox: ticks it (Shift: the range from the last one ticked). */
-  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLInputElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
+  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
 
   /** A row's source logo or label: the list shows only that source, or that label, too (it adds to the section). */
   const quick = (section: Exclude<SectionKey, "date">, value: string) => {
@@ -897,8 +921,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   };
   /**
    * What Save as view keeps (contract 2.0.0-p: filters, search, sort, group, density). Where the list started from a
-   * label, Important or Not transcribed, that is kept as its filter; Needs you, Unread and Audio only have none, so a
-   * view saved there keeps the filters and the search (the dialog says so).
+   * label, Important or Audio only (Status is not transcribed), that is kept as its filter; Needs you and Unread have
+   * none, so a view saved there keeps the filters and the search (the dialog says so).
    */
   const viewSpec = (): ViewSpec => {
     let filters = spec;
@@ -907,10 +931,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     };
     if (labelKey) add("labels", labelKey);
     if (baseView === "important") add("marked", "important");
-    if (baseView === "not_transcribed") add("status", "not_transcribed");
+    if (baseView === "audio_only") add("status", "not_transcribed");
     return { filters, search: query.trim() || null, sort: choice.sort, group: choice.group, density };
   };
-  const unsaved = baseView === "needs" || baseView === "unread" || baseView === "audio_only";
+  const unsaved = baseView === "needs" || baseView === "unread";
   const canSave = filtersOn > 0 || !!query.trim() || (baseView !== "all" && !unsaved) || !!labelKey;
   const changed = !!savedView && JSON.stringify([cleanSpec(spec), query.trim() || null, choice.sort, choice.group])
     !== JSON.stringify([cleanSpec(savedView.spec.filters), savedView.spec.search ?? null, savedView.spec.sort, savedView.spec.group]);
@@ -1073,6 +1097,17 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     </ToastRegion>
   );
 
+  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
+  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
+  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
+  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
+  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
+    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
+  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
+  // The window's title row (UX-20) shows the list's place, its count and the search; a recording opened as its own
+  // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
+  const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
+    : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
   const closeOpen = () => {
     const id = open?.id ?? null;
     setOpenId(null);
@@ -1110,13 +1145,6 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
-  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
-  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
-  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
-  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
-  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
-    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
-  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
   const viewEmpty = scope.kind === "view" ? EMPTY_VIEW[scope.view] : undefined;
   const panelShown = panel && !trash && !choosing;
 
@@ -1128,78 +1156,78 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
             onSaveView={() => setSavingView(true)} canSave={canSave} />
         )}
         <div className="el-page el-page--wide el-lib__main">
-          {choosing ? (
-            <header className="el-lib-toolbar el-selectbar" role="toolbar" aria-label="Selected recordings">
-              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
-                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h1 className="el-title-m el-lib-toolbar__title" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
-              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
-              <div className="el-page__actions el-lib-toolbar__end">
-                <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
-                <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
-                )}
-                <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
-                  onClick={() => deleteOrAsk(pickedIds)} />
-                {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
-                )}
-                <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
-              </div>
-            </header>
-          ) : (
+          {/* UX-05/UX-20: the window's title row shows the place, its count and the one search (usePageTitle). Without
+              it (no title row in this shell) the page keeps a slim header of its own with the same three. */}
+          {!inTitleRow && (
             <header className="el-lib-toolbar">
-              {!trash && layout === "list" && shownIds.length > 0 && (
-                <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
-              )}
-              {/* Library / <the place>: "Library" goes back to All recordings, its filters and search cleared. */}
-              <nav className="el-lib-crumbs" aria-label="Breadcrumbs">
-                <button type="button" className="el-lib-crumbs__root" onClick={() => show(ALL_SCOPE, {}, true)}
-                  title="All recordings, nothing filtered">Library</button>
-                <span className="el-lib-crumbs__sep" aria-hidden="true">/</span>
-              </nav>
               <h1 className="el-title-m el-lib-toolbar__title">
                 <span dir="auto">{title}</span>
                 {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
               </h1>
               {!trash && (
-                <>
-                  <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={placeholderFor(width, panelShown && !drawer)}
-                    className="el-lib-toolbar__search" />
-                  <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
-                    title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
-                    Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
-                  </Button>
-                  <Menu label="Sort & display" items={displayMenu}
-                    button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
-                </>
+                <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
+                  placeholder={placeholderFor(width, panelShown && !drawer)} className="el-lib-toolbar__search" />
               )}
             </header>
           )}
-          {!trash && !choosing && (
-            <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
-              {LIBRARY_TABS.map((t) => (
-                <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
-                  onClick={() => setTab(t)} onKeyDown={(e) => {
-                    const at = LIBRARY_TABS.indexOf(t);
-                    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
-                    const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
-                    if (!step) return;
-                    e.preventDefault();
-                    const next = LIBRARY_TABS[(at + step + LIBRARY_TABS.length) % LIBRARY_TABS.length];
-                    setTab(next);
-                    (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[LIBRARY_TABS.indexOf(next)])?.focus();
-                  }}>
-                  {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
-                </button>
-              ))}
+          {choosing ? (
+            // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings">
+              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
+                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
+              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
+                  onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>
+                  {pickedIds.length > MAX_TRANSCRIBE && !tooMany ? `Transcribe (${MAX_TRANSCRIBE} at a time)` : "Transcribe"}
+                </Button>
+                <Button size="sm" variant="quiet" icon={Icons.MoveIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })}>Move to project</Button>
+                <Button size="sm" variant="quiet" icon={Icons.LabelIcon} disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })}>Label</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="Share or export" button={{ variant: "quiet", size: "sm", icon: Icons.ShareIcon, text: "Export", "aria-label": "Share or export", title: "Share or export" }}
+                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title="Delete (Del)" aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                  onClick={() => deleteOrAsk(pickedIds)}>Delete</Button>
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="More actions" button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
+                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "transcribe", "export", "ai", "delete"]))} />
+                )}
+                <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
+              </div>
+            </div>
+          ) : !trash && (
+            // Row 2 (40 px): the kinds on the start side (Other only while it has recordings), the list's controls on the end.
+            <div className="el-lib-row2">
+              <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
+                {tabsShown.map((t) => (
+                  <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
+                    onClick={() => setTab(t)} onKeyDown={(e) => {
+                      const at = tabsShown.indexOf(t);
+                      const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+                      const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
+                      if (!step) return;
+                      e.preventDefault();
+                      const next = tabsShown[(at + step + tabsShown.length) % tabsShown.length];
+                      setTab(next);
+                      (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
+                    }}>
+                    {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="el-lib-row2__end">
+                <Button size="sm" variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
+                  title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
+                  Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                </Button>
+                <Menu label="Sort & display" items={displayMenu}
+                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+              </div>
             </div>
           )}
           {!trash && !choosing && (filtersOn > 0 || changed) && (
@@ -1298,7 +1326,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
               rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
-            <List label="Recordings">
+            <List label="Recordings" className="el-lib-list">
               {groups.map((g) => [
                 g.label ? (
                   <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
@@ -1310,35 +1338,18 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                     } : undefined} />
                 ) : null,
                 ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                  const r = rowModel(item, undefined, rowViews.summaryFor(item));
+                  // In a date group (Today, Yesterday, This week) a row says only the time: its heading says the day.
+                  const r = rowModel(item, undefined, rowViews.summaryFor(item), TIME_ONLY_GROUPS.has(g.key));
                   const source = sourceOf(item);
                   return (
-                    <ListRow key={item.id} strong title={r.title} compact={density === "compact"}
-                      leading={
-                        <button type="button" className="el-row__source" aria-label={`Show only ${source.label}`} title={`Show only ${source.label}`}
-                          onClick={() => quick("source", source.value)}>
-                          <SourceAvatar item={item} />
-                        </button>
-                      }
-                      meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
-                      badge={r.badge || recovered.has(item.id) ? <>
-                        {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
-                        {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
-                      </> : undefined}
-                      mark={item.pinned || r.screens || item.labels?.length ? <>
-                        {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
-                        {r.screens ? <ScreensMark count={r.screens} /> : null}
-                        {(item.labels ?? []).slice(0, 3).map((l) => [
-                          <button key={l} type="button" className="el-row__label" title={`Show only ${l}`} aria-label={`Show only label ${l}`}
-                            onClick={() => quick("labels", listKey(l))}>
-                            <LabelDot name={l} colour={labelColour(item, l)} decorative /><span dir="auto">{l}</span>
-                          </button>, " "])}
-                      </> : undefined}
-                      endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                      rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                      pick={{ checked: picked.has(item.id), label: `Select ${r.title}`, onToggle: (e) => pickRow(item, e), shown: choosing }}
-                      checked={choosing ? picked.has(item.id) : undefined}
-                      actions={choosing ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+                    <RecordingRow key={item.id} item={item} r={r} compact={density === "compact"} choosing={choosing} picked={picked.has(item.id)}
+                      source={source} onSource={() => quick("source", source.value)}
+                      labels={(item.labels ?? []).map((l) => ({ name: l, key: listKey(l), colour: labelColour(item, l) }))}
+                      onLabel={(key) => quick("labels", key)}
+                      recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}
+                      onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                      onPick={(e) => pickRow(item, e)}
+                      actions={choosing ? undefined : rowActions(item, r)} />
                   );
                 }),
               ])}
