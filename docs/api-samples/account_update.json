@@ -4,7 +4,7 @@
     "email_verified": true,
     "two_factor": false,
     "google": false,
-    "created_at": "2026-11-21T16:00:45+00:00",
+    "created_at": "2026-11-24T13:15:51+00:00",
     "workspace": {
         "id": 1,
         "name": "Personal",
@@ -20,10 +20,12 @@
             "current": true
         }
     ],
-    "avatar_url": "https://echoledger.test/api/avatars/1/1795276846?expires=sample&signature=sample",
-    "avatar_version": 1795276846,
+    "avatar_url": "https://echoledger.test/api/avatars/1/1795526153?expires=sample&signature=sample",
+    "avatar_version": 1795526153,
+    "avatar_color": 1,
     "has_password": true,
     "pending_email": null,
     "pending_email_expires_at": null,
-    "passkeys_available": true
+    "passkeys_available": true,
+    "language": "en"
 }

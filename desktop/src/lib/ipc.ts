@@ -2011,6 +2011,8 @@ export const api = {
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
   /** The person opened this recording (since v1.3): no longer unread, on every device. */
   markOpened: (id: string) => invoke<void>("session_opened", { id }),
+  /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
+  markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */

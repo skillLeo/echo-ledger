@@ -63,8 +63,9 @@ describe("the Library's right-click menus (UX-22)", () => {
     await show();
     fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 40, clientY: 60 });
     const menu = screen.getByRole("menu", { name: "Recording actions" });
-    // Transcribed: no Transcribe; Ask about this, Mark as unread and Share wait for what runs them (left out, not greyed).
-    expect(groups(menu)).toEqual([["Open"], ["Pin", "Mark as important", "Labels", "Move to project"], ["Rename…", "Export"], ["Move to trash"]]);
+    // Transcribed: no Transcribe; Ask about this and Share wait for what runs them (left out, not greyed). Read: Mark as
+    // unread (contract 2.0.0-t).
+    expect(groups(menu)).toEqual([["Open"], ["Pin", "Mark as important", "Mark as unread", "Labels", "Move to project"], ["Rename…", "Export"], ["Move to trash"]]);
     expect(within(menu).queryByText(/Select|Keep forever|Copy for AI|WhatsApp/)).toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Move to trash" })).toHaveClass("el-menu__option--danger");
     // No title for one recording.
@@ -85,7 +86,7 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
     const menu = screen.getByRole("menu", { name: "Actions for 2 recordings" });
     expect(menu.querySelector(".el-menu__title")).toHaveTextContent("2 recordings");
-    expect(groups(menu)).toEqual([["Transcribe"], ["Pin", "Mark as important", "Labels", "Move to project"], ["Export"], ["Move to trash"]]);
+    expect(groups(menu)).toEqual([["Transcribe"], ["Pin", "Mark as important", "Mark as unread", "Labels", "Move to project"], ["Export"], ["Move to trash"]]);
     fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "Mark as important" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "voice"], action: "important", clientId: null, label: null }]);
@@ -97,7 +98,7 @@ describe("the Library's right-click menus (UX-22)", () => {
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
     const more = screen.getByRole("menu", { name: "More for Bilal Qureshi" });
-    expect(words(more)).toEqual(["Open", "Pin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
+    expect(words(more)).toEqual(["Open", "Pin", "Mark as important", "Mark as unread", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
     fireEvent.click(within(more).getByRole("menuitem", { name: "Move to project" }));
     const projects = screen.getByRole("menu", { name: "Move to project" });
     expect(words(projects)).toEqual(["No project", "Qureshi Textiles"]);
@@ -157,7 +158,7 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
     const menu = screen.getByRole("menu", { name: "Recording actions" });
     expect(keysOf(menu)).toEqual({
-      Open: "Enter", Transcribe: "Ctrl+T", Pin: null, "Mark as important": "Ctrl+Shift+L", Labels: null, "Move to project": null,
+      Open: "Enter", Transcribe: "Ctrl+T", Pin: null, "Mark as important": "Ctrl+Shift+L", "Mark as unread": "Ctrl+Shift+U", Labels: null, "Move to project": null,
       "Rename…": "F2", Export: null, "Move to trash": "Delete",
     });
     fireEvent.keyDown(menu, { key: "Escape" });
@@ -280,7 +281,7 @@ describe("the Library's right-click menus (UX-22)", () => {
     const [call] = callsOf("native_menu_popup") as { items: Line[]; x: number; y: number; menu: number }[];
     expect([call.x, call.y]).toEqual([40, 60]);
     expect(call.items.map((i) => (i.action === null && !i.label ? "—" : i.label))).toEqual([
-      "Open", "—", "Pin", "Mark as Important", "Labels", "Move to Project", "—", "Rename…", "Export", "—", "Move to Trash",
+      "Open", "—", "Pin", "Mark as Important", "Mark as Unread", "Labels", "Move to Project", "—", "Rename…", "Export", "—", "Move to Trash",
     ]);
     expect(call.items.every((i) => !i.accelerator)).toBe(true);
     expect(call.items.find((i) => i.label === "Mark as Important")).toMatchObject({ checked: false });

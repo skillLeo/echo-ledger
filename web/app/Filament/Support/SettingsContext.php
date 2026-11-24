@@ -70,6 +70,9 @@ final class SettingsContext
             'deleting' => $user->deletes_at !== null,
             'browsers' => WebSessions::available(),
             'member' => $role !== null && ! $role->manages(),
+            // BE-06: the initials' colours need the new design's colours; the console's language, the new frame.
+            'v2' => ConsoleV2::any(),
+            'v2_shell' => ConsoleV2::shell(),
         ];
     }
 

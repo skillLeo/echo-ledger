@@ -14,6 +14,7 @@ import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
+import type { NoticeTarget, Notify } from "../../lib/notice";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
   Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
@@ -83,7 +84,7 @@ export const DRAWER_BELOW = 1440;
 const PANEL_KEY = "echoledger-library-filters-open";
 /** The menu keys the Library answers through the registry (UX-22); with Open (Enter, the row's own), Move to trash
  * (Delete, ⌘⌫) and Select all (⌘A), the only shortcuts its menus show. */
-const KEYED_HERE = ["file.rename", "recording.transcribe", "recording.important"] as const;
+const KEYED_HERE = ["file.rename", "recording.transcribe", "recording.important", "recording.unread"] as const;
 const LIBRARY_KEYS: ReadonlySet<string> = new Set([...KEYED_HERE, "recording.open", "recording.moveToTrash", "edit.selectAll"]);
 
 /**
@@ -120,6 +121,17 @@ const typing = (target: EventTarget | null) =>
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
+
+/**
+ * A notice of the queue's (classic's Notify) in the Library's toast. A fix done in place ("Deleted · Undo", its target
+ * an action) becomes the toast's own button: "Deleted" with Undo, which runs it; the queue's other targets are places
+ * this Library already is.
+ */
+export function queueNotice(say: (text: string, action?: Message["action"], error?: boolean) => void, text: string, error?: boolean, target?: NoticeTarget): void {
+  if (target?.kind !== "action") return say(text, undefined, error);
+  const tail = / · ([^·]+)$/.exec(text);
+  say(tail ? text.slice(0, tail.index) : text, { label: tail ? tail[1] : "Undo", run: target.run }, error);
+}
 
 const readPanel = () => {
   try {
@@ -351,7 +363,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const say = useCallback((text: string, action?: Message["action"], error?: boolean) => setMessage({ id: ++seq.current, text, action, error }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
   // the list is away (Trash, a selection, a recording open).
-  const queue = useLibraryQueue(useCallback((text: string, error?: boolean) => say(text, undefined, error), [say]));
+  const queue = useLibraryQueue(useCallback<Notify>((text, error, target) => queueNotice(say, text, error, target), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -824,8 +836,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         // When the list can't be read, Undo tries every picked one (those still in the Library just stay).
         const text = `${gone} of ${ids.length} moved to Trash · ${kept}`;
         const now = await api.library().catch(() => null);
+        // Some stayed: a problem, said as one (never pushed off by a newer message), with Undo for those that went.
         if (!now) {
-          say(text, { label: "Undo", run: () => void restoreMany(ids) });
+          say(text, { label: "Undo", run: () => void restoreMany(ids) }, true);
           return;
         }
         const still = new Set(now.filter((i) => !i.deleted).map((i) => i.id));
@@ -835,7 +848,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ?? order.find((i) => still.has(i.id)) ?? null;
         setItems(now);
         setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined);
+        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined, true);
         return;
       }
       const order = listOf(items).rows;
@@ -865,6 +878,45 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       sayProblem(say, errorMessage(e));
     }
   };
+  /**
+   * Mark as unread (contract 2.0.0-t, DELETE /api/sessions/{id}/opened) or, when every one is unread, Mark as read: here
+   * at once (the dot, Unread and its count), then on every device; what the server refuses is put back, and said.
+   */
+  const setUnread = async (ids: readonly string[], unread: boolean) => {
+    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    if (!chosen.length) return;
+    if (chosen.length > MAX_BULK) {
+      say(`Up to ${MAX_BULK} at a time: unselect ${chosen.length - MAX_BULK}`);
+      return;
+    }
+    const was = new Map(chosen.map((i) => [i.id, { opened: i.opened, read: readHere.has(i.id) }]));
+    const put = (next: (id: string) => { opened: boolean | undefined; read: boolean }) => {
+      setItems((list) => list?.map((i) => (was.has(i.id) ? { ...i, opened: next(i.id).opened } : i)) ?? list);
+      setReadHere((r) => {
+        const out = new Set(r);
+        for (const id of was.keys()) if (next(id).read) out.add(id); else out.delete(id);
+        return out;
+      });
+    };
+    const marked = { opened: !unread, read: !unread };
+    put(() => marked);
+    // One at a time; what the server took is kept whatever happens after.
+    const done = new Set<string>();
+    try {
+      for (const id of was.keys()) {
+        await (unread ? api.markUnopened(id) : api.markOpened(id));
+        done.add(id);
+      }
+      // Once more: a sync answered meanwhile from the copy saved before the marks undid them.
+      put(() => marked);
+      say(`Marked ${recordingsWord(was.size)} as ${unread ? "unread" : "read"}`);
+    } catch (e) {
+      // Only what was not done goes back; the rest stays marked, and the problem says how many went.
+      put((id) => (done.has(id) ? marked : was.get(id)!));
+      sayProblem(say, done.size ? `${done.size} of ${was.size} marked as ${unread ? "unread" : "read"} · ${errorMessage(e)}` : errorMessage(e));
+    }
+  };
+
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
     try {
       const changed = await api.bulkSessions([...ids], action);
@@ -1130,6 +1182,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setFocusAfter({ rowId: open.id, seq: ++seq.current });
       return;
     }
+    // ⇧⌘U / Ctrl+Shift+U on the recording open now (Mark as unread, or read once it is unread).
+    if (open && !e.defaultPrevented && keyMatches(e, shortcutOf("recording.unread", currentPlatform()))) {
+      e.preventDefault();
+      runAction("recording.unread", recordingContext([open.id]));
+      return;
+    }
     if (open || trash || !items) return;
     if (e.key === "/" && !mod) {
       e.preventDefault();
@@ -1353,6 +1411,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     "recording.transcribe": (c) => setOrganise({ kind: "transcribe", ids: [...(c.targets ?? [])] }),
     "recording.pin": (c) => void bulk(c.targets ?? [], c.state?.pinned ? "unpin" : "pin", c.state?.pinned ? "Unpinned" : "Pinned"),
     "recording.important": (c) => void bulk(c.targets ?? [], c.state?.important ? "unimportant" : "important", c.state?.important ? "Not important" : "Marked as important"),
+    // Mark as unread, or Mark as read once every one is unread (the menu's word says which); with none named, the
+    // recording open now.
+    "recording.unread": (c) => {
+      const ids = c.targets?.length ? c.targets : openIdRef.current ? [openIdRef.current] : [];
+      void setUnread(ids, !(c.state?.unread ?? recordingContext(ids).state?.unread));
+    },
     "recording.labels": (c) => {
       const list = lists?.find((l) => l.key === c.value);
       const ids = c.targets ?? [];
@@ -1742,7 +1806,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       onLabel={(key) => quick("labels", key)}
                       recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}
                       onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                      onPick={(e) => pickRow(item, e)} last={lastOpened?.id === item.id}
+                      onPick={(e) => pickRow(item, e)} last={lastOpened?.id === item.id} unread={item.opened === false && !readHere.has(item.id)}
                       actions={choosing ? undefined : rowActions(item, r)} />
                   );
                 }),

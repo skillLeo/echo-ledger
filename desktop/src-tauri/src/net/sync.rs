@@ -53,6 +53,17 @@ impl LibraryCache {
         }
     }
 
+    /// The recording is unread again (Mark as unread, 2.0.0-t): true when the saved copy changed.
+    pub fn mark_unopened(&mut self, id: &str) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) if item.rest.get("opened") != Some(&serde_json::Value::Bool(false)) => {
+                item.rest.insert("opened".into(), serde_json::Value::Bool(false));
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn load(path: &Path) -> Self {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }

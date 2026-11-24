@@ -602,6 +602,94 @@ label.el-set-row:hover {
     border-radius: var(--radius-full);
 }
 
+/* BE-06: initials in the person's colour (avatar_color, the tokens' --el-role-avatar-0…7, under the new design). */
+.el-pcard-avatar.is-initials,
+.el-profile-avatar.is-initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--el-role-avatar-text, #fff);
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.el-pcard-avatar.is-initials::before {
+    content: attr(data-initials);
+}
+
+/* ---------- Profile: the photo, the colour (BE-06) ---------- */
+.el-profile-avatar {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+}
+
+.el-set-row.el-profile-photo {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+}
+
+.el-set-row.el-profile-photo > .el-set-text {
+    flex: 1 1 160px;
+    min-width: 0;
+}
+
+.el-profile-photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.el-profile-colors-row {
+    align-items: center;
+    gap: 8px;
+}
+
+.el-profile-colors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.el-profile-swatch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    color: var(--el-role-avatar-text, #fff);
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 0 0 2px transparent;
+}
+
+.el-profile-swatch[aria-checked='true'] {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+
+.el-profile-swatch:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 4px;
+}
+
+/* A phone: the 8 colours on one line. */
+@media (max-width: 480px) {
+    .el-profile-colors {
+        gap: 6px;
+    }
+
+    .el-profile-swatch {
+        width: 32px;
+        height: 32px;
+    }
+}
+
 .el-pcard-text {
     display: flex;
     flex-direction: column;

@@ -93,8 +93,14 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(confirm).toHaveBeenCalledWith(DELETE);
     expect(callsOf("pending_delete")).toEqual([{ ids: ["p2"] }]);
     expect(callsOf("pending_discard"), "never the immediate delete").toEqual([]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Deleted · Undo");
+    // The queue's "Deleted · Undo" is the toast's own Undo button, which brings the recording back.
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast.querySelector(".el-toast__message")).toHaveTextContent(/^Deleted$/);
     expect(screen.queryByTestId("library-queue")).toBeNull();
+    respond("pending_delete_undo", undefined);
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p2"] }]);
   });
 
   it("Transcribe all sends every one; Delete all asks once and deletes nothing when cancelled", async () => {

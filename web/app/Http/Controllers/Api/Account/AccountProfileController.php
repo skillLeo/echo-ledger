@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Api\Account;
 
 use App\Exceptions\ApiError;
 use App\Filament\Auth\EditProfile;
+use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\Shell;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Controller;
 use App\Mail\SecurityChangeMail;
@@ -44,16 +46,39 @@ final class AccountProfileController extends Controller
     public function update(Request $request, Workspaces $workspaces, AuditLog $audit): JsonResponse
     {
         $user = $this->owner($request);
-        if (! $request->has('name')) {
+        // Since 2.0.0-r §6 (BE-06) the language and the initials' colour beside the name: each optional, one at least.
+        if (! $request->has('name') && ! $request->exists('language') && ! $request->exists('avatar_color')) {
             throw FieldErrors::fail(['name' => [['required', 'Enter your name.']]]);
         }
-        [$name, $problems] = AccountRules::name($request->input('name'));
-        if ($problems !== []) {
-            throw FieldErrors::fail(['name' => $problems]);
+        $problems = [];
+        $name = null;
+        if ($request->has('name')) {
+            [$name, $nameProblems] = AccountRules::name($request->input('name'));
+            if ($nameProblems !== []) {
+                $problems['name'] = $nameProblems;
+            }
         }
-        if ($name !== $user->name) {
+        $language = $request->input('language');
+        if ($request->exists('language') && ! (is_string($language) && isset(ConsoleV2::LANGUAGES[$language]))) {
+            $problems['language'] = [['invalid', 'Choose English or Urdu.']];
+        }
+        $colour = $request->input('avatar_color');
+        if ($request->exists('avatar_color') && ! (is_int($colour) && $colour >= 0 && $colour < User::AVATAR_COLORS)) {
+            $problems['avatar_color'] = [['invalid', 'Choose one of the 8 colours.']];
+        }
+        // Nothing is saved unless all of it is right.
+        if ($problems !== []) {
+            throw FieldErrors::fail($problems);
+        }
+        if ($name !== null && $name !== $user->name) {
             $user->forceFill(['name' => $name])->save();
             $audit->record('name_changed', $user->id, $user);
+        }
+        if (is_int($colour) && $colour !== $user->avatar_color) {
+            $user->forceFill(['avatar_color' => $colour])->save();
+        }
+        if (is_string($language)) {
+            Shell::remember($user, 'app_language', $language);
         }
 
         return app(AccountController::class)->show($request, $workspaces);

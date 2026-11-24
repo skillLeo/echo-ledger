@@ -10,6 +10,7 @@ import type { LibraryItem } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
+import { Toast } from "../components/Toast";
 import { aiHeader, ZIP_FORMATS } from "./organise";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -295,7 +296,7 @@ describe("the row ⋮ and the right-click menu", () => {
     await act(flushAsync);
   };
 
-  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
+  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Unread · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
     respond("library_refresh", pinned);
@@ -303,7 +304,7 @@ describe("the row ⋮ and the right-click menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
     const words = () => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
-    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
+    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Mark as unread", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
     // Hairlines between 3b's groups, no group headers; every item without a tick has its icon.
     expect(menu.querySelectorAll(".el-menu__separator")).toHaveLength(3);
     expect(menu.querySelectorAll(".el-menu__group")).toHaveLength(0);
@@ -843,6 +844,21 @@ describe("Trash, Undo and the limits", () => {
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "bilal" }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("1 recording back");
+  });
+
+  it("only some moved is a problem: the N of M message is never pushed off by a newer one from elsewhere (FIX-03)", async () => {
+    respond("sessions_bulk", 1);
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    respond("library_list", ITEMS.filter((i) => i.id !== "bilal"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    const shown = () => [...document.querySelectorAll(".el-toast .el-toast__message")].map((m) => m.textContent);
+    expect(shown()).toEqual(["1 of 2 moved to Trash · kept there for 36 hours"]);
+    // The app says something meanwhile (a sync): it waits for the problem to close.
+    render(<Toast message="Library synced" duration={0} onClose={() => undefined} />);
+    expect(shown()).toEqual(["1 of 2 moved to Trash · kept there for 36 hours"]);
   });
 
   it("when only some moved and the list can't be read, it still says N of M and keeps Undo", async () => {

@@ -1,17 +1,18 @@
 {
     "data": [
         {
-            "id": "01m7zddet30jk01e0wfv30x8ms",
+            "id": "01m86v5p92f7me69t3bj2exw6x",
             "kind": "session",
             "to": {
-                "name": "Abe Hayes",
+                "name": "Juana Predovic",
                 "email": "teammate@example.test",
                 "avatar_url": null,
-                "avatar_version": null
+                "avatar_version": null,
+                "avatar_color": 2
             },
             "title": "Retainer check-in, renamed",
             "note": "Please look.",
-            "sent_at": "2026-11-21T16:00:47+00:00",
+            "sent_at": "2026-11-24T13:15:54+00:00",
             "saved_at": null
         }
     ]

@@ -756,6 +756,40 @@ async fn opening_a_recording_tells_the_server_and_the_saved_copy_is_read_at_once
     assert!(!cache.mark_opened("gone"), "not in the Library: nothing to save");
 }
 
+#[tokio::test]
+async fn marking_a_recording_unread_tells_the_server_and_the_saved_copy_is_unread_at_once() {
+    // Contract 2.0.0-t: DELETE on the same address as opening, 204, idempotent.
+    let server = MockServer::start(Router::new().fixed("DELETE", "/api/sessions/a/opened", Reply::empty(204)));
+    client(&server).session_unopen("a").await.unwrap();
+    client(&server).session_unopen("a").await.unwrap();
+    assert_eq!(server.requests_to("DELETE", "/api/sessions/a/opened").len(), 2);
+    assert!(server.requests_to("POST", "/api/sessions/a/opened").is_empty(), "never the opening call");
+
+    let mut cache = LibraryCache::default();
+    let mut read = item("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", "a");
+    read.rest.insert("opened".into(), Value::Bool(true));
+    cache.items.push(read);
+    assert!(cache.mark_unopened("a"), "read → unread");
+    assert_eq!(cache.items[0].rest.get("opened"), Some(&Value::Bool(false)));
+    assert!(!cache.mark_unopened("a"), "already unread: nothing to save");
+    assert!(!cache.mark_unopened("gone"), "not in the Library: nothing to save");
+    // And opening it again reads it.
+    assert!(cache.mark_opened("a"));
+}
+
+#[tokio::test]
+async fn marking_unread_on_a_recording_the_person_cannot_see_or_on_an_older_server_is_an_error() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("DELETE", "/api/sessions/gone/opened", Reply::json(404, json!({"error": {"code": "not_found", "message": "Session not found."}})))
+            .fixed("DELETE", "/api/sessions/old/opened", Reply::json(405, json!({"error": {"code": "method_not_allowed", "message": "Method not allowed."}}))),
+    );
+    let gone = client(&server).session_unopen("gone").await.unwrap_err();
+    assert!(matches!(gone, AppError::Server { status: 404, .. }), "{gone:?}");
+    let old = client(&server).session_unopen("old").await.unwrap_err();
+    assert!(matches!(old, AppError::Server { status: 405, .. }), "{old:?}: the command turns this into 'needs a newer server'");
+}
+
 // ---- saved views (contract 2.0.0-p) -------------------------------------------------------------------------------
 
 #[tokio::test]
