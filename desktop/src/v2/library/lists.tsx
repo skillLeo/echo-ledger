@@ -1,14 +1,14 @@
 // Labels in the v2 Library (D14, contract 2.0.0-m; PLAN_LIBRARY_FILTERS: "lists ARE labels"). A label is one of the
 // person's lists kept by the server (a name, a colour, a place in the order), so the same labels in the same order show
 // on every device. They live in the sidebar's LABELS section (LabelsNav): choosing one shows its recordings, "+ New
-// label" makes one, and each has Rename…, Change colour…, Move up / Move down and Delete label…. A recording's ⋮ and
+// label" makes one, and each has Show recordings, Rename…, Colour ›, Move up / Move down and Delete label…. A recording's ⋮ and
 // right-click have Labels ▸ to put it in or take it out of them.
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type ListItem } from "../../lib/ipc";
 import {
-  Button, ColourPicker, ContextMenu, Dialog, Icon, Icons, LABEL_COLOURS, LabelDot, NEW_LIST_WORDS, NewListDialog, RENAME_LIST_WORDS, RenameListDialog,
-  addToListItems, deleteListWords, labelColourName, menuPointFor, type LabelColour,
+  Button, ContextMenu, Dialog, Icon, Icons, LABEL_COLOURS, LabelDot, NEW_LIST_WORDS, NewListDialog, RENAME_LIST_WORDS, RenameListDialog,
+  addToListItems, deleteListWords, labelColourName, menuPointFor,
 } from "../components";
 import type { MenuItem } from "../components/Menu";
 import { contextItems, LABEL } from "../actions/contextMenus";
@@ -104,7 +104,7 @@ export function addToListMenu({ lists: all, chosen, onToggle, onNew }: {
   };
 }
 
-type Editing = { kind: "rename" | "recolour" | "delete"; list: ListItem };
+type Editing = { kind: "rename" | "delete"; list: ListItem };
 
 /** Under the name field: a library view's name is reserved, another label's name is in use. */
 const nameWords = (taken: (name: string) => string) => ({
@@ -114,7 +114,7 @@ const nameWords = (taken: (name: string) => string) => ({
 /**
  * The sidebar's LABELS section: a header that folds (kept on this computer) with "+", each label with its colour dot
  * and its count (muted), the one shown marked, its menu on ⋮ or a right-click, and "+ New label" at the end. The
- * dialogs it opens: New label, Rename label, Change colour and the Delete question.
+ * dialogs it opens: New label, Rename label and the Delete question (Colour › sets a colour at once).
  */
 export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChanged }: {
   /** How many recordings have each label, by key. */
@@ -139,7 +139,6 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{ list: ListItem; at: { x: number; y: number } } | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [colour, setColour] = useState<LabelColour>("grey");
   const [busy, setBusy] = useState(false);
   const section = useRef<HTMLElement>(null);
   // A label's menu (UX-22): what it does, registered before the labels are known (filled in below).
@@ -192,13 +191,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     onLibraryChanged();
     say(`Renamed to ${saved.name}`);
   });
-  const recolour = (list: ListItem) => run(async () => {
-    const saved = await api.updateList(list.key, { color: LABEL_COLOURS[colour].toLowerCase() });
-    setLists(all.map((l) => (l.key === list.key ? saved : l)));
-    setEditing(null);
-    onLibraryChanged();
-  });
-  /** Colour › a colour (UX-22): set at once, as Change colour… saves it. */
+  /** Colour › a colour (UX-22): set at once. */
   const setColourOf = (list: ListItem, name: keyof typeof LABEL_COLOURS) => run(async () => {
     const saved = await api.updateList(list.key, { color: LABEL_COLOURS[name].toLowerCase() });
     setLists(all.map((l) => (l.key === list.key ? saved : l)));
@@ -238,7 +231,6 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     say(`${list.name} deleted · its recordings are still in your Library`);
   });
   const edit = (kind: Editing["kind"], list: ListItem) => {
-    setColour(labelColourName(list.color) ?? "grey");
     setEditing({ kind, list });
   };
   const asked = editing ? deleteListWords(editing.list.name, { body: "Its recordings stay in your Library; only the label goes." }) : null;
@@ -286,10 +278,6 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
       <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={RESERVED_NAMES}
         words={{ ...LABEL_WORDS.renameDialog, ...nameWords(LABEL_WORDS.renameDialog.duplicate) }}
         onClose={() => setEditing(null)} onRename={(name) => editing && void rename(editing.list, name)} />
-      <Dialog open={editing?.kind === "recolour"} title="Change colour" onClose={() => setEditing(null)}
-        actions={<><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => editing && void recolour(editing.list)}>Save</Button></>}>
-        <ColourPicker label="Colour" hideLabel value={colour} onChange={setColour} />
-      </Dialog>
       <Dialog open={editing?.kind === "delete"} alert title={asked?.title ?? ""} description={asked?.body} onClose={() => setEditing(null)}
         actions={<><Button onClick={() => setEditing(null)}>{asked?.cancel}</Button><Button variant="danger" loading={busy} loadingLabel="Deleting…" onClick={() => editing && void remove(editing.list)}>{asked?.confirm}</Button></>} />
     </section>
