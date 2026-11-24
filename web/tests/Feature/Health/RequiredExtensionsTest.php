@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Health\PhpExtensions;
 use App\Services\Health\ServerHealth;
 use App\Services\RecordingCipher;
+use App\Services\SettingsRepository;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +19,10 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Process\Process;
+use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+
+uses(ApiClient::class);
 
 /*
 | W-INC-1124: a hosting change took sodium out of PHP 8.4, and every upload crashed in RecordingCipher without anyone
@@ -271,6 +275,71 @@ describe('the alert (W-INC-1125)', function () {
         withoutExtensions();
         $this->getJson('/health/php')->assertOk();
         expect(Cache::get(ServerHealth::WEB))->toBeNull();
+    });
+
+    it('writes one Activity item per super admin while it lasts, quiet after it is read, and resolves it when it passes', function () {
+        Mail::fake();
+        $admin = Fx::superAdmin();
+        $other = Fx::superAdmin();
+        $person = User::factory()->create();
+        withoutExtensions('sodium');
+
+        healthCheck();
+        $items = fn (User $user) => $user->notifications()->where('data->viewData->kind', 'server_problem');
+        $item = $items($admin)->sole();
+        // Stored escaped, as every item's words are.
+        expect(htmlspecialchars_decode($item->data['title'], ENT_QUOTES))->toBe("Uploads are failing: the server's PHP is missing sodium")
+            ->and($item->data['body'])->toContain('selectorctl --interpreter=php')->toContain('enable-user-extensions=sodium')
+            ->and($item->read_at)->toBeNull()
+            ->and($items($other)->count())->toBe(1)
+            ->and($items($person)->count())->toBe(0);
+
+        // Read, then the next checks: still one item, and not unread again.
+        $item->markAsRead();
+        $this->travel(5)->minutes();
+        healthCheck();
+        healthCheck();
+        expect($items($admin)->count())->toBe(1)->and($items($admin)->sole()->read_at)->not->toBeNull()
+            ->and((int) $items($admin)->sole()->getAttribute('repeat_count'))->toBe(1);
+
+        // The check passes: resolved, read, "Fixed".
+        withoutExtensions();
+        healthCheck();
+        $fixed = $items($admin)->sole();
+        expect($fixed->getAttribute('resolved_at'))->not->toBeNull()->and($fixed->read_at)->not->toBeNull()
+            ->and($fixed->data['title'])->toBe('Fixed: uploads work again');
+
+        // It comes back: the same item, unread and at the top again.
+        withoutExtensions('sodium');
+        healthCheck();
+        $again = $items($admin)->sole();
+        expect($again->getAttribute('resolved_at'))->toBeNull()->and($again->read_at)->toBeNull()
+            ->and((int) $again->getAttribute('repeat_count'))->toBe(2);
+    });
+
+    it('shows the problem to the super admin\'s apps, on the badge, and to nobody else', function () {
+        Mail::fake();
+        $admin = Fx::superAdmin();
+        $person = Fx::user();
+        withoutExtensions('sodium');
+        healthCheck();
+        withoutExtensions();
+
+        $mine = $this->api(Fx::token(Fx::device($admin)))->getJson('/api/activity')->assertOk()->json('data');
+        expect(collect($mine)->firstWhere('kind', 'server_problem'))->toMatchArray(['session_id' => null, 'resolved' => false])
+            ->and($this->api(Fx::token(Fx::device($admin)))->getJson('/api/badge')->assertOk()->json('count'))->toBeGreaterThan(0);
+        app('auth')->forgetGuards();
+        expect(collect($this->api(Fx::token(Fx::device($person)))->getJson('/api/activity')->assertOk()->json('data'))->pluck('kind'))
+            ->not->toContain('server_problem');
+    });
+
+    it('says on the dashboard when alerts cannot be emailed, until an SMTP server is set', function () {
+        $this->actingAs(Fx::superAdmin(), 'web');
+        config(['mail.default' => 'log']);
+        expect((string) $this->get('/admin')->assertOk()->getContent())->toContain('data-mail-not-set-up')->toContain('mail isn');
+
+        app(SettingsRepository::class)->set('mail.host', 'smtp.example.test');
+        expect((string) $this->get('/admin')->assertOk()->getContent())->not->toContain('data-mail-not-set-up');
     });
 
     it('runs with the web check in the schedule', function () {

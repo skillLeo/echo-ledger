@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-u (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-w (2026-11-25, proposed by EL-Backend, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-w (proposed 2026-11-25; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
 2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
@@ -2517,6 +2518,12 @@ The console bell and the device apps share one list of notifications: `transcrip
 (the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, since v1.5
 `shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"), and since v1.8
 `missed_recording` (a call an app saw but did not record; it needs action, see `POST /api/devices/missed-recordings`).
+Since 2.0.0-w, `server_problem`, for super admins only: the server's PHP lacks what uploads need (W-INC-1125). Its
+title says what breaks and what is missing ("Uploads are failing: the server's PHP is missing sodium") and its body the
+command that fixes it, as plain text; `session_id` is `null`. There is one item per problem: while it lasts the item only
+takes the newest words, and once the server's check passes it reads "Fixed: uploads work again" and is `resolved`. It
+counts as a problem on the badge (its kind contains `problem`). An app that does not know the kind shows its title
+and body as they are.
 Recordings in the undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show
 new ones as OS notifications that open `session_id`, outside the quiet hours the person chose on that device.
 

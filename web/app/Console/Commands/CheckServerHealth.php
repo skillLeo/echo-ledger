@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Mail\ServerHealthFixedMail;
 use App\Mail\ServerHealthMail;
 use App\Models\User;
+use App\Services\ActivityFeed;
 use App\Services\Health\ServerHealth;
 use Illuminate\Console\Command;
 use Illuminate\Mail\Mailable;
@@ -101,10 +102,16 @@ final class CheckServerHealth extends Command
         ServerHealth::healthy($result) ? Cache::forget(ServerHealth::SCHEDULED)
             : Cache::forever(ServerHealth::SCHEDULED, [...$result, 'php' => PHP_VERSION, 'checked_at' => now()->toIso8601String()]);
 
+        // Since W-INC-1125: an Activity item for each super admin, every run (it only changes when the words do): the
+        // bell and the badge reach them where no email can (production had no real mailer for months).
+        $webMissing = $webFails ? $web['missing'] : [];
+        [$title, $body] = ServerHealth::alertText([...$result['missing'], ...$webMissing], $result['cipher'] ?? ($webFails ? $web['cipher'] : null));
+        app(ActivityFeed::class)->serverProblem($title, $body);
+        Cache::forever(ServerHealth::ACTIVITY_OPEN, true);
+
         if (! Cache::add(ServerHealth::MAILED, true, now()->addHour())) {
             return;
         }
-        $webMissing = $webFails ? $web['missing'] : [];
         $fix = ServerHealth::fixCommand([...$result['missing'], ...$webMissing]);
         $sent = $this->mailAdmins(fn (): Mailable => new ServerHealthMail($result['missing'], $result['cipher'], PHP_VERSION, url('/admin'),
             $webMissing, $webFails ? $web['cipher'] : null, $webFails, $fix));
@@ -121,6 +128,9 @@ final class CheckServerHealth extends Command
     {
         if (Cache::pull(ServerHealth::SCHEDULED) !== null) {
             Log::info('Server health check passes again.');
+        }
+        if (Cache::pull(ServerHealth::ACTIVITY_OPEN) !== null) {
+            app(ActivityFeed::class)->serverProblemResolved();
         }
         $since = Cache::pull(ServerHealth::MAILED_FAULT);
         if (is_string($since)) {
