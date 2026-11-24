@@ -106,7 +106,7 @@ class AssistSessions extends Page implements HasTable
                     ->state(fn (AssistSession $s): string => $s->practice ? __('Practice') : __('Call'))
                     ->color(fn (AssistSession $s): string => $s->practice ? 'info' : 'gray'),
                 TextColumn::make('mode')->label(__('Mode'))->formatStateUsing(fn (string $state): string => isset(AssistRecords::MODES[$state]) ? __(AssistRecords::MODES[$state]) : $state),
-                TextColumn::make('platform')->label(__('On'))->formatStateUsing(fn (string $state): string => ['desktop' => __('Computer'), 'android' => __('Phone'), 'ios' => __('iPhone'), 'web' => __('Web')][$state] ?? $state),
+                TextColumn::make('platform')->label(__('assist_context.col_platform'))->formatStateUsing(fn (string $state): string => ['desktop' => __('Computer'), 'android' => __('Phone'), 'ios' => __('iPhone'), 'web' => __('Web')][$state] ?? $state),
                 TextColumn::make('seconds_used')->label(__('Length'))->state(fn (AssistSession $s): string => AssistRecords::duration($s->seconds())),
                 TextColumn::make('report_status')->label(__('Report'))->badge()
                     ->state(fn (AssistSession $s): string => $s->ended() ? (isset(self::REPORT_LABELS[$s->report_status]) ? __(self::REPORT_LABELS[$s->report_status]) : '—') : __('On now'))

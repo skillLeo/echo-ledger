@@ -9,8 +9,8 @@
     $pct = fn (?float $p): string => $p === null ? '—' : rtrim(rtrim(number_format($p, 2), '0'), '.').'%';
     $ms = fn (?float $v): string => $v === null ? '—' : number_format($v, $v < 100 ? 1 : 0).' ms';
     [$label, $color] = match ($r['status']) {
-        'up' => [__('Up'), 'success'],
-        'down' => [__('Down'), 'danger'],
+        'up' => [__('assist_context.relay_up'), 'success'],
+        'down' => [__('assist_context.relay_down'), 'danger'],
         'not_set' => [__('Not set up'), 'gray'],
         default => [__('Not checked yet'), 'warning'],
     };

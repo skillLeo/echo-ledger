@@ -90,7 +90,7 @@
                                         @if ($row['hint'])
                                             {{ $row['hint']['text'] }}
                                             @if (($row['hint']['action'] ?? null) === 'used')
-                                                <x-filament::badge color="gray" size="sm">{{ __('Used') }}</x-filament::badge>
+                                                <x-filament::badge color="gray" size="sm">{{ __('assist_context.suggestion_used') }}</x-filament::badge>
                                             @endif
                                         @else
                                             <span style="{{ $muted }}">—</span>

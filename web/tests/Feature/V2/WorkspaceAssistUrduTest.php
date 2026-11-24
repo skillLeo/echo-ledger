@@ -106,8 +106,45 @@ it('has an Urdu line for every word of the Workspace and Live Assist pages', fun
 
     expect(count(array_unique($keys)))->toBeGreaterThan(200);
     foreach (array_unique($keys) as $key) {
+        // A key of a group file (assist_context.*, workspace_context.*: a word in its context) has its Urdu there, not in ur.json.
+        if (preg_match('/^(assist|workspace)_context\.[a-z_]+$/', $key) === 1) {
+            expect(__($key, [], 'ur'))->not->toBe($key, "No Urdu for: {$key}");
+
+            continue;
+        }
         expect($urdu[$key] ?? '')->not->toBe('', "No Urdu for: {$key}");
     }
+});
+
+it('keeps a short word\'s general meaning in ur.json and its narrower one in a group file, English unchanged', function () {
+    // Lead decision on ur.json (2026-11-26): ur.json is global, so a one-word key means what a toggle or a plain list
+    // would; a page that means something narrower reads a context key, whose English is the same word.
+    $context = ['assist_context.col_platform' => 'On', 'assist_context.relay_up' => 'Up', 'assist_context.relay_down' => 'Down', 'assist_context.suggestion_used' => 'Used',
+        'workspace_context.col_sent' => 'Sent'];
+    $urdu = json_decode((string) file_get_contents(lang_path('ur.json')), true, 512, JSON_THROW_ON_ERROR);
+    foreach ($context as $key => $english) {
+        expect(__($key, [], 'en'))->toBe($english, $key)
+            ->and(__($key, [], 'ur'))->not->toBe($key, $key)->not->toBe($english, $key)
+            ->and($urdu[$english] ?? '')->not->toBe('', "{$english} keeps a general meaning in ur.json");
+    }
+    expect($urdu['On'])->toBe('آن')->and($urdu['Up'])->toBe('اوپر')->and($urdu['Down'])->toBe('نیچے');
+});
+
+it('never gives a one-word key a question word in ur.json', function () {
+    $urdu = json_decode((string) file_get_contents(lang_path('ur.json')), true, 512, JSON_THROW_ON_ERROR);
+    $questions = ['کس', 'کیا', 'کون', 'کب', 'کہاں', 'کیوں', 'کیسے', 'کتنا', 'کتنے', 'کتنی', 'کونسا', 'کونسی'];
+    // English question words are questions in Urdu too. 'With' and 'Inside' were there before this rule (the recording
+    // details, a project's folder); their owners move them to a context key.
+    $allowed = ['who', 'what', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom', 'with', 'inside'];
+    $found = [];
+    foreach ($urdu as $key => $value) {
+        if (preg_match("/^[A-Za-z][A-Za-z'-]*$/", (string) $key) === 1 && ! in_array(strtolower((string) $key), $allowed, true)
+            && array_intersect(preg_split('/[\s،۔؟?!:]+/u', (string) $value) ?: [], $questions) !== []) {
+            $found[] = "{$key} => {$value}";
+        }
+    }
+
+    expect($found)->toBe([]);
 });
 
 it('keeps the English of the sentences built from names, numbers and roles exactly as before', function () {

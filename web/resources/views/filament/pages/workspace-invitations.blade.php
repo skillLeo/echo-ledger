@@ -9,7 +9,7 @@
                 <thead>
                     <tr style="text-align:left;opacity:.7">
                         <th style="padding:.5rem .75rem">{{ __('Email') }}</th><th style="padding:.5rem .75rem">{{ __('Role') }}</th>
-                        <th style="padding:.5rem .75rem">{{ __('Sent') }}</th><th style="padding:.5rem .75rem">{{ __('Ends') }}</th><th style="padding:.5rem .75rem"><span class="el-sr">{{ __('Actions') }}</span></th>
+                        <th style="padding:.5rem .75rem">{{ __('workspace_context.col_sent') }}</th><th style="padding:.5rem .75rem">{{ __('Ends') }}</th><th style="padding:.5rem .75rem"><span class="el-sr">{{ __('Actions') }}</span></th>
                     </tr>
                 </thead>
                 <tbody>
