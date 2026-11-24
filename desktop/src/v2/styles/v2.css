@@ -1975,17 +1975,18 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   border: 0; border-radius: var(--el-radius-sm); background: transparent; color: var(--el-role-text-secondary); cursor: pointer;
 }
 .el-panel-show:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
-/* UX-02 (v21_panel_flyout): the flyout over a light scrim, sliding in from the rail; hidden, the panel takes no column and
-   its toggle sits at the start of the page header (PanelToggle). */
+/* UX-02 (v21_panel_flyout, .el-shell--flyouts): the panel 240 px wide; the flyout over a light scrim, sliding in from the
+   rail; hidden, the panel takes no column and its toggle sits at the start of the page header (PanelToggle). */
 .el-panel-scrim {
   grid-column: 2 / -1; grid-row: 1; position: absolute; inset: 0; z-index: calc(var(--el-layer-overlay) - 1);
   background: color-mix(in srgb, var(--el-role-scrim-default) 30%, transparent);
 }
-.el-shell--nav .el-panel--flyout { animation: el-panel-in var(--el-motion-base) var(--el-motion-ease-out); }
+.el-shell--flyouts .el-panel { inline-size: calc(var(--el-space-64) * 4 - var(--el-space-16)); }
+.el-shell--flyouts .el-panel--flyout { animation: el-panel-in var(--el-motion-base) var(--el-motion-ease-out); }
 @keyframes el-panel-in { from { opacity: 0; translate: calc(-1 * var(--el-space-12)) 0; } }
-:dir(rtl) .el-shell--nav .el-panel--flyout { animation-name: el-panel-in-rtl; }
+:dir(rtl) .el-shell--flyouts .el-panel--flyout { animation-name: el-panel-in-rtl; }
 @keyframes el-panel-in-rtl { from { opacity: 0; translate: var(--el-space-12) 0; } }
-@media (prefers-reduced-motion: reduce) { .el-shell--nav .el-panel--flyout { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .el-shell--flyouts .el-panel--flyout { animation: none; } }
 .el-page__toggle { display: inline-flex; flex: none; }
 .el-page__head > .el-page__toggle + * { margin-inline-end: auto; }
 /* Where dragged recordings go, shown only while dragging. */

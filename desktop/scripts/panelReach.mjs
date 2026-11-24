@@ -2,6 +2,7 @@
 // For each place that has a panel: open it from the rail (one click) and press each of its items (the second click; folds
 // and ⋯ menus open in place and are not items);
 // when an item closes the flyout, the next one opens it again from the rail. The page header's toggle opens it too.
+// Then the keyboard: Tab never reaches the page behind the scrim, and Esc closes only the flyout, back to its toggle.
 // Fails, with what could not be reached, when any item needs more, is covered or does not take the click.
 //   node scripts/panelReach.mjs [width]
 import { createServer } from "vite";
@@ -82,6 +83,37 @@ try {
       await settle(page);
     }
   }
+  // Keyboard: Tab stays out of the page behind the scrim (it is inert; the rail is not), and Esc closes the flyout only,
+  // with focus back where it was: an open recording stays open, and the toggle that opened it gets focus again.
+  await settle(page);
+  const rows = page.locator("button[data-row-id]");
+  await rail.getByRole("button", { name: /^Library/ }).first().click();
+  await panel.waitFor({ timeout: 3000 }).catch(() => undefined);
+  await page.keyboard.press("Escape");
+  await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => undefined);
+  // The filters an item opened close with the page's own Esc, now that the flyout is gone.
+  for (let i = 0; i < 3 && (await page.locator(".el-filter-scrim:visible").count()); i++) await page.keyboard.press("Escape");
+  await rows.first().click();
+  await rows.first().waitFor({ state: "detached", timeout: 3000 }).catch(() => problems.push("keyboard: the recording did not open"));
+  await page.evaluate(() => document.activeElement?.setAttribute("data-was-focused", ""));
+  await page.keyboard.press("Control+Backslash");
+  await panel.waitFor({ timeout: 3000 }).catch(() => problems.push("keyboard: Ctrl+\\ did not open the flyout over the recording"));
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab");
+    if (await page.evaluate(() => !!document.activeElement?.closest("main"))) { problems.push(`keyboard: Tab ${i + 1} reached the page behind the scrim`); break; }
+  }
+  await page.keyboard.press("Escape");
+  await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => problems.push("keyboard: Esc did not close the flyout"));
+  if (await rows.count()) problems.push("keyboard: Esc closed the recording behind the flyout");
+  await page.keyboard.press("Escape");
+  await rows.first().waitFor({ timeout: 3000 }).catch(() => problems.push("keyboard: Esc did not close the recording afterwards"));
+  const libToggle = page.getByRole("button", { name: "Show the Library panel" });
+  await libToggle.focus();
+  await page.keyboard.press("Enter");
+  await panel.waitFor({ timeout: 3000 }).catch(() => problems.push("keyboard: the toggle did not open the flyout"));
+  await page.keyboard.press("Escape");
+  await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => undefined);
+  if (!(await page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "Show the Library panel"))) problems.push("keyboard: focus did not go back to the toggle");
   await page.close();
 } finally {
   await browser.close();

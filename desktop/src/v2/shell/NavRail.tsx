@@ -62,7 +62,7 @@ export type FlyoutClose = "chose" | "esc" | "outside" | "hide";
  * The page header's panel toggle (UX-02): while the place has a panel that is not on the screen, its button at the start
  * of the page header ([PanelToggle]); none otherwise. `onToggle` gets the button, the flyout's opener.
  */
-export const PanelToggleContext = createContext<{ label: string; onToggle: (opener: HTMLElement) => void } | null>(null);
+export const PanelToggleContext = createContext<{ label: string; expanded?: boolean; onToggle: (opener: HTMLElement) => void } | null>(null);
 
 /** The panel's toggle at the start of a page header ([▯]): nothing while the panel is shown or the page has none. */
 export function PanelToggle() {
@@ -70,7 +70,7 @@ export function PanelToggle() {
   if (!toggle) return null;
   return (
     <span className="el-page__toggle">
-      <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={toggle.label} title={`${toggle.label} (${MAC ? "⌃⌘S" : "Ctrl+\\"})`}
+      <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={toggle.label} aria-expanded={toggle.expanded} title={`${toggle.label} (${MAC ? "⌃⌘S" : "Ctrl+\\"})`}
         aria-keyshortcuts={MAC ? "Control+Meta+S Meta+\\" : "Control+\\"} onClick={(e) => toggle.onToggle(e.currentTarget)} />
     </span>
   );
@@ -87,15 +87,24 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
     const away = (e: PointerEvent) => {
       if (!box.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".el-rail")) onClose("outside");
     };
+    // Esc closes the flyout and nothing else: the page's own Esc (an open recording, filters, a selection) listens on
+    // the document and must not hear it. From inside the flyout the panel takes it (onKeyDown below, after its own
+    // menus); from outside it (the rail, or nothing focused), this listener does, before anyone else, unless a menu or
+    // a dialog there has it.
     const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) onClose("esc");
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target && (box.current?.contains(target) || target.closest('[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]'))) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose("esc");
     };
     document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", esc);
+    document.addEventListener("keydown", esc, true);
     box.current?.querySelector<HTMLElement>("button, input")?.focus();
     return () => {
       document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", esc);
+      document.removeEventListener("keydown", esc, true);
     };
   }, [flyout, onClose]);
   // A flyout closes once something is chosen: a press on a button that isn't a fold, a menu or a field.
@@ -107,6 +116,12 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
   };
   return (
     <aside ref={box} className={`el-panel${flyout ? " el-panel--flyout" : ""}`} aria-label={`${PLACE_NAMES[place]} panel`} onClickCapture={chose}
+      onKeyDown={(e) => {
+        if (!flyout || e.key !== "Escape" || e.defaultPrevented) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onClose("esc");
+      }}
       data-testid="nav-panel">
       <div className="el-panel__head">
         <h2 className="el-panel__title">{PLACE_NAMES[place]}</h2>
