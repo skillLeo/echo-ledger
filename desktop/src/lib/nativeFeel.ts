@@ -52,6 +52,18 @@ function onSelection(e: MouseEvent, win: Window): boolean {
   const selection = win.getSelection?.();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
   const doc = win.document;
+  // Text under user-select: none (a button's or a tab's words) is in the range after Select All but never drawn as
+  // selected: a press on it is a press on the control, not on the selection. The nearest set value decides (WebKit
+  // and Chromium hand it down; "auto" looks further up).
+  const unselectable = (text: Node) => {
+    for (let el = text.parentElement; el; el = el.parentElement) {
+      const style = win.getComputedStyle(el);
+      const value = style.userSelect || style.getPropertyValue("-webkit-user-select");
+      if (value === "none") return true;
+      if (value && value !== "auto") return false;
+    }
+    return false;
+  };
   const hit = (part: Range) => {
     // A web view always draws a range; a document that draws nothing (a test's) has nothing to press on.
     for (const box of typeof part.getClientRects === "function" ? part.getClientRects() : []) {
@@ -63,12 +75,12 @@ function onSelection(e: MouseEvent, win: Window): boolean {
     const range = selection.getRangeAt(i);
     const root = range.commonAncestorContainer;
     if (root.nodeType === Node.TEXT_NODE) {
-      if (hit(range)) return true;
+      if (!unselectable(root) && hit(range)) return true;
       continue;
     }
     const texts = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = texts.nextNode(); node; node = texts.nextNode()) {
-      if (!range.intersectsNode(node) || !node.textContent?.trim()) continue;
+      if (!range.intersectsNode(node) || !node.textContent?.trim() || unselectable(node)) continue;
       const part = doc.createRange();
       part.selectNodeContents(node);
       if (node === range.startContainer) part.setStart(node, range.startOffset);
