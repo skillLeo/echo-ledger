@@ -1234,7 +1234,7 @@ brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
 | `device` (was "Recorded on") | `phone`, `desktop`, `web` | `source_device` |
 | `project` | `none` (no project) and project ids | `client.id`, and every project above it: "Project is Acme" keeps Acme's subfolders too. An id that is not one of the person's projects (gone, or someone else's) matches nothing |
 | `language` | the offered codes (`en`, `ur`, `ar`, `fr`, `de`, `es`, `it`, `pt`, `nl`, `tr`, `ru`) and `unknown` | `facets.language`: the language the final transcript was written in, else the one chosen for the recording (`language`), else `unknown`; old and engine spellings read as the offered codes (`en+ur` and Hindi are `ur`, `ar-EG` is `ar`, a code not offered is passed over) |
-| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript) |
+| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript; shown as "Audio only" since v2.1) |
 | `labels` | label keys (a label in lower case; any capitals are accepted and kept in lower case) | `labels`, capitals ignored as lists are |
 | `marked` | `pinned`, `important`, `keep_forever` | `pinned`, `important`, `keep` (a recording can have several) |
 | `bookmarks` | `any` (any bookmark) and bookmark tags (in lower case; any capitals are accepted) | `any` when `marker_count` > 0, and each of `tags` in lower case (the web's "Has bookmarks" and "Bookmark tag", the apps' Bookmark chip) |
@@ -1269,9 +1269,11 @@ The server knows what reached it. Only the apps know their own: an upload that f
 reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
 those to the server's, never counting one recording twice.
 
-The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
-**Important** (`important=1`, or Marked is Important), **Not transcribed** (Status is Not transcribed), **Audio only**
-(`status=audio_only`) and **Shared** (Shared with me, My links, Request links).
+The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`; failed recordings are
+here), **Unread** (`view=unread`), **Important** (`important=1`, or Marked is Important), **Audio only** (Status is
+`not_transcribed`, counted as `library.not_transcribed`) and **Shared** (Shared with me, My links, Request links).
+Since v2.1 (2.0.0-q) the old Not transcribed view and Audio only are one view, **Audio only**, and every app shows the
+Status value `not_transcribed` as "Audio only".
 
 ### The Library's kinds (since 2.0.0-q)
 Every recording in the Library has exactly one kind, worked out from its Source (`facets.source`), the same on the
@@ -1832,9 +1834,9 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
   engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
   teammate sent (the `shared` folder) it is `null`.
-- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter). Since 2.0.0-p
-  the sidebar's **Audio only** is this list, and the Status filter's **Not transcribed** holds these and the
-  recordings kept without a finished transcript (see "Library filters").
+- `GET /api/library?status=audio_only` lists them. Since v2.1 (2.0.0-q) the Library's one **Audio only** view is the
+  Status filter's `not_transcribed`, shown as "Audio only": these and the recordings kept without a finished
+  transcript (see "Library filters").
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
   "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already

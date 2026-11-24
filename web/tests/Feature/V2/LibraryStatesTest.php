@@ -212,7 +212,8 @@ it('uses the glossary\'s words in the console: the place, the rows and the Statu
     expect($html)->toContain('Audio only')->toContain('Transcribing…')->toContain('Failed · Retry')->toContain('Waiting to upload')
         ->not->toContain('Untranscribed')->not->toContain('Not transcribed');
     $status = collect(collect(Livewire::test(ListCaptureSessions::class)->instance()->filterPanel())->firstWhere('key', 'status')['options'])->pluck('label', 'value')->all();
-    expect($status['not_transcribed'])->toBe('Audio only')->and($status['processing'])->toBe('Transcribing…');
+    // Status `processing` holds uploads on their way and transcripts being written: named for both (In progress).
+    expect($status['not_transcribed'])->toBe('Audio only')->and($status['processing'])->toBe('In progress');
 
     $prefs = $owner->console_preferences ?? [];
     $prefs['shell'] = ['app_language' => 'ur'];
@@ -222,5 +223,19 @@ it('uses the glossary\'s words in the console: the place, the rows and the Statu
     foreach (['Audio only', 'Transcribing…', 'Failed · Retry', 'Waiting to upload'] as $word) {
         expect($urdu)->toContain(__($word, [], 'ur'));
         expect(__($word, [], 'ur'))->not->toBe($word, "{$word} has its Urdu");
+    }
+    expect(__('In progress', [], 'ur'))->not->toBe('In progress');
+});
+
+it('never says "Not transcribed" or "Untranscribed" to a customer: the guides, the help, the Urdu words, the emails', function () {
+    $places = [dirname(base_path()).'/docs/USER_GUIDE.md', resource_path('help/user-guide.md'), lang_path('ur.json')];
+    foreach ([resource_path('views/mail'), resource_path('views/notifications')] as $folder) {
+        if (is_dir($folder)) {
+            $places = [...$places, ...glob($folder.'/*.blade.php') ?: []];
+        }
+    }
+    foreach ($places as $file) {
+        $text = (string) file_get_contents($file);
+        expect(preg_match('/not transcribed|untranscribed/i', $text))->toBe(0, "{$file} still says it");
     }
 });

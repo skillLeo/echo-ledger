@@ -76,9 +76,10 @@ final class LibraryFilterBar
             'language' => $value === LibraryFilters::UNKNOWN_LANGUAGE ? __('Unknown') : __(LanguageChoice::label($value)),
             'status' => match ($value) {
                 'transcribed' => __('Transcribed'),
-                // The glossary's names (docs/PLAN_V2_1_POLISH.md section 1); the values stay the API's.
+                // The glossary's names (docs/PLAN_V2_1_POLISH.md section 1); the values stay the API's. `processing`
+                // holds uploads still on their way as well as transcripts being written, so it is named for both.
                 'not_transcribed' => __('Audio only'),
-                'processing' => __('Transcribing…'),
+                'processing' => __('In progress'),
                 default => __('Failed'),
             },
             'labels' => is_string($option['name'] ?? null) ? $option['name'] : $value,
