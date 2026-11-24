@@ -274,18 +274,21 @@ object Decisions {
         recordingId: String,
         widget: Boolean = true,
         /**
-         * True: nobody saw an Undo for it, so it goes back to the person ("Not deleted yet. Choose again.") in the same
-         * write, whatever it was before its Delete: waiting on the phone, with no "kept after 10 s" ever started and
-         * nothing sent until they choose (the person's last choice was Delete). A copy the server already had stays as
-         * it is there: its delete is stopped if it has not run, and nothing is sent again.
+         * True: nobody saw an Undo for it, so it goes back to the person ("Choose again") in the same write, whatever it
+         * was before its Delete: waiting on the phone, with no "kept after 10 s" ever started and nothing sent until they
+         * choose. The server follows the person's last choice, Delete: a copy an upload reached is deleted there as
+         * queued, and a later keep brings it back from the server's bin, or sends the phone's file fresh.
          */
-        leftToPerson: Boolean = false
+        leftToPerson: Boolean = false,
+        /** With [leftToPerson]: EchoLedger kept running ("Not deleted yet"), else it closed ("Deleted just before…"). */
+        notDeletedYet: Boolean = true
     ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         DiscardLaterWorker.cancel(context, recordingId)
-        // A server copy an upload reached meanwhile: its delete is stopped if it has not run, else the next upload
-        // restores it first ([com.echoledger.mobile.net.UploadWorker]).
-        val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
+        val serverCopy = graph.recordings.get(recordingId)?.serverCopy
+        // A server copy an upload reached meanwhile: on an Undo its delete is stopped if it has not run, else the next
+        // upload restores it first ([com.echoledger.mobile.net.UploadWorker]); left to the person, it goes ahead.
+        val serverDelete = if (leftToPerson) null else serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
             when {
                 it.state == DISCARDING && leftToPerson -> it.copy(
@@ -295,9 +298,9 @@ object Decisions {
                     discardedFrom = null,
                     undoIn = null,
                     restoredDelete = true,
-                    notDeletedYet = true,
-                    // Only for a later keep the person chooses: a server copy whose delete may have run comes back first.
-                    restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
+                    notDeletedYet = notDeletedYet,
+                    // Only for a later keep the person chooses: the server copy, deleted meanwhile, comes back first.
+                    restoreServerCopy = it.serverCopy != null
                 )
 
                 it.state == DISCARDING -> it.copy(
@@ -311,7 +314,7 @@ object Decisions {
                 )
 
                 // A delete whose store was never written (the process died after its Undo was posted): taken back too.
-                it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false, notDeletedYet = false)
+                it.state == WAITING && it.restoredDelete && !leftToPerson -> it.copy(restoredDelete = false, notDeletedYet = false)
 
                 else -> it
             }
@@ -352,13 +355,9 @@ object Decisions {
 
     /** A Delete whose Undo was lost with its process: the call waits again, marked [LocalRecording.restoredDelete]. */
     private suspend fun restoreDelete(context: Context, recordingId: String) {
-        val back = undoDiscard(context, recordingId) ?: return
-        val graph = (context.applicationContext as EchoLedgerApp).graph
-        // Waiting for the person, not for a timer: nobody gets a call kept or sent that they had chosen to delete.
-        DecisionTimeoutWorker.cancel(context, recordingId)
-        UploadWorker.cancel(context, recordingId)
-        graph.recordings.update(back.id) { it.copy(state = WAITING, transcribe = null, restoredDelete = true, notDeletedYet = false) }
-        WidgetStateStore.refresh(context)
+        // Waiting for the person, not for a timer, in one write: nobody gets a call kept or sent that they had chosen to
+        // delete, whenever the process stops.
+        undoDiscard(context, recordingId, leftToPerson = true, notDeletedYet = false)
     }
 
     /** Whether [recordingId] still waits for its choice (a question held back can still be asked). */
