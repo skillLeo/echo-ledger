@@ -45,6 +45,17 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 | not_deleted_yet | Not deleted yet. Choose again. | ابھی حذف نہیں ہوئی۔ دوبارہ منتخب کریں۔ |
 | block_screens | Block screenshots of EchoLedger | EchoLedger کے اسکرین شاٹس روکیں |
 | block_screens_help | Off: you can take screenshots of the app, except screens that show keys or recovery codes. On: EchoLedger's own screens can't be captured and are hidden in Recents. | بند: آپ ایپ کے اسکرین شاٹس لے سکتے ہیں، سوائے ان اسکرینز کے جن پر کلیدیں یا ریکوری کوڈز ہوں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں اور حالیہ ایپس میں چھپی رہتی ہیں۔ |
+| ac_saved | %1$s · call saved | %1$s · کال محفوظ ہو گئی |
+| ac_hint | Swipe away to keep the audio only. Change this in Settings › After each call. | صرف آڈیو رکھنے کے لیے ہٹا دیں۔ اسے ترتیبات › ہر کال کے بعد میں بدلیں۔ |
+| ac_grouped | %1$d calls saved | %1$d کالز محفوظ ہو گئیں |
+| ac_transcribe_all | Transcribe all | سب کا ٹرانسکرپٹ بنائیں |
+| ac_always_transcribe | Always transcribe | ہمیشہ ٹرانسکرپٹ بنائیں |
+| ac_always_audio | Always audio only | ہمیشہ صرف آڈیو |
+| ac_ready | Transcript ready | ٹرانسکرپٹ تیار ہے |
+| ac_bar_saved | %1$s · %2$s saved | %1$s · %2$s محفوظ |
+| ac_bar | Show a small bar on screen | اسکرین پر ایک چھوٹی پٹی دکھائیں |
+| ac_bar_help | One small line at the top of the screen for 6 seconds, as well as the notification. Needs the permission to display over other apps. | نوٹیفکیشن کے ساتھ اسکرین کے اوپر 6 سیکنڈ کے لیے ایک چھوٹی لائن۔ دوسری ایپس کے اوپر دکھانے کی اجازت چاہیے۔ |
+| ac_setting_ask_help | A quiet notification after each call. | ہر کال کے بعد ایک خاموش نوٹیفکیشن۔ |
 | hide_live_words | Hide EchoLedger's live words from screenshots and screen shares | EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں |
 | hide_live_words_help | On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and screen shares. The recording pill and the after-call card always show. Off: everything shows. | آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔ |
 
@@ -52,3 +63,7 @@ Confirmations (one line at a time, 5 s, never two at once, never on top of the c
 - after Transcribe: `done_transcribing` + `undo`;
 - after the 8 s or a swipe: `done_audio` + `transcribe` + `undo`;
 - after Delete: `done_deleted` + `undo`.
+
+On the phone since v2.1 (FIX-03) a confirmation is never a floating window: inside the app it is the app's snackbar
+(Undo for 10 s, a swipe left or right closes it), outside the app it takes the call's notification in place, and only
+when neither can show it does it stay on the card. Back-to-back calls: `grouped_audio` + `grouped_review`.

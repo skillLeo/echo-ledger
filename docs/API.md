@@ -3,7 +3,11 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-p (2026-11-23, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-t (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
+2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
+2.0.0-r (accepted 2026-11-24 by EL-Lead; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
+2.0.0-q (accepted 2026-11-24 by EL-Lead; the Library's kinds, see "The Library's kinds (since 2.0.0-q)"): every recording has exactly one kind, `call`, `meeting`, `voice_note` or `other`, worked out from its Source, so the Library's tabs always add up to All. Imported files and any Source that is not a call, a meeting or a voice note are `other`, and the tabs gain **Other**, shown only when its count is above 0. A library item's `facets` carries `kind`; `GET /api/library/facets` answers `kinds`, the count of each kind for the filters and the search, which add up to `total`. The console's address takes `kind=other`. The shared test file gives every recording its kind and every filter set its kinds. Only additions, nothing stored: older apps ignore `kind` and `kinds` and keep their four tabs.
 2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q` (the search: every word somewhere among the title, the transcript and the project path), and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language) and `processing_since` (when its current upload or transcript attempt began, for Needs you's "stuck"). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
 2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
 2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
@@ -150,6 +154,7 @@ Every addition below is marked **(since v1.1)**.
 | session `status` | `recording`, `uploading`, `processing`, `completed`, `failed`, `audio_only` (since v1.8: uploaded, not transcribed; apps that don't know it show it like a completed recording without a transcript) |
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
+| library item `facets.state` (since 2.0.0-r) | `transcribed`, `audio_only`, `transcribing`, `waiting_to_upload`, `failed`, `waiting`: the glossary's states, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)" |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
 | provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only), `gemini` (since v1.5: Google Gemini, final transcripts only) |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
@@ -693,6 +698,8 @@ No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
   index the landing and downloads pages (off until the public launch).
 
 ### `GET /api/config` — `config:read`
+Since 2.0.0-r the answer also carries `upload_retry`, and `ui_flags` the `v21_*` flags (six since 2.0.0-s): see "v2.1: flags, Activity,
+upload retries, the badge, states and the profile (since 2.0.0-r)".
 ```json
 {"api_version": "1.1",
  "device": {"id": "01JB…", "name": "S25 Ultra", "platform": "android", "source_device": "phone"},
@@ -1022,6 +1029,15 @@ SHA-256, encrypts the file at rest, and starts the final transcript when every r
   new chunks arrive.
 - A scheduled recovery (every 5 minutes) finishes recordings left in `assembling` for more than 15 minutes when
   every part is still on disk, and marks them `failed` (upload again) otherwise **(since v1.1)**.
+- Only a fault of the upload itself (the checksum, a part missing or damaged) ends in `failed` at once. When the
+  server is at fault (its PHP, its storage), the recording stays `assembling` with its parts, and the recovery finishes
+  it once the server is fixed: the client keeps polling and its local audio, and uploads nothing again. For so long
+  only: 48 hours after `complete`, or after 8 rounds of the recovery (15 minutes apart at first, then twice as long
+  each time up to 8 hours: about 32 hours for all eight), whichever comes first, the parts are discarded and the
+  recording is `failed`, so the client sends the whole file again. The desktop (a `Verifying` upload) and the phone
+  (`STILL_VERIFYING`) keep their local audio for as long as the recording is `assembling` and delete it only once it is
+  `ready` (checked 2026-11-24 in desktop/src-tauri/src/net/uploader.rs and mobile UploadWorker.kt). No field changes
+  **(since W-INC-1124, 2026-11-24)**.
 
 ### `POST /api/sessions/{id}/transcripts` — `sessions:write`
 Device-supplied transcripts: `kind: "live"` (captions captured during the session) or `kind: "final"` (only when the
@@ -1078,14 +1094,15 @@ when `status=recording`, `view=waiting` or, since 2.0.0-p, `view=needs_you` is g
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
-    "facets": {"source": "zoom", "status": "transcribed", "language": "en"}, "processing_since": null,
+    "facets": {"source": "zoom", "status": "transcribed", "language": "en", "kind": "meeting"}, "processing_since": null,
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
  "next_cursor": null, "server_time": "2026-10-24T09:05:00+00:00", "views_version": 4}
 ```
 `facets` (since 2.0.0-p): the recording's value in the Library's Source, Status and Language filters, worked out by the
-server as "Library filters" says; the apps count with these instead of working them out again. `processing_since`
+server as "Library filters" says; the apps count with these instead of working them out again. Since 2.0.0-q also `kind`,
+the recording's one kind (`call`, `meeting`, `voice_note` or `other`, see "The Library's kinds"). `processing_since`
 (since 2.0.0-p): when the current upload or transcript attempt began, the later of the two (a retry starts it again), or
 null when none is stored (recordings from before 2.0.0-p); "Needs you" counts a recording stuck from it. `views_version` (since
 2.0.0-p): a number that changes whenever the person's saved views change (0 before the first one); when it differs from
@@ -1232,7 +1249,7 @@ brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
 | `device` (was "Recorded on") | `phone`, `desktop`, `web` | `source_device` |
 | `project` | `none` (no project) and project ids | `client.id`, and every project above it: "Project is Acme" keeps Acme's subfolders too. An id that is not one of the person's projects (gone, or someone else's) matches nothing |
 | `language` | the offered codes (`en`, `ur`, `ar`, `fr`, `de`, `es`, `it`, `pt`, `nl`, `tr`, `ru`) and `unknown` | `facets.language`: the language the final transcript was written in, else the one chosen for the recording (`language`), else `unknown`; old and engine spellings read as the offered codes (`en+ur` and Hindi are `ur`, `ar-EG` is `ar`, a code not offered is passed over) |
-| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript) |
+| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript; shown as "Audio only" since v2.1) |
 | `labels` | label keys (a label in lower case; any capitals are accepted and kept in lower case) | `labels`, capitals ignored as lists are |
 | `marked` | `pinned`, `important`, `keep_forever` | `pinned`, `important`, `keep` (a recording can have several) |
 | `bookmarks` | `any` (any bookmark) and bookmark tags (in lower case; any capitals are accepted) | `any` when `marker_count` > 0, and each of `tags` in lower case (the web's "Has bookmarks" and "Bookmark tag", the apps' Bookmark chip) |
@@ -1267,23 +1284,53 @@ The server knows what reached it. Only the apps know their own: an upload that f
 reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
 those to the server's, never counting one recording twice.
 
-The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
-**Important** (`important=1`, or Marked is Important), **Not transcribed** (Status is Not transcribed), **Audio only**
-(`status=audio_only`) and **Shared** (Shared with me, My links, Request links).
+The sidebar's Library views: **All recordings** (no filter), **Needs you** (`view=needs_you`; failed recordings are
+here), **Unread** (`view=unread`), **Important** (`important=1`, or Marked is Important), **Audio only** (Status is
+`not_transcribed`, counted as `library.not_transcribed`) and **Shared** (Shared with me, My links, Request links).
+Since v2.1 (2.0.0-q) the old Not transcribed view and Audio only are one view, **Audio only**, and every app shows the
+Status value `not_transcribed` as "Audio only".
 
-**The Library's tabs** (UI guidance, no API change; docs/PLAN_NAV_3_LEVELS.md section 4): the page's top tabs split the
-list by `facets.source`, the same on the web, the desktop and the phone. **All** (every source), **Calls**
-(`whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype`), **Meetings**
-(`zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord`) and **Voice notes** (`voice_note`); `imported` and
-`other` are under All only. A tab narrows the place, the filters and the search (AND with them; a Source filter still
-applies inside it), and each tab's count is how many the place, the filters and the search keep in it. The web keeps
-the tab in the address as `kind=calls|meetings|voice_notes`, none for All (any other value is All too), with the
-3-level navigation on (`ui_v2.shell` and `ui_v2.library`).
+### The Library's kinds (since 2.0.0-q)
+Every recording in the Library has exactly one kind, worked out from its Source (`facets.source`), the same on the
+server, the web, the desktop and the phone. Nothing is stored, so there is nothing to backfill: a recording's kind
+follows its Source.
+
+| Kind | Sources |
+|---|---|
+| `call` | `whatsapp`, `whatsapp_business`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype` |
+| `meeting` | `zoom`, `google_meet`, `microsoft_teams`, `slack`, `discord` |
+| `voice_note` | `voice_note` |
+| `other` | every other Source: `imported` (a file that came in as a file, whatever app it names), `other`, and any Source the app does not know (one the server adds later) |
+
+A library item carries it as `facets.kind`. An app that meets a `facets.kind` it does not know, or an item without one
+(cached before 2.0.0-q), works it out from `facets.source` with this table, and a Source it does not know is `other`.
+
+**The Library's tabs** (docs/PLAN_NAV_3_LEVELS.md section 4): **All** · **Calls** (`call`) · **Meetings** (`meeting`) ·
+**Voice notes** (`voice_note`) · **Other** (`other`). Other shows only while its count is above 0; the other tabs always
+show. Every recording is in All and in exactly one other tab, so the kind tabs always add up to All, whatever the place,
+the filters and the search. A tab narrows the place, the filters and the search (AND with them; a Source filter still
+applies inside it), and each tab's count is how many the place, the filters and the search keep in it. On the web,
+`GET /api/library/facets` gives the counts for the filters and the search (`kinds`); the desktop and the phone count
+their synced library with `facets.kind`. The web keeps the tab in the address as
+`kind=calls|meetings|voice_notes|other`, none for All (any other value is All too), with the 3-level navigation on
+(`ui_v2.shell` and `ui_v2.library`); `kind=other` while Other has nothing shows the empty Other list, its tab still
+chosen. The address words map to the kinds: `calls` → `call`, `meetings` → `meeting`, `voice_notes` → `voice_note`,
+`other` → `other`. They stay plural on purpose, because saved links have used them since 2.0.0-p; the API's kinds stay
+singular.
+
+**Older apps** (before 2.0.0-q) ignore `facets.kind` and `kinds`: they keep All · Calls · Meetings · Voice notes, with
+imported files and other Sources under All only, and their kind tabs do not add up to All when the person has such
+recordings (as before). Nothing else changes for them. Apps add the Other tab when they build on 2.0.0-q.
+
+**The shared test file** (`web/tests/Fixtures/library-facets.json`): each recording's `facets.kind`, and each filter
+set's `expect.kinds` (the count of each kind for its filters and its search, adding up to its `total`), with imported
+files, `other` and requested files among the recordings. Each app's tests check that the kinds add up.
 
 ### `GET /api/library/facets` — `library:read` (since 2.0.0-p)
 The filter panel's counts. Query: `filters`, `q`, `tz` as above.
 ```json
 {"total": 23,
+ "kinds": {"call": 14, "meeting": 5, "voice_note": 3, "other": 1},
  "sections": {
    "date": [{"value": "today", "count": 3}, {"value": "last_7_days", "count": 9}, {"value": "this_month", "count": 20}],
    "source": [{"value": "whatsapp", "count": 7}, {"value": "zoom", "count": 3}],
@@ -1303,6 +1350,8 @@ The filter panel's counts. Query: `filters`, `q`, `tz` as above.
  "views_version": 4}
 ```
 - `total`: what the filters and the search keep (what `GET /api/library` with them lists).
+- `kinds` (since 2.0.0-q): of those, how many are of each kind ("The Library's kinds"), every section's filter and the
+  search applied. All four kinds are always there (0 when none), and they add up to `total`: the tabs' counts.
 - **The facet rule:** each section's counts apply the search and every *other* section's filter, never its own, so every
   option stays selectable: with Source is WhatsApp and Device is Desktop, Source counts each app's recordings on the
   desktop and Device counts where the WhatsApp calls were made. A recording counts once in each option it has (in each
@@ -1714,6 +1763,14 @@ the recording, so it does not reorder or re-sync the library. Library items carr
 (`false` until then), which the apps show as a dot; the console counts viewing a recording's page as opening it.
 Another workspace's id → `404`.
 
+### `DELETE /api/sessions/{id}/opened` — `library:read` (since 2.0.0-t)
+The device's user marks this recording unread again (the apps' Mark as unread, UX-22): `204`. It takes back only the
+asking person's own open, never anyone else's, and it is idempotent (a recording they have not opened, or already
+marked unread: `204`). Like opening, it never changes the recording (no `updated_at`, no reorder, no re-sync of the
+library). From then on library items carry `"opened": false` for them, the recording is in Unread (`view=unread`)
+and counted in `library.unread`, until it is opened again. The same recordings as `POST …/opened`: one the person
+cannot see (another workspace's, or another person's they were not given) → `404`.
+
 ### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
 `200 {"data": [ShareLink]}`, newest first. The URL is not shown again.
 
@@ -1800,9 +1857,9 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
   engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
   teammate sent (the `shared` folder) it is `null`.
-- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter). Since 2.0.0-p
-  the sidebar's **Audio only** is this list, and the Status filter's **Not transcribed** holds these and the
-  recordings kept without a finished transcript (see "Library filters").
+- `GET /api/library?status=audio_only` lists them. Since v2.1 (2.0.0-q) the Library's one **Audio only** view is the
+  Status filter's `not_transcribed`, shown as "Audio only": these and the recordings kept without a finished
+  transcript (see "Library filters").
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
   "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already
@@ -2336,6 +2393,121 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 
 ---
 
+## v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)
+
+docs/PLAN_V2_1_POLISH.md, BE-02 to BE-06, and its five feature flags. Additions only: no field is renamed or removed,
+and an app that does not know a new field ignores it.
+
+### 1. The v2.1 interface flags
+`ui_flags` (`GET /api/config`, `GET /api/account/ui`) gains five flags, and since 2.0.0-s a sixth, each `false` on an
+older server:
+
+| Flag | What it turns on |
+|---|---|
+| `v21_aftercall_notify` | phone: the after-call notification with Transcribe and Delete; swiping it away keeps the audio only |
+| `v21_aftercall_card` | desktop: the small after-call card |
+| `v21_panel_flyout` | every app: under 1200 px the panel opens over the page instead of disappearing |
+| `v21_zoom` | desktop and web: zoom in Settings › Appearance |
+| `v21_preview_pane` | desktop and web: the Library's preview pane |
+| `v21_win_titlebar` (since 2.0.0-s) | desktop on Windows: the custom title row |
+
+They work like `live_assist`: the admin sets each to `off` (only the admin's lists: people, workspaces, a share of
+accounts) or `everyone`. There is no `opt_in`, and the person's design choice (`design`, `ui_classic`) does not change
+them; an app applies a v21 flag only on the screens of the design it is showing. All six start `off` with empty
+lists, so they answer `false` for everyone until the admin adds someone to a list.
+
+### 2. Activity: one item per recording and event (BE-02)
+- The server keeps one Activity item per recording and kind (`session_id`, `kind`). When the same thing happens to the
+  same recording again (its upload fails again, its transcript fails again, it is shared with you again), the item is
+  updated instead of a new one being added: `at` becomes the new time, it is unread again, the title and body are the
+  latest, and `repeat_count` goes up by one. Items without a recording (the monthly limit, a new device, upgrades) are
+  never merged.
+- Every item gains:
+  - `repeat_count`: how many times it happened (1 for most);
+  - `group`: `"upload_failed"` for an upload failure, otherwise `null`;
+  - `resolved`: `true` once what the item asked for is done; for now that is an upload failure whose recording has
+    since reached the server (it then reads "Uploaded" and is read). Otherwise `false`.
+- Items that were already there before 2.0.0-r are merged by a one-time migration that runs with the deploy of
+  2.0.0-r, not when the list is read. For each person, recording and kind it keeps the newest item. Its `repeat_count`
+  becomes the number of items merged, and it is unread when any of them was. Running it again changes nothing, and
+  the deploy's check confirms that no two items share a person, a recording and a kind.
+- `GET /api/activity` takes `group` (`upload_failed`) to list only that group's items, newest first.
+- `GET /api/activity/groups` — `library:read`: the groups that hold at least one unresolved item:
+  `200 {"data": [{"group": "upload_failed", "count": 3, "unread": 2, "session_ids": ["01JB…", …], "at": "…"}]}`.
+  `count` is the group's unresolved items, `at` the newest one's time. The apps show it as one line, for example
+  "3 recordings didn't finish uploading · Retry all", and open it to the group's items.
+
+### 3. Upload retries and Retry all (BE-03)
+- `GET /api/config` gains `"upload_retry": {"after_seconds": [60, 300, 1800], "then": ["network_change", "app_start"]}`.
+  The apps retry a failed upload on their own 1, 5 and 30 minutes after it failed, and after that on a network change
+  or when the app starts. The server says it, so every app follows the same schedule; the uploads stay the device's.
+- `POST /api/activity/retry-all` — `sessions:write`, throttled (6/min/device): takes `{"group": "upload_failed"}` and answers
+  `202 {"retry_requested_at": "…", "count": 3}`. Only the devices hold the files, so the server asks them: from then on,
+  `GET /api/activity` and `GET /api/activity/groups` carry `"retry_requested_at"` (the person's latest Retry all, or
+  `null`). An app that sees it newer than its own last run retries every failed upload it holds at once, then
+  records the time it ran, so one Retry all runs once on each device. A device with nothing failed does nothing. A
+  recording that is already `ready` on the server is never sent again: an app retries only its own uploads that
+  failed, and the server answers a `complete` for a `ready` recording with `ready` (as since v1.1). The console's
+  Retry all sends the same request. `422` for any other `group`.
+- When an upload that had failed reaches the server, its `upload_failed` item becomes `resolved` and read (see 2).
+
+### 4. The badge (BE-04)
+`GET /api/badge` — `library:read`: `200 {"count": 4, "label": "4", "tone": "accent"}`. It is the one number on the
+Activity icon in every app and in the web console.
+- `count`: unread Activity items that need action, plus calls waiting for the person's choice after a call (Transcribe,
+  Save audio only or Delete). Items that need action are
+  a failed transcript or upload, the monthly limit reached, a missed recording, and an answer to an upgrade request. A
+  merged item counts once, and a resolved one never counts.
+- `label`: `null` at 0, the number up to 99, then `"99+"`.
+- `tone`: `"danger"` when one of the counted items is a failure, else `"accent"`.
+- The apps refresh it with the Activity list, on resume and after they act on an item. The Library itself has no
+  badge; its Needs you count is in the panel.
+
+### 5. The glossary's states (BE-05)
+Each recording has one state, from its one Status (`facets.status`, "Library filters"), with one name in every app:
+
+| `facets.state` | Name | On a list row |
+|---|---|---|
+| `transcribed` | (nothing) | the transcript's first words |
+| `audio_only` | Audio only | grey text, no coloured chip |
+| `transcribing` | Transcribing… | a small spinner and the text |
+| `waiting_to_upload` | Waiting to upload | grey text |
+| `failed` | Failed · Retry | red text and a retry icon (the only red on rows) |
+| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only |
+
+- Every library item's `facets` gains `state`. `transcribed` comes from Status `transcribed`, `audio_only` from
+  `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording`,
+  `waiting_to_upload` while it is `uploading`, and `transcribing` otherwise.
+- `GET /api/library/facets` gains `states`, counted like `kinds`: of the recordings the filters and the search keep,
+  how many are in each state. All six keys are always there, and they add up to `total` (a call still waiting is not
+  in `total`, so `waiting` is 0 there).
+- "Not transcribed" is not a name any more: the view is **Audio only**. It is Status `not_transcribed`, so its count is
+  `library.not_transcribed`. `library.audio_only` and `status=audio_only` keep their 2.0.0-j meaning (recordings saved
+  as audio only by choice), which is a part of it. Failed recordings are in **Needs you**.
+- `waiting_to_upload` covers only what reached the server as a session still `uploading`. A recording that has not
+  reached the server at all is the app's own, and the app shows it with the same name.
+- The Status filter keeps its four values: no state is a filter value, so saved views stay readable by older apps.
+  `processing` is shown as "In progress", and the apps show its parts from `states`, for example "2 transcribing ·
+  1 waiting to upload". The parts are `transcribing` and `waiting_to_upload`, and they are given while the Status
+  filter keeps `processing`, which is when they add up to its count. Each row still shows its own state.
+
+### 6. The profile inside the apps (BE-06)
+- `GET /api/account` gains:
+  - `"language"`: the apps' and the console's interface language, `"en"` or `"ur"`. It is the same setting as the web
+    console's language, so a change shows everywhere.
+  - `"avatar_color"`: 0 to 7, the colour of the initials' circle when there is no photo. It indexes the tokens' 8
+    colours, in order: teal, blue, indigo, purple, pink, orange, green and slate.
+- Everywhere a person is shown with `avatar_url` (2.0.0-l), `avatar_color` is given beside it.
+- The server picks the colour once, at sign-up, so it is the same on every device. People who signed up earlier get
+  one from their id, once, and keep it.
+- `PATCH /api/account` takes `language` and `avatar_color` beside `name`. Each is optional, at least one is needed,
+  and the answer is the account as in `GET`.
+  - `422 validation_failed` for a language other than `en` or `ur`, or a colour outside 0 to 7.
+  - The limit is 10 an hour, shared with the name.
+- The profile picture is unchanged: `POST` and `DELETE /api/account/avatar` (2.0.0-l). The website is only for billing.
+
+---
+
 ## Activity centre (since v1.1)
 
 The console bell and the device apps share one list of notifications: `transcript_ready`, `transcript_failed`,
@@ -2347,6 +2519,9 @@ Recordings in the undo bin make none. Read notifications are kept 90 days, unrea
 new ones as OS notifications that open `session_id`, outside the quiet hours the person chose on that device.
 
 ### `GET /api/activity?limit=` — `library:read` (since v1.1)
+Since 2.0.0-r each item also carries `repeat_count`, `group` and `resolved`, the list takes `group`, and the answer
+carries `retry_requested_at`: see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since
+2.0.0-r)".
 `limit` 1-100 (default 30), newest first:
 ```json
 {"data": [{"id": "9b1c…", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call",

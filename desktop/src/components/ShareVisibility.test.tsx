@@ -121,7 +121,7 @@ describe("the card's and the captions' badge", () => {
     await act(flushAsync);
     expect(callsOf("privacy_window_share")).toEqual([{ which: "captions" }]);
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText("Show them from the captions' badge.")).toBeInTheDocument();
+    expect(screen.getByText("Show them from the captions' own menu")).toBeInTheDocument();
     cleanup();
     respond("privacy_window_share", view({ which: "captions", shown: true, state: "shown", badge: "Shown in screen shares", switchLabel: "Hide captions from screen shares" }));
     respond("privacy_window_share_set", view({ which: "captions" }));

@@ -125,6 +125,12 @@ it('keeps the same recordings and counts every section the same for each filter 
         $answer = $this->api($this->token)->getJson('/api/library/facets?'.http_build_query($query))->assertOk()->json();
 
         expect($answer['total'])->toBe($set['expect']['total'], "{$set['name']}: total");
+        // Since 2.0.0-q: the count of each kind, which add up to the total (the Library's tabs add up to All).
+        expect($answer['kinds'])->toBe($set['expect']['kinds'], "{$set['name']}: kinds")
+            ->and(array_sum($answer['kinds']))->toBe($answer['total'], "{$set['name']}: the kinds add up");
+        // Since 2.0.0-r: the count of each of the glossary's states, which add up to the total too.
+        expect($answer['states'])->toBe($set['expect']['states'], "{$set['name']}: states")
+            ->and(array_sum($answer['states']))->toBe($answer['total'], "{$set['name']}: the states add up");
         foreach ($set['expect']['facets'] as $section => $counts) {
             expect(countsOf($answer['sections'][$section]))->toBe($counts, "{$set['name']}: {$section}");
         }

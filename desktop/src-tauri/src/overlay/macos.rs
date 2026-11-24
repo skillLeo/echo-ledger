@@ -335,6 +335,7 @@ pub fn window_facts<R: Runtime>(window: &WebviewWindow<R>, label: &'static str) 
             ns_panel: is_panel,
             activation_setter: activation_setter_applied(ns_window),
             sharing: ns_window.sharingType().0 as u64,
+            server_sharing: crate::privacy::window_server_sharing(ns_window.windowNumber() as i64),
         });
     });
     rx.recv_timeout(Duration::from_secs(2)).ok()

@@ -335,7 +335,8 @@ describe('the review of 2356ca5c', function () {
         minutesLimit($this->owner, 1);
 
         Livewire::test(ViewCaptureSession::class, ['record' => $id])
-            ->callAction('retry', data: ['language' => ''])->assertNotified('Not transcribed');
+            // Since v2.1 the glossary's words (docs/PLAN_V2_1_POLISH.md section 1): never "Not transcribed".
+            ->callAction('retry', data: ['language' => ''])->assertNotified('Still audio only');
         expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
 
         minutesLimit($this->owner, null);

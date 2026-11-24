@@ -1,15 +1,17 @@
 // Home in the new look (ui_v2.home, IA 1): the status strip, the get-started checklist until everything is done, what
-// needs action (failed uploads, calls waiting for a decision, untranscribed recordings, missed calls), the last five
+// needs action (failed uploads, calls waiting for a decision, recordings kept as audio only, missed calls), the last five
 // recordings and the month's minutes. Everything comes from data the app already reads.
+import { RowMetaText } from "../library/RecordingRow";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type LibraryItem, type SkippedItem } from "../../lib/ipc";
 import { useReadyReport } from "../../views/main/ReadyCheck";
 import { accessOf, usePermissions } from "../../views/main/Permissions";
 import { permissionKinds } from "../setup/SetupHealth";
 import { useEntitlements } from "../../lib/entitlements";
-import { Badge, Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
+import { Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
-import { isUntranscribed, rowModel } from "../library/model";
+import { rowModel } from "../library/model";
+import { statusOf } from "../library/facets";
 import { minutesLine } from "../settings/AccountCard";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { RecordSection, type Run } from "./RecordSection";
@@ -35,7 +37,7 @@ export function needsAction(input: { failed: number; waiting: number; untranscri
   const all: NeedsAction[] = [
     { id: "failed", count: input.failed, title: plural(input.failed, "1 recording didn't upload", "# recordings didn't upload") },
     { id: "waiting", count: input.waiting, title: plural(input.waiting, "1 call waits for your decision", "# calls wait for your decision") },
-    { id: "untranscribed", count: input.untranscribed, title: plural(input.untranscribed, "1 recording isn't transcribed", "# recordings aren't transcribed") },
+    { id: "untranscribed", count: input.untranscribed, title: plural(input.untranscribed, "1 recording is audio only", "# recordings are audio only") },
     { id: "missed", count: input.missed, title: plural(input.missed, "1 short call was skipped in the last day", "# short calls were skipped in the last day") },
     { id: "notifications", count: input.notifications ?? 0, title: plural(input.notifications ?? 0, "1 notification needs you", "# notifications need you"),
       line: "A transcript that failed, the monthly limit, or an answer to your upgrade request." },
@@ -103,7 +105,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
   const actions = needsAction({
     failed: status.failedUploads,
     waiting: status.pendingDecisions,
-    untranscribed: live.filter(isUntranscribed).length,
+    // The Audio only view's recordings (Status not_transcribed), so the line and the view it opens agree.
+    untranscribed: live.filter((i) => statusOf(i) === "not_transcribed").length,
     missed: skipped.length,
     notifications,
   });
@@ -186,9 +189,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
               {recent.map((item) => {
                 const r = rowModel(item);
                 return (
-                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
-                    endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
+                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={<RowMetaText r={r} />}
+                    endTop={r.when} endBottom={r.duration ? <span className="el-ltr">{r.duration}</span> : undefined}
                     onClick={() => onOpenRecording(item.id)} />
                 );
               })}

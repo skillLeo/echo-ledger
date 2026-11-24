@@ -1,6 +1,7 @@
 // A Settings page in the new look: its frame (back, title, the setting asked for scrolled to and highlighted) and
 // the rows every page is built from. A row's title, description and options come from the settings registry
 // (lib/settingsRegistry.ts), the same words search, the phone and the console use.
+import { PanelToggle } from "../../shell/NavRail";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, type Settings, type SettingsPatch } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
@@ -55,7 +56,7 @@ export function SettingsPage({ title, back, onBack, target, children }: {
   return (
     <div className="el-page el-page--narrow el-settings-v2" data-v2="settings-page" ref={root}>
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{back}</Button>
-      <header className="el-page__head"><h1 className="el-title-l">{title}</h1></header>
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">{title}</h1></header>
       {children}
     </div>
   );
@@ -91,16 +92,18 @@ export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string
   );
 }
 
-export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled }: {
+export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled, meta }: {
   id: string;
   value: T;
   options?: { value: T; label: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** The row's subtitle when it depends on the choice (else the setting's description). */
+  meta?: string;
 }) {
   const s = setting(id);
   return (
-    <ListRow compact anchor={id} title={s.title} meta={s.description}
+    <ListRow compact anchor={id} title={s.title} meta={meta ?? s.description}
       control={<Select label={s.title} hideLabel value={value} options={options} disabled={disabled} onChange={(v) => onChange(v as T)} className="el-setting__select" />} />
   );
 }

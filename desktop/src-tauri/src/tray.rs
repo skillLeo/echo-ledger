@@ -286,7 +286,11 @@ pub enum MainShare {
     Hidden(String),
 }
 
-/// The durations under "Hide from screen shares", by menu id, in order.
+/// The tray's entry that hides the main window from screen shares for a while (PLAN_V2_1_POLISH FIX-01: the words say
+/// which window): the durations open under it.
+pub const TRAY_HIDE_MAIN: &str = "Hide the EchoLedger window from screen shares for…";
+
+/// The durations under [`TRAY_HIDE_MAIN`], by menu id, in order.
 pub const HIDE_CHOICES: [(&str, &str); 6] = [
     ("share_hide_call", "Until this call ends"),
     ("share_hide_15", "15 min"),
@@ -450,7 +454,7 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
     entries.push(Entry::Item { id: "auto", label: "Record calls automatically".into(), enabled: true, checked: Some(shape.auto) });
     match &shape.main_share {
         Some(MainShare::Shown { call }) => entries.push(Entry::Submenu {
-            label: "Hide from screen shares".into(),
+            label: TRAY_HIDE_MAIN.into(),
             items: HIDE_CHOICES.iter().filter(|(id, _)| *call || *id != "share_hide_call").map(|(id, label)| item(id, *label)).collect(),
         }),
         Some(MainShare::Hidden(line)) => entries.push(item("share_show_now", line.clone())),
@@ -556,6 +560,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     "share_show_now" => crate::privacy::show_main_in_shares(&app, None),
                     "share_hide_custom" => {
                         crate::actions::open_settings(&app, "share_privacy.main");
+                        Ok(())
+                    }
+                    // A page's own native menu (Record's, DES-02): the main window runs the action picked.
+                    id if crate::native_menu::picked_action(id).is_some() => {
+                        crate::native_menu::picked(&app, id);
                         Ok(())
                     }
                     id if hide_choice(id).is_some() => hide_choice(id).map_or(Ok(()), |choice| crate::privacy::hide_main(&app, choice).map(|_| ())),
@@ -742,12 +751,12 @@ mod tests {
     #[test]
     fn the_main_window_is_hidden_from_screen_shares_for_a_chosen_time_and_shown_with_one_line() {
         let shown = labels(&MenuShape { main_share: Some(MainShare::Shown { call: false }), ..MenuShape::default() });
-        assert!(shown.contains(&"Hide from screen shares ▸ 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "{shown:?}");
+        assert!(shown.contains(&"Hide the EchoLedger window from screen shares for… ▸ 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "{shown:?}");
         let in_call = labels(&MenuShape { main_share: Some(MainShare::Shown { call: true }), ..MenuShape::default() });
-        assert!(in_call.contains(&"Hide from screen shares ▸ Until this call ends | 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "offered only while a call is detected");
+        assert!(in_call.contains(&"Hide the EchoLedger window from screen shares for… ▸ Until this call ends | 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "offered only while a call is detected");
         let hidden = labels(&MenuShape { main_share: Some(MainShare::Hidden("Hidden until 14:30 · Show now".into())), ..MenuShape::default() });
         assert!(hidden.contains(&"Hidden until 14:30 · Show now".to_string()));
-        assert!(!hidden.iter().any(|l| l.starts_with("Hide from screen shares")));
+        assert!(!hidden.iter().any(|l| l.starts_with(TRAY_HIDE_MAIN)));
         let held = labels(&MenuShape { held_back: Some(crate::privacy::held_back_line(crate::privacy::ASSIST)), ..MenuShape::default() });
         assert!(held.contains(&"The Live Assist card couldn't be hidden from screen shares, so it stays off.".to_string()), "the tray tells the person");
         let none = labels(&MenuShape::default());

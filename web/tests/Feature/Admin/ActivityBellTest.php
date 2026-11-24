@@ -13,8 +13,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
 | v1.6 P6: the app's bell counts only what needs the person: unread problems (since v1.8 a missed recording too), answers
-| to an upgrade request and calls waiting for Keep or Discard; never finished transcripts, new devices or shares; "9+"
-| above nine.
+| to an upgrade request and calls waiting for the person's choice after a call; never finished transcripts, new devices
+| or shares; "9+" above nine, and since 2.0.0-r (BE-04, the one badge of every app) "99+" above 99.
 */
 
 beforeEach(function () {
@@ -61,11 +61,13 @@ it('counts unread problems, upgrade answers and calls waiting for Keep or Discar
     expect(bellBadge())->toBe('1');
 });
 
-it('says 9+ above nine', function () {
+it('says the number up to 99, then 99+ (since 2.0.0-r; 9+ above nine before)', function () {
     bellPost('transcript_failed', 12);
+    expect(bellBadge())->toBe('12')->and(Activity::getNavigationBadge())->toBe('12');
 
-    expect(bellBadge())->toBe('9+')->and(Activity::getNavigationBadge())->toBe('9+')
-        ->and(ActionBadge::label(9))->toBe('9')->and(ActionBadge::label(10))->toBe('9+')->and(ActionBadge::label(0))->toBeNull();
+    bellPost('upload_failed', 90);
+    expect(bellBadge())->toBe('99+')->and(Activity::getNavigationBadge())->toBe('99+')
+        ->and(ActionBadge::label(99))->toBe('99')->and(ActionBadge::label(100))->toBe('99+')->and(ActionBadge::label(0))->toBeNull();
 });
 
 it('counts only the person\'s own: another person\'s problems never show', function () {

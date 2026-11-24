@@ -1,13 +1,13 @@
 // The three levels (PLAN_NAV_3_LEVELS §2, §3, §6): the rail's places with their badges, dots and ⌘1…⌘6; the selected
 // place pressed again starts it over; the panel hidden by ⊟ or ⌘\ and remembered per place; under 1100 px a flyout
-// from the rail that closes once something is chosen; Record's menu with call recording; the logo opens Home.
+// from the rail that closes once something is chosen; Record's menu with call recording and the Record page (Home).
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { FLYOUT_BELOW, NavShell } from "./NavShell";
+import { FLYOUT_BELOW, NavShell, RAIL_FULL_FROM } from "./NavShell";
 import type { Place } from "./NavRail";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -27,7 +27,7 @@ function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn() }: { o
       onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} callRecording={{ on: true, toggle: toggleCalls }} onSearch={() => undefined} searchKeys="⌘K"
       me={{ name: "Ayesha Khan", email: "ayesha@example.test", plan: null }} account={[{ label: "Sign out", onPick: () => undefined }]}
       panels={{ library: panel("Library"), projects: panel("Projects"), live: panel("Live"), ask: panel("Ask"), activity: panel("Activity"), settings: panel("Settings") }}
-      feet={{ library: <p>Synced just now</p> }}>
+      feet={{ library: <p>Synced just now</p> }} layoutFor="ledger.example.test|ayesha@example.test|w1">
       <p>The page</p>
     </NavShell>
   );
@@ -41,25 +41,25 @@ describe("the three levels", () => {
     window.localStorage.clear();
   });
 
-  it("the rail: Home's logo, Record, the places with their badges and dots, and at its foot Search, Setup, Help, Settings and the avatar", () => {
+  it("the rail: Record, the places with their badges and dots, and at its foot Setup, Help, Settings and the avatar (DES-01: no logo, no Search)", () => {
     setWidth(1440);
     render(<App />);
     const names = rail().getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(names).toEqual([
-      "EchoLedger, Home", "Record", "More ways to record",
-      "Library, 4", "Projects", "Live, recording", "Ask", "Activity, 2",
-      "Search", "Setup, needs setup", "Help", "Settings", "Ayesha Khan: account",
+      "Record", "More ways to record",
+      "Library", "Projects", "Live, recording", "Ask", "Activity, 2",
+      "Setup, needs setup", "Help", "Settings", "Account, Ayesha Khan",
     ]);
     // ⌘1…⌘6 said on the places.
-    expect(rail().getByRole("button", { name: "Library, 4" })).toHaveAttribute("aria-keyshortcuts", "Meta+1 Control+1");
+    expect(rail().getByRole("button", { name: "Library" })).toHaveAttribute("aria-keyshortcuts", "Meta+1 Control+1");
     expect(rail().getByRole("button", { name: "Settings" })).toHaveAttribute("aria-keyshortcuts", "Meta+6 Control+6");
-    expect(rail().getByRole("button", { name: "Library, 4" })).toHaveAttribute("aria-current", "page");
+    expect(rail().getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
     // The panel beside the page: the place's name and its views.
     expect(within(panel()!).getByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(within(panel()!).getByText("Synced just now")).toBeInTheDocument();
   });
 
-  it("a place goes back as it was left; the selected place pressed again starts it over; the logo opens Home", () => {
+  it("a place goes back as it was left; the selected place pressed again starts it over; Record's menu opens Home", () => {
     setWidth(1440);
     const onPlace = vi.fn();
     const onHome = vi.fn();
@@ -68,9 +68,10 @@ describe("the three levels", () => {
     expect(onPlace).toHaveBeenLastCalledWith("projects", false);
     fireEvent.click(rail().getByRole("button", { name: "Projects" }));
     expect(onPlace).toHaveBeenLastCalledWith("projects", true);
-    fireEvent.click(rail().getByRole("button", { name: "EchoLedger, Home" }));
+    fireEvent.click(rail().getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "More ways to record" })).getByRole("menuitem", { name: "Record Page" }));
     expect(onHome).toHaveBeenCalled();
-    expect(rail().getByRole("button", { name: "EchoLedger, Home" })).toHaveAttribute("aria-current", "page");
+    expect(rail().queryAllByRole("button").filter((b) => b.getAttribute("aria-current") === "page")).toEqual([]);
     // Home has no panel.
     expect(panel()).toBeNull();
   });
@@ -85,11 +86,11 @@ describe("the three levels", () => {
     expect(onPlace).toHaveBeenLastCalledWith("library", false);
     fireEvent.keyDown(window, { key: "\\", metaKey: true });
     expect(panel()).toBeNull();
-    expect(JSON.parse(window.localStorage.getItem("echoledger-nav-panels")!)).toEqual(["library"]);
+    expect(JSON.parse(window.localStorage.getItem("echoledger-nav-panels:ledger.example.test|ayesha@example.test|w1")!)).toEqual(["library"]);
     // Another place keeps its own: shown.
     fireEvent.click(rail().getByRole("button", { name: "Projects" }));
     expect(panel()).not.toBeNull();
-    fireEvent.click(rail().getByRole("button", { name: "Library, 4" }));
+    fireEvent.click(rail().getByRole("button", { name: "Library" }));
     expect(panel()).toBeNull();
     // Shown again from its button, or ⊟ hides it.
     fireEvent.click(screen.getByRole("button", { name: "Show the Library panel" }));
@@ -114,7 +115,7 @@ describe("the three levels", () => {
     const onPlace = vi.fn();
     render(<App onPlace={onPlace} />);
     expect(panel()).toBeNull();
-    const library = rail().getByRole("button", { name: "Library, 4" });
+    const library = rail().getByRole("button", { name: "Library" });
     expect(library).toHaveAttribute("aria-expanded", "false");
     // The selected place's icon starts it over (the way back) and opens its flyout.
     fireEvent.click(library);
@@ -142,7 +143,7 @@ describe("the three levels", () => {
   it("the flyout's focus: back to its rail item on Esc, a press outside or ⊟; to the page after a choice", async () => {
     setWidth(1024);
     render(<App />);
-    const library = () => rail().getByRole("button", { name: "Library, 4" });
+    const library = () => rail().getByRole("button", { name: "Library" });
     const open = () => {
       library().focus();
       fireEvent.click(library());
@@ -185,35 +186,47 @@ describe("the three levels", () => {
     expect(panel()).not.toBeNull();
     fireEvent.keyDown(document.body, { key: "\\", metaKey: true });
     expect(panel()).toBeNull();
-    expect(rail().getByRole("button", { name: "Library, 4" })).toHaveFocus();
+    expect(rail().getByRole("button", { name: "Library" })).toHaveFocus();
   });
 
-  it("in a short window the rail keeps its icons only, every place and its foot still named (the old sidebar's short foot)", () => {
+  it("in a short window Help and Setup move into the avatar's menu; every place keeps its name under its icon (DES-01)", () => {
     setWidth(1440);
     Object.defineProperty(window, "innerHeight", { value: 640, configurable: true, writable: true });
     window.dispatchEvent(new Event("resize"));
     render(<App />);
-    expect(document.querySelector(".el-shell")).toHaveClass("el-shell--short-rail");
-    for (const name of ["Library, 4", "Activity, 2", "Search", "Setup, needs setup", "Help", "Settings", "Ayesha Khan: account"]) {
+    expect(640).toBeLessThan(RAIL_FULL_FROM);
+    expect(document.querySelector(".el-shell")).toHaveClass("el-shell--short");
+    // Setup's dot moves onto the avatar with Setup: its name says so.
+    for (const name of ["Library", "Activity, 2", "Settings", "Account, Ayesha Khan, needs setup"]) {
       expect(rail().getByRole("button", { name })).toBeInTheDocument();
     }
+    expect(rail().queryByRole("button", { name: "Help" })).toBeNull();
+    expect(rail().queryByRole("button", { name: /^Setup/ })).toBeNull();
+    // Every label stays under its icon (no icons-only rail any more).
+    for (const [name, label] of [["Library", "Library"], ["Projects", "Projects"], ["Live, recording", "Live"], ["Ask", "Ask"], ["Activity, 2", "Activity"], ["Settings", "Settings"], ["Account, Ayesha Khan, needs setup", "Account"]]) {
+      expect(rail().getByRole("button", { name }).querySelector(".el-rail__label")!.textContent).toBe(label);
+    }
+    fireEvent.click(rail().getByRole("button", { name: "Account, Ayesha Khan, needs setup" }));
+    expect(within(screen.getByRole("menu", { name: "Account, Ayesha Khan" })).getByRole("menuitem", { name: "Setup & health" })).toBeInTheDocument();
+    expect(within(screen.getByRole("menu", { name: "Account, Ayesha Khan" })).getByRole("menuitem", { name: "Help" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Account, Ayesha Khan" }), { key: "Escape" });
     // The panel's foot (the Library's Trash and sync line, the status) is the panel's, under its scrolling list.
     expect(within(panel()!).getByText("Synced just now").closest(".el-panel__foot")).not.toBeNull();
     Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
     act(() => { window.dispatchEvent(new Event("resize")); });
-    expect(document.querySelector(".el-shell")).not.toHaveClass("el-shell--short-rail");
+    expect(document.querySelector(".el-shell")).not.toHaveClass("el-shell--short");
   });
 
-  it("Record's menu: Record now, Import audio files, Call recording on or off, the Record page", () => {
+  it("Record's menu (DES-02): New recording, Import audio files, the Auto-record tick on or off, the Record page", () => {
     setWidth(1440);
     const toggleCalls = vi.fn();
     render(<App toggleCalls={toggleCalls} />);
     fireEvent.click(rail().getByRole("button", { name: "More ways to record" }));
     const menu = within(screen.getByRole("menu", { name: "More ways to record" }));
-    expect([...screen.getByRole("menu", { name: "More ways to record" }).querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(
-      ["Record now", "Import audio files…", "Call recording", "Record page"]);
-    expect(menu.getByRole("menuitemcheckbox", { name: "Call recording" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Call recording" }));
+    expect([...screen.getByRole("menu", { name: "More ways to record" }).querySelectorAll('[role^="menuitem"] .el-menu__label')].map((m) => m.textContent)).toEqual(
+      ["New Recording", "Import Audio Files…", "Auto-record Calls & Meetings", "Record Page"]);
+    expect(menu.getByRole("menuitemcheckbox", { name: "Auto-record Calls & Meetings" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Auto-record Calls & Meetings" }));
     expect(toggleCalls).toHaveBeenCalled();
   });
 });

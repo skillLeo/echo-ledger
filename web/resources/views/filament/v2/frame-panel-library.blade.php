@@ -1,6 +1,6 @@
 {{--
     The Library's panel (docs/PLAN_NAV_3_LEVELS.md section 3): Views (All recordings first and chosen by default, Needs
-    you, Unread, Important, Not transcribed, Audio only, Shared), My views (+ New view; drag, rename, delete), Labels
+    you, Unread, Important, Audio only, Shared), My views (+ New view; drag, rename, delete), Labels
     (colour dots, + New label), and Trash at its foot. The web reads the server, so there is no "Synced" line. The
     first nine answer Alt+1…9.
 --}}

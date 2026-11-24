@@ -95,7 +95,7 @@ object Notifications {
             setSound(null, null)
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        }
+        } + AfterCallNotice.channel(words)
         manager.createNotificationChannels(channels)
     }
 
@@ -115,6 +115,18 @@ object Notifications {
 
     fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Whether a call's decision notification (its question, a choice's line, "Deleted · Undo") is really seen: allowed
+     * (Android 13+), the app's notifications not switched off (any version), and its channel not blocked. Only then may
+     * an Undo live there; otherwise it belongs on a screen of this process.
+     */
+    fun decisionsShow(context: Context, channel: String = CHANNEL_DECISIONS): Boolean {
+        if (!canPost(context)) return false
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        if (!manager.areNotificationsEnabled()) return false
+        return manager.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
 
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
     @SuppressLint("MissingPermission") // checked by canPost() first
@@ -508,8 +520,15 @@ object Notifications {
      * False when it could not be posted (no permission, or Android refused it): then nobody can see this Undo.
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
-    fun discardedWithUndo(context: Context, rec: LocalRecording): Boolean {
-        if (!canPost(context)) return false
+    fun discardedWithUndo(
+        context: Context,
+        rec: LocalRecording,
+        /** How long it stays: the time its file waits, less the delete's slack. */
+        timeoutMs: Long = com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS,
+        /** The channel of the notification it replaces (v2.1: "After a call" for the after-call notification's Delete). */
+        channel: String = CHANNEL_DECISIONS
+    ): Boolean {
+        if (!decisionsShow(context, channel)) return false
         val undo = PendingIntent.getBroadcast(
             context,
             rec.id.hashCode() + 3,
@@ -519,7 +538,7 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
-        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_stat_rec)
             // The title as the person named it, or the app's words for the call, in the app language.
             .setContentTitle(
@@ -536,7 +555,7 @@ object Notifications {
             .setPublicVersion(
                 NotificationCompat.Builder(
                     context,
-                    CHANNEL_DECISIONS
+                    channel
                 ).setSmallIcon(
                     R.drawable.ic_stat_rec
                 ).setContentTitle(
@@ -547,11 +566,109 @@ object Notifications {
             )
             .setSilent(true)
             .setAutoCancel(true)
-            .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS)
+            .setTimeoutAfter(timeoutMs)
             .setContentIntent(openApp(context))
             .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Undo"), undo)
         return runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }.isSuccess
     }
+
+    /**
+     * A choice made on the after-call card, confirmed in place of the call's after-call notification when the app is not
+     * on screen (v2.1, I-05; never a floating window): "Transcribing…" or "Saved as audio" (with Transcribe), the call
+     * and its length, and Undo, which asks about the call again. Quiet, and gone after [timeoutMs]: the time its upload
+     * waits, so Undo always finds the call. False when it could not be posted.
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun choiceLine(context: Context, rec: LocalRecording, transcribe: Boolean, timeoutMs: Long): Boolean {
+        if (!decisionsShow(context)) return false
+        val words = com.echoledger.mobile.notify.AppWords.resources(context)
+        fun said(id: Int) = com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(id))
+        val undo = PendingIntent.getBroadcast(
+            context,
+            rec.id.hashCode() + 4,
+            Intent(context, SaveDecisionReceiver::class.java)
+                .setAction(SaveDecisionReceiver.ACTION_UNDO_CHOICE)
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val title = said(if (transcribe) R.string.cc_done_transcribing else R.string.cc_done_audio)
+        val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
+        val line = words.getString(R.string.n_call_line, recordingTitle(words, rec), duration)
+        val publicLine = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            .build()
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            // The title as the person named it, or the app's words for the call, in the app language.
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.drawn(words, line))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            // On the lock screen only what happened, never who the call was with.
+            .setPublicVersion(publicLine)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(timeoutMs)
+            .setContentIntent(openApp(context))
+        if (!transcribe) {
+            val transcribeNow = PendingIntent.getBroadcast(
+                context,
+                rec.id.hashCode() + 5,
+                Intent(context, SaveDecisionReceiver::class.java)
+                    .setAction(SaveDecisionReceiver.ACTION_KEEP)
+                    .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id)
+                    .putExtra(SaveDecisionReceiver.EXTRA_TRANSCRIBE, true),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(0, said(R.string.cc_transcribe), transcribeNow)
+        }
+        builder.addAction(0, said(R.string.cc_undo), undo)
+        return runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }.isSuccess
+    }
+
+    /**
+     * Back-to-back calls kept together as audio only, when the app is not on screen (v2.1, I-05): "3 calls saved as
+     * audio" with Review (the Library), one notification for the whole group, updated in place as calls join it, gone
+     * after [timeoutMs].
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun groupedLine(context: Context, count: Int, timeoutMs: Long): Boolean {
+        if (!decisionsShow(context)) return false
+        val words = com.echoledger.mobile.notify.AppWords.resources(context)
+        val title = com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(R.string.cc_grouped_audio, count))
+        val review = openLibrary(context)
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(timeoutMs)
+            .setContentIntent(review)
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(R.string.cc_grouped_review)), review)
+        return runCatching { NotificationManagerCompat.from(context).notify(GROUPED_ID, builder.build()) }.isSuccess
+    }
+
+    fun cancelGrouped(context: Context) {
+        NotificationManagerCompat.from(context).cancel(GROUPED_ID)
+    }
+
+    /** The grouped calls' notification: one for the group, whichever calls are in it. */
+    const val GROUPED_ID = 7_442
+
+    private fun openLibrary(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        42,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_LIBRARY),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
 
     /** A call started while the capture helper is not running: say so during the call, with the way to fix it. */
     fun captureNotReady(context: Context) {

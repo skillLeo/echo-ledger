@@ -335,10 +335,10 @@ describe("rows that save", () => {
     expect(live).toHaveAttribute("aria-checked", "false");
   });
 
-  it("chooses whether the other floating windows are hidden from screen sharing on the Screen-share privacy page", async () => {
+  it("chooses whether Live Translate (the other floating windows before FIX-01) is hidden from screen sharing on the Screen-share privacy page", async () => {
     await setup({ settings: { hideFromSharing: "floating" } });
     await go("Screen-share privacy");
-    const select = await screen.findByLabelText("Other floating windows");
+    const select = await screen.findByLabelText("Live Translate");
     expect(select).toHaveValue("all");
     expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Hidden from screen shares", "Shown in screen shares"]);
     fireEvent.change(select, { target: { value: "off" } });

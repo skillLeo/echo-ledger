@@ -30,18 +30,35 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    // Transcribe or Save audio only (since 2.0.5); an older notification's Keep keeps it as before.
-                    ACTION_KEEP -> Decisions.apply(
-                        context,
-                        id,
-                        keep = true,
-                        transcribe = if (intent.hasExtra(EXTRA_TRANSCRIBE)) intent.getBooleanExtra(EXTRA_TRANSCRIBE, false) else null
-                    )
+                    // Transcribe or Save audio only (since 2.0.5); an older notification's Keep keeps it as before. From
+                    // "Saved as audio" (v2.1), Transcribe changes the choice, which then does not count toward "Always".
+                    ACTION_KEEP -> {
+                        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
+                        Decisions.apply(
+                            context,
+                            id,
+                            keep = true,
+                            transcribe = if (intent.hasExtra(EXTRA_TRANSCRIBE)) intent.getBooleanExtra(EXTRA_TRANSCRIBE, false) else null
+                        )
+                    }
 
                     // Undo on "Saved · …" is a Discard too: "Discarded · Undo" first, the file only after that.
                     ACTION_DISCARD, ACTION_UNDO -> discard(context, id)
 
                     ACTION_UNDO_DISCARD -> undoDiscard(context, id)
+
+                    ACTION_UNDO_CHOICE -> undoChoice(context, id)
+
+                    // v2.1 UX-13: the after-call notification.
+                    ACTION_AC_TRANSCRIBE -> AfterCallActions.transcribe(context, listOf(id))
+
+                    ACTION_AC_TRANSCRIBE_ALL -> AfterCallActions.transcribe(context, ids(intent, id))
+
+                    ACTION_AC_SWIPED -> AfterCallActions.swiped(context, ids(intent, id))
+
+                    ACTION_AC_ALWAYS -> CallChoice.Pick.of(intent.getStringExtra(EXTRA_PICK))?.let {
+                        AfterCallActions.always(context, id, it)
+                    }
                 }
             } finally {
                 pending.finish()
@@ -49,12 +66,20 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun ids(intent: Intent, id: String): List<String> = intent.getStringArrayExtra(EXTRA_IDS)?.toList() ?: listOf(id)
+
     private suspend fun discard(context: Context, id: String) {
         // The chip for the same call goes too, so its ten seconds never keep a call on its way out.
         withContext(Dispatchers.Main) { if (DecisionPopup.showingFor == id) DecisionPopup.hide() }
+        // The after-call notification's Delete (v2.1): "Deleted · Undo" for 8 s on its own channel, where the question
+        // showed, and it ends a run of choices.
+        val notifies = CallChoice.notifies((context.applicationContext as EchoLedgerApp).graph.settings.current())
+        val lineMs = if (notifies) CallChoice.DELETED_MS else DecisionPopup.DISCARDED_MS
+        val channel = if (notifies) com.echoledger.mobile.notify.AfterCallNotice.CHANNEL else Notifications.CHANNEL_DECISIONS
         // "Deleted · Undo" and the call on its way out in one uncancellable step, before anything that can wait: the
         // delete is never due without its Undo, and a slow widget never shortens it.
-        withContext(NonCancellable) { Decisions.discardWithNotification(context, id) } ?: return
+        withContext(NonCancellable) { Decisions.discardWithNotification(context, id, lineMs, channel) } ?: return
+        if (notifies) AfterCallActions.counted(context, CallChoice.Pick.DELETE)
         Decisions.refreshWidget(context)
     }
 
@@ -64,7 +89,20 @@ class SaveDecisionReceiver : BroadcastReceiver() {
      */
     private suspend fun undoDiscard(context: Context, id: String) {
         Notifications.cancelDecision(context, id)
+        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
         val back = Decisions.undoDiscard(context, id) ?: return
+        val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
+        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode) }
+    }
+
+    /**
+     * Undo on "Transcribing…" or "Saved as audio" in the after-call notification (v2.1): the call waits for the question
+     * again with nothing decided, its upload called off, and is asked about again. Nothing when it was sent meanwhile.
+     */
+    private suspend fun undoChoice(context: Context, id: String) {
+        Notifications.cancelDecision(context, id)
+        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
+        val back = Decisions.undoKeep(context, id) ?: return
         val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
         withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode) }
     }
@@ -78,10 +116,23 @@ class SaveDecisionReceiver : BroadcastReceiver() {
 
         /** Since v1.8.1: Undo on "Discarded · …" (Discard in the notification). */
         const val ACTION_UNDO_DISCARD = "com.echoledger.mobile.UNDO_DISCARD"
+
+        /** Since v2.1: Undo on "Transcribing…" or "Saved as audio" (a choice made on the after-call card). */
+        const val ACTION_UNDO_CHOICE = "com.echoledger.mobile.UNDO_CHOICE"
         const val EXTRA_ID = "recording_id"
 
         /** With [ACTION_KEEP] (since 2.0.5): true for Transcribe, false for Save audio only. */
         const val EXTRA_TRANSCRIBE = "transcribe"
+
+        /** v2.1 UX-13, the after-call notification: Transcribe, Transcribe all, a swipe, and "Always …" ([EXTRA_PICK]). */
+        const val ACTION_AC_TRANSCRIBE = "com.echoledger.mobile.AC_TRANSCRIBE"
+        const val ACTION_AC_TRANSCRIBE_ALL = "com.echoledger.mobile.AC_TRANSCRIBE_ALL"
+        const val ACTION_AC_SWIPED = "com.echoledger.mobile.AC_SWIPED"
+        const val ACTION_AC_ALWAYS = "com.echoledger.mobile.AC_ALWAYS"
+
+        /** The calls one notification is about (back-to-back calls share one). */
+        const val EXTRA_IDS = "recording_ids"
+        const val EXTRA_PICK = "pick"
     }
 }
 
@@ -211,13 +262,27 @@ object Decisions {
      * the call back to choose again instead of deleting it unseen. Null when there was nothing to delete (the posted
      * Undo goes too).
      */
-    suspend fun discardWithNotification(context: Context, recordingId: String): LocalRecording? {
+    suspend fun discardWithNotification(
+        context: Context,
+        recordingId: String,
+        /** How long "Deleted · Undo" stays (8 s from the after-call notification since v2.1); the file waits 2 s more. */
+        lineMs: Long = DecisionPopup.DISCARDED_MS,
+        /** The channel of the notification it replaces, so it shows wherever the question showed. */
+        channel: String = Notifications.CHANNEL_DECISIONS
+    ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val rec = graph.recordings.get(recordingId)?.takeIf { it.state in DISCARDABLE } ?: return null
         if (rec.state == WAITING) chooseAgain(context, recordingId)
-        val posted = Notifications.discardedWithUndo(context, rec)
+        val posted = Notifications.discardedWithUndo(context, rec, lineMs, channel)
         afterUndoPosted()
-        val discarding = discardLater(context, recordingId, undoHere = !posted, widget = false, keepNotification = posted)
+        val discarding = discardLater(
+            context,
+            recordingId,
+            afterMs = lineMs + DISCARD_GRACE_MS,
+            undoHere = !posted,
+            widget = false,
+            keepNotification = posted
+        )
         if (discarding == null && posted) Notifications.cancelDecision(context, recordingId)
         return discarding
     }
@@ -247,14 +312,40 @@ object Decisions {
      * ("queued"; the caller shows "Saved" again, whose time the upload waits for). Null when its time was over and it
      * is gone.
      */
-    suspend fun undoDiscard(context: Context, recordingId: String, widget: Boolean = true): LocalRecording? {
+    suspend fun undoDiscard(
+        context: Context,
+        recordingId: String,
+        widget: Boolean = true,
+        /**
+         * True: nobody saw an Undo for it, so it goes back to the person ("Choose again") in the same write, whatever it
+         * was before its Delete: waiting on the phone, with no "kept after 10 s" ever started and nothing sent until they
+         * choose. The server follows the person's last choice, Delete: a copy an upload reached is deleted there as
+         * queued, and a later keep brings it back from the server's bin, or sends the phone's file fresh.
+         */
+        leftToPerson: Boolean = false,
+        /** With [leftToPerson]: EchoLedger kept running ("Not deleted yet"), else it closed ("Deleted just before…"). */
+        notDeletedYet: Boolean = true
+    ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         DiscardLaterWorker.cancel(context, recordingId)
-        // A server copy an upload reached meanwhile: its delete is stopped if it has not run, else the next upload
-        // restores it first ([com.echoledger.mobile.net.UploadWorker]).
-        val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
+        val serverCopy = graph.recordings.get(recordingId)?.serverCopy
+        // A server copy an upload reached meanwhile: on an Undo its delete is stopped if it has not run, else the next
+        // upload restores it first ([com.echoledger.mobile.net.UploadWorker]); left to the person, it goes ahead.
+        val serverDelete = if (leftToPerson) null else serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
             when {
+                it.state == DISCARDING && leftToPerson -> it.copy(
+                    state = WAITING,
+                    transcribe = null,
+                    discardAt = null,
+                    discardedFrom = null,
+                    undoIn = null,
+                    restoredDelete = true,
+                    notDeletedYet = notDeletedYet,
+                    // Only for a later keep the person chooses: the server copy, deleted meanwhile, comes back first.
+                    restoreServerCopy = it.serverCopy != null
+                )
+
                 it.state == DISCARDING -> it.copy(
                     state = it.discardedFrom ?: WAITING,
                     discardAt = null,
@@ -266,13 +357,18 @@ object Decisions {
                 )
 
                 // A delete whose store was never written (the process died after its Undo was posted): taken back too.
-                it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false, notDeletedYet = false)
+                it.state == WAITING && it.restoredDelete && !leftToPerson -> it.copy(restoredDelete = false, notDeletedYet = false)
 
                 else -> it
             }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
-        // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one.
-        if (back.state == WAITING) DecisionTimeoutWorker.schedule(context, recordingId)
+        // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one;
+        // left to the person, nothing keeps or sends it by itself.
+        if (leftToPerson) {
+            UploadWorker.cancel(context, recordingId)
+        } else if (back.state == WAITING) {
+            DecisionTimeoutWorker.schedule(context, recordingId)
+        }
         if (widget) WidgetStateStore.refresh(context)
         return back
     }
@@ -302,13 +398,9 @@ object Decisions {
 
     /** A Delete whose Undo was lost with its process: the call waits again, marked [LocalRecording.restoredDelete]. */
     private suspend fun restoreDelete(context: Context, recordingId: String) {
-        val back = undoDiscard(context, recordingId) ?: return
-        val graph = (context.applicationContext as EchoLedgerApp).graph
-        // Waiting for the person, not for a timer: nobody gets a call kept or sent that they had chosen to delete.
-        DecisionTimeoutWorker.cancel(context, recordingId)
-        UploadWorker.cancel(context, recordingId)
-        graph.recordings.update(back.id) { it.copy(state = WAITING, transcribe = null, restoredDelete = true, notDeletedYet = false) }
-        WidgetStateStore.refresh(context)
+        // Waiting for the person, not for a timer, in one write: nobody gets a call kept or sent that they had chosen to
+        // delete, whenever the process stops.
+        undoDiscard(context, recordingId, leftToPerson = true, notDeletedYet = false)
     }
 
     /** Whether [recordingId] still waits for its choice (a question held back can still be asked). */

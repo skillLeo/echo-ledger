@@ -91,7 +91,8 @@ const SERVED_BEFORE_DOCUMENTED = [
     'POST /api/assist/sessions/{}/live',
 ];
 
-// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served: nothing documented waits for the router.
+// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served, and since 2.0.0-r's BE-02, BE-03 and BE-04 those of
+// 2.0.0-r: nothing documented waits for the router.
 const NOT_SERVED_YET = [];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {

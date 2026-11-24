@@ -60,7 +60,9 @@
             "facets": {
                 "source": "voice_note",
                 "status": "transcribed",
-                "language": "en"
+                "language": "en",
+                "kind": "voice_note",
+                "state": "transcribed"
             },
             "processing_since": "2026-11-23T01:10:30+00:00",
             "updated_at": "2026-11-23T01:10:30+00:00"
@@ -133,7 +135,9 @@
             "facets": {
                 "source": "whatsapp_business",
                 "status": "transcribed",
-                "language": "en"
+                "language": "en",
+                "kind": "call",
+                "state": "transcribed"
             },
             "processing_since": "2026-11-23T01:10:30+00:00",
             "updated_at": "2026-11-23T01:10:30+00:00"
@@ -201,7 +205,9 @@
             "facets": {
                 "source": "google_meet",
                 "status": "transcribed",
-                "language": "en"
+                "language": "en",
+                "kind": "meeting",
+                "state": "transcribed"
             },
             "processing_since": "2026-11-23T01:10:29+00:00",
             "updated_at": "2026-11-23T01:10:30+00:00"
@@ -274,7 +280,9 @@
             "facets": {
                 "source": "zoom",
                 "status": "transcribed",
-                "language": "en"
+                "language": "en",
+                "kind": "meeting",
+                "state": "transcribed"
             },
             "processing_since": "2026-11-23T01:10:29+00:00",
             "updated_at": "2026-11-23T01:10:29+00:00"
@@ -347,7 +355,9 @@
             "facets": {
                 "source": "whatsapp",
                 "status": "transcribed",
-                "language": "en"
+                "language": "en",
+                "kind": "call",
+                "state": "transcribed"
             },
             "processing_since": "2026-11-23T01:10:29+00:00",
             "updated_at": "2026-11-23T01:10:29+00:00"

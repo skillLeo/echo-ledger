@@ -110,7 +110,8 @@ describe("one setting for recording calls", () => {
 
 describe("Hide EchoLedger from screen sharing", () => {
   it("says in plain words that it also hides EchoLedger from screenshots, in both designs", async () => {
-    expect(HIDES_SCREENSHOTS_TOO).toBe("Hiding from screen sharing also hides EchoLedger from your screenshots: your computer uses one setting for both.");
+    // Since FIX-01 the row is Live Translate's: the same one-setting rule, said of a hidden window.
+    expect(HIDES_SCREENSHOTS_TOO).toBe("Also hidden from your own screenshots");
     respond("privacy_status", makePrivacyStatus());
     const patch = vi.fn(async () => true);
     const classic = render(<SharePrivacyPage settings={makeSettings()} patch={patch} onCheck={() => undefined} />);

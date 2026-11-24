@@ -115,6 +115,14 @@ describe("dictation box", () => {
     expect(text.scrollTop).toBe(480);
   });
 
+  // FIX-01, decision 8: the dictation box shows in screen shares (the person's own words), so it has no privacy badge.
+  it("has no privacy badge: it is shown in screen shares", async () => {
+    respond("privacy_status", { badge: "private" });
+    await renderDictation();
+    await emitEvent("overlay:visibility", true);
+    expect(screen.queryByTestId("privacy-badge")).toBeNull();
+  });
+
   // B14: the flow bar, the start / stop sounds and the push-to-talk hint.
   it("shows the microphone level in the flow bar and empties it when dictation stops", async () => {
     await renderDictation();

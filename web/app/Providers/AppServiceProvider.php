@@ -38,6 +38,7 @@ use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\Entitlements\PromoCodes;
+use App\Services\Health\ServerHealth;
 use App\Services\InterfaceFlags;
 use App\Services\Library\LibraryFacets;
 use App\Services\MailSettings;
@@ -67,6 +68,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Mail\MailManager;
@@ -153,6 +155,16 @@ class AppServiceProvider extends ServiceProvider
 
         // The interface flags (since 2.0.0-a), decided with Pennant.
         InterfaceFlags::define();
+
+        // `php artisan about` says whether this PHP has what the server needs (W-INC-1124; echoledger:health in full).
+        AboutCommand::add('Server health', static function (): array {
+            $result = app(ServerHealth::class)->check();
+
+            return [
+                'PHP extensions' => $result['missing'] === [] ? 'all loaded' : 'missing: '.implode(', ', $result['missing']),
+                'Recordings cipher' => $result['cipher'] === null ? 'works' : 'fails: '.$result['cipher'],
+            ];
+        });
 
         // Pages and emails write the product's name as @brand (since v1.9, L0), read when they are shown.
         Blade::directive('brand', static fn (): string => '<?php echo e(\App\Support\Brand::name()); ?>');
@@ -241,6 +253,8 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since 2.0.0-r (BE-03): Retry all asks every device of the person; 6 a minute per device is plenty.
+        RateLimiter::for('retry-all', fn (Request $request) => Limit::perMinute(6)->by('retry-all:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Since v1.9 (L1): the Live Assist relay reports every suggestion; a busy relay sends a few a second.
         RateLimiter::for('assist-relay', fn (Request $request) => Limit::perMinute(3000)->by('assist-relay:'.$request->ip()));
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));

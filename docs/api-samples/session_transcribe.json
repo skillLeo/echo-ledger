@@ -67,7 +67,9 @@
         "facets": {
             "source": "zoom",
             "status": "processing",
-            "language": "unknown"
+            "language": "unknown",
+            "kind": "meeting",
+            "state": "transcribing"
         },
         "processing_since": "2026-11-23T01:10:30+00:00",
         "updated_at": "2026-11-23T01:10:30+00:00"

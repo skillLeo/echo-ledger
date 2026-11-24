@@ -1,7 +1,8 @@
 {{--
-    The Library's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4; docs/API.md "The Library's tabs"): All · Calls ·
-    Meetings · Voice notes, each with how many the place, the filters and the search keep in it. A tab is in the address
-    (kind), so a link and Back keep it; the filters' pills come under them while some are on.
+    The Library's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4; docs/API.md "The Library's kinds"): All · Calls ·
+    Meetings · Voice notes · Other (Other only while it has something), each with how many the place, the filters and the
+    search keep in it; the kind tabs add up to All. A tab is in the address (kind), so a link and Back keep it; the
+    filters' pills come under them while some are on.
 --}}
 @php
     // How many the list holds, said once in the header too: under the wide width (or while the filters push the list)

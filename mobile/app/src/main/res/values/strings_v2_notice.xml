@@ -27,6 +27,7 @@
     <string name="n_call_saved">Call saved</string>
     <string name="n_undo">Undo</string>
     <string name="n_discarded">Deleted · %1$s · %2$s</string>
+    <string name="n_call_line">%1$s · %2$s</string>
     <string name="n_call_discarded">Call discarded</string>
     <string name="n_not_ready_text">This call is not being recorded because the capture helper is not running. Tap to open Setup and start it.</string>
     <string name="n_call_not_recorded_first">This call could not be recorded.</string>
@@ -143,4 +144,6 @@
     <string name="c_other_b">This is a test notification.</string>
     <string name="c_decisions">Calls and problems</string>
     <string name="c_decisions_d">Asks after a call whether to keep it, and says when a call could not be recorded</string>
+    <string name="c_after_call">After a call</string>
+    <string name="c_after_call_d">Asks quietly after each call whether to transcribe or delete it</string>
 </resources>

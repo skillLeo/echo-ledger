@@ -57,7 +57,9 @@
         "facets": {
             "source": "whatsapp",
             "status": "processing",
-            "language": "unknown"
+            "language": "unknown",
+            "kind": "call",
+            "state": "waiting"
         },
         "processing_since": null,
         "updated_at": "2026-11-23T01:10:30+00:00"

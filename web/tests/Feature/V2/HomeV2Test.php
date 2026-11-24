@@ -50,9 +50,11 @@ it('WEB-HOM-004: shows the setup checklist on Home to a person who has not finis
 it('WEB-HOM-005: says what needs action as one quiet line on Home, each a link to its Library view', function () {
     [$owner] = webParityWorld();
     $html = homeV2Html($this, $owner);
-    // The world: one failed upload (Samples to the courier) and recordings not transcribed yet.
+    // The world: one failed upload (Samples to the courier) and recordings kept as audio only (since v2.1 the
+    // glossary's words, docs/PLAN_V2_1_POLISH.md section 1: never "not transcribed").
     expect($html)->toContain('wire:name="App\Filament\Widgets\V2NeedsActionWidget"')->toContain('data-needs-action')
-        ->toContain('Needs action')->toContain('1 failed upload')->toMatch('~data-needs="untranscribed">\d+ not transcribed<~');
+        ->toContain('Needs action')->toContain('1 failed upload')->toMatch('~data-needs="untranscribed">\d+ audio only<~')
+        ->not->toContain('not transcribed');
     expect(substr_count($html, 'data-needs-action'))->toBe(1);
     foreach (V2NeedsActionWidget::items() as $item) {
         expect($html)->toContain('href="'.e($item['url']).'"');

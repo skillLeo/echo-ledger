@@ -76,8 +76,10 @@ final class LibraryFilterBar
             'language' => $value === LibraryFilters::UNKNOWN_LANGUAGE ? __('Unknown') : __(LanguageChoice::label($value)),
             'status' => match ($value) {
                 'transcribed' => __('Transcribed'),
-                'not_transcribed' => __('Not transcribed'),
-                'processing' => __('Processing'),
+                // The glossary's names (docs/PLAN_V2_1_POLISH.md section 1); the values stay the API's. `processing`
+                // holds uploads still on their way as well as transcripts being written, so it is named for both.
+                'not_transcribed' => __('Audio only'),
+                'processing' => __('In progress'),
                 default => __('Failed'),
             },
             'labels' => is_string($option['name'] ?? null) ? $option['name'] : $value,
@@ -107,7 +109,7 @@ final class LibraryFilterBar
      * The filter panel: every section with its options, counts, what is ticked, is / is not and the custom dates.
      *
      * @param  array<string, array{op: string, values: list<string>, from?: string, to?: string}>  $filters
-     * @param  array{sections: array<string, list<array<string, mixed>>>}  $facets
+     * @param  array{sections: array<string, list<array<string, mixed>>>, states?: array<string, int>}  $facets
      * @return list<array{key: string, label: string, op: string, on: bool, values: list<string>, from: string|null, to: string|null, options: list<array<string, mixed>>}>
      */
     public static function panel(array $filters, array $facets): array
@@ -128,7 +130,8 @@ final class LibraryFilterBar
                     $value = (string) $option['value'];
                     $options[] = ['value' => $value, 'label' => self::optionLabel($section, $value, $option), 'count' => (int) $option['count'],
                         'on' => in_array($value, $ticked, true), 'child' => ($option['parent_id'] ?? null) !== null,
-                        ...($section === 'labels' ? self::dot($option['color'] ?? null) : [])];
+                        ...($section === 'labels' ? self::dot($option['color'] ?? null) : []),
+                        ...($section === 'status' && $value === 'processing' ? ['parts' => self::processingParts($facets['states'] ?? [], (int) $option['count'])] : [])];
                 }
             }
             $sections[] = ['key' => $section, 'label' => self::sectionLabel($section), 'op' => $filter['op'] ?? 'is', 'on' => $filter !== null,
@@ -136,6 +139,28 @@ final class LibraryFilterBar
         }
 
         return $sections;
+    }
+
+    /**
+     * What In progress (Status `processing`) holds, from the glossary's states (contract 2.0.0-r, BE-05): "2 transcribing ·
+     * 1 waiting to upload". The filter keeps its one value; its parts come from the facets' `states`, so they are given
+     * only while they are that option's recordings (they add up to its count: the Status filter keeps `processing`).
+     *
+     * @param  array<string, int>  $states
+     */
+    public static function processingParts(array $states, int $count): ?string
+    {
+        $transcribing = (int) ($states['transcribing'] ?? 0);
+        $waiting = (int) ($states['waiting_to_upload'] ?? 0);
+        if ($count === 0 || $transcribing + $waiting !== $count) {
+            return null;
+        }
+        $parts = array_filter([
+            $transcribing > 0 ? trans_choice('1 transcribing|:count transcribing', $transcribing) : null,
+            $waiting > 0 ? trans_choice('1 waiting to upload|:count waiting to upload', $waiting) : null,
+        ]);
+
+        return implode(' · ', $parts);
     }
 
     /**
@@ -175,14 +200,15 @@ final class LibraryFilterBar
 
     /**
      * The Library's places by key, in the console's language: All recordings first (docs/PLAN_NAV_3_LEVELS.md section 0;
-     * nothing is called the Inbox), then Needs you, Unread, Important, Not transcribed and Audio only.
+     * nothing is called the Inbox), then Needs you, Unread, Important and Audio only. Since v2.1 Not transcribed is Audio
+     * only (docs/PLAN_V2_1_POLISH.md section 1): one name and one definition, the recordings whose rows say Audio only.
      *
      * @return array<string, string>
      */
     public static function placeNames(): array
     {
         return ['all' => __('All recordings'), 'needs_you' => __('Needs you'), 'unread' => __('Unread'), 'important' => __('Important'),
-            'not_transcribed' => __('Not transcribed'), 'audio_only' => __('Audio only')];
+            'audio_only' => __('Audio only')];
     }
 
     /**
@@ -204,16 +230,24 @@ final class LibraryFilterBar
         $library = CaptureSessionResource::getUrl('index');
         $onLibrary = rtrim($path, '/') === rtrim((string) parse_url($library, PHP_URL_PATH), '/');
         $tab = is_string($query['tab'] ?? null) ? $query['tab'] : 'all';
+        // Old links to Not transcribed (and the older Untranscribed) open Audio only.
+        $tab = in_array($tab, ['not_transcribed', 'untranscribed'], true) ? 'audio_only' : $tab;
         $plain = $onLibrary && empty($query['f']) && empty($query['v']) && empty($query['search']);
         $facets = app(LibraryFacets::class);
         $counts = $facets->libraryCounts($workspaceId, $user->id);
 
         $places = [];
-        $icons = ['all' => 'library', 'needs_you' => 'alert', 'unread' => 'inbox', 'important' => 'flag', 'not_transcribed' => 'transcript', 'audio_only' => 'mic'];
+        $icons = ['all' => 'library', 'needs_you' => 'alert', 'unread' => 'inbox', 'important' => 'flag', 'audio_only' => 'mic'];
         $names = self::placeNames();
-        foreach (LibraryFacets::PLACES as $place) {
+        foreach (array_keys($names) as $place) {
+            // Audio only counts what its rows say (the engine's `not_transcribed`, LibraryFilters::state).
+            $count = match ($place) {
+                'all' => 0,
+                'audio_only' => $counts['not_transcribed'],
+                default => $counts[$place],
+            };
             $places[] = ['key' => $place, 'label' => $names[$place], 'icon' => $icons[$place], 'url' => $place === 'all' ? $library : $library.'?tab='.$place,
-                'count' => $place === 'all' ? 0 : $counts[$place], 'strong' => in_array($place, ['needs_you', 'unread'], true),
+                'count' => $count, 'strong' => in_array($place, ['needs_you', 'unread'], true),
                 'active' => $plain && ($place === 'all' ? in_array($tab, ['all', ''], true) : $tab === $place)];
         }
         $shared = [];

@@ -31,7 +31,8 @@ import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
-import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
+import { rowState, STATE_WORDS } from "./model";
+import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "notes" | "details";
@@ -73,7 +74,8 @@ export type RecordingPageProps = {
   startAt?: { ms: number; seq: number } | null;
   onBack: () => void;
   /** One message at a time, with at most one action (the Library's Toast). */
-  onMessage: (message: string) => void;
+  /** Says something in the Library's toast (a problem through sayProblem). */
+  onMessage: Say;
   /** Opens the recording's project (its name in the meta line). */
   onOpenProject?: (id: string) => void;
   /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
@@ -245,7 +247,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const state = await api.makeTranscriptViews(id);
       if (shownTranscript.current === id) setViews(state);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       if (mounted.current) setRetrying(false);
     }
@@ -261,7 +263,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(id);
       setViews(state);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
       if (viewPress.current === press) setShowAs("original");
     }
   };
@@ -309,7 +311,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       setVocabTerms(rules.length ? [] : newTerms(before, text));
       onMessage("Line saved");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   // Suggested fixes (since v1.4): open ones are marked in their line; one at a time opens with Accept and Dismiss. They
@@ -362,7 +364,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       }
       onMessage(accept ? `Changed to “${fix.to}”` : "Suggestion dismissed");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       if (mounted.current) setFixBusy(false);
     }
@@ -457,7 +459,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       reloadScreens();
       onMessage(`Screen ${screen.index} deleted`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
@@ -480,7 +482,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onItemChanged?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
       onMessage("Renamed");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const startRename = () => {
@@ -495,7 +497,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await api.retranscribe(item.id, language);
       onMessage(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -511,7 +513,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await api.addReplacement(offer.from, offer.to, offer.client_id);
       onMessage(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const addToVocabulary = async (term: string) => {
@@ -520,7 +522,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       setVocabTerms((terms) => terms.filter((t) => t !== term));
       onMessage(`Added “${term}” to the vocabulary`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
@@ -531,7 +533,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onItemChanged?.({ id: item.id, labels: saved?.data?.labels ?? left });
       onMessage(`Label removed: ${label}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   /** The fix box's buttons: Review and each decision put the keyboard there, or back on Review. */
@@ -586,9 +588,32 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people, exportView)}\n\n${body}` : body);
       onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
-      onMessage("Could not access the clipboard");
+      sayProblem(onMessage, "Could not access the clipboard");
     }
   };
+  // ⌘P on a Mac, Ctrl+P elsewhere: print the transcript (its print page, where Save as PDF is too), not the window
+  // (FIX-10). Heard on the document, before the window's guard; never while typing (a field keeps its keys; Ctrl+P
+  // moves up a line on a Mac) or behind a dialog.
+  const printNow = useRef<() => void>(() => undefined);
+  printNow.current = () => void exportAs("html");
+  useEffect(() => {
+    const mac = /mac/i.test(navigator.platform || navigator.userAgent);
+    const onKey = (e: KeyboardEvent) => {
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      // The P key whatever the layout types with it (Urdu, Arabic: e.code), as LibraryNav does.
+      const p = e.key.toLowerCase() === "p" || (e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key) && e.code === "KeyP");
+      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || !p) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      // Held down, it repeats: printed once.
+      if (e.repeat) return;
+      printNow.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const exportAs = async (format: ExportFormat) => {
     if (!tDetail) return;
     try {
@@ -596,7 +621,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (format === "html") onMessage("Opened the print page in your browser: choose Save as PDF there");
       else if (path) onMessage(`Saved to ${path}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const packAs = async (format: MeetingPackFormat, withAudio: boolean) => {
@@ -605,7 +630,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (format === "pdf") onMessage("Opened the meeting pack in your browser: choose Save as PDF there");
       else if (path) onMessage(`Saved to ${path}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const canExport = !!tDetail && tDetail.segments.length > 0;
@@ -636,7 +661,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const toggle = () => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) void a.play().catch(() => onMessage("The audio didn't play. Try again in a moment."));
+    if (a.paused) void a.play().catch(() => sayProblem(onMessage, "The audio didn't play. Try again in a moment."));
     else a.pause();
   };
   const seek = (s: number) => {
@@ -706,7 +731,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await fn();
       if (done) onMessage(done);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -752,7 +777,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {state === "ready" ? <Badge tone="success">Transcribed</Badge>
               : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
-                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
+                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge>{rowState(item)?.text ?? STATE_WORDS.audio_only}</Badge>}
           </p>
           {(item.labels?.length ?? 0) > 0 && (
             <ul className="el-recording__labels" aria-label="Labels">
@@ -899,7 +924,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           ) : state === "no_audio" ? (
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
-            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
+            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : rowState(item)?.text ?? STATE_WORDS.audio_only}
               body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
                 : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
                 : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
@@ -944,7 +969,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       )}
       {sharing && (
         <ShareDialog target={{ kind: "session", id: item.id, title: item.title ?? null, hasAudio: detail.state === "ready" && !!detail.value.url }}
-          view={exportView} onClose={() => setSharing(false)} notify={(t) => onMessage(t)} />
+          view={exportView} onClose={() => setSharing(false)} notify={(t, error) => onMessage(t, undefined, error)} />
       )}
       {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}

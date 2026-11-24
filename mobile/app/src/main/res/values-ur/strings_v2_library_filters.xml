@@ -14,6 +14,7 @@
     <string name="v2_lf_no_views">جو فلٹرز آپ اکثر استعمال کرتے ہیں انہیں منظر کے طور پر محفوظ کریں: فلٹرز، پھر منظر کے طور پر محفوظ کریں۔</string>
     <string name="v2_lf_calls">کالز</string>
     <string name="v2_lf_meetings">میٹنگز</string>
+    <string name="v2_lf_other">دیگر</string>
     <string name="v2_lf_kinds">ریکارڈنگ کی قسم</string>
     <string name="v2_lf_filters">فلٹرز</string>
     <string name="v2_lf_filters_n">فلٹرز %1$d</string>

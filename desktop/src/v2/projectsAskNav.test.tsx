@@ -367,8 +367,9 @@ describe("the Library's group headers", () => {
     const headers = [...list.children].filter((c) => c.classList.contains("el-list-section"));
     expect(headers.length).toBeGreaterThan(0);
     expect(document.querySelector(".el-selectbar")).toBeNull();
-    // No Select button: the toolbar's Select all (or a row's checkbox) starts picking.
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select all" }));
+    // No Select button, and no Select all until picking (UX-05: the selection bar has it): a row's checkbox starts it.
+    expect(screen.queryByRole("checkbox", { name: "Select all" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("checkbox", { name: /^Select / })[0]);
     expect(document.querySelector('[data-v2="library"] .el-selectbar')).not.toBeNull();
   });
 });

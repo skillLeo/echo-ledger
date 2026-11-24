@@ -243,6 +243,7 @@ fun kindName(kind: LibraryKind): String = stringResource(
         LibraryKind.CALLS -> R.string.v2_lf_calls
         LibraryKind.MEETINGS -> R.string.v2_lf_meetings
         LibraryKind.VOICE_NOTES -> R.string.v2_lib_voice_notes
+        LibraryKind.OTHER -> R.string.v2_lf_other
     }
 )
 
@@ -254,7 +255,7 @@ const val PILLS_ROW_TAG = "library-pills"
 
 /**
  * Under the search: [Filters n] (opens the Filters sheet; n the sections on), then All · Calls · Meetings · Voice
- * notes with how many each holds, one chosen at a time.
+ * notes, and Other while it holds something, with how many each holds, one chosen at a time.
  */
 @Composable
 fun LibraryKindRow(kind: LibraryKind, counts: Map<LibraryKind, Int>, filtersOn: Int, onKind: (LibraryKind) -> Unit, onFilters: () -> Unit) {
@@ -269,7 +270,7 @@ fun LibraryKindRow(kind: LibraryKind, counts: Map<LibraryKind, Int>, filtersOn: 
     ) {
         FiltersButton(filtersOn, onFilters)
         Box(Modifier.width(EchoTokens.Border.hairline).heightIn(min = EchoTokens.Space.s24).background(EchoV2.colors.borderDefault))
-        LibraryKind.entries.forEach { k ->
+        LibraryKind.shown(counts).forEach { k ->
             val n = counts[k] ?: 0
             EchoChip(stringResource(R.string.v2_lf_kind_count, kindName(k), n), k == kind, { onKind(k) })
         }

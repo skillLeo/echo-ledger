@@ -46,6 +46,7 @@ export {
   LucideMailIcon as MailIcon,
   LucideSendIcon as SendIcon,
   LucideArrowUpDownIcon as SortIcon,
+  LucideArrowUpIcon as ArrowUpIcon,
   LucideRotateCcwIcon as BackIcon,
   LucideRotateCwIcon as ForwardIcon,
   LucideRadioIcon as RadioIcon,

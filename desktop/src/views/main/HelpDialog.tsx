@@ -54,7 +54,7 @@ export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = 
 ];
 
 /** How to get a screenshot of EchoLedger and what to send for support (D-125). */
-export const CAPTURE_HELP = "While EchoLedger hides from screen shares it is hidden from screenshots too: turn on Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support (both in Settings › Screen-share privacy).";
+export const CAPTURE_HELP = "EchoLedger's windows show in your screenshots; only the live words (Live Assist, captions, translation) are hidden from them. For support, send Copy diagnostics (Settings › Screen-share privacy).";
 
 export function HelpDialog({ platform, onClose, onSettings, threeLevels = false }: {
   platform: string; onClose: () => void; onSettings: (page: string) => void;

@@ -27,7 +27,8 @@ use UnitEnum;
  * Admin panel → Interface flags (since 2.0.0-a): the super admin turns each redesigned screen and Live Assist on for
  * everyone, for a share of accounts (the same accounts every time), for workspaces or for people. Off by default.
  * Since 2.0.0-g each flag has an availability: Off (not available: only the lists below), Opt-in (people may try the
- * new design in Settings › Appearance) or Everyone; the nine console screens can be set together.
+ * new design in Settings › Appearance) or Everyone; the nine console screens can be set together. Since 2.0.0-r also
+ * v2.1's five flags, off or everyone like Live Assist.
  *
  * @property-read Schema $form
  */
@@ -73,10 +74,10 @@ class InterfaceFlagsPage extends Page
         $this->form->fill($state);
     }
 
-    /** @return array<string, string> the availabilities a flag can have (Live Assist has no opt-in) */
+    /** @return array<string, string> the availabilities a flag can have (Live Assist and the v2.1 flags have no opt-in) */
     private static function availabilities(string $flag): array
     {
-        return $flag === InterfaceFlags::LIVE_ASSIST
+        return ! InterfaceFlags::hasOptIn($flag)
             ? ['off' => 'Off — only the lists below', 'everyone' => 'Everyone']
             : ['off' => 'Off — not available (only the lists below)', 'opt_in' => 'Opt-in — people may try it', 'everyone' => 'Everyone'];
     }

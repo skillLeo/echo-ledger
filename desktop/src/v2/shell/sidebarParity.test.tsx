@@ -272,7 +272,7 @@ describe("Help & shortcuts in the new design", () => {
     fireEvent.keyDown(document.body, { key: "?" });
     await act(flushAsync);
     await act(flushAsync);
-    expect(await screen.findByTestId("capture-help")).toHaveTextContent("turn on Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support");
+    expect(await screen.findByTestId("capture-help")).toHaveTextContent("only the live words (Live Assist, captions, translation) are hidden from them. For support, send Copy diagnostics");
     fireEvent.click(screen.getByRole("button", { name: "Open Screen-share privacy" }));
     await act(flushAsync);
     await act(flushAsync);
@@ -329,7 +329,7 @@ describe("Home's needs you", () => {
     respond("pending_list", []);
     await app();
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "2 recordings didn't upload" }));
@@ -345,7 +345,7 @@ describe("Home's needs you", () => {
     respond("pending_list", []);
     await app();
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "1 call waits for your decision" }));
@@ -354,7 +354,7 @@ describe("Home's needs you", () => {
     expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
     expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "1 notification needs you" }));

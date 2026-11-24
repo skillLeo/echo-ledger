@@ -582,12 +582,12 @@ describe("LibraryView transcript", () => {
 
   // pending / submitted / processing read "Transcribing…" everywhere (phase 1 contract, section 1 item 11).
   it.each([
-    [null, "Not transcribed yet."],
+    [null, "Audio only. No transcript yet."],
     ["processing", "Transcribing…"],
     ["pending", "Transcribing…"],
     ["submitted", "Transcribing…"],
     ["awaiting_device", "Waiting for the recording to finish uploading from the device that made it."],
-    ["not_started", "Not transcribed yet."],
+    ["not_started", "Audio only. No transcript yet."],
   ])("explains a recording without a transcript (final status %s)", async (finalStatus, message) => {
     const pending = makeItem("p", { title: "Pending", status: "processing", transcript: { final_status: finalStatus, final_transcript_id: null, live_available: false, preview: null } });
     await renderLibrary([pending]);

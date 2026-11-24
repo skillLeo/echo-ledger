@@ -8,19 +8,20 @@ use App\Models\AssistTurn;
 use App\Models\LabelList;
 use App\Models\MissedRecording;
 use App\Models\Passkey;
+use App\Models\SavedView;
 use App\Models\Screen;
 use App\Models\SentItem;
-use App\Models\SavedView;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
 use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
-use App\Services\Library\SavedViews;
 use App\Services\InterfaceFlags;
+use App\Services\Library\SavedViews;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\Workspaces;
@@ -74,6 +75,7 @@ const ISO_WEB_BYPASS = [
     'request.files.complete' => 'public request link: the token is the only key',
     'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
     'site.home' => 'public landing page: no workspace data',
+    'health.php' => 'the web PHP\'s own health check for the deploy (W-INC-1124): ok or not, server-wide, no workspace data',
     'site.pricing' => 'public pricing page (v2.0): the plans on offer, server-wide, no workspace data',
     'legacy.profile' => 'the account page\'s old address (before v1.7): a redirect to Settings, no data',
     'legacy.security' => 'the security centre\'s old address (before v1.7): a redirect to Settings, no data',
@@ -327,6 +329,13 @@ function isoApiCases(array $b): array
         'api.storage' => ['GET', '/api/storage', [], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('recordings_count') === 1],
         'api.activity' => ['GET', '/api/activity', [], 'list'],
         'api.activity.read' => ['POST', '/api/activity/read', [], 'list'],
+        // Since 2.0.0-r: the badge counts the person's own only (tests/Feature/Api/BadgeTest.php).
+        'api.badge' => ['GET', '/api/badge', [], 'list'],
+        // Since 2.0.0-r: the Activity's groups, the person's own (tests/Feature/Api/ActivityDedupeTest.php).
+        'api.activity.groups' => ['GET', '/api/activity/groups', [], 'list'],
+        // Since 2.0.0-r: Retry all sets the person's own time only (tests/Feature/Api/UploadRetriesTest.php).
+        'api.activity.retry-all' => ['POST', '/api/activity/retry-all', ['group' => 'upload_failed'], fn (TestResponse $r): bool => $r->status() === 202
+            && unscoped(fn (): bool => User::query()->whereKey($b['bob']->id)->value('retry_requested_at') === null)],
         'api.sessions.export' => ['POST', '/api/sessions/export', ['ids' => [$s], 'format' => 'txt'],
             // Same answer as for unknown ids: nothing of the workspace matched.
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],

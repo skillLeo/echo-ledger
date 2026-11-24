@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export const UI_FLAG_NAMES = [
   "ui_v2.shell", "ui_v2.home", "ui_v2.library", "ui_v2.recording_controls", "ui_v2.after_call", "ui_v2.live", "ui_v2.ask",
-  "ui_v2.settings", "ui_v2.setup_health", "ui_v2.admin", "ui_v2.website", "live_assist",
+  "ui_v2.settings", "ui_v2.setup_health", "ui_v2.admin", "ui_v2.website", "live_assist", "v21_panel_flyout",
 ] as const;
 export type UiFlagName = (typeof UI_FLAG_NAMES)[number];
 export type UiFlags = Record<UiFlagName, boolean>;

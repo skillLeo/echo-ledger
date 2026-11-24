@@ -1223,3 +1223,20 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - a deploy check for the required extensions;
   - parts kept, rather than discarded, after an environment fault;
   - a clear message from RecordingCipher.
+
+## 2026-11-24 04:45 PKT — production web deploy of v1.1 80ff7788 (nav3 + W-INC-1124)
+- **What went out:** 78a3fcb5 → 80ff7788, three-level navigation on the console (NAV web, W-nav-minors) and W-INC-1124: a health check every 5 minutes with an admin banner and an email, a deploy check for both PHPs, and kept parts after a server fault, bounded at 48 h or 8 rounds.
+  - 69 web files, 26 added and 43 modified, none deleted.
+  - Bundle sha256 0cd48ebe…71f7. The clean build needs the vendor folder (Filament's theme.css), so it was built with vendor linked from merge-web; composer.lock is identical.
+- **Backup:** ~/echoledger-backups/pre-nav3-20261123-234206 (db.sql.gz, web.tgz, env.backup, SHA256SUMS).
+- **Rehearsal:** on a copy of that dump on the Mac, migration 2026_12_29_000001 ran up, down, up, all W-INC-1124.sql checks were ok, and the counts were unchanged. The local copy was deleted afterwards.
+- **Deploy:**
+  - Maintenance 23:43:50–23:45:09 UTC (about 80 s).
+  - `migrate --force` ran 1 migration (13.77 ms) with nothing pending afterwards, then optimize and filament:optimize.
+- **Checks:**
+  - Addresses: /app/login 200; /api/config and /api/views 401; /.env 403; /health/php `{"ok":true}` 200.
+  - check-php.sh: PASS for the CLI 8.4 (all extensions, cipher works) and for the web PHP. FAIL for /usr/bin/php, as expected: it is the account default 8.2, which can't boot the app.
+  - `about --only=server_health`: all loaded, cipher works.
+  - Counts equal step 2: 3 users, 289 sessions, 251 transcripts, 219 recordings, 0 saved views, 0 failed_jobs. No new errors.
+- **Scheduler, now confirmed by evidence:** yesterday's assembly jobs ran a few seconds after minute boundaries, within seconds of each upload, so a per-minute `schedule:run` on PHP 8.4 is firing. That closes the old "hPanel cron unconfirmed" item. A manual `schedule:run` on 8.4 runs all 7 tasks. The health check writes its cache entry only when it fails, so an empty entry means healthy.
+- **Merged since, for 2026-11-25:** eef23198 (BE-01 Other tab with one name per state, and the health check's report), b69cd8c7 (contract 2.0.0-r and the five v21 flags). Runbook: ~/EchoLedgerTeam/handover/deploy-2026-11-25.md, including adding the owner to the v21 flag lists.

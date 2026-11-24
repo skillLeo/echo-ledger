@@ -31,6 +31,17 @@
             "video/webm"
         ]
     },
+    "upload_retry": {
+        "after_seconds": [
+            60,
+            300,
+            1800
+        ],
+        "then": [
+            "network_change",
+            "app_start"
+        ]
+    },
     "providers": {
         "live_captions": {
             "provider": "assemblyai",
@@ -236,7 +247,13 @@
         "ui_v2.setup_health": false,
         "ui_v2.admin": false,
         "ui_v2.website": false,
-        "live_assist": true
+        "live_assist": true,
+        "v21_aftercall_notify": false,
+        "v21_aftercall_card": false,
+        "v21_panel_flyout": false,
+        "v21_zoom": false,
+        "v21_preview_pane": false,
+        "v21_win_titlebar": false
     },
     "ui_classic": false,
     "ui_design": {

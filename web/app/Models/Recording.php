@@ -37,6 +37,8 @@ use Illuminate\Support\Carbon;
  * @property string $key_id
  * @property Carbon|null $assembled_at
  * @property Carbon|null $upload_started_at when the current upload began (since 2.0.0-p; null on older rows)
+ * @property Carbon|null $assembling_since when `complete` started the current assembly (W-INC-1124; null on older rows)
+ * @property int $recovery_rounds times recordings:recover queued the current assembly again (W-INC-1124)
  * @property string|null $error
  * @property Carbon $created_at
  * @property-read CaptureSession $captureSession
@@ -48,7 +50,8 @@ class Recording extends Model
     protected $fillable = [
         'capture_session_id', 'role', 'mime', 'codec', 'channels', 'sample_rate', 'duration_ms',
         'declared_size_bytes', 'sha256', 'chunk_size_bytes', 'total_chunks', 'received_chunks', 'upload_status',
-        'stored_path', 'stored_size_bytes', 'key_id', 'assembled_at', 'error', 'upload_started_at',
+        'stored_path', 'stored_size_bytes', 'key_id', 'assembled_at', 'error', 'upload_started_at', 'assembling_since',
+        'recovery_rounds',
     ];
 
     /** @return BelongsTo<CaptureSession, $this> */
@@ -105,6 +108,8 @@ class Recording extends Model
             'stored_size_bytes' => 'integer',
             'assembled_at' => 'datetime',
             'upload_started_at' => 'datetime',
+            'assembling_since' => 'datetime',
+            'recovery_rounds' => 'integer',
         ];
     }
 }

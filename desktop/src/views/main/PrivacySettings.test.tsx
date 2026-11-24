@@ -126,7 +126,7 @@ describe("Settings › Screen-share privacy", () => {
   it("shows Show in screen share and Copy diagnostics as actions, not plain text (D-090)", async () => {
     respond("privacy_status", makePrivacyStatus({ platform: "macos", zoomInstalled: true }));
     render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
-    for (const name of ["Show in screen share for 10 min", "Copy diagnostics"]) {
+    for (const name of ["Show Live Translate for 10 min", "Copy diagnostics"]) {
       const row = await screen.findByRole("button", { name: new RegExp(`^${name}`) });
       expect(row).toHaveClass("set-action");
     }
@@ -260,7 +260,9 @@ describe("Settings › Screen-share privacy", () => {
     cleanup();
     respond("privacy_status", makePrivacyStatus({ hiding: "floating" }));
     render(<SharePrivacyPage settings={makeSettings({ hideFromSharing: "floating" })} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
-    expect(await screen.findByText(/captions, the recording controls and the other floating windows stay hidden/)).toBeInTheDocument();
+    // FIX-01: the windows by the names people know, with what always shows.
+    expect(await screen.findByText("What others see when you share your screen.")).toBeInTheDocument();
+    expect(screen.getByText("Always shown · and the after-call card")).toBeInTheDocument();
   });
 
   it("labels every button to the system's settings the same way", async () => {
@@ -290,10 +292,10 @@ describe("the privacy badge", () => {
   beforeEach(() => resetTauriMock());
 
   it.each([
-    ["private", "Private: hidden from screen share. Check screen-share privacy"],
-    ["black_box", "Black box: people see a black box instead of EchoLedger. Check screen-share privacy"],
+    ["private", "Private: live words are hidden from screen shares. Check screen-share privacy"],
+    ["black_box", "Black box: people see a black box instead of the live words. Check screen-share privacy"],
     ["not_checked", "Not checked on this system yet. Check screen-share privacy"],
-    ["visible", "Visible in screen share. Check screen-share privacy"],
+    ["visible", "Live words may show in screen shares. Check screen-share privacy"],
   ] as const)("%s opens Check screen-share privacy when clicked", async (badge, name) => {
     respond("privacy_status", makePrivacyStatus({ badge }));
     respond("privacy_open_check", null);

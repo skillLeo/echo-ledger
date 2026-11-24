@@ -121,8 +121,9 @@ describe("backup engine and waiting for the engine (v1.5)", () => {
 
 describe("the recording page's words for a transcript's state (D-052)", () => {
   it("says each state in plain words, never the server's id", () => {
-    expect(transcriptStatusLine(null)).toBe("Not transcribed yet.");
-    expect(transcriptStatusLine("not_started")).toBe("Not transcribed yet.");
+    // The glossary's word (PLAN_V2_1_POLISH section 1): never "Not transcribed".
+    expect(transcriptStatusLine(null)).toBe("Audio only. No transcript yet.");
+    expect(transcriptStatusLine("not_started")).toBe("Audio only. No transcript yet.");
     expect(transcriptStatusLine("awaiting_device")).toBe("Waiting for the recording to finish uploading from the device that made it.");
     // A finished recording is never said to be empty here: its transcript is loading, or says it is empty itself.
     expect(transcriptStatusLine("completed")).not.toMatch(/no words|empty/i);

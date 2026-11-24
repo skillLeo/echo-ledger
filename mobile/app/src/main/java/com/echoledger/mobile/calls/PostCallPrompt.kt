@@ -12,7 +12,8 @@ import com.echoledger.mobile.overlay.DecisionPopup
 /**
  * What happens when a call recording ends (since 2.0.5, Settings › Recording › After each call; [CallChoice]):
  * - Ask me (the default): the after-call card ([DecisionPopup]); without the overlay permission a notification asks
- *   with Transcribe, Save audio only and Delete. Nobody choosing keeps the audio only.
+ *   with Transcribe, Save audio only and Delete. Nobody choosing keeps the audio only. Since v2.1, with
+ *   [CallChoice.NOTIFY_FLAG] on, a quiet notification asks instead ([AfterCallActions], UX-13).
  * - Transcribe every call, Save audio only, a choice made on the pill during the call, "At the start of the call", and
  *   quiet hours or Do Not Disturb: no question; the call is kept as [CallChoice.outcome] says and sent now.
  * Skipped calls (unanswered, short, silent) never reach this.
@@ -44,13 +45,22 @@ object PostCallPrompt {
         return rec.copy(state = state, transcribe = transcribe ?: rec.transcribe)
     }
 
-    /** Asks about a waiting call, or sends a kept one. [themeMode]: the card's light or dark look. */
-    fun show(context: Context, rec: LocalRecording, themeMode: String) {
+    /**
+     * Asks about a waiting call, or sends a kept one. [themeMode]: the card's light or dark look. [again]: put back by
+     * Undo, so it is asked about after a question already on the card, never folded into the grouped line.
+     */
+    fun show(context: Context, rec: LocalRecording, themeMode: String, again: Boolean = false) {
         if (rec.state != "pending_decision") {
             UploadWorker.enqueue(context, rec.id)
             return
         }
-        val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode)
+        // v2.1 UX-13: a quiet notification instead of the card (behind its flag; off, the card as before).
+        val settings = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings?.value
+        if (isCall(rec) && settings != null && CallChoice.notifies(settings)) {
+            AfterCallActions.ask(context, rec, settings)
+            return
+        }
+        val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode, again)
         // One question at a time: the notification only when the card cannot be drawn.
         if (!shown) Notifications.showSaveDecision(context, rec, clientName = null)
         // The card's own time (and the line it waits behind) first; 10 s for the notification.
@@ -58,8 +68,8 @@ object PostCallPrompt {
         DecisionTimeoutWorker.schedule(context, rec.id, backstopMs)
     }
 
-    /** A call back from "Deleted · Undo" in a notification: asked again if it waited, sent if it was kept. */
-    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(context, rec, themeMode)
+    /** A call back from an Undo (a notification, the app's snackbar): asked again if it waited, sent if it was kept. */
+    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(context, rec, themeMode, again = true)
 
     /**
      * The recording follows After each call with nothing on the screen (since v1.8 0.3: a call or a recording is live,
