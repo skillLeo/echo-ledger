@@ -59,6 +59,7 @@ pub mod tray;
 pub mod ui_flags;
 pub mod updates;
 pub mod whatsapp;
+pub mod wintitle;
 pub mod server_notice;
 
 use std::path::PathBuf;
@@ -482,6 +483,12 @@ pub fn run() {
     {
         builder = builder.menu(app_menu::build).activate_ignoring_other_apps(app_life::takes_focus_at_launch(autostart, smoke_dir.is_some()));
     }
+    // UX-20 (v21_win_titlebar): Snap Layouts on the page's Maximize, on Windows 11 (wintitle.rs). Its script only
+    // watches for that button, which the page draws with the flag on.
+    #[cfg(windows)]
+    {
+        builder = builder.plugin(tauri_plugin_snap_layout::init().button_id(wintitle::MAXIMIZE_ID).build());
+    }
     let app = builder
         .plugin(shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
@@ -644,6 +651,7 @@ pub fn run() {
             title_click::title_double_click,
             native_menu::native_menu_popup,
             dock::dock_activity_set,
+            wintitle::window_titlebar,
             app_menu::app_menu_set,
             commands::set_window_theme,
             commands::pair_device,

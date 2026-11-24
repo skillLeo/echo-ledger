@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "windows-titlebar",
+  "description": "Main window on Windows with its own title row (v21_win_titlebar): its window buttons and Snap Layouts on Maximize",
+  "windows": ["main"],
+  "platforms": ["windows"],
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "snap-layout:default"
+  ]
+}

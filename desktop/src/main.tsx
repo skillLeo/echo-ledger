@@ -4,8 +4,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
-import { api } from "./lib/ipc";
-import { watchTitlebar } from "./lib/titlebar";
+import { api, listenTo } from "./lib/ipc";
+import { watchTitlebar, watchWinTitlebar } from "./lib/titlebar";
 import { installNativeFeel, SYNC_NOW_EVENT } from "./lib/nativeFeel";
 import { watchTitleDoubleClick } from "./lib/titleClick";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -77,6 +77,8 @@ api
       watchTitlebar(a.platform, isFullscreen);
       watchTitleDoubleClick(a.platform);
     }
+    // Windows with v21_win_titlebar: the page draws the title row and the window's buttons (wintitle.rs).
+    if (label === "main" && a.platform === "windows") watchWinTitlebar(api.windowTitlebar, (follow) => listenTo<boolean>("window:titlebar", follow));
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

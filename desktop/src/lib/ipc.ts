@@ -1859,6 +1859,8 @@ export const api = {
   /** The floating windows to the display that isn't the main one (so the main one can be shared). */
   privacyMoveToOtherDisplay: () => invoke<void>("privacy_move_to_other_display"),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
+  /** Whether the main window draws its own title row (Windows with v21_win_titlebar, wintitle.rs). */
+  windowTitlebar: () => invoke<boolean>("window_titlebar"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),
   unpair: () => invoke<AppStatus>("unpair"),
