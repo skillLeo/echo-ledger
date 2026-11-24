@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
@@ -49,6 +49,52 @@ describe("Sync Now from the keys (FIX-10)", () => {
     await settle();
     dialog.remove();
     expect(callsOf("library_refresh").length).toBe(before + 1);
+  });
+
+  /** The signed-in window, its flags on; `over` changes what the core says. */
+  const signedIn = (over: { locked?: boolean; onboardingDone?: boolean } = {}) => {
+    respond("app_status", makeStatus());
+    respond("get_settings", makeSettings(over.onboardingDone === false ? { onboardingDone: false } : {}));
+    respond("lock_status", { enabled: !!over.locked, locked: !!over.locked, hasPin: !!over.locked, osMethod: null, retryAfterSeconds: 0 });
+    respond("library_list", ITEMS);
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respond("bin_list", { data: [] });
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false });
+    render(<MainApp />);
+  };
+
+  it("does nothing on the lock screen", async () => {
+    respond("library_refresh", ITEMS);
+    signedIn({ locked: true });
+    await settle();
+    expect(screen.getByRole("heading", { name: "EchoLedger is locked" })).toBeInTheDocument();
+    act(() => { window.dispatchEvent(new Event(SYNC_NOW_EVENT)); });
+    await settle();
+    expect(callsOf("library_refresh")).toHaveLength(0);
+  });
+
+  it("does nothing in setup (the first-run wizard)", async () => {
+    respond("library_refresh", ITEMS);
+    signedIn({ onboardingDone: false });
+    await settle();
+    // The wizard's screen (or the moment before it), never the app's.
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    act(() => { window.dispatchEvent(new Event(SYNC_NOW_EVENT)); });
+    await settle();
+    expect(callsOf("library_refresh")).toHaveLength(0);
+  });
+
+  it("a sync that fails says so, as an error", async () => {
+    respond("library_refresh", ITEMS);
+    signedIn();
+    await settle();
+    await screen.findByRole("navigation", { name: "Main" });
+    await settle();
+    fail("library_refresh", "Can't reach the server. Check the connection and try again.");
+    act(() => { window.dispatchEvent(new Event(SYNC_NOW_EVENT)); });
+    await settle();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Can't reach the server");
   });
 
   it("does nothing before the app is there (signed out: the sign-in)", async () => {
