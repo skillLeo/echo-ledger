@@ -336,7 +336,11 @@ describe('the alert (W-INC-1125)', function () {
         withoutExtensions();
         $web = 503;
         Http::fake(['*/health/php' => function () use (&$web) {
-            return Http::response($web === 503 ? ['ok' => false] : 'Bad gateway', $web);
+            return Http::response(match ($web) {
+                503 => ['ok' => false],
+                200 => ['ok' => true],
+                default => 'Bad gateway',
+            }, $web);
         }]);
         Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
         Mail::assertSent(ServerHealthMail::class, 1);
@@ -355,6 +359,24 @@ describe('the alert (W-INC-1125)', function () {
         Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
         Mail::assertSent(ServerHealthFixedMail::class, 1);
         expect($admin->notifications()->where('data->viewData->kind', 'server_problem')->sole()->getAttribute('resolved_at'))->not->toBeNull();
+    });
+
+    it('takes only the web PHP\'s own answer: another page with 503 or 200 is "could not ask"', function () {
+        Mail::fake();
+        Fx::superAdmin();
+        $page = ['body' => '<html>Service Unavailable</html>', 'status' => 503];
+        Http::fake(['*/health/php' => function () use (&$page) {
+            return Http::response($page['body'], $page['status'], ['Content-Type' => 'text/html']);
+        }]);
+
+        // The hosting's own 503 page (overload, maintenance): no fault, nothing mailed, nothing in Activity.
+        expect(Artisan::call('echoledger:health', ['--report' => true, '--web' => true]))->toBe(0);
+        // A 200 page that is not the check's answer (a captive page) says nothing either.
+        $page = ['body' => '<html>Welcome</html>', 'status' => 200];
+        expect(Artisan::call('echoledger:health', ['--report' => true, '--web' => true]))->toBe(0);
+
+        Mail::assertNothingSent();
+        expect(DB::table('notifications')->where('dedupe_key', 'server_problem:php')->count())->toBe(0);
     });
 
     it('takes the problem away from someone who is not a super admin any more', function () {

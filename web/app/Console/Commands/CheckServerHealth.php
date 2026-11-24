@@ -75,16 +75,21 @@ final class CheckServerHealth extends Command
     private function askWeb(): array
     {
         try {
-            $status = Http::timeout(15)->acceptJson()->withHeaders(['Cache-Control' => 'no-cache'])->get(url('/health/php'))->status();
+            $response = Http::timeout(15)->acceptJson()->withHeaders(['Cache-Control' => 'no-cache'])->get(url('/health/php'));
+            $status = $response->status();
+            // Only the web PHP's own answer counts (W-INC-1125 review): {"ok": true} with 200, {"ok": false} with 503.
+            // Any other page with those codes (the hosting's proxy under load, its maintenance page) is "could not ask".
+            $said = is_array($response->json()) ? ($response->json()['ok'] ?? null) : null;
         } catch (Throwable $e) {
             $status = 0;
+            $said = null;
         }
-        if ($status === 200) {
+        if ($status === 200 && $said === true) {
             $this->info('Web PHP: ok.');
 
             return ['ok' => true, 'missing' => [], 'cipher' => null];
         }
-        if ($status === 503) {
+        if ($status === 503 && $said === false) {
             $kept = Cache::get(ServerHealth::WEB);
             $missing = is_array($kept) && is_array($kept['missing'] ?? null) ? array_values($kept['missing']) : [];
             $cipher = is_array($kept) && is_string($kept['cipher'] ?? null) ? $kept['cipher'] : null;
