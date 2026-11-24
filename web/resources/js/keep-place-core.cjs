@@ -11,9 +11,16 @@
         root.ElKeepPlaceCore = core;
     }
 })(typeof self !== 'undefined' ? self : this, function () {
-    /** Where this tab keeps the Library's place, and the recording last opened (sessionStorage; signing out forgets them). */
+    /**
+     * Where this tab keeps the Library's place, and the recording last opened (sessionStorage; signing out forgets them),
+     * one person's in one workspace (scope: the frame's memory scope, NavFrame::memoryScope): another workspace's list
+     * never comes back to this one's place.
+     */
     const KEY = 'el-place:library';
     const OPENED = 'el-place:opened';
+    function keys(scope) {
+        return { place: KEY + ':' + scope, opened: OPENED + ':' + scope };
+    }
     /** A place older than this is not kept: the list starts at its top. */
     const MAX_AGE = 30 * 60 * 1000;
     /** How long the opened row keeps its tint after coming back. */
@@ -52,10 +59,13 @@
         return Math.max(0, Math.min(Math.round(y), Math.max(0, s.maxY)));
     }
 
-    /** How many times Load more brings back the rows that were shown (chunk at a time, never past the list's max). */
-    function moreNeeded(savedShown, shownNow, chunk, max) {
+    /**
+     * How many rows to show at once to bring back the ones that were shown (ListCaptureSessions::v2ShowUpTo, one
+     * request; never past the list's max), or 0 when the list shows them already.
+     */
+    function showUpTo(savedShown, shownNow, max) {
         const want = Math.min(savedShown, max);
-        return want > shownNow ? Math.ceil((want - shownNow) / chunk) : 0;
+        return want > shownNow ? want : 0;
     }
 
     /** Whether the opened row still has its tint (since: when the list came back). */
@@ -68,12 +78,20 @@
         return scrollY > viewport;
     }
 
-    /** Home, Ctrl+Home, or ⌘↑ on a Mac go to the top; never while typing, nor with Shift or Alt (a selection, a word). */
+    /**
+     * Home, Ctrl+Home, or ⌘↑ on a Mac go to the top; never while typing or in a control that has its own Home (a toolbar,
+     * tabs, a slider: e.typing), nor with Shift or Alt (a selection, a word).
+     */
     function toTopKey(e, mac) {
         if (e.typing || e.shiftKey || e.altKey) return false;
         if (e.key === 'Home') return ! e.metaKey;
         return mac && e.key === 'ArrowUp' && e.metaKey && ! e.ctrlKey;
     }
 
-    return { KEY, OPENED, MAX_AGE, TINT, place, restorable, cameBack, scrollTo, moreNeeded, tinted, showsBackToTop, toTopKey };
+    /** Whether the focus is still where it was when the list came back (nothing else took it): only then the row takes it. */
+    function focusFree(now, atStart, body) {
+        return now === null || now === body || now === atStart;
+    }
+
+    return { KEY, OPENED, MAX_AGE, TINT, keys, place, restorable, cameBack, scrollTo, showUpTo, tinted, showsBackToTop, toTopKey, focusFree };
 });

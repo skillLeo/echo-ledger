@@ -5,7 +5,7 @@
       its "Library" link goes back to the list as it was left.
     - Coming back from a recording (the browser's Back, that link, the rail), the list shows as many rows again, scrolls
       to where it was, and the recording you opened keeps a light grey tint and the keyboard's place (J / K go on from
-      it) for a minute, until another row is opened or clicked, or the view, tab, filters or search change. Not the
+      it, unless the person has taken the focus meanwhile) for a minute, until another row is opened or clicked, or the view, tab, filters or search change. Not the
       selection's colour: it never looks like a ticked row.
     - Back to top: a small round ↑ at the bottom corner once a long list (the Library, Activity, Shared with me,
       Recently deleted) is more than a screen down; it scrolls to the top and the first row takes the focus. Home,
@@ -22,6 +22,13 @@
         if (window.elV2KeepPlace) return;
         window.elV2KeepPlace = true;
         const core = window.ElKeepPlaceCore;
+        // One person's place in one workspace (NavFrame::memoryScope): another workspace's list never comes back to it.
+        const KEYS = core.keys({!! json_encode(\App\Filament\Support\NavFrame::memoryScope(), JSON_HEX_TAG) !!});
+        // The long lists that have Back to top: the Library, Activity, Shared with me and Recently deleted.
+        const LISTS = {!! json_encode(array_map(fn (string $url): string => rtrim((string) parse_url($url, PHP_URL_PATH), '/'), [
+            \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), \App\Filament\Pages\Activity::getUrl(),
+            \App\Filament\Pages\SharedWithMe::getUrl(), \App\Filament\Pages\RecentlyDeleted::getUrl(),
+        ]), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!};
         const store = {
             get(key) { try { return JSON.parse(sessionStorage.getItem(key) || 'null'); } catch (e) { return null; } },
             set(key, value) { try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* a private window */ } },
@@ -34,12 +41,16 @@
         const smooth = () => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
         // A recording's page: it was opened (the Library tints it on the way back), and its "Library" link goes back to
-        // the list as it was left (the same view, tab, filters and search).
+        // the list as it was left (the same view, tab, filters and search). Any other page that is not the Library: the
+        // way back from a recording is over (Library, a recording, Activity, Library starts the list at its top).
         const recordingPage = () => {
             const page = document.querySelector('[data-recording-page]');
-            if (! page) return;
-            store.set(core.OPENED, { id: page.dataset.recordingPage, at: Date.now() });
-            const saved = store.get(core.KEY);
+            if (! page) {
+                if (! library()) store.set(KEYS.opened, null);
+                return;
+            }
+            store.set(KEYS.opened, { id: page.dataset.recordingPage, at: Date.now() });
+            const saved = store.get(KEYS.place);
             if (saved && typeof saved.url === 'string' && saved.url.split('?')[0] === location.pathname.replace(/\/[^/]+$/, '')) {
                 document.querySelectorAll('a.v2-back').forEach((a) => { a.href = saved.url; });
             }
@@ -51,7 +62,7 @@
             if (! library() || restoring) return;
             const all = rows();
             const top = all.find((r) => r.getBoundingClientRect().bottom > 0);
-            store.set(core.KEY, core.place({ url: here(), y: window.scrollY, id: top ? top.dataset.recording : null,
+            store.set(KEYS.place, core.place({ url: here(), y: window.scrollY, id: top ? top.dataset.recording : null,
                 offset: top ? top.getBoundingClientRect().top : 0, shown: all.length, at: Date.now() }));
         };
         let noting = 0;
@@ -72,19 +83,25 @@
 
         async function restore() {
             const lib = library();
-            const saved = store.get(core.KEY);
-            const opened = store.get(core.OPENED);
+            const saved = store.get(KEYS.place);
+            const opened = store.get(KEYS.opened);
             if (! lib || ! core.restorable(saved, here(), Date.now()) || ! core.cameBack(saved, opened)) return;
             const host = lib.closest('[wire\\:id]');
             const wire = host && window.Livewire ? window.Livewire.find(host.getAttribute('wire:id')) : null;
+            // Where the focus is now: if the person takes it meanwhile (the search, a filter), the row never takes it back.
+            const focusAtStart = document.activeElement;
             restoring = true;
             try {
                 // The rows load after the page (the table's own deferred load): wait for them, up to a few seconds.
                 for (let i = 0; i < 50 && ! rows().length; i++) await new Promise((r) => setTimeout(r, 100));
-                // As many rows as were shown: Load more as many times as it took then.
-                const more = wire && typeof wire.v2LoadMore === 'function' ? core.moreNeeded(saved.shown, rows().length, {{ \App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions::V2_CHUNK }}, {{ \App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions::V2_MAX }}) : 0;
-                for (let i = 0; i < more; i++) await wire.v2LoadMore();
-                if (more) await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+                // As many rows as were shown, in one request (never past the list's limit).
+                const upTo = wire && typeof wire.v2ShowUpTo === 'function' ? core.showUpTo(saved.shown, rows().length, {{ \App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions::V2_MAX }}) : 0;
+                if (upTo) {
+                    await wire.v2ShowUpTo(upTo);
+                    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+                }
+                // The person searched or filtered meanwhile: that is another list now.
+                if (here() !== saved.url) return;
                 const anchor = saved.id ? document.querySelector('.v2-library .v2-lib-row[data-recording="' + saved.id.replace(/["\\]/g, '') + '"]') : null;
                 const maxY = document.documentElement.scrollHeight - window.innerHeight;
                 window.scrollTo({ top: core.scrollTo(saved, { rowTop: anchor ? anchor.getBoundingClientRect().top + window.scrollY : null, maxY }), behavior: 'auto' });
@@ -93,21 +110,24 @@
                     tint = { id: opened.id, url: here(), since: Date.now() };
                     paint();
                     window.setTimeout(paint, core.TINT + 50);
-                    // The keyboard's place: J / K go on from it, and the focus is on it.
-                    rows().forEach((r) => recordOf(r).classList.remove('el-kb-row'));
-                    recordOf(row).classList.add('el-kb-row');
-                    row.scrollIntoView({ block: 'nearest' });
-                    linkOf(row).focus({ preventScroll: true });
+                    // The keyboard's place: J / K go on from it, and the focus is on it, unless the person has taken the
+                    // focus meanwhile (typing in the search: their letters stay theirs, never J / K / X).
+                    if (core.focusFree(document.activeElement, focusAtStart, document.body)) {
+                        rows().forEach((r) => recordOf(r).classList.remove('el-kb-row'));
+                        recordOf(row).classList.add('el-kb-row');
+                        row.scrollIntoView({ block: 'nearest' });
+                        linkOf(row).focus({ preventScroll: true });
+                    }
                 }
             } finally {
                 restoring = false;
-                store.set(core.OPENED, null);
+                store.set(KEYS.opened, null);
                 note();
             }
         }
 
-        // Back to top, on the long lists: the Library, Activity, and a table's (Shared with me, Recently deleted).
-        const longList = () => document.querySelector('.v2-library, .fi-main .el-rows, .fi-main .fi-ta-content');
+        // Back to top, on the four long lists only: the Library, Activity, Shared with me, Recently deleted.
+        const longList = () => (LISTS.includes(location.pathname.replace(/\/$/, '')) ? document.querySelector('.v2-library, .fi-main .el-rows, .fi-main .fi-ta-content') : null);
         const firstRow = () => {
             const list = longList();
             const first = list ? list.querySelector('.v2-lib-row[data-recording], :scope > li, .fi-ta-record') : null;
@@ -129,7 +149,8 @@
         });
         document.addEventListener('keydown', (e) => {
             const t = e.target;
-            const typing = t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="listbox"], [role="dialog"]') !== null;
+            // A field, and a control with its own Home (a menu, a list box, a dialog, a toolbar, tabs, a slider).
+            const typing = t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="listbox"], [role="dialog"], [role="toolbar"], [role="tablist"], [role="slider"]') !== null;
             if (! longList() || e.defaultPrevented || ! core.toTopKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey, typing }, /Mac/i.test(navigator.platform))) return;
             e.preventDefault();
             toTop();

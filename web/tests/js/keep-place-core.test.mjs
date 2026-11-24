@@ -38,11 +38,25 @@ test('the list comes back where it was: the row at the top of the window where i
     assert.equal(core.scrollTo(saved, { rowTop: 100, maxY: 9000 }), 0);
 });
 
-test('rows that were shown come back too: Load more as many times as it took, never past the list\'s 500', () => {
-    assert.equal(core.moreNeeded(100, 50, 50, 500), 1);
-    assert.equal(core.moreNeeded(260, 50, 50, 500), 5);
-    assert.equal(core.moreNeeded(50, 50, 50, 500), 0);
-    assert.equal(core.moreNeeded(900, 50, 50, 500), 9);
+test('rows that were shown come back too, in one request, never past the list\'s 500', () => {
+    assert.equal(core.showUpTo(100, 50, 500), 100);
+    assert.equal(core.showUpTo(260, 50, 500), 260);
+    assert.equal(core.showUpTo(50, 50, 500), 0);
+    assert.equal(core.showUpTo(900, 50, 500), 500);
+});
+
+test('one person\'s place in one workspace: another scope keeps its own', () => {
+    assert.deepEqual(core.keys('a1b2c3d4e5f6.0a1b2c3d'), { place: 'el-place:library:a1b2c3d4e5f6.0a1b2c3d', opened: 'el-place:opened:a1b2c3d4e5f6.0a1b2c3d' });
+    assert.notEqual(core.keys('p.w1').place, core.keys('p.w2').place);
+});
+
+test('the row takes the focus only if nothing else took it while the list came back', () => {
+    const body = { name: 'body' };
+    const search = { name: 'search' };
+    assert.ok(core.focusFree(body, body, body));
+    assert.ok(core.focusFree(null, body, body));
+    assert.ok(! core.focusFree(search, body, body), 'the person clicked into the search and is typing');
+    assert.ok(core.focusFree(search, search, body), 'it was there from the start (the page put it there)');
 });
 
 test('the opened row keeps its light tint for a minute after coming back', () => {

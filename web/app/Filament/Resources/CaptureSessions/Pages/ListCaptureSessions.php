@@ -790,6 +790,18 @@ class ListCaptureSessions extends ListRecords
     }
 
     /**
+     * UX-25: coming back from a recording, as many rows as were shown when the list was left, in one request (whole
+     * chunks, never past V2_MAX, never fewer than now).
+     */
+    public function v2ShowUpTo(int $rows): void
+    {
+        if (ConsoleV2::library()) {
+            $chunks = (int) ceil(max(0, $rows) / self::V2_CHUNK);
+            $this->v2Shown = max($this->v2Shown, min(self::V2_MAX, $chunks * self::V2_CHUNK));
+        }
+    }
+
+    /**
      * The new Library's poll while a row on screen is moving: a few columns of those rows only, and no redraw of the
      * list (up to 500 rows) unless one of them changed.
      */
