@@ -12,6 +12,7 @@ import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { Shell } from "../shell/Shell";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -122,7 +123,9 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     // Needs you: the failed one, the two calls waiting and the upload that failed here. Then Shared ▸, which folds.
     expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(
-      ["All recordings, 4", "Needs you, 4", "Unread, 1", "Important, 0", "Not transcribed, 1", "Audio only, 1", "Shared"]);
+      ["All recordings, 4", "Needs you, 4", "Unread, 1", "Important, 0", "Audio only, 1", "Shared"]);
+    // Not transcribed is Audio only since v2.1 (docs/PLAN_V2_1_POLISH.md section 1): one view, never the old name.
+    expect(list).not.toHaveTextContent(/not transcribed|untranscribed/i);
     // No Library places list any more: these are the LIBRARY section's.
     expect(screen.queryByRole("list", { name: "Library places" })).toBeNull();
     expect(within(list).getByRole("button", { name: "All recordings, 4" })).toHaveAttribute("aria-current", "page");
@@ -149,9 +152,11 @@ describe("the Library's places", () => {
     fireEvent.click(within(list).getByRole("button", { name: "Needs you, 2" }));
     await settle();
     expect(rows()).toEqual(["call", "bad"]);
-    expect(document.querySelector("button[data-row-id=call]")!.closest("li")).toHaveTextContent("Waiting for decision");
+    // The glossary's word for it (contract 2.0.0-r `waiting`), in grey: not Audio only.
+    expect(document.querySelector("button[data-row-id=call]")!.closest("li")!.querySelector(".el-rec-state")).toHaveTextContent(/^Waiting$/);
+    expect(document.querySelector("button[data-row-id=call]")!.closest("li")).not.toHaveTextContent("Audio only");
     // With a filter that the call doesn't have, it is still listed (as the server's Needs you keeps it).
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Teams" })[0]);
+    await filterBySource("Teams");
     await settle();
     expect(rows()).toEqual(["call", "bad"]);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
@@ -167,7 +172,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     expect(rows()).toEqual(["zoom"]);
     // Projects, then the Library again: Unread with Source: Zoom, as left.
@@ -216,6 +221,109 @@ describe("the Library's places", () => {
     expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
   });
 
+  it("in the app, ⌘F is the title row's: its field searches this view and says In: All recordings (the Library has no field of its own there)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    expect(screen.getAllByRole("searchbox", { name: "Search recordings" })).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = screen.getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    expect(document.querySelector(".el-titlerow__scope")).toHaveTextContent("In: All recordings");
+    fireEvent.change(field, { target: { value: "weekly" } });
+    await act(() => new Promise((r) => setTimeout(r, 800)));
+    expect(rows()).toEqual(["zoom"]);
+  });
+
+  it("in the app, ⌘[ walks the Library's own steps first: a filter change, then the view, before leaving the place", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // One ⌘[: the filter change goes, the view stays (and the Library stays the place).
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    // The next: the view before it (All recordings), still in the Library.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // ⌘] walks forward again, one step a press.
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+  });
+
+  it("in the app, a view picked in the sidebar is one step: ⌘[ straight after goes back to All recordings, still in the Library", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeDisabled();
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    // Lit at once (the Library's step), no other redraw needed.
+    expect(titleRow().getByRole("button", { name: "Back" })).toBeEnabled();
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+  });
+
+  it("in the app, Back then a new view: Forward goes out (nothing ahead any more)", async () => {
+    inTheApp();
+    await settle();
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(titleRow().getByRole("button", { name: "Back" }));
+    await settle();
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Important/);
+    expect(titleRow().getByRole("button", { name: "Forward" })).toBeDisabled();
+  });
+
+  it("in the app, back from a recording opened from a scrolled list, by the row's ←, ⌘[ and the side button: the same place, its row tinted (UX-25)", async () => {
+    respond("session_detail", { playback_url: null });
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    // The shell's content area is the box that scrolls (its CSS isn't loaded here).
+    const box = document.querySelector<HTMLElement>(".content")!;
+    box.style.overflowY = "auto";
+    const titleRow = () => within(screen.getByTestId("title-row"));
+    const ways: [string, () => void][] = [
+      ["the row's ←", () => fireEvent.click(titleRow().getByRole("button", { name: "Back" }))],
+      ["⌘[", () => fireEvent.keyDown(document.body, { key: "[", metaKey: true })],
+      ["the side button", () => { fireEvent.mouseDown(window, { button: 3 }); fireEvent.mouseUp(window, { button: 3 }); }],
+    ];
+    for (const [way, back] of ways) {
+      box.scrollTop = 700;
+      fireEvent.click(within(screen.getByRole("list", { name: "Recordings" })).getByRole("button", { name: "Imported memo" }));
+      await settle();
+      expect(screen.getByRole("heading", { level: 1, name: "Imported memo" }), way).toBeInTheDocument();
+      box.scrollTop = 0;
+      back();
+      await settle();
+      expect(box.scrollTop, way).toBe(700);
+      expect(document.querySelector(".el-rec--last button[data-row-id]")?.getAttribute("data-row-id"), way).toBe("file");
+    }
+  });
+
   it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
     respond("projects_list", { data: [] });
@@ -229,7 +337,7 @@ describe("the Library's places", () => {
     await act(() => new Promise((r) => setTimeout(r, 20)));
     await settle();
     expect(screen.queryByTestId("nav-panel")).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
     fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
@@ -247,7 +355,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
     await settle();
@@ -273,7 +381,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "weekly" } });
     await settle();
     fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
@@ -299,16 +407,32 @@ describe("the Library's places", () => {
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("");
   });
 
+  it("in the app, ⌘K's \"Show WhatsApp recordings\" is All recordings with Source: WhatsApp (a row's mark no longer filters)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
+    await settle();
+    const palette = screen.getByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "show whatsapp" } });
+    // Among the search's Commands (UX-20 groups what it finds).
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Show WhatsApp recordings/ }));
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();
+    expect(rows()).toEqual(["wa"]);
+  });
+
   it("in the app, All after a view shows every recording again", async () => {
     inTheApp();
     await settle();
     const list = await screen.findByRole("list", { name: "Library views" });
-    fireEvent.click(within(list).getByRole("button", { name: "Not transcribed, 1" }));
+    fireEvent.click(within(list).getByRole("button", { name: "Audio only, 1" }));
     await settle();
     expect(rows()).toEqual(["file"]);
     fireEvent.click(within(list).getByRole("button", { name: "All recordings, 4" }));
     await settle();
     expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
-    expect(within(list).getByRole("button", { name: "Not transcribed, 1" })).not.toHaveAttribute("aria-current");
+    expect(within(list).getByRole("button", { name: "Audio only, 1" })).not.toHaveAttribute("aria-current");
   });
 });

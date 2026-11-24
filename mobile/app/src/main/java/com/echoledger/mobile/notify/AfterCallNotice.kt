@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.res.Resources
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
@@ -57,6 +58,15 @@ object AfterCallNotice {
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         }
+
+    /**
+     * The channel exists only while the after-call flag is on ([Notifications.createChannels] removes it when the flag is
+     * off): made here, just before the first notification, when the flag has just come on.
+     */
+    fun ensureChannel(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CHANNEL) == null) manager.createNotificationChannel(channel(AppWords.resources(context)))
+    }
 
     /** Whether the notification can show: allowed on Android 13+, and neither the app's notifications nor this channel off. */
     fun canShow(context: Context): Boolean {
@@ -118,12 +128,13 @@ object AfterCallNotice {
         val builder = base(context, quiet)
             .setContentTitle(title)
             .setContentText(meta)
+            .setLargeIcon(sourceLogo(context, rec))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setPublicVersion(base(context, quiet).setContentTitle(said(words.getString(R.string.n_call_saved))).build())
             .setContentIntent(open(context, MainActivity.OPEN_PENDING, 1))
             // A swipe keeps the audio only; nothing else shows.
-            .setDeleteIntent(action(context, SaveDecisionReceiver.ACTION_AC_SWIPED, listOf(rec.id), 6))
+            .setDeleteIntent(swiped(context, listOf(rec.id), 6))
             .setTimeoutAfter(CallChoice.NOTICE_MS)
             .addAction(
                 0,
@@ -165,7 +176,7 @@ object AfterCallNotice {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setPublicVersion(base(context, quiet).setContentTitle(title).build())
             .setContentIntent(open(context, MainActivity.OPEN_PENDING, 1))
-            .setDeleteIntent(action(context, SaveDecisionReceiver.ACTION_AC_SWIPED, ids, 9))
+            .setDeleteIntent(swiped(context, ids, 9))
             .setTimeoutAfter(CallChoice.NOTICE_MS)
             .addAction(
                 0,
@@ -186,6 +197,7 @@ object AfterCallNotice {
         val notification = base(context, quiet = true)
             .setContentTitle(title)
             .setContentText(said(words.getString(R.string.n_call_line, callCardTitle(words, rec), length(rec))))
+            .setLargeIcon(sourceLogo(context, rec))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPublicVersion(base(context, quiet = true).setContentTitle(title).build())
             .setContentIntent(open(context, MainActivity.OPEN_PENDING, 1))
@@ -199,6 +211,11 @@ object AfterCallNotice {
     @SuppressLint("MissingPermission") // canShow() first
     fun transcribingAll(context: Context, recs: List<LocalRecording>) {
         recs.forEach { markTranscribing(context, it.id, true) }
+        // The group's one notification follows them all: it ends once the last one is ready ([groupMemberDone]).
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putStringSet(GROUP_LEFT, recs.map { it.id }.toSet())
+            .putInt(GROUP_READY, 0)
+            .apply()
         if (!canShow(context)) return
         val words = AppWords.resources(context)
         val title = NoticeWords.drawn(words, words.getString(R.string.cc_done_transcribing))
@@ -231,6 +248,60 @@ object AfterCallNotice {
 
     fun cancelGrouped(context: Context) {
         NotificationManagerCompat.from(context).cancel(GROUPED_ID)
+    }
+
+    /** Whether the call [id] is one of the back-to-back calls sent with Transcribe all, still being made. */
+    fun inGroup(context: Context, id: String): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(GROUP_LEFT, emptySet()).orEmpty().contains(id)
+
+    /**
+     * One of the calls sent with Transcribe all is done ([ready]: its transcript is there). Once the last one is, the
+     * group's "Transcribing…" becomes "3 transcripts ready" in place (or goes, when none is), never left up for the hour.
+     */
+    @SuppressLint("MissingPermission") // canShow() first
+    fun groupMemberDone(context: Context, id: String, ready: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val left = prefs.getStringSet(GROUP_LEFT, emptySet()).orEmpty()
+        if (id !in left) return
+        val readyCount = prefs.getInt(GROUP_READY, 0) + if (ready) 1 else 0
+        prefs.edit().putStringSet(GROUP_LEFT, left - id).putInt(GROUP_READY, readyCount).apply()
+        if ((left - id).isNotEmpty()) return
+        if (readyCount == 0 || !canShow(context)) {
+            cancelGrouped(context)
+            return
+        }
+        val words = AppWords.resources(context)
+        val title = NoticeWords.drawn(words, words.getQuantityString(R.plurals.cc_ac_ready_many, readyCount, readyCount))
+        val notification = base(context, quiet = true)
+            .setContentTitle(title)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPublicVersion(base(context, quiet = true).setContentTitle(title).build())
+            .setContentIntent(open(context, MainActivity.OPEN_LIBRARY, 42))
+            .setTimeoutAfter(CallChoice.NOTICE_MS)
+            .build()
+        runCatching { NotificationManagerCompat.from(context).notify(GROUPED_ID, notification) }
+    }
+
+    /**
+     * The swipe's answer, with when the notification was posted: Android sends it on a swipe, on Clear all, and also
+     * when the hour is over ([CallChoice.NOTICE_MS]). Only a swipe or a Clear all within the hour counts as choosing
+     * audio only ([com.echoledger.mobile.calls.AfterCallActions.swiped]).
+     */
+    private fun swiped(context: Context, ids: List<String>, offset: Int): PendingIntent =
+        action(context, SaveDecisionReceiver.ACTION_AC_SWIPED, ids, offset) {
+            putExtra(SaveDecisionReceiver.EXTRA_POSTED_AT, System.currentTimeMillis())
+        }
+
+    /**
+     * The call's app's own icon, as the notification's large icon ("(WA) EchoLedger · now"); none when the app is not on
+     * this phone (a SIM call, an app used elsewhere): then the small icon alone, never a placeholder.
+     */
+    private fun sourceLogo(context: Context, rec: LocalRecording): android.graphics.Bitmap? {
+        val app = com.echoledger.mobile.core.SourceApp.from(rec.sourceApp)
+        val px = (LARGE_ICON_DP * context.resources.displayMetrics.density).toInt()
+        return com.echoledger.mobile.core.CallTargets.KNOWN.filterValues { it == app }.keys.firstNotNullOfOrNull { pkg ->
+            runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(px, px) }.getOrNull()
+        }
     }
 
     /** Forgets every call this notification knew (tests). */
@@ -280,6 +351,11 @@ object AfterCallNotice {
     fun scheduleKeep(context: Context, id: String) = DecisionTimeoutWorker.schedule(context, id, CallChoice.NOTICE_MS)
 
     private const val NOTICED = "noticed"
+    private const val GROUP_LEFT = "group_left"
+    private const val GROUP_READY = "group_ready"
+
+    /** The large icon's size, as Android's own notification templates draw it. */
+    private const val LARGE_ICON_DP = 48
     private const val KEEP = 50
     private const val WAITING = "pending_decision"
 }

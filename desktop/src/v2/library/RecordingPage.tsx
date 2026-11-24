@@ -31,6 +31,7 @@ import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
+import { rowState, STATE_WORDS } from "./model";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
@@ -590,6 +591,29 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       sayProblem(onMessage, "Could not access the clipboard");
     }
   };
+  // ⌘P on a Mac, Ctrl+P elsewhere: print the transcript (its print page, where Save as PDF is too), not the window
+  // (FIX-10). Heard on the document, before the window's guard; never while typing (a field keeps its keys; Ctrl+P
+  // moves up a line on a Mac) or behind a dialog.
+  const printNow = useRef<() => void>(() => undefined);
+  printNow.current = () => void exportAs("html");
+  useEffect(() => {
+    const mac = /mac/i.test(navigator.platform || navigator.userAgent);
+    const onKey = (e: KeyboardEvent) => {
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      // The P key whatever the layout types with it (Urdu, Arabic: e.code), as LibraryNav does.
+      const p = e.key.toLowerCase() === "p" || (e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key) && e.code === "KeyP");
+      if (e.defaultPrevented || !mod || e.altKey || e.shiftKey || !p) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      // Held down, it repeats: printed once.
+      if (e.repeat) return;
+      printNow.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const exportAs = async (format: ExportFormat) => {
     if (!tDetail) return;
     try {
@@ -753,7 +777,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {state === "ready" ? <Badge tone="success">Transcribed</Badge>
               : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
-                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
+                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge>{rowState(item)?.text ?? STATE_WORDS.audio_only}</Badge>}
           </p>
           {(item.labels?.length ?? 0) > 0 && (
             <ul className="el-recording__labels" aria-label="Labels">
@@ -900,7 +924,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           ) : state === "no_audio" ? (
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
-            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
+            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : rowState(item)?.text ?? STATE_WORDS.audio_only}
               body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
                 : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
                 : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}

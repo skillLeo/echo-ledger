@@ -14,6 +14,7 @@ import { libraryViewCounts, prepare } from "./facets";
 import { fromServer, MAX_VIEWS, syncedViewsStore, toServer, VIEW_WORDS, viewsAccount, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "./scope";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -394,7 +395,7 @@ describe("My views in the sidebar and the Library", () => {
   it("Save as view keeps the filters, the search and the sort; it appears in MY VIEWS, opens there and syncs", async () => {
     render(<App />);
     await act(flushAsync);
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "whatsapp" } });
     fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Longest" }));
@@ -488,10 +489,11 @@ describe("My views in the sidebar and the Library", () => {
     await act(flushAsync);
     expect(nav().getByRole("button", { name: "Unread, 1" })).toHaveAttribute("aria-current", "page");
     expect(rows()).toEqual(["wa2"]);
-    fireEvent.keyDown(window, { key: "7", code: "Digit7", altKey: true });
+    // Five library views since v2.1 (Audio only took in Not transcribed), so the first of My views is Alt+6.
+    fireEvent.keyDown(window, { key: "6", code: "Digit6", altKey: true });
     await act(flushAsync);
     expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
-    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+7");
+    expect(myViews().getByRole("button", { name: "WhatsApp" })).toHaveAttribute("aria-keyshortcuts", "Alt+6");
     // Typed in a field, Alt+1 is the field's (a character on some keyboards), never a view.
     const field = screen.getByRole("searchbox", { name: "Search recordings" });
     field.focus();

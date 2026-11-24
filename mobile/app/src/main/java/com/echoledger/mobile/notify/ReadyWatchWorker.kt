@@ -31,11 +31,32 @@ class ReadyWatchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         // A call sent from its after-call notification (v2.1): "Transcript ready" takes that notification's place.
         val notice = inputData.getString(KEY_NOTICE)
         runCatching { graph.library.refresh() }
-        val item = graph.library.items.value.firstOrNull { it.id == id && !it.deleted } ?: return Result.success()
+        // One of back-to-back calls sent with Transcribe all: their one notification follows them ([AfterCallNotice]).
+        val grouped = notice != null && AfterCallNotice.inGroup(applicationContext, notice)
+        val item = graph.library.items.value.firstOrNull { it.id == id && !it.deleted }
+        if (item == null) {
+            if (grouped) AfterCallNotice.groupMemberDone(applicationContext, notice!!, ready = false)
+            return Result.success()
+        }
         val ready = RecordingSteps.readyNotice(item)
         if (ready == null) {
-            if (round + 1 < MAX_ROUNDS) enqueue(applicationContext, id, round + 1, notice)
+            if (round + 1 < MAX_ROUNDS) {
+                enqueue(applicationContext, id, round + 1, notice)
+            } else if (grouped) {
+                AfterCallNotice.groupMemberDone(applicationContext, notice!!, ready = false)
+            }
             return Result.success()
+        }
+        val made = com.echoledger.mobile.core.ItemStatus.of(item) !in
+            setOf(com.echoledger.mobile.core.ItemStatus.NO_AUDIO, com.echoledger.mobile.core.ItemStatus.FAILED)
+        if (grouped) {
+            AfterCallNotice.markTranscribing(applicationContext, notice!!, false)
+            AfterCallNotice.groupMemberDone(applicationContext, notice, ready = made)
+            // Ready: the group's notification says so for them all. A failure still gets its own notice.
+            if (made) {
+                markNotified(applicationContext, id)
+                return Result.success()
+            }
         }
         val canPost = ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED

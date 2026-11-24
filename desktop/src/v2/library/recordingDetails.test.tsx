@@ -33,7 +33,9 @@ describe("the recording page's details", () => {
     render(<LibraryV2 />);
     await act(flushAsync);
     const row = screen.getByRole("button", { name: "Payment terms" });
-    expect(row).toHaveAccessibleDescription(/^Pinned Q4 VIP .*Recovered$/);
+    // Its first words, then what the row doesn't all show (pinned, every label), Recovered, when and how long (UX-06).
+    expect(row).toHaveAccessibleDescription("Hello Pinned, Q4, VIP Recovered 24 Oct 1h 02m");
+    expect(row.closest("li")!.querySelectorAll(".el-rec__label")).toHaveLength(2);
   });
 
   it("header: the project opens, Automatic title, the engine and the script warning; bookmarks play; the keys hint; Details", async () => {

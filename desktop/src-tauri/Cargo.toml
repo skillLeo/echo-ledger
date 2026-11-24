@@ -64,6 +64,7 @@ qrcodegen = "1.8.0"
 rfd = { version = "0.17.2", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
 wasapi = "0.26.0"
 windows = { version = "0.62.2", features = [
   "Wdk_System_SystemServices",

@@ -10,12 +10,15 @@ import { fileURLToPath } from "node:url";
 // Read from disk when the test runs (not import.meta.glob: Vitest's module cache keeps a glob's list of files from a run
 // before a file was added). Keyed as the glob did: "./views/main/MainApp.tsx".
 const here = dirname(fileURLToPath(import.meta.url));
-const walk = (at: string): string[] => readdirSync(at).flatMap((name) => {
+// Sorted, so the files come in the same order on every system.
+const walk = (at: string): string[] => readdirSync(at).sort().flatMap((name) => {
   const path = join(at, name);
   return statSync(path).isDirectory() ? walk(path) : [path];
 });
 const sources: Record<string, string> = Object.fromEntries(walk(join(here, "views")).filter((path) => path.endsWith(".tsx"))
   .map((path) => [`./${relative(here, path).split("\\").join("/")}`, readFileSync(path, "utf8")]));
+// An empty or moved folder must not pass in silence.
+if (!("./views/main/MainApp.tsx" in sources)) throw new Error("the views were not all read: ./views/main/MainApp.tsx is missing");
 
 /** The text of each call `name(...)` in `source`, with its arguments split at the top level. */
 export function callsOf(source: string, name: RegExp): { line: number; args: string[] }[] {

@@ -74,6 +74,17 @@ function ranked<T>(rows: readonly T[], score: (row: T) => number): { row: T; sco
     .map(({ row, score: s }) => ({ row, score: s }));
 }
 
+/**
+ * The new design has no smart folders: each is a filter of All recordings (an app's is its Source, the Inbox is No
+ * project), and since v2.1 the palette is a way to it that a row's mark used to be (PLAN_V2_1_POLISH UX-06). Shared with
+ * me stays a place ("Go to Shared with me").
+ */
+const V2_FOLDER_WORDS: Partial<Record<SmartFolder, string>> = {
+  inbox: "Show recordings in no project", whatsapp: "Show WhatsApp recordings", whatsapp_business: "Show WhatsApp Business recordings",
+  google_meet: "Show Meet recordings", zoom: "Show Zoom recordings", teams: "Show Teams recordings", phone: "Show SIM calls",
+  voice_notes: "Show voice notes", imported: "Show imported recordings",
+};
+
 /** A smart folder of the Library the palette can open (the ones the sidebar lists). */
 export interface PaletteFolder {
   folder: SmartFolder;
@@ -143,7 +154,9 @@ export function paletteCommands(status: AppStatus, actions: {
     { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) },
     { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
     ...(openFolder ? (actions.folders ?? []).map(({ folder, label }) => (
-      { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
+      actions.v2 && V2_FOLDER_WORDS[folder]
+        ? { id: `folder-${folder}`, label: V2_FOLDER_WORDS[folder]!, keywords: `${label} source filter show only library recordings`, run: () => openFolder(folder) }
+        : { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
     )) : []),
     { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
     { id: "record", label: actions.v2 ? "Go to Record page" : "Go to Home", keywords: actions.v2 ? "home record microphone detection start live assist" : "record microphone detection start", run: () => actions.go("record") },

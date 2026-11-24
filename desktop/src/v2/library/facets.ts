@@ -1,5 +1,5 @@
 // The Library's views and filters, as contract 2.0.0-p defines them (docs/API.md "Library filters (since 2.0.0-p)"):
-// one definition of each library view (All, Needs you, Unread, Important, Not transcribed, Audio only), of every filter
+// one definition of each library view (All, Needs you, Unread, Important, Audio only), of every filter
 // section (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks) with "is" and "is not", of the
 // search, and of the live counts the filter panel shows (the facet rule). The desktop works them out from its synced
 // library, so they are instant and work offline; the server, the web console and the phone get the same numbers, and
@@ -7,33 +7,58 @@
 // shape (a filter set), so a saved view goes to the server as it is. Pure, so the rules are tested without a window.
 import type { LibraryItem } from "../../lib/ipc";
 
-/** The library views in the sidebar's LIBRARY section, in its order. */
-export type LibraryViewId = "all" | "needs" | "unread" | "important" | "not_transcribed" | "audio_only";
-export const LIBRARY_VIEWS: readonly LibraryViewId[] = ["all", "needs", "unread", "important", "not_transcribed", "audio_only"];
+/**
+ * The library views in the sidebar's LIBRARY section, in its order. Since v2.1 (docs/PLAN_V2_1_POLISH.md section 1) Not
+ * transcribed and Audio only are one view, Audio only: the recordings whose Status is `not_transcribed`, as the server
+ * counts it (`library.not_transcribed`).
+ */
+export type LibraryViewId = "all" | "needs" | "unread" | "important" | "audio_only";
+export const LIBRARY_VIEWS: readonly LibraryViewId[] = ["all", "needs", "unread", "important", "audio_only"];
 export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = {
-  all: "All recordings", needs: "Needs you", unread: "Unread", important: "Important", not_transcribed: "Not transcribed", audio_only: "Audio only",
+  all: "All recordings", needs: "Needs you", unread: "Unread", important: "Important", audio_only: "Audio only",
 };
 
 /**
- * The Library's page tabs (PLAN_NAV_3_LEVELS §4; docs/API.md, the UI's guidance): All, Calls, Meetings, Voice notes,
- * each a set of Source values ANDed with the filters. Imported and Other are under All only.
+ * The Library's page tabs (PLAN_NAV_3_LEVELS §4; contract 2.0.0-q "The Library's kinds"): All, Calls, Meetings, Voice
+ * notes and Other, one per kind, ANDed with the filters, so they always add up to All. Other is shown only while it has
+ * recordings (or is the open tab).
  */
-export type LibraryTab = "all" | "calls" | "meetings" | "voice_notes";
-export const LIBRARY_TABS: readonly LibraryTab[] = ["all", "calls", "meetings", "voice_notes"];
-export const LIBRARY_TAB_NAMES: Record<LibraryTab, string> = { all: "All", calls: "Calls", meetings: "Meetings", voice_notes: "Voice notes" };
-const TAB_SOURCES: Record<Exclude<LibraryTab, "all">, ReadonlySet<string>> = {
-  calls: new Set(["whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype"]),
-  meetings: new Set(["zoom", "google_meet", "microsoft_teams", "slack", "discord"]),
-  voice_notes: new Set(["voice_note"]),
+export type LibraryTab = "all" | "calls" | "meetings" | "voice_notes" | "other";
+export const LIBRARY_TABS: readonly LibraryTab[] = ["all", "calls", "meetings", "voice_notes", "other"];
+export const LIBRARY_TAB_NAMES: Record<LibraryTab, string> = { all: "All", calls: "Calls", meetings: "Meetings", voice_notes: "Voice notes", other: "Other" };
+
+/** A recording's kind (contract 2.0.0-q): one of four, from its Source; every Source no kind names is `other`. */
+export type Kind = "call" | "meeting" | "voice_note" | "other";
+const KIND_SOURCES: Record<Exclude<Kind, "other">, ReadonlySet<string>> = {
+  call: new Set(["whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype"]),
+  meeting: new Set(["zoom", "google_meet", "microsoft_teams", "slack", "discord"]),
+  voice_note: new Set(["voice_note"]),
 };
-/** Whether a recording is in a tab (by its Source). */
-export const inTab = (f: Facts, tab: LibraryTab) => tab === "all" || f.values.source.some((v) => TAB_SOURCES[tab].has(v));
-/** Each tab's count among these recordings (already the place's, filtered and searched). */
+const TAB_KIND: Record<Exclude<LibraryTab, "all">, Kind> = { calls: "call", meetings: "meeting", voice_notes: "voice_note", other: "other" };
+const KINDS: readonly Kind[] = ["call", "meeting", "voice_note", "other"];
+/** The kind of a Source value. */
+export function kindOfSource(source: string): Kind {
+  for (const kind of ["call", "meeting", "voice_note"] as const) if (KIND_SOURCES[kind].has(source)) return kind;
+  return "other";
+}
+/** A recording's kind: the server's (`facets.kind`) when it sent one, else from its Source value. */
+export function kindOfItem(item: LibraryItem, source: string): Kind {
+  const sent = facetsOf(item)?.kind;
+  return sent && (KINDS as readonly string[]).includes(sent) ? (sent as Kind) : kindOfSource(source);
+}
+export const kindOf = (f: Pick<Facts, "item" | "values">): Kind => kindOfItem(f.item, f.values.source[0] ?? "other");
+/** Whether a recording is in a tab (by its kind). */
+export const inTab = (f: Facts, tab: LibraryTab) => tab === "all" || kindOf(f) === TAB_KIND[tab];
+/** Each tab's count among these recordings (already the place's, filtered and searched): the kinds add up to All. */
 export function tabCounts(facts: readonly Facts[]): Record<LibraryTab, number> {
-  const out = { all: facts.length, calls: 0, meetings: 0, voice_notes: 0 } as Record<LibraryTab, number>;
-  for (const f of facts) for (const t of ["calls", "meetings", "voice_notes"] as const) if (inTab(f, t)) out[t]++;
+  const out = { all: facts.length, calls: 0, meetings: 0, voice_notes: 0, other: 0 } as Record<LibraryTab, number>;
+  const tabOf: Record<Kind, Exclude<LibraryTab, "all">> = { call: "calls", meeting: "meetings", voice_note: "voice_notes", other: "other" };
+  for (const f of facts) out[tabOf[kindOf(f)]]++;
   return out;
 }
+/** The tabs shown: Other only while it has recordings or is open. */
+export const shownTabs = (counts: Record<LibraryTab, number>, open: LibraryTab): LibraryTab[] =>
+  LIBRARY_TABS.filter((t) => t !== "other" || counts.other > 0 || open === "other");
 
 /** The filter sections, in the panel's (and the contract's) order. */
 export type SectionKey = "date" | "source" | "device" | "project" | "language" | "status" | "labels" | "marked" | "bookmarks";
@@ -54,9 +79,13 @@ export type DatePreset = "today" | "last_7_days" | "this_month" | "custom";
 export const DATE_PRESETS: readonly DatePreset[] = ["today", "last_7_days", "this_month", "custom"];
 export const DATE_NAMES: Record<DatePreset, string> = { today: "Today", last_7_days: "Last 7 days", this_month: "This month", custom: "Custom" };
 
-/** A recording's status, one of four (Status's options; Not transcribed is also a library view). */
+/**
+ * A recording's status, one of four (Status's options; `not_transcribed` is also the Audio only view). Since v2.1 they are
+ * named in the glossary's words (docs/PLAN_V2_1_POLISH.md section 1): `not_transcribed` is Audio only, and `processing`,
+ * which holds uploads on their way as well as transcripts being written, In progress (the web console's names).
+ */
 export type StatusValue = "transcribed" | "not_transcribed" | "processing" | "failed";
-export const STATUS_NAMES: Record<StatusValue, string> = { transcribed: "Transcribed", not_transcribed: "Not transcribed", processing: "Processing", failed: "Failed" };
+export const STATUS_NAMES: Record<StatusValue, string> = { transcribed: "Transcribed", not_transcribed: "Audio only", processing: "In progress", failed: "Failed" };
 const STATUS_ORDER: readonly StatusValue[] = ["transcribed", "not_transcribed", "processing", "failed"];
 
 export const MARKED_NAMES = { pinned: "Pinned", important: "Important", keep_forever: "Keep forever" } as const;
@@ -85,9 +114,9 @@ const MOVING = new Set(["uploading", "processing"]);
 /** How long a recording may be processing after it ended before it needs the person. */
 export const STUCK_MS = 24 * 60 * 60_000;
 
-/** The facets the server sends with a library item (since 2.0.0-p): the apps count with these. */
-export type ServerFacets = { source?: string; status?: string; language?: string };
-const facetsOf = (item: LibraryItem): ServerFacets | undefined => (item as LibraryItem & { facets?: ServerFacets }).facets;
+/** The facets the server sends with a library item (since 2.0.0-p; `kind` since 2.0.0-q, `state` since 2.0.0-r). */
+export type ServerFacets = { source?: string; status?: string; language?: string; kind?: string; state?: string };
+export const facetsOf = (item: LibraryItem): ServerFacets | undefined => (item as LibraryItem & { facets?: ServerFacets }).facets;
 
 /** A recording's status: the server's when it sent one; else worked out the same way (the first that holds). */
 export function statusOf(item: LibraryItem): StatusValue {
@@ -273,8 +302,7 @@ export function inLibraryView(f: Facts, view: LibraryViewId): boolean {
     case "needs": return f.needs;
     case "unread": return f.unread;
     case "important": return !!f.item.important;
-    case "not_transcribed": return f.values.status[0] === "not_transcribed";
-    case "audio_only": return f.item.status === "audio_only";
+    case "audio_only": return f.values.status[0] === "not_transcribed";
   }
 }
 

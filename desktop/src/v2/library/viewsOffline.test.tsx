@@ -8,6 +8,7 @@ import MainApp from "../../views/main/MainApp";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -77,7 +78,7 @@ describe("My views while the account can't be read", () => {
     await settle();
     expect(myViews().getByRole("button", { name: "Clients" })).toBeInTheDocument();
     // Saved offline: it shows at once.
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     fireEvent.click(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Save as view" }));
     fireEvent.change(screen.getByRole("textbox", { name: "View name" }), { target: { value: "WhatsApp calls" } });
     fireEvent.click(screen.getByRole("button", { name: "Save view" }));

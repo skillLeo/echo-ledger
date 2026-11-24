@@ -1206,6 +1206,7 @@ dependencies = [
  "wasapi",
  "webp",
  "webpki-roots 1.0.11",
+ "webview2-com",
  "windows 0.62.2",
  "windows-collections 0.3.2",
  "windows-future 0.3.2",

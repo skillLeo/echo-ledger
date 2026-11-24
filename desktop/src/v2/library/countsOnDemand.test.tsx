@@ -15,7 +15,7 @@ vi.mock("./facets", async (real) => {
 });
 
 const ITEMS = [
-  makeItem("a", { title: "Ali", source_app: "whatsapp" }),
+  makeItem("a", { title: "Ali", source_app: "whatsapp", labels: ["Q4"] }),
   makeItem("b", { title: "Bina", source_app: "zoom" }),
 ];
 
@@ -40,12 +40,12 @@ describe("the options' counts", () => {
     expect(counted).not.toHaveBeenCalled();
     // A filter on (its pill shows) still counts nothing until the pill is opened.
     fireEvent.change(search, { target: { value: "" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Show only label Q4" }));
     await act(flushAsync);
     expect(counted).not.toHaveBeenCalled();
-    fireEvent.click(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Labels: Q4" }));
     expect(counted).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Edit Source" }), { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Edit Labels" }), { key: "Escape" });
     // The panel open with nothing changed since: the same counts, not worked out again.
     fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
     expect(counted).toHaveBeenCalledTimes(1);
