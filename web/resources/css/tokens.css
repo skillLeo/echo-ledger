@@ -155,7 +155,7 @@
   --el-layout-control-height: 36px;
   --el-layout-control-height-mobile: 48px;
   --el-layout-control-touch-min: 48px;
-  --el-layout-titlebar-macos: 38px;
+  --el-layout-titlebar-macos: 40px;
   --el-component-button-radius: 4px;
   --el-component-button-height: 36px;
   --el-component-button-padding-x: 12px;
@@ -203,6 +203,22 @@
   --el-desktop-text-rail-label-size: 11px;
   --el-desktop-text-rail-label-line: 14px;
   --el-desktop-text-rail-label-weight: 500;
+  --el-desktop-text-row-title-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-desktop-text-row-title-size: 15px;
+  --el-desktop-text-row-title-line: 20px;
+  --el-desktop-text-row-title-weight: 600;
+  --el-desktop-text-badge-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-desktop-text-badge-size: 10px;
+  --el-desktop-text-badge-line: 16px;
+  --el-desktop-text-badge-weight: 600;
+  --el-desktop-text-avatar-rail-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-desktop-text-avatar-rail-size: 12px;
+  --el-desktop-text-avatar-rail-line: 16px;
+  --el-desktop-text-avatar-rail-weight: 600;
+  --el-desktop-text-avatar-menu-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-desktop-text-avatar-menu-size: 15px;
+  --el-desktop-text-avatar-menu-line: 20px;
+  --el-desktop-text-avatar-menu-weight: 600;
   --el-desktop-control-height: 32px;
   --el-desktop-control-height-small: 28px;
   --el-desktop-panel-item-height: 32px;
@@ -210,6 +226,37 @@
   --el-desktop-row-height-compact: 44px;
   --el-desktop-icon-default: 16px;
   --el-desktop-icon-rail: 20px;
+  --el-desktop-titlerow-height: 52px;
+  --el-desktop-titlerow-rail-top-fullscreen: 8px;
+  --el-desktop-titlerow-keep-clear: 80px;
+  --el-desktop-titlerow-lights-left: 6px;
+  --el-desktop-titlerow-lights-top: 16px;
+  --el-desktop-titlerow-lights-width: 60px;
+  --el-desktop-titlerow-lights-height: 20px;
+  --el-desktop-search-height: 28px;
+  --el-desktop-search-min-width: 280px;
+  --el-desktop-search-max-width: 400px;
+  --el-desktop-search-least-width: 200px;
+  --el-desktop-search-drag-room: 64px;
+  --el-desktop-search-results-width: 560px;
+  --el-desktop-rail-width: 72px;
+  --el-desktop-rail-item-height: 56px;
+  --el-desktop-rail-pill-width: 48px;
+  --el-desktop-rail-pill-height: 28px;
+  --el-desktop-record-width: 56px;
+  --el-desktop-record-height: 40px;
+  --el-desktop-record-chevron: 16px;
+  --el-desktop-badge-height: 16px;
+  --el-desktop-badge-padding: 4px;
+  --el-desktop-badge-ring: 2px;
+  --el-desktop-badge-dot: 8px;
+  --el-desktop-badge-inset: 3px;
+  --el-desktop-avatar-rail: 28px;
+  --el-desktop-avatar-rail-hit: 40px;
+  --el-desktop-avatar-list: 32px;
+  --el-desktop-avatar-menu: 40px;
+  --el-desktop-avatar-profile: 96px;
+  --el-desktop-avatar-ring: 1px;
   --el-role-bg-canvas: #FAFAF9;
   --el-role-bg-surface: #FFFFFF;
   --el-role-bg-subtle: #F4F4F2;
@@ -258,6 +305,16 @@
   --el-role-label-pink-fill: #F9E7F0;
   --el-role-label-pink-text: #BC2F75;
   --el-role-label-pink-dot: #D7609C;
+  --el-role-avatar-0: #0F766E;
+  --el-role-avatar-1: #1D5FB4;
+  --el-role-avatar-2: #0E7490;
+  --el-role-avatar-3: #4D7C0F;
+  --el-role-avatar-4: #BE185D;
+  --el-role-avatar-5: #C2410C;
+  --el-role-avatar-6: #15803D;
+  --el-role-avatar-7: #475569;
+  --el-role-avatar-text: #FFFFFF;
+  --el-role-avatar-ring: #00000014;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -310,6 +367,16 @@
     --el-role-label-pink-fill: #3A1D2B;
     --el-role-label-pink-text: #D968A1;
     --el-role-label-pink-dot: #C4317A;
+    --el-role-avatar-0: #0F766E;
+    --el-role-avatar-1: #1D5FB4;
+    --el-role-avatar-2: #0E7490;
+    --el-role-avatar-3: #4D7C0F;
+    --el-role-avatar-4: #BE185D;
+    --el-role-avatar-5: #C2410C;
+    --el-role-avatar-6: #15803D;
+    --el-role-avatar-7: #475569;
+    --el-role-avatar-text: #FFFFFF;
+    --el-role-avatar-ring: #FFFFFF1F;
   }
 }
 
@@ -362,6 +429,16 @@
   --el-role-label-pink-fill: #3A1D2B;
   --el-role-label-pink-text: #D968A1;
   --el-role-label-pink-dot: #C4317A;
+  --el-role-avatar-0: #0F766E;
+  --el-role-avatar-1: #1D5FB4;
+  --el-role-avatar-2: #0E7490;
+  --el-role-avatar-3: #4D7C0F;
+  --el-role-avatar-4: #BE185D;
+  --el-role-avatar-5: #C2410C;
+  --el-role-avatar-6: #15803D;
+  --el-role-avatar-7: #475569;
+  --el-role-avatar-text: #FFFFFF;
+  --el-role-avatar-ring: #FFFFFF1F;
 }
 
 @theme inline {
@@ -413,6 +490,16 @@
   --color-el-label-pink-fill: var(--el-role-label-pink-fill);
   --color-el-label-pink-text: var(--el-role-label-pink-text);
   --color-el-label-pink-dot: var(--el-role-label-pink-dot);
+  --color-el-avatar-0: var(--el-role-avatar-0);
+  --color-el-avatar-1: var(--el-role-avatar-1);
+  --color-el-avatar-2: var(--el-role-avatar-2);
+  --color-el-avatar-3: var(--el-role-avatar-3);
+  --color-el-avatar-4: var(--el-role-avatar-4);
+  --color-el-avatar-5: var(--el-role-avatar-5);
+  --color-el-avatar-6: var(--el-role-avatar-6);
+  --color-el-avatar-7: var(--el-role-avatar-7);
+  --color-el-avatar-text: var(--el-role-avatar-text);
+  --color-el-avatar-ring: var(--el-role-avatar-ring);
   --radius-el-sm: var(--el-radius-sm);
   --radius-el-md: var(--el-radius-md);
   --radius-el-lg: var(--el-radius-lg);

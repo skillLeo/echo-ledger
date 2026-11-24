@@ -50,6 +50,7 @@ pub mod smoke;
 pub mod stall;
 pub mod spaces;
 pub mod stt;
+pub mod title_click;
 pub mod translate;
 pub mod tray;
 pub mod ui_flags;
@@ -632,6 +633,7 @@ pub fn run() {
             commands::translate_stop,
             commands::translate_toggle_lock,
             commands::window_appearance,
+            title_click::title_double_click,
             commands::set_window_theme,
             commands::pair_device,
             commands::sign_in_password,

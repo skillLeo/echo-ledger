@@ -368,6 +368,8 @@ export interface Account {
   /** The person's picture (since 2.0.0-l): a signed link and the version it is kept by; null shows the initials. */
   avatar_url?: string | null;
   avatar_version?: number | null;
+  /** The colour of the initials' circle without a photo, 0–7 (since 2.0.0-r, BE-06); left out, one from the email. */
+  avatar_color?: number | null;
   /** The account has a password (one made with Google may not); null from a server before 2.0.0-l. */
   has_password?: boolean | null;
   /** An email change waiting for its code, and until when. */
@@ -1882,6 +1884,8 @@ export const api = {
   checkForUpdates: () => invoke<UpdateStatus>("update_check"),
   /** "Restart": installs the ready update and starts the new version. */
   installUpdate: () => invoke<void>("update_install"),
+  /** A double click on the title row (UX-20): zoom, minimize or nothing, as the Mac's setting says (lib/titleClick.ts). */
+  titleDoubleClick: () => invoke<void>("title_double_click"),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),

@@ -52,6 +52,8 @@ type ListProps = {
    */
   anchor?: HTMLElement | null;
   align?: "start" | "end";
+  /** Shown above the items, not one of them (the account menu's avatar, name, email and plan). */
+  header?: ReactNode;
 };
 
 /** The gap a menu keeps from the window's edges. */
@@ -118,7 +120,7 @@ export function Layer({ from, children }: { from: Element | null; children: Reac
  * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
  * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
  */
-export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end" }: ListProps) {
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", header }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);
@@ -265,6 +267,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   const list = (
     <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
+      {header && <li role="none" className="el-menu__header">{header}</li>}
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
         if (!group) return rows;
@@ -304,7 +307,7 @@ function keyNames(shortcut: string): string {
  * A button that opens a list of actions (a project's menu, a recording's ⋮). The list is a menu: arrow keys, Home and
  * End move, Enter picks, Esc closes and gives focus back to the button; a press outside closes it.
  */
-export function Menu({ label, items: given, button, chip }: {
+export function Menu({ label, items: given, button, chip, header, align }: {
   label: string;
   /** The items, or a function that makes them when the menu opens (a row's ⋮ in a long list). */
   items: readonly MenuItem[] | (() => readonly MenuItem[]);
@@ -312,6 +315,10 @@ export function Menu({ label, items: given, button, chip }: {
   button?: Omit<ButtonProps, "onClick" | "children"> & { text?: ReactNode };
   /** A filter chip opens it instead of a button: its words, and filled while the filter is on. */
   chip?: { text: string; on: boolean };
+  /** Above the items (see MenuList). */
+  header?: ReactNode;
+  /** Which edge of the button the list lines up with (default: a chip's start, a button's end). */
+  align?: "start" | "end";
 }) {
   const id = useId();
   // The items are made when the menu opens and kept while it is open.
@@ -364,7 +371,7 @@ export function Menu({ label, items: given, button, chip }: {
       )}
       {open && (
         <MenuList label={label} items={typeof given === "function" ? open.items : given} id={`${id}-menu`} className={chip ? "el-menu el-menu--start" : "el-menu el-menu--end"} initial={open.at}
-          anchor={root.current} align={chip ? "start" : "end"} listRef={list}
+          anchor={root.current} align={align ?? (chip ? "start" : "end")} listRef={list} header={header}
           onBack={close} onLeave={close} onPick={pick} />
       )}
     </div>

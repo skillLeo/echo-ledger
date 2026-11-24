@@ -1,13 +1,17 @@
-// The app's frame in three levels (PLAN_NAV_3_LEVELS): the rail (Home's logo, ● Record, Library, Projects, Live, Ask,
-// Activity; at its foot Setup & health, Help, Settings and the avatar), the selected place's panel (260 px; hidden by
-// ⊟ or ⌘\ and remembered per place; under 1100 px a flyout from the rail that closes once something is chosen), and
-// the page. Clicking the selected place again starts that place over; ⌘1…⌘6 go to the places.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+// The app's frame in three levels (PLAN_NAV_3_LEVELS): the rail (● Record, Library, Projects, Live, Ask, Activity; at
+// its foot Setup & health, Help, Settings and the avatar, labelled Account), the selected place's panel (hidden by ⊟ or
+// ⌘\ and remembered per place; in a small window a flyout from the rail that closes once something is chosen), and the
+// page under the one title row (UX-20: ← →, the page's title and count, the search, the status items). The rail and the
+// panel run to the top: on a Mac the window's buttons sit in the rail's top cell. Clicking the selected place again
+// starts that place over; ⌘1…⌘6 go to the places.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
-import { BrandMark } from "../../components/BrandMark";
+import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
-import { PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
+import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
+import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
+import { TitleRow } from "./TitleRow";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
@@ -46,8 +50,12 @@ function loadPinned(account: string | null | undefined): boolean {
 function savePinned(account: string | null | undefined, pinned: boolean) {
   writeKept(PIN_KEY, account, pinned ? "1" : "0");
 }
-/** Below this window height the rail shows its icons only. */
-export const SHORT_RAIL_BELOW = 820;
+/**
+ * From this window height the rail has room for all of it (DES-01: the title row's top cell, Record, five places at 56
+ * px, Setup, Help, Settings and Account); below it Help and Setup move into the avatar's menu, so the rail never clips
+ * and never scrolls (720×560 at the least, FIX-08).
+ */
+export const RAIL_FULL_FROM = 680;
 const PRESS_HOLD_MS = 3000;
 
 /** Which places' panels are hidden, each account's own on this computer (shown unless hidden). */
@@ -77,7 +85,7 @@ export type NavShellProps = {
   /** Each place's panel and, for some, its foot (the Library's Trash and sync line). */
   panels: Partial<Record<Place, ReactNode>>;
   feet?: Partial<Record<Place, ReactNode>>;
-  /** Badges: the Library's Needs you, Activity's unread needs. */
+  /** The Library's Needs you: no longer a badge in the rail (DES-01: only Activity has a number), kept for the callers. */
   libraryCount?: number;
   activityCount?: number;
   /** Live's red dot: a call is recorded, or call recording is on and listening. */
@@ -93,9 +101,13 @@ export type NavShellProps = {
   onVoiceNote?: () => void;
   /** Call recording on or off (Settings › Recording's switch), from Record's menu. */
   callRecording?: { on: boolean; toggle: () => void };
-  onSearch?: () => void;
+  /** Search everything (⌘K), starting from what was typed in the title row. */
+  onSearch?: (typed?: string) => void;
   searchKeys?: string;
-  me?: { name: string; email: string; plan: string | null } | null;
+  /** At the end of the title row: status items that show only when needed (Restart to update, the share badge, zoom). */
+  titleEnd?: ReactNode;
+  /** The person (DES-08): their photo or their colour (avatar_color), and the plan's line for the account menu. */
+  me?: { name: string; email: string; plan: string | null; usage?: string | null; color?: number | null; photo?: string | null } | null;
   /** The avatar's menu: the account, the plan, the workspace, the theme, sign out. */
   account?: MenuItem[];
   uploading?: string | null;
@@ -109,8 +121,8 @@ export type NavShellProps = {
   children: ReactNode;
 };
 
-export function NavShell({ place, onPlace, onHome, status, panels, feet, libraryCount, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
-  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, children }: NavShellProps) {
+export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
+  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, titleEnd, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
   useEffect(() => {
@@ -125,9 +137,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
   const small = width < (panelFlyout ? DOCK_FROM : FLYOUT_BELOW);
   // A small window's panel is a flyout, unless pinned there (v21_panel_flyout).
   const narrow = small && !(panelFlyout && pinned);
-  // A short window: the rail's names go (each place keeps its name for assistive tools and in its tooltip), so every
-  // place and the foot stay on screen.
-  const short = height < SHORT_RAIL_BELOW;
+  // A short window: Help and Setup move into the avatar's menu; every place keeps its name.
+  const short = height < RAIL_FULL_FROM;
   const [hidden, setHidden] = useState<Set<Place>>(() => loadHidden(layoutFor));
   // Another account: its own layout.
   const [layoutOf, setLayoutOf] = useState(layoutFor);
@@ -150,7 +161,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     const next = focusNext.current;
     if (!next) return;
     focusNext.current = null;
-    const toggle = () => main.current?.querySelector<HTMLElement>(".el-page__toggle button") ?? null;
+    const toggle = () => main.current?.querySelector<HTMLElement>(".el-titlerow__toggle") ?? null;
     if (next === "main") return main.current?.focus();
     if (next === "opener") return (opener.current?.isConnected ? opener.current : toggle())?.focus();
     const active = document.activeElement;
@@ -198,10 +209,56 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     }
     onPlace(p, again);
   };
+  // The page's title in the row (pageTitle.tsx): the page mounted last.
+  const [title, titleSlot] = usePageTitleSlot();
+  // Back and Forward (UX-20): a page's own step first (usePageHistory), else the places visited, Home among them.
+  const steps = useRef(new Map<string, PageHistory>());
+  const [, setStepsSeen] = useState("");
+  const historySlot = useMemo(() => ({
+    set(id: string, given: PageHistory | null) {
+      if (given && (given.back || given.forward)) steps.current.set(id, given);
+      else steps.current.delete(id);
+      setStepsSeen([...steps.current].map(([k, v]) => `${k}:${v.back ? "b" : ""}${v.forward ? "f" : ""}`).join("|"));
+    },
+  }), []);
+  const pageStep = (way: "back" | "forward") => [...steps.current.values()].reverse().find((h) => h[way])?.[way] ?? null;
+  const [visits, setVisits] = useState<{ back: (Place | null)[]; forward: (Place | null)[]; at: Place | null }>({ back: [], forward: [], at: place });
+  if (place !== visits.at) setVisits((v) => (place === v.at ? v : { back: [...v.back, v.at], forward: [], at: place }));
+  const visit = (to: Place | null) => (to === null ? onHome() : onPlace(to, false));
+  const walk = (way: "back" | "forward") => {
+    const own = pageStep(way);
+    if (own) return own();
+    const list = way === "back" ? visits.back : visits.forward;
+    if (!list.length) return;
+    const to = list[list.length - 1];
+    setVisits((v) => (way === "back"
+      ? { back: v.back.slice(0, -1), forward: [...v.forward, v.at], at: to }
+      : { back: [...v.back, v.at], forward: v.forward.slice(0, -1), at: to }));
+    visit(to);
+  };
+  const canWalk = (way: "back" | "forward") => !!pageStep(way) || (way === "back" ? visits.back : visits.forward).length > 0;
+  // ⌘F: the page's own search in the row (each press), else everything; the page may take it first (the Library).
+  const [findSeq, setFindSeq] = useState(0);
   // ⌘1…⌘6 (Ctrl elsewhere): the places; ⌘\ the panel. Never while typing or behind a dialog.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e) => {
-    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.defaultPrevented || typing(e.target)) return;
+    if (e.defaultPrevented) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
+      e.preventDefault();
+      if (title?.search) setFindSeq((n) => n + 1);
+      else onSearch?.();
+      return;
+    }
+    // ⌘[ ⌘] (Ctrl+[ ] and Alt+← → on Windows): Back and Forward, never while typing.
+    const way = (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]")) ? (e.key === "[" ? "back" : "forward")
+      : (e.altKey && !mod && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) ? (e.key === "ArrowLeft" ? "back" : "forward") : null;
+    if (way && !typing(e.target) && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
+      e.preventDefault();
+      walk(way);
+      return;
+    }
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || typing(e.target)) return;
     if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
     // ⌃⌘S: the Mac's own Show/Hide Sidebar (v21_panel_flyout); ⌘\ (Ctrl+\) as before.
     if (panelFlyout && e.metaKey && e.ctrlKey && e.key.toLowerCase() === "s") {
@@ -221,9 +278,39 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
   };
   useEffect(() => {
     const on = (e: KeyboardEvent) => keys.current(e);
+    // The mouse's back (button 3) and forward (4), unless the page took them (the Library's open recording).
+    const side = (e: MouseEvent) => {
+      if ((e.button !== 3 && e.button !== 4) || e.defaultPrevented) return;
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      walkRef.current(e.button === 3 ? "back" : "forward");
+    };
     window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+    window.addEventListener("mouseup", side);
+    return () => {
+      window.removeEventListener("keydown", on);
+      window.removeEventListener("mouseup", side);
+    };
   }, []);
+  const walkRef = useRef(walk);
+  walkRef.current = walk;
+  // A hairline under the title row once the page under it has scrolled (any list in the content column).
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const el = main.current;
+    if (!el) return;
+    const on = (e: Event) => {
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target && !target.closest(".el-titlerow")) setScrolled(target.scrollTop > 0);
+    };
+    el.addEventListener("scroll", on, true);
+    return () => el.removeEventListener("scroll", on, true);
+  }, []);
+  const [scrolledAt, setScrolledAt] = useState(place);
+  if (place !== scrolledAt) {
+    setScrolledAt(place);
+    setScrolled(false);
+  }
   // A page asks for its panel (Settings' home: Show groups).
   const showPanel = useRef<() => void>(() => undefined);
   showPanel.current = () => {
@@ -262,10 +349,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     ...(callRecording ? [{ label: "Call recording", group: "Calls", checked: callRecording.on, onPick: callRecording.toggle }] : []),
     { label: "Record page", icon: Icons.HomeIcon, onPick: onHome },
   ];
-  const mac = searchKeys?.startsWith("⌘") ?? false;
-  // UX-02: the page header's toggle while the panel is off the screen, and in a small window while its flyout is open
-  // (expanded: focus goes back to it); in a small window, the pin.
-  const pageToggle = panelFlyout && hasPanel && (narrow || !shown) ? {
+  // ⊟ in the title row (UX-20, right after the window's buttons) while the panel is off the screen, and in a small window
+  // while its flyout is open (expanded: focus goes back to it); in a small window, the pin (UX-02).
+  const rowToggle = hasPanel && (narrow || !shown) ? {
     label: `Show the ${PLACE_NAMES[place!]} panel`,
     expanded: narrow ? shown : undefined,
     onToggle: (button: HTMLElement) => {
@@ -293,23 +379,33 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
       });
     },
   } : undefined;
-  const counts: Partial<Record<Place, number | undefined>> = { library: libraryCount || undefined, activity: activityCount || undefined };
+  // Only Activity shows a number (DES-01, UX-08); the Library has no badge.
+  const counts: Partial<Record<Place, number | undefined>> = { activity: activityCount || undefined };
   const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
   };
   const railPlace = (p: Place) => (
     <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
       expanded={narrow && panels[p] ? flyout && place === p : undefined}
-      dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} />
+      dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} dotKind={p === "live" ? "live" : undefined} />
   );
+  // The avatar's menu (DES-08): in a short window Setup and Help come first in it.
+  const accountItems: MenuItem[] = [
+    ...(short ? [{ label: "Setup & health", icon: Icons.ReadyIcon, onPick: onSetupHealth }, ...(onHelp ? [{ label: "Help", icon: Icons.HelpIcon, onPick: onHelp }] : [])] : []),
+    ...(account ?? []),
+  ];
+  const [meTip, meTipShown] = useTip("Account, theme and settings");
   // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
   const scrim = shown && narrow && panelFlyout;
   return (
-    <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short-rail" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
+    <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
       <nav className="el-rail" aria-label="Main">
-        <button type="button" className="el-rail__home" aria-label="EchoLedger, Home" title="Home" aria-current={place === null ? "page" : undefined} onClick={onHome}>
-          <BrandMark size={28} className="el-rail__mark" />
-        </button>
+        {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
+            it moves the window. 8 px in full screen; none on Windows, under its own title bar. */}
+        <div className="el-rail__top" data-tauri-drag-region="deep" aria-hidden="true">
+          {/* Where the buttons are (and 4 px round them): no drag region, nothing of ours that takes a press. */}
+          <span className="el-rail__lights" data-tauri-drag-region="false" />
+        </div>
         <div className="el-rail__record" role="group" aria-label="Record">
           <button type="button" className={`el-rail__rec${stops ? " el-rail__rec--stop" : ""}`} aria-label={stops ? "Stop recording" : "Record"} title={stops ? "Stop recording" : "Record now"}
             aria-disabled={pressing ? true : undefined} onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>
@@ -319,14 +415,27 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
         </div>
         <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
         <div className="el-rail__foot">
-          {onSearch && <RailItem icon={Icons.SearchIcon} label="Search" current={false} onClick={onSearch} shortcut={mac ? "⌘K" : "Ctrl+K"} keys={mac ? "Meta+K" : "Control+K"} />}
-          <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />
-          {onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}
+          {!short && <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />}
+          {!short && onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}
           {railPlace("settings")}
           {me && account && (
             <div className="el-rail__me">
-              <Menu label={`${me.name}: account`} items={account} button={{ variant: "quiet", className: "el-rail__avatar", title: me.email,
-                "aria-label": `${me.name}: account`, text: <Avatar initials={initials(me.name, me.email)} size="sm" /> }} />
+              <Menu label={`Account, ${me.name}`} items={accountItems} align="start"
+                header={(
+                  <div className="el-account-head">
+                    <Avatar initials={initials(me.name, me.email)} size="menu" color={me.color} seed={me.email} photo={me.photo} />
+                    <div className="el-account-head__who">
+                      <span className="el-account-head__name" dir="auto">{me.name}</span>
+                      {me.name !== me.email && <span className="el-account-head__line" dir="auto">{me.email}</span>}
+                      {(me.plan || me.usage) && <span className="el-account-head__line" dir="auto">{[me.plan, me.usage].filter(Boolean).join(" · ")}</span>}
+                    </div>
+                  </div>
+                )}
+                button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": `Account, ${me.name}`, ...meTip,
+                  text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
+                    {short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
+                    <span className="el-rail__label" aria-hidden="true">Account</span></> }} />
+              {meTipShown}
             </div>
           )}
         </div>
@@ -347,14 +456,17 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
           {panels[place!]}
         </PlacePanel>
       )}
-      {!shown && hasPanel && !narrow && !panelFlyout && (
-        <button type="button" className="el-panel-show" aria-label={`Show the ${PLACE_NAMES[place!]} panel`} title={`Show panel (${mac ? "⌘" : "Ctrl+"}\\)`}
-          aria-keyshortcuts="Meta+\ Control+\" onClick={togglePanel}><Icon icon={Icons.SidebarIcon} /></button>
-      )}
       <main className="el-shell__main" ref={main} tabIndex={-1} inert={scrim || undefined}>
+        <TitleRow place={place} title={title} toggle={rowToggle} back={canWalk("back") ? () => walk("back") : null} forward={canWalk("forward") ? () => walk("forward") : null}
+          onEverything={(typed) => onSearch?.(typed)} findSeq={findSeq} scrolled={scrolled} end={titleEnd} />
         {notices}
         {banners}
-        <PanelToggleContext.Provider value={pageToggle}>{children}</PanelToggleContext.Provider>
+        {/* The page's own ⊟ (PanelToggle) is the title row's now: none in its header. */}
+        <PanelToggleContext.Provider value={null}>
+          <PageTitleSlot.Provider value={titleSlot}>
+            <PageHistoryContext.Provider value={historySlot}>{children}</PageHistoryContext.Provider>
+          </PageTitleSlot.Provider>
+        </PanelToggleContext.Provider>
       </main>
     </div>
   );

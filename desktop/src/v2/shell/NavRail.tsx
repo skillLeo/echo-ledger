@@ -1,11 +1,12 @@
 // The three levels of navigation (PLAN_NAV_3_LEVELS §1–§3, §6): the rail of main places (72 px, an icon and a short
-// name under it, always there), the place's panel of views and collections (260 px; ⊟ or ⌘\ hides it; under 1100 px
-// it opens as a flyout from the rail and closes once something is chosen), and the page. The pieces are here; Shell
-// puts them together with the app's state.
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+// name under it, always there; DES-01: 56 px items, the selected one's pill, a tooltip with its shortcut), the place's
+// panel of views and collections (⊟ or ⌘\ hides it; in a small window it opens as a flyout from the rail and closes
+// once something is chosen), and the page. The pieces are here; Shell puts them together with the app's state.
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, Icon, Icons, SearchField } from "../components";
 import type { IconType } from "../components/Button";
 import { Menu, type MenuItem } from "../components/Menu";
+import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
 
@@ -24,9 +25,15 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 export const placeKey = (place: Place) => `${MAC ? "⌘" : "Ctrl+"}${RAIL_PLACES.indexOf(place) + 1}`;
 const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} Control+${RAIL_PLACES.indexOf(place) + 1}`;
 
-/** One place in the rail: its icon, its short name under it, a count (Library's Needs you, Activity's) or a dot. */
-export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, shortcut, keys, expanded, place }: {
+/**
+ * One place in the rail: its icon (with the selected place's pill behind it), its short name under it, and a number
+ * badge (Activity's, the only one) or a dot (Live's red while recording, Setup's when something needs doing). Its
+ * tooltip, after 500 ms or on keyboard focus, gives the name and the shortcut ("Library ⌘1").
+ */
+export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, dotKind, shortcut, keys, expanded, place }: {
   icon: IconType; label: string; current: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; count?: number; dot?: boolean; dotLabel?: string;
+  /** Live's dot is red (a call is recorded); the others are the accent. */
+  dotKind?: "live";
   /** Its flyout is open (a narrow window); left out where there is none. */
   expanded?: boolean;
   place?: Place;
@@ -34,16 +41,20 @@ export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, 
   shortcut?: string; keys?: string;
 }) {
   const name = count ? `${label}, ${count}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
+  const [tipProps, tip] = useTip(shortcut ? `${label} ${shortcut}` : label);
   return (
-    <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}
-      data-place={place} title={shortcut ? `${label} (${shortcut})` : label} aria-keyshortcuts={keys} onClick={onClick}>
-      <span className="el-rail__icon">
-        <Icon icon={icon} size="md" />
-        {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
-          : dot ? <span className="el-rail__dot" aria-hidden="true" /> : null}
-      </span>
-      <span className="el-rail__label" aria-hidden="true">{label}</span>
-    </button>
+    <>
+      <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}
+        data-place={place} aria-keyshortcuts={keys} onClick={onClick} {...tipProps}>
+        <span className="el-rail__icon">
+          <Icon icon={icon} size="md" />
+          {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+            : dot ? <span className={`el-rail__dot${dotKind ? ` el-rail__dot--${dotKind}` : ""}`} aria-hidden="true" /> : null}
+        </span>
+        <span className="el-rail__label" aria-hidden="true">{label}</span>
+      </button>
+      {tip}
+    </>
   );
 }
 
@@ -65,6 +76,21 @@ export type FlyoutClose = "chose" | "esc" | "outside" | "hide";
 export const PanelToggleContext = createContext<{ label: string; expanded?: boolean; onToggle: (opener: HTMLElement) => void } | null>(null);
 
 /** The panel's toggle at the start of a page header ([▯]): nothing while the panel is shown or the page has none. */
+/**
+ * A page's own steps back and forward (an open recording closes before the place changes; the Library's views): the
+ * title row's ← → and ⌘[ ⌘] take them first, then the places visited. Null, or a step left out: none.
+ */
+export type PageHistory = { back?: (() => void) | null; forward?: (() => void) | null };
+export const PageHistoryContext = createContext<{ set: (id: string, steps: PageHistory | null) => void } | null>(null);
+export function usePageHistory(steps: PageHistory | null) {
+  const slot = useContext(PageHistoryContext);
+  const id = useId();
+  useEffect(() => {
+    slot?.set(id, steps);
+  });
+  useEffect(() => () => slot?.set(id, null), [slot, id]);
+}
+
 export function PanelToggle() {
   const toggle = useContext(PanelToggleContext);
   if (!toggle) return null;
@@ -123,7 +149,8 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
         onClose("esc");
       }}
       data-testid="nav-panel">
-      <div className="el-panel__head">
+      {/* The panel's top cell of the title row: its empty part and its name move the window (UX-20). */}
+      <div className="el-panel__head" data-tauri-drag-region="deep">
         <h2 className="el-panel__title">{PLACE_NAMES[place]}</h2>
         {menu && menu.length > 0 && <Menu label={`More for ${PLACE_NAMES[place]}`} items={menu} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />}
         {pin && <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={pin.pinned ? "Unpin the panel" : "Pin the panel"} aria-pressed={pin.pinned}
