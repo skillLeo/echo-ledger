@@ -3676,6 +3676,11 @@ button.v2-row-tile:focus-visible,
     margin: 0;
 }
 
+/* Nastaliq's letters reach far below the line: in Urdu the count keeps a little air under the title. */
+html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
+    margin-block-start: var(--el-space-4);
+}
+
 /* The tabs' row scrolls sideways only when the tabs alone do not fit it, as the list chips' row does: one line, no
    scrollbar drawn and no fade (no gradients, DS rule 1); the tab cut at the edge shows there is more. A tab's focus ring
    is drawn inside it, where the scroller cannot cut it. */
