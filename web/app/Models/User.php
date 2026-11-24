@@ -41,6 +41,7 @@ use Laravel\Passport\HasApiTokens;
  * @property string $name
  * @property string $email
  * @property Carbon|null $email_verified_at
+ * @property Carbon|null $retry_requested_at the person's latest Retry all (since 2.0.0-r, BE-03)
  * @property bool $is_super_admin
  * @property int $views_version moves with every change of the person's saved Library views (contract 2.0.0-p)
  * @property int|null $current_workspace_id
@@ -195,6 +196,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'deletion_requested_at' => 'datetime',
             'deletes_at' => 'datetime',
             'consent_seen_at' => 'datetime',
+            'retry_requested_at' => 'datetime',
             'notify_transcript_ready' => 'boolean',
             'email_preferences' => 'array',
             'console_preferences' => 'array',

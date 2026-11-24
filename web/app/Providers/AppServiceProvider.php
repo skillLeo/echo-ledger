@@ -253,6 +253,8 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since 2.0.0-r (BE-03): Retry all asks every device of the person; 6 a minute per device is plenty.
+        RateLimiter::for('retry-all', fn (Request $request) => Limit::perMinute(6)->by('retry-all:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Since v1.9 (L1): the Live Assist relay reports every suggestion; a busy relay sends a few a second.
         RateLimiter::for('assist-relay', fn (Request $request) => Limit::perMinute(3000)->by('assist-relay:'.$request->ip()));
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));

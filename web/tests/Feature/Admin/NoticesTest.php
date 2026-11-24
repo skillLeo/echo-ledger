@@ -286,9 +286,10 @@ describe('the bell', function () {
 
         Livewire::test(Activity::class)->call('open', $id)->assertRedirect(CaptureSessionResource::getUrl('view', ['record' => $session], panel: 'app'));
         $session->delete();
+        // Since 2.0.0-r (BE-02) the same failure again is the same item: it now opens the failed list, its recording gone.
         app(ActivityFeed::class)->post($a, 'transcript_failed', 'Transcription failed', 'x', $session, 'heroicon-o-exclamation-circle');
-        $gone = (string) $a->notifications()->get()->filter(fn ($n): bool => ActivityFeed::kindOf($n) === 'transcript_failed')->sortByDesc('created_at')->last(fn ($n): bool => $n->id !== $id)?->id;
-        Livewire::test(Activity::class)->call('open', $gone)->assertRedirect(CaptureSessionResource::getUrl('index', ['tab' => 'failed'], panel: 'app'));
+        expect($a->notifications()->get()->filter(fn ($n): bool => ActivityFeed::kindOf($n) === 'transcript_failed')->pluck('id')->all())->toBe([$id]);
+        Livewire::test(Activity::class)->call('open', $id)->assertRedirect(CaptureSessionResource::getUrl('index', ['tab' => 'failed'], panel: 'app'));
     });
 });
 

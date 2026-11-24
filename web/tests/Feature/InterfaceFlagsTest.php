@@ -42,6 +42,8 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
         'ui_v2.ask', 'ui_v2.settings', 'ui_v2.setup_health', 'ui_v2.admin', 'ui_v2.website', 'live_assist',
         // Since 2.0.0-r: v2.1's five.
         'v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane',
+        // Since 2.0.0-s.
+        'v21_win_titlebar',
     ])->and($classic)->toBeFalse();
 });
 

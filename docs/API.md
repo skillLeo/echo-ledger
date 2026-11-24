@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-r (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-s (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
 2.0.0-r (accepted 2026-11-24 by EL-Lead; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
 2.0.0-q (accepted 2026-11-24 by EL-Lead; the Library's kinds, see "The Library's kinds (since 2.0.0-q)"): every recording has exactly one kind, `call`, `meeting`, `voice_note` or `other`, worked out from its Source, so the Library's tabs always add up to All. Imported files and any Source that is not a call, a meeting or a voice note are `other`, and the tabs gain **Other**, shown only when its count is above 0. A library item's `facets` carries `kind`; `GET /api/library/facets` answers `kinds`, the count of each kind for the filters and the search, which add up to `total`. The console's address takes `kind=other`. The shared test file gives every recording its kind and every filter set its kinds. Only additions, nothing stored: older apps ignore `kind` and `kinds` and keep their four tabs.
 2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q` (the search: every word somewhere among the title, the transcript and the project path), and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language) and `processing_since` (when its current upload or transcript attempt began, for Needs you's "stuck"). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
@@ -696,7 +697,7 @@ No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
   index the landing and downloads pages (off until the public launch).
 
 ### `GET /api/config` — `config:read`
-Since 2.0.0-r the answer also carries `upload_retry`, and `ui_flags` the five `v21_*` flags: see "v2.1: flags, Activity,
+Since 2.0.0-r the answer also carries `upload_retry`, and `ui_flags` the `v21_*` flags (six since 2.0.0-s): see "v2.1: flags, Activity,
 upload retries, the badge, states and the profile (since 2.0.0-r)".
 ```json
 {"api_version": "1.1",
@@ -2388,8 +2389,9 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 docs/PLAN_V2_1_POLISH.md, BE-02 to BE-06, and its five feature flags. Additions only: no field is renamed or removed,
 and an app that does not know a new field ignores it.
 
-### 1. Five interface flags
-`ui_flags` (`GET /api/config`, `GET /api/account/ui`) gains five flags, each `false` on an older server:
+### 1. The v2.1 interface flags
+`ui_flags` (`GET /api/config`, `GET /api/account/ui`) gains five flags, and since 2.0.0-s a sixth, each `false` on an
+older server:
 
 | Flag | What it turns on |
 |---|---|
@@ -2398,10 +2400,11 @@ and an app that does not know a new field ignores it.
 | `v21_panel_flyout` | every app: under 1200 px the panel opens over the page instead of disappearing |
 | `v21_zoom` | desktop and web: zoom in Settings › Appearance |
 | `v21_preview_pane` | desktop and web: the Library's preview pane |
+| `v21_win_titlebar` (since 2.0.0-s) | desktop on Windows: the custom title row |
 
 They work like `live_assist`: the admin sets each to `off` (only the admin's lists: people, workspaces, a share of
 accounts) or `everyone`. There is no `opt_in`, and the person's design choice (`design`, `ui_classic`) does not change
-them; an app applies a v21 flag only on the screens of the design it is showing. All five start `off` with empty
+them; an app applies a v21 flag only on the screens of the design it is showing. All six start `off` with empty
 lists, so they answer `false` for everyone until the admin adds someone to a list.
 
 ### 2. Activity: one item per recording and event (BE-02)
@@ -2429,7 +2432,7 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 - `GET /api/config` gains `"upload_retry": {"after_seconds": [60, 300, 1800], "then": ["network_change", "app_start"]}`.
   The apps retry a failed upload on their own 1, 5 and 30 minutes after it failed, and after that on a network change
   or when the app starts. The server says it, so every app follows the same schedule; the uploads stay the device's.
-- `POST /api/activity/retry-all` — `library:read`: takes `{"group": "upload_failed"}` and answers
+- `POST /api/activity/retry-all` — `sessions:write`, throttled (6/min/device): takes `{"group": "upload_failed"}` and answers
   `202 {"retry_requested_at": "…", "count": 3}`. Only the devices hold the files, so the server asks them: from then on,
   `GET /api/activity` and `GET /api/activity/groups` carry `"retry_requested_at"` (the person's latest Retry all, or
   `null`). An app that sees it newer than its own last run retries every failed upload it holds at once, then
@@ -2474,6 +2477,10 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
   as audio only by choice), which is a part of it. Failed recordings are in **Needs you**.
 - `waiting_to_upload` covers only what reached the server as a session still `uploading`. A recording that has not
   reached the server at all is the app's own, and the app shows it with the same name.
+- The Status filter keeps its four values: no state is a filter value, so saved views stay readable by older apps.
+  `processing` is shown as "In progress", and the apps show its parts from `states`, for example "2 transcribing ·
+  1 waiting to upload". The parts are `transcribing` and `waiting_to_upload`, and they are given while the Status
+  filter keeps `processing`, which is when they add up to its count. Each row still shows its own state.
 
 ### 6. The profile inside the apps (BE-06)
 - `GET /api/account` gains:

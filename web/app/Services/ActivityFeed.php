@@ -33,18 +33,25 @@ use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Notifications\DatabaseNotification as FilamentDatabaseNotification;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
  * The activity centre (plan B18): "Transcript ready", "Transcription failed", "Upload failed", "Device paired" and
  * "Monthly limit at 80 % / reached", since v1.5 also for the plan's storage and AI credits. One database notification
  * per event: the console bell shows it, the device apps read it with GET /api/activity and turn it into an OS
- * notification that opens the recording.
+ * notification that opens the recording. Since 2.0.0-r (BE-02) an event about a recording that happened before to the
+ * same recording updates its item instead (one item per person, recording and kind: `dedupe_key`), and an upload
+ * failure is resolved once the recording reaches the server.
  */
 final class ActivityFeed
 {
@@ -69,11 +76,17 @@ final class ActivityFeed
         $feed = fn (): self => app(self::class);
         Transcript::created(fn (Transcript $t) => $feed()->transcriptChanged($t, true));
         Transcript::updated(fn (Transcript $t) => $feed()->transcriptChanged($t, false));
+        // Since 2.0.0-r (BE-02 review): a deleted recording's upload failure is over.
+        CaptureSession::deleted(fn (CaptureSession $session) => $feed()->uploadGone($session));
+        // …and one restored from the bin whose upload is still failed needs the person again (BE-02 review).
+        CaptureSession::restored(fn (CaptureSession $session) => $feed()->uploadBack($session));
         Recording::updated(function (Recording $r) use ($feed): void {
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Failed) {
                 $feed()->uploadFailed($r);
             }
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
+                // Since 2.0.0-r (BE-02): an upload that had failed is on the server now.
+                $feed()->uploadResolved($r);
                 $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->first(['id', 'workspace_id', 'user_id']);
                 $session === null || $feed()->planLimitChanged((int) $session->workspace_id, self::LIMIT_STORAGE);
                 // Since v1.6: more hours in a day than the super admin's alert (UnusualUsage).
@@ -178,7 +191,7 @@ final class ActivityFeed
                 $user->notifyNow($notification->toDatabase());
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A missed recording\'s Activity item was not written');
         }
     }
 
@@ -195,7 +208,7 @@ final class ActivityFeed
                 $user->notifications()->whereIn('data->viewData->missed_recording_id', $chunk)->delete();
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'Missed recordings\' Activity items were not deleted');
         }
     }
 
@@ -268,7 +281,7 @@ final class ActivityFeed
                 }
             }
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'A monthly limit\'s Activity item was not written');
         }
     }
 
@@ -302,10 +315,111 @@ final class ActivityFeed
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
             // Written at once, not queued: the bell, the device poll and the once-a-month checks see it immediately.
-            $user->notifyNow($notification->toDatabase());
+            $session === null ? $user->notifyNow($notification->toDatabase()) : self::upsert($user, $kind, $session->id, $notification->toDatabase()->data);
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'An Activity item was not written');
         }
+    }
+
+    /**
+     * Reports a failed write without what it wrote: a QueryException's message carries its bindings (a title, a name),
+     * so the log gets its class and SQLSTATE only, never the words (BE-02 review).
+     */
+    private static function reportSafely(Throwable $e, string $what): void
+    {
+        $state = $e instanceof QueryException ? ' (SQLSTATE '.((string) ($e->errorInfo[0] ?? $e->getCode())).')' : '';
+        report(new RuntimeException($what.': '.$e::class.$state));
+    }
+
+    /**
+     * One item per person, recording and kind (contract 2.0.0-r, BE-02): the same event again updates the item, newest
+     * words, unread, at the top, `repeat_count` one more, no longer resolved. Two requests at once meet at the unique key.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function upsert(User $user, string $kind, string $sessionId, array $data): void
+    {
+        $key = $kind.':'.$sessionId;
+        $existing = $user->notifications()->where('dedupe_key', $key)->first();
+        if ($existing instanceof DatabaseNotification) {
+            $existing->forceFill(['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $existing->getAttribute('repeat_count') + 1,
+                'created_at' => now(), 'updated_at' => now()])->save();
+
+            return;
+        }
+        try {
+            $user->notifications()->create(['id' => (string) Str::uuid(), 'type' => FilamentDatabaseNotification::class, 'data' => $data,
+                'read_at' => null, 'dedupe_key' => $key, 'repeat_count' => 1]);
+        } catch (UniqueConstraintViolationException) {
+            self::upsert($user, $kind, $sessionId, $data);
+        }
+    }
+
+    /**
+     * The recording of an upload failure reached the server after all (contract 2.0.0-r, BE-02): once no recording of its
+     * session is still failed, the item reads "Uploaded", is read and is resolved, so it leaves the group and never counts
+     * on the badge.
+     */
+    public function uploadResolved(Recording $recording): void
+    {
+        try {
+            $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($recording->capture_session_id)->first();
+            if (! $session instanceof CaptureSession
+                || Recording::query()->where('capture_session_id', $session->id)->where('upload_status', UploadStatus::Failed->value)->exists()) {
+                return;
+            }
+            $item = self::uploadFailureOf($session);
+            if (! $item instanceof DatabaseNotification) {
+                return;
+            }
+            $data = self::make(self::line('Uploaded'), self::line(':title is on the server now.', ['title' => $session->displayTitle()]), 'upload_failed', $session->id)
+                ->icon('heroicon-o-check-circle')->toDatabase()->data;
+            $item->forceFill(['data' => $data, 'read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save();
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not resolved');
+        }
+    }
+
+    /**
+     * A recording deleted (to the undo bin, or for good) has nothing left to upload: its upload failure is resolved and
+     * read, its words kept, so it leaves the group and the badge (BE-02 review).
+     */
+    public function uploadGone(CaptureSession $session): void
+    {
+        try {
+            $item = self::uploadFailureOf($session);
+            if ($item instanceof DatabaseNotification) {
+                $item->forceFill(['read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save();
+            }
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not resolved');
+        }
+    }
+
+    /**
+     * A recording back from the undo bin: when one of its uploads is still failed, its upload failure is unresolved and
+     * unread again, so it is back in the group and on the badge.
+     */
+    public function uploadBack(CaptureSession $session): void
+    {
+        try {
+            if (! Recording::query()->where('capture_session_id', $session->id)->where('upload_status', UploadStatus::Failed->value)->exists()) {
+                return;
+            }
+            DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())->where('notifiable_id', $session->user_id)
+                ->where('dedupe_key', 'upload_failed:'.$session->id)->whereNotNull('resolved_at')->update(['resolved_at' => null, 'read_at' => null]);
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'An upload failure was not brought back');
+        }
+    }
+
+    /** The person's unresolved upload failure for a recording, if any. */
+    private static function uploadFailureOf(CaptureSession $session): ?DatabaseNotification
+    {
+        $item = DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())
+            ->where('notifiable_id', $session->user_id)->where('dedupe_key', 'upload_failed:'.$session->id)->whereNull('resolved_at')->first();
+
+        return $item instanceof DatabaseNotification ? $item : null;
     }
 
     /**
@@ -321,9 +435,9 @@ final class ActivityFeed
         try {
             $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'app'), shouldOpenInNewTab: false)->markAsRead()]);
-            $recipient->notifyNow($notification->toDatabase());
+            $sessionId === null ? $recipient->notifyNow($notification->toDatabase()) : self::upsert($recipient, 'shared_with_you', $sessionId, $notification->toDatabase()->data);
         } catch (Throwable $e) {
-            report($e);
+            self::reportSafely($e, 'An Activity item was not written');
         }
     }
 
@@ -438,6 +552,10 @@ final class ActivityFeed
             'session_id' => is_string($session) ? $session : null,
             'read' => $n->read_at !== null,
             'at' => $n->created_at?->toAtomString(),
+            // Since 2.0.0-r (BE-02): how many times it happened, its group, and whether what it asked for is done.
+            'repeat_count' => max(1, (int) $n->getAttribute('repeat_count')),
+            'group' => $kind === 'upload_failed' ? 'upload_failed' : null,
+            'resolved' => $n->getAttribute('resolved_at') !== null,
             // Since v1.8 a missed recording also says why, and which one (docs/API.md `POST /api/devices/missed-recordings`).
             ...($kind === 'missed_recording' ? ['reason' => $string('reason'), 'missed_recording_id' => $string('missed_recording_id')] : []),
         ];

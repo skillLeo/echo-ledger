@@ -2203,6 +2203,14 @@ html[dir='rtl'] .v2-row-title {
     white-space: nowrap;
 }
 
+.v2-lib-opt-parts {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
 .v2-lib-opt-count {
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);

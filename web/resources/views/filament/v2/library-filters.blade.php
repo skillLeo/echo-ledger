@@ -76,7 +76,12 @@
                                 @if (($option['color'] ?? null) !== null || $section['key'] === 'labels')
                                     <span class="v2-label-dot {{ $option['dot'] ?? '' }}" aria-hidden="true" @if (($option['own'] ?? null) !== null) style="--label-own: {{ $option['own'] }}" @endif></span>
                                 @endif
-                                <span class="v2-lib-opt-label" dir="auto"><bdi>{{ $option['label'] }}</bdi></span>
+                                <span class="v2-lib-opt-label" dir="auto"><bdi>{{ $option['label'] }}</bdi>
+                                    {{-- In progress's parts, from the glossary's states (2.0.0-r): "2 transcribing · 1 waiting to upload". --}}
+                                    @if (($option['parts'] ?? null) !== null)
+                                        <span class="v2-lib-opt-parts" data-parts><bdi>{{ $option['parts'] }}</bdi></span>
+                                    @endif
+                                </span>
                                 @if ($option['count'] !== null)
                                     <span class="v2-lib-opt-count">{{ \Illuminate\Support\Number::format($option['count']) }}</span>
                                 @endif
