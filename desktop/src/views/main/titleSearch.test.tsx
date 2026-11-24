@@ -122,13 +122,22 @@ describe("the title row's search of everything (UX-20)", () => {
     expect(p.onOpenRecording).not.toHaveBeenCalled();
   });
 
-  it("a chosen row that goes away gives the choice back to the best match", () => {
-    search();
+  it("a chosen row that goes away gives the choice back to the best match (the same words typed)", () => {
+    offs.push(registerAction("file.newRecording", () => undefined));
+    const props = { status: makeStatus(), onClose: vi.fn(), onGo: vi.fn(), run: vi.fn(), onOpenRecording: vi.fn(), look: "v2" as const, inRow: true,
+      onShowAll: vi.fn(), onAsk: vi.fn(), actionState: { canRecord: true, recording: false } };
+    respond("search_library", { data: [], next_page: null });
+    const { rerender } = render(<CommandPalette {...props} />);
     const input = screen.getByRole("combobox");
-    fireEvent.change(input, { target: { value: "acme" } });
+    fireEvent.change(input, { target: { value: "new recording" } });
+    // Chosen with the arrows: away from New recording and back to it.
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    fireEvent.change(input, { target: { value: "activity" } });
-    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(/Activity/);
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("New recording");
+    // A recording starts: New recording goes from the list; the best match is chosen instead.
+    rerender(<CommandPalette {...props} actionState={{ canRecord: true, recording: true }} />);
+    expect(screen.queryByRole("option", { name: /^New recording/ })).toBeNull();
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(/^Ask about/);
   });
 
   it("focus goes back to the field it was opened from on Esc or a press outside, not after a choice that goes somewhere", () => {
@@ -148,6 +157,24 @@ describe("the title row's search of everything (UX-20)", () => {
     }
   });
 
+  it("the row's search wrapper is never the opener: its field, or its button", () => {
+    const wrap = document.createElement("div");
+    wrap.className = "el-titlerow__search";
+    wrap.setAttribute("role", "search");
+    const field = document.createElement("input");
+    field.className = "el-titlerow__field";
+    wrap.append(field);
+    document.body.append(wrap);
+    try {
+      (document.activeElement as HTMLElement | null)?.blur();
+      search();
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+      expect(field).toHaveFocus();
+    } finally {
+      wrap.remove();
+    }
+  });
+
   it("from the ⌕ button too, and a press outside closes it there; a choice leaves focus to where it went", () => {
     const button = document.createElement("button");
     button.className = "el-button";
@@ -159,7 +186,8 @@ describe("the title row's search of everything (UX-20)", () => {
       // WebKit leaves focus on the page when a button is clicked: the row's search is the opener anyway.
       (document.activeElement as HTMLElement | null)?.blur();
       const p = search();
-      fireEvent.mouseDown(document.querySelector(".palette-backdrop")!);
+      // The press's own default (focus moving to the page) is stopped, or the browser would take focus away again.
+      expect(fireEvent.mouseDown(document.querySelector(".palette-backdrop")!)).toBe(false);
       expect(p.onClose).toHaveBeenCalled();
       expect(button).toHaveFocus();
     } finally {

@@ -200,7 +200,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   if (opener.current === null && typeof document !== "undefined") {
     const active = document.activeElement;
     opener.current = active instanceof HTMLElement && active !== document.body ? active
-      : document.querySelector<HTMLElement>(".el-titlerow__search, .el-titlerow__middle .el-button");
+      : document.querySelector<HTMLElement>(".el-titlerow__field, button.el-titlerow__search, .el-titlerow__middle .el-button");
   }
   const dismiss = () => {
     onClose();
@@ -350,7 +350,12 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   };
 
   return (
-    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${inRow && look === "v2" ? " el-palette--row" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
+    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}${inRow && look === "v2" ? " el-palette--row" : ""}`} onMouseDown={(e) => {
+      // Its own default (focus moving to the page) is stopped, or the browser would take back the focus given to the opener.
+      if (e.target !== e.currentTarget) return;
+      e.preventDefault();
+      dismiss();
+    }}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
