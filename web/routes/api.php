@@ -275,6 +275,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('activity/read', [ActivityController::class, 'read'])->name('api.activity.read');
             // Since 2.0.0-r (BE-04): the one number on the Activity icon.
             Route::get('badge', BadgeController::class)->name('api.badge');
+            // Since 2.0.0-r (BE-02): the groups, as "3 recordings didn't finish uploading · Retry all".
+            Route::get('activity/groups', [ActivityController::class, 'groups'])->name('api.activity.groups');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');

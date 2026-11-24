@@ -33,18 +33,23 @@ use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Notifications\DatabaseNotification as FilamentDatabaseNotification;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
  * The activity centre (plan B18): "Transcript ready", "Transcription failed", "Upload failed", "Device paired" and
  * "Monthly limit at 80 % / reached", since v1.5 also for the plan's storage and AI credits. One database notification
  * per event: the console bell shows it, the device apps read it with GET /api/activity and turn it into an OS
- * notification that opens the recording.
+ * notification that opens the recording. Since 2.0.0-r (BE-02) an event about a recording that happened before to the
+ * same recording updates its item instead (one item per person, recording and kind: `dedupe_key`), and an upload
+ * failure is resolved once the recording reaches the server.
  */
 final class ActivityFeed
 {
@@ -74,6 +79,8 @@ final class ActivityFeed
                 $feed()->uploadFailed($r);
             }
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
+                // Since 2.0.0-r (BE-02): an upload that had failed is on the server now.
+                $feed()->uploadResolved($r);
                 $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->first(['id', 'workspace_id', 'user_id']);
                 $session === null || $feed()->planLimitChanged((int) $session->workspace_id, self::LIMIT_STORAGE);
                 // Since v1.6: more hours in a day than the super admin's alert (UnusualUsage).
@@ -302,7 +309,55 @@ final class ActivityFeed
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
             // Written at once, not queued: the bell, the device poll and the once-a-month checks see it immediately.
-            $user->notifyNow($notification->toDatabase());
+            $session === null ? $user->notifyNow($notification->toDatabase()) : self::upsert($user, $kind, $session->id, $notification->toDatabase()->data);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * One item per person, recording and kind (contract 2.0.0-r, BE-02): the same event again updates the item, newest
+     * words, unread, at the top, `repeat_count` one more, no longer resolved. Two requests at once meet at the unique key.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function upsert(User $user, string $kind, string $sessionId, array $data): void
+    {
+        $key = $kind.':'.$sessionId;
+        $existing = $user->notifications()->where('dedupe_key', $key)->first();
+        if ($existing instanceof DatabaseNotification) {
+            $existing->forceFill(['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $existing->getAttribute('repeat_count') + 1,
+                'created_at' => now(), 'updated_at' => now()])->save();
+
+            return;
+        }
+        try {
+            $user->notifications()->create(['id' => (string) Str::uuid(), 'type' => FilamentDatabaseNotification::class, 'data' => $data,
+                'read_at' => null, 'dedupe_key' => $key, 'repeat_count' => 1]);
+        } catch (UniqueConstraintViolationException) {
+            self::upsert($user, $kind, $sessionId, $data);
+        }
+    }
+
+    /**
+     * The recording of an upload failure reached the server after all (contract 2.0.0-r, BE-02): its item reads
+     * "Uploaded", is read and is resolved, so it leaves the group and never counts on the badge.
+     */
+    public function uploadResolved(Recording $recording): void
+    {
+        try {
+            $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($recording->capture_session_id)->first();
+            if (! $session instanceof CaptureSession) {
+                return;
+            }
+            $item = DatabaseNotification::query()->where('notifiable_type', (new User)->getMorphClass())
+                ->where('notifiable_id', $session->user_id)->where('dedupe_key', 'upload_failed:'.$session->id)->whereNull('resolved_at')->first();
+            if (! $item instanceof DatabaseNotification) {
+                return;
+            }
+            $data = self::make(self::line('Uploaded'), self::line(':title is on the server now.', ['title' => $session->displayTitle()]), 'upload_failed', $session->id)
+                ->icon('heroicon-o-check-circle')->toDatabase()->data;
+            $item->forceFill(['data' => $data, 'read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save();
         } catch (Throwable $e) {
             report($e);
         }
@@ -321,7 +376,7 @@ final class ActivityFeed
         try {
             $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'app'), shouldOpenInNewTab: false)->markAsRead()]);
-            $recipient->notifyNow($notification->toDatabase());
+            $sessionId === null ? $recipient->notifyNow($notification->toDatabase()) : self::upsert($recipient, 'shared_with_you', $sessionId, $notification->toDatabase()->data);
         } catch (Throwable $e) {
             report($e);
         }
@@ -438,6 +493,10 @@ final class ActivityFeed
             'session_id' => is_string($session) ? $session : null,
             'read' => $n->read_at !== null,
             'at' => $n->created_at?->toAtomString(),
+            // Since 2.0.0-r (BE-02): how many times it happened, its group, and whether what it asked for is done.
+            'repeat_count' => max(1, (int) $n->getAttribute('repeat_count')),
+            'group' => $kind === 'upload_failed' ? 'upload_failed' : null,
+            'resolved' => $n->getAttribute('resolved_at') !== null,
             // Since v1.8 a missed recording also says why, and which one (docs/API.md `POST /api/devices/missed-recordings`).
             ...($kind === 'missed_recording' ? ['reason' => $string('reason'), 'missed_recording_id' => $string('missed_recording_id')] : []),
         ];
