@@ -69,7 +69,7 @@ describe('sending', function () {
 
         $items = received($this);
         expect($items)->toHaveCount(1)
-            ->and($items[0])->toMatchArray(['kind' => 'session', 'from' => ['name' => 'Ana', 'email' => 'ana@example.com', 'avatar_url' => null, 'avatar_version' => null], 'note' => 'for tomorrow', 'title' => 'Call with Omar', 'saved_at' => null, 'client' => null])
+            ->and($items[0])->toMatchArray(['kind' => 'session', 'from' => ['name' => 'Ana', 'email' => 'ana@example.com', 'avatar_url' => null, 'avatar_version' => null, 'avatar_color' => $this->ana->avatarColor()], 'note' => 'for tomorrow', 'title' => 'Call with Omar', 'saved_at' => null, 'client' => null])
             ->and($items[0]['session'])->toMatchArray(['id' => $this->call->id, 'title' => 'Call with Omar', 'client' => null, 'device' => null, 'filed_by' => null]);
         $note = DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
         expect(ActivityFeed::payload($note))->toMatchArray(['kind' => 'shared_with_you', 'title' => 'Ana sent you Call with Omar', 'body' => 'for tomorrow', 'session_id' => $this->call->id]);

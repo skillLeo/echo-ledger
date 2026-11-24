@@ -1,6 +1,7 @@
 {{--
     The v2.0 avatar menu: who you are (opens Settings), Upgrade or Plan & usage, Settings, the theme, the admin panel
-    for staff, Help, and Sign out last, apart from the rest.
+    for staff, Help, and Sign out last, apart from the rest. Since BE-06 its avatar is the person's photo, else their
+    initials in their colour (avatar_color, the tokens' --el-role-avatar-0…7), as in the apps.
 --}}
 @php
     use App\Filament\Auth\EditProfile;
@@ -12,17 +13,27 @@
     $user = $context?->user;
     $name = $user !== null ? (filled($user->name) ? $user->name : \Illuminate\Support\Str::before((string) $user->email, '@')) : '';
     $upgrade = $context !== null && $context->flag('can_upgrade') && ! $context->flag('member');
+    $photo = $user !== null ? \App\Services\Accounts\Avatars::of($user)['avatar_url'] : null;
+    $color = $user?->avatarColor() ?? 0;
 @endphp
 @if ($context !== null)
     <x-filament::dropdown :placement="$placement ?? 'bottom-end'" teleport width="xs" class="fi-user-menu v2-um">
         <x-slot name="trigger">
             <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="{{ __('Open the menu for :name', ['name' => $name]) }}">
-                <span class="v2-avatar" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+                @if ($photo !== null)
+                    <img class="v2-avatar is-photo" src="{{ $photo }}" alt="" aria-hidden="true">
+                @else
+                    <span class="v2-avatar is-coloured" data-avatar-color="{{ $color }}" style="background-color: var(--el-role-avatar-{{ $color }})" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+                @endif
             </button>
         </x-slot>
         <x-filament::dropdown.list>
             <a href="{{ EditProfile::settingsUrl() }}" class="v2-um-head">
-                <span class="v2-avatar is-large" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+                @if ($photo !== null)
+                    <img class="v2-avatar is-large is-photo" src="{{ $photo }}" alt="" aria-hidden="true">
+                @else
+                    <span class="v2-avatar is-large is-coloured" data-avatar-color="{{ $color }}" style="background-color: var(--el-role-avatar-{{ $color }})" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+                @endif
                 <span class="v2-um-text">
                     <span class="v2-um-name">{{ $name }}</span>
                     <span class="v2-um-email" dir="ltr">{{ $user->email }}</span>

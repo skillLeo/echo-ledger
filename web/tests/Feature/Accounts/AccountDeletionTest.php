@@ -64,6 +64,8 @@ describe('GET /api/account', function () {
             // Since 2.0.0-l.
             'avatar_url' => null, 'avatar_version' => null, 'has_password' => true, 'pending_email' => null, 'pending_email_expires_at' => null,
             'passkeys_available' => true,
+            // Since 2.0.0-r §6 (BE-06): the initials' colour (the person's id's until chosen) and the interface language.
+            'avatar_color' => $user->avatarColor(), 'language' => 'en',
         ]);
     });
 });
