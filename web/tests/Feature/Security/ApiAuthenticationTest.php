@@ -143,6 +143,10 @@ function secDeviceGuardedRoutes(): array
         'POST call-rules' => ['POST', '/api/call-rules', 'sessions:write'],
         'PATCH call-rules/{id}' => ['PATCH', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
         'DELETE call-rules/{id}' => ['DELETE', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
+        // Since 2.0.0-x (CC5).
+        'PATCH call-rules/preferences' => ['PATCH', '/api/call-rules/preferences', 'sessions:write'],
+        'POST call-rules/declined' => ['POST', '/api/call-rules/declined', 'sessions:write'],
+        'DELETE call-rules/declined' => ['DELETE', '/api/call-rules/declined', 'sessions:write'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
@@ -272,8 +276,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
     // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
     // 2.0.0-p: the five saved view routes and the filter counts; 2.0.0-r: the badge, the Activity's groups and Retry all;
-    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-w: the five call rules routes.
-    expect($guarded)->toBe(183);
+    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-w: the five call rules routes; 2.0.0-x: three more.
+    expect($guarded)->toBe(186);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

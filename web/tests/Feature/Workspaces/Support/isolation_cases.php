@@ -190,6 +190,9 @@ function isoWorld(bool $sameWorkspace = false): array
     app(InterfaceFlags::class)->set(InterfaceFlags::CALL_RULES, true, 0, [], []);
     $bobRule = CallRule::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'match_key' => '+923009990001', 'number' => '+923009990001',
         'name' => 'BOB-SECRET-CLIENT contact', 'action' => 'dont_record']);
+    // Since 2.0.0-x: an offer Bob turned down, naming the same person.
+    $bob->forceFill(['call_settings' => ['declined' => [['kind' => 'contact', 'number' => '+923009990001', 'name' => 'BOB-SECRET-CLIENT declined',
+        'match_key' => '+923009990001']]]])->save();
     app('auth')->forgetGuards();
 
     return compact('bobRule', 'bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
@@ -382,6 +385,11 @@ function isoApiCases(array $b): array
             fn (TestResponse $r): bool => $r->status() === 201 && $r->json('action') === 'always_audio'],
         'api.call-rules.update' => ['PATCH', "/api/call-rules/{$b['bobRule']->id}", ['action' => 'ask'], 404],
         'api.call-rules.destroy' => ['DELETE', "/api/call-rules/{$b['bobRule']->id}", [], 404],
+        // Since 2.0.0-x: preferences and turned-down offers are the calling person's own; Bob's never show.
+        'api.call-rules.preferences' => ['PATCH', '/api/call-rules/preferences', ['hint_seen' => true], 'list'],
+        'api.call-rules.declined' => ['POST', '/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'],
+            fn (TestResponse $r): bool => $r->status() === 201],
+        'api.call-rules.declined.forget' => ['DELETE', '/api/call-rules/declined', [], fn (TestResponse $r): bool => $r->status() === 204],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.

@@ -37,13 +37,26 @@ final class CallRules
 
     public const SHORT_CALL_SECONDS = 30;
 
+    /**
+     * Since 2.0.0-x (CC5): what the after-call card and Privacy & data remember, kept for the account, with defaults.
+     *
+     * @var array<string, bool|null>
+     */
+    public const PREFERENCES = ['hide_live_words' => true, 'block_screenshots' => false, 'hint_seen' => false, 'always_offered' => false, 'streak' => null];
+
+    /** The choices a streak counts (the card's three: Transcribe, Save audio only, Delete). */
+    public const STREAK_CHOICES = ['always_transcribe', 'always_audio', 'delete'];
+
+    /** At most this many turned-down offers are kept; past it the oldest goes. */
+    public const MAX_DECLINED = 500;
+
     /** A call the short-call setting drops: shorter than SHORT_CALL_SECONDS, or missed. */
     public const NOT_KEPT = 'not_kept';
 
     /**
      * The settings as `GET /api/config` gives them (`call_rules`).
      *
-     * @return array{after_call: string|null, ask_when: string, short_calls: string, short_call_seconds: int, version: int}
+     * @return array{after_call: string|null, ask_when: string, short_calls: string, short_call_seconds: int, version: int, preferences: array<string, mixed>}
      */
     public function settings(User $user): array
     {
@@ -55,7 +68,30 @@ final class CallRules
             'short_calls' => in_array($saved['short_calls'] ?? null, self::SHORT_CALLS, true) ? $saved['short_calls'] : 'dont_keep',
             'short_call_seconds' => self::SHORT_CALL_SECONDS,
             'version' => (int) ($saved['version'] ?? 0),
+            // Since 2.0.0-x (CC5).
+            'preferences' => self::preferencesOf($saved),
         ];
+    }
+
+    /**
+     * The preferences as saved, each key with its default when never set.
+     *
+     * @param  array<string, mixed>  $saved  users.call_settings
+     * @return array<string, mixed>
+     */
+    private static function preferencesOf(array $saved): array
+    {
+        $kept = is_array($saved['preferences'] ?? null) ? $saved['preferences'] : [];
+        $preferences = [];
+        foreach (self::PREFERENCES as $key => $default) {
+            $preferences[$key] = array_key_exists($key, $kept) ? $kept[$key] : $default;
+        }
+        // In the contract's order whatever the database keeps (MySQL's JSON sorts an object's keys).
+        if (is_array($preferences['streak'])) {
+            $preferences['streak'] = ['choice' => $preferences['streak']['choice'] ?? null, 'count' => $preferences['streak']['count'] ?? null];
+        }
+
+        return $preferences;
     }
 
     /**
@@ -71,7 +107,114 @@ final class CallRules
             ...$this->settings($user),
             'updated_at' => is_string($saved['updated_at'] ?? null) ? $saved['updated_at'] : null,
             'rules' => $this->rules($user)->map(fn (CallRule $rule): array => $rule->toApi())->all(),
+            // Since 2.0.0-x (CC5): newest first, without the matching key the server keeps beside each.
+            'declined' => array_map(fn (array $entry): array => array_filter([
+                'kind' => $entry['kind'] ?? null, 'number' => $entry['number'] ?? null, 'name' => $entry['name'] ?? null,
+                'source_app' => $entry['source_app'] ?? null,
+            ], fn ($value): bool => $value !== null), is_array($saved['declined'] ?? null) ? array_values($saved['declined']) : []),
         ];
+    }
+
+    /**
+     * `PATCH /api/call-rules/preferences` (since 2.0.0-x): any of PREFERENCES, each on its own; the others keep theirs.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public function updatePreferences(User $user, array $input): void
+    {
+        $unknown = array_diff(array_keys($input), array_keys(self::PREFERENCES));
+        if ($unknown !== []) {
+            throw FieldErrors::fail(array_fill_keys(array_map('strval', $unknown), [['invalid', 'That is not one of the preferences.']]));
+        }
+        $data = FieldErrors::validate($input, [
+            'hide_live_words' => ['sometimes', 'required', 'boolean'],
+            'block_screenshots' => ['sometimes', 'required', 'boolean'],
+            'hint_seen' => ['sometimes', 'required', 'boolean'],
+            'always_offered' => ['sometimes', 'required', 'boolean'],
+            'streak' => ['sometimes', 'nullable', 'array:choice,count'],
+            'streak.choice' => ['required_with:streak', 'string', Rule::in(self::STREAK_CHOICES)],
+            'streak.count' => ['required_with:streak', 'integer', 'min:1', 'max:99'],
+        ]);
+        $changes = [];
+        foreach (array_keys(self::PREFERENCES) as $key) {
+            if (! array_key_exists($key, $input)) {
+                continue;
+            }
+            $changes[$key] = $key === 'streak'
+                ? (is_array($data['streak'] ?? null) ? ['choice' => (string) $data['streak']['choice'], 'count' => (int) $data['streak']['count']] : null)
+                : (bool) $data[$key];
+        }
+        $this->changed($user, function (array $settings) use ($changes): array {
+            $settings['preferences'] = [...(is_array($settings['preferences'] ?? null) ? $settings['preferences'] : []), ...$changes];
+
+            return [$settings, null];
+        });
+    }
+
+    /**
+     * `POST /api/call-rules/declined` (since 2.0.0-x): a contact or Source whose "Always …?" offer was turned down,
+     * newest first; one already there moves to the front. At most MAX_DECLINED, the oldest going.
+     *
+     * @param  array<string, mixed>  $input
+     * @return bool whether it is new
+     */
+    public function decline(User $user, array $input): bool
+    {
+        $data = FieldErrors::validate($input, [
+            'kind' => ['required', 'string', Rule::in(['contact', 'source'])],
+            'number' => ['nullable', 'string', 'max:40'],
+            'name' => ['nullable', 'string', 'min:1', 'max:120'],
+            'source_app' => ['required_if:kind,source', 'nullable', 'string', Rule::in(self::sources())],
+        ]);
+        $fields = $this->fields([...$data, 'action' => 'ask']);
+        $entry = array_filter(['kind' => $fields['kind'], 'number' => $fields['number'], 'name' => $fields['name'],
+            'source_app' => $fields['source_app'], 'match_key' => $fields['match_key']], fn ($v): bool => $v !== null);
+
+        return $this->changed($user, function (array $settings) use ($entry): array {
+            $list = is_array($settings['declined'] ?? null) ? array_values($settings['declined']) : [];
+            foreach ($list as $old) {
+                // The same person, already kept with the country code: keep that form, as rules do.
+                if (self::sameTarget($old, $entry) && isset($old['number'], $entry['number']) && str_starts_with((string) $old['number'], '+')
+                    && ! str_starts_with((string) $entry['number'], '+')) {
+                    $entry['number'] = $old['number'];
+                    $entry['match_key'] = $old['number'];
+                }
+            }
+            $kept = array_values(array_filter($list, fn (array $old): bool => ! self::sameTarget($old, $entry)));
+            $new = count($kept) === count($list);
+            $settings['declined'] = array_slice([$entry, ...$kept], 0, self::MAX_DECLINED);
+
+            return [$settings, $new];
+        });
+    }
+
+    /** `DELETE /api/call-rules/declined` (since 2.0.0-x): every turned-down offer forgotten. */
+    public function forgetDeclined(User $user): void
+    {
+        $this->changed($user, function (array $settings): array {
+            $settings['declined'] = [];
+
+            return [$settings, null];
+        });
+    }
+
+    /**
+     * Whether two declined entries are the same contact or Source: the same Source, the same number (with or without
+     * its country code), or, without numbers, the same name.
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
+     */
+    private static function sameTarget(array $a, array $b): bool
+    {
+        if (($a['kind'] ?? null) !== ($b['kind'] ?? null)) {
+            return false;
+        }
+        if (isset($a['number'], $b['number'])) {
+            return self::sameNumber((string) $a['number'], (string) $b['number']);
+        }
+
+        return ($a['match_key'] ?? null) === ($b['match_key'] ?? null);
     }
 
     /** @return Collection<int, CallRule> contact, then group, then Source; by name within each */

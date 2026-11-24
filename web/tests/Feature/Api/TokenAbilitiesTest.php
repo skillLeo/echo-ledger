@@ -31,6 +31,10 @@ function abilityRoutes(): array
         'call rule add' => ['POST', '/api/call-rules', 'sessions:write'],
         'call rule change' => ['PATCH', "/api/call-rules/{$id}", 'sessions:write'],
         'call rule remove' => ['DELETE', "/api/call-rules/{$id}", 'sessions:write'],
+        // Since 2.0.0-x (CC5).
+        'call preferences' => ['PATCH', '/api/call-rules/preferences', 'sessions:write'],
+        'call offer declined' => ['POST', '/api/call-rules/declined', 'sessions:write'],
+        'call offers declined forgotten' => ['DELETE', '/api/call-rules/declined', 'sessions:write'],
         'device report' => ['POST', '/api/devices/report', 'config:read'],
         'missed recording' => ['POST', '/api/devices/missed-recordings', 'config:read'],
         'share check result' => ['POST', '/api/diagnostics/share-checks', 'config:read'],

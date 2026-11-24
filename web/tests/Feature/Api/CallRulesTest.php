@@ -57,7 +57,8 @@ describe('the flag', function () {
         expect(InterfaceFlags::names())->toContain('call_rules')
             ->and($this->getJson('/api/config')->json('ui_flags.call_rules'))->toBeTrue()
             ->and($this->getJson('/api/config')->json('call_rules'))->toBe(['after_call' => null, 'ask_when' => 'after_call',
-                'short_calls' => 'dont_keep', 'short_call_seconds' => 30, 'version' => 0]);
+                'short_calls' => 'dont_keep', 'short_call_seconds' => 30, 'version' => 0,
+                'preferences' => ['hide_live_words' => true, 'block_screenshots' => false, 'hint_seen' => false, 'always_offered' => false, 'streak' => null]]);
     });
 });
 
@@ -293,4 +294,116 @@ it('rolls the table and the column back and forth', function () {
 
     Artisan::call('migrate', ['--path' => $migration, '--force' => true]);
     expect(Schema::hasTable('call_rules'))->toBeTrue()->and(Schema::hasColumn('users', 'call_settings'))->toBeTrue();
+});
+
+describe('choices that follow the account (2.0.0-x, CC5)', function () {
+    it('keeps each preference on its own, so two devices changing different ones never undo each other', function () {
+        expect($this->getJson('/api/call-rules')->json('preferences'))->toBe(CallRules::PREFERENCES)
+            ->and($this->getJson('/api/call-rules')->json('declined'))->toBe([]);
+
+        $this->patchJson('/api/call-rules/preferences', ['hint_seen' => true])->assertOk()->assertJsonPath('preferences.hint_seen', true);
+        // Another device, another key.
+        $other = Fx::device($this->person);
+        app('auth')->forgetGuards();
+        $this->withToken(Fx::token($other))->patchJson('/api/call-rules/preferences', ['block_screenshots' => true, 'streak' => ['choice' => 'always_audio', 'count' => 2]])
+            ->assertOk();
+
+        $this->asToken($this->token);
+        expect($this->getJson('/api/config')->json('call_rules.preferences'))->toBe(['hide_live_words' => true, 'block_screenshots' => true,
+            'hint_seen' => true, 'always_offered' => false, 'streak' => ['choice' => 'always_audio', 'count' => 2]])
+            ->and($this->getJson('/api/call-rules')->json('version'))->toBe(2);
+
+        $this->patchJson('/api/call-rules/preferences', ['streak' => null, 'always_offered' => true])->assertOk()
+            ->assertJsonPath('preferences.streak', null)->assertJsonPath('preferences.always_offered', true)->assertJsonPath('preferences.hint_seen', true);
+    });
+
+    it('refuses a key or a value that is not one of the preferences, with codes', function () {
+        $this->patchJson('/api/call-rules/preferences', ['theme' => 'dark'])->assertStatus(422)->assertJsonPath('error_codes.theme.0.code', 'invalid');
+        $this->patchJson('/api/call-rules/preferences', ['hint_seen' => 'often'])->assertStatus(422);
+        $this->patchJson('/api/call-rules/preferences', ['streak' => ['choice' => 'ask', 'count' => 2]])->assertStatus(422);
+        $this->patchJson('/api/call-rules/preferences', ['streak' => ['choice' => 'delete', 'count' => 100]])->assertStatus(422)
+            ->assertJsonPath('error_codes', fn (array $codes): bool => isset($codes['streak.count']));
+        $this->patchJson('/api/call-rules/preferences', ['streak' => ['choice' => 'delete', 'count' => 1, 'extra' => 1]])->assertStatus(422);
+        expect($this->person->fresh()->call_settings)->toBeNull();
+    });
+
+    it('changes nothing in /api/config while the flag is off, whatever is kept', function () {
+        $this->patchJson('/api/call-rules/preferences', ['block_screenshots' => true, 'hide_live_words' => false])->assertOk();
+        $on = $this->getJson('/api/config')->json();
+        app(InterfaceFlags::class)->set(InterfaceFlags::CALL_RULES, false, 0, [], []);
+
+        $off = $this->getJson('/api/config')->assertOk()->json();
+        expect($off)->not->toHaveKey('call_rules')->and($off['ui_flags']['call_rules'])->toBeFalse()
+            ->and(json_encode($off))->not->toContain('block_screenshots')->not->toContain('hide_live_words')
+            ->and(array_keys($on))->toContain('call_rules');
+        $this->patchJson('/api/call-rules/preferences', ['hint_seen' => true])->assertNotFound();
+        $this->postJson('/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'])->assertNotFound();
+        $this->deleteJson('/api/call-rules/declined')->assertNotFound();
+    });
+
+    it('keeps the offers turned down, newest first, once each, and forgets them all on request', function () {
+        $this->postJson('/api/call-rules/declined', ['kind' => 'contact', 'number' => '+92 300 1234567', 'name' => 'Ahmed Khan'])->assertCreated();
+        $this->postJson('/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'])->assertCreated();
+        // The same person without the country code: already there, moved to the front.
+        $this->postJson('/api/call-rules/declined', ['kind' => 'contact', 'number' => '0300-1234567', 'name' => 'Ahmed'])->assertOk();
+
+        $declined = $this->getJson('/api/call-rules')->json('declined');
+        expect($declined)->toHaveCount(2)
+            ->and($declined[0])->toBe(['kind' => 'contact', 'number' => '+923001234567', 'name' => 'Ahmed'])
+            ->and($declined[1])->toBe(['kind' => 'source', 'source_app' => 'zoom'])
+            ->and($this->getJson('/api/config')->json('call_rules'))->not->toHaveKey('declined');
+
+        $this->postJson('/api/call-rules/declined', ['kind' => 'group', 'group' => 'favourites'])->assertStatus(422);
+        $this->postJson('/api/call-rules/declined', ['kind' => 'contact'])->assertStatus(422)->assertJsonPath('error_codes.number.0.code', 'required');
+
+        $this->deleteJson('/api/call-rules/declined')->assertNoContent();
+        expect($this->getJson('/api/call-rules')->json('declined'))->toBe([]);
+    });
+
+    it('keeps at most 500 turned-down offers, the oldest going', function () {
+        $this->person->forceFill(['call_settings' => ['declined' => array_map(fn (int $i): array => ['kind' => 'contact',
+            'number' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT), 'match_key' => '+92300'.str_pad((string) $i, 7, '0', STR_PAD_LEFT)], range(1, 500))]])->save();
+
+        $this->postJson('/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'])->assertCreated();
+
+        $declined = $this->getJson('/api/call-rules')->json('declined');
+        expect($declined)->toHaveCount(500)->and($declined[0])->toBe(['kind' => 'source', 'source_app' => 'zoom'])
+            ->and(collect($declined)->pluck('number'))->not->toContain('+923000000500')->toContain('+923000000001');
+    });
+
+    it('never logs the people turned down, exports them, and erases them with the account', function () {
+        Storage::fake('local');
+        $logged = [];
+        Event::listen(MessageLogged::class, function (MessageLogged $e) use (&$logged): void {
+            $logged[] = $e->message.' '.json_encode($e->context);
+        });
+        $this->postJson('/api/call-rules/declined', ['kind' => 'contact', 'number' => '+923007778889', 'name' => 'DECLINED-SECRET-NAME'])->assertCreated();
+        $this->postJson('/api/call-rules/declined', ['kind' => 'contact', 'number' => 'nope +923007778889', 'name' => 'DECLINED-SECRET-NAME'])->assertStatus(422);
+        expect(implode("\n", $logged))->not->toContain('7778889')->not->toContain('DECLINED-SECRET-NAME');
+
+        $id = $this->postJson('/api/account/export')->assertStatus(202)->json('id');
+        $url = (string) $this->getJson("/api/account/export/{$id}")->assertJsonPath('status', 'ready')->json('url');
+        app('auth')->forgetGuards();
+        $path = tempnam(sys_get_temp_dir(), 'zip');
+        file_put_contents($path, $this->get($url)->assertOk()->streamedContent());
+        $zip = new ZipArchive;
+        expect($zip->open($path))->toBeTrue();
+        $exported = json_decode((string) $zip->getFromName('call-rules.json'), true);
+        $zip->close();
+        unlink($path);
+        expect($exported['declined'][0])->toMatchArray(['name' => 'DECLINED-SECRET-NAME'])->and($exported['preferences'])->toBe(CallRules::PREFERENCES);
+
+        app(AccountDeletion::class)->schedule($this->person->fresh());
+        $this->travel(7)->days();
+        $this->travel(1)->minutes();
+        expect(Artisan::call('echoledger:erase-accounts'))->toBe(0)
+            ->and(DB::table('users')->where('call_settings', 'like', '%DECLINED-SECRET-NAME%')->exists())->toBeFalse();
+    });
+
+    it('never takes "preferences" or "declined" for a rule\'s id', function () {
+        $rule = callRule($this, ['kind' => 'source', 'source_app' => 'zoom', 'action' => 'always_transcribe']);
+        $this->patchJson('/api/call-rules/preferences', ['action' => 'ask'])->assertStatus(422);
+        $this->patchJson('/api/call-rules/not-a-ulid', ['action' => 'ask'])->assertNotFound();
+        expect(CallRule::query()->findOrFail($rule['id'])->action)->toBe('always_transcribe');
+    });
 });

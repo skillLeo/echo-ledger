@@ -215,9 +215,13 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             // Since 2.0.0-w (B5): changing the call rules, only while the call_rules flag is on; 60 a minute per person.
             Route::middleware([EnsureCallRules::class, 'throttle:call-rules'])->group(function (): void {
                 Route::put('call-rules/settings', [CallRulesController::class, 'settings'])->name('api.call-rules.settings');
+                // Since 2.0.0-x (CC5): before call-rules/{id}, which only takes a rule's ULID.
+                Route::patch('call-rules/preferences', [CallRulesController::class, 'preferences'])->name('api.call-rules.preferences');
+                Route::post('call-rules/declined', [CallRulesController::class, 'decline'])->name('api.call-rules.declined');
+                Route::delete('call-rules/declined', [CallRulesController::class, 'forgetDeclined'])->name('api.call-rules.declined.forget');
                 Route::post('call-rules', [CallRulesController::class, 'store'])->name('api.call-rules.store');
-                Route::patch('call-rules/{id}', [CallRulesController::class, 'update'])->name('api.call-rules.update');
-                Route::delete('call-rules/{id}', [CallRulesController::class, 'destroy'])->name('api.call-rules.destroy');
+                Route::patch('call-rules/{id}', [CallRulesController::class, 'update'])->whereUlid('id')->name('api.call-rules.update');
+                Route::delete('call-rules/{id}', [CallRulesController::class, 'destroy'])->whereUlid('id')->name('api.call-rules.destroy');
             });
             // Since 2.0.0-l (docs/API.md "Account and security from the apps"): the person's own account only.
             Route::post('account/proof-code', [AccountProfileController::class, 'proofCode'])->middleware('throttle:account-proof-code')->name('api.account.proof-code');

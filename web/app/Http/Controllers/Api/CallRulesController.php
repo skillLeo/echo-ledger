@@ -32,6 +32,31 @@ final class CallRulesController extends Controller
         return response()->json($this->rules->payload($person));
     }
 
+    /** PATCH /api/call-rules/preferences (since 2.0.0-x) */
+    public function preferences(Request $request): JsonResponse
+    {
+        $person = $this->person($request);
+        $this->rules->updatePreferences($person, $request->json()->all());
+
+        return response()->json($this->rules->payload($person));
+    }
+
+    /** POST /api/call-rules/declined (since 2.0.0-x) */
+    public function decline(Request $request): Response
+    {
+        $new = $this->rules->decline($this->person($request), $request->only(['kind', 'number', 'name', 'source_app']));
+
+        return response()->noContent($new ? 201 : 200);
+    }
+
+    /** DELETE /api/call-rules/declined (since 2.0.0-x) */
+    public function forgetDeclined(Request $request): Response
+    {
+        $this->rules->forgetDeclined($this->person($request));
+
+        return response()->noContent();
+    }
+
     /** POST /api/call-rules */
     public function store(Request $request): JsonResponse
     {
