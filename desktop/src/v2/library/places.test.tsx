@@ -221,6 +221,47 @@ describe("the Library's places", () => {
     expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
   });
 
+  it("in the app, ⌘F is the title row's: its field searches this view and says In: All recordings (the Library has no field of its own there)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    expect(screen.getAllByRole("searchbox", { name: "Search recordings" })).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = screen.getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    expect(document.querySelector(".el-titlerow__scope")).toHaveTextContent("In: All recordings");
+    fireEvent.change(field, { target: { value: "weekly" } });
+    await act(() => new Promise((r) => setTimeout(r, 800)));
+    expect(rows()).toEqual(["zoom"]);
+  });
+
+  it("in the app, ⌘[ walks the Library's own steps first: a filter change, then the view, before leaving the place", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // One ⌘[: the filter change goes, the view stays (and the Library stays the place).
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    // The next: the view before it (All recordings), still in the Library.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // ⌘] walks forward again, one step a press.
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+  });
+
   it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
     respond("projects_list", { data: [] });

@@ -6,7 +6,7 @@
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
 // reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
 // a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { PanelToggle } from "../shell/NavRail";
+import { PanelToggle, usePageHistory } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
@@ -594,21 +594,27 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     let frame = 0;
     const mark = () => {
       frame = 0;
-      const list = root.current?.querySelector<HTMLElement>(".el-lib-list");
-      if (!list) return;
+      const el = root.current;
+      if (!el) return;
       const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
-      list.style.setProperty("--el-sticky-cover", `${pad}px`);
+      // On the Library's root: the stuck headings and the stuck selection bar both cover the padding band.
+      el.style.setProperty("--el-sticky-cover", `${pad}px`);
       const top = box.getBoundingClientRect().top + pad;
-      for (const h of list.querySelectorAll<HTMLElement>(":scope > .el-list-section")) {
-        h.toggleAttribute("data-stuck", box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1);
-      }
+      const stuck = (h: HTMLElement) => box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1;
+      for (const h of el.querySelectorAll<HTMLElement>(".el-lib-list > .el-list-section, .el-selectbar")) h.toggleAttribute("data-stuck", stuck(h));
     };
-    const onScroll = () => {
+    const soon = () => {
       if (!frame) frame = requestAnimationFrame(mark);
     };
-    box.addEventListener("scroll", onScroll, { passive: true });
+    box.addEventListener("scroll", soon, { passive: true });
+    // A tab, a filter, a sort, a delete or a resize moves the headings without a scroll: marked again then too.
+    window.addEventListener("resize", soon);
+    const resized = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
+    if (resized && root.current) resized.observe(root.current);
     return () => {
-      box.removeEventListener("scroll", onScroll);
+      box.removeEventListener("scroll", soon);
+      window.removeEventListener("resize", soon);
+      resized?.disconnect();
       cancelAnimationFrame(frame);
     };
   }, []);
@@ -1051,11 +1057,15 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // else closes the filters; J and K move between rows, Enter opens one, X ticks it; ⌘A / Ctrl+A picks every row shown;
   // Delete sends the picked (or the focused) ones to Trash with Undo.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  /** Inside the shell (its title row has ← → and the one search): set where usePageHistory and usePageTitle answer. */
+  const inShellRef = useRef(false);
+  const inTitleRowRef = useRef(false);
   keys.current = (e: KeyboardEvent) => {
     if (organise || context || savingView || newLabel) return;
     const mod = e.metaKey || e.ctrlKey;
     // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
-    if (!open && !trash && items && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+    // In the shell's title row (inTitleRow) ⌘F is the row's: it searches this view and says so ("In: All recordings").
+    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -1064,7 +1074,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     if (typing(e.target)) return;
     // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
     // (the search, a field, the pill editor) or with a question open.
-    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+    // In the shell the title row answers them (usePageHistory), asking the Library first: nothing moves twice.
+    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       back.current(e.key === "[" ? "back" : "forward");
@@ -1144,7 +1155,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     // The mouse's back (button 3) and forward (4): never the web view's own page history. Heard first (the capture phase),
     // so the Library answers before the shell's title row, which walks the places, however often it is drawn again; a
     // press something else took is left alone.
-    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    // In the shell its title row hears them (usePageHistory) and asks the Library first.
+    const side = (e: MouseEvent) => !inShellRef.current && (e.button === 3 || e.button === 4);
     const down = (e: MouseEvent) => {
       if (side(e)) e.preventDefault();
     };
@@ -1218,11 +1230,34 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
   const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
     : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
+  /** A toolbar's keys (the selection bar, as the shared SelectionBar): ← → between its controls, Home and End to the ends. */
+  const toolbarKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const next = rtl ? "ArrowLeft" : "ArrowRight";
+    const prev = rtl ? "ArrowRight" : "ArrowLeft";
+    if (![next, prev, "Home", "End"].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+    const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [role="checkbox"]')]
+      .filter((c) => !c.closest('[role="menu"]'));
+    const at = controls.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const to = e.key === "Home" ? 0 : e.key === "End" ? controls.length - 1 : e.key === next ? Math.min(at + 1, controls.length - 1) : Math.max(at - 1, 0);
+    controls[to].focus();
+  };
   const closeOpen = () => {
     const id = open?.id ?? null;
     setOpenId(null);
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
+  // The title row's ← → (⌘[ ⌘], Alt+← →, the mouse's side buttons) ask the Library first (UX-20): an open recording
+  // goes back to the list where it was (UX-25's kept place is this step); else the Library's own steps (a view, a
+  // filter, a search); then the places visited. Outside the shell the Library hears those keys itself.
+  const inShell = usePageHistory({
+    back: open ? closeOpen : steps.current.back.length ? () => void walk("back") : null,
+    forward: !open && steps.current.forward.length ? () => void walk("forward") : null,
+  });
+  inShellRef.current = inShell;
+  inTitleRowRef.current = inTitleRow;
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
@@ -1283,7 +1318,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           )}
           {choosing ? (
             // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
-            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings">
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
               <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
               <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>

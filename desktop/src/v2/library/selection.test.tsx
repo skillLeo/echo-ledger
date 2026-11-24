@@ -76,6 +76,21 @@ describe("selection mode", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Bilal Qureshi" })).toBeInTheDocument();
   });
 
+  it("the selection bar is a toolbar: ← → move between its controls, Home and End go to its ends", async () => {
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    const all = within(bar()).getByRole("checkbox", { name: /^(Select|Unselect) all$/ });
+    act(() => all.focus());
+    fireEvent.keyDown(all, { key: "ArrowRight" });
+    expect(within(bar()).getByRole("button", { name: "Transcribe" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "End" });
+    expect(within(bar()).getByRole("button", { name: "Cancel selection" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowLeft" });
+    expect(within(bar()).getByRole("button", { name: "More actions" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Home" });
+    expect(all).toHaveFocus();
+  });
+
   it("Cmd/Ctrl-click starts it on that row; Shift-click adds the range; Cmd/Ctrl+A picks every row shown; Esc ends it", async () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
