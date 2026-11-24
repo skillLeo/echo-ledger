@@ -258,7 +258,8 @@ final class TranscribeLater
             $spent = 0;
             foreach ($eligible as $session) {
                 try {
-                    $transcript = $this->claimAndStart($session);
+                    // Queued, never the fast path: up to 50 starts must not run after this response in this web worker.
+                    $transcript = $this->claimAndStart($session, queued: true);
                 } catch (Throwable) {
                     // This one could not start (and went back to audio only); the others still do.
                     $skipped[] = ['id' => $session->id, 'code' => 'not_started'];
@@ -335,7 +336,8 @@ final class TranscribeLater
      * Takes the recording out of audio only in one statement (so two taps never start two transcripts), then starts its
      * transcript. Null when it was no longer audio only.
      */
-    private function claimAndStart(CaptureSession $session): ?Transcript
+    /** [$queued]: on the queue, never the fast path (the bulk starts, FinalTranscriptCoordinator::start). */
+    private function claimAndStart(CaptureSession $session, bool $queued = false): ?Transcript
     {
         $claimed = CaptureSession::query()->whereKey($session->id)->where('status', SessionStatus::AudioOnly->value)
             ->update(['status' => SessionStatus::Processing->value, 'transcribe' => true, 'updated_at' => now()]);
@@ -345,7 +347,7 @@ final class TranscribeLater
         $session->refresh();
         $existing = $session->finalTranscript()->first();
         try {
-            return $this->coordinator->start($session, $existing);
+            return $this->coordinator->start($session, $existing, queued: $queued);
         } catch (Throwable $e) {
             // Never left half started: the recording goes back to audio only, and its final transcript leaves the running
             // statuses (deleted if this start made it, failed otherwise), so nothing requeues it later (stt:reconcile) to
