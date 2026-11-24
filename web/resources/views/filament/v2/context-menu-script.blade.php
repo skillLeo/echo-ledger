@@ -255,7 +255,7 @@
             if (! row) return;
             const rows = window.elV2ContextMenu.rowsFor(row);
             const r = row.getBoundingClientRect();
-            if (openFor(rows, { x: rtl() ? r.right - 24 : r.left + 24, y: r.top + r.height / 2 }, window.Livewire.find(host.getAttribute('wire:id')), true, rows.length > 1)) {
+            if (openFor(rows, { x: rtl() ? r.right - 24 : r.left + 24, y: r.top + r.height / 2 }, window.Livewire.find(host.getAttribute('wire:id')), true, window.elV2ContextMenu.picked(row))) {
                 e.preventDefault();
                 byKey = Date.now();
             }
@@ -281,11 +281,19 @@
                 if (open && open.from === button) { close(true); return; }
                 const rows = this.rowsFor(row);
                 const r = button.getBoundingClientRect();
-                if (openFor(rows, { x: rtl() ? r.right : r.left, y: r.bottom + 4 }, window.Livewire.find(host.getAttribute('wire:id')), ! e || e.detail === 0, rows.length > 1)) {
+                if (openFor(rows, { x: rtl() ? r.right : r.left, y: r.bottom + 4 }, window.Livewire.find(host.getAttribute('wire:id')), ! e || e.detail === 0, this.picked(row))) {
                     open.from = button;
                     button.setAttribute('aria-expanded', 'true');
                     open.onClose = () => button.setAttribute('aria-expanded', 'false');
                 }
+            },
+            /**
+             * Whether the row's own box is ticked: its menu is then the selection's (one row or more), which its actions
+             * clear when they end, as the selection bar's do.
+             */
+            picked(row) {
+                const mine = (row.closest('.fi-ta-record, .fi-ta-row') || row).querySelector('input.fi-ta-record-checkbox');
+                return !! (mine && mine.checked);
             },
             /** What a row's menu is for: the selection when the row is part of it (two or more), else the row. */
             rowsFor(row) {

@@ -78,3 +78,11 @@ test('Back to top shows once the list is more than a screen down, and Home, Ctrl
     assert.ok(! core.toTopKey(key('Home', { shiftKey: true }), false));
     assert.ok(! core.toTopKey(key('Home', { altKey: true }), false));
 });
+
+test('the person did something while the list came back: no scroll, no tint and no focus are put back on them', () => {
+    // A click on another row (it opens beside the list), a wheel turn, a touch, a key: even where nothing takes the focus.
+    assert.deepEqual(core.restoreSteps(true, true), { scroll: false, tint: false, focus: false });
+    // Nothing done: the place and the tint, and the focus while nothing else has it.
+    assert.deepEqual(core.restoreSteps(false, true), { scroll: true, tint: true, focus: true });
+    assert.deepEqual(core.restoreSteps(false, false), { scroll: true, tint: true, focus: false });
+});

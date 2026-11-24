@@ -856,7 +856,7 @@ final class CaptureSessionsTable
     {
         return Action::make('rowMenu')->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
             ->alpineClickHandler('window.elV2ContextMenu && window.elV2ContextMenu.openFromButton($el, $event)')
-            ->extraAttributes(['data-row-menu' => true, 'aria-haspopup' => 'menu']);
+            ->extraAttributes(['data-row-menu' => true, 'aria-haspopup' => 'menu', 'aria-expanded' => 'false']);
     }
 
     /** The title the recording shows without one of its own ("WhatsApp call", "Call with Omar Khan"). */

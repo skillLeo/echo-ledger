@@ -36,8 +36,12 @@ it('gives the Library its place, the tint and Back to top, in the console\'s wor
         ->toContain('core.showUpTo(saved.shown, rows().length, 500)')->toContain('await wire.v2ShowUpTo(upTo);')
         // One person's place in one workspace: the frame's memory scope.
         ->toContain('core.keys("'.NavFrame::memoryScope().'")')
-        // The row takes the focus only if nothing else took it meanwhile.
+        // The row takes the focus only if nothing else took it meanwhile, and anything the person does while the list
+        // comes back (a click anywhere, the wheel, a touch, a key) leaves the list theirs: no scroll, tint or focus.
         ->toContain('core.focusFree(document.activeElement, focusAtStart, document.body)')
+        ->toContain("const INTERACTIONS = ['pointerdown', 'wheel', 'touchstart', 'keydown'];")
+        ->toContain('window.addEventListener(type, () => { taken = true; }, { capture: true, passive: true })')
+        ->toContain('const steps = core.restoreSteps(taken, ')
         // Home is the control's own in a toolbar, tabs and a slider.
         ->toContain('[role="toolbar"], [role="tablist"], [role="slider"]');
 });

@@ -69,6 +69,13 @@
         window.addEventListener('scroll', () => { window.clearTimeout(noting); noting = window.setTimeout(note, 150); }, { passive: true });
         window.addEventListener('pagehide', note);
 
+        // Anything the person does from the moment the page loads (a click anywhere, even where nothing takes the focus, as
+        // Safari's buttons and boxes; the wheel; a touch; a key) is theirs: coming back then leaves the list where they
+        // put it, untinted, and the focus theirs. Heard first (the capture phase), before anything else can stop it.
+        let taken = false;
+        const INTERACTIONS = ['pointerdown', 'wheel', 'touchstart', 'keydown'];
+        INTERACTIONS.forEach((type) => window.addEventListener(type, () => { taken = true; }, { capture: true, passive: true }));
+
         // The tint: on the opened row while it lasts; Livewire's redraws keep it (they would take a class they don't know).
         let tint = null;
         const paint = () => {
@@ -102,17 +109,18 @@
                 }
                 // The person searched or filtered meanwhile: that is another list now.
                 if (here() !== saved.url) return;
+                const steps = core.restoreSteps(taken, core.focusFree(document.activeElement, focusAtStart, document.body));
                 const anchor = saved.id ? document.querySelector('.v2-library .v2-lib-row[data-recording="' + saved.id.replace(/["\\]/g, '') + '"]') : null;
                 const maxY = document.documentElement.scrollHeight - window.innerHeight;
-                window.scrollTo({ top: core.scrollTo(saved, { rowTop: anchor ? anchor.getBoundingClientRect().top + window.scrollY : null, maxY }), behavior: 'auto' });
+                if (steps.scroll) window.scrollTo({ top: core.scrollTo(saved, { rowTop: anchor ? anchor.getBoundingClientRect().top + window.scrollY : null, maxY }), behavior: 'auto' });
                 const row = document.querySelector('.v2-library .v2-lib-row[data-recording="' + opened.id.replace(/["\\]/g, '') + '"]');
-                if (row) {
+                if (row && steps.tint) {
                     tint = { id: opened.id, url: here(), since: Date.now() };
                     paint();
                     window.setTimeout(paint, core.TINT + 50);
                     // The keyboard's place: J / K go on from it, and the focus is on it, unless the person has taken the
                     // focus meanwhile (typing in the search: their letters stay theirs, never J / K / X).
-                    if (core.focusFree(document.activeElement, focusAtStart, document.body)) {
+                    if (steps.focus) {
                         rows().forEach((r) => recordOf(r).classList.remove('el-kb-row'));
                         recordOf(row).classList.add('el-kb-row');
                         row.scrollIntoView({ block: 'nearest' });
@@ -168,6 +176,6 @@
         document.addEventListener('DOMContentLoaded', recordingPage, { once: true });
         document.addEventListener('livewire:initialized', start, { once: true });
         // Back to a page the browser kept as it was (its back-forward cache): the place is there; the tint comes back.
-        window.addEventListener('pageshow', (e) => { if (e.persisted) { recordingPage(); void restore(); } });
+        window.addEventListener('pageshow', (e) => { if (e.persisted) { taken = false; recordingPage(); void restore(); } });
     })();
 </script>

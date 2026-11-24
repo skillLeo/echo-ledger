@@ -88,10 +88,19 @@
         return mac && e.key === 'ArrowUp' && e.metaKey && ! e.ctrlKey;
     }
 
+    /**
+     * What coming back still does once the rows are there: nothing when the person did something meanwhile (taken: a
+     * click, even one that takes no focus, the wheel, a touch, a key), which is theirs; else the place and the tint, and
+     * the focus on the row when nothing else has it (focusFree).
+     */
+    function restoreSteps(taken, focusFree) {
+        return taken ? { scroll: false, tint: false, focus: false } : { scroll: true, tint: true, focus: !! focusFree };
+    }
+
     /** Whether the focus is still where it was when the list came back (nothing else took it): only then the row takes it. */
     function focusFree(now, atStart, body) {
         return now === null || now === body || now === atStart;
     }
 
-    return { KEY, OPENED, MAX_AGE, TINT, keys, place, restorable, cameBack, scrollTo, showUpTo, tinted, showsBackToTop, toTopKey, focusFree };
+    return { KEY, OPENED, MAX_AGE, TINT, keys, place, restorable, cameBack, scrollTo, showUpTo, tinted, showsBackToTop, toTopKey, focusFree, restoreSteps };
 });
