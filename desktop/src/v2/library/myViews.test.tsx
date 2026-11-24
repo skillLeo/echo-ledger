@@ -14,6 +14,7 @@ import { libraryViewCounts, prepare } from "./facets";
 import { fromServer, MAX_VIEWS, syncedViewsStore, toServer, VIEW_WORDS, viewsAccount, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "./scope";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -394,7 +395,7 @@ describe("My views in the sidebar and the Library", () => {
   it("Save as view keeps the filters, the search and the sort; it appears in MY VIEWS, opens there and syncs", async () => {
     render(<App />);
     await act(flushAsync);
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "whatsapp" } });
     fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Longest" }));

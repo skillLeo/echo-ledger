@@ -48,8 +48,6 @@ export type RecordingRowProps = {
   /** Selection mode: the box shows on every row, and a click ticks the row. */
   choosing: boolean;
   picked: boolean;
-  source: { value: string; label: string };
-  onSource: () => void;
   labels: readonly { name: string; key: string; colour: string | null }[];
   onLabel: (key: string) => void;
   recovered: ReactNode;
@@ -61,7 +59,7 @@ export type RecordingRowProps = {
   actions?: ReactNode;
 };
 
-export function RecordingRow({ item, r, compact, choosing, picked, source, onSource, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions }: RecordingRowProps) {
+export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions }: RecordingRowProps) {
   const id = useId();
   // Said with the row, though not all shown: pinned (its section says so), every label (up to three dots show), Recovered.
   const marks = [item.pinned ? "Pinned" : null, ...labels.map((l) => l.name)].filter(Boolean).join(", ");
@@ -75,9 +73,8 @@ export function RecordingRow({ item, r, compact, choosing, picked, source, onSou
       <span className="el-rec__pick">
         <PickBox checked={picked} label={`Select ${r.title}`} onClick={(e) => onPick(e)} />
       </span>
-      <button type="button" className="el-rec__source" aria-label={`Show only ${source.label}`} title={`Show only ${source.label}`} onClick={onSource}>
-        <RowAvatar item={item} r={r} />
-      </button>
+      {/* The mark only says who or what (a label dot still filters; Source is Filters', the kind tabs' and ⌘K's). */}
+      <span className="el-rec__mark"><RowAvatar item={item} r={r} /></span>
       <span className="el-rec__main">
         <span className="el-rec__line">
           <span className="el-rec__title" id={`${id}-title`} dir="auto">{r.title}</span>

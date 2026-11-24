@@ -23,7 +23,7 @@ import { RecordingRow } from "./RecordingRow";
 import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, sourceOf, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
@@ -1340,10 +1340,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
                 ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
                   // In a date group (Today, Yesterday, This week) a row says only the time: its heading says the day.
                   const r = rowModel(item, undefined, rowViews.summaryFor(item), TIME_ONLY_GROUPS.has(g.key));
-                  const source = sourceOf(item);
                   return (
                     <RecordingRow key={item.id} item={item} r={r} compact={density === "compact"} choosing={choosing} picked={picked.has(item.id)}
-                      source={source} onSource={() => quick("source", source.value)}
                       labels={(item.labels ?? []).map((l) => ({ name: l, key: listKey(l), colour: labelColour(item, l) }))}
                       onLabel={(key) => quick("labels", key)}
                       recovered={recovered.has(item.id) ? <Badge tone="accent">{RECOVERED_CHIP}</Badge> : null}

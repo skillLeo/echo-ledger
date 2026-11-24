@@ -15,6 +15,7 @@ import { libraryViewCounts, prepare } from "./facets";
 import { viewsStore } from "./myViews";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "./scope";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -138,7 +139,7 @@ describe("the way back to all recordings", () => {
   it("Clear all shows whenever a filter is on, and clears every one", async () => {
     render(<App />);
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     const pills = within(screen.getByRole("group", { name: "Filters on" }));
     fireEvent.click(pills.getByRole("button", { name: "Clear all" }));
     atAll();
@@ -152,7 +153,7 @@ describe("the way back to all recordings", () => {
     // All → Unread → Unread with Source: WhatsApp → Audio only, searched.
     fireEvent.click(nav().getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only WhatsApp" })[0]);
+    await filterBySource("WhatsApp");
     await settle();
     fireEvent.click(nav().getByRole("button", { name: /^Audio only, / }));
     await settle();

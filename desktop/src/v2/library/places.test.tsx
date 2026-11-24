@@ -12,6 +12,7 @@ import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { Shell } from "../shell/Shell";
 import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -155,7 +156,7 @@ describe("the Library's places", () => {
     expect(document.querySelector("button[data-row-id=call]")!.closest("li")!.querySelector(".el-rec-state")).toHaveTextContent(/^Waiting$/);
     expect(document.querySelector("button[data-row-id=call]")!.closest("li")).not.toHaveTextContent("Audio only");
     // With a filter that the call doesn't have, it is still listed (as the server's Needs you keeps it).
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Teams" })[0]);
+    await filterBySource("Teams");
     await settle();
     expect(rows()).toEqual(["call", "bad"]);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
@@ -171,7 +172,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     expect(rows()).toEqual(["zoom"]);
     // Projects, then the Library again: Unread with Source: Zoom, as left.
@@ -202,7 +203,7 @@ describe("the Library's places", () => {
     await act(() => new Promise((r) => setTimeout(r, 20)));
     await settle();
     expect(screen.queryByTestId("nav-panel")).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
     fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
@@ -220,7 +221,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     await settle();
     fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
     await settle();
@@ -246,7 +247,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
     await settle();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show only Zoom" })[0]);
+    await filterBySource("Zoom");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "weekly" } });
     await settle();
     fireEvent.click(rail().getByRole("button", { name: /^Projects/ }));
@@ -270,6 +271,22 @@ describe("the Library's places", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
     expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("");
+  });
+
+  it("in the app, ⌘K's \"Show WhatsApp recordings\" is All recordings with Source: WhatsApp (a row's mark no longer filters)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
+    await settle();
+    const palette = screen.getByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "show whatsapp" } });
+    expect(within(palette).getAllByRole("option")[0]).toHaveTextContent("Show WhatsApp recordings");
+    fireEvent.keyDown(palette, { key: "Enter" });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();
+    expect(rows()).toEqual(["wa"]);
   });
 
   it("in the app, All after a view shows every recording again", async () => {

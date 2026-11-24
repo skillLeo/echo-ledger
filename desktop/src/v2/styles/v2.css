@@ -1865,9 +1865,9 @@ span.el-nav-section__title { cursor: default; }
 /* The box: on hover and keyboard focus, always while selecting; it takes no room otherwise. */
 .el-rec__pick { position: relative; display: none; flex: none; }
 .el-rec:hover .el-rec__pick, .el-rec:focus-within .el-rec__pick, .el-rec--picking .el-rec__pick, .el-rec--selected .el-rec__pick { display: inline-flex; }
-.el-rec:hover .el-rec__source, .el-rec:focus-within .el-rec__source { display: none; }
-.el-rec--picking .el-rec__source { display: none; }
-.el-rec__source { position: relative; flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; border-radius: var(--el-radius-full); cursor: pointer; }
+.el-rec:hover .el-rec__mark, .el-rec:focus-within .el-rec__mark { display: none; }
+.el-rec--picking .el-rec__mark { display: none; }
+.el-rec__mark { position: relative; flex: none; display: inline-flex; }
 .el-rec-avatar {
   position: relative; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
