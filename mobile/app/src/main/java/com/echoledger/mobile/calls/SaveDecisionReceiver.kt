@@ -57,7 +57,7 @@ class SaveDecisionReceiver : BroadcastReceiver() {
                     ACTION_AC_SWIPED -> AfterCallActions.swiped(
                         context,
                         ids(intent, id),
-                        postedAt = intent.getLongExtra(EXTRA_POSTED_AT, 0L).takeIf { it > 0 }
+                        postedAt = if (intent.hasExtra(EXTRA_POSTED_AT)) intent.getLongExtra(EXTRA_POSTED_AT, 0L) else null
                     )
 
                     ACTION_AC_ALWAYS -> CallChoice.Pick.of(intent.getStringExtra(EXTRA_PICK))?.let {
@@ -138,7 +138,10 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         const val EXTRA_IDS = "recording_ids"
         const val EXTRA_PICK = "pick"
 
-        /** With [ACTION_AC_SWIPED]: when its notification was posted (its hour running out is not a choice). */
+        /**
+         * With [ACTION_AC_SWIPED]: when its notification was posted, as SystemClock.elapsedRealtime (its hour running out
+         * is not a choice).
+         */
         const val EXTRA_POSTED_AT = "posted_at"
     }
 }
@@ -162,6 +165,7 @@ object Decisions {
             // Nothing is uploaded; a server session that captions opened is deleted, so no transcript is ever made.
             graph.recordings.get(recordingId)?.serverSessionId?.let { DiscardWorker.enqueue(context, recordingId, it) }
             graph.recordings.delete(recordingId)
+            com.echoledger.mobile.notify.AfterCallNotice.groupMemberDone(context, recordingId, ready = false)
         }
         WidgetStateStore.refresh(context)
     }
@@ -400,6 +404,8 @@ object Decisions {
         Notifications.cancelDecision(context, recordingId)
         // Nothing was uploaded; a server session that captions opened is deleted, so no transcript is ever made.
         gone.serverSessionId?.let { DiscardWorker.enqueue(context, recordingId, it) }
+        // One of back-to-back calls sent with Transcribe all, deleted before it was sent: done for their notification.
+        com.echoledger.mobile.notify.AfterCallNotice.groupMemberDone(context, recordingId, ready = false)
         WidgetStateStore.refresh(context)
     }
 

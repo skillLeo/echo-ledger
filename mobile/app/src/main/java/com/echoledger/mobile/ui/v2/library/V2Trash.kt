@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -15,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.ui.MainViewModel
@@ -119,24 +121,29 @@ fun V2TrashContent(
 
             items.isEmpty() -> EchoEmptyState(text.trashEmptyTitle, text.trashKeeps(keepHours), icon = EchoIcons.Delete)
 
-            else -> LazyColumn(Modifier.weight(1f)) {
-                item {
-                    Text(
-                        text.trashKeeps(keepHours),
-                        style = EchoV2.type.meta,
-                        color = c.textSecondary,
-                        modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
-                    )
+            else -> Box(Modifier.weight(1f)) {
+                val trashList = androidx.compose.foundation.lazy.rememberLazyListState()
+                LazyColumn(Modifier.fillMaxSize(), state = trashList) {
+                    item {
+                        Text(
+                            text.trashKeeps(keepHours),
+                            style = EchoV2.type.meta,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
+                        )
+                    }
+                    items(items, key = { it.id }) { bin ->
+                        EchoListRow(
+                            title = bin.title.ifBlank { text.recordings },
+                            meta = eraseDay(bin.eraseAt, locale)?.let(text.erasesOn) ?: bin.client?.name,
+                            leading = { EchoAvatar(icon = EchoIcons.Delete) },
+                            tall = true,
+                            onClick = { actionsFor = bin }
+                        )
+                    }
                 }
-                items(items, key = { it.id }) { bin ->
-                    EchoListRow(
-                        title = bin.title.ifBlank { text.recordings },
-                        meta = eraseDay(bin.eraseAt, locale)?.let(text.erasesOn) ?: bin.client?.name,
-                        leading = { EchoAvatar(icon = EchoIcons.Delete) },
-                        tall = true,
-                        onClick = { actionsFor = bin }
-                    )
-                }
+                // Back to top (UX-25).
+                com.echoledger.mobile.ui.v2.components.EchoBackToTop(trashList, Modifier.align(Alignment.BottomEnd))
             }
         }
     }

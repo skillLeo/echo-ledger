@@ -45,6 +45,7 @@
     <string name="v2_lib_save">Save</string>
     <string name="v2_lib_select">Select</string>
     <string name="v2_lib_sync">Sync now</string>
+    <string name="v2_lib_search_in">Search in %1$s</string>
     <string name="v2_lib_recently_deleted">Recently deleted</string>
     <string name="v2_lib_views">Views</string>
     <string name="v2_lib_source">Source</string>
