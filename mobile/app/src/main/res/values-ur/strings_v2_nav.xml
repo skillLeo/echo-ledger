@@ -42,6 +42,13 @@
     <string name="v2_lib_setup_title">سیٹ اپ مکمل کریں</string>
     <string name="v2_lib_setup_hide">چھپائیں</string>
     <string name="v2_lib_need_calls_off">کالز ریکارڈ نہیں ہو رہیں</string>
+    <string name="v2_lib_need_wont_record">کالز ریکارڈ نہیں ہوں گی</string>
+    <string name="v2_lib_need_wont_record_why">کالز ریکارڈ نہیں ہوں گی: %1$s</string>
+    <string name="v2_lib_need_retry_all">سب دوبارہ آزمائیں</string>
+    <plurals name="v2_lib_need_not_uploaded">
+        <item quantity="one">%1$d اپ لوڈ نہیں ہوئی</item>
+        <item quantity="other">%1$d اپ لوڈ نہیں ہوئیں</item>
+    </plurals>
     <string name="v2_lib_need_waiting_one">1 کال انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
     <string name="v2_lib_need_waiting">%1$d کالز انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
     <string name="v2_lib_need_more">%1$s · %2$d مزید</string>

@@ -330,6 +330,8 @@ class V2LibraryActionsTest : ScreenTest() {
                    "snippet":"the invoice for June","highlights":[[4,11]]}],"hit_count":1}],"next_page":null}"""
             )
         )
+        // The ⌕ in the title row opens search over the page (v2.1 UX-14).
+        compose.onNodeWithContentDescription("Search recordings").performClick()
         compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("invoice")
         compose.waitUntil(10_000) { server.requestsTo("GET", "/api/search").any { it.url.query.orEmpty().contains("q=invoice") } }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Transcripts").fetchSemanticsNodes().isNotEmpty() }
@@ -359,7 +361,8 @@ class V2LibraryActionsTest : ScreenTest() {
     fun syncNowAsksTheServerAgain() {
         seed()
         val before = server.requestsTo("GET", "/api/library").size
-        compose.onNodeWithContentDescription("More").performClick()
+        // The avatar's menu (v2.1 UX-14: no ⋮).
+        compose.onNodeWithContentDescription("Account and settings").performClick()
         click("Sync now")
         pumpUntil("synced") { server.requestsTo("GET", "/api/library").size > before }
     }
@@ -367,8 +370,7 @@ class V2LibraryActionsTest : ScreenTest() {
     @Test
     fun groupByAndDensityAreChosenInTheSheet() {
         seed()
-        // ⋮ › Sort & display (PLAN_LIBRARY_FILTERS §2).
-        compose.onNodeWithContentDescription("More").performClick()
+        // Sort & display, the chips row's last chip (v2.1 UX-14; it was in ⋮).
         click("Sort & display")
         compose.onNode(hasText("Project") and isSelectable()).performSemanticsAction(SemanticsActions.OnClick)
         pumpUntil("grouped") { vm.settings.value.libraryViews.values.any { it.group == "project" } }

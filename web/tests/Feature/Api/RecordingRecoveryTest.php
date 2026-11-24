@@ -346,6 +346,8 @@ describe('the assembly job', function () {
         $id = (string) $this->createSession($bytes)->assertCreated()->json('recordings.0.id');
         $this->uploadAll($id, $bytes, (int) Recording::query()->findOrFail($id)->chunk_size_bytes);
         Queue::fake();
+        // The clock stands still: on a busy machine a second can pass between the request and the check.
+        $this->freezeTime();
 
         $this->postJson("/api/recordings/{$id}/complete")->assertStatus(202);
 

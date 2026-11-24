@@ -4,14 +4,16 @@
 // what its picks do. On Windows, in the browser and in the tests the menu is ours in Windows 11's style
 // (components/Menu.tsx ContextMenu), which the caller shows when popupNative answers false.
 //
-// Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>[=<value>][~<n>]"), heard by the window's
-// one listener, which offers it to runPicked first. Each of these menus' picks carries the menu's number last ("~<n>",
+// Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>[@<target>][=<value>][~<n>]", a target's
+// or value's own "%", "=", "@" and "~" percent-encoded), heard by the window's one listener (menuState.ts), which hands
+// every numbered pick to runPicked (MainApp: setPickedHandler(runPicked)). Each of these menus' picks carries the menu's number last ("~<n>",
 // read off first): runPicked claims every such pick, running it through the item it came from (whose pick goes through
 // the registry) while its menu is the open one, and dropping it once it is not, so a numbered pick never reaches the
 // registry by its bare id. A pick with no number (Record's menu, the menu bar) is not caught here.
 import { api, type NativeMenuItem } from "../../lib/ipc";
 import type { MenuItem } from "../components/Menu";
 import { macTitle, nativeItems, type Platform } from "./registry";
+import { parsePick, type MenuPick } from "./menuState";
 
 /** The platform a menu is for: a Mac's system menus, else Windows's. */
 export function currentPlatform(): Platform {
@@ -33,12 +35,15 @@ export function forgetPicks(): void {
 
 /** A numbered pick's menu number ("recording.pin~5" → 5), read off its end; null for a pick with none. */
 export function menuNumberOf(picked: string): number | null {
-  const m = /~(\d+)$/.exec(picked);
-  return m ? Number(m[1]) : null;
+  return parsePick(picked)?.menu ?? null;
 }
 
-/** What an item of menu `n` comes back as (native_menu.rs item_id): "<id>[=<value>]~<n>". */
-const pickOf = (action: string, choice: string | undefined, n: number) => `${action}${choice !== undefined ? `=${choice}` : ""}~${n}`;
+/**
+ * What an item of menu `n` comes back as, read (menuState.ts parsePick decodes what native_menu.rs encoded): its action,
+ * its choice and the menu's number, so a choice holding "=" or ending in "~12" is matched as itself.
+ */
+const pickOf = (action: string, choice: string | undefined, n: number) => JSON.stringify([action, choice ?? null, n]);
+const keyOf = (pick: MenuPick) => JSON.stringify([pick.id, pick.value ?? null, pick.menu ?? null]);
 
 /** Each item's pick, by what it comes back as: its action, its choice, and this menu's number. */
 function collectPicks(items: readonly MenuItem[], n: number, into: Map<string, () => void>): void {
@@ -76,8 +81,9 @@ export async function popupNative(items: readonly MenuItem[], at: { x: number; y
  * one and dropped once it is not (let go, or an earlier menu's); one with no number is another menu's (false).
  */
 export function runPicked(picked: string): boolean {
-  if (menuNumberOf(picked) === null) return false;
-  const run = picks.get(picked);
+  const pick = parsePick(picked);
+  if (!pick || pick.menu === undefined) return false;
+  const run = picks.get(keyOf(pick));
   if (run) {
     forgetPicks();
     run();

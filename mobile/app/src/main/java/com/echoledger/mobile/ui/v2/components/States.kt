@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -143,20 +144,31 @@ fun EchoBanner(
         contentColor = c.textPrimary,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
     ) {
-        Row(
-            Modifier.padding(
-                start = EchoTokens.Space.s12,
-                end = EchoTokens.Space.s4,
-                top = EchoTokens.Space.s4,
-                bottom = EchoTokens.Space.s4
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-        ) {
-            Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = ink)
-            Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
-            if (actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
-            if (onClose != null) EchoIconButton(EchoIcons.Close, closeLabel ?: "", onClose)
+        val padding = Modifier.padding(
+            start = EchoTokens.Space.s12,
+            end = EchoTokens.Space.s4,
+            top = EchoTokens.Space.s4,
+            bottom = EchoTokens.Space.s4
+        )
+        val line: @Composable (Boolean) -> Unit = { withAction ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
+                Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = ink)
+                Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
+                if (withAction && actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+                if (onClose != null) EchoIconButton(EchoIcons.Close, closeLabel ?: "", onClose)
+            }
+        }
+        if (actionLabel != null && largeText()) {
+            // At 150 % text and more the words keep the width (never one word a line beside Fix and ×): the action goes
+            // under them, at the end, as a page title's actions do.
+            Column(padding) {
+                line(false)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+                }
+            }
+        } else {
+            Box(padding) { line(true) }
         }
     }
 }

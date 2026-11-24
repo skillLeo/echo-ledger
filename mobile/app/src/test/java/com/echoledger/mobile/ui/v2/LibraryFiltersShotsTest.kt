@@ -19,6 +19,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.R
 import com.echoledger.mobile.testsupport.FakeServer
@@ -205,8 +206,10 @@ class LibraryFiltersShotsTest : ScreenTest() {
     fun afterSortAndDisplay() = assertEquals(
         all,
         shoot("after-sort-display") {
-            tapWords(*both(R.string.v2_lib_more))
-            tapWords(*both(R.string.v2_lf_sort_display))
+            // The chips row's last chip since v2.1 (UX-14): scrolled to, then tapped.
+            val chip = both(R.string.v2_lf_sort_display).map { hasText(it) }.reduce { a, b -> a or b } and hasClickAction()
+            compose.onAllNodes(chip).onFirst().performScrollTo().performClick()
+            compose.waitForIdle()
         }
     )
 }

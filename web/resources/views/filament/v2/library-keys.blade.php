@@ -92,7 +92,7 @@
             const everyPage = !! (data && data.isTrackingDeselectedRecords);
             const menu = window.elV2ContextMenu;
             if (act && menu && ! (act === 'selection-menu' && everyPage)
-                && menu.openFor(act === 'selection-menu' ? menu.rowsFor(row) : [row], { x: e.clientX, y: e.clientY }, lib.wire)) {
+                && menu.openFor(act === 'selection-menu' ? menu.rowsFor(row) : [row], { x: e.clientX, y: e.clientY }, lib.wire, false, act === 'selection-menu')) {
                 e.preventDefault();
                 return;
             }

@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -113,6 +114,9 @@ class V2RecordingWiringTest : ScreenTest() {
             )
         )
         shell()
+        // Search is the ⌕ in the Library's title row (UX-14).
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Search recordings")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Search recordings")).performClick()
         compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("invoice")
         compose.waitUntil(10_000) { compose.onAllNodesWithText("the invoice for June").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("the invoice for June").performClick()

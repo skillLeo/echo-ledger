@@ -73,6 +73,7 @@ import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSegmented
 import com.echoledger.mobile.ui.v2.components.EchoTextField
+import com.echoledger.mobile.ui.v2.components.LocalPageMargin
 import com.echoledger.mobile.ui.v2.components.startAlign
 import com.echoledger.mobile.ui.v2.shell.sourceName
 import com.echoledger.mobile.ui.v2.theme.EchoV2
@@ -254,16 +255,26 @@ const val KIND_ROW_TAG = "library-kinds"
 const val PILLS_ROW_TAG = "library-pills"
 
 /**
- * Under the search: [Filters n] (opens the Filters sheet; n the sections on), then All · Calls · Meetings · Voice
- * notes, and Other while it holds something, with how many each holds, one chosen at a time.
+ * Under the title (v2.1 UX-14, 48 dp): [Filters n] (opens the Filters sheet; n the sections on), then All · Calls ·
+ * Meetings · Voice notes, and Other while it holds something, with how many each holds, one chosen at a time; and last
+ * Sort & display ([onSortDisplay]; it was in ⋮).
  */
 @Composable
-fun LibraryKindRow(kind: LibraryKind, counts: Map<LibraryKind, Int>, filtersOn: Int, onKind: (LibraryKind) -> Unit, onFilters: () -> Unit) {
+fun LibraryKindRow(
+    kind: LibraryKind,
+    counts: Map<LibraryKind, Int>,
+    filtersOn: Int,
+    onKind: (LibraryKind) -> Unit,
+    onSortDisplay: (() -> Unit)? = null,
+    onFilters: () -> Unit
+) {
     Row(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
+            // 48 dp (UX-14): the chips' own 48 dp touch areas, nothing above or below them.
+            .heightIn(min = EchoTokens.Layout.controlTouchMin)
+            .padding(horizontal = LocalPageMargin.current)
             .semanticsTag(KIND_ROW_TAG),
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically
@@ -273,6 +284,37 @@ fun LibraryKindRow(kind: LibraryKind, counts: Map<LibraryKind, Int>, filtersOn: 
         LibraryKind.shown(counts).forEach { k ->
             val n = counts[k] ?: 0
             EchoChip(stringResource(R.string.v2_lf_kind_count, kindName(k), n), k == kind, { onKind(k) })
+        }
+        if (onSortDisplay != null) {
+            Box(Modifier.width(EchoTokens.Border.hairline).heightIn(min = EchoTokens.Space.s24).background(EchoV2.colors.borderDefault))
+            RowButton(EchoIcons.Sort, stringResource(R.string.v2_lf_sort_display), onSortDisplay)
+        }
+    }
+}
+
+/** A button the size of a chip, in the chips' row (Sort & display). */
+@Composable
+private fun RowButton(icon: ImageVector, words: String, onClick: () -> Unit) {
+    val c = EchoV2.colors
+    androidx.compose.material3.Surface(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) {},
+        shape = RoundedCornerShape(EchoTokens.Component.chipRadius),
+        color = c.bgSurface,
+        contentColor = c.textPrimary,
+        border = androidx.compose.foundation.BorderStroke(EchoTokens.Border.hairline, c.borderStrong)
+    ) {
+        Row(
+            Modifier
+                .defaultMinSize(minHeight = EchoTokens.Component.chipHeight)
+                .padding(horizontal = EchoTokens.Space.s12),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+        ) {
+            Icon(icon, null, Modifier.size(EchoTokens.Icon.md))
+            Text(words, style = EchoV2.type.label, maxLines = 1)
         }
     }
 }
@@ -328,7 +370,7 @@ fun LibraryPillsRow(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
+            .padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s4)
             .semanticsTag(PILLS_ROW_TAG),
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically
