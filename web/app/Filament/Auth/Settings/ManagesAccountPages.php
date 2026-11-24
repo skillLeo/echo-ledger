@@ -219,7 +219,7 @@ trait ManagesAccountPages
     /** Devices › Sign in a device: a one-time QR and code (10 minutes). */
     public function signInDeviceAction(): Action
     {
-        return Action::make('signInDevice')->label('Sign in a device')
+        return Action::make('signInDevice')->label(__('Sign in a device'))
             ->modalHeading(__('Sign in a phone or computer'))
             ->modalDescription(__('Scan the QR code in the :app app, or type the code. It works once and expires in 10 minutes.', ['app' => Brand::name()]))
             ->fillForm(function (PairingService $pairing): array {
@@ -244,29 +244,29 @@ trait ManagesAccountPages
             ->modalHeading(fn (array $arguments): string => $this->ownDevice($arguments)->readableName())
             ->modalWidth('md')
             ->fillForm(fn (array $arguments): array => ['name' => $this->ownDevice($arguments)->readableName()])
-            ->schema([TextInput::make('name')->label('Name')->required()->maxLength(60)])
-            ->modalSubmitActionLabel('Save')
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(60)])
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (array $data, array $arguments): void {
                 $device = $this->ownDevice($arguments);
                 $device->forceFill(['name' => trim((string) $data['name']), 'name_chosen' => true])->save();
-                Notification::make()->title('Device renamed')->success()->send();
+                Notification::make()->title(__('Device renamed'))->success()->send();
             })
             ->extraModalFooterActions(fn (array $arguments): array => array_values(array_filter([
-                $this->ownDevice($arguments)->signed_out_at === null ? Action::make('signOutDevice')->label('Sign out')->color('danger')
-                    ->requiresConfirmation()->modalHeading('Sign out '.$this->ownDevice($arguments)->readableName().'?')
-                    ->modalDescription('It will need to sign in again.')->modalSubmitActionLabel('Sign out')->modalIcon(null)
+                $this->ownDevice($arguments)->signed_out_at === null ? Action::make('signOutDevice')->label(__('Sign out'))->color('danger')
+                    ->requiresConfirmation()->modalHeading(__('Sign out :name?', ['name' => $this->ownDevice($arguments)->readableName()]))
+                    ->modalDescription(__('It will need to sign in again.'))->modalSubmitActionLabel(__('Sign out'))->modalIcon(null)
                     ->action(function () use ($arguments): void {
                         $done = app(AccountSessions::class)->revokeDevice($this->account(), (string) $arguments['device']);
-                        Notification::make()->title($done ? 'Device signed out' : 'That device was already signed out')->success()->send();
+                        Notification::make()->title($done ? __('Device signed out') : __('That device was already signed out'))->success()->send();
                     })->cancelParentActions() : null,
-                $this->ownDevice($arguments)->status() !== Device::ACTIVE ? Action::make('reauthDevice')->label('Sign in again')->color('gray')
+                $this->ownDevice($arguments)->status() !== Device::ACTIVE ? Action::make('reauthDevice')->label(__('Sign in again'))->color('gray')
                     ->action(fn () => $this->replaceMountedAction('signInAgain', ['device' => $arguments['device']])) : null,
-                $this->ownDevice($arguments)->signed_out_at !== null ? Action::make('forgetDevice')->label('Remove from list')->color('danger')
-                    ->requiresConfirmation()->modalHeading('Remove '.$this->ownDevice($arguments)->readableName().' from the list?')
-                    ->modalDescription(null)->modalSubmitActionLabel('Remove')->modalIcon(null)
+                $this->ownDevice($arguments)->signed_out_at !== null ? Action::make('forgetDevice')->label(__('Remove from list'))->color('danger')
+                    ->requiresConfirmation()->modalHeading(__('Remove :name from the list?', ['name' => $this->ownDevice($arguments)->readableName()]))
+                    ->modalDescription(null)->modalSubmitActionLabel(__('Remove'))->modalIcon(null)
                     ->action(function () use ($arguments): void {
                         $done = app(AccountSessions::class)->removeDevice($this->account(), (string) $arguments['device']);
-                        Notification::make()->title($done ? 'Removed from the list' : 'That device was already removed')->success()->send();
+                        Notification::make()->title($done ? __('Removed from the list') : __('That device was already removed'))->success()->send();
                     })->cancelParentActions() : null,
             ])));
     }

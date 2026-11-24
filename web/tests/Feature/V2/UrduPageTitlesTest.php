@@ -185,6 +185,40 @@ it('opens Settings › Devices\' Sign in a device and Sign in again windows from
         && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.');
 });
 
+it('words Settings › Devices\' button and each device\'s window (name, sign out, remove) in Urdu in the new frame, and as before in classic (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $name = $device->fresh()->readableName();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    $settings = fn () => Livewire::test(EditProfile::class, ['subpage' => 'devices']);
+    $window = TestAction::make('device')->arguments(['device' => $device->id]);
+    // The window's buttons (Sign out, Sign in again, Remove from list) as the mounted window carries them.
+    $footer = fn ($page): array => array_values(array_map(fn (Action $a): string => (string) $a->getLabel(), $page->instance()->getMountedAction()->getExtraModalFooterActions()));
+
+    $as(false, 'en');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getLabel() === 'Sign in a device');
+    expect(mountedWindow($settings()->mountAction($window))['name']->getLabel())->toBe('Name');
+    expect($footer($settings()->mountAction($window)))->toBe(['Sign in again', 'Remove from list']);
+    expect($settings()->mountAction([$window, TestAction::make('forgetDevice')])->instance()->getMountedAction()->getModalHeading())->toBe('Remove '.$name.' from the list?');
+
+    $as(true, 'ur');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getLabel() === 'ڈیوائس سائن اِن کریں');
+    expect(mountedWindow($settings()->mountAction($window))['name']->getLabel())->toBe('نام');
+    expect($footer($settings()->mountAction($window)))->toBe(['دوبارہ سائن اِن کریں', 'فہرست سے ہٹائیں']);
+    expect((string) $settings()->mountAction([$window, TestAction::make('forgetDevice')])->instance()->getMountedAction()->getModalHeading())
+        ->toContain('کو فہرست سے ہٹائیں؟')->toContain($name);
+    $settings()->callAction([$window, TestAction::make('forgetDevice')])->assertNotified('فہرست سے ہٹا دی گئی');
+});
+
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {
     $as = function (bool $v2, string $language): void {
         webParityDesign($v2);
