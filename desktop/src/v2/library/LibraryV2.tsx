@@ -885,13 +885,22 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         return out;
       });
     };
-    put(() => ({ opened: !unread, read: !unread }));
+    const marked = { opened: !unread, read: !unread };
+    put(() => marked);
+    // One at a time; what the server took is kept whatever happens after.
+    const done = new Set<string>();
     try {
-      for (const id of was.keys()) await (unread ? api.markUnopened(id) : api.markOpened(id));
+      for (const id of was.keys()) {
+        await (unread ? api.markUnopened(id) : api.markOpened(id));
+        done.add(id);
+      }
+      // Once more: a sync answered meanwhile from the copy saved before the marks undid them.
+      put(() => marked);
       say(`Marked ${recordingsWord(was.size)} as ${unread ? "unread" : "read"}`);
     } catch (e) {
-      put((id) => was.get(id)!);
-      sayProblem(say, errorMessage(e));
+      // Only what was not done goes back; the rest stays marked, and the problem says how many went.
+      put((id) => (done.has(id) ? marked : was.get(id)!));
+      sayProblem(say, done.size ? `${done.size} of ${was.size} marked as ${unread ? "unread" : "read"} · ${errorMessage(e)}` : errorMessage(e));
     }
   };
 

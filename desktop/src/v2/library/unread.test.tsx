@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
-import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 
@@ -110,5 +110,39 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     await act(flushAsync);
     expect(dotOf("Bilal Qureshi")).toBeNull();
     expect(screen.getByText(/Mark as unread needs a newer EchoLedger server/)).toBeInTheDocument();
+  });
+
+  it("a sync that lands while the server is asked, with the copy from before, never takes the dot away again", async () => {
+    let answer: () => void = () => undefined;
+    respondWith("session_unopen", () => new Promise<null>((resolve) => { answer = () => resolve(null); }));
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 40, clientY: 60 });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Mark as unread/ }));
+    expect(dotOf("Bilal Qureshi")).not.toBeNull();
+    // The saved Library read again before the mark is written: Bilal still opened in it.
+    await emitEvent("library:updated", 0);
+    await act(flushAsync);
+    expect(dotOf("Bilal Qureshi")).toBeNull();
+    await act(async () => { answer(); await flushAsync(); });
+    expect(dotOf("Bilal Qureshi")).not.toBeNull();
+    expect(screen.getByText("Marked 1 recording as unread")).toBeInTheDocument();
+  });
+
+  it("a failure partway: what the server took stays, the rest is put back, and it says how many", async () => {
+    respond("library_list", ITEMS.map((i) => ({ ...i, opened: true })));
+    respond("library_refresh", ITEMS.map((i) => ({ ...i, opened: true })));
+    respondWith("session_unopen", (args) => ((args as { id: string }).id === "usman" ? Promise.reject("The server did not answer.") : Promise.resolve(null)));
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    fireEvent.contextMenu(row("Usman Chaudhry"), { clientX: 40, clientY: 60 });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Mark as unread/ }));
+    await act(flushAsync);
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(["bilal", "usman"]);
+    expect(dotOf("Bilal Qureshi")).not.toBeNull();
+    expect(dotOf("Usman Chaudhry")).toBeNull();
+    expect(screen.getByText(/1 of 2 marked as unread/)).toBeInTheDocument();
   });
 });
