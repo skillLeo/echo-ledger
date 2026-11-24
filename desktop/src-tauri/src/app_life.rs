@@ -105,8 +105,9 @@ async fn ask(app: &tauri::AppHandle) -> bool {
     #[cfg(target_os = "macos")]
     {
         let (tx, rx) = tokio::sync::oneshot::channel();
+        let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
-            let _ = tx.send(objc2::MainThreadMarker::new().is_some_and(mac::ask_quit));
+            let _ = tx.send(objc2::MainThreadMarker::new().is_some_and(|mtm| mac::ask_quit(&handle, mtm)));
         });
         rx.await.unwrap_or(false)
     }
@@ -219,7 +220,7 @@ pub mod mac {
 
     /// "Stop the recording and quit?" as the app's own alert, hidden from screen shares as its other windows are. True
     /// for Stop and Quit. On the main thread; it waits for the answer.
-    pub fn ask_quit(mtm: MainThreadMarker) -> bool {
+    pub fn ask_quit(app: &AppHandle, mtm: MainThreadMarker) -> bool {
         let (title, body, stop, cancel) = QUIT_WHILE_RECORDING;
         let alert = NSAlert::new(mtm);
         alert.setAlertStyle(NSAlertStyle::Warning);
@@ -227,8 +228,11 @@ pub mod mac {
         alert.setInformativeText(&NSString::from_str(body));
         alert.addButtonWithTitle(&NSString::from_str(stop));
         alert.addButtonWithTitle(&NSString::from_str(cancel));
-        crate::privacy::hide_question(&alert.window());
-        alert.runModal() == NSAlertFirstButtonReturn
+        let window = alert.window();
+        crate::privacy::hide_question(app, &window);
+        let answer = alert.runModal() == NSAlertFirstButtonReturn;
+        crate::privacy::question_closed(app, &window);
+        answer
     }
 
     static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -285,7 +289,7 @@ pub mod mac {
             TerminatePlan::Keep => {}
             // The Dock's Quit: asked first, here (AppKit waits for this answer); Cancel and nothing quits.
             TerminatePlan::Ask => match MainThreadMarker::new() {
-                Some(mtm) if ask_quit(mtm) => {}
+                Some(mtm) if ask_quit(app, mtm) => {}
                 _ => return NSApplicationTerminateReply::TerminateCancel.0,
             },
         }
@@ -347,7 +351,7 @@ mod tests {
         let ask = mac.find("TerminatePlan::Ask =>").unwrap();
         assert!(ask < mac.find("dispatch2::DispatchQueue::main().after(when, reply_once)").unwrap(), "the backstop after the question");
         // The question is the app's own alert, hidden from screen shares.
-        assert!(mac.contains("crate::privacy::hide_question(&alert.window());"), "hidden by the privacy service, as every window is");
+        assert!(mac.contains("crate::privacy::hide_question(app, &window);"), "hidden by the privacy service, as every window is");
     }
 
     #[test]

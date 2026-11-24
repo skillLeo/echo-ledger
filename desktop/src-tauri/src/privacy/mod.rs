@@ -386,6 +386,9 @@ pub struct Privacy {
     held_back: Mutex<BTreeSet<String>>,
     /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
     bar_on_screen: AtomicBool,
+    /// The app's own questions on screen now (FIX-11's quit question), by their window: hidden from shares whatever the
+    /// settings, so the system windows' sealing (`seal_others`) leaves them as they are.
+    questions: Mutex<BTreeSet<usize>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -408,6 +411,19 @@ impl Privacy {
 
     pub fn kind_of(&self, label: &str) -> Option<Kind> {
         lock(&self.registry).get(label).copied()
+    }
+
+    /// A question of the app's own is up in this window (until [`Privacy::question_closed`]).
+    pub fn question_open(&self, window: usize) {
+        lock(&self.questions).insert(window);
+    }
+
+    pub fn question_closed(&self, window: usize) {
+        lock(&self.questions).remove(&window);
+    }
+
+    pub fn questions(&self) -> BTreeSet<usize> {
+        lock(&self.questions).clone()
     }
 
     pub fn registered(&self) -> Vec<(String, Kind)> {
@@ -1261,11 +1277,28 @@ pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// A question the app asks in a window of its own (FIX-11: "Stop the recording and quit?"): hidden from screen shares
-/// before it shows, whatever the settings, as a question about the person's recording is theirs alone. Set here, as
-/// every window's flag is (I-02).
+/// before it shows, whatever the settings, as a question about the person's recording is theirs alone, and kept so
+/// while it is up (`seal_others` leaves it; [`question_closed`] when it goes). Set here, as every window's flag is (I-02).
 #[cfg(target_os = "macos")]
-pub fn hide_question(window: &objc2_app_kit::NSWindow) {
+pub fn hide_question<R: Runtime>(app: &AppHandle<R>, window: &objc2_app_kit::NSWindow) {
+    if let Some(privacy) = app.try_state::<Privacy>() {
+        privacy.question_open(window as *const objc2_app_kit::NSWindow as usize);
+    }
     window.setSharingType(objc2_app_kit::NSWindowSharingType::None);
+}
+
+/// The question's window went.
+#[cfg(target_os = "macos")]
+pub fn question_closed<R: Runtime>(app: &AppHandle<R>, window: &objc2_app_kit::NSWindow) {
+    if let Some(privacy) = app.try_state::<Privacy>() {
+        privacy.question_closed(window as *const objc2_app_kit::NSWindow as usize);
+    }
+}
+
+/// Whether the system windows' sealing sets this window's flag (pure): not one of EchoLedger's registered windows (the
+/// service sets theirs), nor a question of the app's own that is up (hidden whatever the settings).
+pub fn seals(window: usize, ours: &BTreeSet<usize>, questions: &BTreeSet<usize>) -> bool {
+    !ours.contains(&window) && !questions.contains(&window)
 }
 
 /// macOS: every NSWindow of this process that is not one of EchoLedger's registered windows (made by the system, see
@@ -1280,12 +1313,13 @@ pub fn seal_others<R: Runtime>(app: &AppHandle<R>) {
         use objc2_app_kit::{NSApplication, NSWindowSharingType};
         let (Some(privacy), Some(mtm)) = (handle.try_state::<Privacy>(), MainThreadMarker::new()) else { return };
         let ours: BTreeSet<usize> = privacy.registered().iter().filter_map(|(label, _)| handle.get_webview_window(label)?.ns_window().ok()).map(|p| p as usize).collect();
+        let questions = privacy.questions();
         let protect = others_protected(&choice_now(&handle));
         let sharing = if protect { NSWindowSharingType::None } else { NSWindowSharingType::ReadOnly };
         let windows = NSApplication::sharedApplication(mtm).windows();
         for i in 0..windows.count() {
             let window = windows.objectAtIndex(i);
-            if !ours.contains(&(objc2::rc::Retained::as_ptr(&window) as usize)) && window.sharingType() != sharing {
+            if seals(objc2::rc::Retained::as_ptr(&window) as usize, &ours, &questions) && window.sharingType() != sharing {
                 window.setSharingType(sharing);
             }
         }
@@ -1851,6 +1885,26 @@ mod tests {
                 out.push(path);
             }
         }
+    }
+
+    #[test]
+    fn the_system_windows_sealing_leaves_a_question_of_the_app_s_own_hidden_while_it_is_up() {
+        let ours: BTreeSet<usize> = [1].into();
+        let mut questions: BTreeSet<usize> = BTreeSet::new();
+        assert!(seals(7, &ours, &questions), "a system window: sealed as the floating windows are");
+        assert!(!seals(1, &ours, &questions), "EchoLedger's own: the service sets them");
+        let p = Privacy::new();
+        p.question_open(7);
+        questions = p.questions();
+        assert!(!seals(7, &ours, &questions), "the quit question stays hidden from shares while it is up");
+        p.question_closed(7);
+        assert!(seals(7, &ours, &p.questions()), "gone: its window is a system window again");
+        // seal_others asks `seals` with the questions; the quit question records itself and is let go when answered.
+        let code = include_str!("mod.rs").split("#[cfg(test)]").next().unwrap();
+        let seal = &code[code.find("pub fn seal_others<R: Runtime>").unwrap()..];
+        assert!(seal[..seal.find("\n}\n").unwrap()].contains("if seals(objc2::rc::Retained::as_ptr(&window) as usize, &ours, &questions)"));
+        let app_life = include_str!("../app_life.rs");
+        assert!(app_life.contains("crate::privacy::hide_question(app, &window);") && app_life.contains("crate::privacy::question_closed(app, &window);"));
     }
 
     #[test]

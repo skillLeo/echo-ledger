@@ -87,8 +87,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
-        Some(hide) => crate::tray::MainShare::Hidden(format!("Hidden from screen shares {}", crate::privacy::share::until_words(&hide, chrono::Local::now()))),
-        None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
+        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::menu_line(&hide, chrono::Local::now())),
+        None => crate::tray::MainShare::Shown,
     });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
     let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));

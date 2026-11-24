@@ -278,8 +278,8 @@ struct MenuShape {
 /// The main window in screen shares, as the tray says it (v2.0).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MainShare {
-    /// Shown: "Hide from screen shares" opens the durations; `call`: "Until this call ends" is offered.
-    Shown { call: bool },
+    /// Shown: Hide from Screen Shares › offers the set's times.
+    Shown,
     /// Hidden: the line ("Hidden from screen shares until 14:30"), above the set with its Stop Hiding.
     Hidden(String),
 }
@@ -831,7 +831,7 @@ mod tests {
 
     #[test]
     fn recording_says_its_state_and_time_with_stop_pause_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, mic_note: false, review: 2, auto: false, calls_ready: Some(false), viewer: None, main_share: Some(MainShare::Shown { call: false }), held_back: None, hidden: None, translate: false };
+        let shape = MenuShape { recording: true, paused: true, mic_note: false, review: 2, auto: false, calls_ready: Some(false), viewer: None, main_share: Some(MainShare::Shown), held_back: None, hidden: None, translate: false };
         let labels = labels(&shape);
         assert_eq!(labels[0], "Paused", "its time comes once a second (tick)");
         assert!(!labels.contains(&"Fix…".to_string()), "while recording the first line is the recording's");
@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     fn hide_from_screen_shares_is_the_one_set_every_menu_has() {
-        let shown = labels(&MenuShape { main_share: Some(MainShare::Shown { call: true }), ..MenuShape::default() });
+        let shown = labels(&MenuShape { main_share: Some(MainShare::Shown), ..MenuShape::default() });
         assert!(shown.contains(&"Hide from screen shares ▸ For 15 minutes | For 1 hour | Until I quit | Until I turn it off".to_string()), "{shown:?}");
         // While hidden: what for (greyed), and Stop hiding at the end of the set.
         let hidden_shape = MenuShape { main_share: Some(MainShare::Hidden("Hidden from screen shares until 14:30".into())), ..MenuShape::default() };
