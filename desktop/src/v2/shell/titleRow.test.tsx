@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { EVERYTHING, TitleRow, searchFits, type TitleRowProps } from "./TitleRow";
+import { EVERYTHING, SHORT_FIELD, TitleRow, searchFits, type TitleRowProps } from "./TitleRow";
 
 const base: TitleRowProps = { place: "library", title: null, toggle: null, back: null, forward: null, onEverything: () => undefined };
 const row = () => screen.getByTestId("title-row");
@@ -148,6 +148,31 @@ describe("the title row (UX-20)", () => {
       Element.prototype.getBoundingClientRect = rect;
       if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
       if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll);
+    }
+  });
+
+  it("a field under 220 px says \"Search\"; its full words stay its name, never cut", () => {
+    // The owner's ask: no label loses its words. A narrow field's placeholder is the short word; the page's words
+    // ("Search recordings") stay the field's accessible name. Under right-to-left (an Urdu reader) it is the same: the
+    // desktop's own words are English.
+    const Real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { observe() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    let field = SHORT_FIELD - 20;
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() {
+      return this.classList?.contains("el-titlerow") ? 600 : this.classList?.contains("el-titlerow__middle") ? field : 0;
+    } });
+    try {
+      const props = { ...base, place: "library" as const, title: { title: "All recordings", count: 253, search: { query: "", setQuery: () => undefined, placeholder: "Search recordings", scope: "All recordings" } } };
+      const narrow = render(<TitleRow {...props} />);
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", "Search");
+      narrow.unmount();
+      field = SHORT_FIELD;
+      render(<TitleRow {...props} />);
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", "Search recordings");
+    } finally {
+      globalThis.ResizeObserver = Real;
+      if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
     }
   });
 

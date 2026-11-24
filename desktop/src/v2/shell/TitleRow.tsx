@@ -20,6 +20,9 @@ export const SEARCH_WORDS: Partial<Record<Place, string>> = {
   library: "Search recordings", projects: "Search projects", settings: "Search settings",
 };
 export const EVERYTHING = "Search everything";
+/** Below this width the field's placeholder is the short word: its full words (and the scope's chip) stay its name. */
+export const SHORT_FIELD = 220;
+export const SHORT_WORDS = "Search";
 
 /** The field's least width and the least drag room left between the title and the field (tokens desktop.search.*). */
 export const FIELD_LEAST = 180;
@@ -62,6 +65,8 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
   const [fits, setFits] = useState(true);
   // The title's words cut (only in a window under the least width, next to the ⌕ button): its tooltip says them.
   const [cut, setCut] = useState(false);
+  // A narrow field says "Search" (its full words stay its name and tooltip).
+  const [short, setShort] = useState(false);
   // The field becomes a button when the row has no room for it beside the whole title (measured; in a test there is
   // no layout). The title's group is measured at its full width, its words uncut.
   useLayoutEffect(() => {
@@ -79,6 +84,8 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
       setFits(searchFits(inner, whole(start.current), whole(tail.current)));
       const name = el.querySelector(".el-titlerow__name") as HTMLElement | null;
       setCut(!!name && name.scrollWidth > name.clientWidth + 0.5);
+      const middle = el.querySelector(".el-titlerow__middle") as HTMLElement | null;
+      setShort(!!middle && middle.clientWidth > 0 && middle.clientWidth < SHORT_FIELD);
     };
     const watch = new ResizeObserver(measure);
     watch.observe(el);
@@ -143,7 +150,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
                 </button>
               </span>
             )}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={search.placeholder} value={search.query} dir="auto"
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={search.query} dir="auto"
               aria-keyshortcuts="Meta+F Control+F" onChange={(e) => search.setQuery(e.target.value)} onFocus={() => setScoped(true)}
               onBlur={() => setScoped(false)}
               onKeyDown={(e) => {
@@ -156,9 +163,10 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
             <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </div>
         ) : (
-          <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" onClick={() => everything("")}>
+          <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" aria-label={words}
+            title={`${words} (${everyKeys})`} onClick={() => everything("")}>
             <Icon icon={Icons.SearchIcon} />
-            <span className="el-titlerow__placeholder">{words}</span>
+            <span className="el-titlerow__placeholder">{short ? SHORT_WORDS : words}</span>
             <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </button>
         )}

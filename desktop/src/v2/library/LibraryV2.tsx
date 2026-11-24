@@ -21,6 +21,7 @@ import {
 } from "../components";
 import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
 import { RecordingRow } from "./RecordingRow";
+import { useFitRow } from "./fitRow";
 import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
@@ -748,6 +749,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const shown = useMemo(() => groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), [groups, collapsed]);
   const matching = shownItems.length;
   const filtersOn = activeSections(spec).length;
+  // Row 2 never cuts a label: the end's words go first, then the tabs scroll (fitRow.ts).
+  const row2 = useRef<HTMLDivElement>(null);
+  const row2Tabs = useRef<HTMLDivElement>(null);
+  const row2End = useRef<HTMLDivElement>(null);
+  const row2Fit = useFitRow(row2, row2Tabs, row2End, filtersOn);
   /** The list as drawn (for a delete's next row): the rows on screen, folded sections left out. */
   const listOf = (_all: readonly LibraryItem[] | null) => ({ rows: shown });
 
@@ -1591,8 +1597,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             </div>
           ) : !trash && (
             // Row 2 (40 px): the kinds on the start side (Other only while it has recordings), the list's controls on the end.
-            <div className="el-lib-row2">
-              <div className="el-lib-tabs" role="tablist" aria-label="Kinds of recording">
+            <div ref={row2} className="el-lib-row2">
+              <div ref={row2Tabs} className={`el-lib-tabs${row2Fit.scrolls ? " el-lib-tabs--scrolls" : ""}`} role="tablist" aria-label="Kinds of recording">
                 {tabsShown.map((t) => (
                   <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
                     onClick={() => setTab(t)} onKeyDown={(e) => {
@@ -1611,13 +1617,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                   </button>
                 ))}
               </div>
-              <div className="el-lib-row2__end">
+              <div ref={row2End} className="el-lib-row2__end">
                 <Button size="sm" variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
+                  aria-label={row2Fit.labels ? undefined : filtersOn ? `Filters, ${filtersOn}` : "Filters"}
                   title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
-                  Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                  {row2Fit.labels && "Filters"}{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
                 </Button>
                 <Menu label="Sort & display" items={displayMenu}
-                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: row2Fit.labels ? "Sort & display" : undefined,
+                    title: `Sort & display: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
               </div>
             </div>
           )}

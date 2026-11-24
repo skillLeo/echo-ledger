@@ -1853,14 +1853,26 @@ span.el-nav-section__title { cursor: default; }
   min-block-size: var(--el-space-40);
   border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
-.el-lib-row2__end { display: flex; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
+.el-lib-row2__end { display: flex; flex: none; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
 .el-lib-row2.el-selectbar { padding-inline-start: var(--el-space-16); }
 .el-lib-row2.el-selectbar .el-lib-toolbar__all { margin: 0; }
 .el-lib-row2__selected { margin-block: 0; margin-inline-start: var(--el-space-4); font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 /* The page's tabs: All · Calls · Meetings · Voice notes (· Other) with their counts, grey with tabular figures. */
-.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); }
+/* A tab's words never wrap or get cut: with no room the end's labels go first (fitRow.ts), then the tabs scroll sideways
+   as the list chips' row does: one line, no fade (no gradients, DS rule 1), no scrollbar drawn; the tab at the edge
+   shows there is more. */
+.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); flex: 0 1 auto; min-inline-size: 0; }
+/* While they scroll the scroller reaches over the row's hairline, so the chosen tab's line still sits on it, and a
+   tab's focus ring is drawn inside it, where the scroller cannot cut it. */
+.el-lib-tabs--scrolls {
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
+  margin-block-end: calc(-1 * var(--el-border-hairline));
+}
+.el-lib-tabs--scrolls::-webkit-scrollbar { display: none; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab { margin-block-end: 0; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab:focus-visible { outline-offset: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset))); }
 .el-lib-tabs__tab {
-  display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer;
+  display: inline-flex; flex: none; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer; white-space: nowrap;
   padding-block: 0; padding-inline: var(--el-space-12); color: var(--el-role-text-secondary); border-block-end: var(--el-border-strong) solid transparent; margin-block-end: calc(-1 * var(--el-border-hairline));
 }
 .el-lib-tabs__tab:hover { color: var(--el-role-text-primary); }
