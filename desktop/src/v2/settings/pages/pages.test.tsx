@@ -504,6 +504,7 @@ describe("Screen moments v2", () => {
     expect(more.tagName).toBe("DETAILS");
     expect(more).not.toHaveAttribute("open");
     expect(within(more).getByText("Learn more").tagName).toBe("SUMMARY");
+    expect(within(more).getByText("Learn more")).toHaveAccessibleName("Learn more about screen moments");
     expect(more).toHaveTextContent("Screens are stored encrypted on this computer until they reach your server");
     expect(more).toHaveTextContent(TARGET_HINT.meeting_window);
     expect(more).toHaveTextContent("Windows 10 draws a yellow border around the meeting window while screens are on.");

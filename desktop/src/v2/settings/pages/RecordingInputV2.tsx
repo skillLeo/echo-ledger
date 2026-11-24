@@ -173,7 +173,7 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
       </Group>
       {/* Learn more: what screen moments are, and this platform's notes, in full. */}
       <details className="el-group__note el-caption el-secondary" data-testid="screen-learn-more">
-        <summary>Learn more</summary>
+        <summary aria-label="Learn more about screen moments">Learn more</summary>
         <p>
           During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at
           this page”, so the transcript knows what was on screen. Screens are stored encrypted on this computer until they
