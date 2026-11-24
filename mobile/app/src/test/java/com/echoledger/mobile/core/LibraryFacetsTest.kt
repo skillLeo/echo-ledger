@@ -81,6 +81,22 @@ class LibraryFacetsTest {
         assertEquals(listOf(LibraryKind.ALL, LibraryKind.VOICE_NOTES), tabsOf("voice_note", kind = null))
     }
 
+    /**
+     * Review of I-07: a chosen Other goes back to All only once it has nothing and either had something on the page or
+     * the library has synced; a first frame with the library not read yet (back from the background) keeps it.
+     */
+    @Test
+    fun aChosenOtherSurvivesAFirstFrameBeforeTheLibraryIsRead() {
+        // The first frame after the page is made again: nothing read yet, nothing had, not synced.
+        assertTrue(!LibraryKind.backToAll(LibraryKind.OTHER, otherCount = 0, otherHad = false, synced = false))
+        // Other emptied by a filter or a search while it was on screen, or a synced library with none: All.
+        assertTrue(LibraryKind.backToAll(LibraryKind.OTHER, otherCount = 0, otherHad = true, synced = false))
+        assertTrue(LibraryKind.backToAll(LibraryKind.OTHER, otherCount = 0, otherHad = false, synced = true))
+        // Something in it, or another tab chosen: nothing changes.
+        assertTrue(!LibraryKind.backToAll(LibraryKind.OTHER, otherCount = 2, otherHad = true, synced = true))
+        assertTrue(!LibraryKind.backToAll(LibraryKind.CALLS, otherCount = 0, otherHad = true, synced = true))
+    }
+
     @Test
     fun otherIsATabOnlyWhileItHoldsSomething() {
         assertEquals(

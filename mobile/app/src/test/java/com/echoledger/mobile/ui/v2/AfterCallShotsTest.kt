@@ -102,11 +102,10 @@ class AfterCallShotsTest : ScreenTest() {
         AfterCallNotice.resetForTest(app)
     }
 
-    /** Draws [part] in every variant, on the app's canvas colour; saves `<name>-<variant>.png`. */
-
     /** The part drawn shows the app's own logo (the card, the bar): its icon is waited for. */
     private var logo = false
 
+    /** Draws [part] in every variant, on the app's canvas colour; saves `<name>-<variant>.png`. */
     private fun shoot(
         name: String,
         only: List<Triple<Boolean, EchoLanguage, Float>> = variants,

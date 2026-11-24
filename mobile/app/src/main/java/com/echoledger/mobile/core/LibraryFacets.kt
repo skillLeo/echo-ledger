@@ -175,6 +175,14 @@ enum class LibraryKind(val wire: String, val kind: String?, val sources: Set<Str
         /** The contract's table: a Source in no list (or none) is Other. */
         fun fromSource(source: String?): LibraryKind = KINDS.firstOrNull { k -> k.sources?.contains(source) == true } ?: OTHER
 
+        /**
+         * Whether a chosen Other goes back to All: only once it has nothing, and only once it had something on this page
+         * ([otherHad]) or the library has synced ([synced]). A first frame before the library is read (back from the
+         * background, the process made again) keeps the Other the person chose.
+         */
+        fun backToAll(chosen: LibraryKind, otherCount: Int, otherHad: Boolean, synced: Boolean): Boolean =
+            chosen == OTHER && otherCount == 0 && (otherHad || synced)
+
         /** The tabs to show: Other only while it holds something. */
         fun shown(counts: Map<LibraryKind, Int>): List<LibraryKind> = entries.filter { it != OTHER || (counts[OTHER] ?: 0) > 0 }
     }
