@@ -801,6 +801,7 @@
     "Renamed to “:title”": "نیا نام “:title” رکھ دیا گیا",
     "Clear search and filters": "تلاش اور فلٹرز صاف کریں",
     "Show all recordings": "تمام ریکارڈنگز دکھائیں",
+    "Back to top": "اوپر جائیں",
     "Upload a voice note": "وائس نوٹ اپ لوڈ کریں",
     "No recordings match your search": "آپ کی تلاش سے کوئی ریکارڈنگ نہیں ملی",
     "No recordings match these filters": "ان فلٹرز سے کوئی ریکارڈنگ نہیں ملی",
@@ -1106,5 +1107,6 @@
     "Mark as read": "پڑھا ہوا کریں",
     "Copy link": "لنک کاپی کریں",
     "Share with people…": "لوگوں کے ساتھ شیئر کریں…",
+    "Share with people": "لوگوں کے ساتھ شیئر کریں",
     "Up to :max at a time: unselect :count": "ایک وقت میں زیادہ سے زیادہ :max: :count کا انتخاب ہٹائیں"
 }

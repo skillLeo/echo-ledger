@@ -1,11 +1,12 @@
 {{--
     Back to where the page belongs (v2.0), above its title: the chevron turns over right to left. A recording's page also
     has Previous / Next recording at the end of the line (WEB-REC-007): two 44 px icon buttons, ‹ ›, mirrored right to
-    left, turned off at the ends of the list.
+    left, turned off at the ends of the list. Since UX-25 the recording it is (data-recording-page): the Library tints it
+    on the way back, and "Library" goes back to the list as it was left (filament.v2.keep-place).
 --}}
 @if (isset($neighbours))
     @php($rtl = \App\Filament\Support\ConsoleV2::rtl())
-    <div class="v2-viewer-head" data-recording-nav>
+    <div class="v2-viewer-head" data-recording-nav @isset($recording) data-recording-page="{{ $recording }}" @endisset>
         <a href="{{ $url }}" class="v2-back"><x-el.v2.icon name="chevron-start" />{{ $label }}</a>
         <span class="v2-tb-spacer"></span>
         @foreach (['previous' => ['Previous recording', $rtl ? 'heroicon-o-chevron-right' : 'heroicon-o-chevron-left'], 'next' => ['Next recording', $rtl ? 'heroicon-o-chevron-left' : 'heroicon-o-chevron-right']] as $key => [$words, $icon])
