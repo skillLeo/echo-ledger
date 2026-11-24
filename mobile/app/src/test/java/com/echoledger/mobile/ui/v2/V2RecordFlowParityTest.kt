@@ -70,6 +70,44 @@ class V2RecordFlowParityTest : ScreenTest() {
         }
     }
 
+    /** The pickers the page asked for (no system picker in a test). */
+    private class Pickers : androidx.activity.result.ActivityResultRegistryOwner {
+        val asked = mutableListOf<List<String>>()
+
+        override val activityResultRegistry = object : androidx.activity.result.ActivityResultRegistry() {
+            override fun <I : Any?, O : Any?> onLaunch(
+                requestCode: Int,
+                contract: androidx.activity.result.contract.ActivityResultContract<I, O>,
+                input: I,
+                options: androidx.core.app.ActivityOptionsCompat?
+            ) {
+                asked += (input as? Array<*>)?.map { it.toString() }.orEmpty()
+            }
+        }
+    }
+
+    /** v2.1 UX-15: the New sheet's Import audio opens the voice page with its file picker, once (not again on a rotation). */
+    @Test
+    fun importAudioOpensTheFilePickerAtOnceAndOnlyOnce() {
+        val pickers = Pickers()
+        val restoration = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restoration.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                CompositionLocalProvider(
+                    androidx.activity.compose.LocalActivityResultRegistryOwner provides pickers,
+                    LocalEchoToasts provides rememberEchoToastState()
+                ) {
+                    V2VoiceNoteScreen(vm, onBack = {}, importNow = true)
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(listOf("audio/*", "video/*")), pickers.asked)
+        restoration.emulateSavedInstanceStateRestore()
+        compose.waitForIdle()
+        assertEquals("not again after a rotation", 1, pickers.asked.size)
+    }
+
     private fun shows(words: String) = pumpUntil("\"$words\"") {
         compose.mainClock.advanceTimeByFrame()
         compose.onAllNodesWithText(words, substring = true).fetchSemanticsNodes().isNotEmpty()

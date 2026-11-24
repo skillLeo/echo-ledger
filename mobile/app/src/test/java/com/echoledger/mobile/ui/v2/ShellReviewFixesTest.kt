@@ -37,12 +37,9 @@ import com.echoledger.mobile.ui.v2.shell.CallsChip
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
 import com.echoledger.mobile.ui.v2.shell.EchoRecordButton
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
-import com.echoledger.mobile.ui.v2.shell.RecordSheetActions
-import com.echoledger.mobile.ui.v2.shell.RecordSheetState
 import com.echoledger.mobile.ui.v2.shell.RecordTapGuard
 import com.echoledger.mobile.ui.v2.shell.ShellStats
 import com.echoledger.mobile.ui.v2.shell.UiFlags
-import com.echoledger.mobile.ui.v2.shell.V2RecordSheetBody
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
@@ -271,39 +268,33 @@ class ShellReviewFixesTest : ScreenTest() {
 
     // Major: Watch translate is reachable, with classic's "blocked" line.
 
+    // v2.1 UX-15: their state left the New sheet for the Live tab.
     @Test
-    fun theRecordSheetHasGameAndWatchTranslateWithWhyTheyWereRefused() {
+    fun theLiveTabHasGameAndWatchTranslateWithWhyTheyWereRefused() {
         val went = mutableListOf<String>()
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 Column {
-                    V2RecordSheetBody(
-                        RecordSheetState(
-                            com.echoledger.mobile.privilege.AppCallCapture.BOTH_SIDES,
+                    com.echoledger.mobile.ui.v2.live.V2LiveTab(
+                        liveAssist = false,
+                        liveTranslate = true,
+                        onOpen = { went += if (it == com.echoledger.mobile.ui.v2.live.LiveEntry.WatchTranslate) "watch" else "game" },
+                        status = com.echoledger.mobile.ui.v2.live.LiveStatus(
                             armed = false,
                             canArm = true,
-                            liveAssist = false,
-                            liveTranslate = true,
-                            translateLocked = null,
-                            game = true,
-                            watch = false,
-                            blocked = "Needs Soniox credit"
-                        ),
-                        RecordSheetActions(
-                            {}, {}, {}, {}, {}, {},
-                            onLiveTranslate = { went += "game" },
-                            onLocked = { went += "plans" },
-                            onWatchTranslate = { went += "watch" }
-                        ),
-                        onDismiss = {}
+                            calls = "Calls: ready",
+                            onArm = {},
+                            game = "Game: on",
+                            watch = "Needs Soniox credit"
+                        )
                     )
                 }
             }
         }
         compose.onNodeWithText("Game: on").assertExists()
         compose.onNodeWithText("Needs Soniox credit").assertExists()
-        compose.onNodeWithText("Watch translate").performClick()
-        compose.onNodeWithText("Game translate").performClick()
+        compose.onNodeWithText("Watch translate").performScrollTo().performClick()
+        compose.onNodeWithText("Game translate").performScrollTo().performClick()
         assertEquals(listOf("watch", "game"), went)
     }
 

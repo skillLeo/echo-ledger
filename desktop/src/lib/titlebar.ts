@@ -9,6 +9,8 @@
 // run at document start), so the first paint is right; the answer here then only takes it away in full screen, and is
 // kept for the page after a reload (TITLEBAR_KEY).
 
+import { useSyncExternalStore } from "react";
+
 /** The strip on, or not. */
 export type TitlebarMode = "strip" | "none";
 
@@ -41,7 +43,8 @@ export function watchTitlebar(
   win: Window = window,
 ): () => void {
   if (platform !== "macos") {
-    applyTitlebar("none", root);
+    // Windows' own title row (below) is not the Mac's strip: it stays.
+    if (root.dataset.titlebar !== WIN_TITLEBAR) applyTitlebar("none", root);
     return () => undefined;
   }
   let asked = 0;
@@ -75,4 +78,62 @@ export function watchTitlebar(
     win.clearTimeout(settle);
     win.removeEventListener("resize", resized);
   };
+}
+
+// Windows' own title row (UX-20, v21_win_titlebar; wintitle.rs). With the flag on the main window has no system title
+// bar and the page draws the row with the window's buttons. <html data-titlebar="win"> says so: the core sets it before
+// the page's first frame when it builds the window that way (winTitlebarStart.js), tells the page when the flag changes
+// while it is open ("window:titlebar"), and answers after a reload (window_titlebar).
+
+/** <html data-titlebar> while the page draws Windows' title row. */
+export const WIN_TITLEBAR = "win";
+/** Sent on the window when the row comes or goes, for the parts that draw it. */
+export const WIN_TITLEBAR_EVENT = "echoledger:win-titlebar";
+
+/** Whether the page draws Windows' title row now. */
+export function winTitlebarOn(root: HTMLElement = document.documentElement): boolean {
+  return root.dataset.titlebar === WIN_TITLEBAR;
+}
+
+/** Sets or clears it, and tells the parts that draw it. */
+export function applyWinTitlebar(on: boolean, root: HTMLElement = document.documentElement, win: Window = window): void {
+  if (on === winTitlebarOn(root)) return;
+  if (on) root.dataset.titlebar = WIN_TITLEBAR;
+  else delete root.dataset.titlebar;
+  win.dispatchEvent(new Event(WIN_TITLEBAR_EVENT));
+}
+
+/**
+ * Keeps it as the core says (Windows' main window): its answer now, then every change. Returns the function that stops
+ * listening.
+ */
+export function watchWinTitlebar(
+  ask: () => Promise<boolean>,
+  listen: (follow: (on: boolean) => void) => Promise<() => void>,
+  root: HTMLElement = document.documentElement,
+  win: Window = window,
+): () => void {
+  let stopped = false;
+  let unlisten: (() => void) | null = null;
+  const follow = (on: boolean) => {
+    if (!stopped) applyWinTitlebar(on === true, root, win);
+  };
+  void listen(follow).then((off) => (stopped ? off() : (unlisten = off)), () => undefined);
+  ask().then(follow, () => undefined);
+  return () => {
+    stopped = true;
+    unlisten?.();
+  };
+}
+
+/** Whether the page draws Windows' title row, followed as it changes. */
+export function useWinTitlebar(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      window.addEventListener(WIN_TITLEBAR_EVENT, changed);
+      return () => window.removeEventListener(WIN_TITLEBAR_EVENT, changed);
+    },
+    () => winTitlebarOn(),
+    () => false,
+  );
 }

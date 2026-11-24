@@ -162,6 +162,7 @@
             const was = open;
             close(true);
             const ids = was.targets;
+            if (was.send) { was.send(item); return; }
             if (item.action === 'recording.open') {
                 if (window.matchMedia('(min-width: 1024px)').matches && typeof was.wire.selectRecording === 'function') was.wire.selectRecording(ids[0]);
                 else window.location.href = window.location.pathname.replace(/\/$/, '') + '/' + encodeURIComponent(ids[0]);
@@ -206,16 +207,20 @@
         function openFor(rows, at, wire, byKeyboard = false, selection = false) {
             const data = dataOf();
             if (! data || ! wire || ! rows.length) return false;
-            const made = core.recordingMenu(data, rows.map(rowOf));
+            return show(core.recordingMenu(data, rows.map(rowOf)), (data.words || {}).menu || 'Recording actions', at, byKeyboard, { wire, selection });
+        }
+
+        /** Shows a menu made by the core ({items, title, targets}) at x, y; `extra` says where its picks go. */
+        function show(made, label, at, byKeyboard, extra) {
             if (! made.items.length) return false;
             const back = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
             close(false);
             const layer = document.createElement('div');
             layer.className = 'v2-ctx-layer';
-            const menu = list(made.items, (data.words || {}).menu || 'Recording actions', made.title);
+            const menu = list(made.items, label, made.title);
             layer.append(menu);
             document.body.append(layer);
-            open = { layer, menu, sub: null, targets: made.targets, wire, back, selection };
+            open = { layer, menu, sub: null, targets: made.targets, back, ...extra };
             placeAt(menu, at.x, at.y);
             layer.addEventListener('keydown', onKey);
             layer.addEventListener('click', (e) => {
@@ -241,11 +246,57 @@
             return true;
         }
 
+        /*
+         * UX-22 3b, the other objects: a view, a label, a project, Trash (the panel), an Activity item, a recording in
+         * Trash. Each is marked data-v2-object="<kind>" with its id, what of its menu does not fit it (-not), its
+         * state (-pinned) and a label's colour (-colour, ticked under Colour ›); its menu's words are the Livewire
+         * component's around it (data-v2-object-menus) and a pick goes to that component (objectAction). Open, Show
+         * recordings and a project's Open follow the object's own link.
+         */
+        const objectOf = (el) => {
+            if (! (el instanceof Element)) return null;
+            const own = el.closest('[data-v2-object]');
+            if (own) return own;
+            const row = el.closest('.fi-ta-record, .fi-ta-row');
+            return row ? row.querySelector('[data-v2-object]') : null;
+        };
+        function openObject(el, at, byKeyboard = false) {
+            const host = el.closest('[wire\\:id]');
+            const json = host ? host.querySelector('script[data-v2-object-menus]') : null;
+            let data = null;
+            try { data = json ? JSON.parse(json.textContent) : null; } catch (e) { data = null; }
+            if (! data || ! window.Livewire) return false;
+            const d = el.dataset;
+            const kind = d.v2Object;
+            const made = core.objectMenu(data, kind, { id: d.v2ObjectId, not: (d.v2ObjectNot || '').split(' ').filter(Boolean), state: { pinned: d.v2ObjectPinned === '1' },
+                colour: d.v2ObjectColour || null });
+            const wire = window.Livewire.find(host.getAttribute('wire:id'));
+            const link = el.matches('a[href]') ? el : el.querySelector('a[href]');
+            const send = (item) => {
+                if (['place.open', 'label.showRecordings', 'project.open'].includes(item.action) && link) { window.location.href = link.href; return; }
+                wire.objectAction(kind, item.action, String(d.v2ObjectId), item.choice === undefined ? null : item.choice);
+            };
+            return show(made, (data.words || {}).menu || 'Actions', at, byKeyboard, { wire, send });
+        }
+        document.addEventListener('contextmenu', (e) => {
+            const el = objectOf(e.target);
+            if (el && openObject(el, { x: e.clientX, y: e.clientY })) e.preventDefault();
+        });
+
         // Shift+F10 and the Menu key: the menu of the row in hand, at its start. The browser's own menu, which the
         // Menu key opens too, is kept away while ours is open.
         let byKey = 0;
         document.addEventListener('keydown', (e) => {
             if (! (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) || e.ctrlKey || e.metaKey || e.altKey) return;
+            const object = objectOf(document.activeElement);
+            if (object) {
+                const r = (document.activeElement || object).getBoundingClientRect();
+                if (openObject(object, { x: rtl() ? r.right - 24 : r.left + 24, y: r.top + r.height / 2 }, true)) {
+                    e.preventDefault();
+                    byKey = Date.now();
+                }
+                return;
+            }
             const lib = document.querySelector('.v2-library');
             const host = lib ? lib.closest('[wire\\:id]') : null;
             if (! lib || ! host || ! window.Livewire) return;
@@ -267,6 +318,19 @@
         window.elV2ContextMenu = {
             openFor,
             close,
+            /** An object's ⋯ (a view's, a label's): its menu below the button; from the keyboard its first item has the focus. */
+            openObjectFromButton(button, e) {
+                const el = button.closest('[data-v2-object]');
+                if (! el) return;
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                if (open && open.from === button) { close(true); return; }
+                const r = button.getBoundingClientRect();
+                if (openObject(el, { x: rtl() ? r.right : r.left, y: r.bottom + 4 }, ! e || e.detail === 0)) {
+                    open.from = button;
+                    button.setAttribute('aria-expanded', 'true');
+                    open.onClose = () => button.setAttribute('aria-expanded', 'false');
+                }
+            },
             /**
              * The row's ⋯: the same menu as a right-click on its row, below the button (on its reading side); from the
              * keyboard (Enter or Space on it) its first item has the focus.

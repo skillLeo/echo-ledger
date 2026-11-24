@@ -29,14 +29,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.ReadyChip
-import com.echoledger.mobile.privilege.AppCallCapture
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoCountBadge
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
-import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -153,40 +151,32 @@ fun ActivityBell(count: Int, onClick: () -> Unit) {
     }
 }
 
-/** What the Record sheet shows. */
+/** What the "New" sheet shows (v2.1 UX-15: actions only; the calls' and Live Translate's states are on the Live tab). */
 class RecordSheetState(
-    val calls: AppCallCapture,
-    val armed: Boolean,
-    val canArm: Boolean,
     val liveAssist: Boolean,
     val liveTranslate: Boolean,
     /** The plan's badge when Live Translate is not in the plan (it then opens the plans). */
-    val translateLocked: String?,
-    val game: Boolean,
-    val watch: Boolean,
-    /** What the translation service said when it last refused ("Needs Soniox credit"), until a session runs again. */
-    val blocked: String? = null
+    val translateLocked: String?
 )
 
-/** Where the Record sheet's rows go. */
+/** Where the "New" sheet's rows go. */
 class RecordSheetActions(
     val onRecordNow: () -> Unit,
-    val onVoiceAndFiles: () -> Unit,
-    val onCalls: () -> Unit,
-    val onArm: (Boolean) -> Unit,
+    val onVoiceNote: () -> Unit,
+    /** Import audio: the voice page's file picker, open at once. */
+    val onImport: () -> Unit,
     val onLiveAssist: () -> Unit,
     val onDictation: () -> Unit,
-    /** Live Translate for a game (classic's Game translate). */
-    val onLiveTranslate: () -> Unit,
-    val onLocked: () -> Unit,
-    /** Live Translate for a video (classic's Watch translate). */
-    val onWatchTranslate: () -> Unit = onLiveTranslate
+    /** Translate a game or video: where both are, with their state (the Live tab). */
+    val onTranslate: () -> Unit,
+    val onLocked: () -> Unit
 )
 
 /**
- * The Record sheet (a long press on Record): Record now, Voice & files, auto-record calls on or off with the calls'
- * status ("Calls: ready"), Calls & meetings, Live Assist (for this person's flag), Dictation and Live Translate (Game
- * translate and Watch translate, each on or off or why it was refused, or one row with the plan's badge).
+ * The "New" sheet (a long press on Record, v2.1 UX-15): actions only, at most six, each also reachable without the long
+ * press: Record now (the big one; a tap on Record does the same), Voice note, Import audio, Start Live Assist (for this
+ * person's flag), Dictation, and Translate a game or video (or one row with the plan's badge). The auto-record switch
+ * and the statuses are on the Live tab and in Settings.
  */
 @Composable
 fun V2RecordSheet(state: RecordSheetState, actions: RecordSheetActions, onDismiss: () -> Unit) {
@@ -208,7 +198,10 @@ fun V2RecordSheetBody(state: RecordSheetState, actions: RecordSheetActions, onDi
     EchoButton(
         stringResource(R.string.v2_rs_record_now),
         go(actions.onRecordNow),
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile).fillMaxWidth(),
+        Modifier
+            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+            .fillMaxWidth()
+            .heightIn(min = EchoTokens.Component.bigButtonHeight),
         icon = EchoIcons.Mic
     )
     Text(
@@ -217,88 +210,20 @@ fun V2RecordSheetBody(state: RecordSheetState, actions: RecordSheetActions, onDi
         color = EchoV2.colors.textSecondary,
         modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
     )
-    EchoSettingRow(
-        stringResource(R.string.v2_rs_voice),
-        subtitle = stringResource(R.string.v2_rs_voice_help),
-        icon = EchoIcons.Upload,
-        onClick = go(actions.onVoiceAndFiles)
-    )
-    val calls = stringResource(
-        when (state.calls) {
-            AppCallCapture.NOT_IN_THIS_BUILD -> R.string.v2_rs_calls_web
-            AppCallCapture.NONE -> R.string.v2_rs_calls_android
-            AppCallCapture.NEEDS_HELPER, AppCallCapture.VOICE_ONLY_NEEDS_HELPER -> R.string.v2_rs_calls_setup
-            AppCallCapture.VOICE_ONLY -> R.string.v2_rs_calls_voice
-            AppCallCapture.BOTH_SIDES -> if (state.armed) R.string.v2_rs_calls_armed else R.string.v2_rs_calls_ready
-        }
-    )
-    // TODO-DS: an EchoSwitch with a leading icon; until then the icon sits in the same column as the rows' icons.
-    Row(Modifier.fillMaxWidth().padding(start = EchoTokens.Layout.pagePaddingMobile), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            PendingIcons.PhoneCallback,
-            null,
-            Modifier.size(EchoTokens.Icon.lg),
-            tint = if (state.canArm) EchoV2.colors.textSecondary else EchoV2.colors.textDisabled
-        )
-        EchoSwitch(
-            checked = state.armed,
-            onCheckedChange = actions.onArm,
-            label = stringResource(R.string.v2_rs_calls),
-            modifier = Modifier.weight(1f),
-            supporting = calls,
-            enabled = state.canArm
-        )
-    }
-    EchoSettingRow(stringResource(R.string.v2_rs_calls_open), icon = EchoIcons.PhoneCall, onClick = go(actions.onCalls))
+    EchoSettingRow(stringResource(R.string.v2_rs_voice_note), icon = EchoIcons.VoiceNote, onClick = go(actions.onVoiceNote))
+    EchoSettingRow(stringResource(R.string.v2_rs_import), icon = EchoIcons.Upload, onClick = go(actions.onImport))
     if (state.liveAssist) {
-        EchoSettingRow(
-            stringResource(R.string.v2_rs_assist),
-            subtitle = stringResource(R.string.v2_rs_assist_help),
-            icon = EchoIcons.Assist,
-            onClick = go(actions.onLiveAssist)
-        )
+        EchoSettingRow(stringResource(R.string.v2_rs_start_assist), icon = EchoIcons.Assist, onClick = go(actions.onLiveAssist))
     }
-    EchoSettingRow(
-        stringResource(R.string.v2_rs_dictation),
-        subtitle = stringResource(R.string.v2_rs_dictation_help),
-        icon = EchoIcons.Dictation,
-        onClick = go(actions.onDictation)
-    )
+    // The same icons as the Live tab's rows: the mic is Voice note's alone.
+    EchoSettingRow(stringResource(R.string.v2_rs_dictation), icon = EchoIcons.Transcribe, onClick = go(actions.onDictation))
     if (state.liveTranslate || state.translateLocked != null) {
-        if (!state.liveTranslate) {
-            // Not in the plan: one row with the plan's badge, which opens the plans.
-            EchoSettingRow(
-                stringResource(R.string.v2_rs_translate),
-                subtitle = state.translateLocked,
-                icon = EchoIcons.Translate,
-                onClick = go(actions.onLocked)
-            )
-        } else {
-            com.echoledger.mobile.ui.v2.components.EchoSectionHeader(stringResource(R.string.v2_rs_translate))
-            val on = stringResource(R.string.v2_rs_on)
-            val off = stringResource(R.string.v2_rs_off)
-            // As classic's tiles: on or off, or what the translation service said when it last refused.
-            EchoSettingRow(
-                stringResource(R.string.v2_rs_game),
-                subtitle = if (state.game) {
-                    stringResource(R.string.v2_rs_game_status, on)
-                } else {
-                    state.blocked ?: stringResource(R.string.v2_rs_game_status, off)
-                },
-                icon = EchoIcons.Games,
-                onClick = go(actions.onLiveTranslate)
-            )
-            EchoSettingRow(
-                stringResource(R.string.v2_rs_watch),
-                subtitle = if (state.watch) {
-                    stringResource(R.string.v2_rs_watch_status, on)
-                } else {
-                    state.blocked ?: stringResource(R.string.v2_rs_watch_status, off)
-                },
-                icon = EchoIcons.Videos,
-                onClick = go(actions.onWatchTranslate)
-            )
-        }
+        EchoSettingRow(
+            stringResource(R.string.v2_rs_translate_any),
+            subtitle = state.translateLocked.takeIf { !state.liveTranslate },
+            icon = EchoIcons.Translate,
+            onClick = go(if (state.liveTranslate) actions.onTranslate else actions.onLocked)
+        )
     }
 }
 

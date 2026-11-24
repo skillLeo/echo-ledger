@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Pages;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Health\ServerHealth;
+use App\Services\MailSettings;
 use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\PlanLimits;
 use BackedEnum;
@@ -40,8 +41,12 @@ class Dashboard extends FilamentDashboard
         $user = auth()->user();
         $problems = $user instanceof User && $user->is_super_admin ? $this->serverProblems() : [];
 
+        // Since W-INC-1125: alerts are emails too, and a server without a real mailer only writes them to its log.
+        $noMail = $user instanceof User && $user->is_super_admin && ! app(MailSettings::class)->delivers();
+
         return $schema->components([
             ...($problems === [] ? [] : [View::make('filament.admin.server-health')->viewData(['problems' => $problems])]),
+            ...($noMail ? [View::make('filament.admin.mail-not-set-up')->viewData(['settings' => Settings::getUrl(panel: 'admin')])] : []),
             $this->getWidgetsContentComponent(),
             View::make('filament.pages.workspaces-overview')
                 ->visible(fn (): bool => StaffAccess::can('customers.view'))

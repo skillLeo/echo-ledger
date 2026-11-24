@@ -33,6 +33,10 @@ export {
   LucideLogOutIcon as SignOutIcon,
   LucideCalendarIcon as CalendarIcon,
   LucideCopyIcon as CopyIcon,
+  // The window's own buttons on Windows (UX-20): Restore is two windows, as the system draws it.
+  LucideMinusIcon as WindowMinimizeIcon,
+  LucideSquareIcon as WindowMaximizeIcon,
+  LucideCopyIcon as WindowRestoreIcon,
   LucideSmartphoneIcon as DeviceIcon,
   LucideLaptopIcon as LaptopIcon,
   LucidePencilIcon as RenameIcon,

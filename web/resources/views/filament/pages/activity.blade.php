@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    <?php if (\App\Filament\Support\ConsoleV2::any()): ?>@include('filament.v2.object-menus', ['menus' => $this->objectMenus()])<?php endif; ?>
     <div class="el-activity" style="max-width: var(--content-max)">
         @if ($waiting !== null || $groups['needs'] !== [])
             <h2 class="el-section-header">{{ __('Needs action') }}</h2>
