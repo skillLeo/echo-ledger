@@ -37,11 +37,20 @@
         default => 'outline',
     };
     $planUrl = EditProfile::settingsUrl('plan');
+    // BE-06: the person's photo, else their initials in their colour (avatar_color) under the new design's colours.
+    $photo = \App\Services\Accounts\Avatars::of($user)['avatar_url'];
+    $v2 = \App\Filament\Support\ConsoleV2::any();
     $label = "{$name}, {$user->email}, {$plan->name} plan".($expires !== null && $plan->key !== 'free' ? ', paid until '.Formats::longDate($expires) : '').'. Opens plan and usage.';
 @endphp
 <div class="el-pcard" data-profile-card>
     <a href="{{ $planUrl }}" class="el-pcard-body" aria-label="{{ $label }}">
-        <img class="el-pcard-avatar" src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
+        @if ($photo !== null)
+            <img class="el-pcard-avatar" src="{{ $photo }}" alt="" aria-hidden="true">
+        @elseif ($v2)
+            <span class="el-pcard-avatar is-initials" style="background-color: var(--el-role-avatar-{{ $user->avatarColor() }})" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+        @else
+            <img class="el-pcard-avatar" src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
+        @endif
         <span class="el-pcard-text">
             <span class="el-pcard-name">{{ $name }}</span>
             <span class="el-pcard-email">{{ $user->email }}</span>

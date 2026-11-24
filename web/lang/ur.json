@@ -1106,5 +1106,21 @@
     "Mark as read": "پڑھا ہوا کریں",
     "Copy link": "لنک کاپی کریں",
     "Share with people…": "لوگوں کے ساتھ شیئر کریں…",
-    "Up to :max at a time: unselect :count": "ایک وقت میں زیادہ سے زیادہ :max: :count کا انتخاب ہٹائیں"
+    "Up to :max at a time: unselect :count": "ایک وقت میں زیادہ سے زیادہ :max: :count کا انتخاب ہٹائیں",
+    "Photo": "تصویر",
+    "Shown beside your name in what you share, on every device.": "آپ کی شیئر کی گئی چیزوں میں آپ کے نام کے ساتھ، ہر ڈیوائس پر دکھائی جاتی ہے۔",
+    "Change photo…": "تصویر بدلیں…",
+    "Add photo…": "تصویر لگائیں…",
+    "Remove photo": "تصویر ہٹائیں",
+    "Remove your photo?": "اپنی تصویر ہٹائیں؟",
+    "Your initials show in its place, on every device.": "اس کی جگہ آپ کے نام کے ابتدائی حروف دکھائی دیں گے، ہر ڈیوائس پر۔",
+    "Picture": "تصویر",
+    "JPEG, PNG or WebP, up to 5 MB. It is cut to a square and shown beside your name on every device.": "JPEG، PNG یا WebP، زیادہ سے زیادہ 5 MB۔ اسے مربع کاٹ کر ہر ڈیوائس پر آپ کے نام کے ساتھ دکھایا جاتا ہے۔",
+    "Photo changed": "تصویر بدل گئی",
+    "Photo removed": "تصویر ہٹا دی گئی",
+    "Your initials' circle when there is no photo.": "تصویر نہ ہو تو آپ کے ابتدائی حروف کا دائرہ۔",
+    "Cyan": "آسمانی",
+    "Olive": "زیتونی",
+    "Slate": "سلیٹی",
+    "The console's and the apps' words and direction. Transcripts keep their own language.": "کنسول اور ایپس کے الفاظ اور سمت۔ ٹرانسکرپٹ اپنی زبان میں رہتے ہیں۔"
 }

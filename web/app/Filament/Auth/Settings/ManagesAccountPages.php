@@ -6,13 +6,19 @@ namespace App\Filament\Auth\Settings;
 
 use App\Exceptions\ApiError;
 use App\Filament\Pages\AccountBeingDeleted;
+use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\PlanLock;
+use App\Filament\Support\SettingsContext;
+use App\Filament\Support\Shell;
 use App\Filament\Support\UpgradeFlow;
 use App\Models\ConnectedApp;
 use App\Models\Device;
+use App\Models\User;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\Avatars;
 use App\Services\Accounts\EmailChange;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
@@ -24,6 +30,7 @@ use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
 use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
@@ -31,6 +38,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -83,11 +91,74 @@ trait ManagesAccountPages
     {
         $context = $this->context();
         $workspace = $context->workspace();
+        $user = $this->account();
+        $name = filled($user->name) ? $user->name : Str::before((string) $user->email, '@');
 
         return [
             'team' => $context->flag('team_member') && $workspace !== null,
             'workspace' => $workspace !== null ? $workspace->name.($context->role() !== null ? ', '.$context->role()->label() : '') : null,
+            // BE-06 (contract 2.0.0-r §6): the photo, the initials' colour and the language, as the apps' profile has them.
+            'photo' => Avatars::of($user)['avatar_url'],
+            'initials' => InitialsAvatarProvider::initials($name),
+            'color' => $user->avatarColor(),
+            'colors' => self::AVATAR_COLOR_NAMES,
+            'v2' => ConsoleV2::any(),
+            'appLanguages' => ConsoleV2::shell() ? ConsoleV2::LANGUAGES : null,
+            'appLanguage' => Shell::preferences($user)['app_language'],
         ];
+    }
+
+    /** The 8 initials' colours in the order the server keeps them (avatar_color 0 to 7; their names since 2.0.0-u). */
+    public const AVATAR_COLOR_NAMES = ['Teal', 'Blue', 'Cyan', 'Olive', 'Pink', 'Orange', 'Green', 'Slate'];
+
+    /** Profile › Colour: the initials' circle when there is no photo, the apps' too (PATCH /api/account's avatar_color). */
+    public function setAvatarColor(int $color): bool
+    {
+        if ($color < 0 || $color >= User::AVATAR_COLORS) {
+            return false;
+        }
+        $this->account()->forceFill(['avatar_color' => $color])->save();
+        SettingsContext::forget();
+
+        return true;
+    }
+
+    /** Profile › Change photo…: the apps' own checks (POST /api/account/avatar), a square picture kept at 128 and 512 px. */
+    public function changePhotoAction(): Action
+    {
+        return Action::make('changePhoto')->label(fn (): string => Avatars::of($this->account())['avatar_url'] !== null ? __('Change photo…') : __('Add photo…'))
+            ->modalHeading(__('Photo'))->modalDescription(__('JPEG, PNG or WebP, up to 5 MB. It is cut to a square and shown beside your name on every device.'))
+            ->modalSubmitActionLabel(__('Save'))->modalWidth('md')->color('gray')
+            ->schema([FileUpload::make('photo')->label(__('Picture'))->image()->storeFiles(false)->required()->maxSize(Avatars::MAX_BYTES / 1024)])
+            ->action(function (array $data): void {
+                $file = $data['photo'] ?? null;
+                if (! $file instanceof UploadedFile) {
+                    return;
+                }
+                try {
+                    app(Avatars::class)->store($this->account(), $file);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                SettingsContext::forget();
+                Notification::make()->title(__('Photo changed'))->success()->send();
+            });
+    }
+
+    /** Profile › Remove photo: the initials come back (DELETE /api/account/avatar). */
+    public function removePhotoAction(): Action
+    {
+        return Action::make('removePhoto')->label(__('Remove photo'))->color('danger')->link()
+            ->visible(fn (): bool => Avatars::of($this->account())['avatar_url'] !== null)
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Remove your photo?'))
+            ->modalDescription(__('Your initials show in its place, on every device.'))->modalSubmitActionLabel(__('Remove'))
+            ->action(function (): void {
+                app(Avatars::class)->remove($this->account());
+                SettingsContext::forget();
+                Notification::make()->title(__('Photo removed'))->success()->send();
+            });
     }
 
     /** @return array<string, mixed> Devices: every phone, computer and browser, the QR to sign one in, the connected apps */
