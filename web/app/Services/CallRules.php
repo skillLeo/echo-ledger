@@ -340,10 +340,28 @@ final class CallRules
             return self::NOT_KEPT;
         }
         $rules = CallRule::query()->where('user_id', $user->id)->get();
-        $found = $this->contactRule($rules, $number, $name)
-            ?? $this->groupRule($rules, $groups)
-            ?? ($source !== null ? $rules->first(fn (CallRule $r): bool => $r->kind === 'source' && $r->source_app === $source) : null);
-        $action = $found !== null && $found->action !== 'ask' ? $found->action : ($settings['after_call'] ?? 'ask');
+        $default = $settings['after_call'] ?? 'ask';
+        // The steps that have a rule for this call, in order: the contact, its group, the Source.
+        $steps = array_values(array_filter([
+            $this->contactRule($rules, $number, $name),
+            $this->groupRule($rules, $groups),
+            $source !== null ? $rules->first(fn (CallRule $r): bool => $r->kind === 'source' && $r->source_app === $source) : null,
+        ]));
+        $action = $default;
+        foreach ($steps as $i => $rule) {
+            if ($rule->action !== 'ask') {
+                $action = $rule->action;
+
+                break;
+            }
+            // Privacy first (EL-Lead's ruling on B5): "ask" stops the search and follows the default, but a "Don't record"
+            // after it (a later step or the default) still applies, so "Ask me" for Ahmed never records a Zoom call
+            // that Zoom's rule says not to record.
+            $later = [...array_map(fn (CallRule $r): string => $r->action, array_slice($steps, $i + 1)), $default];
+            $action = in_array('dont_record', $later, true) ? 'dont_record' : $default;
+
+            break;
+        }
         if ($projectAlways && in_array($action, ['ask', 'always_audio'], true)) {
             return 'always_transcribe';
         }
@@ -352,15 +370,17 @@ final class CallRules
     }
 
     /**
-     * A phone number as rules keep and compare it: spaces, dashes, dots and brackets removed, a leading 00 made +.
-     * Null when what is left is not a number.
+     * A phone number as rules keep and compare it: a leading 00 made +, a trunk "(0)" after the country code dropped
+     * ("+44 (0)20 …" is +4420…), then spaces, dashes, dots and brackets removed. Null when what is left is not a number.
      */
     public static function normalizeNumber(?string $number): ?string
     {
-        $clean = preg_replace('/[\s\-.()\x{00A0}]+/u', '', trim((string) $number)) ?? '';
+        $clean = trim((string) $number);
         if (str_starts_with($clean, '00')) {
             $clean = '+'.substr($clean, 2);
         }
+        $clean = (string) preg_replace('/^(\+\d{1,3})[\s\-.\x{00A0}]*\(0\)/u', '$1', $clean);
+        $clean = preg_replace('/[\s\-.()\x{00A0}]+/u', '', $clean) ?? '';
 
         return preg_match('/^\+?\d{4,20}$/', $clean) === 1 ? $clean : null;
     }
@@ -430,8 +450,26 @@ final class CallRules
             return null;
         }
 
-        return CallRule::query()->where('user_id', $user->id)->where('kind', 'contact')->whereNotNull('number')->get()
-            ->first(fn (CallRule $r): bool => self::sameNumber((string) $r->number, $number));
+        return self::byNumber(CallRule::query()->where('user_id', $user->id)->where('kind', 'contact')->whereNotNull('number')->get(), $number);
+    }
+
+    /**
+     * The one rule for [$number] (EL-Lead's ruling on B5): the exact number first; else the only rule with the same last
+     * 10 digits when one side has no country code. Two or more such rules (the same local number in two countries)
+     * match none, so the call follows the next step rather than a guess.
+     *
+     * @param  Collection<int, CallRule>  $rules
+     */
+    private static function byNumber(Collection $rules, string $number): ?CallRule
+    {
+        $withNumber = $rules->filter(fn (CallRule $r): bool => $r->number !== null);
+        $exact = $withNumber->first(fn (CallRule $r): bool => $r->number === $number);
+        if ($exact !== null) {
+            return $exact;
+        }
+        $near = $withNumber->filter(fn (CallRule $r): bool => self::sameNumber((string) $r->number, $number));
+
+        return $near->count() === 1 ? $near->first() : null;
     }
 
     /** @param  Collection<int, CallRule>  $rules */
@@ -440,7 +478,7 @@ final class CallRules
         $contacts = $rules->where('kind', 'contact');
         $number = self::normalizeNumber($number);
         if ($number !== null) {
-            $byNumber = $contacts->first(fn (CallRule $r): bool => $r->number !== null && self::sameNumber($r->number, $number));
+            $byNumber = self::byNumber($contacts, $number);
             if ($byNumber !== null) {
                 return $byNumber;
             }
