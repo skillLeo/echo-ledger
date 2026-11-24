@@ -99,7 +99,7 @@ it('draws the initials in the person\'s colour on the profile card when there is
     SettingsContext::forget();
 
     expect((string) $this->get('/app/settings')->assertOk()->getContent())->toContain('el-pcard-avatar is-initials')->toContain('var(--el-role-avatar-5)')
-        ->toContain('>AK<');
+        ->toContain('data-initials="AK"');
 });
 
 it('changes nothing of anyone else', function () {

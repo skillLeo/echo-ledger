@@ -9,6 +9,7 @@ use App\Filament\Pages\AccountBeingDeleted;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
@@ -138,7 +139,7 @@ trait ManagesAccountPages
                 try {
                     app(Avatars::class)->store($this->account(), $file);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }

@@ -47,7 +47,8 @@
         @if ($photo !== null)
             <img class="el-pcard-avatar" src="{{ $photo }}" alt="" aria-hidden="true">
         @elseif ($v2)
-            <span class="el-pcard-avatar is-initials" style="background-color: var(--el-role-avatar-{{ $user->avatarColor() }})" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+            {{-- The initials drawn by CSS (data-initials), so the card's name stays the person's name and email. --}}
+            <span class="el-pcard-avatar is-initials" data-initials="{{ InitialsAvatarProvider::initials($name) }}" style="background-color: var(--el-role-avatar-{{ $user->avatarColor() }})" aria-hidden="true"></span>
         @else
             <img class="el-pcard-avatar" src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
         @endif

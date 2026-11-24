@@ -613,6 +613,10 @@ label.el-set-row:hover {
     font-weight: 600;
 }
 
+.el-pcard-avatar.is-initials::before {
+    content: attr(data-initials);
+}
+
 /* ---------- Profile: the photo, the colour (BE-06) ---------- */
 .el-profile-avatar {
     flex: none;
