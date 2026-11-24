@@ -32,7 +32,7 @@ import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyS
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { rowState, STATE_WORDS } from "./model";
-import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
+import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "notes" | "details";
@@ -74,7 +74,8 @@ export type RecordingPageProps = {
   startAt?: { ms: number; seq: number } | null;
   onBack: () => void;
   /** One message at a time, with at most one action (the Library's Toast). */
-  onMessage: (message: string) => void;
+  /** Says something in the Library's toast (a problem through sayProblem). */
+  onMessage: Say;
   /** Opens the recording's project (its name in the meta line). */
   onOpenProject?: (id: string) => void;
   /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
@@ -246,7 +247,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const state = await api.makeTranscriptViews(id);
       if (shownTranscript.current === id) setViews(state);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       if (mounted.current) setRetrying(false);
     }
@@ -262,7 +263,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(id);
       setViews(state);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
       if (viewPress.current === press) setShowAs("original");
     }
   };
@@ -310,7 +311,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       setVocabTerms(rules.length ? [] : newTerms(before, text));
       onMessage("Line saved");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   // Suggested fixes (since v1.4): open ones are marked in their line; one at a time opens with Accept and Dismiss. They
@@ -363,7 +364,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       }
       onMessage(accept ? `Changed to “${fix.to}”` : "Suggestion dismissed");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       if (mounted.current) setFixBusy(false);
     }
@@ -458,7 +459,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       reloadScreens();
       onMessage(`Screen ${screen.index} deleted`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
@@ -481,7 +482,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onItemChanged?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
       onMessage("Renamed");
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const startRename = () => {
@@ -496,7 +497,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await api.retranscribe(item.id, language);
       onMessage(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -512,7 +513,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await api.addReplacement(offer.from, offer.to, offer.client_id);
       onMessage(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const addToVocabulary = async (term: string) => {
@@ -521,7 +522,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       setVocabTerms((terms) => terms.filter((t) => t !== term));
       onMessage(`Added “${term}” to the vocabulary`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
@@ -532,7 +533,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onItemChanged?.({ id: item.id, labels: saved?.data?.labels ?? left });
       onMessage(`Label removed: ${label}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   /** The fix box's buttons: Review and each decision put the keyboard there, or back on Review. */
@@ -587,7 +588,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people, exportView)}\n\n${body}` : body);
       onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
-      onMessage("Could not access the clipboard");
+      sayProblem(onMessage, "Could not access the clipboard");
     }
   };
   const exportAs = async (format: ExportFormat) => {
@@ -597,7 +598,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (format === "html") onMessage("Opened the print page in your browser: choose Save as PDF there");
       else if (path) onMessage(`Saved to ${path}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const packAs = async (format: MeetingPackFormat, withAudio: boolean) => {
@@ -606,7 +607,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       if (format === "pdf") onMessage("Opened the meeting pack in your browser: choose Save as PDF there");
       else if (path) onMessage(`Saved to ${path}`);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     }
   };
   const canExport = !!tDetail && tDetail.segments.length > 0;
@@ -637,7 +638,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const toggle = () => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) void a.play().catch(() => onMessage("The audio didn't play. Try again in a moment."));
+    if (a.paused) void a.play().catch(() => sayProblem(onMessage, "The audio didn't play. Try again in a moment."));
     else a.pause();
   };
   const seek = (s: number) => {
@@ -707,7 +708,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       await fn();
       if (done) onMessage(done);
     } catch (e) {
-      onMessage(errorMessage(e));
+      sayProblem(onMessage, errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -945,7 +946,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       )}
       {sharing && (
         <ShareDialog target={{ kind: "session", id: item.id, title: item.title ?? null, hasAudio: detail.state === "ready" && !!detail.value.url }}
-          view={exportView} onClose={() => setSharing(false)} notify={(t) => onMessage(t)} />
+          view={exportView} onClose={() => setSharing(false)} notify={(t, error) => onMessage(t, undefined, error)} />
       )}
       {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}

@@ -353,8 +353,8 @@ describe("the Library's places", () => {
     await settle();
     const palette = screen.getByRole("dialog", { name: "Command palette" });
     fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "show whatsapp" } });
-    expect(within(palette).getAllByRole("option")[0]).toHaveTextContent("Show WhatsApp recordings");
-    fireEvent.keyDown(palette, { key: "Enter" });
+    // Among the search's Commands (UX-20 groups what it finds).
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Show WhatsApp recordings/ }));
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
     expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();
