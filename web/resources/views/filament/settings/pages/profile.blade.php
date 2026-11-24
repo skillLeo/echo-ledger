@@ -63,6 +63,6 @@
 </x-el.section>
 @if ($team)
     <x-el.section>
-        <x-el.row setting="profile.workspace" title="Workspace" :value="$workspace" />
+        <x-el.row setting="profile.workspace" :title="__('Workspace')" :value="$workspace" />
     </x-el.section>
 @endif

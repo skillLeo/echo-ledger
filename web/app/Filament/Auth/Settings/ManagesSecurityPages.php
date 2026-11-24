@@ -49,7 +49,7 @@ trait ManagesSecurityPages
             'passkeysOn' => $this->context()->flag('full_console'),
             'passkeys' => Passkey::query()->where('user_id', $user->id)->latest()->get()->map(fn (Passkey $p): array => [
                 'id' => $p->id, 'name' => $p->name,
-                'value' => $p->last_used_at !== null ? 'Used '.$p->last_used_at->diffForHumans(short: true) : 'Added '.Formats::shortDate($p->created_at),
+                'value' => $p->last_used_at !== null ? __('Used :when', ['when' => $p->last_used_at->diffForHumans(short: true)]) : __('Added :date', ['date' => Formats::shortDate($p->created_at)]),
             ])->all(),
             'maxPasskeys' => Passkeys::MAX_PER_USER,
             'browsersOn' => WebSessions::available(),
@@ -62,28 +62,28 @@ trait ManagesSecurityPages
     public function changePasswordAction(): Action
     {
         return Action::make('changePassword')
-            ->label('Password')
-            ->modalHeading(fn (): string => $this->account()->has_password !== false ? 'Change password' : 'Choose a password')
+            ->label(__('Password'))
+            ->modalHeading(fn (): string => $this->account()->has_password !== false ? __('Change password') : __('Choose a password'))
             ->modalWidth('md')
             ->schema([
-                TextInput::make('currentPassword')->label('Current password')
+                TextInput::make('currentPassword')->label(__('Current password'))
                     ->password()->revealable(filament()->arePasswordsRevealable())->autocomplete('current-password')
                     ->currentPassword(guard: Filament::getAuthGuard())->required()
                     ->visible(fn (): bool => $this->account()->has_password !== false),
-                TextInput::make('password')->label('New password')
+                TextInput::make('password')->label(__('New password'))
                     ->password()->revealable(filament()->arePasswordsRevealable())->autocomplete('new-password')
                     ->rule(PasswordRule::default())->required()->same('passwordConfirmation'),
-                TextInput::make('passwordConfirmation')->label('Confirm the new password')
+                TextInput::make('passwordConfirmation')->label(__('Confirm the new password'))
                     ->password()->revealable(filament()->arePasswordsRevealable())->autocomplete('new-password')->required(),
             ])
-            ->modalSubmitActionLabel(fn (): string => $this->account()->has_password !== false ? 'Change password' : 'Set password')
+            ->modalSubmitActionLabel(fn (): string => $this->account()->has_password !== false ? __('Change password') : __('Set password'))
             ->action(function (#[SensitiveParameter] array $data): void {
                 $hash = Hash::make((string) $data['password']);
                 $this->account()->forceFill(['password' => $hash])->save();
                 if (request()->hasSession()) {
                     request()->session()->put(['password_hash_'.Filament::getAuthGuard() => $hash]);
                 }
-                Notification::make()->title('Password saved')->success()->send();
+                Notification::make()->title(__('Password saved'))->success()->send();
             });
     }
 
@@ -117,14 +117,14 @@ trait ManagesSecurityPages
     /** Google sign-in › Unlink, confirmed. */
     public function unlinkGoogleAction(): Action
     {
-        return Action::make('unlinkGoogle')->label('Unlink')->color('danger')
-            ->requiresConfirmation()->modalIcon(null)->modalHeading('Unlink Google?')
-            ->modalDescription('You then sign in with your email and password. Never set one? Use "Forgot password?" on the sign-in page.')
-            ->modalSubmitActionLabel('Unlink')
+        return Action::make('unlinkGoogle')->label(__('Unlink'))->color('danger')
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Unlink Google?'))
+            ->modalDescription(__('You then sign in with your email and password. Never set one? Use "Forgot password?" on the sign-in page.'))
+            ->modalSubmitActionLabel(__('Unlink'))
             ->action(function (): void {
                 $this->account()->forceFill(['google_id' => null])->save();
                 app(AuditLog::class)->record('google_unlinked', $this->account()->id, $this->account());
-                Notification::make()->title('Google unlinked')->success()->send();
+                Notification::make()->title(__('Google unlinked'))->success()->send();
             });
     }
 
@@ -139,48 +139,48 @@ trait ManagesSecurityPages
     {
         $passkey = app(Passkeys::class)->register($this->account(), (string) json_encode($credential), $name);
         $passkey === null
-            ? Notification::make()->title("Couldn't add that passkey")->body('Try again, or use another device.')->danger()->send()
-            : Notification::make()->title('Passkey added')->body("“{$passkey->name}” can now sign you in.")->success()->send();
+            ? Notification::make()->title(__("Couldn't add that passkey"))->body(__('Try again, or use another device.'))->danger()->send()
+            : Notification::make()->title(__('Passkey added'))->body(__('“:name” can now sign you in.', ['name' => $passkey->name]))->success()->send();
     }
 
     /** Passkeys › Remove, confirmed. */
     public function removePasskeyAction(): Action
     {
-        return Action::make('removePasskey')->label('Remove')->color('danger')
-            ->requiresConfirmation()->modalIcon(null)->modalHeading('Remove this passkey?')
-            ->modalDescription('It will no longer sign you in.')->modalSubmitActionLabel('Remove')
+        return Action::make('removePasskey')->label(__('Remove'))->color('danger')
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Remove this passkey?'))
+            ->modalDescription(__('It will no longer sign you in.'))->modalSubmitActionLabel(__('Remove'))
             ->action(fn (array $arguments) => $this->removePasskey((string) ($arguments['passkey'] ?? '')));
     }
 
     public function removePasskey(string $id): void
     {
         if (app(Passkeys::class)->remove($this->account(), $id)) {
-            Notification::make()->title('Passkey removed')->success()->send();
+            Notification::make()->title(__('Passkey removed'))->success()->send();
         }
     }
 
     /** Signed-in browsers › Sign out, confirmed. */
     public function signOutBrowserAction(): Action
     {
-        return Action::make('signOutBrowser')->label('Sign out')->color('danger')
-            ->requiresConfirmation()->modalIcon(null)->modalHeading('Sign out this browser?')
-            ->modalDescription('It will need to sign in again.')->modalSubmitActionLabel('Sign out')
+        return Action::make('signOutBrowser')->label(__('Sign out'))->color('danger')
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Sign out this browser?'))
+            ->modalDescription(__('It will need to sign in again.'))->modalSubmitActionLabel(__('Sign out'))
             ->action(fn (array $arguments) => $this->signOutBrowser((string) ($arguments['browser'] ?? '')));
     }
 
     public function signOutBrowser(string $id): void
     {
         $done = app(WebSessions::class)->revoke($this->account()->id, $id, session()->getId());
-        Notification::make()->title($done ? 'Browser signed out' : 'That browser was already signed out')->success()->send();
+        Notification::make()->title($done ? __('Browser signed out') : __('That browser was already signed out'))->success()->send();
     }
 
     /** Sign out everywhere: every phone, computer, browser and connected app, this browser too. */
     public function signOutEverywhereAction(): Action
     {
-        return Action::make('signOutEverywhere')->label('Sign out everywhere')->color('danger')
-            ->requiresConfirmation()->modalIcon(null)->modalHeading('Sign out everywhere?')
-            ->modalDescription("You'll be signed out on every phone, computer and browser, including this one.")
-            ->modalSubmitActionLabel('Sign out everywhere')
+        return Action::make('signOutEverywhere')->label(__('Sign out everywhere'))->color('danger')
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Sign out everywhere?'))
+            ->modalDescription(__("You'll be signed out on every phone, computer and browser, including this one."))
+            ->modalSubmitActionLabel(__('Sign out everywhere'))
             ->action(function (): void {
                 app(AccountSessions::class)->signOutEverywhere($this->account());
                 Filament::auth()->logout();

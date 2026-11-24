@@ -86,10 +86,10 @@ trait ManagesAppPages
     /** "Reset to defaults" at the end of a page: only the settings on that page that the registry marks resettable. */
     public function resetPageAction(): Action
     {
-        return Action::make('resetPage')->label('Reset to defaults')->color('gray')->link()
+        return Action::make('resetPage')->label(__('Reset to defaults'))->color('gray')->link()
             ->requiresConfirmation()->modalIcon(null)
-            ->modalHeading(fn (): string => 'Reset '.SettingsRegistry::pageTitle($this->subpage).' to defaults?')
-            ->modalDescription(null)->modalSubmitActionLabel('Reset')
+            ->modalHeading(fn (): string => __('Reset :page to defaults?', ['page' => __(SettingsRegistry::pageTitle($this->subpage))]))
+            ->modalDescription(null)->modalSubmitActionLabel(__('Reset'))
             ->action(function (): void {
                 $user = $this->account();
                 $columns = ['appearance.sidebar' => 'style', 'appearance.density' => 'density', 'appearance.clock' => 'clock', 'appearance.library_view' => 'layout', 'transcription.language' => 'language'];
@@ -118,7 +118,7 @@ trait ManagesAppPages
                     $prefs['style'] = ConsoleV2Nav::style($user);
                 }
                 $this->js('document.getElementById("fi-main-sidebar")?.setAttribute("data-style", '.json_encode($prefs['style']).'); document.documentElement.dataset.density = '.json_encode($prefs['density']));
-                Notification::make()->title(SettingsRegistry::pageTitle($this->subpage).' reset to defaults')->success()->send();
+                Notification::make()->title(__(':page reset to defaults', ['page' => __(SettingsRegistry::pageTitle($this->subpage))]))->success()->send();
             });
     }
 
@@ -186,10 +186,10 @@ trait ManagesAppPages
         return [
             'used' => $used,
             'limit' => $limit,
-            'value' => Formats::bytes($used).($limit !== null ? ' of '.Formats::bytes($limit) : ''),
+            'value' => $limit !== null ? __(':used of :limit', ['used' => Formats::bytes($used), 'limit' => Formats::bytes($limit)]) : Formats::bytes($used),
             'percent' => $limit !== null && $limit > 0 ? min(100, (int) floor($used * 100 / $limit)) : null,
-            'retention' => $retention !== null ? Formats::days($retention) : 'Until you delete them',
-            'bin' => CaptureSession::binHours().' hours',
+            'retention' => $retention !== null ? Formats::days($retention) : __('Until you delete them'),
+            'bin' => __(':hours hours', ['hours' => CaptureSession::binHours()]),
             'binUrl' => RecentlyDeleted::canAccess() ? RecentlyDeleted::getUrl(panel: 'app') : null,
         ];
     }
@@ -213,33 +213,33 @@ trait ManagesAppPages
         $this->groqKeyError = null;
         $key = trim($this->groqKey);
         if (mb_strlen($key) < 20) {
-            $this->groqKeyError = 'Paste the whole key. It starts with gsk_.';
+            $this->groqKeyError = __('Paste the whole key. It starts with gsk_.');
 
             return;
         }
         try {
             app(TranscriptionKeys::class)->put($this->account(), TranscriptionKeys::PROVIDER, $key);
         } catch (ApiError $e) {
-            $this->groqKeyError = $e->getStatusCode() >= 500 ? "Couldn't reach Groq. Try again." : "That key didn't work. Check it on console.groq.com and paste it again.";
+            $this->groqKeyError = $e->getStatusCode() >= 500 ? __("Couldn't reach Groq. Try again.") : __("That key didn't work. Check it on console.groq.com and paste it again.");
 
             return;
         }
         $this->groqKey = '';
         SettingsContext::forget();
-        Notification::make()->title('Your Groq key is saved')->body('New recordings are transcribed with it.')->success()->send();
+        Notification::make()->title(__('Your Groq key is saved'))->body(__('New recordings are transcribed with it.'))->success()->send();
     }
 
     /** Transcription key › Remove key, confirmed. */
     public function removeKeyAction(): Action
     {
-        return Action::make('removeKey')->label('Remove key')->color('danger')
-            ->requiresConfirmation()->modalIcon(null)->modalHeading('Remove your Groq key?')
-            ->modalDescription("New recordings won't be transcribed until you add a key or upgrade.")
-            ->modalSubmitActionLabel('Remove key')
+        return Action::make('removeKey')->label(__('Remove key'))->color('danger')
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Remove your Groq key?'))
+            ->modalDescription(__("New recordings won't be transcribed until you add a key or upgrade."))
+            ->modalSubmitActionLabel(__('Remove key'))
             ->action(function (): void {
                 app(TranscriptionKeys::class)->forget($this->account());
                 SettingsContext::forget();
-                Notification::make()->title('Your Groq key is removed')->success()->send();
+                Notification::make()->title(__('Your Groq key is removed'))->success()->send();
             });
     }
 
@@ -270,42 +270,42 @@ trait ManagesAppPages
         $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
 
         return [
-            'Everywhere' => [
-                [$mac ? '⌘ K' : 'Ctrl K', 'Search recordings, transcripts, pages and settings'],
-                ['/', 'Search the list on this page'],
+            __('Everywhere') => [
+                [$mac ? '⌘ K' : 'Ctrl K', __('Search recordings, transcripts, pages and settings')],
+                ['/', __('Search the list on this page')],
                 // With the three levels [ is the twin of ⌘\ (below); the sidebar it folded is the old one's.
-                ...(ConsoleV2::frame() ? [] : [['[', 'Fold the sidebar to icons, and back']]),
-                ['?', 'Help & shortcuts'],
-                ['Esc', 'Close a panel, a menu or a dialog'],
+                ...(ConsoleV2::frame() ? [] : [['[', __('Fold the sidebar to icons, and back')]]),
+                ['?', __('Help & shortcuts')],
+                ['Esc', __('Close a panel, a menu or a dialog')],
                 // Since docs/PLAN_NAV_3_LEVELS.md section 0 (the new Library's frame): Back and Forward, as the apps have them.
-                ...(ConsoleV2::library() ? [[$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', 'Back and forward']] : []),
+                ...(ConsoleV2::library() ? [[$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', __('Back and forward')]] : []),
                 // Since docs/PLAN_NAV_3_LEVELS.md section 6: the rail's places, the panel's first nine and the panel itself.
                 ...(ConsoleV2::frame() ? [
-                    [$mac ? '⌘ 1…6' : 'Ctrl 1…6', 'Library, Projects, Live, Ask, Activity, Settings'],
-                    [$mac ? '⌥ 1…9' : 'Alt 1…9', 'The panel\'s first nine (the Library\'s views, then My views)'],
-                    [$mac ? '⌘ \\  [' : 'Ctrl \\  [', 'Hide or show the panel'],
+                    [$mac ? '⌘ 1…6' : 'Ctrl 1…6', __('Library, Projects, Live, Ask, Activity, Settings')],
+                    [$mac ? '⌥ 1…9' : 'Alt 1…9', __('The panel\'s first nine (the Library\'s views, then My views)')],
+                    [$mac ? '⌘ \\  [' : 'Ctrl \\  [', __('Hide or show the panel')],
                 ] : []),
             ],
-            'In the Library' => [
-                ['J  K', 'Next and previous recording'],
-                ['Enter', 'Open it'],
-                ['X', 'Select it'],
-                ['Esc', 'Close the recording on the right, or clear the selection'],
+            __('In the Library') => [
+                ['J  K', __('Next and previous recording')],
+                ['Enter', __('Open it')],
+                ['X', __('Select it')],
+                ['Esc', __('Close the recording on the right, or clear the selection')],
                 // Since v2.0 (ui_v2.library, parity plan 3): the selection's keys and mouse.
                 ...(ConsoleV2::library() ? [
-                    [$mac ? '⌘ A' : 'Ctrl A', 'Select every recording on the page'],
-                    ['Shift click', 'Select a range'],
-                    ['Delete', 'Delete the selection (Undo in the notice)'],
-                    ['Right-click', 'The recording\'s menu, or the selection\'s'],
+                    [$mac ? '⌘ A' : 'Ctrl A', __('Select every recording on the page')],
+                    ['Shift click', __('Select a range')],
+                    ['Delete', __('Delete the selection (Undo in the notice)')],
+                    ['Right-click', __('The recording\'s menu, or the selection\'s')],
                     // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the filters, the search and the places.
-                    ['F', 'Open or close the filters (while the Library has focus)'],
-                    [$mac ? '⌘ F' : 'Ctrl F', 'Search titles, transcripts and projects in the Library'],
-                    ...(ConsoleV2::frame() ? [] : [[$mac ? '⌘ 1…9  ⌥ 1…9' : 'Ctrl 1…9  Alt 1…9', 'Open the sidebar\'s first nine places']]),
+                    ['F', __('Open or close the filters (while the Library has focus)')],
+                    [$mac ? '⌘ F' : 'Ctrl F', __('Search titles, transcripts and projects in the Library')],
+                    ...(ConsoleV2::frame() ? [] : [[$mac ? '⌘ 1…9  ⌥ 1…9' : 'Ctrl 1…9  Alt 1…9', __('Open the sidebar\'s first nine places')]]),
                 ] : []),
             ],
-            'On a recording' => [
-                ['Space', 'Play or pause'],
-                ['←  →', 'Back or forward 5 seconds (Shift: 10)'],
+            __('On a recording') => [
+                ['Space', __('Play or pause')],
+                ['←  →', __('Back or forward 5 seconds (Shift: 10)')],
             ],
         ];
     }
