@@ -11,10 +11,13 @@ use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\Workspaces\Workspaces;
 use Filament\Notifications\DatabaseNotification;
+use Illuminate\Database\QueryException;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -151,6 +154,8 @@ it('merges the items already there once, newest kept, unread when any was, and c
     $me = Fx::user();
     $other = Fx::user();
     $session = Fx::session($me, null, ['title' => 'Old call']);
+    // Its upload still failed (written without the listener), so the merge keeps it unresolved.
+    DB::table('recordings')->where('id', Fx::pendingRecording($session, 'audio')->id)->update(['upload_status' => 'failed']);
     $raw = function (User $user, string $kind, ?string $sessionId, string $at, ?string $readAt, string $title) {
         DB::table('notifications')->insert(['id' => (string) Str::uuid(), 'type' => DatabaseNotification::class,
             'notifiable_type' => $user->getMorphClass(), 'notifiable_id' => $user->id, 'read_at' => $readAt, 'created_at' => $at, 'updated_at' => $at,
@@ -179,6 +184,71 @@ it('merges the items already there once, newest kept, unread when any was, and c
 
     $migration->up();
     expect(DB::table('notifications')->orderBy('created_at')->get(['notifiable_id', 'data', 'read_at', 'dedupe_key', 'repeat_count'])->all())->toEqual($after->all());
+});
+
+it('resolves the upload failures the migration finds already over, and leaves a real one; twice changes nothing', function () {
+    $me = Fx::user();
+    $gone = Fx::session($me, null, ['title' => 'Gone']);
+    $binned = Fx::session($me, null, ['title' => 'In the bin']);
+    $uploaded = Fx::session($me, null, ['title' => 'Uploaded since']);
+    $failing = Fx::session($me, null, ['title' => 'Still failing']);
+    Fx::pendingRecording($failing, 'audio')->update(['upload_status' => UploadStatus::Failed]);
+    DB::table('notifications')->delete();
+    foreach ([$gone, $binned, $uploaded, $failing] as $session) {
+        DB::table('notifications')->insert(['id' => (string) Str::uuid(), 'type' => DatabaseNotification::class,
+            'notifiable_type' => $me->getMorphClass(), 'notifiable_id' => $me->id, 'read_at' => null, 'created_at' => now(), 'updated_at' => now(),
+            'data' => json_encode(['title' => 'Upload failed — retry', 'body' => 'b', 'viewData' => ['kind' => 'upload_failed', 'session_id' => $session->id]])]);
+    }
+    DB::table('capture_sessions')->where('id', $gone->id)->delete();
+    $binned->delete();
+    DB::table('notifications')->where('notifiable_id', $me->id)->update(['resolved_at' => null, 'read_at' => null]);
+
+    $migration = require database_path('migrations/2026_12_30_000001_add_activity_dedupe_to_notifications.php');
+    $migration->up();
+    $state = fn (): array => DB::table('notifications')->where('notifiable_id', $me->id)->get(['dedupe_key', 'resolved_at', 'read_at'])
+        ->mapWithKeys(fn ($row): array => [substr((string) $row->dedupe_key, 14) => [$row->resolved_at !== null, $row->read_at !== null]])->all();
+
+    expect($state())->toBe([$gone->id => [true, true], $binned->id => [true, true], $uploaded->id => [true, true], $failing->id => [false, false]]);
+    $before = DB::table('notifications')->orderBy('id')->get()->all();
+    $migration->up();
+    expect(DB::table('notifications')->orderBy('id')->get()->all())->toEqual($before)
+        ->and(activityOf($me, '/api/activity/groups')['data'][0]['session_ids'])->toBe([$failing->id]);
+});
+
+it('resolves an upload failure when its recording is deleted, and only once no upload of it is still failed', function () {
+    $me = Fx::user();
+    $deleted = failingUpload($me, 'Deleted after');
+    $deleted->captureSession->delete();
+    expect(collect(activityOf($me)['data'])->firstWhere('session_id', $deleted->capture_session_id))->toMatchArray(['resolved' => true, 'read' => true]);
+
+    // Two artifacts of one recording failed: the first one arriving does not resolve it, the second does.
+    $first = failingUpload($me, 'Two parts');
+    $second = Fx::pendingRecording($first->captureSession, 'second part', 1024, 'channel_2');
+    $second->update(['upload_status' => UploadStatus::Failed]);
+    $path = app(ChunkedUploadService::class)->tempPath('test');
+    foreach ([[$first, 'audio of Two parts', false], [$second, 'second part', true]] as [$recording, $plain, $resolved]) {
+        file_put_contents($path, $plain);
+        $recording->update(['upload_status' => UploadStatus::Assembling]);
+        app(ChunkedUploadService::class)->storeEncrypted($recording->fresh(), $path);
+        expect(collect(activityOf($me)['data'])->firstWhere('session_id', $first->capture_session_id)['resolved'])->toBe($resolved);
+    }
+    @unlink($path);
+});
+
+it('reports a failed write without its words: the class and the SQLSTATE only', function () {
+    Exceptions::fake();
+    $me = Fx::user();
+    $session = Fx::session($me, null, ['title' => 'Confidential supplier call']);
+    Schema::rename('notifications', 'notifications_away');
+    try {
+        app(ActivityFeed::class)->post($me, 'transcript_failed', 'Transcription failed', 'Confidential supplier call', $session, 'heroicon-o-bell');
+    } finally {
+        Schema::rename('notifications_away', 'notifications');
+    }
+
+    Exceptions::assertReported(fn (RuntimeException $e): bool => str_contains($e->getMessage(), 'QueryException (SQLSTATE')
+        && ! str_contains($e->getMessage(), 'Confidential'));
+    Exceptions::assertNotReported(QueryException::class);
 });
 
 it('writes nothing of a recording to the log while it merges, groups and resolves', function () {

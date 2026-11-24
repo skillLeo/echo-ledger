@@ -3,14 +3,15 @@
 -- After migrate: notifications.dedupe_key (varchar 120, nullable), repeat_count (unsigned int, not null, default 1) and
 -- resolved_at (nullable timestamp, all null) exist, with the unique key notifications_dedupe_unique on (notifiable_type,
 -- notifiable_id, dedupe_key); the items already there are merged: no two items of one person share a recording and a
--- kind, every item about a recording carries "<kind>:<session_id>" as its key, and every repeat_count is 1 or more. After
+-- kind, every item about a recording carries "<kind>:<session_id>" as its key, and every repeat_count is 1 or more; no
+-- upload failure is left unresolved whose recording is gone, in the undo bin, or has no failed upload any more. After
 -- the rollback: the three columns and the key are gone, the table's columns as before.
 select group_concat(column_name order by cast(column_name as binary) separator ',') = 'created_at,data,dedupe_key,id,notifiable_id,notifiable_type,read_at,repeat_count,resolved_at,type,updated_at' from information_schema.columns where table_schema = database() and table_name = 'notifications';
 select count(*) = 1 from information_schema.columns where table_schema = database() and table_name = 'notifications' and column_name = 'dedupe_key' and is_nullable = 'YES' and character_maximum_length = 120;
 select count(*) = 1 from information_schema.columns where table_schema = database() and table_name = 'notifications' and column_name = 'repeat_count' and is_nullable = 'NO' and column_default = '1' and column_type like 'int%unsigned';
 select count(*) = 1 from information_schema.columns where table_schema = database() and table_name = 'notifications' and column_name = 'resolved_at' and is_nullable = 'YES' and data_type = 'timestamp';
 select group_concat(column_name order by seq_in_index separator ',') = 'notifiable_type,notifiable_id,dedupe_key' from information_schema.statistics where table_schema = database() and table_name = 'notifications' and index_name = 'notifications_dedupe_unique' and non_unique = 0;
-select count(*) = 0 from notifications where resolved_at is not null;
+select count(*) = 0 from notifications n where n.dedupe_key like 'upload_failed:%' and n.resolved_at is null and not exists (select 1 from recordings r join capture_sessions s on s.id = r.capture_session_id where r.capture_session_id = substring(n.dedupe_key, 15) and r.upload_status = 'failed' and s.deleted_at is null);
 select count(*) = 0 from notifications where repeat_count < 1;
 select count(*) = 0 from (select notifiable_type, notifiable_id, json_unquote(json_extract(data, '$.viewData.kind')) as kind, json_unquote(json_extract(data, '$.viewData.session_id')) as session_id, count(*) as items from notifications where json_type(json_extract(data, '$.viewData.session_id')) = 'STRING' and json_type(json_extract(data, '$.viewData.kind')) = 'STRING' and json_unquote(json_extract(data, '$.viewData.session_id')) <> '' group by notifiable_type, notifiable_id, kind, session_id having items > 1) as twice;
 select count(*) = 0 from notifications where json_type(json_extract(data, '$.viewData.session_id')) = 'STRING' and json_type(json_extract(data, '$.viewData.kind')) = 'STRING' and json_unquote(json_extract(data, '$.viewData.session_id')) <> '' and (dedupe_key is null or dedupe_key <> concat(json_unquote(json_extract(data, '$.viewData.kind')), ':', json_unquote(json_extract(data, '$.viewData.session_id'))));
