@@ -1,29 +1,44 @@
 // UX-22 (PLAN_V2_1_POLISH 3b): a right-click menu, shown each platform's way. On a Mac it is the system's own menu,
 // drawn by the core (native_menu_popup, as Record's menu is): Title Case, ticks, one level of sub-menus, hairlines and
 // a greyed title line for several ("3 Recordings"), no icons and no shortcuts. Nothing of it is kept on this side but
-// what its picks do: a pick comes back as `menu:action` ("<id>" or "<id>=<value>"), and runPicked runs it through the
-// item it came from (whose pick goes through the registry). On Windows, in the browser and in the tests the menu is ours
-// in Windows 11's style (components/Menu.tsx ContextMenu), which the caller shows when popupNative answers false.
-import { api } from "../../lib/ipc";
+// what its picks do. On Windows, in the browser and in the tests the menu is ours in Windows 11's style
+// (components/Menu.tsx ContextMenu), which the caller shows when popupNative answers false.
+//
+// Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>", or "<id>=<value>" for a choice), heard by
+// the window's one listener, which offers it to runPicked first. One of these menus' picks carries the menu's number in
+// its value ("<id>=<value>#<n>") and runs through the item it came from (whose pick goes through the registry); any other
+// (Record's menu, the menu bar, or an earlier menu's) is not caught here.
+import { api, type NativeMenuItem } from "../../lib/ipc";
 import type { MenuItem } from "../components/Menu";
-import { nativeItems, type Platform } from "./registry";
+import { macTitle, nativeItems, type Platform } from "./registry";
 
 /** The platform a menu is for: a Mac's system menus, else Windows's. */
 export function currentPlatform(): Platform {
   return typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "macos" : "windows";
 }
 
-/** What the open system menu's picks do: one menu at a time, forgotten after a pick or when the next one opens. */
-let picks = new Map<string, () => void>();
-let forget = 0;
+/** An app's own words in a menu (a title line, "No project", a sort order, a format), in the platform's case. */
+export const appWords = (words: string, platform: Platform = currentPlatform()) => (platform === "macos" ? macTitle(words) : words);
 
-/** Each item's pick, by what it comes back as: its action, or its action and choice. */
-function picksOf(items: readonly MenuItem[], into = new Map<string, () => void>()): Map<string, () => void> {
-  for (const item of items) {
-    if (item.items?.length) picksOf(item.items, into);
-    else if (item.action && item.onPick) into.set(item.choice !== undefined ? `${item.action}=${item.choice}` : item.action, item.onPick);
-  }
-  return into;
+/** What the open system menu's picks do (one menu at a time), by what each comes back as. */
+let picks = new Map<string, () => void>();
+let menuNumber = 0;
+let forget = 0;
+/** Lets this side's menu go (its picks are no longer this menu's). */
+export function forgetPicks(): void {
+  window.clearTimeout(forget);
+  picks = new Map();
+}
+
+/** Each item's pick, by what it comes back as: its action, its choice, and this menu's number. */
+function withNumber(items: readonly MenuItem[], n: number, into: Map<string, () => void>): MenuItem[] {
+  return items.map((item) => {
+    if (item.items?.length) return { ...item, items: withNumber(item.items, n, into) };
+    if (!item.action || !item.onPick) return item;
+    const value = `${item.choice ?? ""}#${n}`;
+    into.set(`${item.action}=${value}`, item.onPick);
+    return { ...item, choice: value };
+  });
 }
 
 /**
@@ -32,24 +47,28 @@ function picksOf(items: readonly MenuItem[], into = new Map<string, () => void>(
  */
 export async function popupNative(items: readonly MenuItem[], at: { x: number; y: number }, title?: string): Promise<boolean> {
   if (currentPlatform() !== "macos" || !items.length) return false;
-  window.clearTimeout(forget);
-  picks = picksOf(items);
+  forgetPicks();
+  const n = ++menuNumber;
+  const into = new Map<string, () => void>();
+  const numbered = withNumber(items, n, into);
+  picks = into;
   try {
-    await api.nativeMenuPopup(nativeItems(items, title), at.x, at.y);
+    const lines: NativeMenuItem[] = nativeItems(numbered, title ? appWords(title, "macos") : undefined);
+    await api.nativeMenuPopup(lines, at.x, at.y);
     // The pick may come just after the menu closes; a moment later this menu's picks are let go.
     forget = window.setTimeout(() => { picks = new Map(); }, 1000);
     return true;
   } catch {
-    picks = new Map();
+    forgetPicks();
     return false;
   }
 }
 
-/** A pick from a system menu one of these showed: runs it (true), else leaves it to the caller (Record's menu). */
+/** A pick from a system menu one of these showed: runs it (true), else false (another menu's, or let go). */
 export function runPicked(picked: string): boolean {
   const run = picks.get(picked);
   if (!run) return false;
-  picks = new Map();
+  forgetPicks();
   run();
   return true;
 }

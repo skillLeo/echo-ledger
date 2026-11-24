@@ -25,7 +25,7 @@ import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
-import { currentPlatform, popupNative } from "../actions/popup";
+import { appWords, currentPlatform, popupNative } from "../actions/popup";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
@@ -1264,10 +1264,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
         ],
         "recording.moveToProject": choiceItems("recording.moveToProject", [
-          { value: "none", label: "No project", checked: where === "none" },
+          { value: "none", label: appWords("No project", ctx.platform), checked: where === "none" },
           ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
         ], ctx).map(oneOf),
-        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: f.label })), ctx),
+        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: appWords(f.label, ctx.platform) })), ctx),
       }, LIBRARY_KEYS),
     };
   };
@@ -1277,9 +1277,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const listSpaceMenu = (): MenuItem[] => {
     const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
-      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
-      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
-      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label, checked: density === d })), ctx).map(oneOf),
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(SORT_NAMES[k], ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(GROUP_NAMES[k], ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
+      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label: appWords(label, ctx.platform), checked: density === d })), ctx).map(oneOf),
     }, LIBRARY_KEYS);
   };
   /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
@@ -1556,7 +1556,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
               <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
               {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
               <div className="el-lib-row2__end">
                 <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}

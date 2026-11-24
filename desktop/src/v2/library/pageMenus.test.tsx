@@ -91,8 +91,21 @@ describe("the recording page's right-click menus (UX-22)", () => {
     range.selectNodeContents(text);
     window.getSelection()!.removeAllRanges();
     window.getSelection()!.addRange(range);
+    // The words' box, as a browser gives it (jsdom has none): 300 px down, then 120 after a scroll.
+    let top = 300;
+    Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: () => ({ top, left: 100, width: 80, height: 18, bottom: top + 18, right: 180, x: 100, y: top }) });
+    const frame = () => act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
     act(() => void document.dispatchEvent(new Event("selectionchange")));
+    await frame();
     const bar = screen.getByRole("toolbar", { name: "Selected words" });
+    expect(bar.style.top).toBe("300px");
+    // Right after the transcript in the page, so Tab reaches it from the words.
+    expect(screen.getByRole("list", { name: "Transcript" }).nextElementSibling).toBe(bar);
+    // It follows the words when the page scrolls (one update a frame).
+    top = 120;
+    fireEvent.scroll(window);
+    await frame();
+    expect(bar.style.top).toBe("120px");
     // A Mac's words (Title Case), as its menus.
     expect(within(bar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Play from Here", "Copy with Time"]);
     expect(checkMenu([...bar.querySelectorAll("button")].map((b) => ({ label: b.textContent ?? "", action: b.getAttribute("data-action") ?? undefined })), "macos")).toEqual([]);
@@ -104,6 +117,8 @@ describe("the recording page's right-click menus (UX-22)", () => {
     // The words let go: the bar goes.
     window.getSelection()!.removeAllRanges();
     act(() => void document.dispatchEvent(new Event("selectionchange")));
+    await frame();
     expect(screen.queryByRole("toolbar", { name: "Selected words" })).toBeNull();
+    delete (Range.prototype as { getBoundingClientRect?: unknown }).getBoundingClientRect;
   });
 });

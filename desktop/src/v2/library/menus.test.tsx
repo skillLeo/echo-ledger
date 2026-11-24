@@ -285,9 +285,10 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(call.items.every((i) => !i.accelerator)).toBe(true);
     expect(call.items.find((i) => i.label === "Mark as Important")).toMatchObject({ checked: false });
     const move = call.items.find((i) => i.label === "Move to Project")!;
-    expect(move.items!.map((i) => [i.label, i.value, i.checked])).toEqual([["No project", "none", true], ["Qureshi Textiles", "c1", false]]);
-    // A pick comes back as "<id>=<value>" (menu:action) and runs through the item it came from.
-    expect(runPicked("recording.moveToProject=c1")).toBe(true);
+    // The app's own words in a Mac's case ("No Project"); a project's name as it is. Each value carries the menu's number.
+    expect(move.items!.map((i) => [i.label, i.value?.replace(/#\d+$/, ""), i.checked])).toEqual([["No Project", "none", true], ["Qureshi Textiles", "c1", false]]);
+    // A pick comes back as "<id>=<value>#<menu>" (menu:action) and runs through the item it came from.
+    expect(runPicked(`recording.moveToProject=${move.items![1].value}`)).toBe(true);
     await act(flushAsync);
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { client_id: "c1" } }]);
     // Several: a greyed title line first.
@@ -295,8 +296,9 @@ describe("the Library's right-click menus (UX-22)", () => {
     fireEvent.click(row("Voice note"), { metaKey: true });
     fireEvent.contextMenu(row("Voice note"), { clientX: 40, clientY: 60 });
     await act(flushAsync);
-    expect((callsOf("native_menu_popup")[1] as { items: Line[] }).items.slice(0, 2)).toEqual([{ action: null, label: "2 recordings", enabled: false }, { action: null }]);
-    // A pick of something this menu didn't show is left to the shell (Record's menu).
+    expect((callsOf("native_menu_popup")[1] as { items: Line[] }).items.slice(0, 2)).toEqual([{ action: null, label: "2 Recordings", enabled: false }, { action: null }]);
+    // A pick without this menu's number (another menu's: Record's) is left to the shell, as is an earlier menu's.
     expect(runPicked("file.newRecording")).toBe(false);
+    expect(runPicked(`recording.moveToProject=${move.items![1].value}`)).toBe(false);
   });
 });
