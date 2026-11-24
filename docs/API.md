@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-v (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-y (2026-11-26, proposed by EL-Backend, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-y (proposed 2026-11-26; bulk Mark as read / unread): `POST /api/sessions/opened` and `DELETE /api/sessions/opened` take up to 200 ids and do for each what `POST` and `DELETE /api/sessions/{id}/opened` do for one, in one call: `200 {"done": [...], "not_found": [...]}`, a recording the person cannot read listed back, never an error for the whole batch. Additions only. (2.0.0-w and 2.0.0-x, the call rules, are accepted on their own branch and land separately.)
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
@@ -1772,6 +1773,26 @@ marked unread: `204`). Like opening, it never changes the recording (no `updated
 library). From then on library items carry `"opened": false` for them, the recording is in Unread (`view=unread`)
 and counted in `library.unread`, until it is opened again. The same recordings as `POST …/opened`: one the person
 cannot see (another workspace's, or another person's they were not given) → `404`.
+
+### `POST /api/sessions/opened` — `library:read` (since 2.0.0-y)
+Mark as read for many recordings in one call (the apps' selection: Mark as read): `{"ids": ["01JB…", …]}`, 1 to 200
+ids → `200 {"done": ["01JB…", …], "not_found": ["01JC…"]}`. For each id it does what `POST /api/sessions/{id}/opened`
+does for one, with the same rules:
+- `done` lists the recordings the asking person can read, whose open is now theirs (opening again only moves the time).
+- `not_found` lists every other id, as it was sent: another workspace's, another person's they were not given, one in
+  the bin, or none at all. Those are never an error for the whole batch, and nothing is said about why.
+- An id sent twice counts once, in the order of its first place.
+- It never changes a recording (no `updated_at`, no reorder, no re-sync of the library) and never anyone else's opens.
+- More than 200 ids, or an id that is not a string, is `422 validation_failed` with `errors` and `error_codes`
+  (`too_long` with `max: 200` on `ids`), and nothing is marked.
+
+### `DELETE /api/sessions/opened` — `library:read` (since 2.0.0-y)
+Mark as unread for many recordings in one call: `{"ids": [...]}`, 1 to 200 → `200 {"done": [...], "not_found":
+[...]}`. For each id it does what `DELETE /api/sessions/{id}/opened` does: it takes back only the asking person's own
+open. A recording they had not opened, or already marked unread, is in `done` too (idempotent). From then on those
+recordings carry `"opened": false` for them, are in Unread and are counted in `library.unread` (`GET
+/api/library/facets`). The same `not_found`, the same 200 at most, the same `422` as `POST`. It never moves a recording
+to the bin: that is `DELETE /api/sessions/{id}`.
 
 ### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
 `200 {"data": [ShareLink]}`, newest first. The URL is not shown again.
