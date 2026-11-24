@@ -16,6 +16,7 @@ import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 import { ATTACH_NOTE, fileName, linkMessage, pasteNote, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
 import { PACKS } from "../../views/main/TranscriptTools";
 import { Button, Dialog, Icons, Select, TextField } from "../components";
+import { openSettingsSection } from "../../lib/entitlements";
 import type { MenuItem } from "../components/Menu";
 
 /**
@@ -296,6 +297,10 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
   );
 }
 
+/** What the core says when the plan transcribes with the person's own key and none is added yet (`needs_transcription_key`);
+ * the same words as desktop/src-tauri/src/error.rs CODE_TEXT, which a test holds them to. */
+export const NEEDS_TRANSCRIPTION_KEY_TEXT = "This plan transcribes with your own Groq key. Add it in Settings › Transcription key.";
+
 /** Transcribe: the minutes it will use and the minutes left this month first, then it starts. */
 export function TranscribeDialog({ ids, onClose, say, of }: {
   ids: readonly string[]; onClose: () => void; say: Say;
@@ -321,6 +326,7 @@ export function TranscribeDialog({ ids, onClose, say, of }: {
       setBusy(false);
     }
   };
+  const needsKey = error === NEEDS_TRANSCRIPTION_KEY_TEXT;
   const minutes = (n: number) => (n === 1 ? "1 minute" : `${n} minutes`);
   const first = of && of > ids.length ? `The first ${ids.length} of ${of} now. ` : "";
   const description = error
@@ -329,7 +335,10 @@ export function TranscribeDialog({ ids, onClose, say, of }: {
         + (over ? " That is more than is left, so nothing will start. Pick fewer recordings." : ""));
   return (
     <Dialog open title={ids.length === 1 ? "Transcribe this recording?" : `Transcribe ${recordingsWord(ids.length)}?`} description={description} onClose={onClose}
-      actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!estimate || over} loading={busy} loadingLabel="Starting…" onClick={() => void start()}>Transcribe</Button></>} />
+      actions={<><Button onClick={onClose}>Cancel</Button>{needsKey
+        // Nothing can start until a key is added: the way to add one, as classic's "Add my Groq key".
+        ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => { onClose(); openSettingsSection("transcription-key"); }}>Add my Groq key</Button>
+        : <Button variant="primary" disabled={!estimate || over} loading={busy} loadingLabel="Starting…" onClick={() => void start()}>Transcribe</Button>}</>} />
   );
 }
 
