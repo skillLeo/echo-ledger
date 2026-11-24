@@ -2297,10 +2297,11 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 .el-winbutton .el-icon > svg { inline-size: var(--el-desktop-window-button-glyph); block-size: var(--el-desktop-window-button-glyph); }
 /* `is-hovered`: the snap layout plugin's own hover for Maximize, whose native window lies over it on Windows 11. */
-.el-winbutton:hover, .el-winbutton.is-hovered { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
-.el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) 14%, transparent); }
+:root { --el-winbutton-hover-mix: 8%; --el-winbutton-pressed-mix: 14%; --el-winbutton-close-pressed-mix: 80%; }
+.el-winbutton:hover, .el-winbutton.is-hovered { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-hover-mix), transparent); }
+.el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
 .el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
-.el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) 80%, transparent); color: var(--el-role-text-on-accent); }
+.el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {

@@ -43,17 +43,54 @@ pub fn registers_snap(on: bool, registered: bool) -> bool {
     on && !registered
 }
 
-/// Registers the snap layout plugin the first time the flag is seen on (Windows); nothing otherwise.
+/// What the page's own row needs from the core, granted to the main window at run time with the plugin (pure): its
+/// buttons (minimize, maximize and restore, close) and Snap Layouts' two commands. Never a compiled capability, so with
+/// the flag off the window has none of it.
+pub fn capability() -> tauri::ipc::CapabilityBuilder {
+    tauri::ipc::CapabilityBuilder::new(CAPABILITY)
+        .window(crate::lifecycle::MAIN)
+        .permission("core:window:allow-minimize")
+        .permission("core:window:allow-toggle-maximize")
+        .permission("core:window:allow-close")
+        .permission("snap-layout:default")
+}
+
+/// The run-time capability's name.
+pub const CAPABILITY: &str = "windows-titlebar";
+
+/// Registers the snap layout plugin and grants the row's capability, the first time the flag is seen on (Windows);
+/// nothing otherwise.
 fn snap_once(app: &AppHandle, on: bool) {
     if !registers_snap(on, SNAP_REGISTERED.load(Ordering::SeqCst)) || SNAP_REGISTERED.swap(true, Ordering::SeqCst) {
         return;
     }
     #[cfg(windows)]
-    if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build()) {
-        eprintln!("[echoledger] Snap Layouts were not set up: {e}");
+    {
+        if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build()) {
+            eprintln!("[echoledger] Snap Layouts were not set up: {e}");
+        }
+        if let Err(e) = app.add_capability(capability()) {
+            eprintln!("[echoledger] the title row's buttons were not allowed: {e}");
+        }
     }
     #[cfg(not(windows))]
     let _ = app;
+}
+
+/// Snap Layouts follow the row on the open window (Windows): with the row gone the plugin's native window over the old
+/// Maximize is destroyed (so the top-right corner never maximizes), and it comes back with the row.
+fn snap_follow(window: &tauri::WebviewWindow, on: bool) {
+    if !SNAP_REGISTERED.load(Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        use tauri_plugin_snap_layout::SnapExt;
+        let snap = window.snap();
+        let _ = if on { snap.attach(window) } else { snap.detach(window) };
+    }
+    #[cfg(not(windows))]
+    let _ = (window, on);
 }
 
 /// Whether the main window draws its own title row (pure): on Windows with the flag on.
@@ -84,6 +121,7 @@ pub fn follow(app: &AppHandle, flags: &UiFlags) {
     if on {
         let _ = window.set_shadow(true);
     }
+    snap_follow(&window, on);
     let _ = app.emit_to(crate::lifecycle::MAIN, EVENT, on);
 }
 
@@ -139,11 +177,11 @@ mod tests {
         assert!(!include_str!("lib.rs").contains("snap_layout"), "not registered when the app starts");
         // The one registration, at run time, on Windows, behind the flag's gate (and once).
         let code = include_str!("wintitle.rs").split("#[cfg(test)]").next().unwrap();
-        assert_eq!(code.matches("tauri_plugin_snap_layout::").count(), 1);
+        assert_eq!(code.matches("tauri_plugin_snap_layout::init()").count(), 1);
         let once = &code[code.find("fn snap_once(").unwrap()..];
         let once = &once[..once.find("\n}\n").unwrap()];
         let gate = once.find("if !registers_snap(on, SNAP_REGISTERED.load(Ordering::SeqCst)) || SNAP_REGISTERED.swap(true, Ordering::SeqCst) {").expect("gated");
-        let register = once.find("#[cfg(windows)]\n    if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build())").expect("on Windows only");
+        let register = once.find("#[cfg(windows)]\n    {\n        if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build())").expect("on Windows only");
         assert!(gate < register);
         // Called with the flag's answer from the two places that know it: the main window's build (before it is made, so
         // the script reaches it) and a change while EchoLedger runs.
@@ -151,6 +189,34 @@ mod tests {
         assert!(build[..build.find("\n}\n").unwrap()].contains("snap_once(app, on);"));
         let follow = &code[code.find("pub fn follow").unwrap()..];
         assert!(follow[..follow.find("\n}\n").unwrap()].contains("snap_once(app, on);"));
+    }
+
+    #[test]
+    fn the_rows_permissions_exist_only_once_the_flag_is_on() {
+        // With the flag off the main window has no window-button or Snap Layouts permission: none is compiled in.
+        for file in std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities")).unwrap().flatten() {
+            let text = std::fs::read_to_string(file.path()).unwrap();
+            for permission in ["snap-layout", "allow-minimize", "allow-toggle-maximize", "allow-close"] {
+                assert!(!text.contains(permission), "{} grants {permission}", file.path().display());
+            }
+        }
+        // Granted with the plugin, in the one gated place.
+        use tauri::ipc::RuntimeCapability;
+        let tauri::utils::acl::capability::CapabilityFile::Capability(built) = capability().build() else { panic!("one capability") };
+        let built = serde_json::to_value(&built).unwrap();
+        assert_eq!(built["identifier"], CAPABILITY);
+        assert_eq!(built["windows"], json!(["main"]), "the main window only");
+        let permissions: Vec<&str> = built["permissions"].as_array().unwrap().iter().filter_map(|p| p.as_str()).collect();
+        assert_eq!(permissions, ["core:window:allow-minimize", "core:window:allow-toggle-maximize", "core:window:allow-close", "snap-layout:default"]);
+        let code = include_str!("wintitle.rs").split("#[cfg(test)]").next().unwrap();
+        let once = &code[code.find("fn snap_once(").unwrap()..];
+        let once = &once[..once.find("\n}\n").unwrap()];
+        assert!(once.find("registers_snap(on,").unwrap() < once.find("app.add_capability(capability())").unwrap());
+        assert_eq!(code.matches("add_capability(").count(), 1);
+        // The row gone while running: the plugin's window over Maximize goes too.
+        let follow = &code[code.find("pub fn follow").unwrap()..];
+        assert!(follow[..follow.find("\n}\n").unwrap()].contains("snap_follow(&window, on);"));
+        assert!(code.contains("let _ = if on { snap.attach(window) } else { snap.detach(window) };"));
     }
 
     #[test]
@@ -163,10 +229,7 @@ mod tests {
         let lock = include_str!("../Cargo.lock");
         assert_eq!(lock.matches("\nname = \"tauri-plugin-snap-layout\"\n").count(), 1);
         assert_eq!(lock.matches("\nname = \"raw-window-handle\"\n").count(), 1, "one raw-window-handle");
-        // Its permission is the main window's, on Windows only (tauri-build checks a capability only for its platforms).
-        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/windows-titlebar.json")).unwrap();
-        assert_eq!(capability["platforms"], json!(["windows"]));
-        assert_eq!(capability["windows"], json!(["main"]));
-        assert!(capability["permissions"].as_array().unwrap().contains(&json!("snap-layout:default")));
+        // No compiled capability: the row's permissions are granted at run time with the plugin (capability()).
+        assert!(!std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/windows-titlebar.json")).exists());
     }
 }
