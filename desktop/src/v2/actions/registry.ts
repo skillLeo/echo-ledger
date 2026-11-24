@@ -201,10 +201,24 @@ export function menuItems(ids: readonly string[], ctx: ActionContext): (MenuItem
   return out;
 }
 
+/**
+ * A sub-menu's choices (UX-22): a label's name, a project, a format, a sort order. Each sends the sub-menu's action with
+ * its value; their words are the choices' own, so checkMenu takes them only under that sub-menu.
+ */
+export function choiceItems(action: string, choices: readonly { value: string; label: string; checked?: boolean; disabled?: boolean; icon?: MenuItem["icon"] }[],
+  pick: (value: string) => void): MenuItem[] {
+  need(action);
+  return choices.map((c) => ({ action, choice: c.value, label: c.label, icon: c.icon, checked: c.checked, disabled: c.disabled || undefined, onPick: () => pick(c.value) }));
+}
+
 /** What is wrong with a menu (the test's check): an item with no action, an unknown one, other words or keys. */
-export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform): string[] {
+export function checkMenu(items: readonly (MenuItem & { action?: string })[], platform: Platform, parent?: string): string[] {
   const out: string[] = [];
   for (const item of items) {
+    if (item.choice !== undefined) {
+      if (!parent || item.action !== parent) out.push(`"${item.label}": a choice outside its sub-menu (${item.action ?? "no action"})`);
+      continue;
+    }
     if (!item.action) {
       out.push(`"${item.label}": no action in actions.json`);
     } else {
@@ -219,7 +233,7 @@ export function checkMenu(items: readonly (MenuItem & { action?: string })[], pl
         if (item.shortcut && !keys.includes(item.shortcut)) out.push(`"${item.label}": shortcut ${item.shortcut}, actions.json says ${keys[0] ?? "none"}`);
       }
     }
-    if (item.items) out.push(...checkMenu(item.items, platform));
+    if (item.items) out.push(...checkMenu(item.items, platform, item.action));
   }
   return out;
 }

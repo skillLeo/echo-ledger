@@ -27,6 +27,9 @@ export type MenuItem = {
   separator?: boolean;
   /** The command it sends (v2/actions/actions.json, UX-21): its words, keys and what it does come from there. */
   action?: string;
+  /** One of its sub-menu's choices (a label, a project, a format, a sort order): its words are the choice's own, and its
+   * `action` is the sub-menu's (UX-22). */
+  choice?: string;
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
