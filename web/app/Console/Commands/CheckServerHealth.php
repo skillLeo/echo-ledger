@@ -52,7 +52,15 @@ final class CheckServerHealth extends Command
         $web = $this->option('web') ? $this->askWeb() : null;
         $healthy = ServerHealth::healthy($result) && ($web === null || $web['ok'] !== false);
         if ($this->option('report')) {
-            $healthy ? $this->clear() : $this->raise($result, $web);
+            // Only a real answer from the web PHP clears its part (W-INC-1125 review): when it could not be asked (a
+            // timeout, a 502) while a fault is still reported, this run neither raises nor clears, so a blip of the
+            // site never sends a false "fixed".
+            $webUnknown = $web !== null && $web['ok'] === null;
+            if ($healthy && $webUnknown && (Cache::has(ServerHealth::ACTIVITY_OPEN) || Cache::has(ServerHealth::MAILED_FAULT))) {
+                $this->warn('A fault is still reported and the web PHP could not be asked: left as it is.');
+            } else {
+                $healthy ? $this->clear() : $this->raise($result, $web);
+            }
         }
 
         return $healthy ? self::SUCCESS : self::FAILURE;

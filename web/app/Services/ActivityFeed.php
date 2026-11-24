@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
@@ -75,6 +76,9 @@ final class ActivityFeed
     public const SERVER_PROBLEM = 'server_problem';
 
     private const SERVER_PROBLEM_KEY = 'server_problem:php';
+
+    /** Set for an hour when a server problem turns unread (W-INC-1125 review): a flapping fault rings once an hour. */
+    private const SERVER_PROBLEM_RANG = 'activity:server-problem-rang';
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -372,12 +376,19 @@ final class ActivityFeed
      */
     public function serverProblem(string $title, string $body): void
     {
+        self::forgetServerProblemsOfOthers();
+        // Whether this run may make an item unread (new, or back after it was fixed): once an hour, for every admin.
+        $ring = null;
+        $mayRing = function () use (&$ring): bool {
+            return $ring ??= Cache::add(self::SERVER_PROBLEM_RANG, true, now()->addHour());
+        };
         foreach (User::query()->where('is_super_admin', true)->get() as $admin) {
             try {
                 $data = self::make($title, $body, self::SERVER_PROBLEM, null, null, '/admin')->icon('heroicon-o-exclamation-triangle')->toDatabase()->data;
                 $item = $admin->notifications()->where('dedupe_key', self::SERVER_PROBLEM_KEY)->first();
                 if (! $item instanceof DatabaseNotification) {
                     try {
+                        $mayRing();
                         $admin->notifications()->create(['id' => (string) Str::uuid(), 'type' => FilamentDatabaseNotification::class, 'data' => $data,
                             'read_at' => null, 'dedupe_key' => self::SERVER_PROBLEM_KEY, 'repeat_count' => 1]);
                     } catch (UniqueConstraintViolationException) {
@@ -387,8 +398,12 @@ final class ActivityFeed
                     continue;
                 }
                 if ($item->getAttribute('resolved_at') !== null) {
-                    $item->forceFill(['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $item->getAttribute('repeat_count') + 1,
-                        'created_at' => now(), 'updated_at' => now()])->save();
+                    // Back after it was fixed: open again, and unread at the top at most once an hour, so a fault that
+                    // flaps does not make every app notify every few minutes.
+                    $item->forceFill($mayRing()
+                        ? ['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $item->getAttribute('repeat_count') + 1,
+                            'created_at' => now(), 'updated_at' => now()]
+                        : ['data' => $data, 'resolved_at' => null])->save();
                 } elseif (($item->data['title'] ?? null) !== ($data['title'] ?? null) || ($item->data['body'] ?? null) !== ($data['body'] ?? null)) {
                     $item->forceFill(['data' => $data])->save();
                 }
@@ -398,9 +413,26 @@ final class ActivityFeed
         }
     }
 
+    /**
+     * A server problem is for super admins only (W-INC-1125 review): the items of anyone who is not one any more go,
+     * when the role is taken away (User) and, for any other way, whenever a problem is written or resolved.
+     */
+    public static function forgetServerProblemsOfOthers(?User $user = null): void
+    {
+        try {
+            DatabaseNotification::query()->where('dedupe_key', self::SERVER_PROBLEM_KEY)->where('notifiable_type', (new User)->getMorphClass())
+                ->when($user !== null, fn ($q) => $q->where('notifiable_id', $user?->id))
+                ->whereNotIn('notifiable_id', User::query()->where('is_super_admin', true)->select('id'))
+                ->delete();
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'Server problems of a former super admin were not removed');
+        }
+    }
+
     /** The health check passes again: each super admin's open item reads "Fixed", is read and resolved (W-INC-1125). */
     public function serverProblemResolved(): void
     {
+        self::forgetServerProblemsOfOthers();
         try {
             $data = self::make('Fixed: uploads work again', 'The server\'s PHP has everything it needs again, and recordings can be stored.',
                 self::SERVER_PROBLEM, null, null, '/admin')->icon('heroicon-o-check-circle')->toDatabase()->data;

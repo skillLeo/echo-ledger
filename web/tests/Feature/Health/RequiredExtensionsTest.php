@@ -14,6 +14,7 @@ use App\Services\SettingsRepository;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -309,12 +310,72 @@ describe('the alert (W-INC-1125)', function () {
         expect($fixed->getAttribute('resolved_at'))->not->toBeNull()->and($fixed->read_at)->not->toBeNull()
             ->and($fixed->data['title'])->toBe('Fixed: uploads work again');
 
-        // It comes back: the same item, unread and at the top again.
+        // It comes back within the hour: open again, but not unread again (a flapping fault rings once an hour).
+        withoutExtensions('sodium');
+        healthCheck();
+        $quiet = $items($admin)->sole();
+        expect($quiet->getAttribute('resolved_at'))->toBeNull()->and($quiet->read_at)->not->toBeNull()
+            ->and((int) $quiet->getAttribute('repeat_count'))->toBe(1);
+
+        // Fixed, then back after the hour: unread and at the top again.
+        withoutExtensions();
+        healthCheck();
+        $this->travel(61)->minutes();
         withoutExtensions('sodium');
         healthCheck();
         $again = $items($admin)->sole();
         expect($again->getAttribute('resolved_at'))->toBeNull()->and($again->read_at)->toBeNull()
             ->and((int) $again->getAttribute('repeat_count'))->toBe(2);
+    });
+
+    it('never says "fixed" when the web PHP cannot be asked while its fault is reported', function () {
+        Mail::fake();
+        $admin = Fx::superAdmin();
+        withoutExtensions('sodium');
+        $this->getJson('/health/php')->assertStatus(503);
+        withoutExtensions();
+        $web = 503;
+        Http::fake(['*/health/php' => function () use (&$web) {
+            return Http::response($web === 503 ? ['ok' => false] : 'Bad gateway', $web);
+        }]);
+        Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
+        Mail::assertSent(ServerHealthMail::class, 1);
+
+        // The site blips: nothing is cleared, no "fixed", the item stays open.
+        $web = 502;
+        Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
+        $this->travel(5)->minutes();
+        Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
+
+        Mail::assertNotSent(ServerHealthFixedMail::class);
+        expect($admin->notifications()->where('data->viewData->kind', 'server_problem')->sole()->getAttribute('resolved_at'))->toBeNull();
+
+        // Only a real answer clears it.
+        $web = 200;
+        Artisan::call('echoledger:health', ['--report' => true, '--web' => true]);
+        Mail::assertSent(ServerHealthFixedMail::class, 1);
+        expect($admin->notifications()->where('data->viewData->kind', 'server_problem')->sole()->getAttribute('resolved_at'))->not->toBeNull();
+    });
+
+    it('takes the problem away from someone who is not a super admin any more', function () {
+        Mail::fake();
+        $admin = Fx::superAdmin();
+        $stays = Fx::superAdmin();
+        withoutExtensions('sodium');
+        healthCheck();
+        $kind = fn (User $user) => $user->notifications()->where('data->viewData->kind', 'server_problem')->count();
+        expect($kind($admin))->toBe(1);
+
+        $admin->forceFill(['is_super_admin' => false])->save();
+
+        expect($kind($admin))->toBe(0)->and($kind($stays))->toBe(1);
+        $device = Fx::device($admin);
+        expect(collect($this->api(Fx::token($device))->getJson('/api/activity')->assertOk()->json('data'))->pluck('kind'))->not->toContain('server_problem');
+
+        // Taken away by any other way (straight in the database): gone at the next check.
+        DB::table('users')->where('id', $stays->id)->update(['is_super_admin' => false]);
+        healthCheck();
+        expect($kind($stays))->toBe(0);
     });
 
     it('shows the problem to the super admin\'s apps, on the badge, and to nobody else', function () {
