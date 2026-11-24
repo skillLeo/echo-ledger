@@ -69,7 +69,7 @@ final class ActivityFeed
         self::SERVER_PROBLEM];
 
     /**
-     * Since W-INC-1125 (contract 2.0.0-w): the server's PHP lacks what uploads need, for the super admins only. One open
+     * Since W-INC-1125 (contract 2.0.0-v): the server's PHP lacks what uploads need, for the super admins only. One open
      * item per problem (SERVER_PROBLEM_KEY), resolved when the scheduled health check passes again.
      */
     public const SERVER_PROBLEM = 'server_problem';
@@ -365,7 +365,7 @@ final class ActivityFeed
     }
 
     /**
-     * The server's PHP fails its health check (W-INC-1125, contract 2.0.0-w): one item per super admin, in the bell and
+     * The server's PHP fails its health check (W-INC-1125, contract 2.0.0-v): one item per super admin, in the bell and
      * the badge of every app, for when no email can reach them. The scheduled check calls this every five minutes while
      * it lasts: an open item only takes the newest words, without turning unread again; one made again after it was
      * resolved is unread, at the top, `repeat_count` one more.
