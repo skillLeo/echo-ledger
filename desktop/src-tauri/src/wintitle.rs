@@ -7,7 +7,9 @@
 //! - resizing from every edge, the top included: Tauri hit-tests an undecorated window's border (tauri-runtime-wry's
 //!   undecorated_resizing);
 //! - Snap Layouts on Windows 11 when the pointer rests on Maximize: tauri-plugin-snap-layout puts a small native window
-//!   over the page's Maximize button that answers the system as a maximize button (HTMAXBUTTON); Windows 10 has none;
+//!   over the page's Maximize button that answers the system as a maximize button (HTMAXBUTTON); Windows 10 has none.
+//!   The plugin is registered only once the flag is first seen on, so with it off nothing of it is in the app (its
+//!   script reaches the web views built after that: the main window's next build, if it was open already);
 //! - the shadow: kept on an undecorated window (`shadow(true)`);
 //! - Alt+Space, the window's system menu: an undecorated window keeps WS_SYSMENU and WS_CAPTION (tao).
 //!
@@ -33,6 +35,27 @@ pub const MAXIMIZE_ID: &str = "el-window-maximize";
 /// Whether the main window has its own row now (as it was built, or as the flag last changed it).
 static OWN_ROW: AtomicBool = AtomicBool::new(false);
 
+/// Whether the snap layout plugin is in the app (registered once, the first time the flag is seen on).
+static SNAP_REGISTERED: AtomicBool = AtomicBool::new(false);
+
+/// Whether to register the snap layout plugin now (pure): the flag on and not registered yet. With the flag off, never.
+pub fn registers_snap(on: bool, registered: bool) -> bool {
+    on && !registered
+}
+
+/// Registers the snap layout plugin the first time the flag is seen on (Windows); nothing otherwise.
+fn snap_once(app: &AppHandle, on: bool) {
+    if !registers_snap(on, SNAP_REGISTERED.load(Ordering::SeqCst)) || SNAP_REGISTERED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(windows)]
+    if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build()) {
+        eprintln!("[echoledger] Snap Layouts were not set up: {e}");
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// Whether the main window draws its own title row (pure): on Windows with the flag on.
 pub fn own_row(windows: bool, flags: &UiFlags) -> bool {
     windows && flags.is_on(FLAG)
@@ -43,6 +66,8 @@ pub fn own_row(windows: bool, flags: &UiFlags) -> bool {
 pub fn on_builder<'a, R: Runtime, M: Manager<R>>(app: &AppHandle, builder: WebviewWindowBuilder<'a, R, M>) -> WebviewWindowBuilder<'a, R, M> {
     let on = own_row(cfg!(windows), &crate::ui_flags::cached(&app.state::<crate::AppState>()));
     OWN_ROW.store(on, Ordering::SeqCst);
+    // Before the window is built, so the plugin's script reaches it.
+    snap_once(app, on);
     if on { builder.decorations(false).shadow(true).initialization_script(START) } else { builder }
 }
 
@@ -53,6 +78,7 @@ pub fn follow(app: &AppHandle, flags: &UiFlags) {
     if OWN_ROW.swap(on, Ordering::SeqCst) == on {
         return;
     }
+    snap_once(app, on);
     let Some(window) = app.get_webview_window(crate::lifecycle::MAIN) else { return };
     let _ = window.set_decorations(!on);
     if on {
@@ -103,6 +129,31 @@ mod tests {
     }
 
     #[test]
+    fn with_the_flag_off_nothing_of_snap_layouts_is_registered() {
+        // The ruling: with the flag off nothing differs from 2.0.15, the plugin's script included.
+        assert!(!registers_snap(false, false), "flag off: never");
+        assert!(!registers_snap(false, true));
+        assert!(registers_snap(true, false), "the first time it is seen on");
+        assert!(!registers_snap(true, true), "once");
+        // Nothing at start: the app's builder has no such plugin.
+        assert!(!include_str!("lib.rs").contains("snap_layout"), "not registered when the app starts");
+        // The one registration, at run time, on Windows, behind the flag's gate (and once).
+        let code = include_str!("wintitle.rs").split("#[cfg(test)]").next().unwrap();
+        assert_eq!(code.matches("tauri_plugin_snap_layout::").count(), 1);
+        let once = &code[code.find("fn snap_once(").unwrap()..];
+        let once = &once[..once.find("\n}\n").unwrap()];
+        let gate = once.find("if !registers_snap(on, SNAP_REGISTERED.load(Ordering::SeqCst)) || SNAP_REGISTERED.swap(true, Ordering::SeqCst) {").expect("gated");
+        let register = once.find("#[cfg(windows)]\n    if let Err(e) = app.plugin(tauri_plugin_snap_layout::init().button_id(MAXIMIZE_ID).build())").expect("on Windows only");
+        assert!(gate < register);
+        // Called with the flag's answer from the two places that know it: the main window's build (before it is made, so
+        // the script reaches it) and a change while EchoLedger runs.
+        let build = &code[code.find("pub fn on_builder").unwrap()..];
+        assert!(build[..build.find("\n}\n").unwrap()].contains("snap_once(app, on);"));
+        let follow = &code[code.find("pub fn follow").unwrap()..];
+        assert!(follow[..follow.find("\n}\n").unwrap()].contains("snap_once(app, on);"));
+    }
+
+    #[test]
     fn snap_layouts_come_from_one_pinned_plugin_linked_on_windows_only() {
         let cargo = include_str!("../Cargo.toml");
         let windows = &cargo[cargo.find("[target.'cfg(windows)'.dependencies]").unwrap()..];
@@ -112,12 +163,6 @@ mod tests {
         let lock = include_str!("../Cargo.lock");
         assert_eq!(lock.matches("\nname = \"tauri-plugin-snap-layout\"\n").count(), 1);
         assert_eq!(lock.matches("\nname = \"raw-window-handle\"\n").count(), 1, "one raw-window-handle");
-        let lib = include_str!("lib.rs");
-        assert_eq!(lib.matches("tauri_plugin_snap_layout").count(), 1);
-        assert!(
-            lib.contains("    #[cfg(windows)]\n    {\n        builder = builder.plugin(tauri_plugin_snap_layout::init().button_id(wintitle::MAXIMIZE_ID).build());\n    }"),
-            "registered on Windows only, for the page's Maximize"
-        );
         // Its permission is the main window's, on Windows only (tauri-build checks a capability only for its platforms).
         let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/windows-titlebar.json")).unwrap();
         assert_eq!(capability["platforms"], json!(["windows"]));
