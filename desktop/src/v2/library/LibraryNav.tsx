@@ -12,7 +12,7 @@ import { LabelsNav } from "./lists";
 import { nameProblem, useMyViews, VIEW_NAME_MAX, ViewError, viewsStore, type MyView } from "./myViews";
 import type { LibraryScope } from "./scope";
 import { useSyncClock } from "./syncClock";
-import { contextItems, MY_VIEW } from "../actions/contextMenus";
+import { contextItems, LIBRARY_VIEW, MY_VIEW } from "../actions/contextMenus";
 import { currentPlatform, popupNative } from "../actions/popup";
 import { useActions } from "../actions/useActions";
 import type { MenuItem } from "../components/Menu";
@@ -108,6 +108,16 @@ function Row({ icon, label, count, strong, current, onClick, children, ...rest }
 
 export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNewView, say, onLibraryChanged }: LibraryNavProps) {
   const views = useMyViews();
+  // A built-in view's menu (UX-22, 3b): Open; Unread's Mark all as read and Audio only's Transcribe all… (the Library
+  // runs those two, for the place it lists).
+  const [viewMenu, setViewMenu] = useState<{ view: LibraryViewId; at: { x: number; y: number } } | null>(null);
+  useActions("place", { "place.open": (c) => { const view = c.targets?.[0] as LibraryViewId | undefined; if (view) onScope({ kind: "view", view }); } });
+  const placeMenu = (view: LibraryViewId) => contextItems(LIBRARY_VIEW, { platform: currentPlatform(), targets: [view], kind: "place" })
+    .filter((item) => item.action === "place.open" || (item.action === "view.markAllRead" && view === "unread") || (item.action === "view.transcribeAll" && view === "audio_only"));
+  const openViewMenu = (view: LibraryViewId, at: { x: number; y: number }) => {
+    if (currentPlatform() !== "macos") return setViewMenu({ view, at });
+    void popupNative(placeMenu(view), at).then((shown) => { if (!shown) setViewMenu({ view, at }); });
+  };
   const sharedOpen = !!current?.startsWith("shared:");
   const [libraryFolded, foldLibrary] = useFolded("library-folded");
   // Shared open or not is kept too; it opens by itself while one of its places is shown.
@@ -144,9 +154,10 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
     <div className="el-library-nav">
       <section className="el-nav-section" aria-label="Views">
         <SectionHead title="Views" folded={libraryFolded} onFold={foldLibrary} />
+        {viewMenu && <ContextMenu label={LIBRARY_VIEW_NAMES[viewMenu.view]} at={viewMenu.at} onClose={() => setViewMenu(null)} items={placeMenu(viewMenu.view)} />}
         {!libraryFolded && <ul className="el-nav-list" aria-label="Library views">
           {LIBRARY_VIEWS.map((view) => (
-            <li key={view}>
+            <li key={view} onContextMenu={(e) => { e.preventDefault(); openViewMenu(view, { x: e.clientX, y: e.clientY }); }}>
               <Row icon={VIEW_ICONS[view]} label={LIBRARY_VIEW_NAMES[view]} count={counts?.[view]} strong={STRONG.includes(view)}
                 current={current === `view:${view}`} onClick={() => onScope({ kind: "view", view })} aria-keyshortcuts={shortcut({ kind: "view", view })} />
             </li>

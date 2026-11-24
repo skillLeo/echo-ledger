@@ -8,9 +8,16 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type ListItem } from "../../lib/ipc";
 import {
   Button, ColourPicker, ContextMenu, Dialog, Icon, Icons, LABEL_COLOURS, LabelDot, NEW_LIST_WORDS, NewListDialog, RENAME_LIST_WORDS, RenameListDialog,
-  addToListItems, deleteListWords, labelColourName, listChipMenuItems, menuPointFor, type LabelColour,
+  addToListItems, deleteListWords, labelColourName, menuPointFor, type LabelColour,
 } from "../components";
 import type { MenuItem } from "../components/Menu";
+import { contextItems, LABEL } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { choiceItems, type ActionContext } from "../actions/registry";
+import { useActions } from "../actions/useActions";
+
+/** What a label's menu runs (contextMenus LABEL's ids). */
+const LABEL_IDS = ["label.showRecordings", "file.rename", "label.colour", "view.moveUp", "view.moveDown", "label.delete"] as const;
 
 /** A label's key: its name in lower case, as the server keys it. */
 export const listKey = (name: string) => name.toLowerCase();
@@ -135,6 +142,9 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   const [colour, setColour] = useState<LabelColour>("grey");
   const [busy, setBusy] = useState(false);
   const section = useRef<HTMLElement>(null);
+  // A label's menu (UX-22): what it does, registered before the labels are known (filled in below).
+  const labelActions = useRef<Record<string, (c: ActionContext) => void>>({});
+  useActions("label", Object.fromEntries(LABEL_IDS.map((id) => [id, (c: ActionContext) => labelActions.current[id]?.(c)])));
   if (!all) return null;
   const names = all.map((l) => l.name);
   const fold = () => setFolded((f) => {
@@ -188,6 +198,37 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     setEditing(null);
     onLibraryChanged();
   });
+  /** Colour › a colour (UX-22): set at once, as Change colour… saves it. */
+  const setColourOf = (list: ListItem, name: keyof typeof LABEL_COLOURS) => run(async () => {
+    const saved = await api.updateList(list.key, { color: LABEL_COLOURS[name].toLowerCase() });
+    setLists(all.map((l) => (l.key === list.key ? saved : l)));
+    onLibraryChanged();
+  });
+  // A label's menu (UX-22, 3b), from actions.json: Show recordings | Rename… · Colour › · Move up · Move down |
+  // Delete label… (its recordings stay).
+  const listOf = (c: ActionContext) => all.find((l) => l.key === c.targets?.[0]);
+  labelActions.current = {
+    "label.showRecordings": (c) => { const l = listOf(c); if (l) onOpen(l.key); },
+    "file.rename": (c) => { const l = listOf(c); if (l) edit("rename", l); },
+    "label.colour": (c) => { const l = listOf(c); if (l && c.value && c.value in LABEL_COLOURS) void setColourOf(l, c.value as keyof typeof LABEL_COLOURS); },
+    "view.moveUp": (c) => { const l = listOf(c); if (l) void move(l, -1); },
+    "view.moveDown": (c) => { const l = listOf(c); if (l) void move(l, 1); },
+    "label.delete": (c) => { const l = listOf(c); if (l) edit("delete", l); },
+  };
+  const labelMenu = (list: ListItem): MenuItem[] => {
+    const i = all.findIndex((l) => l.key === list.key);
+    const ctx: ActionContext = { platform: currentPlatform(), targets: [list.key], kind: "label" };
+    const now = labelColourName(list.color);
+    const colours = (Object.keys(LABEL_COLOURS) as (keyof typeof LABEL_COLOURS)[]).map((name) => ({
+      value: name, label: name.charAt(0).toUpperCase() + name.slice(1), checked: now === name,
+    }));
+    return contextItems(LABEL, ctx, { "label.colour": choiceItems("label.colour", colours, ctx).map((item) => ({ ...item, radio: true })) })
+      .filter((item) => !(item.action === "view.moveUp" && i === 0) && !(item.action === "view.moveDown" && i === all.length - 1));
+  };
+  const openMenu = (list: ListItem, where: { x: number; y: number }) => {
+    if (currentPlatform() !== "macos") return setMenu({ list, at: where });
+    void popupNative(labelMenu(list), where).then((shown) => { if (!shown) setMenu({ list, at: where }); });
+  };
   const remove = (list: ListItem) => run(async () => {
     await api.deleteList(list.key);
     setLists(all.filter((l) => l.key !== list.key));
@@ -212,16 +253,16 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
       {!folded && (
         <ul className="el-nav-list" aria-label={LABEL_WORDS.section}>
           {all.map((l, i) => (
-            <li key={l.key} className="el-nav-row" onContextMenu={(e) => { e.preventDefault(); setMenu({ list: l, at: { x: e.clientX, y: e.clientY } }); }}>
+            <li key={l.key} className="el-nav-row" onContextMenu={(e) => { e.preventDefault(); openMenu(l, { x: e.clientX, y: e.clientY }); }}>
               <button type="button" className="el-nav-item el-nav-item--row" aria-current={current === l.key ? "page" : undefined}
                 aria-label={`${l.name}, ${counts[l.key] ?? 0}`} onClick={() => onOpen(l.key)}
-                onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); setMenu({ list: l, at: menuPointFor(e.currentTarget) }); } }}>
+                onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openMenu(l, menuPointFor(e.currentTarget)); } }}>
                 <LabelDot name={l.name} colour={l.color} decorative />
                 <span className="el-nav-item__label" dir="auto">{l.name}</span>
                 {(counts[l.key] ?? 0) > 0 && <span className="el-nav-item__count el-caption el-num">{counts[l.key]}</span>}
               </button>
               <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${l.name}`}
-                onClick={(e) => setMenu({ list: l, at: menuPointFor(e.currentTarget) })} data-index={i} />
+                onClick={(e) => openMenu(l, menuPointFor(e.currentTarget))} data-index={i} />
             </li>
           ))}
           <li>
@@ -237,11 +278,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
         if (!list) return null;
         return (
           <ContextMenu label={list.name} at={menu.at} onClose={() => setMenu(null)}
-            items={listChipMenuItems({
-              name: list.name, canMoveEarlier: i > 0, canMoveLater: i < all.length - 1, words: LABEL_WORDS.chipMenu,
-              onRename: () => edit("rename", list), onRecolour: () => edit("recolour", list),
-              onMoveEarlier: () => void move(list, -1), onMoveLater: () => void move(list, 1), onDelete: () => edit("delete", list),
-            })} />
+            items={labelMenu(list)} />
         );
       })()}
       <NewListDialog open={creating} onClose={() => setCreating(false)} existing={names} reserved={RESERVED_NAMES} usedColours={all.map((l) => l.color)}

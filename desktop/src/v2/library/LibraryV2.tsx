@@ -1351,6 +1351,27 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     "recording.deleteNow": (c) => { const b = (bin ?? []).find((x) => x.id === c.targets?.[0]); if (b) setErase(b); },
     "trash.empty": () => void emptyTrash(),
   };
+  // A built-in view's menu (the sidebar's, UX-22): Unread's Mark all as read, Audio only's Transcribe all… (it asks with
+  // the count and the minutes first, as Transcribe does).
+  const placeRuns: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    "view.markAllRead": () => {
+      const unread = (items ?? []).filter((i) => !i.deleted && i.opened === false && !readHere.has(i.id)).map((i) => i.id);
+      if (!unread.length) return;
+      setReadHere((r) => new Set([...r, ...unread]));
+      for (const id of unread) void api.markOpened(id).catch(() => undefined);
+      say(`Marked ${recordingsWord(unread.length)} as read`);
+    },
+    "view.transcribeAll": () => {
+      const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
+      if (audioOnly.length) setOrganise({ kind: "transcribe", ids: audioOnly.slice(0, MAX_TRANSCRIBE) });
+    },
+  };
+  const placeRunsRef = useRef(placeRuns);
+  placeRunsRef.current = placeRuns;
+  useEffect(() => {
+    const offs = Object.keys(placeRunsRef.current).map((id) => registerAction(id, (ctx) => placeRunsRef.current[id]?.(ctx), "place"));
+    return () => offs.forEach((off) => off());
+  }, []);
   const runsRef = useRef(runs);
   runsRef.current = runs;
   const runnable = Object.keys(runs).filter((id) => runs[id]).join(" ");
