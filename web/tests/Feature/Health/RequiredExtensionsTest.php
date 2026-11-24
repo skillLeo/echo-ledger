@@ -3,14 +3,18 @@
 declare(strict_types=1);
 
 use App\Exceptions\MissingPhpExtension;
+use App\Mail\ServerHealthFixedMail;
 use App\Mail\ServerHealthMail;
 use App\Models\StaffRole;
 use App\Models\User;
 use App\Services\Health\PhpExtensions;
 use App\Services\Health\ServerHealth;
 use App\Services\RecordingCipher;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Process\Process;
@@ -182,6 +186,97 @@ describe('the health check', function () {
         Artisan::call('schedule:list');
 
         expect(Artisan::output())->toMatch('#\*/5\s+\* \* \* \*\s+php artisan echoledger:health --report#');
+    });
+});
+
+describe('the alert (W-INC-1125)', function () {
+    it('names what is missing and the command that turns it back on, once an hour', function () {
+        Mail::fake();
+        $admin = Fx::superAdmin();
+        withoutExtensions('sodium');
+
+        expect(healthCheck())->toBe(1);
+        $this->travel(30)->minutes();
+        healthCheck();
+
+        Mail::assertSent(ServerHealthMail::class, 1);
+        Mail::assertSent(ServerHealthMail::class, function (ServerHealthMail $mail) use ($admin): bool {
+            $html = $mail->render();
+            $fix = 'selectorctl --interpreter=php --version='.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION.' --enable-user-extensions=sodium';
+
+            return $mail->hasTo($admin->email) && $mail->fix === $fix && str_contains($html, $fix)
+                && str_contains($mail->envelope()->subject, 'missing sodium');
+        });
+    });
+
+    it('emails "fixed" once when a mailed failure passes again, and never without one', function () {
+        Mail::fake();
+        Fx::superAdmin();
+
+        // A pass with nothing mailed before says nothing.
+        healthCheck();
+        Mail::assertNothingSent();
+
+        withoutExtensions('sodium');
+        healthCheck();
+        withoutExtensions();
+        expect(healthCheck())->toBe(0);
+        healthCheck();
+
+        Mail::assertSent(ServerHealthMail::class, 1);
+        Mail::assertSent(ServerHealthFixedMail::class, 1);
+        Mail::assertSent(ServerHealthFixedMail::class, fn (ServerHealthFixedMail $mail): bool => str_contains($mail->render(), 'passes again'));
+        expect(ServerHealth::lastScheduledFailure())->toBeNull();
+    });
+
+    it('asks the web PHP too, and names what it lacks when only the web PHP fails', function () {
+        Mail::fake();
+        Fx::superAdmin();
+        // The web PHP's own check keeps what it lacks for the scheduled run, which only sees its 503.
+        withoutExtensions('sodium');
+        $this->getJson('/health/php')->assertStatus(503);
+        withoutExtensions();
+        $web = 503;
+        Http::fake(['*/health/php' => function () use (&$web) {
+            return Http::response(['ok' => $web === 200], $web);
+        }]);
+
+        expect(Artisan::call('echoledger:health', ['--report' => true, '--web' => true]))->toBe(1);
+
+        Mail::assertSent(ServerHealthMail::class, fn (ServerHealthMail $mail): bool => $mail->webFails && $mail->missing === []
+            && $mail->webMissing === ['sodium'] && str_contains((string) $mail->fix, 'enable-user-extensions=sodium'));
+        // The scheduled tasks' PHP itself is fine: the dashboard's banner for it stays away.
+        expect(ServerHealth::lastScheduledFailure())->toBeNull();
+
+        $web = 200;
+        expect(Artisan::call('echoledger:health', ['--report' => true, '--web' => true]))->toBe(0);
+        Mail::assertSent(ServerHealthFixedMail::class, 1);
+    });
+
+    it('does not cry wolf when the web PHP cannot be asked', function () {
+        Mail::fake();
+        Fx::superAdmin();
+        Http::fake(['*/health/php' => Http::response('Bad gateway', 502)]);
+
+        expect(Artisan::call('echoledger:health', ['--report' => true, '--web' => true]))->toBe(0);
+
+        Mail::assertNothingSent();
+    });
+
+    it('forgets what the web PHP lacked once it passes', function () {
+        withoutExtensions('sodium');
+        $this->getJson('/health/php')->assertStatus(503);
+        expect(Cache::get(ServerHealth::WEB)['missing'])->toBe(['sodium']);
+
+        withoutExtensions();
+        $this->getJson('/health/php')->assertOk();
+        expect(Cache::get(ServerHealth::WEB))->toBeNull();
+    });
+
+    it('runs with the web check in the schedule', function () {
+        $events = collect(app(Schedule::class)->events())->map(fn ($event) => (string) $event->command);
+
+        expect($events->contains(fn (string $command): bool => str_contains($command, 'echoledger:health --report --web')))->toBeTrue();
     });
 });
 
