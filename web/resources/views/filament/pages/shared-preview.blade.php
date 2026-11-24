@@ -1,4 +1,5 @@
-{{-- Shared with me → Open: a received recording (player and transcript, read-only) or a received project's recordings. --}}
+{{-- Shared with me → Open: a received recording (player and transcript, read-only) or a received project's recordings.
+     Its words and dates in the console's language (English as it was; the classic "From" line is English only). --}}
 @php($zone = app(\App\Services\SettingsRepository::class)->displayTimezone())
 <div class="el-shared-preview" style="display: grid; gap: 12px;">
 <?php if (\App\Filament\Support\ConsoleV2::any()): ?>
@@ -6,7 +7,7 @@
          line stays byte for byte as it was. --}}
     <div style="display: grid; gap: 4px;">
         <x-el.person :person="$item->sender" :sub="$item->sender->email" />
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ $item->sent_at->copy()->setTimezone($zone)->format('M j, Y · g:i A') }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ \App\Filament\Support\ConsoleDates::dateTime($item->sent_at->copy()->setTimezone($zone), 'g:i A') }}</p>
     </div>
 <?php else: ?>
     <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -20,10 +21,10 @@
         @forelse ($sessions as $session)
             <div class="text-sm" style="display: flex; justify-content: space-between; gap: 12px;">
                 <span dir="auto">{{ $session->displayTitle() }}</span>
-                <span class="text-gray-500 dark:text-gray-400" style="white-space: nowrap;">{{ $session->started_at->copy()->setTimezone($zone)->format('M j') }}</span>
+                <span class="text-gray-500 dark:text-gray-400" style="white-space: nowrap;">{{ \App\Filament\Support\ConsoleDates::day($session->started_at->copy()->setTimezone($zone)) }}</span>
             </div>
         @empty
-            <p class="text-sm text-gray-500 dark:text-gray-400">This project has no recordings yet.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('This project has no recordings yet.') }}</p>
         @endforelse
     @else
         @if ($audio)
@@ -36,7 +37,7 @@
                 {{ $line['text'] }}
             </p>
         @empty
-            <p class="text-sm text-gray-500 dark:text-gray-400">The transcript is not ready yet.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('The transcript is not ready yet.') }}</p>
         @endforelse
     @endif
 </div>

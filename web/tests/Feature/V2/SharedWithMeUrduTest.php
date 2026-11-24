@@ -7,6 +7,7 @@ use App\Models\SentItem;
 use App\Models\User;
 use App\Services\InterfaceFlags;
 use App\Services\Sharing\Teammates;
+use Illuminate\Support\Carbon;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -113,3 +114,29 @@ it('says From as the person who shared it, from a group file of its own, with En
         expect(sharedPage($this))->toContain('>From<')->not->toContain('shared_context');
     }
 });
+
+it('says the Open window\'s words and dates in Urdu, and in English as they were', function () {
+    $this->item->forceFill(['sent_at' => Carbon::parse('2026-11-17 12:00:00', 'UTC')])->save();
+    $project = Fx::client($this->farah, 'Acme Holdings');
+    app(Teammates::class)->send($this->farah, $project, ['saif@example.com'], null);
+    $sent = SentItem::query()->where('to_user_id', $this->me->id)->where('kind', 'project')->firstOrFail();
+
+    sharedUrdu(true, 'ur', $this->me);
+    app()->setLocale('ur');
+    // A recording with no transcript yet, and a project with no recordings yet.
+    Livewire::test(SharedWithMe::class)->mountAction(TestAction::make('open')->table($this->item))
+        ->assertMountedActionModalSee(['ٹرانسکرپٹ ابھی تیار نہیں ہے۔', '17 نومبر 2026'])
+        ->assertMountedActionModalDontSee(['The transcript is not ready yet.', 'Nov 17']);
+    Livewire::test(SharedWithMe::class)->mountAction(TestAction::make('open')->table($sent))
+        ->assertMountedActionModalSee('اس پروجیکٹ میں ابھی کوئی ریکارڈنگ نہیں ہے۔');
+
+    foreach ([true, false] as $v2) {
+        sharedUrdu($v2, 'en', $this->me);
+        app()->setLocale('en');
+        Livewire::test(SharedWithMe::class)->mountAction(TestAction::make('open')->table($this->item))
+            ->assertMountedActionModalSee(['The transcript is not ready yet.', 'Nov 17, 2026']);
+        Livewire::test(SharedWithMe::class)->mountAction(TestAction::make('open')->table($sent))
+            ->assertMountedActionModalSee('This project has no recordings yet.');
+    }
+});
+
