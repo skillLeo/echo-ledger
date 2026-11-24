@@ -94,6 +94,10 @@ data class AppSettings(
      * permission): a 56 dp line under the status bar beside the after-call notification.
      */
     val afterCallBar: Boolean = false,
+    /** v2.1 UX-15: how many times the app was opened, and the Record hint ("Tap to record · Hold for more"). */
+    val appOpens: Int = 0,
+    val recordHintShows: Int = 0,
+    val recordHintDone: Boolean = false,
     /** Since v1.5: automatic call recordings shorter than this are skipped (0 = never). */
     val skipCallsShorterThanS: Int = 10,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */

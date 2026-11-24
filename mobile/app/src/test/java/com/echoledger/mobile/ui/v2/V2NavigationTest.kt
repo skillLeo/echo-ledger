@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
@@ -30,6 +31,7 @@ import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.v2.live.LiveEntry
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
+import com.echoledger.mobile.ui.v2.shell.RecordHint
 import com.echoledger.mobile.ui.v2.shell.RecordSheetActions
 import com.echoledger.mobile.ui.v2.shell.RecordSheetState
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -181,71 +183,70 @@ class V2NavigationTest : ScreenTest() {
         compose.onNodeWithText("Classic VoiceNote").assertExists()
     }
 
+    /** v2.1 UX-15: a long press opens "New", which holds actions only, at most six; Record now is the big one. */
     @Test
-    fun recordLongPressOpensTheSheetWithCallsLiveAssistDictationAndLiveTranslate() {
+    fun recordLongPressOpensTheNewSheetWithItsSixActionsOnly() {
         seed()
         shell(UiFlags(v2.flags + ("live_assist" to true)))
         compose.onNodeWithContentDescription("Record").performTouchInput { longClick() }
         compose.onNodeWithText("New").assertExists()
-        compose.onNodeWithText("Record now").assertExists()
-        compose.onNodeWithText("Voice & files").assertExists()
-        compose.onNodeWithText("Calls & meetings").assertExists()
-        compose.onNodeWithText("Live Assist").assertExists()
-        compose.onNodeWithText("Dictation").assertExists()
-        compose.onNodeWithText("Live Translate").assertExists()
-        // Auto-record calls: the same arm and disarm as classic's switch.
-        val calls = compose.onNode(hasText("Auto-record calls") and isToggleable())
-        calls.assertExists()
-        compose.onNodeWithText("Dictation").performClick()
-        compose.onNodeWithText("Classic Dictation").assertExists()
+        val actions = listOf("Record now", "Voice note", "Import audio", "Start Live Assist", "Dictation", "Translate a game or video")
+        actions.forEach { compose.onNodeWithText(it).assertExists() }
+        // No switch and no statuses: they are on the Live tab and in Settings.
+        assertTrue(compose.onAllNodes(isToggleable()).fetchSemanticsNodes().isEmpty())
+        listOf("Calls & meetings", "Voice & files", "Game translate", "Watch translate").forEach {
+            assertTrue(it, compose.onAllNodesWithText(it).fetchSemanticsNodes().isEmpty())
+        }
+        val big = compose.onNode(hasText("Record now") and hasClickAction()).fetchSemanticsNode().size.height
+        assertTrue("Record now is the big one ($big px)", big >= with(compose.density) { 56.dp.roundToPx() })
+        compose.onNodeWithText("Import audio").performClick()
+        compose.onNodeWithText("Classic ImportAudio").assertExists()
     }
 
     @Test
-    fun withoutTheCaptureHelperTheSheetSaysSetUpFirstAndCannotArm() {
+    fun translateAGameOrVideoGoesToTheLiveTabWithBothAndTheirState() {
+        seed()
+        shell()
+        compose.onNodeWithContentDescription("Record").performTouchInput { longClick() }
+        compose.onNodeWithText("Translate a game or video").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Game translate").assertExists()
+        compose.onNodeWithText("Watch translate").assertExists()
+        compose.onNodeWithText("Game: off").assertExists()
+    }
+
+    @Test
+    fun theLiveTabHasAutoRecordCallsWithHowCallsStand() {
         seed()
         // This test phone can record calls but its capture helper isn't running.
         shell()
-        compose.onNodeWithContentDescription("Record").performTouchInput { longClick() }
+        compose.onNode(hasText("Live") and !isHeading()).performClick()
+        compose.waitForIdle()
         compose.onNode(hasText("Auto-record calls") and isToggleable()).assertIsNotEnabled()
         compose.onAllNodesWithText("Calls: set up first").fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
     }
 
+    /** v2.1 UX-15: the switch that left the New sheet arms and disarms on the Live tab, saying how calls stand. */
     @Test
-    fun theRecordSheetsSwitchArmsAndDisarmsAndEachRowOpensItsPage() {
+    fun theLiveTabsSwitchArmsAndDisarmsAutoRecordCalls() {
         val armed = mutableListOf<Boolean>()
-        val went = mutableListOf<String>()
-        fun state(on: Boolean) = RecordSheetState(
-            calls = com.echoledger.mobile.privilege.AppCallCapture.BOTH_SIDES,
-            armed = on,
-            canArm = true,
-            liveAssist = false,
-            liveTranslate = false,
-            translateLocked = "Pro",
-            game = false,
-            watch = false
-        )
         var on by androidx.compose.runtime.mutableStateOf(false)
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                androidx.compose.foundation.layout.Column {
-                    V2RecordSheetBody(
-                        state(on),
-                        RecordSheetActions(
-                            onRecordNow = { went += "record" },
-                            onVoiceAndFiles = { went += "voice" },
-                            onCalls = { went += "calls" },
-                            onArm = {
-                                armed += it
-                                on = it
-                            },
-                            onLiveAssist = { went += "assist" },
-                            onDictation = { went += "dictation" },
-                            onLiveTranslate = { went += "translate" },
-                            onLocked = { went += "plans" }
-                        ),
-                        onDismiss = {}
+                com.echoledger.mobile.ui.v2.live.V2LiveTab(
+                    liveAssist = false,
+                    liveTranslate = false,
+                    onOpen = {},
+                    status = com.echoledger.mobile.ui.v2.live.LiveStatus(
+                        armed = on,
+                        canArm = true,
+                        calls = if (on) "Calls: auto-record on" else "Calls: ready",
+                        onArm = {
+                            armed += it
+                            on = it
+                        }
                     )
-                }
+                )
             }
         }
         compose.onNodeWithText("Calls: ready").assertExists()
@@ -253,14 +254,58 @@ class V2NavigationTest : ScreenTest() {
         compose.onAllNodesWithText("Calls: auto-record on").fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
         compose.onNode(hasText("Auto-record calls") and isToggleable()).performClick()
         assertEquals(listOf(true, false), armed)
+    }
+
+    @Test
+    fun theNewSheetsRowsEachOpenTheirPage() {
+        val went = mutableListOf<String>()
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                androidx.compose.foundation.layout.Column {
+                    V2RecordSheetBody(
+                        RecordSheetState(liveAssist = false, liveTranslate = false, translateLocked = "Pro"),
+                        RecordSheetActions(
+                            onRecordNow = { went += "record" },
+                            onVoiceNote = { went += "voice" },
+                            onImport = { went += "import" },
+                            onLiveAssist = { went += "assist" },
+                            onDictation = { went += "dictation" },
+                            onTranslate = { went += "translate" },
+                            onLocked = { went += "plans" }
+                        ),
+                        onDismiss = {}
+                    )
+                }
+            }
+        }
         // Live Assist only with its flag; Live Translate not in the plan shows the plan's badge and opens the plans.
-        compose.onNodeWithText("Live Assist").assertDoesNotExist()
+        compose.onNodeWithText("Start Live Assist").assertDoesNotExist()
         compose.onNodeWithText("Pro").performClick()
         compose.onNodeWithText("Record now").performClick()
-        compose.onNodeWithText("Voice & files").performClick()
-        compose.onNodeWithText("Calls & meetings").performClick()
+        compose.onNodeWithText("Voice note").performClick()
+        compose.onNodeWithText("Import audio").performClick()
         compose.onNodeWithText("Dictation").performClick()
-        assertEquals(listOf("plans", "record", "voice", "calls", "dictation"), went)
+        assertEquals(listOf("plans", "record", "voice", "import", "dictation"), went)
+    }
+
+    /** v2.1 UX-15: from the second opening, "Tap to record · Hold for more", at most three times, never after a long press. */
+    @Test
+    fun theRecordHintShowsFromTheSecondOpeningAndGoesAfterTheFirstLongPress() {
+        seed()
+        assertTrue(!RecordHint.due(com.echoledger.mobile.data.AppSettings(appOpens = 1)))
+        assertTrue(RecordHint.due(com.echoledger.mobile.data.AppSettings(appOpens = 2)))
+        assertTrue(!RecordHint.due(com.echoledger.mobile.data.AppSettings(appOpens = 5, recordHintShows = 3)))
+        assertTrue(!RecordHint.due(com.echoledger.mobile.data.AppSettings(appOpens = 5, recordHintDone = true)))
+        vm.updateSettings { it.copy(appOpens = 1) }
+        pumpUntil("stored") { vm.settings.value.appOpens == 1 }
+        shell()
+        pumpUntil("the second opening") { vm.settings.value.appOpens == 2 }
+        pumpUntil("the hint") { compose.onAllNodesWithText("Tap to record · Hold for more").fetchSemanticsNodes().isNotEmpty() }
+        pumpUntil("counted") { vm.settings.value.recordHintShows == 1 }
+        compose.onNodeWithContentDescription("Record").performTouchInput { longClick() }
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithText("Tap to record · Hold for more").fetchSemanticsNodes().isEmpty())
+        pumpUntil("never again") { vm.settings.value.recordHintDone }
     }
 
     @Test
