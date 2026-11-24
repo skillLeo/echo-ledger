@@ -159,7 +159,7 @@ class AppPanelProvider extends PanelProvider
             ->registration(Register::class)
             ->passwordReset(RequestPasswordReset::class)
             // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
-            // Since v1.6 (P6) its number counts only what needs you, "9+" above nine (App\Livewire\ActivityBell).
+            // Since v1.6 (P6) its number counts only what needs you, "99+" above 99 since 2.0.0-r (App\Livewire\ActivityBell).
             ->databaseNotifications(livewireComponent: ActivityBell::class)
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16) and Google (since v1.5) are under the sign-in form itself (Login::content, since v1.6.2).

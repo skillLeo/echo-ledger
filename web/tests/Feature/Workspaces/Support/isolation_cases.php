@@ -8,9 +8,9 @@ use App\Models\AssistTurn;
 use App\Models\LabelList;
 use App\Models\MissedRecording;
 use App\Models\Passkey;
+use App\Models\SavedView;
 use App\Models\Screen;
 use App\Models\SentItem;
-use App\Models\SavedView;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
 use App\Models\ShareCheckResult;
@@ -19,8 +19,8 @@ use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
-use App\Services\Library\SavedViews;
 use App\Services\InterfaceFlags;
+use App\Services\Library\SavedViews;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\Workspaces;
@@ -328,6 +328,8 @@ function isoApiCases(array $b): array
         'api.storage' => ['GET', '/api/storage', [], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('recordings_count') === 1],
         'api.activity' => ['GET', '/api/activity', [], 'list'],
         'api.activity.read' => ['POST', '/api/activity/read', [], 'list'],
+        // Since 2.0.0-r: the badge counts the person's own only (tests/Feature/Api/BadgeTest.php).
+        'api.badge' => ['GET', '/api/badge', [], 'list'],
         'api.sessions.export' => ['POST', '/api/sessions/export', ['ids' => [$s], 'format' => 'txt'],
             // Same answer as for unknown ids: nothing of the workspace matched.
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],

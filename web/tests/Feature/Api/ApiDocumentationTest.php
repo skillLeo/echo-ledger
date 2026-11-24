@@ -92,11 +92,10 @@ const SERVED_BEFORE_DOCUMENTED = [
 ];
 
 // Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served. Contract 2.0.0-r is written ahead of the server: BE-02
-// (the Activity groups), BE-03 (Retry all) and BE-04 (the badge) each remove their line when they serve it.
+// (the Activity groups) and BE-03 (Retry all) each remove their line when they serve it; BE-04 serves the badge.
 const NOT_SERVED_YET = [
     'GET /api/activity/groups',
     'POST /api/activity/retry-all',
-    'GET /api/badge',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {

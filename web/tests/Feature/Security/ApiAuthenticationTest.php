@@ -264,8 +264,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
     // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
-    // 2.0.0-p: the five saved view routes and the filter counts.
-    expect($guarded)->toBe(174);
+    // 2.0.0-p: the five saved view routes and the filter counts; 2.0.0-r: the badge.
+    expect($guarded)->toBe(175);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
