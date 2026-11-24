@@ -321,7 +321,9 @@ async function keyboardRows(page) {
 async function selfTest(base) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=light`);
-  await page.waitForTimeout(1500);
+  // The rows, not a guess: on a busy computer 1.5 s wasn't enough and the self-test found no row title.
+  await page.waitForSelector(".item-title", { timeout: 60_000 });
+  await page.waitForTimeout(500);
   const caught = await page.evaluate(({ problems, covered, textProblems }) => {
     const run = (src) => (0, eval)(`(${src})`)();
     const results = {};
@@ -408,7 +410,10 @@ try {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message.split("\n")[0]));
     await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}${lang === "ur" ? "&lang=ur" : ""}`);
-    await page.waitForTimeout(1500);
+    // Drawn first (the root has content), then a moment for fonts and layout to settle: a fixed wait alone missed the
+    // first paint on a busy computer.
+    await page.waitForFunction(() => (document.getElementById("root")?.textContent ?? "").trim().length > 0, null, { timeout: 60_000 }).catch(() => undefined);
+    await page.waitForTimeout(1000);
     try {
       if (step) await step(page);
     } catch (e) {
