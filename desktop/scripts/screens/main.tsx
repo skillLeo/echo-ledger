@@ -19,7 +19,7 @@ import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOU
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
-import { applyTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
+import { applyTitlebar, applyWinTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -49,6 +49,9 @@ const start = params.get("start");
 if (start !== null && platform === "macos") watchTitlebar("macos", () => new Promise((done) => window.setTimeout(() => done(fullscreen), Number(start))));
 else applyTitlebar(titlebarMode(platform, fullscreen));
 if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTrafficLights(params.get("inactive") === "1");
+// "&wintitle=1" (with platform=windows): the main window with its own title row (v21_win_titlebar), as the core builds it
+// without Windows' title bar (wintitle.rs) and its start script marks the page.
+if (platform === "windows" && params.get("wintitle") === "1") applyWinTitlebar(true);
 
 /**
  * macOS's three window buttons over the page, at the left whatever the page's direction. tao moves the close button's

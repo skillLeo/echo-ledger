@@ -31,6 +31,7 @@
     "titlerow": {
       "height": { "$type": "dimension", "$value": "52px", "$description": "UX-20: the one title row on a Mac: the window's buttons in the rail's top cell, the panel's name, then the page's toolbar" },
       "rail-top-fullscreen": { "$type": "dimension", "$value": "8px", "$description": "Full screen hides the window's buttons: the rail's top cell shrinks to this" },
+      "height-windows": { "$type": "dimension", "$value": "48px", "$description": "UX-20 on Windows (v21_win_titlebar): the window's own title row, in place of the system's title bar" },
       "keep-clear": { "$type": "dimension", "$value": "80px", "$description": "Nothing that can be clicked within this of the window's left edge in the title row" },
       "lights-left": { "$type": "dimension", "$value": "6px", "$description": "The Mac's three window buttons and 4 px round them, kept free of drag regions: trafficLightPosition x + 1 - 4" },
       "lights-top": { "$type": "dimension", "$value": "16px", "$description": "trafficLightPosition y - 4 - 4" },
@@ -47,6 +48,10 @@
     },
     "resize": {
       "closing-opacity": { "$type": "number", "$value": 0.5, "$description": "UX-03: a panel dragged below its closing width fades to this; let go and it closes" }
+    },
+    "window-button": {
+      "width": { "$type": "dimension", "$value": "46px", "$description": "UX-20 on Windows: Minimize, Maximize and Close, as wide as the system's own, the row's height tall" },
+      "glyph": { "$type": "dimension", "$value": "12px", "$description": "Their glyphs" }
     },
     "rail": {
       "width": { "$type": "dimension", "$value": "72px" },

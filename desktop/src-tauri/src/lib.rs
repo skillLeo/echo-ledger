@@ -60,6 +60,7 @@ pub mod tray;
 pub mod ui_flags;
 pub mod updates;
 pub mod whatsapp;
+pub mod wintitle;
 pub mod server_notice;
 
 use std::path::PathBuf;
@@ -653,6 +654,7 @@ pub fn run() {
             title_click::title_double_click,
             native_menu::native_menu_popup,
             dock::dock_activity_set,
+            wintitle::window_titlebar,
             app_menu::app_menu_set,
             commands::set_window_theme,
             commands::pair_device,

@@ -67,6 +67,9 @@ muda = { version = "=0.20.0", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
+# UX-20 (v21_win_titlebar): Snap Layouts on the page's own Maximize button (wintitle.rs). MIT; its source read: a Win32
+# child window over the button that answers WM_NCHITTEST with HTMAXBUTTON, no network calls.
+tauri-plugin-snap-layout = "=1.0.9"
 wasapi = "0.26.0"
 windows = { version = "0.62.2", features = [
   "Wdk_System_SystemServices",

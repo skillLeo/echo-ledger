@@ -16,6 +16,9 @@ import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import type { ShellStatus } from "./status";
+import { WindowButtons } from "./WindowButtons";
+import { BrandMark } from "../../components/BrandMark";
+import { useWinTitlebar } from "../../lib/titlebar";
 import { changePreferences, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../lib/shell";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
@@ -164,6 +167,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const small = width < (panelFlyout ? DOCK_FROM : FLYOUT_BELOW);
   // A small window's panel is a flyout, unless pinned there (v21_panel_flyout).
   const narrow = small && !(panelFlyout && pinned);
+  // Windows' own title row (v21_win_titlebar, wintitle.rs): the mark in the rail's top cell, the window's buttons at the
+  // title row's end.
+  const winRow = useWinTitlebar();
   // The compact rail (Settings › Appearance, View › Theme): icons only, each keeping its name for assistive tools and in
   // its tooltip ("Library ⌘1"); kept on this computer, followed at once.
   const [compactRail, setCompactRail] = useState(() => loadPreferences().compactRail);
@@ -505,10 +511,13 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
       <nav className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main">
         {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
-            it moves the window. 8 px in full screen; none on Windows, under its own title bar. */}
+            it moves the window. 8 px in full screen; none on Windows under its system title bar, and with Windows' own
+            title row (v21_win_titlebar) 48 px with the app's mark. */}
         <div className="el-rail__top" data-tauri-drag-region="deep" aria-hidden="true">
           {/* Where the buttons are (and 4 px round them): no drag region, nothing of ours that takes a press. */}
           <span className="el-rail__lights" data-tauri-drag-region="false" />
+          {/* Windows' own title row (v21_win_titlebar): the app's mark, where Windows puts a window's icon. */}
+          {winRow && <BrandMark size={20} className="el-rail__mark" />}
         </div>
         <RecordSplit stops={stops} time={status.kind === "recording" ? status.time : undefined} busy={!!pressing} onPress={pressRecord} menu={recordMenu} ctx={recordCtx} />
         <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
@@ -564,7 +573,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       )}
       <main className="el-shell__main" ref={main} tabIndex={-1} inert={scrim || undefined}>
         <TitleRow place={place} title={title} toggle={rowToggle} back={canWalk("back") ? () => walk("back") : null} forward={canWalk("forward") ? () => walk("forward") : null}
-          onEverything={(typed) => onSearch?.(typed)} findSeq={findSeq} scrolled={scrolled} end={titleEnd} />
+          onEverything={(typed) => onSearch?.(typed)} findSeq={findSeq} scrolled={scrolled} end={winRow ? <>{titleEnd}<WindowButtons /></> : titleEnd} />
         {notices}
         {banners}
         {/* The page's own ⊟ (PanelToggle) is the title row's now: none in its header. */}

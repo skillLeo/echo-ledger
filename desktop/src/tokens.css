@@ -228,6 +228,7 @@
   --el-desktop-icon-rail: 20px;
   --el-desktop-titlerow-height: 52px;
   --el-desktop-titlerow-rail-top-fullscreen: 8px;
+  --el-desktop-titlerow-height-windows: 48px;
   --el-desktop-titlerow-keep-clear: 80px;
   --el-desktop-titlerow-lights-left: 6px;
   --el-desktop-titlerow-lights-top: 16px;
@@ -240,6 +241,8 @@
   --el-desktop-search-drag-room: 16px;
   --el-desktop-search-results-width: 560px;
   --el-desktop-resize-closing-opacity: 0.5;
+  --el-desktop-window-button-width: 46px;
+  --el-desktop-window-button-glyph: 12px;
   --el-desktop-rail-width: 72px;
   --el-desktop-rail-item-height: 56px;
   --el-desktop-rail-pill-width: 48px;

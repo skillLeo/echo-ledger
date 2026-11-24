@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
 use App\Services\Accounts\EmailChange;
+use App\Services\ActivityFeed;
 use App\Services\Staff\StaffAccess;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
@@ -105,6 +106,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             // Since v1.6: a password set later (the reset link, the profile) is one the owner knows.
             if ($user->isDirty('password') && ! $user->isDirty('has_password')) {
                 $user->has_password = true;
+            }
+        });
+        // Since W-INC-1125: the server's problems are for super admins only; a person who is not one any more loses them.
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('is_super_admin') && ! $user->is_super_admin) {
+                ActivityFeed::forgetServerProblemsOfOthers($user);
             }
         });
     }

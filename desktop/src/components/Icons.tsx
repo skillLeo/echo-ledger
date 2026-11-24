@@ -427,6 +427,11 @@ export const LucideEyeOffIcon = L([
 ]);
 export const LucideFileTextIcon = L(["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]);
 export const LucideXIcon = L(["M18 6 6 18", "m6 6 12 12"]);
+/** The window's own buttons on Windows (UX-20, v21_win_titlebar): Minimize (Lucide minus) and Maximize (Lucide square). */
+export const LucideMinusIcon = L(["M5 12h14"]);
+export const LucideSquareIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="18" x="3" y="3" rx="2" /></Svg>
+);
 export const LucideExternalLinkIcon = L(["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]);
 export const LucideChevronRightIcon = L(["m9 18 6-6-6-6"]);
 export const LucideChevronLeftIcon = L(["m15 18-6-6 6-6"]);
