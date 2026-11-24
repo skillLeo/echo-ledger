@@ -1095,5 +1095,11 @@
     "1 audio only|:count audio only": "1 صرف آڈیو|:count صرف آڈیو",
     "1 transcribing|:count transcribing": "1 کا ٹرانسکرپٹ بن رہا ہے|:count کے ٹرانسکرپٹ بن رہے ہیں",
     "1 waiting to upload|:count waiting to upload": "1 اپ لوڈ کا انتظار|:count اپ لوڈ کا انتظار",
-    "Still audio only": "ابھی صرف آڈیو"
+    "Still audio only": "ابھی صرف آڈیو",
+    "Mark as important": "اہم نشان لگائیں",
+    "Rename…": "نام بدلیں…",
+    "Move to trash": "ردی میں ڈالیں",
+    "New label…": "نیا لیبل…",
+    ":count recordings": ":count ریکارڈنگز",
+    "Recording actions": "ریکارڈنگ کے اختیارات"
 }

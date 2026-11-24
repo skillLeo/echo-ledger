@@ -47,3 +47,49 @@ test('keys: arrows wrap, Home and End go to the ends; a menu never opens off the
     assert.deepEqual(core.place(1000, 700, 240, 300, 1280, 800), { x: 1000, y: 496 });
     assert.deepEqual(core.place(1200, 10, 240, 300, 1280, 800), { x: 1036, y: 10 });
 });
+
+// The menu for rows as the page draws them (data-* on .v2-lib-row) and the page's choices (ListCaptureSessions::menuData).
+const DATA = {
+    actions, runnable: ALL.filter((id) => id !== 'recording.unread').concat('label.new'),
+    labels: [{ value: 'Q4', label: 'Q4' }, { value: 'Clients', label: 'Clients' }],
+    projects: [{ value: 'c1', label: 'Acme' }],
+    formats: [{ value: 'docx', label: 'Word (.docx)' }, { value: 'txt', label: 'Text (.txt)' }],
+    words: { many: ':count recordings', noProject: 'No project' },
+    say: { Pin: 'پن کریں', Unpin: 'پن ہٹائیں' },
+};
+const rowOf = (id, more = {}) => ({ id, pinned: false, important: false, state: 'ready', client: null, labels: [], ...more });
+
+test('a row\'s menu from what it shows: Transcribe only while Audio only, its labels and project ticked, the words in the console\'s language', () => {
+    const { items, title, targets } = core.recordingMenu(DATA, [rowOf('a', { pinned: true, state: 'audio_only', client: 'c1', labels: ['q4'] })]);
+    assert.equal(title, null);
+    assert.deepEqual(targets, ['a']);
+    assert.deepEqual(words(items), ['Open', 'Transcribe', '| پن ہٹائیں', 'Mark as important', 'Labels', 'Move to project', '| Rename…', 'Export', '| Move to trash']);
+    const sub = (label) => items.find((i) => i.label === label).items;
+    assert.deepEqual(sub('Labels').map((i) => [i.label, i.checked, !! i.separator]), [['Q4', true, false], ['Clients', false, false], ['New label…', undefined, true]]);
+    assert.equal(sub('Labels')[2].action, 'label.new');
+    assert.deepEqual(sub('Move to project').map((i) => [i.choice, i.label, i.checked]), [['none', 'No project', false], ['c1', 'Acme', true]]);
+    assert.deepEqual(sub('Export').map((i) => i.choice), ['docx', 'txt']);
+    // A recording with its transcript: no Transcribe.
+    assert.ok(! words(core.recordingMenu(DATA, [rowOf('b')]).items).includes('Transcribe'));
+});
+
+test('several rows: titled with the count; Unpin and a tick only when every one is so; Transcribe while any is Audio only', () => {
+    const rows = [rowOf('a', { pinned: true, important: true, labels: ['q4'] }), rowOf('b', { pinned: false, important: true, state: 'audio_only', labels: ['q4', 'clients'] })];
+    const { items, title, targets } = core.recordingMenu(DATA, rows);
+    assert.equal(title, '2 recordings');
+    assert.deepEqual(targets, ['a', 'b']);
+    assert.deepEqual(words(items), ['Transcribe', '| پن کریں', 'Mark as important', 'Labels', 'Move to project', '| Export', '| Move to trash']);
+    assert.equal(items.find((i) => i.label === 'Mark as important').checked, true);
+    const labels = items.find((i) => i.label === 'Labels').items;
+    assert.deepEqual(labels.slice(0, 2).map((i) => i.checked), [true, false]);
+    // Neither in a project: No project is ticked; one in Acme and one not: nothing is.
+    assert.equal(items.find((i) => i.label === 'Move to project').items[0].checked, true);
+    const mixed = core.recordingMenu(DATA, [rowOf('a', { client: 'c1' }), rowOf('b')]).items.find((i) => i.label === 'Move to project').items;
+    assert.deepEqual(mixed.map((i) => i.checked), [false, false]);
+});
+
+test('a read-only console\'s menu holds only Open, and nothing for several', () => {
+    const readOnly = { ...DATA, runnable: ['recording.open'] };
+    assert.deepEqual(words(core.recordingMenu(readOnly, [rowOf('a')]).items), ['Open']);
+    assert.deepEqual(core.recordingMenu(readOnly, [rowOf('a'), rowOf('b')]).items, []);
+});
