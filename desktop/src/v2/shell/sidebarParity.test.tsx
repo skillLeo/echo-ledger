@@ -329,7 +329,7 @@ describe("Home's needs you", () => {
     respond("pending_list", []);
     await app();
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "2 recordings didn't upload" }));
@@ -345,7 +345,7 @@ describe("Home's needs you", () => {
     respond("pending_list", []);
     await app();
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "1 call waits for your decision" }));
@@ -354,7 +354,7 @@ describe("Home's needs you", () => {
     expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
     expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record Page" }));
     await act(flushAsync);
     await act(flushAsync);
     fireEvent.click(await screen.findByRole("button", { name: "1 notification needs you" }));

@@ -147,17 +147,37 @@ enum class LibraryPlace(val wire: String) {
 }
 
 /**
- * The Library's tabs, chips under the search on the phone (docs/API.md "The Library's tabs"): All · Calls · Meetings ·
- * Voice notes, by the recording's Source; Imported and Other are under All only. A tab narrows the place, the filters and
- * the search, and each one's count is how many those three keep in it.
+ * The Library's tabs, chips under the search on the phone (docs/API.md "The Library's kinds", contract 2.0.0-q): All ·
+ * Calls · Meetings · Voice notes · Other. Every recording has exactly one kind ([of]: the server's `facets.kind`, else
+ * worked out from its Source with the contract's table, an unknown Source being Other), so the kind tabs always add up
+ * to All. A tab narrows the place, the filters and the search, and each one's count is how many those three keep in it.
+ * Other shows only while its count is above 0 ([shown]).
  */
-enum class LibraryKind(val wire: String, val sources: Set<String>?) {
-    ALL("all", null),
-    CALLS("calls", setOf("whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype")),
-    MEETINGS("meetings", setOf("zoom", "google_meet", "microsoft_teams", "slack", "discord")),
-    VOICE_NOTES("voice_notes", setOf("voice_note"));
+enum class LibraryKind(val wire: String, val kind: String?, val sources: Set<String>?) {
+    ALL("all", null, null),
+    CALLS("calls", "call", setOf("whatsapp", "whatsapp_business", "phone_call", "telegram", "signal", "messenger", "instagram", "skype")),
+    MEETINGS("meetings", "meeting", setOf("zoom", "google_meet", "microsoft_teams", "slack", "discord")),
+    VOICE_NOTES("voice_notes", "voice_note", setOf("voice_note")),
 
-    fun holds(source: String): Boolean = sources == null || source in sources
+    /** Imported files, `other`, and any Source the phone does not know (one the server adds later). */
+    OTHER("other", "other", null);
+
+    /** Whether a recording of kind [of] is in this tab (All holds every one). */
+    fun holds(of: LibraryKind): Boolean = this == ALL || this == of
+
+    companion object {
+        /** The kind tabs, each recording in exactly one of them. */
+        val KINDS = listOf(CALLS, MEETINGS, VOICE_NOTES, OTHER)
+
+        /** A recording's one kind: the server's [kind] when the phone knows it, else from its [source]. */
+        fun of(kind: String?, source: String?): LibraryKind = KINDS.firstOrNull { it.kind == kind } ?: fromSource(source)
+
+        /** The contract's table: a Source in no list (or none) is Other. */
+        fun fromSource(source: String?): LibraryKind = KINDS.firstOrNull { k -> k.sources?.contains(source) == true } ?: OTHER
+
+        /** The tabs to show: Other only while it holds something. */
+        fun shown(counts: Map<LibraryKind, Int>): List<LibraryKind> = entries.filter { it != OTHER || (counts[OTHER] ?: 0) > 0 }
+    }
 }
 
 /**
@@ -177,6 +197,9 @@ class LibraryFacts(
 ) {
     val source: String get() = values.getValue(FilterSection.SOURCE).first()
     val status: String get() = values.getValue(FilterSection.STATUS).first()
+
+    /** Its one kind (contract 2.0.0-q): the server's `facets.kind`, else worked out from its Source. */
+    val kind: LibraryKind by lazy { LibraryKind.of(item.facets?.kind, source) }
 
     /** Every word somewhere among the title, the transcript and the project path (each word in any of them). */
     fun matches(words: List<String>): Boolean = words.all { w -> title.contains(w) || text.contains(w) || path.any { it.contains(w) } }

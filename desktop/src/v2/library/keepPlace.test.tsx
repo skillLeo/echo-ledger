@@ -216,11 +216,31 @@ describe("a stuck group heading (UX-25 review)", () => {
     scrollTo(scroller, 900);
     await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
     expect(headings().map((h) => h.hasAttribute("data-stuck"))).toEqual([true, ...headings().slice(1).map(() => false)]);
-    expect(screen.getByRole("list", { name: "Recordings" }).style.getPropertyValue("--el-sticky-cover")).toBe("24px");
+    // On the Library's root, for the stuck headings and the stuck selection bar alike.
+    expect((document.querySelector('[data-v2="library"]') as HTMLElement).style.getPropertyValue("--el-sticky-cover")).toBe("24px");
     // Back at the top nothing is stuck.
     scrollTo(scroller, 0);
     await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
     expect(headings().some((h) => h.hasAttribute("data-stuck"))).toBe(false);
+    // A resize (or a tab, a filter, a sort, a delete) moves things without a scroll: marked again.
+    scroller.scrollTop = 900;
+    act(() => void window.dispatchEvent(new Event("resize")));
+    await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    expect(headings()[0]).toHaveAttribute("data-stuck");
+    // The selection bar, stuck at the top while picking, is marked and covers the band too.
+    fireEvent.click(row("Call 1"), { metaKey: true });
+    const bar = document.querySelector(".el-selectbar") as HTMLElement;
+    spy.mockImplementation(function (this: HTMLElement) {
+      const top = this === scroller ? 0 : this === bar ? 24 : 400;
+      return { top, bottom: top + 40, left: 0, right: 800, width: 800, height: 40, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    scrollTo(scroller, 950);
+    await act(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    expect(bar).toHaveAttribute("data-stuck");
+    expect(css).toMatch(/\[data-v2="library"\] \.el-selectbar\[data-stuck\]::before,/);
+    // The last-opened grey is 6% (9% on hover) in light, 9% (12%) in dark, where 6% is a row's own hover.
+    expect(css).toContain(":root { --el-rec-last-mix: 6%; --el-rec-last-hover-mix: 9%; }");
+    expect(css).toContain(':root[data-theme="dark"] { --el-rec-last-mix: 9%; --el-rec-last-hover-mix: 12%; }');
     spy.mockRestore();
   });
 });

@@ -42,4 +42,15 @@
     <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس لے سکتے ہیں، سوائے ان اسکرینز کے جن پر کلیدیں یا ریکوری کوڈز ہوں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں اور حالیہ ایپس میں چھپی رہتی ہیں۔</string>
     <string name="cc_hide_live_words">EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں</string>
     <string name="cc_hide_live_words_help">آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔</string>
+    <string name="cc_ac_saved">%1$s · کال محفوظ ہو گئی</string>
+    <string name="cc_ac_hint">صرف آڈیو رکھنے کے لیے ہٹا دیں۔ اسے ترتیبات › ہر کال کے بعد میں بدلیں۔</string>
+    <string name="cc_ac_grouped">%1$d کالز محفوظ ہو گئیں</string>
+    <string name="cc_ac_transcribe_all">سب کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_ac_always_transcribe">ہمیشہ ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_ac_always_audio">ہمیشہ صرف آڈیو</string>
+    <string name="cc_ac_ready">ٹرانسکرپٹ تیار ہے</string>
+    <string name="cc_ac_bar_saved">%1$s · %2$s محفوظ</string>
+    <string name="cc_ac_bar">اسکرین پر ایک چھوٹی پٹی دکھائیں</string>
+    <string name="cc_ac_bar_help">نوٹیفکیشن کے ساتھ اسکرین کے اوپر 6 سیکنڈ کے لیے ایک چھوٹی لائن۔ دوسری ایپس کے اوپر دکھانے کی اجازت چاہیے۔</string>
+    <string name="cc_ac_setting_ask_help">ہر کال کے بعد ایک خاموش نوٹیفکیشن۔</string>
 </resources>

@@ -88,6 +88,28 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
   );
 }
 
+/**
+ * UX-20: "Restart to update" at the end of the title row once an update is downloaded (like VS Code's Update button);
+ * nothing otherwise. Not while recording: it says why instead.
+ */
+export function RestartToUpdate({ appStatus, notify }: { appStatus: AppStatus; notify: Notify }) {
+  const [status] = useUpdateStatus();
+  if (status?.phase !== "ready" || !status.version) return null;
+  const install = async () => {
+    try {
+      await api.installUpdate();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  return (
+    <button type="button" className="el-button el-button--secondary el-button--sm el-titlerow__update" disabled={!!appStatus.recording}
+      title={appStatus.recording ? RECORDING_BLOCKS : `Restart to install EchoLedger ${status.version}`} onClick={() => void install()}>
+      <span>Restart to update</span>
+    </button>
+  );
+}
+
 /** "Update ready — Restart" across the top of the window once an update is downloaded, or Later (the next start). */
 export function UpdateBanner({ appStatus, notify, onOpen }: { appStatus: AppStatus; notify: Notify; onOpen?: () => void }) {
   const [status] = useUpdateStatus();

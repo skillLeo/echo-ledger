@@ -190,6 +190,78 @@ describe("the Library's places", () => {
     expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
   });
 
+  it("in the app, the mouse's back button steps once, also after leaving the Library and coming back (the title row's Back is not run too)", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const heading = () => screen.getByRole("heading", { level: 1 });
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    fireEvent.click(within(screen.getByRole("list", { name: "Library views" })).getByRole("button", { name: /^Important, / }));
+    await settle();
+    // Projects and back: the Library is drawn again (its listeners too).
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    await settle();
+    fireEvent.click(rail().getByRole("button", { name: /^Library/ }));
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    // One press of the side button: one step, the Library's own, not the places' too (still the Library, not Projects).
+    fireEvent.mouseDown(window, { button: 3 });
+    fireEvent.mouseUp(window, { button: 3 });
+    await settle();
+    expect(heading()).not.toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // And one press forward brings back exactly where it was: one step was taken, no more.
+    fireEvent.mouseDown(window, { button: 4 });
+    fireEvent.mouseUp(window, { button: 4 });
+    await settle();
+    expect(heading()).toHaveTextContent(/^Important/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, ⌘F is the title row's: its field searches this view and says In: All recordings (the Library has no field of its own there)", async () => {
+    inTheApp();
+    await settle();
+    await screen.findByRole("list", { name: "Library views" });
+    expect(screen.getAllByRole("searchbox", { name: "Search recordings" })).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    await settle();
+    const field = screen.getByRole("searchbox", { name: "Search recordings" });
+    expect(field).toHaveFocus();
+    expect(document.querySelector(".el-titlerow__scope")).toHaveTextContent("In: All recordings");
+    fireEvent.change(field, { target: { value: "weekly" } });
+    await act(() => new Promise((r) => setTimeout(r, 800)));
+    expect(rows()).toEqual(["zoom"]);
+  });
+
+  it("in the app, ⌘[ walks the Library's own steps first: a filter change, then the view, before leaving the place", async () => {
+    respond("projects_list", { data: [] });
+    inTheApp();
+    await settle();
+    const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+    const list = await screen.findByRole("list", { name: "Library views" });
+    fireEvent.click(within(list).getByRole("button", { name: /^Unread, / }));
+    await settle();
+    await filterBySource("Zoom");
+    expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    // One ⌘[: the filter change goes, the view stays (and the Library stays the place).
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+    // The next: the view before it (All recordings), still in the Library.
+    fireEvent.keyDown(document.body, { key: "[", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
+    expect(rail().getByRole("button", { name: /^Library/ })).toHaveAttribute("aria-current", "page");
+    // ⌘] walks forward again, one step a press.
+    fireEvent.keyDown(document.body, { key: "]", metaKey: true });
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Unread/);
+  });
+
   it("in the app, in a narrow window the Library's rail icon still starts it over, and opens its flyout (the way back)", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
     respond("projects_list", { data: [] });
@@ -281,8 +353,8 @@ describe("the Library's places", () => {
     await settle();
     const palette = screen.getByRole("dialog", { name: "Command palette" });
     fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "show whatsapp" } });
-    expect(within(palette).getAllByRole("option")[0]).toHaveTextContent("Show WhatsApp recordings");
-    fireEvent.keyDown(palette, { key: "Enter" });
+    // Among the search's Commands (UX-20 groups what it finds).
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Show WhatsApp recordings/ }));
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings/);
     expect(within(screen.getByRole("group", { name: "Filters on" })).getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();

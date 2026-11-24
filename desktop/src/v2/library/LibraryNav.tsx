@@ -16,6 +16,7 @@ import { contextItems, LIBRARY_VIEW, MY_VIEW } from "../actions/contextMenus";
 import { currentPlatform, popupNative } from "../actions/popup";
 import { useActions } from "../actions/useActions";
 import type { MenuItem } from "../components/Menu";
+import { sayProblem, type Say } from "./organise";
 
 const VIEW_ICONS: Record<LibraryViewId, IconType> = {
   all: Icons.LibraryIcon, needs: Icons.ErrorIcon, unread: Icons.MailIcon, important: Icons.StarIcon, audio_only: Icons.WaveIcon,
@@ -86,7 +87,7 @@ export type LibraryNavProps = {
   shared?: { tabs: readonly (readonly [string, string])[]; current: string | null; open: (tab: string) => void };
   /** "+ New view": the Library opens its filters, to choose some and Save as view. */
   onNewView: () => void;
-  say: (text: string) => void;
+  say: Say;
   /** Labels changed (renamed, recoloured, deleted): the Library is synced once. */
   onLibraryChanged: () => void;
 };
@@ -203,7 +204,7 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
  */
 function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
   views: readonly MyView[]; current: string | null; onOpen: (id: string) => void; onGone: () => void; onNew: () => void;
-  say: (text: string) => void; shortcut: (id: string) => string | undefined;
+  say: Say; shortcut: (id: string) => string | undefined;
 }) {
   const [menu, setMenu] = useState<{ view: MyView; at: { x: number; y: number } } | null>(null);
   const [folded, fold] = useFolded("views-folded");
@@ -212,7 +213,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
   // Dragging a view (pointer events, as recordings are dragged: the page's own drag and drop is off on Windows): the
   // place it would go before is marked.
   const [over, setOver] = useState<number | null>(null);
-  const move = (view: MyView, to: number) => void viewsStore.move(view.id, to).catch((e) => say(e instanceof Error ? e.message : String(e)));
+  const move = (view: MyView, to: number) => void viewsStore.move(view.id, to).catch((e) => sayProblem(say, e instanceof Error ? e.message : String(e)));
   // A view's menu (UX-22, 3b), from actions.json: Open | Rename… · Duplicate · Move up · Move down | Delete view….
   const byId = (c: { targets?: readonly string[] }) => views.find((v) => v.id === c.targets?.[0]);
   const at = (c: { targets?: readonly string[] }) => views.findIndex((v) => v.id === c.targets?.[0]);
@@ -225,7 +226,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
       const taken = new Set(views.map((x) => x.name.toLocaleLowerCase()));
       let name = `${v.name} copy`;
       for (let n = 2; taken.has(name.toLocaleLowerCase()); n++) name = `${v.name} copy ${n}`;
-      void viewsStore.create(name, v.spec).then(() => say(`Duplicated as ${name}`)).catch((e) => say(e instanceof Error ? e.message : String(e)));
+      void viewsStore.create(name, v.spec).then(() => say(`Duplicated as ${name}`)).catch((e) => sayProblem(say, e instanceof Error ? e.message : String(e)));
     },
     "view.moveUp": (c) => { const v = byId(c); if (v && at(c) > 0) move(v, at(c) - 1); },
     "view.moveDown": (c) => { const v = byId(c); if (v && at(c) < views.length - 1) move(v, at(c) + 1); },
@@ -248,7 +249,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
       if (current === view.id) onGone();
       say(`${view.name} deleted · its recordings are still in your Library`);
     } catch (e) {
-      say(e instanceof Error ? e.message : String(e));
+      sayProblem(say, e instanceof Error ? e.message : String(e));
     }
   };
   const press = (e: ReactPointerEvent, view: MyView) => {

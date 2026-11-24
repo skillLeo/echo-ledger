@@ -80,6 +80,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                     }
                     // The Phone app's copy of an imported call may now be offered for deletion (when the person chose it).
                     com.echoledger.mobile.calls.PhoneAppRecordings.uploaded(applicationContext, id)
+                    // Sent from its after-call notification (v2.1): that notification will say "Transcript ready".
+                    session?.let { com.echoledger.mobile.notify.AfterCallNotice.uploaded(applicationContext, id, it) }
                     runCatching { graph.library.refresh() }
                     WidgetStateStore.refresh(applicationContext)
                     Result.success()

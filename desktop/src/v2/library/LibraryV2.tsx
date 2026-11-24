@@ -6,7 +6,7 @@
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
 // reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
 // a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { PanelToggle } from "../shell/NavRail";
+import { PanelToggle, usePageHistory } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
@@ -51,7 +51,7 @@ import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLa
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
-  TranscribeDialog, WhatsAppDialog, ZIP_FORMATS,
+  sayProblem, TranscribeDialog, WhatsAppDialog, ZIP_FORMATS,
 } from "./organise";
 import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 
@@ -118,7 +118,7 @@ const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'));
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
-type Message = { id: number; text: string; action?: { label: string; run: () => void } };
+type Message = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
 
 const readPanel = () => {
   try {
@@ -347,10 +347,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     anchor.current = null;
   }, []);
 
-  const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
+  const say = useCallback((text: string, action?: Message["action"], error?: boolean) => setMessage({ id: ++seq.current, text, action, error }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
   // the list is away (Trash, a selection, a recording open).
-  const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
+  const queue = useLibraryQueue(useCallback((text: string, error?: boolean) => say(text, undefined, error), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -604,21 +604,27 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     let frame = 0;
     const mark = () => {
       frame = 0;
-      const list = root.current?.querySelector<HTMLElement>(".el-lib-list");
-      if (!list) return;
+      const el = root.current;
+      if (!el) return;
       const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
-      list.style.setProperty("--el-sticky-cover", `${pad}px`);
+      // On the Library's root: the stuck headings and the stuck selection bar both cover the padding band.
+      el.style.setProperty("--el-sticky-cover", `${pad}px`);
       const top = box.getBoundingClientRect().top + pad;
-      for (const h of list.querySelectorAll<HTMLElement>(":scope > .el-list-section")) {
-        h.toggleAttribute("data-stuck", box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1);
-      }
+      const stuck = (h: HTMLElement) => box.scrollTop > 0 && Math.abs(h.getBoundingClientRect().top - top) < 1;
+      for (const h of el.querySelectorAll<HTMLElement>(".el-lib-list > .el-list-section, .el-selectbar")) h.toggleAttribute("data-stuck", stuck(h));
     };
-    const onScroll = () => {
+    const soon = () => {
       if (!frame) frame = requestAnimationFrame(mark);
     };
-    box.addEventListener("scroll", onScroll, { passive: true });
+    box.addEventListener("scroll", soon, { passive: true });
+    // A tab, a filter, a sort, a delete or a resize moves the headings without a scroll: marked again then too.
+    window.addEventListener("resize", soon);
+    const resized = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
+    if (resized && root.current) resized.observe(root.current);
     return () => {
-      box.removeEventListener("scroll", onScroll);
+      box.removeEventListener("scroll", soon);
+      window.removeEventListener("resize", soon);
+      resized?.disconnect();
       cancelAnimationFrame(frame);
     };
   }, []);
@@ -746,10 +752,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         run: () => void api.restoreSession(item.id).then(async () => {
           await load();
           setFocusAfter({ rowId: item.id, seq: ++seq.current });
-        }).catch((e) => say(errorMessage(e))),
+        }).catch((e) => sayProblem(say, errorMessage(e))),
       });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -769,7 +775,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     await load();
     const left = ids.length - back;
-    say(left === 0 ? `${recordingsWord(back)} back` : `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
+    if (left === 0) say(`${recordingsWord(back)} back`);
+    else sayProblem(say, `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
   };
   /** Delete a whole view or more than this many: asked first. */
   const ASK_ABOVE = 20;
@@ -793,7 +800,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       const gone = await api.bulkSessions([...ids], "delete");
       endSelection();
       if (!gone) {
-        say("Nothing was moved to Trash. Try again, or reload the Library.");
+        sayProblem(say, "Nothing was moved to Trash. Try again, or reload the Library.");
         void load();
         return;
       }
@@ -823,7 +830,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
       say(`${recordingsWord(gone)} moved to Trash · ${kept}`, { label: "Undo", run: () => void restoreMany(ids) });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -837,11 +844,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       await api.bulkSessions([...ids], on ? "label" : "unlabel", null, list.name);
       say(on ? `Added to ${list.name}` : `Removed from ${list.name}`, changed.length ? {
         label: "Undo",
-        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => say(errorMessage(e))),
+        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => sayProblem(say, errorMessage(e))),
       } : undefined);
       await Promise.all([load(), reloadLists()]);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
@@ -850,7 +857,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       say(ids.length === 1 ? done : `${done} · ${recordingsWord(changed)}`);
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -935,7 +942,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       await load();
       say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const eraseNow = async (b: BinItem) => {
@@ -945,7 +952,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
       say(`"${b.title || "Recording"}" deleted forever`);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -1016,7 +1023,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       endSelection();
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -1070,11 +1077,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // else closes the filters; J and K move between rows, Enter opens one, X ticks it; ⌘A / Ctrl+A picks every row shown;
   // Delete sends the picked (or the focused) ones to Trash with Undo.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  /** Inside the shell (its title row has ← → and the one search): set where usePageHistory and usePageTitle answer. */
+  const inShellRef = useRef(false);
+  const inTitleRowRef = useRef(false);
   keys.current = (e: KeyboardEvent) => {
     if (organise || context || savingView || newLabel) return;
     const mod = e.metaKey || e.ctrlKey;
     // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
-    if (!open && !trash && items && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+    // In the shell's title row (inTitleRow) ⌘F is the row's: it searches this view and says so ("In: All recordings").
+    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -1083,7 +1094,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (typing(e.target)) return;
     // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
     // (the search, a field, the pill editor) or with a question open.
-    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+    // In the shell the title row answers them (usePageHistory), asking the Library first: nothing moves twice.
+    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       back.current(e.key === "[" ? "back" : "forward");
@@ -1170,23 +1182,26 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     walk(way);
   };
   useEffect(() => {
-    // The mouse's back (button 3) and forward (4): never the web view's own page history.
-    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    // The mouse's back (button 3) and forward (4): never the web view's own page history. Heard first (the capture phase),
+    // so the Library answers before the shell's title row, which walks the places, however often it is drawn again; a
+    // press something else took is left alone.
+    // In the shell its title row hears them (usePageHistory) and asks the Library first.
+    const side = (e: MouseEvent) => !inShellRef.current && (e.button === 3 || e.button === 4);
     const down = (e: MouseEvent) => {
       if (side(e)) e.preventDefault();
     };
     const up = (e: MouseEvent) => {
-      if (!side(e)) return;
+      if (!side(e) || e.defaultPrevented) return;
       e.preventDefault();
       // Not behind a question or a dialog.
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       back.current(e.button === 3 ? "back" : "forward");
     };
-    window.addEventListener("mousedown", down);
-    window.addEventListener("mouseup", up);
+    window.addEventListener("mousedown", down, true);
+    window.addEventListener("mouseup", up, true);
     return () => {
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("mouseup", up);
+      window.removeEventListener("mousedown", down, true);
+      window.removeEventListener("mouseup", up, true);
     };
   }, []);
   useEffect(() => {
@@ -1311,7 +1326,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         : ids.length === 1 ? `Took “${title || "the recording"}” out of its project` : `Took ${ids.length} recordings out of their projects`);
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   // What the Library's menus do (the registry runs these; one code path for every menu that sends these ids).
@@ -1339,7 +1354,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     "recording.moveToTrash": (c) => deleteOrAsk(c.targets ?? []),
     "file.newRecording": onRecord ? () => onRecord() : undefined,
     // A voice note from the microphone (3b's New voice note), where this computer can record.
-    "file.newVoiceNote": onRecord ? () => void api.toggleMicNote().catch((e) => say(errorMessage(e))) : undefined,
+    "file.newVoiceNote": onRecord ? () => void api.toggleMicNote().catch((e) => sayProblem(say, errorMessage(e))) : undefined,
     "file.importAudio": onImport ? () => onImport() : undefined,
     "view.sortBy": (c) => { if (c.value) setChoice({ ...choice, sort: c.value as SortKey }); },
     "view.groupBy": (c) => { if (c.value) setChoice({ ...choice, group: c.value as LibraryViewChoice["group"] }); },
@@ -1416,7 +1431,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const toasts = (
     <ToastRegion>
       {message && (
-        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run}
+        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error}
           onClose={() => setMessage((m) => (m?.id === message.id ? null : m))} />
       )}
     </ToastRegion>
@@ -1433,13 +1448,36 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
   const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
     : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
+  /** A toolbar's keys (the selection bar, as the shared SelectionBar): ← → between its controls, Home and End to the ends. */
+  const toolbarKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const next = rtl ? "ArrowLeft" : "ArrowRight";
+    const prev = rtl ? "ArrowRight" : "ArrowLeft";
+    if (![next, prev, "Home", "End"].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+    const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [role="checkbox"]')]
+      .filter((c) => !c.closest('[role="menu"]'));
+    const at = controls.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const to = e.key === "Home" ? 0 : e.key === "End" ? controls.length - 1 : e.key === next ? Math.min(at + 1, controls.length - 1) : Math.max(at - 1, 0);
+    controls[to].focus();
+  };
   const closeOpen = () => {
     const id = open?.id ?? null;
     setOpenId(null);
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
+  // The title row's ← → (⌘[ ⌘], Alt+← →, the mouse's side buttons) ask the Library first (UX-20): an open recording
+  // goes back to the list where it was (UX-25's kept place is this step); else the Library's own steps (a view, a
+  // filter, a search); then the places visited. Outside the shell the Library hears those keys itself.
+  const inShell = usePageHistory({
+    back: open ? closeOpen : steps.current.back.length ? () => void walk("back") : null,
+    forward: !open && steps.current.forward.length ? () => void walk("forward") : null,
+  });
+  inShellRef.current = inShell;
+  inTitleRowRef.current = inTitleRow;
   const recordingPage = open && (
-    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
@@ -1498,7 +1536,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           )}
           {choosing ? (
             // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
-            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings">
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
               <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
               <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
@@ -1561,7 +1599,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           {!trash && !choosing && (filtersOn > 0 || changed) && (
             <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}
               onSaveView={() => setSavingView(true)} onSaveChanges={changed && savedView ? () => {
-                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => say(errorMessage(e)));
+                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => sayProblem(say, errorMessage(e)));
               } : undefined} />
           )}
           {top && scope.kind === "view" && scope.view === "all" && !filtersOn && !query && !choosing && <LibraryTop {...top} items={items} />}
