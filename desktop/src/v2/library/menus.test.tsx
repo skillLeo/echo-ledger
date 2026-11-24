@@ -149,6 +149,24 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(document.querySelector(".el-lib-list")).toBeNull();
   });
 
+  it("Mark as important is in the selection bar's ⋮ and the recording page's menu too, not only a right-click", async () => {
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", { id: "t1", kind: "final", provider: "x", status: "completed", language: "en", text: null, segments: [] });
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Selected recordings" })).getByRole("button", { name: "More actions" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitemcheckbox", { name: "Mark as important" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["bilal"], action: "important", clientId: null, label: null });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(row("Usman Chaudhry"));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Recording actions" })).getByRole("menuitemcheckbox", { name: "Mark as important" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["usman"], action: "important", clientId: null, label: null });
+  });
+
   it("Trash: a deleted recording's Restore | Delete immediately…; Trash's own Empty trash… asks, then erases every one", async () => {
     const BIN = [
       { id: "old1", title: "Old call", deleted_at: "2026-11-23T09:00:00Z", erase_at: "2026-11-25T09:00:00Z", duration_ms: 60_000 },

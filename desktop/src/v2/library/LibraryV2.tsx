@@ -26,7 +26,7 @@ import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./fi
 import { contextItems, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
 import { currentPlatform, popupNative } from "../actions/popup";
-import { choiceItems, registerAction, type ActionContext } from "../actions/registry";
+import { choiceItems, menuItems, registerAction, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
@@ -879,6 +879,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
     if (!all((i) => !!i.keep)) add("keep", { label: "Keep forever", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "keep", "Kept forever") });
     if (!none((i) => !!i.keep)) add("unkeep", { label: "Allow auto clean-up", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "unkeep", "Auto clean-up allowed") });
+    // Mark as important (UX-22): actions.json's item, the same as a right-click's (the selection bar's ⋮ and the
+    // recording page's menu have it too).
+    for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: "Organise" });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
         ? { label: `Transcribe (${MAX_TRANSCRIBE} at a time)`, icon: Icons.TranscriptIcon, group: "Organise", disabled: true }
