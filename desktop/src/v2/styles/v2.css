@@ -2122,6 +2122,11 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); font-weight: var(--el-desktop-text-rail-label-weight);
 }
 .el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+/* The compact rail (Settings › Appearance, View › Theme): icons only, 44 px items (the 28 px pill and 8 px above and
+   below it), and still 72 px wide, since a Mac's window buttons sit in its top cell. Every item keeps its name for
+   assistive tools and in its tooltip; Record keeps its time while recording. */
+.el-rail--compact .el-rail__item, .el-rail--compact .el-rail__me .el-button.el-rail__item { min-block-size: calc(var(--el-desktop-rail-pill-height) + var(--el-space-16)); }
+.el-rail--compact .el-rail__item .el-rail__label, .el-rail--compact .el-rail__record:not(.el-rail__record--on) .el-rail__label { display: none; }
 /* Badges: on the icon's top-right corner, cut out of it by a ring in the rail's colour. The number (Activity's only):
    16 px tall, 10 px semibold tabular figures, the accent with its text colour; a dot: 8 px (Live's red, recording). */
 .el-rail__count {
@@ -2278,6 +2283,30 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 [data-titlebar="strip"] .el-titlebar + .titlebar-drag { display: none; }
 [data-titlebar="strip"] .el-shell:not(.el-shell--nav) { margin-block-start: var(--el-layout-titlebar-macos); block-size: calc(100% - var(--el-layout-titlebar-macos)); }
 [data-titlebar="strip"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-16); }
+/* ---- Windows' own title row (UX-20, v21_win_titlebar; wintitle.rs, WindowButtons.tsx) -------------------------------
+   No system title bar: the title row is the window's, 48 px. The rail's top cell holds the app's mark (where Windows draws
+   a window's icon) and moves the window; the panel's head is as tall as the row. Minimize, Maximize and Close end the
+   row, flush with the window's edge, 46 px wide and as tall as the row; right to left they mirror with the row, as an
+   app's own title bar does in a right-to-left interface. */
+[data-titlebar="win"] .el-shell--nav .el-rail { padding-block-start: 0; }
+[data-titlebar="win"] .el-rail__top { display: flex; align-items: center; justify-content: center; block-size: var(--el-desktop-titlerow-height-windows); }
+[data-titlebar="win"] .el-rail__lights { display: none; }
+[data-titlebar="win"] .el-titlerow, [data-titlebar="win"] .el-panel__head { block-size: var(--el-desktop-titlerow-height-windows); }
+[data-titlebar="win"] .el-titlerow { padding-inline-end: 0; }
+[data-titlebar="win"] .el-titlerow__end { align-self: stretch; }
+/* The full 48 px: over the row's hairline too, as a system title bar's buttons reach its edge. */
+.el-winbuttons { display: flex; flex: none; align-self: flex-start; block-size: var(--el-desktop-titlerow-height-windows); margin-inline-start: var(--el-space-8); }
+.el-winbutton {
+  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-desktop-window-button-width); padding: 0;
+  border: 0; border-radius: 0; background: transparent; color: var(--el-role-text-primary); cursor: default; font: inherit;
+}
+.el-winbutton .el-icon > svg { inline-size: var(--el-desktop-window-button-glyph); block-size: var(--el-desktop-window-button-glyph); }
+/* `is-hovered`: the snap layout plugin's own hover for Maximize, whose native window lies over it on Windows 11. */
+:root { --el-winbutton-hover-mix: 8%; --el-winbutton-pressed-mix: 14%; --el-winbutton-close-pressed-mix: 80%; }
+.el-winbutton:hover, .el-winbutton.is-hovered { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-hover-mix), transparent); }
+.el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
+.el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
+.el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {

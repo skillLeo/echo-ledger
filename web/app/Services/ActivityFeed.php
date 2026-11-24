@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
@@ -65,7 +66,19 @@ final class ActivityFeed
      * staff asking the person for another payment receipt; since v1.8 a call an app saw but did not record.
      */
     public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
-        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested', 'missed_recording'];
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested', 'missed_recording',
+        self::SERVER_PROBLEM];
+
+    /**
+     * Since W-INC-1125 (contract 2.0.0-v): the server's PHP lacks what uploads need, for the super admins only. One open
+     * item per problem (SERVER_PROBLEM_KEY), resolved when the scheduled health check passes again.
+     */
+    public const SERVER_PROBLEM = 'server_problem';
+
+    private const SERVER_PROBLEM_KEY = 'server_problem:php';
+
+    /** Set for an hour when a server problem turns unread (W-INC-1125 review): a flapping fault rings once an hour. */
+    private const SERVER_PROBLEM_RANG = 'activity:server-problem-rang';
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -352,6 +365,81 @@ final class ActivityFeed
                 'read_at' => null, 'dedupe_key' => $key, 'repeat_count' => 1]);
         } catch (UniqueConstraintViolationException) {
             self::upsert($user, $kind, $sessionId, $data);
+        }
+    }
+
+    /**
+     * The server's PHP fails its health check (W-INC-1125, contract 2.0.0-v): one item per super admin, in the bell and
+     * the badge of every app, for when no email can reach them. The scheduled check calls this every five minutes while
+     * it lasts: an open item only takes the newest words, without turning unread again; one made again after it was
+     * resolved is unread, at the top, `repeat_count` one more.
+     */
+    public function serverProblem(string $title, string $body): void
+    {
+        self::forgetServerProblemsOfOthers();
+        // Whether this run may make an item unread (new, or back after it was fixed): once an hour, for every admin.
+        $ring = null;
+        $mayRing = function () use (&$ring): bool {
+            return $ring ??= Cache::add(self::SERVER_PROBLEM_RANG, true, now()->addHour());
+        };
+        foreach (User::query()->where('is_super_admin', true)->get() as $admin) {
+            try {
+                $data = self::make($title, $body, self::SERVER_PROBLEM, null, null, '/admin')->icon('heroicon-o-exclamation-triangle')->toDatabase()->data;
+                $item = $admin->notifications()->where('dedupe_key', self::SERVER_PROBLEM_KEY)->first();
+                if (! $item instanceof DatabaseNotification) {
+                    try {
+                        $mayRing();
+                        $admin->notifications()->create(['id' => (string) Str::uuid(), 'type' => FilamentDatabaseNotification::class, 'data' => $data,
+                            'read_at' => null, 'dedupe_key' => self::SERVER_PROBLEM_KEY, 'repeat_count' => 1]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Another run made it a moment ago: it is there.
+                    }
+
+                    continue;
+                }
+                if ($item->getAttribute('resolved_at') !== null) {
+                    // Back after it was fixed: open again, and unread at the top at most once an hour, so a fault that
+                    // flaps does not make every app notify every few minutes.
+                    $item->forceFill($mayRing()
+                        ? ['data' => $data, 'read_at' => null, 'resolved_at' => null, 'repeat_count' => (int) $item->getAttribute('repeat_count') + 1,
+                            'created_at' => now(), 'updated_at' => now()]
+                        : ['data' => $data, 'resolved_at' => null])->save();
+                } elseif (($item->data['title'] ?? null) !== ($data['title'] ?? null) || ($item->data['body'] ?? null) !== ($data['body'] ?? null)) {
+                    $item->forceFill(['data' => $data])->save();
+                }
+            } catch (Throwable $e) {
+                self::reportSafely($e, 'A server problem was not written to Activity');
+            }
+        }
+    }
+
+    /**
+     * A server problem is for super admins only (W-INC-1125 review): the items of anyone who is not one any more go,
+     * when the role is taken away (User) and, for any other way, whenever a problem is written or resolved.
+     */
+    public static function forgetServerProblemsOfOthers(?User $user = null): void
+    {
+        try {
+            DatabaseNotification::query()->where('dedupe_key', self::SERVER_PROBLEM_KEY)->where('notifiable_type', (new User)->getMorphClass())
+                ->when($user !== null, fn ($q) => $q->where('notifiable_id', $user?->id))
+                ->whereNotIn('notifiable_id', User::query()->where('is_super_admin', true)->select('id'))
+                ->delete();
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'Server problems of a former super admin were not removed');
+        }
+    }
+
+    /** The health check passes again: each super admin's open item reads "Fixed", is read and resolved (W-INC-1125). */
+    public function serverProblemResolved(): void
+    {
+        self::forgetServerProblemsOfOthers();
+        try {
+            $data = self::make('Fixed: uploads work again', 'The server\'s PHP has everything it needs again, and recordings can be stored.',
+                self::SERVER_PROBLEM, null, null, '/admin')->icon('heroicon-o-check-circle')->toDatabase()->data;
+            DatabaseNotification::query()->where('dedupe_key', self::SERVER_PROBLEM_KEY)->whereNull('resolved_at')->get()
+                ->each(fn (DatabaseNotification $item) => $item->forceFill(['data' => $data, 'read_at' => $item->read_at ?? now(), 'resolved_at' => now()])->save());
+        } catch (Throwable $e) {
+            self::reportSafely($e, 'A server problem was not resolved in Activity');
         }
     }
 

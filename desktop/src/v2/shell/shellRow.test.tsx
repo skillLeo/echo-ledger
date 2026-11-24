@@ -4,7 +4,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
-import { NavShell, RAIL_FULL_FROM } from "./NavShell";
+import { NavShell, RAIL_FULL_FROM, RAIL_FULL_FROM_COMPACT } from "./NavShell";
+import { changePreferences, loadPreferences } from "../../lib/shell";
+import { runAction } from "../actions/registry";
+import { menuSnapshot } from "../actions/menuState";
+import { AppearancePageV2 } from "../settings/pages/AppV2";
 import { PanelToggle, usePageHistory, type Place } from "./NavRail";
 import { usePageTitle } from "../pageTitle";
 import { installNativeFeel } from "../../lib/nativeFeel";
@@ -320,5 +324,76 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     act(() => setSize(1440, RAIL_FULL_FROM));
     expect(rail().getByRole("button", { name: "Help" })).toBeInTheDocument();
     expect(rail().getByRole("button", { name: "Account, Ayesha Khan" })).toBeInTheDocument();
+  });
+
+  it("the compact rail: icons only, each keeping its name; Settings and View › Theme › Compact rail turn it on and off", () => {
+    setSize(1440, 900);
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(nav).not.toHaveClass("el-rail--compact");
+    expect(menuSnapshot().state.compactRail).toBe(false);
+    // Settings › Appearance's switch (and Reset) go through the preferences, told at once.
+    act(() => void changePreferences({ compactRail: true }));
+    expect(nav).toHaveClass("el-rail--compact");
+    expect(menuSnapshot().state.compactRail).toBe(true);
+    // The names stay: the buttons' (assistive tools, the tooltip's "Library ⌘1") and the drawn label, hidden by the CSS.
+    expect(rail().getByRole("button", { name: "Library" }).querySelector(".el-rail__label")).toHaveTextContent("Library");
+    expect(rail().getByRole("button", { name: "Account, Ayesha Khan" })).toBeInTheDocument();
+    // The menu bar's tick runs the same choice, kept on this computer.
+    act(() => void runAction("view.compactRail", { platform: "macos" }));
+    expect(nav).not.toHaveClass("el-rail--compact");
+    expect(loadPreferences().compactRail).toBe(false);
+    act(() => void runAction("view.compactRail", { platform: "macos" }));
+    expect(nav).toHaveClass("el-rail--compact");
+    expect(loadPreferences().compactRail).toBe(true);
+    act(() => void changePreferences({ compactRail: false }));
+  });
+
+  it("with Appearance open, View › Theme › Compact rail turns its switch on, and the page's next change keeps it", () => {
+    localStorage.clear();
+    setSize(1440, 900);
+    render(<App page={() => <AppearancePageV2 theme="system" onTheme={() => undefined} rail />} />);
+    const toggle = () => screen.getByRole("switch", { name: "Compact rail (icons only)" });
+    expect(toggle()).not.toBeChecked();
+    act(() => void runAction("view.compactRail", { platform: "macos" }));
+    expect(toggle()).toBeChecked();
+    expect(screen.getByRole("navigation", { name: "Main" })).toHaveClass("el-rail--compact");
+    // A change made on the page afterwards is made on what is saved: the compact rail stays on.
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Times" })).getByRole("radio", { name: "24-hour" }));
+    expect(loadPreferences()).toMatchObject({ clock: "24", compactRail: true });
+    expect(toggle()).toBeChecked();
+    // And the other way: the switch, then the menu's tick and the rail follow.
+    fireEvent.click(toggle());
+    expect(loadPreferences().compactRail).toBe(false);
+    expect(menuSnapshot().state.compactRail).toBe(false);
+    expect(screen.getByRole("navigation", { name: "Main" })).not.toHaveClass("el-rail--compact");
+    act(() => void changePreferences({ clock: "12" }));
+  });
+
+  it("a compact rail fits a shorter window: Help and Setup stay in it down to 554 px", () => {
+    expect(RAIL_FULL_FROM_COMPACT).toBe(RAIL_FULL_FROM - 9 * 12 - 18);
+    expect(RAIL_FULL_FROM_COMPACT).toBeLessThanOrEqual(560);
+    changePreferences({ compactRail: true });
+    try {
+      setSize(1440, RAIL_FULL_FROM_COMPACT);
+      render(<App />);
+      expect(rail().getByRole("button", { name: "Help" })).toBeInTheDocument();
+      expect(rail().getByRole("button", { name: /^Setup/ })).toBeInTheDocument();
+      act(() => setSize(1440, RAIL_FULL_FROM_COMPACT - 1));
+      expect(rail().queryByRole("button", { name: "Help" })).toBeNull();
+      expect(rail().getByRole("button", { name: "Account, Ayesha Khan, needs setup" })).toBeInTheDocument();
+    } finally {
+      act(() => void changePreferences({ compactRail: false }));
+    }
+  });
+
+  it("the compact rail's look: 44 px items with no names drawn, 72 px wide still; Record keeps its time while recording", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toContain(".el-rail--compact .el-rail__item, .el-rail--compact .el-rail__me .el-button.el-rail__item { min-block-size: calc(var(--el-desktop-rail-pill-height) + var(--el-space-16)); }");
+    expect(css).toContain(".el-rail--compact .el-rail__item .el-rail__label, .el-rail--compact .el-rail__record:not(.el-rail__record--on) .el-rail__label { display: none; }");
+    expect(css).not.toMatch(/\.el-rail--compact[^{]*\{[^}]*inline-size/);
   });
 });

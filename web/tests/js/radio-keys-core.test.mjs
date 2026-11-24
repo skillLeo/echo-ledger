@@ -31,3 +31,17 @@ test('any other key is not the group\'s', () => {
     for (const key of ['Enter', ' ', 'Tab', 'a', 'PageDown']) assert.equal(core.next(8, 2, key, false), null);
     assert.equal(core.next(0, -1, 'ArrowRight', false), null);
 });
+
+test('after an arrow\'s choice the focus comes back to it for 3 s, until the person moves on', () => {
+    const refocus = { until: 1000 + 3000 };
+    // A redraw within the 3 s (no event): the focus goes back to the choice; after them, or with none chosen, it does not.
+    assert.equal(core.keepsFocus(refocus, null, 2000), true);
+    assert.equal(core.keepsFocus(refocus, null, 4001), false);
+    assert.equal(core.keepsFocus(null, null, 2000), false);
+    // Another arrow in the same group keeps it (the new choice is the one to come back to).
+    assert.equal(core.keepsFocus(refocus, { type: 'keydown', inGroup: true }, 2000), true);
+    // A click anywhere, even on the group (it takes no focus, or a control the redraw replaced), and a key elsewhere: never pulled back.
+    assert.equal(core.keepsFocus(refocus, { type: 'pointerdown', inGroup: true }, 2000), false);
+    assert.equal(core.keepsFocus(refocus, { type: 'pointerdown', inGroup: false }, 2000), false);
+    assert.equal(core.keepsFocus(refocus, { type: 'keydown', inGroup: false }, 2000), false);
+});

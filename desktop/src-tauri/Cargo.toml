@@ -67,6 +67,9 @@ muda = { version = "=0.20.0", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
+# UX-20 (v21_win_titlebar): Snap Layouts on the page's own Maximize button (wintitle.rs). MIT; its source read: a Win32
+# child window over the button that answers WM_NCHITTEST with HTMAXBUTTON, no network calls.
+tauri-plugin-snap-layout = "=1.0.9"
 wasapi = "0.26.0"
 windows = { version = "0.62.2", features = [
   "Wdk_System_SystemServices",
@@ -115,6 +118,9 @@ windows = { version = "0.62.2", features = [
   "Storage_Streams",
   "Foundation_Collections",
   "Win32_UI_Shell",
+  # FIX-12: the Jump List's Tasks (IObjectCollection, a task's title as a PROPVARIANT).
+  "Win32_UI_Shell_Common",
+  "Win32_System_Variant",
   "Win32_System_DataExchange",
   "Win32_System_Ole",
 ] }

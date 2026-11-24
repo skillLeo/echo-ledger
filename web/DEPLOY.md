@@ -100,7 +100,11 @@ The scheduler (`routes/console.php`) runs:
 - since W-INC-1124, `echoledger:health --report` every 5 minutes (`withoutOverlapping(5)`): the PHP extensions above
   and a round trip through the recordings cipher. A failure writes one critical line to the log, puts a banner on the
   admin dashboard for super admins (which also checks the web PHP on each visit) until a check passes, and emails
-  the super admins at most once an hour. Meanwhile an upload that cannot be assembled keeps its parts, and
+  the super admins at most once an hour. Since W-INC-1125 it runs as `echoledger:health --report --web`: it also asks
+  the web PHP at `<APP_URL>/health/php` (so APP_URL must reach this server from itself; when it cannot, a warning is
+  logged and nothing is mailed), the email names what each PHP lacks and the `selectorctl ... --enable-user-extensions=`
+  line that turns it back on, and the first passing check after a mailed failure emails "fixed". This only works while
+  the `schedule:run` cron runs: `php artisan schedule:list` must show it. Meanwhile an upload that cannot be assembled keeps its parts, and
   `recordings:recover` finishes it once PHP is fixed, with no new upload: for up to 48 hours after `complete` or 8
   recovery rounds (15 minutes apart at first, doubling up to 8 hours), after which the device is asked for the file.
 - `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has

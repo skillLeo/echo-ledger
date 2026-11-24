@@ -309,6 +309,12 @@ pub struct Settings {
     pub menu_bar_timer: bool,
     /// FIX-11: the Activity number on the app's icon in the Dock (the rail's).
     pub dock_badge: bool,
+    /// FIX-12 (Windows): ✕ quits instead of keeping EchoLedger in the notification area ("When I close the window").
+    pub close_quits: bool,
+    /// FIX-12 (Windows): the first ✕ said EchoLedger keeps running.
+    pub close_tip_shown: bool,
+    /// FIX-12 (Windows): the tip that Windows hides new tray icons was shown, once after install.
+    pub tray_tip_shown: bool,
     /// "type" (keystrokes into the focused app) | "clipboard"
     pub dictation_output: String,
     /// Default client whose keyterms boost accuracy.
@@ -410,6 +416,9 @@ impl Default for Settings {
             menu_bar_icon: true,
             menu_bar_timer: true,
             dock_badge: true,
+            close_quits: false,
+            close_tip_shown: false,
+            tray_tip_shown: false,
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,

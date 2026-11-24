@@ -89,7 +89,7 @@ describe("system-style settings", () => {
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Times" })).getByRole("radio", { name: "24-hour" }));
     expect(document.documentElement.dataset.sidebar).toBe("grey");
     expect(document.documentElement.dataset.density).toBe("compact");
-    expect(JSON.parse(window.localStorage.getItem("echoledger-preferences") ?? "{}")).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+    expect(JSON.parse(window.localStorage.getItem("echoledger-preferences") ?? "{}")).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24", compactRail: false });
   });
 
   it("lists the keys of the app itself under Keyboard shortcuts", async () => {

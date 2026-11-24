@@ -291,6 +291,46 @@ describe("the right-click (FIX-10)", () => {
     }
   });
 
+  it("after Select All a press on a control's words (user-select: none, never drawn as selected) is no press on text", () => {
+    stop = installNativeFeel({ release: true, onSyncNow: () => undefined });
+    document.body.innerHTML = `<div id="bar" style="user-select: none"><button id="save"><span id="label">Save</span></button></div>`
+      + `<p id="words" style="user-select: text">the invoice is due</p><span id="plain">Assalam o alaikum</span>`;
+    const boxes = new Map<Node, { left: number; right: number; top: number; bottom: number }>([
+      [document.getElementById("label")!.firstChild!, { left: 10, right: 60, top: 10, bottom: 30 }],
+      [document.getElementById("words")!.firstChild!, { left: 100, right: 300, top: 40, bottom: 60 }],
+      [document.getElementById("plain")!.firstChild!, { left: 100, right: 300, top: 70, bottom: 90 }],
+    ]);
+    const had = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value(this: Range) {
+        return [...boxes].filter(([node]) => this.intersectsNode(node)).map(([, box]) => box) as unknown as DOMRectList;
+      },
+    });
+    try {
+      const all = document.createRange();
+      all.selectNodeContents(document.body);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(all);
+      // The button's words: its own menu's place, not the system's (the page's menu is held back).
+      expect(fireEvent.contextMenu(document.getElementById("label")!, { clientX: 30, clientY: 20 })).toBe(false);
+      // Selectable text, set or by default ("auto" all the way up): the system's menu.
+      expect(fireEvent.contextMenu(document.getElementById("words")!, { clientX: 150, clientY: 50 })).toBe(true);
+      expect(fireEvent.contextMenu(document.getElementById("plain")!, { clientX: 150, clientY: 80 })).toBe(true);
+      // A selection inside the control's words alone: still not the system's menu.
+      const inside = document.createRange();
+      inside.setStart(document.getElementById("label")!.firstChild!, 0);
+      inside.setEnd(document.getElementById("label")!.firstChild!, 4);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(inside);
+      expect(fireEvent.contextMenu(document.getElementById("label")!, { clientX: 30, clientY: 20 })).toBe(false);
+    } finally {
+      if (had) Object.defineProperty(Range.prototype, "getClientRects", had);
+      else delete (Range.prototype as unknown as { getClientRects?: unknown }).getClientRects;
+      window.getSelection()!.removeAllRanges();
+    }
+  });
+
   it("in a development build the browser's menu (Inspect) stays", () => {
     stop = installNativeFeel({ release: false, onSyncNow: () => undefined });
     document.body.innerHTML = `<p id="text">Words</p>`;
