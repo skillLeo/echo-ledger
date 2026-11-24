@@ -33,6 +33,24 @@ object CallChoice {
     /** The same choice this many times in a row on the card offers "Always do this?" once. */
     const val ALWAYS_AFTER = 3
 
+    /**
+     * v2.1 UX-13 (behind this interface flag, contract 2.0.0-r): after a call a quiet notification asks instead of the
+     * card ([com.echoledger.mobile.notify.AfterCallNotice]); off, the card comes back.
+     */
+    const val NOTIFY_FLAG = "v21_aftercall_notify"
+
+    /** How long the after-call notification stays in the shade; nobody choosing keeps the audio only then. */
+    const val NOTICE_MS = 60 * 60_000L
+
+    /** How long "Deleted · Undo" stays in the notification before the file really goes. */
+    const val DELETED_MS = 8_000L
+
+    /** How long the optional small bar stays on screen. */
+    const val BAR_MS = 6_000L
+
+    /** Whether a call is asked about in the after-call notification (the flag on, for this person). */
+    fun notifies(s: AppSettings): Boolean = s.uiFlags[NOTIFY_FLAG] == true
+
     /** What was chosen for one call: on the pill during it, on the card after it, or by the setting. */
     enum class Pick(val wire: String) {
         TRANSCRIBE("transcribe"),

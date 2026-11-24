@@ -144,4 +144,6 @@
     <string name="c_other_b">This is a test notification.</string>
     <string name="c_decisions">Calls and problems</string>
     <string name="c_decisions_d">Asks after a call whether to keep it, and says when a call could not be recorded</string>
+    <string name="c_after_call">After a call</string>
+    <string name="c_after_call_d">Asks quietly after each call whether to transcribe or delete it</string>
 </resources>

@@ -42,4 +42,15 @@
     <string name="cc_block_screens_help">Off: you can take screenshots of the app, except screens that show keys or recovery codes. On: EchoLedger\'s own screens can\'t be captured and are hidden in Recents.</string>
     <string name="cc_hide_live_words">Hide EchoLedger\'s live words from screenshots and screen shares</string>
     <string name="cc_hide_live_words_help">On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and screen shares. The recording pill and the after-call card always show. Off: everything shows.</string>
+    <string name="cc_ac_saved">%1$s · call saved</string>
+    <string name="cc_ac_hint">Swipe away to keep the audio only. Change this in Settings › After each call.</string>
+    <string name="cc_ac_grouped">%1$d calls saved</string>
+    <string name="cc_ac_transcribe_all">Transcribe all</string>
+    <string name="cc_ac_always_transcribe">Always transcribe</string>
+    <string name="cc_ac_always_audio">Always audio only</string>
+    <string name="cc_ac_ready">Transcript ready</string>
+    <string name="cc_ac_bar_saved">%1$s · %2$s saved</string>
+    <string name="cc_ac_bar">Show a small bar on screen</string>
+    <string name="cc_ac_bar_help">One small line at the top of the screen for 6 seconds, as well as the notification. Needs the permission to display over other apps.</string>
+    <string name="cc_ac_setting_ask_help">A quiet notification after each call.</string>
 </resources>

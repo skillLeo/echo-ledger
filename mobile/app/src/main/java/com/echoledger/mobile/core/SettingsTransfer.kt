@@ -79,6 +79,8 @@ object SettingsTransfer {
         // The Phone app's own recordings belong to this phone (since v1.8).
         "phoneAppImport",
         "deletePhoneAppCopy",
+        // The small after-call bar needs this phone's overlay permission (v2.1).
+        "afterCallBar",
         // Where the control pill sits belongs to this phone's screen.
         "pillEdge",
         "pillY",

@@ -97,6 +97,14 @@ internal enum class FloatingWindow(val title: String, val flags: Int, val liveWo
         liveWords = false
     ),
 
+    /** The optional small bar after a call (v2.1 UX-13): it always shows, like the card it stands in for. */
+    AFTER_CALL_BAR(
+        "EchoLedger after-call bar",
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        liveWords = false
+    ),
+
     /** "Recording this call · Don't record" at the start of a call (2.0.5): it always shows, like the pill. */
     START_BANNER(
         "EchoLedger start banner",

@@ -92,10 +92,13 @@ fun CallsPage(
                 // After each call and When to ask (since 2.0.5, the call-choice plan): the deck's words.
                 EchoSectionHeader(stringResource(R.string.cc_setting_title))
                 val current = CallChoice.setting(settings)
+                // Ask me asks in a quiet notification with the v2.1 after-call flag on.
+                val notifies = CallChoice.notifies(settings)
                 CallChoice.SETTING_WORDS.forEach { (value, label, help) ->
+                    val helpWords = if (value == CallChoice.ASK && notifies) R.string.cc_ac_setting_ask_help else help
                     EchoRadio(current == value, {
                         update { it.copy(afterEachCall = value) }
-                    }, stringResource(label), supporting = stringResource(help))
+                    }, stringResource(label), supporting = stringResource(helpWords))
                 }
                 EchoSectionHeader(stringResource(R.string.cc_when_title))
                 val asking = current == CallChoice.ASK
@@ -104,6 +107,29 @@ fun CallsPage(
                         CallChoice.whenToAsk(settings) == value,
                         { update { it.copy(whenToAsk = value) } },
                         stringResource(label),
+                        enabled = asking
+                    )
+                }
+                if (notifies) {
+                    // v2.1 UX-13: the after-call notification asks; this small bar beside it is the person's choice.
+                    val context = LocalContext.current
+                    EchoSwitch(
+                        settings.afterCallBar,
+                        { on ->
+                            update { it.copy(afterCallBar = on) }
+                            if (on && !android.provider.Settings.canDrawOverlays(context)) {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            }
+                        },
+                        stringResource(R.string.cc_ac_bar),
+                        supporting = stringResource(R.string.cc_ac_bar_help),
                         enabled = asking
                     )
                 }
