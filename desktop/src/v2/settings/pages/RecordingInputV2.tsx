@@ -172,7 +172,7 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
         )}
       </Group>
       {/* Learn more: what screen moments are, and this platform's notes, in full. */}
-      <details className="el-group__note el-caption el-secondary" data-testid="screen-learn-more">
+      <details className="el-more el-group__note el-caption el-secondary" data-testid="screen-learn-more">
         <summary><Icon icon={Icons.ChevronEndIcon} directional />Learn more</summary>
         <p>
           During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at

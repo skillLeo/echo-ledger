@@ -122,14 +122,16 @@ describe("scaled fills", () => {
     expect(readFileSync(join(here, "library", "LibraryNav.tsx"), "utf8")).toMatch(/className="el-nav-item__label" dir="auto"/);
   });
 
-  it("a group's Learn more folds with the app's chevron, not the browser's triangle, and it turns the right way in RTL", () => {
+  it("the app's details (Learn more, Text on the screen) fold with its chevron, not the browser's triangle, turning the right way in RTL", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
-    expect(css).toContain("details.el-group__note > summary::-webkit-details-marker { display: none; }");
-    expect(css).toMatch(/details\.el-group__note > summary \{[^}]*list-style: none;/);
-    expect(css).toContain("details.el-group__note[open] > summary > .el-icon { transform: rotate(90deg); }");
-    expect(css).toContain("[dir=\"rtl\"] details.el-group__note[open] > summary > .el-icon { transform: rotate(-90deg); }");
-    expect(css).toContain("details.el-group__note > p { margin: var(--el-space-8) 0 0; }");
+    expect(css).toContain(".el-more > summary::-webkit-details-marker { display: none; }");
+    expect(css).toMatch(/\.el-more > summary \{[^}]*list-style: none;/);
+    expect(css).toContain(".el-more[open] > summary > .el-icon { transform: rotate(90deg); }");
+    expect(css).toContain("[dir=\"rtl\"] .el-more[open] > summary > .el-icon { transform: rotate(-90deg); }");
+    expect(css).toContain(".el-more > p { margin: var(--el-space-8) 0 0; }");
     expect(readFileSync(join(here, "settings", "pages", "RecordingInputV2.tsx"), "utf8"))
       .toContain("<summary><Icon icon={Icons.ChevronEndIcon} directional />Learn more</summary>");
+    expect(readFileSync(join(here, "library", "screens.tsx"), "utf8"))
+      .toContain("<summary><Icon icon={Icons.ChevronEndIcon} directional />Text on the screen</summary>");
   });
 });

@@ -967,22 +967,23 @@ button.el-step__head { cursor: pointer; }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
-/* UX-10 "Learn more" under a group: a quiet accent line with the app's end chevron (directional, so it flips in RTL),
-   turned down when open, in place of the browser's triangle. The paragraphs are spaced from tokens. */
-details.el-group__note > summary {
+/* The app's one details style (UX-10): "Learn more" under a group, "Text on the screen" in the screen viewer. A quiet
+   accent line with the app's end chevron (directional, so it flips in RTL), turned down when open, in place of the
+   browser's triangle. The paragraphs are spaced from tokens. */
+.el-more > summary {
   display: inline-flex; align-items: center; gap: var(--el-space-4);
   padding-inline-end: var(--el-space-4); list-style: none; cursor: pointer; color: var(--el-role-accent-text);
   border-radius: var(--el-radius-sm);
 }
-details.el-group__note > summary::-webkit-details-marker { display: none; }
-details.el-group__note > summary > .el-icon { transition: transform var(--el-motion-fast); }
-details.el-group__note[open] > summary > .el-icon { transform: rotate(90deg); }
-[dir="rtl"] details.el-group__note[open] > summary > .el-icon { transform: rotate(-90deg); }
-details.el-group__note > summary:hover { text-decoration: underline; }
-details.el-group__note > summary:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
-details.el-group__note > p { margin: var(--el-space-8) 0 0; }
-details.el-group__note[open] > summary + p { margin-block-start: var(--el-space-12); }
-@media (prefers-reduced-motion: reduce) { details.el-group__note > summary > .el-icon { transition: none; } }
+.el-more > summary::-webkit-details-marker { display: none; }
+.el-more > summary > .el-icon { transition: transform var(--el-motion-fast); }
+.el-more[open] > summary > .el-icon { transform: rotate(90deg); }
+[dir="rtl"] .el-more[open] > summary > .el-icon { transform: rotate(-90deg); }
+.el-more > summary:hover { text-decoration: underline; }
+.el-more > summary:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-more > p { margin: var(--el-space-8) 0 0; }
+.el-more[open] > summary + p { margin-block-start: var(--el-space-12); }
+@media (prefers-reduced-motion: reduce) { .el-more > summary > .el-icon { transition: none; } }
 .el-home-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-12); padding: var(--el-space-16); }
 .el-home-check { flex-direction: column; gap: var(--el-space-2); }
 .el-home-empty { padding-block-start: var(--el-space-12); }
@@ -1120,8 +1121,7 @@ details.el-group__note[open] > summary + p { margin-block-start: var(--el-space-
 .el-screen-viewer__wait { inline-size: 100%; block-size: calc(var(--el-space-64) * 4); }
 .el-screen-viewer__said { display: grid; gap: var(--el-space-4); }
 .el-said { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-4); }
-.el-screen-viewer__text summary { cursor: pointer; color: var(--el-role-text-secondary); }
-.el-screen-viewer__text p { margin-block-start: var(--el-space-8); white-space: pre-wrap; overflow-wrap: anywhere; }
+.el-screen-viewer__text > p { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Help (v1.8 P6.4): the guides, a guide to read, what's new, contact support. */
 .el-help { display: grid; gap: var(--el-space-16); }
