@@ -2474,6 +2474,10 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
   as audio only by choice), which is a part of it. Failed recordings are in **Needs you**.
 - `waiting_to_upload` covers only what reached the server as a session still `uploading`. A recording that has not
   reached the server at all is the app's own, and the app shows it with the same name.
+- The Status filter keeps its four values: no state is a filter value, so saved views stay readable by older apps.
+  `processing` is shown as "In progress", and the apps show its parts from `states`, for example "2 transcribing ·
+  1 waiting to upload". The parts are `transcribing` and `waiting_to_upload`, and they are given while the Status
+  filter keeps `processing`, which is when they add up to its count. Each row still shows its own state.
 
 ### 6. The profile inside the apps (BE-06)
 - `GET /api/account` gains:
