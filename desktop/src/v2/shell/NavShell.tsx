@@ -2,36 +2,65 @@
 // Activity; at its foot Setup & health, Help, Settings and the avatar), the selected place's panel (260 px; hidden by
 // ⊟ or ⌘\ and remembered per place; under 1100 px a flyout from the rail that closes once something is chosen), and
 // the page. Clicking the selected place again starts that place over; ⌘1…⌘6 go to the places.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { BrandMark } from "../../components/BrandMark";
 import { initials } from "../settings/initials";
-import { PLACE_NAMES, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
+import { PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
 export const FLYOUT_BELOW = 1100;
+/** With v21_panel_flyout (UX-02): docked from this window width, a flyout below it (760–1199 px), unless pinned. */
+export const DOCK_FROM = 1200;
 const PANEL_KEY = "echoledger-nav-panels";
+/** Whether the panel is pinned beside the page in a small window (UX-02). */
+const PIN_KEY = "echoledger-nav-pinned-small";
+/**
+ * A layout choice is each account's own on this computer (`account`: the server, the email and the workspace, as for My
+ * views). While the account isn't known it is kept in memory only: nothing is read or written. What an earlier version
+ * kept for the whole computer (`key` alone) can't be told apart by account, so it is removed, unread, once an account is
+ * known: every account starts from the defaults.
+ */
+function readKept(key: string, account: string | null | undefined): string | null {
+  if (!account) return null;
+  try {
+    if (localStorage.getItem(key) !== null) localStorage.removeItem(key);
+    return localStorage.getItem(`${key}:${account}`);
+  } catch {
+    return null;
+  }
+}
+function writeKept(key: string, account: string | null | undefined, value: string) {
+  if (!account) return;
+  try {
+    localStorage.setItem(`${key}:${account}`, value);
+  } catch {
+    // Kept for this session only.
+  }
+}
+function loadPinned(account: string | null | undefined): boolean {
+  return readKept(PIN_KEY, account) === "1";
+}
+function savePinned(account: string | null | undefined, pinned: boolean) {
+  writeKept(PIN_KEY, account, pinned ? "1" : "0");
+}
 /** Below this window height the rail shows its icons only. */
 export const SHORT_RAIL_BELOW = 820;
 const PRESS_HOLD_MS = 3000;
 
-/** Which places' panels are hidden, kept on this computer (shown unless hidden). */
-function loadHidden(): Set<Place> {
+/** Which places' panels are hidden, each account's own on this computer (shown unless hidden). */
+function loadHidden(account: string | null | undefined): Set<Place> {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(PANEL_KEY) ?? "[]");
+    const saved: unknown = JSON.parse(readKept(PANEL_KEY, account) ?? "[]");
     return new Set(Array.isArray(saved) ? saved.filter((p): p is Place => RAIL_PLACES.includes(p as Place)) : []);
   } catch {
     return new Set();
   }
 }
-function saveHidden(hidden: ReadonlySet<Place>) {
-  try {
-    localStorage.setItem(PANEL_KEY, JSON.stringify([...hidden]));
-  } catch {
-    // Kept for this session only.
-  }
+function saveHidden(account: string | null | undefined, hidden: ReadonlySet<Place>) {
+  writeKept(PANEL_KEY, account, JSON.stringify([...hidden]));
 }
 
 const typing = (target: EventTarget | null) =>
@@ -72,11 +101,16 @@ export type NavShellProps = {
   uploading?: string | null;
   notices?: ReactNode;
   banners?: ReactNode;
+  /** v21_panel_flyout (UX-02): docked from 1200 px, a flyout with a scrim below it unless pinned, 0 px when hidden with
+   * the toggle at the start of the page header, ⌃⌘S. Off: as before (docked from 1100 px). */
+  panelFlyout?: boolean;
+  /** Whose layout this is (the panels hidden, the pin): the server, the email and the workspace; null until known. */
+  layoutFor?: string | null;
   children: ReactNode;
 };
 
 export function NavShell({ place, onPlace, onHome, status, panels, feet, libraryCount, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
-  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, children }: NavShellProps) {
+  onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
   useEffect(() => {
@@ -87,21 +121,45 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     window.addEventListener("resize", follow);
     return () => window.removeEventListener("resize", follow);
   }, []);
-  const narrow = width < FLYOUT_BELOW;
+  const [pinned, setPinned] = useState(() => loadPinned(layoutFor));
+  const small = width < (panelFlyout ? DOCK_FROM : FLYOUT_BELOW);
+  // A small window's panel is a flyout, unless pinned there (v21_panel_flyout).
+  const narrow = small && !(panelFlyout && pinned);
   // A short window: the rail's names go (each place keeps its name for assistive tools and in its tooltip), so every
   // place and the foot stay on screen.
   const short = height < SHORT_RAIL_BELOW;
-  const [hidden, setHidden] = useState<Set<Place>>(loadHidden);
+  const [hidden, setHidden] = useState<Set<Place>>(() => loadHidden(layoutFor));
+  // Another account: its own layout.
+  const [layoutOf, setLayoutOf] = useState(layoutFor);
+  if (layoutFor !== layoutOf) {
+    setLayoutOf(layoutFor);
+    setHidden(loadHidden(layoutFor));
+    setPinned(loadPinned(layoutFor));
+  }
   const [flyout, setFlyout] = useState(false);
   const hasPanel = !!place && !!panels[place];
   const shown = hasPanel && (narrow ? flyout : !hidden.has(place!));
   // The flyout's opener (its rail item), to take focus back when it closes without a choice.
   const opener = useRef<HTMLElement | null>(null);
   const main = useRef<HTMLElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  // Where focus goes once the panel has come or gone (after the page is no longer inert): the page after a choice, the
+  // flyout's opener, else where it would be lost (the panel gone: the page header's toggle; the panel back: into it).
+  const focusNext = useRef<"main" | "opener" | "toggle" | "panel" | null>(null);
+  useLayoutEffect(() => {
+    const next = focusNext.current;
+    if (!next) return;
+    focusNext.current = null;
+    const toggle = () => main.current?.querySelector<HTMLElement>(".el-page__toggle button") ?? null;
+    if (next === "main") return main.current?.focus();
+    if (next === "opener") return (opener.current?.isConnected ? opener.current : toggle())?.focus();
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    (next === "toggle" ? toggle() : box.current?.querySelector<HTMLElement>(".el-panel button"))?.focus();
+  });
   const closeFlyout = useCallback((why: FlyoutClose) => {
+    focusNext.current = why === "chose" ? "main" : "opener";
     setFlyout(false);
-    if (why === "chose") window.setTimeout(() => main.current?.focus(), 0);
-    else opener.current?.focus();
   }, []);
   const togglePanel = useCallback(() => {
     if (!place || !panels[place]) return;
@@ -113,15 +171,18 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
       setFlyout(true);
       return;
     }
+    focusNext.current = hidden.has(place) ? "panel" : "toggle";
     setHidden((now) => {
       const next = new Set(now);
       if (next.has(place)) next.delete(place);
       else next.add(place);
-      saveHidden(next);
+      saveHidden(layoutFor, next);
       return next;
     });
-  }, [place, panels, narrow, flyout, closeFlyout]);
+  }, [place, panels, narrow, flyout, closeFlyout, hidden, layoutFor]);
   // Another place: the flyout closes (it opens again from the rail).
+  // Wide again: a flyout left open there is closed (it would open by itself when the window narrows).
+  if (flyout && !narrow) setFlyout(false);
   const [lastPlace, setLastPlace] = useState(place);
   if (place !== lastPlace) {
     setLastPlace(place);
@@ -142,6 +203,12 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
   keys.current = (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.defaultPrevented || typing(e.target)) return;
     if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+    // ⌃⌘S: the Mac's own Show/Hide Sidebar (v21_panel_flyout); ⌘\ (Ctrl+\) as before.
+    if (panelFlyout && e.metaKey && e.ctrlKey && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      togglePanel();
+      return;
+    }
     if (e.key === "\\") {
       e.preventDefault();
       togglePanel();
@@ -196,6 +263,36 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     { label: "Record page", icon: Icons.HomeIcon, onPick: onHome },
   ];
   const mac = searchKeys?.startsWith("⌘") ?? false;
+  // UX-02: the page header's toggle while the panel is off the screen, and in a small window while its flyout is open
+  // (expanded: focus goes back to it); in a small window, the pin.
+  const pageToggle = panelFlyout && hasPanel && (narrow || !shown) ? {
+    label: `Show the ${PLACE_NAMES[place!]} panel`,
+    expanded: narrow ? shown : undefined,
+    onToggle: (button: HTMLElement) => {
+      if (narrow) {
+        opener.current = button;
+        setFlyout(true);
+      } else togglePanel();
+    },
+  } : null;
+  const pin = panelFlyout && small ? {
+    pinned,
+    onPin: () => {
+      const next = !pinned;
+      setPinned(next);
+      savePinned(layoutFor, next);
+      setFlyout(false);
+      if (!next) focusNext.current = "toggle";
+      // Unpinned: back to a flyout, closed; pinned: beside the page, shown.
+      if (next && place) setHidden((now) => {
+        if (!now.has(place)) return now;
+        const shownAgain = new Set(now);
+        shownAgain.delete(place);
+        saveHidden(layoutFor, shownAgain);
+        return shownAgain;
+      });
+    },
+  } : undefined;
   const counts: Partial<Record<Place, number | undefined>> = { library: libraryCount || undefined, activity: activityCount || undefined };
   const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
@@ -205,8 +302,10 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
       expanded={narrow && panels[p] ? flyout && place === p : undefined}
       dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} />
   );
+  // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
+  const scrim = shown && narrow && panelFlyout;
   return (
-    <div className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short-rail" : ""}`} data-shell="v2">
+    <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short-rail" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
       <nav className="el-rail" aria-label="Main">
         <button type="button" className="el-rail__home" aria-label="EchoLedger, Home" title="Home" aria-current={place === null ? "page" : undefined} onClick={onHome}>
           <BrandMark size={28} className="el-rail__mark" />
@@ -232,8 +331,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
           )}
         </div>
       </nav>
+      {scrim && <div className="el-panel-scrim" data-testid="panel-scrim" aria-hidden="true" />}
       {shown && (
-        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={closeFlyout}
+        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={closeFlyout} pin={pin}
           foot={<>
             {feet?.[place!]}
             {uploading && <p className="el-shell__uploads el-caption el-secondary" aria-live="polite" data-testid="sidebar-uploads"><span className="el-spinner" aria-hidden="true" /><span dir="auto">{uploading}</span></p>}
@@ -247,14 +347,14 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
           {panels[place!]}
         </PlacePanel>
       )}
-      {!shown && hasPanel && !narrow && (
+      {!shown && hasPanel && !narrow && !panelFlyout && (
         <button type="button" className="el-panel-show" aria-label={`Show the ${PLACE_NAMES[place!]} panel`} title={`Show panel (${mac ? "⌘" : "Ctrl+"}\\)`}
           aria-keyshortcuts="Meta+\ Control+\" onClick={togglePanel}><Icon icon={Icons.SidebarIcon} /></button>
       )}
-      <main className="el-shell__main" ref={main} tabIndex={-1}>
+      <main className="el-shell__main" ref={main} tabIndex={-1} inert={scrim || undefined}>
         {notices}
         {banners}
-        {children}
+        <PanelToggleContext.Provider value={pageToggle}>{children}</PanelToggleContext.Provider>
       </main>
     </div>
   );

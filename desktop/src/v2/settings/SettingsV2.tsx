@@ -2,6 +2,7 @@
 // card with the plan and Upgrade on top. Search finds every individual setting by the words the classic search knows
 // (lib/settingsIndex.ts) and jumps to it; a page opens today's page for that feature (its one home), scrolled to the
 // setting and highlighted.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
@@ -122,7 +123,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   if (inPanel) {
     return (
       <div className="el-page el-page--narrow" data-v2="settings">
-        <header className="el-page__head"><h1 className="el-title-l">Settings</h1></header>
+        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
         <AccountCard />
         <div className="el-settings-home__groups">
           <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
@@ -175,7 +176,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
 
   return (
     <div className="el-page el-page--narrow" data-v2="settings">
-      <header className="el-page__head"><h1 className="el-title-l">Settings</h1></header>
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
       <SearchField label="Search settings" value={query} onChange={setQuery} />
       {answer ? (
         answer.settings.length + answer.help.length > 0 ? (

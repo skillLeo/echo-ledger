@@ -2,6 +2,7 @@
 // events and rules): what needs the person first (calls waiting for Keep or Discard, uploads that stopped, problems
 // and answers the badge counts), what is in progress, the quiet "Skipped 3 short calls" line with Restore, then the
 // notifications by day. A notification marks itself read and opens its recording. Built from v2 parts only.
+import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem, type SkippedItem } from "../../lib/ipc";
 import { dayGroup } from "../../lib/library";
@@ -116,6 +117,7 @@ export function ActivityV2({ status, show = "all", onOpenRecording, onReview, on
   return (
     <div className="el-page el-page--narrow" data-v2="activity">
       <header className="el-page__head">
+        <PanelToggle />
         <div className="el-page__titles">
           <h1 className="el-title-l">Activity</h1>
           <p className="el-secondary" aria-live="polite">{activitySubtitle(needsYou, unread)}</p>

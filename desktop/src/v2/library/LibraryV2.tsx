@@ -6,6 +6,7 @@
 // A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
 // reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
 // a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
+import { PanelToggle } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
@@ -1155,6 +1156,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
             </header>
           ) : (
             <header className="el-lib-toolbar">
+              <PanelToggle />
               {!trash && layout === "list" && shownIds.length > 0 && (
                 <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
               )}
