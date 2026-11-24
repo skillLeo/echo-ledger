@@ -6,6 +6,8 @@
 //! the way the menu bar icon's Quit does (a running recording is kept first), and the Edit keys work in every text
 //! field. The two items of our own are answered by the tray's menu handler (Tauri hands it every menu's events).
 
+use tauri::AppHandle;
+
 /// What the keys do; the ids the handler in tray.rs knows.
 pub const SETTINGS: &str = "settings";
 pub const QUIT: &str = "quit";
@@ -71,10 +73,196 @@ pub fn build<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<taur
     MenuBuilder::new(app).item(&app_menu).item(&edit).item(&window).build()
 }
 
+/// One line of the menu bar the page sends (FIX-05, src/v2/actions/menuBar.ts): our item (an action, with a sub-menu
+/// choice's value), one of macOS's own, a line, or a sub-menu.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum BarEntry {
+    Item {
+        action: String,
+        value: Option<String>,
+        label: String,
+        accelerator: Option<String>,
+        enabled: bool,
+        checked: Option<bool>,
+    },
+    Native {
+        action: String,
+        native: String,
+    },
+    Separator,
+    Submenu {
+        action: Option<String>,
+        label: String,
+        enabled: bool,
+        items: Vec<BarEntry>,
+    },
+}
+
+/// One menu of the bar: its title, its items, and whether it is the app's Window or Help menu.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct BarMenu {
+    pub title: String,
+    pub role: Option<String>,
+    pub items: Vec<BarEntry>,
+}
+
+/// The whole menu bar.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct MenuBar {
+    pub menus: Vec<BarMenu>,
+}
+
+/// The id a picked item comes back with (pure): Settings… and Quit are answered by the core itself (with or without
+/// the page; Quit keeps a running recording first); every other item is an action for the page, with its choice.
+pub fn bar_item_id(action: &str, value: Option<&str>) -> String {
+    match action {
+        "app.settings" => SETTINGS.to_string(),
+        "app.quit" => QUIT.to_string(),
+        _ => match value {
+            Some(value) => format!("{}{}{}", crate::native_menu::item_id(action), crate::native_menu::CHOICE, value),
+            None => crate::native_menu::item_id(action),
+        },
+    }
+}
+
+/// The page's menu bar (FIX-05): drawn by the system, macOS's own items for the standard commands; the Window and Help
+/// menus set as the app's, so macOS adds the window list, Fill and Center, and the Help search that finds any item.
+/// Elsewhere (Windows) there is no menu bar: the same commands are in the avatar's menu and the search (3b).
+#[tauri::command]
+pub fn app_menu_set(app: AppHandle, bar: MenuBar) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        draw(&app, &bar).map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, bar);
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn draw<R: tauri::Runtime>(app: &tauri::AppHandle<R>, bar: &MenuBar) -> tauri::Result<()> {
+    use tauri::menu::{AboutMetadata, CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    fn entries<R: tauri::Runtime>(app: &tauri::AppHandle<R>, items: &[BarEntry]) -> tauri::Result<Vec<Box<dyn IsMenuItem<R>>>> {
+        let mut out: Vec<Box<dyn IsMenuItem<R>>> = Vec::new();
+        for item in items {
+            match item {
+                BarEntry::Separator => out.push(Box::new(PredefinedMenuItem::separator(app)?)),
+                BarEntry::Native { native, .. } => {
+                    let info = app.package_info();
+                    let made = match native.as_str() {
+                        "about" => PredefinedMenuItem::about(app, None, Some(AboutMetadata { name: Some(info.name.clone()), version: Some(info.version.to_string()), ..Default::default() })),
+                        "services" => PredefinedMenuItem::services(app, None),
+                        "hide" => PredefinedMenuItem::hide(app, None),
+                        "hideOthers" => PredefinedMenuItem::hide_others(app, None),
+                        "showAll" => PredefinedMenuItem::show_all(app, None),
+                        "undo" => PredefinedMenuItem::undo(app, None),
+                        "redo" => PredefinedMenuItem::redo(app, None),
+                        "cut" => PredefinedMenuItem::cut(app, None),
+                        "copy" => PredefinedMenuItem::copy(app, None),
+                        "paste" => PredefinedMenuItem::paste(app, None),
+                        "selectAll" => PredefinedMenuItem::select_all(app, None),
+                        // The predefined Close sends the window its close, which `lifecycle::main_closing` turns into
+                        // closing to the menu bar.
+                        "closeWindow" => PredefinedMenuItem::close_window(app, None),
+                        "minimize" => PredefinedMenuItem::minimize(app, None),
+                        "maximize" => PredefinedMenuItem::maximize(app, None),
+                        "fullscreen" => PredefinedMenuItem::fullscreen(app, None),
+                        "bringAllToFront" => PredefinedMenuItem::bring_all_to_front(app, None),
+                        _ => continue,
+                    };
+                    out.push(Box::new(made?));
+                }
+                BarEntry::Item { action, value, label, accelerator, enabled, checked } => {
+                    let id = bar_item_id(action, value.as_deref());
+                    // A key the menu can't take is left off rather than losing the item.
+                    out.push(match checked {
+                        Some(checked) => Box::new(
+                            CheckMenuItem::with_id(app, &id, label, *enabled, *checked, accelerator.as_deref())
+                                .or_else(|_| CheckMenuItem::with_id(app, &id, label, *enabled, *checked, None::<&str>))?,
+                        ),
+                        None => Box::new(
+                            MenuItem::with_id(app, &id, label, *enabled, accelerator.as_deref()).or_else(|_| MenuItem::with_id(app, &id, label, *enabled, None::<&str>))?,
+                        ),
+                    });
+                }
+                BarEntry::Submenu { label, enabled, items, .. } => {
+                    let inner = entries(app, items)?;
+                    let refs: Vec<&dyn IsMenuItem<R>> = inner.iter().map(|b| b.as_ref()).collect();
+                    out.push(Box::new(Submenu::with_items(app, label, *enabled, &refs)?));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    let menu = Menu::new(app)?;
+    let mut roles = Vec::new();
+    for bar_menu in &bar.menus {
+        let inner = entries(app, &bar_menu.items)?;
+        let refs: Vec<&dyn IsMenuItem<R>> = inner.iter().map(|b| b.as_ref()).collect();
+        let submenu = Submenu::with_items(app, &bar_menu.title, true, &refs)?;
+        menu.append(&submenu)?;
+        if let Some(role) = &bar_menu.role {
+            roles.push((role.clone(), submenu));
+        }
+    }
+    app.set_menu(menu)?;
+    for (role, submenu) in roles {
+        match role.as_str() {
+            "window" => submenu.set_as_windows_menu_for_nsapp()?,
+            "help" => submenu.set_as_help_menu_for_nsapp()?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// No window tabs: macOS would otherwise add "Show Tab Bar" and "Show All Tabs" to View (3b).
+#[cfg(target_os = "macos")]
+pub fn no_window_tabs() {
+    if let Some(mtm) = objc2::MainThreadMarker::new() {
+        objc2_app_kit::NSWindow::setAllowsAutomaticWindowTabbing(false, mtm);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::shortcuts::label;
+
+    #[test]
+    fn the_page_s_menu_bar_reads_in_and_its_picks_carry_their_action() {
+        let bar: MenuBar = serde_json::from_str(
+            r#"{"menus":[{"title":"File","items":[
+                {"kind":"item","action":"file.newRecording","label":"New Recording","accelerator":"CmdOrCtrl+N","enabled":true,"checked":null},
+                {"kind":"separator"},
+                {"kind":"native","action":"file.closeWindow","native":"closeWindow"},
+                {"kind":"submenu","action":"file.openRecent","label":"Open Recent","enabled":true,"items":[
+                  {"kind":"item","action":"file.openRecent","value":"r1","label":"Bilal Qureshi","accelerator":null,"enabled":true,"checked":false}]}]},
+              {"title":"Window","role":"window","items":[]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(bar.menus.len(), 2);
+        assert_eq!(bar.menus[1].role.as_deref(), Some("window"));
+        assert!(matches!(&bar.menus[0].items[2], BarEntry::Native { native, .. } if native == "closeWindow"));
+        // Settings… and Quit are the core's own; the rest go to the page with their choice.
+        assert_eq!(bar_item_id("app.quit", None), QUIT);
+        assert_eq!(bar_item_id("app.settings", None), SETTINGS);
+        assert_eq!(bar_item_id("file.newRecording", None), "action:file.newRecording");
+        assert_eq!(bar_item_id("file.openRecent", Some("r1")), "action:file.openRecent#r1");
+    }
+
+    #[test]
+    fn the_command_is_registered_and_window_tabs_are_off() {
+        let lib = include_str!("lib.rs");
+        assert!(lib.contains("app_menu::app_menu_set,"));
+        assert!(lib.contains("app_menu::no_window_tabs();"));
+        assert!(include_str!("../../src/lib/ipc.ts").contains(r#"invoke<void>("app_menu_set", { bar })"#));
+    }
 
     #[test]
     fn the_mac_s_keys_read_as_a_mac_person_expects() {

@@ -380,6 +380,14 @@ export interface Account {
 
 /** Signed updates from the server (since v1.5). */
 export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
+/** The Mac menu bar the page draws (app_menu.rs app_menu_set; built by v2/actions/menuBar.ts). */
+export type NativeMenuBar = { menus: { title: string; role?: "window" | "help"; items: NativeBarEntry[] }[] };
+export type NativeBarEntry =
+  | { kind: "item"; action: string; value?: string; label: string; accelerator: string | null; enabled: boolean; checked: boolean | null }
+  | { kind: "native"; action: string; native: string }
+  | { kind: "separator" }
+  | { kind: "submenu"; action?: string; label: string; enabled: boolean; items: NativeBarEntry[] };
+
 /** One line of a native menu (native_menu.rs): the action it sends (none: a line), its words, keys, tick. */
 export interface NativeMenuItem {
   action: string | null;
@@ -388,6 +396,8 @@ export interface NativeMenuItem {
   accelerator?: string | null;
   enabled?: boolean;
   checked?: boolean | null;
+  /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree). */
+  target?: string;
 }
 
 export interface UpdateStatus {
@@ -1900,6 +1910,8 @@ export const api = {
   titleDoubleClick: () => invoke<void>("title_double_click"),
   /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
   nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number) => invoke<void>("native_menu_popup", { items, x, y }),
+  /** The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. */
+  appMenuSet: (bar: NativeMenuBar) => invoke<void>("app_menu_set", { bar }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),

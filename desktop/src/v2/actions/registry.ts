@@ -67,6 +67,8 @@ export type ActionContext = {
   targets?: readonly string[];
   /** A right-click menu: what doesn't apply is left out, and on a Mac there are no shortcuts. */
   context?: boolean;
+  /** A sub-menu's choice it was picked with (a label, a project, a format, a sort order: choiceItems). */
+  value?: string;
 };
 
 /** The conditions `when` names. Left unsaid, a state that is usually so (can record, has audio) holds. */
@@ -169,8 +171,24 @@ export function hasHandler(id: string): boolean {
 export function registerAction(id: string, run: (ctx: ActionContext) => void): () => void {
   need(id);
   handlers.set(id, [...(handlers.get(id) ?? []), run]);
-  return () => handlers.set(id, (handlers.get(id) ?? []).filter((r) => r !== run));
+  handlersChanged();
+  return () => {
+    handlers.set(id, (handlers.get(id) ?? []).filter((r) => r !== run));
+    handlersChanged();
+  };
 }
+/** Told when something registers or takes back a command (the menu bar greys what nothing here can run). */
+const watchers = new Set<() => void>();
+let handlersChangedAt = 0;
+function handlersChanged() {
+  handlersChangedAt++;
+  watchers.forEach((notify) => notify());
+}
+export function watchHandlers(notify: () => void): () => void {
+  watchers.add(notify);
+  return () => watchers.delete(notify);
+}
+export const handlersVersion = () => handlersChangedAt;
 /** Runs the command if something here can and its conditions hold. True when it ran. */
 export function runAction(id: string, ctx: ActionContext): boolean {
   const all = handlers.get(id) ?? [];

@@ -25,6 +25,9 @@ import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
+import { useMenuBar } from "../../v2/actions/useMenuBar";
+import { useMenuPart } from "../../v2/actions/menuState";
+import { registerAction } from "../../v2/actions/registry";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { LibraryView } from "./LibraryView";
@@ -127,6 +130,13 @@ export function typingIn(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
+
+/** The menu bar's commands the main window answers itself (FIX-05); the shell (NavShell) and the pages add theirs. */
+const MENU_COMMANDS = [
+  "app.accountPlan", "app.checkUpdates", "file.syncNow", "file.newProject", "view.themeLight", "view.themeDark", "view.themeSystem",
+  "go.allRecordings", "go.needsYou", "go.unread", "go.audioOnly", "go.trash", "go.shared", "live.pauseRecording", "live.captions", "window.pill",
+  "help.help", "help.shortcuts", "help.setupHealth",
+] as const;
 
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -257,6 +267,28 @@ export default function MainApp() {
   // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
   const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+  // FIX-05: the Mac menu bar, drawn from the action list, and every pick from a menu the system drew. The window's own
+  // commands are here (MENU_COMMANDS, set below once the window's functions exist); the shell and the pages add theirs.
+  useMenuBar(status?.platform);
+  const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
+  useEffect(() => {
+    const offs = MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.()));
+    return () => offs.forEach((off) => off());
+  }, []);
+  // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
+  const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });
+  useEffect(() => {
+    const target = (ctx: { targets?: readonly string[] }) => ctx.targets?.[0];
+    const offs = [
+      registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
+      registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, []);
+  useMenuPart({ state: {
+    themeLight: theme === "light", themeDark: theme === "dark", themeSystem: theme === "system",
+    paused: !!status?.paused, captionsShown: !!status?.captionsLive, pillShown: !!status?.recording && !status.pillHidden,
+  } });
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
   const [palette, setPalette] = useState(false);
@@ -902,6 +934,32 @@ export default function MainApp() {
     setTab("projects");
     setProjectId(null);
     setProjectRequest({ kind: "new", seq: ++navigations.current });
+  };
+  const setupPage = ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic";
+  projectCommands.current = { open: (id) => openProject(id), requestFiles: (id) => setRequestSheet({ projectId: id }) };
+  menuCommands.current = {
+    "app.accountPlan": () => openAccount("plan"),
+    "app.checkUpdates": () => {
+      openAccount("about");
+      void api.checkForUpdates().catch(() => undefined);
+    },
+    "file.syncNow": () => void run(api.refreshLibrary, "Library synced", { kind: "library", view: null }),
+    "file.newProject": newProject,
+    "view.themeLight": () => chooseTheme("light"),
+    "view.themeDark": () => chooseTheme("dark"),
+    "view.themeSystem": () => chooseTheme("system"),
+    "go.allRecordings": () => openScope(ALL_SCOPE),
+    "go.needsYou": () => openScope({ kind: "view", view: "needs" }),
+    "go.unread": () => openScope({ kind: "view", view: "unread" }),
+    "go.audioOnly": () => openScope({ kind: "view", view: "audio_only" }),
+    "go.trash": () => openScope({ kind: "trash" }),
+    "go.shared": () => openShared(SHARED_TABS[0][0] as SharedTab),
+    "live.pauseRecording": () => void run(status.paused ? api.resumeRecording : api.pauseRecording),
+    "live.captions": () => void run(api.toggleCaptions),
+    "window.pill": () => void run(() => api.setPillHidden(!status.pillHidden)),
+    "help.help": openHelp,
+    "help.shortcuts": openHelp,
+    "help.setupHealth": () => openAccount(setupPage),
   };
   const signOut = async () => {
     if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out", tone: "danger" }))) return;

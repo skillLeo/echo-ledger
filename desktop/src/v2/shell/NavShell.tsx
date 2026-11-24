@@ -9,7 +9,7 @@ import { Avatar, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
-import { listenTo } from "../../lib/ipc";
+import { useMenuPart, useMenuPicks } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
 import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
@@ -384,13 +384,31 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       registerAction("live.autoRecord", () => r.current.callRecording?.toggle()),
       registerAction("go.recordPage", () => r.current.onHome()),
     ];
-    // A pick in a menu the system drew (native_menu.rs).
-    const unlisten = listenTo("menu:action", (id) => { runAction(id, r.current.ctx); });
-    return () => {
-      offs.forEach((off) => off());
-      void unlisten.then((off) => off()).catch(() => undefined);
-    };
+    // A pick in a menu the system drew (native_menu.rs, the menu bar) runs from MainApp's one listener (menuState.ts).
+    return () => offs.forEach((off) => off());
   }, []);
+  // The menu bar's share of the shell (FIX-05): Back and Forward, the places, the sidebar, Find and Search Everything,
+  // with the state their words and greying follow.
+  const shellLive = useRef({ walk, press, togglePanel, onSearch, find: () => setFindSeq((n) => n + 1), hasSearch: !!title?.search });
+  shellLive.current = { walk, press, togglePanel, onSearch, find: () => setFindSeq((n) => n + 1), hasSearch: !!title?.search };
+  useEffect(() => {
+    const r = shellLive;
+    const offs = [
+      registerAction("go.back", () => r.current.walk("back")),
+      registerAction("go.forward", () => r.current.walk("forward")),
+      ...(["library", "projects", "live", "ask", "activity"] as const).map((p) => registerAction(`go.${p}`, () => r.current.press(p))),
+      registerAction("view.sidebar", () => r.current.togglePanel()),
+      registerAction("edit.find", () => (r.current.hasSearch ? r.current.find() : r.current.onSearch?.())),
+      registerAction("edit.searchEverything", () => r.current.onSearch?.()),
+    ];
+    return () => offs.forEach((off) => off());
+  }, []);
+  // Record's menu is the system's on a Mac: its picks run here too (one listener for the window, menuState.ts).
+  useMenuPicks(mac ? "macos" : "windows");
+  useMenuPart({ state: {
+    canGoBack: canWalk("back"), canGoForward: canWalk("forward"), sidebarHidden: hasPanel && !shown,
+    canRecord: !!onRecord, recording: !!recording, autoRecord: !!callRecording?.on,
+  } });
   // ⊟ in the title row (UX-20, right after the window's buttons) while the panel is off the screen, and in a small window
   // while its flyout is open (expanded: focus goes back to it); in a small window, the pin (UX-02).
   const rowToggle = hasPanel && (narrow || !shown) ? {

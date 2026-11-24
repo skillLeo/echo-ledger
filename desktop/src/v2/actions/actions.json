@@ -135,6 +135,15 @@
     { "id": "help.setupHealth", "label": "Setup & health…", "menu": "Help", "icon": "ReadyIcon" },
     { "id": "help.reportProblem", "label": "Report a problem…", "menu": "Help", "icon": "LifeBuoyIcon" },
 
+    { "id": "project.open", "label": "Open", "appliesTo": "one" },
+    { "id": "project.pin", "label": "Pin", "icon": "PinIcon", "appliesTo": "one", "state": { "key": "pinned", "on": "Unpin" } },
+    { "id": "project.rename", "label": "Rename…", "icon": "RenameIcon", "appliesTo": "one" },
+    { "id": "project.instructions", "label": "Instructions & memory…", "appliesTo": "one" },
+    { "id": "project.requestFiles", "label": "Request files…", "icon": "RequestFilesIcon", "appliesTo": "one" },
+    { "id": "project.members", "label": "Members…", "icon": "UsersIcon", "appliesTo": "one" },
+    { "id": "project.archive", "label": "Archive", "appliesTo": "one" },
+    { "id": "project.delete", "label": "Delete project…", "icon": "TrashIcon", "appliesTo": "one", "destructive": true, "confirm": "Delete this project? Its recordings stay in the Library, in no project." },
+
     { "id": "account.photo", "label": "Add photo", "icon": "UserIcon", "when": ["noPhoto"] },
     { "id": "account.editProfile", "label": "Edit profile", "icon": "UserRoundPenIcon" },
     { "id": "account.theme", "label": "Theme", "icon": "AppearanceIcon", "submenu": true },

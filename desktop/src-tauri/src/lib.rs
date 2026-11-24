@@ -496,6 +496,9 @@ pub fn run() {
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
         .setup(move |app| {
+            // No window tabs on a Mac (FIX-05): macOS would add Show Tab Bar and Show All Tabs to the View menu.
+            #[cfg(target_os = "macos")]
+            app_menu::no_window_tabs();
             let smoke_test = smoke_dir.is_some();
             let data_dir = match smoke_dir {
                 Some(dir) => dir,
@@ -636,6 +639,7 @@ pub fn run() {
             commands::window_appearance,
             title_click::title_double_click,
             native_menu::native_menu_popup,
+            app_menu::app_menu_set,
             commands::set_window_theme,
             commands::pair_device,
             commands::sign_in_password,

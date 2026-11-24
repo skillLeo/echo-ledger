@@ -12,6 +12,7 @@ import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../lib/shell";
 import { NavShell } from "./NavShell";
 import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
+import { keyboardPoint, useProjectMenu } from "./ProjectMenu";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -260,8 +261,13 @@ function saveFolds(folds: ReadonlySet<string>) {
 }
 
 /** The projects as a tree: pinned first, then by name, each project's subfolders under it (foldable, remembered). */
-function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void }) {
+function ProjectTreeNav({ projects, current, onOpen, menus = true }: {
+  projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void;
+  /** Each project's menu (right-click, Shift+F10, the menu key); off where the tree only takes dropped recordings. */
+  menus?: boolean;
+}) {
   const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  const menu = useProjectMenu();
   const ids = new Set(projects.map((p) => p.id));
   const children = (parent: string | null) => projects
     .filter((p) => (p.parent_id && ids.has(p.parent_id) ? p.parent_id : null) === parent)
@@ -290,7 +296,13 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
                   </button>
                 ) : <span className="el-nav-tree__fold" aria-hidden="true" />}
                 <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" aria-current={current === p.id ? "page" : undefined}
-                  onClick={() => onOpen(p.id)}><bdi>{p.name}</bdi></button>
+                  onClick={() => onOpen(p.id)}
+                  onContextMenu={menus ? (e) => { e.preventDefault(); menu.openAt(p, { x: e.clientX, y: e.clientY }); } : undefined}
+                  onKeyDown={menus ? (e) => {
+                    if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
+                    e.preventDefault();
+                    menu.openAt(p, keyboardPoint(e.currentTarget));
+                  } : undefined}><bdi>{p.name}</bdi></button>
               </div>
               {open && branch(p.id, depth + 1)}
             </li>
@@ -299,7 +311,7 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
       </ul>
     );
   };
-  return <>{branch(null, 0)}</>;
+  return <>{branch(null, 0)}{menu.view}</>;
 }
 
 /** A place of the Library in the sidebar: its key, words and count; `drop` takes dropped recordings (the Inbox). */
@@ -348,7 +360,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
     <div className="el-panel-drops" aria-hidden="true">
       <p className="el-caption el-secondary el-panel-drops__title">Drop on a project</p>
       <NoProjectDrop />
-      {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} />}
+      {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} menus={false} />}
     </div>
   );
   const projectsPanel = onProject && (

@@ -130,6 +130,11 @@ describe("the title row (UX-20)", () => {
     }
   });
 
+  it("the ⌘K hint reads left to right in an Urdu window too (never \"K⌘\")", () => {
+    render(<div dir="rtl"><TitleRow {...base} /></div>);
+    expect(row().querySelector(".el-titlerow__keys")).toHaveAttribute("dir", "ltr");
+  });
+
   it("a hairline under it only once the page has scrolled", () => {
     const { rerender } = render(<TitleRow {...base} />);
     expect(row()).not.toHaveClass("el-titlerow--scrolled");
