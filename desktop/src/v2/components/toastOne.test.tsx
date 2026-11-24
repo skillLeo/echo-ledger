@@ -78,11 +78,26 @@ describe("one message at a time (FIX-03)", () => {
   it("a waiting message's time starts only once it is on screen", () => {
     vi.useFakeTimers();
     const onClose = vi.fn();
-    const { rerender } = render(<><Toast message="Problem" duration={0} error onClose={() => undefined} /></>);
-    rerender(<><Toast message="Problem" duration={0} error onClose={() => undefined} /><ToastRegion><Toast message="Later" duration={1000} onClose={onClose} /></ToastRegion></>);
+    const problem = <Toast key="p" message="Problem" duration={0} error onClose={() => undefined} />;
+    function Later() {
+      const [on, setOn] = useState(true);
+      return <ToastRegion>{on && <Toast message="Later" duration={1000} onClose={() => { onClose(); setOn(false); }} />}</ToastRegion>;
+    }
+    const later = <Later key="r" />;
+    const { rerender } = render(<>{problem}</>);
+    rerender(<>{problem}{later}</>);
     act(() => vi.advanceTimersByTime(5000));
     expect(onClose).not.toHaveBeenCalled();
     expect(shown()).toEqual(["Problem"]);
+    // The problem closes: "Later" comes, and its own 1000 ms start now.
+    rerender(<>{later}</>);
+    expect(shown()).toEqual(["Later"]);
+    act(() => vi.advanceTimersByTime(999));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(shown()).toEqual(["Later"]);
+    act(() => vi.advanceTimersByTime(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual([]);
   });
 
   it("each has its ✕", () => {

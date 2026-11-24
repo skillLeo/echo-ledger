@@ -58,6 +58,10 @@ export function recordingExportItems({ exportAs, packAs, view }: {
 
 /** Says something in the page's toast; `error`: a problem (a newer message waits for it instead of replacing it). */
 export type Say = (text: string, action?: { label: string; run: () => void }, error?: boolean) => void;
+/** Says a problem: flagged, so a newer message waits for it instead of pushing it off the screen (FIX-03). */
+export function sayProblem(say: Say, text: string): void {
+  say(text, undefined, true);
+}
 
 /**
  * Saves the transcripts of `ids` as one zip in `format` where the person chooses; says where, or nothing on cancel.
@@ -68,7 +72,7 @@ export async function exportRecordings(ids: readonly string[], format: BulkExpor
     const path = await api.exportSessions([...ids], format, view);
     if (path) say(`Saved ${path}`);
   } catch (e) {
-    say(errorMessage(e), undefined, true);
+    sayProblem(say, errorMessage(e));
   }
 }
 
@@ -167,7 +171,7 @@ export async function copyForAiToClipboard(items: readonly LibraryItem[], say: S
     await navigator.clipboard.writeText(text);
     say(copied === 1 && !skipped ? "Copied for AI" : `Copied ${copied} for AI${skipped ? ` · ${skipped} without a transcript left out` : ""}`);
   } catch (e) {
-    say(e instanceof Error && /clipboard/i.test(e.message) ? "Could not access the clipboard" : errorMessage(e), undefined, true);
+    sayProblem(say, e instanceof Error && /clipboard/i.test(e.message) ? "Could not access the clipboard" : errorMessage(e));
   }
 }
 
@@ -240,7 +244,7 @@ export function LabelDialog({ ids, known, onClose, say }: { ids: readonly string
       say(`${action === "label" ? "Labelled" : "Label taken off"} · ${recordingsWord(changed)}`);
       onClose();
     } catch (e) {
-      say(errorMessage(e), undefined, true);
+      sayProblem(say, errorMessage(e));
       setBusy(false);
     }
   };
@@ -277,7 +281,7 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
       say(text ? "Renamed" : "The automatic title will be used");
       onClose();
     } catch (e) {
-      say(errorMessage(e), undefined, true);
+      sayProblem(say, errorMessage(e));
       setBusy(false);
     }
   };
@@ -384,7 +388,7 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     try {
       await fn();
     } catch (e) {
-      say(errorMessage(e), undefined, true);
+      sayProblem(say, errorMessage(e));
     } finally {
       running.current = false;
       setWorking(null);
@@ -500,7 +504,7 @@ export function LanguageDialog({ item, onClose, say }: { item: LibraryItem; onCl
       say(`Re-transcribing in ${languageLabel(language || null)}. The current transcript stays until the new one is ready.`);
       onClose();
     } catch (e) {
-      say(errorMessage(e), undefined, true);
+      sayProblem(say, errorMessage(e));
       setBusy(false);
     }
   };
