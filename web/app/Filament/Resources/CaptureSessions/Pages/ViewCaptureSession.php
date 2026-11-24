@@ -1359,7 +1359,10 @@ class ViewCaptureSession extends ViewRecord
      */
     public function v2BackLink(): ?array
     {
-        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2Neighbours] : null;
+        // UX-25: the recording it is (filament.v2.keep-place notes it was opened, and takes the link back to the list as
+        // it was left).
+        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2Neighbours,
+            'recording' => (string) $this->getRecord()->getKey()] : null;
     }
 
     /** "Sessions > Title", without a trailing "View" (C3). */

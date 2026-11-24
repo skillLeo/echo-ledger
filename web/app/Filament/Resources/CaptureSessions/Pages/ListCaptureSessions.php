@@ -795,6 +795,18 @@ class ListCaptureSessions extends ListRecords
     }
 
     /**
+     * UX-25: coming back from a recording, as many rows as were shown when the list was left, in one request (whole
+     * chunks, never past V2_MAX, never fewer than now).
+     */
+    public function v2ShowUpTo(int $rows): void
+    {
+        if (ConsoleV2::library()) {
+            $chunks = (int) ceil(max(0, $rows) / self::V2_CHUNK);
+            $this->v2Shown = max($this->v2Shown, min(self::V2_MAX, $chunks * self::V2_CHUNK));
+        }
+    }
+
+    /**
      * The new Library's poll while a row on screen is moving: a few columns of those rows only, and no redraw of the
      * list (up to 500 rows) unless one of them changed.
      */
@@ -1054,6 +1066,13 @@ class ListCaptureSessions extends ListRecords
     public ?string $menuRecord = null;
 
     /**
+     * That recording as read in this request (not kept between requests): [its id, the recording or null].
+     *
+     * @var array{0: string|null, 1: CaptureSession|null}|null
+     */
+    protected ?array $menuRecordingRead = null;
+
+    /**
      * UX-22: the person's own selection while a menu's action runs for other rows, given back when it ends or is
      * cancelled (selected, deselected, and whether it was every page's).
      *
@@ -1189,11 +1208,28 @@ class ListCaptureSessions extends ListRecords
     {
         parent::unmountAction($cancelParentActions);
         if ($this->mountedActions === [] && $this->menuSelection !== null) {
-            $this->selectedTableRecords = $this->menuSelection['selected'];
-            $this->deselectedTableRecords = $this->menuSelection['deselected'];
+            // Only what is still in the Library comes back (a row moved to trash meanwhile does not).
+            $this->selectedTableRecords = $this->stillHere($this->menuSelection['selected']);
+            $this->deselectedTableRecords = $this->stillHere($this->menuSelection['deselected']);
             $this->isTrackingDeselectedTableRecords = $this->menuSelection['tracking'];
             $this->menuSelection = null;
         }
+    }
+
+    /**
+     * Which of [$ids] are still in the person's Library.
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function stillHere(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $here = CaptureSessionResource::getEloquentQuery()->whereIn('id', $ids)->pluck('id')->map(fn ($id): string => (string) $id)->all();
+
+        return array_values(array_filter($ids, fn (string $id): bool => in_array($id, $here, true)));
     }
 
     /** The selection bar's actions clear the selection when they end; a menu's for other rows leaves the person's alone. */
@@ -1207,9 +1243,13 @@ class ListCaptureSessions extends ListRecords
     /** The recording a menu's dialog is for: one of the person's own, in this workspace. */
     private function menuRecording(): CaptureSession
     {
-        $record = $this->menuRecord !== null ? CaptureSessionResource::getEloquentQuery()->find($this->menuRecord) : null;
+        // Once a request: the Share dialog asks for it with each of its fields.
+        if ($this->menuRecordingRead === null || $this->menuRecordingRead[0] !== $this->menuRecord) {
+            $record = $this->menuRecord !== null ? CaptureSessionResource::getEloquentQuery()->find($this->menuRecord) : null;
+            $this->menuRecordingRead = [$this->menuRecord, $record instanceof CaptureSession ? $record : null];
+        }
 
-        return $record instanceof CaptureSession ? $record : abort(404);
+        return $this->menuRecordingRead[1] ?? abort(404);
     }
 
     /** Rename… from a row's menu (UX-22): the row's own Rename. */
@@ -1223,13 +1263,15 @@ class ListCaptureSessions extends ListRecords
     {
         return SharingActions::share(fn (): CaptureSession => $this->menuRecording(), fn (): array => self::readyViewsOf($this->menuRecording()),
             fn (): bool => $this->menuRecording()->primaryRecording?->isReady() === true)
-            ->name('menuShare')->visible(fn (): bool => ! ConsoleAccess::readOnly() && ! $this->menuRecording()->hasNoAudio());
+            // Named as the menu item that opens it.
+            ->name('menuShare')->modalHeading(__('Copy link'))->visible(fn (): bool => ! ConsoleAccess::readOnly() && ! $this->menuRecording()->hasNoAudio());
     }
 
     /** Share › Share with people… (UX-22): Send to a teammate, as on the recording page. */
     public function menuSendAction(): Action
     {
-        return SharingActions::send(fn (): CaptureSession => $this->menuRecording())->name('menuSend')->visible(fn (): bool => ! ConsoleAccess::readOnly());
+        return SharingActions::send(fn (): CaptureSession => $this->menuRecording())->name('menuSend')->modalHeading(__('Share with people'))
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly());
     }
 
     /** Share › Send to WhatsApp… (UX-22): the recording page's panel (only with the recording's audio). */

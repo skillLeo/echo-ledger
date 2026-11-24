@@ -18,6 +18,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -233,7 +234,7 @@ it('shares one recording through the console\'s own actions: Copy link makes a l
     Fx::readyRecording($this->a, 'audio of call A');
     $page = Livewire::test(ListCaptureSessions::class);
 
-    $page->call('menuAction', 'file.copyLink', [$this->a->id])->assertActionMounted('menuShare')->assertMountedActionModalSee('Share this recording');
+    $page->call('menuAction', 'file.copyLink', [$this->a->id])->assertActionMounted('menuShare')->assertMountedActionModalSee('Copy link');
     Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$this->a->id])->assertActionMounted('menuSend');
     Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.sendToWhatsApp', [$this->a->id])->assertActionMounted('menuWhatsapp')
         ->assertMountedActionModalSee('Send to WhatsApp');
@@ -304,4 +305,41 @@ it('opens the same menu from the row\'s ⋯ as from a right-click: Filament\'s g
     app('auth')->forgetGuards();
     $this->actingAs($this->owner->fresh(), 'web');
     expect((string) $this->get('/app/sessions')->assertOk()->getContent())->not->toContain('openFromButton');
+});
+
+it('clears a one-row selection after Move to trash on that row, and never gives back a row that is gone', function () {
+    // The row's own box was ticked: the menu is the selection's, and it ends as the selection bar's actions do.
+    Livewire::test(ListCaptureSessions::class)->set('selectedTableRecords', [(string) $this->a->id])
+        ->call('menuAction', 'recording.moveToTrash', [$this->a->id], null, true)
+        ->assertDispatched('deselectAllTableRecords');
+
+    // A selection the browser sent without saying so: what comes back is only what is still there.
+    $c = Fx::session($this->owner, null, ['title' => 'Call C']);
+    Livewire::test(ListCaptureSessions::class)->set('selectedTableRecords', [(string) $this->b->id, (string) $c->id])
+        ->call('menuAction', 'recording.moveToTrash', [$this->b->id])
+        ->assertSet('selectedTableRecords', [(string) $c->id]);
+});
+
+it('reads the Share dialog\'s recording once a request, whatever its fields ask', function () {
+    Fx::readyRecording($this->a, 'audio of call A');
+    $page = Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.copyLink', [$this->a->id])->assertActionMounted('menuShare');
+
+    DB::enableQueryLog();
+    $page->set('mountedActions.0.data.audience', 'password');
+    $reads = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], 'from "capture_sessions"') && str_contains($q['query'], '"id" = ?'))->count();
+    DB::disableQueryLog();
+
+    expect($reads)->toBe(1);
+});
+
+it('names each Share dialog as its menu item does, and ⋯ says its menu is closed until it opens', function () {
+    Fx::readyRecording($this->a, 'audio of call A');
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.copyLink', [$this->a->id])->assertMountedActionModalSee('Copy link');
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$this->a->id])->assertMountedActionModalSee('Share with people')
+        ->assertMountedActionModalDontSee('Send to a teammate');
+    app()->setLocale('ur');
+    Livewire::test(ListCaptureSessions::class)->call('menuAction', 'file.shareWithPeople', [$this->a->id])->assertMountedActionModalSee('لوگوں کے ساتھ شیئر کریں');
+    app()->setLocale('en');
+
+    expect(preg_match('~data-row-menu[^>]*aria-expanded="false"|aria-expanded="false"[^>]*data-row-menu~', Livewire::test(ListCaptureSessions::class)->html()))->toBe(1);
 });
