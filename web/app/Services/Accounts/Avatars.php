@@ -42,18 +42,20 @@ final class Avatars
     public function __construct(private readonly RecordingFiles $files, private readonly AuditLog $audit) {}
 
     /**
-     * `avatar_url` and `avatar_version` beside a person the API shows (null and null = initials).
+     * `avatar_url` and `avatar_version` beside a person the API shows (null and null = initials), and since 2.0.0-r
+     * (BE-06) `avatar_color`, the initials' circle (0–7; null only when there is no person).
      *
-     * @return array{avatar_url: string|null, avatar_version: int|null}
+     * @return array{avatar_url: string|null, avatar_version: int|null, avatar_color: int|null}
      */
     public static function of(?User $user): array
     {
         $version = $user?->avatar_version;
+        $color = $user === null ? null : (int) $user->avatar_color;
         if ($user === null || $version === null) {
-            return ['avatar_url' => null, 'avatar_version' => null];
+            return ['avatar_url' => null, 'avatar_version' => null, 'avatar_color' => $color];
         }
 
-        return ['avatar_url' => self::url($user->id, $version), 'avatar_version' => $version];
+        return ['avatar_url' => self::url($user->id, $version), 'avatar_version' => $version, 'avatar_color' => $color];
     }
 
     /**

@@ -7,7 +7,8 @@
                 "name": "Sample Owner",
                 "email": "sample.new@example.test",
                 "avatar_url": "https://echoledger.test/api/avatars/1/1795396230?expires=sample&signature=sample",
-                "avatar_version": 1795396230
+                "avatar_version": 1795396230,
+                "avatar_color": 3
             },
             "note": "Please look.",
             "title": "Retainer check-in, renamed",

@@ -42,6 +42,7 @@ use Laravel\Passport\HasApiTokens;
  * @property string $email
  * @property Carbon|null $email_verified_at
  * @property Carbon|null $retry_requested_at the person's latest Retry all (since 2.0.0-r, BE-03)
+ * @property int $avatar_color 0–7, the initials' circle without a photo (since 2.0.0-r, BE-06)
  * @property bool $is_super_admin
  * @property int $views_version moves with every change of the person's saved Library views (contract 2.0.0-p)
  * @property int|null $current_workspace_id
@@ -82,8 +83,17 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
 
+    /** The tokens' avatar colours, in order (contract 2.0.0-r, BE-06): teal, blue, indigo, purple, pink, orange, green, slate. */
+    public const AVATAR_COLORS = 8;
+
     protected static function booted(): void
     {
+        // Since 2.0.0-r (BE-06): the colour of the initials is picked once, at sign-up, the same on every device.
+        static::creating(function (User $user): void {
+            if ($user->getAttribute('avatar_color') === null) {
+                $user->setAttribute('avatar_color', random_int(0, self::AVATAR_COLORS - 1));
+            }
+        });
         // What was confirmed is the old address (the profile page changes it at once).
         // Since the security review of 2.0.0-l: an address reserved for another account's restore window is nobody's,
         // however it would be given (sign-up, a member added, staff, the console's change).
@@ -197,6 +207,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'deletes_at' => 'datetime',
             'consent_seen_at' => 'datetime',
             'retry_requested_at' => 'datetime',
+            'avatar_color' => 'integer',
             'notify_transcript_ready' => 'boolean',
             'email_preferences' => 'array',
             'console_preferences' => 'array',

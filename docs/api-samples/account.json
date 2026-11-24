@@ -22,6 +22,8 @@
     ],
     "avatar_url": null,
     "avatar_version": null,
+    "avatar_color": 3,
+    "language": "en",
     "has_password": true,
     "pending_email": null,
     "pending_email_expires_at": null,

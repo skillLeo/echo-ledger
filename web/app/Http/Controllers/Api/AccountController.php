@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\ApiError;
+use App\Filament\Support\Shell;
 use App\Http\Controllers\Controller;
 use App\Models\AccountExport;
 use App\Models\Device;
@@ -62,6 +63,8 @@ final class AccountController extends Controller
             // Since 2.0.0-l (docs/API.md "Account and security from the apps"): the picture, the password, a change of
             // address waiting for its confirmation, and whether the phone can add passkeys on this server.
             ...Avatars::of($user),
+            // Since 2.0.0-r (BE-06): the interface language, the web console's setting, so a change shows everywhere.
+            'language' => Shell::preferences($user)['app_language'],
             'has_password' => AccountProof::hasPassword($user),
             ...app(EmailChange::class)->payload($user),
             'passkeys_available' => Passkeys::availableOnPhone(),

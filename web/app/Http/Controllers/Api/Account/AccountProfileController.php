@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Api\Account;
 
 use App\Exceptions\ApiError;
 use App\Filament\Auth\EditProfile;
+use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\Shell;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Controller;
 use App\Mail\SecurityChangeMail;
@@ -23,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 
 /**
  * The person's name, email and password from the apps (since 2.0.0-l, docs/API.md "Account and security from the
@@ -40,20 +43,36 @@ final class AccountProfileController extends Controller
         return response('', 202);
     }
 
-    /** PATCH /api/account {"name"} — 10 an hour; answers the account as GET /api/account does. */
+    /**
+     * PATCH /api/account {"name", "language", "avatar_color"} — each optional, one at least (since 2.0.0-r, BE-06, the
+     * language and the colour; before, the name only); 10 an hour together. Answers the account as GET /api/account.
+     */
     public function update(Request $request, Workspaces $workspaces, AuditLog $audit): JsonResponse
     {
         $user = $this->owner($request);
-        if (! $request->has('name')) {
+        if (! $request->hasAny(['name', 'language', 'avatar_color'])) {
             throw FieldErrors::fail(['name' => [['required', 'Enter your name.']]]);
         }
-        [$name, $problems] = AccountRules::name($request->input('name'));
-        if ($problems !== []) {
-            throw FieldErrors::fail(['name' => $problems]);
+        $name = null;
+        if ($request->has('name')) {
+            [$name, $problems] = AccountRules::name($request->input('name'));
+            if ($problems !== []) {
+                throw FieldErrors::fail(['name' => $problems]);
+            }
         }
-        if ($name !== $user->name) {
+        $more = FieldErrors::validate($request->only(['language', 'avatar_color']), [
+            'language' => ['sometimes', 'string', Rule::in(array_keys(ConsoleV2::LANGUAGES))],
+            'avatar_color' => ['sometimes', 'integer', 'between:0,'.(User::AVATAR_COLORS - 1)],
+        ]);
+        if ($name !== null && $name !== $user->name) {
             $user->forceFill(['name' => $name])->save();
             $audit->record('name_changed', $user->id, $user);
+        }
+        if (isset($more['language'])) {
+            Shell::remember($user, 'app_language', $more['language']);
+        }
+        if (isset($more['avatar_color']) && (int) $more['avatar_color'] !== (int) $user->avatar_color) {
+            $user->forceFill(['avatar_color' => (int) $more['avatar_color']])->save();
         }
 
         return app(AccountController::class)->show($request, $workspaces);

@@ -7,7 +7,8 @@
                 "name": "Abe Hayes",
                 "email": "teammate@example.test",
                 "avatar_url": null,
-                "avatar_version": null
+                "avatar_version": null,
+                "avatar_color": 3
             },
             "title": "Retainer check-in, renamed",
             "note": "Please look.",
