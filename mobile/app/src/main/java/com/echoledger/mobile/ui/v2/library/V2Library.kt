@@ -48,6 +48,7 @@ import com.echoledger.mobile.data.ListDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
+import com.echoledger.mobile.ui.v2.components.EchoBackToTop
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
@@ -565,6 +566,27 @@ fun V2LibraryScreen(
         is LibraryTarget.Label -> lists.firstOrNull { it.key == target.label }?.name.orEmpty()
         is LibraryTarget.View -> openView?.name.orEmpty()
     }
+    // The recording opened last (UX-25): back from it, the list shows it with a light tint, focused, where it was. The
+    // tint stays until another row is opened or tapped, the view, tab or filters change, or 60 s pass.
+    var openedLast by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnedTo by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        returnedTo = openedLast
+        openedLast = null
+    }
+    LaunchedEffect(returnedTo) {
+        if (returnedTo != null) {
+            kotlinx.coroutines.delay(RETURN_TINT_MS)
+            returnedTo = null
+        }
+    }
+    // The view, its filters and its tab: each such list keeps its own scroll position; a change ends the tint.
+    val place = "$viewKey|${filtersJson.hashCode()}|${kind.name}"
+    var tintedIn by remember { mutableStateOf(place) }
+    if (tintedIn != place) {
+        tintedIn = place
+        returnedTo = null
+    }
     V2LibraryContent(
         state = state,
         query = query,
@@ -573,11 +595,13 @@ fun V2LibraryScreen(
         onToggleView = {},
         initials = initials,
         onOpen = {
+            returnedTo = null
             if (ticked.isNotEmpty()) {
                 pick(listOf(it.id), off = it.id in picked)
             } else {
                 keepSearch(query)
                 vm.markOpened(it.item)
+                openedLast = it.id
                 onOpen(it.item)
             }
         },
@@ -597,7 +621,10 @@ fun V2LibraryScreen(
             folded = folded,
             onFold = { key -> folded = if (key in folded) folded - key else folded + key },
             selected = ticked,
-            onToggle = { row -> pick(listOf(row.id), off = row.id in picked) },
+            onToggle = { row ->
+                returnedTo = null
+                pick(listOf(row.id), off = row.id in picked)
+            },
             onSelectGroup = { g ->
                 val ids = g.rows.map { it.id }.toSet()
                 pick(ids, off = picked.containsAll(ids))
@@ -677,7 +704,9 @@ fun V2LibraryScreen(
             recent = settings.recentSearches,
             onKeepSearch = ::keepSearch,
             title = title,
-            onTitle = { menuOpen = true }
+            onTitle = { menuOpen = true },
+            place = place,
+            returnedTo = returnedTo
         )
     )
     if (menuOpen) {
@@ -851,7 +880,11 @@ class LibraryTools(
     val swipes: Boolean = true,
     /** What the list shows ("All recordings", a label, one of My views): the title, which opens [onTitle]'s menu. */
     val title: String? = null,
-    val onTitle: (() -> Unit)? = null
+    val onTitle: (() -> Unit)? = null,
+    /** Which list this is (the view, its filters, tab and search): each keeps its own scroll position (UX-25). */
+    val place: String = "",
+    /** The recording come back to: a light tint and accessibility focus, so the person sees where they were. */
+    val returnedTo: String? = null
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -900,7 +933,15 @@ fun V2LibraryContent(
     onReviewWaiting: () -> Unit = {}
 ) {
     val c = EchoV2.colors
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Each list keeps its own place (UX-25), across a recording opened and closed, a rotation and the process made again.
+    val listState = rememberSaveable(tools?.place ?: "", saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
+        androidx.compose.foundation.lazy.LazyListState()
+    }
+    // Back from a recording: its row has focus (screen readers start there) and a light tint while it lasts.
+    val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(tools?.returnedTo) {
+        if (tools?.returnedTo != null) runCatching { returnFocus.requestFocus() }
+    }
     val scrollToTop = extras?.scrollToTop ?: 0
     LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
     val text = v2Text
@@ -1133,12 +1174,15 @@ fun V2LibraryContent(
                                         SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
                                             tools.onPin(row)
                                         }, onDelete = { onDelete(row) }) {
+                                            val back = row.id == tools.returnedTo
                                             LibraryRow(
                                                 row,
                                                 selected = if (selecting) row.id in tools.selected else null,
                                                 compact = tools.compact,
                                                 onOpen = { onOpen(row) },
-                                                onLongClick = { tools.onToggle(row) }
+                                                onLongClick = { tools.onToggle(row) },
+                                                returned = back,
+                                                modifier = if (back) Modifier.focusRequester(returnFocus) else Modifier
                                             )
                                         }
                                     }
@@ -1159,6 +1203,8 @@ fun V2LibraryContent(
                             }
                         }
                     }
+                    // Back to top (UX-25): at the list's bottom end, above the bottom bar, clear of Record.
+                    EchoBackToTop(listState, Modifier.align(Alignment.BottomEnd))
                 }
             }
         }
@@ -1329,7 +1375,16 @@ private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Un
  * count and the pinned mark; in selection mode a tick ([selected] not null) and a tap selects.
  */
 @Composable
-private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen: () -> Unit, onLongClick: () -> Unit) {
+private fun LibraryRow(
+    row: V2Row,
+    selected: Boolean?,
+    compact: Boolean,
+    onOpen: () -> Unit,
+    onLongClick: () -> Unit,
+    /** The row come back to from its recording (UX-25): the accent at 8 %, not the selection's tint. */
+    returned: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val c = EchoV2.colors
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
@@ -1350,8 +1405,14 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val important = stringResource(R.string.v2_lib_important_mark)
     EchoListRow(
         title = row.title,
-        // A selected row is tinted all across, as classic's is.
-        modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
+        // A selected row is tinted all across, as classic's is; the row come back to has a lighter tint of its own.
+        modifier = modifier.then(
+            when {
+                selected == true -> Modifier.background(c.accentSoft)
+                returned -> Modifier.background(c.accent.copy(alpha = EchoTokens.Tint.returned)).semantics { this[ReturnedRow] = true }
+                else -> Modifier
+            }
+        ),
         // A failed transcript or one with nothing heard says so in place of the meta line, as classic's row does;
         // U19's converting line comes next, then how long kept audio stays.
         meta = when {
@@ -1473,3 +1534,9 @@ private fun statusBadge(status: RowStatus, text: V2Text): (@Composable () -> Uni
 
 /** How often the Library asks again while something is on its way (classic's LIVE_REFRESH_MS). */
 private const val LIVE_REFRESH_MS = 5_000L
+
+/** How long the row come back to stays tinted at most (UX-25). */
+private const val RETURN_TINT_MS = 60_000L
+
+/** Marks the row come back to (tests read it; screen readers get its focus). */
+val ReturnedRow = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("ReturnedRow")

@@ -14,6 +14,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -123,6 +128,46 @@ class HeaderShotsTest : ScreenTest() {
             drawn += variant
         }
         return drawn
+    }
+
+    /**
+     * UX-25 (after only): back from a recording far down, its row lightly tinted, and Back to top at the bottom end.
+     * Many rows, so the list is more than a screen down.
+     */
+    @Test
+    fun theLibraryComeBackTo() {
+        if (PREFIX != "after") return
+        val today = java.time.OffsetDateTime.now().withHour(9).withMinute(0).withSecond(0).withNano(0)
+        server.on(
+            "GET",
+            "/api/library",
+            FakeServer.json(
+                200,
+                ServerFixtures.libraryPage(
+                    (1..40).map {
+                        ServerFixtures.libraryItem(
+                            "01K%03d".format(it),
+                            title = "Caller %03d".format(it),
+                            startedAt = today.minusDays(it.toLong()).toString()
+                        )
+                    }
+                )
+            )
+        )
+        runBlocking { app.graph.library.refresh() }
+        assertEquals(
+            listOf("light-en", "dark-en", "light-ur", "dark-ur", "light-en-200", "light-ur-200"),
+            shoot("after-come-back") {
+                compose.onAllNodes(androidx.compose.ui.test.hasScrollToIndexAction()).onFirst()
+                    .performScrollToNode(androidx.compose.ui.test.hasText("Caller 030"))
+                compose.onAllNodesWithText("Caller 030").onFirst().performClick()
+                // The recording page's ← in the page's language.
+                val back = V2Testing.resources(language).getString(com.echoledger.mobile.R.string.v2_back)
+                compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(back).fetchSemanticsNodes().isNotEmpty() }
+                compose.onAllNodesWithContentDescription(back).onFirst().performClick()
+                compose.waitUntil(5_000) { compose.onAllNodesWithText("Caller 030").fetchSemanticsNodes().isNotEmpty() }
+            }
+        )
     }
 
     @Test

@@ -154,6 +154,12 @@ object EchoTokens {
         val full = 999.dp
     }
 
+    /** Tints laid over a surface. */
+    object Tint {
+        /** The row you came back to (v2.1 UX-25): "a bit of highlight", the accent at 8 %, never the selection's tint. */
+        const val returned = 0.08f
+    }
+
     object Layout {
         val pagePaddingDesktop = 24.dp
         val pagePaddingMobile = 16.dp

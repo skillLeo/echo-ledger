@@ -70,6 +70,7 @@
     <string name="v2_not_signed_in">سائن ان نہیں</string>
     <string name="v2_clear_search">تلاش صاف کریں</string>
     <string name="v2_close">بند کریں</string>
+    <string name="v2_back_to_top">اوپر واپس</string>
     <string name="v2_loading">لوڈ ہو رہا ہے</string>
     <string name="v2_undo">واپس لیں</string>
     <string name="v2_selected">منتخب</string>

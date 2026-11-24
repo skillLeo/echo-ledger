@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AllInclusive
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -101,6 +102,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 object EchoIcons {
     val Search: ImageVector get() = Icons.Outlined.Search
+
+    /** Back to top (v2.1 UX-25). */
+    val BackToTop: ImageVector get() = Icons.Outlined.ArrowUpward
     val Close: ImageVector get() = Icons.Outlined.Close
     val Back: ImageVector get() = Icons.AutoMirrored.Outlined.ArrowBack
     val More: ImageVector get() = Icons.Outlined.MoreVert
