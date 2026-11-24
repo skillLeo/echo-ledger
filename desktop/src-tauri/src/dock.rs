@@ -50,13 +50,13 @@ pub fn follow(app: &AppHandle) {
 /// The number with the calls waiting the status has just counted (posted to the main thread, never waited for).
 pub fn follow_with(app: &AppHandle, waiting: usize) {
     let count = badge_count(ACTIVITY.load(Ordering::SeqCst), waiting, app.state::<crate::AppState>().settings().dock_badge);
-    if SHOWN.swap(u64::from(count), Ordering::SeqCst) == u64::from(count) {
-        return;
-    }
+    let changed = SHOWN.swap(u64::from(count), Ordering::SeqCst) != u64::from(count);
     #[cfg(target_os = "macos")]
-    {
+    if changed {
         let _ = app.run_on_main_thread(move || mac::draw_badge(badge_label(count)));
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = changed;
 }
 
 /// Paths of audio files opened with EchoLedger (pure): file URLs only, whatever their case.
@@ -319,8 +319,12 @@ mod tests {
 
     #[test]
     fn audio_files_opened_with_echoledger_are_imported_and_said() {
-        let urls: Vec<tauri::Url> = ["file:///Users/me/Call%20with%20Bilal.m4a", "echoledger://open", "https://example.com/a.mp3"].iter().map(|u| tauri::Url::parse(u).unwrap()).collect();
-        assert_eq!(opened_files(&urls), [std::path::PathBuf::from("/Users/me/Call with Bilal.m4a")]);
+        // A file URL as the system hands it: this platform's absolute path, its space escaped.
+        let file = std::env::temp_dir().join("Call with Bilal.m4a");
+        let url = tauri::Url::from_file_path(&file).unwrap();
+        assert!(url.as_str().ends_with("/Call%20with%20Bilal.m4a"), "{url}");
+        let urls = [url, tauri::Url::parse("echoledger://open").unwrap(), tauri::Url::parse("https://example.com/a.mp3").unwrap()];
+        assert_eq!(opened_files(&urls), [file]);
         assert_eq!(import_words(2, 0, 0), "2 recordings imported");
         assert_eq!(import_words(1, 1, 1), "1 recording imported · 1 already in the Library · 1 couldn't be imported");
         assert_eq!(import_words(0, 0, 0), "Nothing was imported");

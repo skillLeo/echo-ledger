@@ -609,7 +609,8 @@ mod tests {
                     walk(root, &path, calls);
                 } else if path.extension().is_some_and(|e| e == "rs") && path.file_name().is_some_and(|n| n != "tests.rs") {
                     let file = syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap();
-                    calls.file = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                    // One spelling on every platform (Windows' `overlay\mod.rs` too): the names below use `/`.
+                    calls.file = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
                     syn::visit::Visit::visit_file(calls, &file);
                 }
             }
