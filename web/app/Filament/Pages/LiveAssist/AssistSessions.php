@@ -64,14 +64,26 @@ class AssistSessions extends Page implements HasTable
 
     public const REPORT_LABELS = ['ready' => 'Ready', 'queued' => 'Being made', 'failed' => 'Could not be made', 'none' => '—'];
 
+    /** In the console's language (the new frame in Urdu); English reads as before. */
+    public function getTitle(): string
+    {
+        return __('Live Assist sessions');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Sessions');
+    }
+
     public function getSubheading(): string
     {
         $plans = app(AssistPlans::class);
         $workspace = (int) CurrentWorkspace::id();
         $plan = $plans->for($workspace);
-        $live = $plan['live_modes'] === [] ? 'Live Assist in calls is not in your plan' : 'Live Assist: '.self::left($plans->left($workspace, self::personId(), false)['seconds_left']).' left';
+        $live = $plan['live_modes'] === [] ? __('Live Assist in calls is not in your plan')
+            : __('Live Assist: :time left', ['time' => self::left($plans->left($workspace, self::personId(), false)['seconds_left'])]);
 
-        return 'This month · '.$live.' · Practice: '.self::left($plans->left($workspace, self::personId(), true)['seconds_left']).' left';
+        return __('This month · :live · Practice: :time left', ['live' => $live, 'time' => self::left($plans->left($workspace, self::personId(), true)['seconds_left'])]);
     }
 
     public function content(Schema $schema): Schema
@@ -88,41 +100,42 @@ class AssistSessions extends Page implements HasTable
             ->defaultSort('started_at', 'desc')
             ->recordUrl(fn (AssistSession $s): string => AssistReportPage::getUrl(['session' => $s->id]))
             ->columns([
-                TextColumn::make('started_at')->label('Started')->dateTime('M j, Y · g:i A', $tz)->sortable()
+                TextColumn::make('started_at')->label(__('Started'))->dateTime('M j, Y · g:i A', $tz)->sortable()
                     ->description(fn (AssistSession $s): string => $s->prep instanceof AssistPrep && $s->prep->title !== null ? $s->prep->title : ''),
-                TextColumn::make('practice')->label('Kind')->badge()
-                    ->state(fn (AssistSession $s): string => $s->practice ? 'Practice' : 'Call')
+                TextColumn::make('practice')->label(__('Kind'))->badge()
+                    ->state(fn (AssistSession $s): string => $s->practice ? __('Practice') : __('Call'))
                     ->color(fn (AssistSession $s): string => $s->practice ? 'info' : 'gray'),
-                TextColumn::make('mode')->label('Mode')->formatStateUsing(fn (string $state): string => AssistRecords::MODES[$state] ?? $state),
-                TextColumn::make('platform')->label('On')->formatStateUsing(fn (string $state): string => ['desktop' => 'Computer', 'android' => 'Phone', 'ios' => 'iPhone', 'web' => 'Web'][$state] ?? $state),
-                TextColumn::make('seconds_used')->label('Length')->state(fn (AssistSession $s): string => AssistRecords::duration($s->seconds())),
-                TextColumn::make('report_status')->label('Report')->badge()
-                    ->state(fn (AssistSession $s): string => $s->ended() ? (self::REPORT_LABELS[$s->report_status] ?? '—') : 'On now')
+                TextColumn::make('mode')->label(__('Mode'))->formatStateUsing(fn (string $state): string => isset(AssistRecords::MODES[$state]) ? __(AssistRecords::MODES[$state]) : $state),
+                TextColumn::make('platform')->label(__('On'))->formatStateUsing(fn (string $state): string => ['desktop' => __('Computer'), 'android' => __('Phone'), 'ios' => __('iPhone'), 'web' => __('Web')][$state] ?? $state),
+                TextColumn::make('seconds_used')->label(__('Length'))->state(fn (AssistSession $s): string => AssistRecords::duration($s->seconds())),
+                TextColumn::make('report_status')->label(__('Report'))->badge()
+                    ->state(fn (AssistSession $s): string => $s->ended() ? (isset(self::REPORT_LABELS[$s->report_status]) ? __(self::REPORT_LABELS[$s->report_status]) : '—') : __('On now'))
                     ->color(fn (AssistSession $s): string => ! $s->ended() ? 'warning' : ($s->report_status === 'ready' ? 'success' : 'gray')),
             ])
             ->filters([
-                SelectFilter::make('kind')->label('Show')->options(['call' => 'Calls', 'practice' => 'Practice'])->placeholder('All')
+                SelectFilter::make('kind')->label(__('Show'))->options(['call' => __('Calls'), 'practice' => __('Practice')])->placeholder(__('All'))
                     ->query(fn (Builder $q, array $data): Builder => match ($data['value'] ?? null) {
                         'call' => $q->where('practice', false), 'practice' => $q->where('practice', true), default => $q,
                     }),
             ])
             ->recordActions([
-                Action::make('delete')->label('Delete')->icon(Heroicon::OutlinedTrash)->color('danger')
+                Action::make('delete')->label(__('Delete'))->icon(Heroicon::OutlinedTrash)->color('danger')
                     ->visible(fn (): bool => self::canChange())
-                    ->requiresConfirmation()->modalHeading('Delete this session?')
-                    ->modalDescription('Its words, suggestions and report go now. The time it used still counts this month.')
+                    ->requiresConfirmation()->modalHeading(__('Delete this session?'))
+                    ->modalDescription(__('Its words, suggestions and report go now. The time it used still counts this month.'))
                     ->action(function (AssistSession $s): void {
                         AssistRecords::eraseSession($s);
-                        Notification::make()->title('Session deleted')->success()->send();
+                        Notification::make()->title(__('Session deleted'))->success()->send();
                     }),
             ])
             ->emptyStateIcon(Heroicon::OutlinedSparkles)
-            ->emptyStateHeading('No sessions yet')
-            ->emptyStateDescription('Start Live Assist in a call, or Practice, from the desktop or phone app. Its report shows here.');
+            ->emptyStateHeading(__('No sessions yet'))
+            ->emptyStateDescription(__('Start Live Assist in a call, or Practice, from the desktop or phone app. Its report shows here.'));
     }
 
     private static function left(int $seconds): string
     {
-        return $seconds >= 3600 ? intdiv($seconds, 3600).' h '.intdiv($seconds % 3600, 60).' min' : intdiv($seconds, 60).' min';
+        return $seconds >= 3600 ? __(':hours h :minutes min', ['hours' => intdiv($seconds, 3600), 'minutes' => intdiv($seconds % 3600, 60)])
+            : __(':n min', ['n' => intdiv($seconds, 60)]);
     }
 }

@@ -85,6 +85,17 @@ class WorkspaceSettings extends Page implements HasTable
 
     protected static ?string $slug = 'workspace';
 
+    /** In the console's language (the new frame in Urdu); English reads as before. */
+    public function getTitle(): string
+    {
+        return __('Workspace');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Workspace');
+    }
+
     public function getSubheading(): ?string
     {
         $workspace = $this->workspace();
@@ -92,9 +103,13 @@ class WorkspaceSettings extends Page implements HasTable
         if ($workspace === null || $role === null) {
             return $workspace?->name;
         }
+        // English keeps its "an owner", "an admin", "a member", "a viewer".
+        $you = $role === WorkspaceRole::Owner || $role === WorkspaceRole::Admin
+            ? __('You are an :role', ['role' => Str::lower(__($role->label()))])
+            : __('You are a :role', ['role' => Str::lower(__($role->label()))]);
 
-        return $workspace->name.' · You are '.($role === WorkspaceRole::Owner || $role === WorkspaceRole::Admin ? 'an ' : 'a ').Str::lower($role->label())
-            .($this->can('manage') ? ' · Plan '.$workspace->plan->name : '');
+        return $workspace->name.' · '.$you
+            .($this->can('manage') ? ' · '.__('Plan :plan', ['plan' => $workspace->plan->name]) : '');
     }
 
     public function content(Schema $schema): Schema
@@ -113,13 +128,15 @@ class WorkspaceSettings extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => User::query()->whereIn('id', fn ($q) => $q->select('user_id')->from('workspace_user')->where('workspace_id', CurrentWorkspace::id())))
-            ->heading('People')
-            ->description('Each person\'s recordings and projects are theirs alone, owners and admins included, until they share them. Owners and admins invite and remove people and revoke devices; viewers open what is shared with them and record nothing.')
+            ->heading(__('People'))
+            ->description(__("Each person's recordings and projects are theirs alone, owners and admins included, until they share them. Owners and admins invite and remove people and revoke devices; viewers open what is shared with them and record nothing."))
             ->columns([
-                TextColumn::make('name'),
-                TextColumn::make('email'),
-                TextColumn::make('role')->badge()
+                TextColumn::make('name')->label(__('Name')),
+                TextColumn::make('email')->label(__('Email')),
+                TextColumn::make('role')->label(__('Role'))->badge()
                     ->state(fn (User $record): string => $this->roleOf($record)?->label() ?? '')
+                    // The badge's colour goes by the English label (the state); the words are the reader's.
+                    ->formatStateUsing(fn (string $state): string => $state === '' ? '' : __($state))
                     ->color(fn (string $state): string => match ($state) {
                         WorkspaceRole::Owner->label() => 'primary',
                         WorkspaceRole::Admin->label() => 'info',
@@ -127,27 +144,27 @@ class WorkspaceSettings extends Page implements HasTable
                     }),
             ])
             ->recordActions([
-                Action::make('changeRole')->label('Change role')
+                Action::make('changeRole')->label(__('Change role'))
                     ->icon(Heroicon::OutlinedArrowsRightLeft)->color('gray')
                     ->authorize(fn (User $record): bool => $this->can('manageMember', $record))
                     ->fillForm(fn (User $record): array => ['role' => $this->roleOf($record)?->value])
-                    ->schema([Select::make('role')->options(fn (): array => $this->assignableRoles())->required()->selectablePlaceholder(false)])
+                    ->schema([Select::make('role')->label(__('Role'))->options(fn (): array => $this->assignableRoles())->required()->selectablePlaceholder(false)])
                     ->action(function (User $record, array $data): void {
                         $to = WorkspaceRole::tryFrom((string) ($data['role'] ?? ''));
                         if ($to === null || ! $this->can('assignRole', $to)) {
-                            Notification::make()->title('You cannot give that role.')->danger()->send();
+                            Notification::make()->title(__('You cannot give that role.'))->danger()->send();
 
                             return;
                         }
-                        if ($this->attempt(fn () => app(Workspaces::class)->setRole($this->workspaceOrFail(), $record, $to), "{$record->name} is now ".Str::lower($to->label()))) {
+                        if ($this->attempt(fn () => app(Workspaces::class)->setRole($this->workspaceOrFail(), $record, $to), __(':name is now :role', ['name' => $record->name, 'role' => Str::lower(__($to->label()))]))) {
                             app(AuditLog::class)->record('role_changed', $this->user()->id, $this->workspaceOrFail(), "{$record->email} is now ".Str::lower($to->label()).' of '.$this->workspaceOrFail()->name);
                         }
                     }),
-                Action::make('remove')->label('Remove')->icon(Heroicon::OutlinedUserMinus)->color('danger')
+                Action::make('remove')->label(__('Remove'))->icon(Heroicon::OutlinedUserMinus)->color('danger')
                     ->authorize(fn (User $record): bool => $this->can('manageMember', $record))
-                    ->requiresConfirmation()->modalDescription('They lose access to this workspace at once and their devices here are signed out. Their links stop working, and what was sent to them from here ends (copies they saved stay theirs). What they recorded stays theirs: nobody here sees it, and it is theirs again if they come back.')
+                    ->requiresConfirmation()->modalDescription(__('They lose access to this workspace at once and their devices here are signed out. Their links stop working, and what was sent to them from here ends (copies they saved stay theirs). What they recorded stays theirs: nobody here sees it, and it is theirs again if they come back.'))
                     ->action(function (User $record): void {
-                        if ($this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), "{$record->name} removed")) {
+                        if ($this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), __(':name removed', ['name' => $record->name]))) {
                             app(AuditLog::class)->record('member_removed', $this->user()->id, $this->workspaceOrFail(), "Removed {$record->email} from ".$this->workspaceOrFail()->name);
                         }
                     }),
@@ -158,9 +175,9 @@ class WorkspaceSettings extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('switch')->label('Switch workspace')->icon(Heroicon::OutlinedArrowsRightLeft)->color('gray')
+            Action::make('switch')->label(__('Switch workspace'))->icon(Heroicon::OutlinedArrowsRightLeft)->color('gray')
                 ->visible(fn (): bool => $this->user()->workspaces()->count() > 1)
-                ->schema([Select::make('workspace_id')->label('Workspace')->required()
+                ->schema([Select::make('workspace_id')->label(__('Workspace'))->required()
                     ->options(fn (): array => $this->user()->workspaces()->orderBy('name')->pluck('workspaces.name', 'workspaces.id')->all())
                     ->default(fn (): ?int => CurrentWorkspace::id())])
                 ->action(function (array $data): void {
@@ -171,41 +188,41 @@ class WorkspaceSettings extends Page implements HasTable
                     }
                 }),
             // Since v1.6 a team is a paid feature: without it Invite carries the plan's badge and opens the sheet.
-            ...(PlanLock::allows('team') ? [] : [PlanLock::sheet('upgradeForTeam', 'team', 'Invite')->authorize(fn (): bool => $this->can('invite'))]),
-            Action::make('addMember')->label('Invite')->icon(Heroicon::OutlinedUserPlus)
+            ...(PlanLock::allows('team') ? [] : [PlanLock::sheet('upgradeForTeam', 'team', __('Invite'))->authorize(fn (): bool => $this->can('invite'))]),
+            Action::make('addMember')->label(__('Invite'))->icon(Heroicon::OutlinedUserPlus)
                 ->visible(fn (): bool => PlanLock::allows('team'))
                 ->authorize(fn (): bool => $this->can('invite'))
                 ->modalDescription(fn (): string => (app(SignUp::class)->open()
-                    ? 'They get an email with a link to join; someone without an account makes one with it.'
-                    : 'They get an email with a link to join. Someone without an account gets one with a one-time password, shown to you once.')
+                    ? __('They get an email with a link to join; someone without an account makes one with it.')
+                    : __('They get an email with a link to join. Someone without an account gets one with a one-time password, shown to you once.'))
                     .(($seats = $this->planLine()) !== null ? ' '.$seats : ''))
                 ->schema([
-                    TextInput::make('email')->email()->required()->maxLength(255),
-                    TextInput::make('name')->maxLength(255)->helperText('For a new account.'),
-                    Select::make('role')->options(fn (): array => $this->assignableRoles())
+                    TextInput::make('email')->label(__('Email'))->email()->required()->maxLength(255),
+                    TextInput::make('name')->label(__('Name'))->maxLength(255)->helperText(__('For a new account.')),
+                    Select::make('role')->label(__('Role'))->options(fn (): array => $this->assignableRoles())
                         ->default(WorkspaceRole::Member->value)->selectablePlaceholder(false)->required(),
                     // Since v1.8 P6.3: how long the link in the email works.
-                    Select::make('days')->label('The link works for')->options(self::DAY_OPTIONS)->default('7')->selectablePlaceholder(false)->required(),
+                    Select::make('days')->label(__('The link works for'))->options(self::dayOptions())->default('7')->selectablePlaceholder(false)->required(),
                 ])
                 ->action(fn (array $data) => $this->addMember($data)),
             // Since v1.8 P6.3: a link anyone can use to join as a member or a viewer, shown once.
-            Action::make('inviteLink')->label('Invite link')->icon(Heroicon::OutlinedLink)->color('gray')
+            Action::make('inviteLink')->label(__('Invite link'))->icon(Heroicon::OutlinedLink)->color('gray')
                 ->visible(fn (): bool => PlanLock::allows('team'))
                 ->authorize(fn (): bool => $this->can('invite'))
-                ->modalDescription(fn (): string => 'Anyone with the link can join as the role you pick, until it ends or you revoke it. Each person takes a seat when they join.'
+                ->modalDescription(fn (): string => __('Anyone with the link can join as the role you pick, until it ends or you revoke it. Each person takes a seat when they join.')
                     .(($seats = $this->planLine()) !== null ? ' '.$seats : ''))
                 ->schema([
-                    Select::make('role')->options(fn (): array => array_intersect_key($this->assignableRoles(), array_flip([WorkspaceRole::Member->value, WorkspaceRole::Viewer->value])))
+                    Select::make('role')->label(__('Role'))->options(fn (): array => array_intersect_key($this->assignableRoles(), array_flip([WorkspaceRole::Member->value, WorkspaceRole::Viewer->value])))
                         ->default(WorkspaceRole::Member->value)->selectablePlaceholder(false)->required(),
-                    Select::make('days')->label('Open for')->options(self::DAY_OPTIONS)->default('7')->selectablePlaceholder(false)->required(),
-                    TextInput::make('max_uses')->label('People at most')->numeric()->integer()->minValue(1)->maxValue(InviteLinks::MAX_USES)
-                        ->placeholder('Any number'),
+                    Select::make('days')->label(__('Open for'))->options(self::dayOptions())->default('7')->selectablePlaceholder(false)->required(),
+                    TextInput::make('max_uses')->label(__('People at most'))->numeric()->integer()->minValue(1)->maxValue(InviteLinks::MAX_USES)
+                        ->placeholder(__('Any number')),
                 ])
-                ->modalSubmitActionLabel('Make the link')
+                ->modalSubmitActionLabel(__('Make the link'))
                 ->action(function (array $data): void {
                     $role = WorkspaceRole::tryFrom((string) $data['role']);
                     if ($role === null || ! in_array($role, InviteLinks::ROLES, true) || ! $this->can('assignRole', $role)) {
-                        Notification::make()->title('You cannot give that role.')->danger()->send();
+                        Notification::make()->title(__('You cannot give that role.'))->danger()->send();
 
                         return;
                     }
@@ -219,45 +236,45 @@ class WorkspaceSettings extends Page implements HasTable
                     }
                     $this->replaceMountedAction('inviteLinkShown');
                 }),
-            Action::make('rename')->label('Rename')->icon(Heroicon::OutlinedPencilSquare)->color('gray')
+            Action::make('rename')->label(__('Rename'))->icon(Heroicon::OutlinedPencilSquare)->color('gray')
                 ->authorize(fn (): bool => $this->can('manage'))
                 ->fillForm(fn (): array => ['name' => $this->workspace()?->name])
-                ->schema([TextInput::make('name')->required()->maxLength(120)])
+                ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(120)])
                 ->action(function (array $data): void {
                     $this->workspaceOrFail()->update(['name' => trim((string) $data['name'])]);
                     app(AuditLog::class)->record('workspace_renamed', $this->user()->id, $this->workspaceOrFail(), 'Workspace renamed to '.$this->workspaceOrFail()->name);
-                    Notification::make()->title('Workspace renamed')->success()->send();
+                    Notification::make()->title(__('Workspace renamed'))->success()->send();
                 }),
-            Action::make('transfer')->label('Hand over')->icon(Heroicon::OutlinedKey)->color('gray')
+            Action::make('transfer')->label(__('Hand over'))->icon(Heroicon::OutlinedKey)->color('gray')
                 ->authorize(fn (): bool => $this->can('manage'))
-                ->modalDescription('The person you pick becomes the owner; you stay as an admin. Only they can hand it back.')
-                ->schema([Select::make('user_id')->label('New owner')->required()
+                ->modalDescription(__('The person you pick becomes the owner; you stay as an admin. Only they can hand it back.'))
+                ->schema([Select::make('user_id')->label(__('New owner'))->required()
                     ->options(fn (): array => $this->workspaceOrFail()->members()
                         ->wherePivotIn('role', [WorkspaceRole::Admin->value, WorkspaceRole::Member->value])
                         ->orderBy('name')->pluck('users.name', 'users.id')->all())])
                 ->action(function (array $data): void {
                     $to = $this->workspaceOrFail()->members()->whereKey((int) $data['user_id'])->first();
-                    if ($to instanceof User && $this->attempt(fn () => app(Workspaces::class)->transfer($this->workspaceOrFail(), $this->user(), $to), "{$to->name} is now the owner")) {
+                    if ($to instanceof User && $this->attempt(fn () => app(Workspaces::class)->transfer($this->workspaceOrFail(), $this->user(), $to), __(':name is now the owner', ['name' => $to->name]))) {
                         app(AuditLog::class)->record('workspace_transferred', $this->user()->id, $this->workspaceOrFail(), "Handed {$this->workspaceOrFail()->name} over to {$to->email}");
                     }
                 }),
-            Action::make('leave')->label('Leave')->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
+            Action::make('leave')->label(__('Leave'))->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
                 ->authorize(fn (): bool => $this->can('leave'))
-                ->requiresConfirmation()->modalDescription('You lose access to this workspace and your devices here are signed out. Your links here stop working, and what was sent to you from here ends (copies you saved stay yours). What you recorded here stays yours, seen by nobody else.')
+                ->requiresConfirmation()->modalDescription(__('You lose access to this workspace and your devices here are signed out. Your links here stop working, and what was sent to you from here ends (copies you saved stay yours). What you recorded here stays yours, seen by nobody else.'))
                 ->action(function (): void {
                     $workspace = $this->workspaceOrFail();
-                    if ($this->attempt(fn () => app(Workspaces::class)->leave($workspace, $this->user()), "You left {$workspace->name}")) {
+                    if ($this->attempt(fn () => app(Workspaces::class)->leave($workspace, $this->user()), __('You left :name', ['name' => $workspace->name]))) {
                         app(AuditLog::class)->record('member_left', $this->user()->id, $workspace, "Left {$workspace->name}");
                         $this->redirect(Dashboard::getUrl());
                     }
                 }),
-            Action::make('deleteWorkspace')->label('Delete workspace')->icon(Heroicon::OutlinedTrash)->color('danger')
+            Action::make('deleteWorkspace')->label(__('Delete workspace'))->icon(Heroicon::OutlinedTrash)->color('danger')
                 ->authorize(fn (): bool => $this->can('manage'))
                 ->requiresConfirmation()
-                ->modalDescription('Everything in it is erased for good: recordings, transcripts, screens, projects and their files, request links, devices and its usage. Only possible once nobody else is in it.')
+                ->modalDescription(__('Everything in it is erased for good: recordings, transcripts, screens, projects and their files, request links, devices and its usage. Only possible once nobody else is in it.'))
                 ->action(function (): void {
                     $workspace = $this->workspaceOrFail();
-                    if ($this->attempt(fn () => app(WorkspaceEraser::class)->erase($workspace, $this->user()), "{$workspace->name} deleted")) {
+                    if ($this->attempt(fn () => app(WorkspaceEraser::class)->erase($workspace, $this->user()), __(':name deleted', ['name' => $workspace->name]))) {
                         $this->redirect(Dashboard::getUrl());
                     }
                 }),
@@ -267,6 +284,12 @@ class WorkspaceSettings extends Page implements HasTable
     /** How long an invitation or an invite link stays open (since v1.8 P6.3). */
     public const DAY_OPTIONS = ['1' => '1 day', '7' => '7 days', '30' => '30 days'];
 
+    /** @return array<int, string> DAY_OPTIONS in the console's language (PHP keeps its "1", "7" and "30" as integer keys) */
+    private static function dayOptions(): array
+    {
+        return array_map(fn (string $days): string => __($days), self::DAY_OPTIONS);
+    }
+
     /** An invite link just made, until its modal has read it (never kept beyond that). */
     public ?string $newInviteLink = null;
 
@@ -274,16 +297,16 @@ class WorkspaceSettings extends Page implements HasTable
     public function inviteLinkShownAction(): Action
     {
         return Action::make('inviteLinkShown')
-            ->modalHeading('Invite link ready')
-            ->modalDescription('Copy it now: it is shown only once. Send it to the people you want in the team.')
+            ->modalHeading(__('Invite link ready'))
+            ->modalDescription(__('Copy it now: it is shown only once. Send it to the people you want in the team.'))
             ->fillForm(function (): array {
                 $url = $this->newInviteLink;
                 $this->newInviteLink = null;
 
                 return ['url' => $url];
             })
-            ->schema([TextInput::make('url')->label('Invite link')->readOnly()->copyable(copyMessage: 'Copied')])
-            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('lg');
+            ->schema([TextInput::make('url')->label(__('Invite link'))->readOnly()->copyable(copyMessage: __('Copied'))])
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('lg');
     }
 
     /** Revokes an invite link: it stops working at once; people who joined with it stay. */
@@ -295,7 +318,7 @@ class WorkspaceSettings extends Page implements HasTable
         $link = WorkspaceInviteLink::query()->where('workspace_id', CurrentWorkspace::id())->find($id);
         if ($link instanceof WorkspaceInviteLink) {
             app(InviteLinks::class)->revoke($link, $this->user());
-            Notification::make()->title('Invite link revoked')->success()->send();
+            Notification::make()->title(__('Invite link revoked'))->success()->send();
         }
     }
 
@@ -313,24 +336,24 @@ class WorkspaceSettings extends Page implements HasTable
         }
         $invitation = WorkspaceInvitation::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('accepted_at')->find($id);
         if (! $invitation instanceof WorkspaceInvitation) {
-            Notification::make()->title('That invitation is no longer pending.')->warning()->send();
+            Notification::make()->title(__('That invitation is no longer pending.'))->warning()->send();
 
             return;
         }
         if (! $this->can('assignRole', $invitation->role)) {
-            Notification::make()->title('You cannot give that role.')->danger()->send();
+            Notification::make()->title(__('You cannot give that role.'))->danger()->send();
 
             return;
         }
         $key = 'add-member:'.$this->user()->id;
         if (RateLimiter::tooManyAttempts($key, self::ADDS_PER_HOUR)) {
-            Notification::make()->title('Too many invitations sent for now')
-                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+            Notification::make()->title(__('Too many invitations sent for now'))
+                ->body(__('Try again in :minutes minutes.', ['minutes' => ceil(RateLimiter::availableIn($key) / 60)]))->danger()->send();
 
             return;
         }
         RateLimiter::hit($key, 3600);
-        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $invitation->email, $invitation->role), "Invitation sent again to {$invitation->email}");
+        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $invitation->email, $invitation->role), __('Invitation sent again to :email', ['email' => $invitation->email]));
     }
 
     /** Cancels an invitation that was not used yet; its link stops working and its seat is free again. */
@@ -341,8 +364,8 @@ class WorkspaceSettings extends Page implements HasTable
         }
         $key = 'cancel-invitation:'.$this->user()->id;
         if (RateLimiter::tooManyAttempts($key, self::CANCELS_PER_HOUR)) {
-            Notification::make()->title('Too many invitations cancelled for now')
-                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+            Notification::make()->title(__('Too many invitations cancelled for now'))
+                ->body(__('Try again in :minutes minutes.', ['minutes' => ceil(RateLimiter::availableIn($key) / 60)]))->danger()->send();
 
             return;
         }
@@ -351,7 +374,7 @@ class WorkspaceSettings extends Page implements HasTable
         if ($invitation instanceof WorkspaceInvitation) {
             $invitation->delete();
             app(AuditLog::class)->record('invitation_revoked', $this->user()->id, $this->workspaceOrFail(), "Took back the invitation of {$invitation->email}");
-            Notification::make()->title(e("Invitation for {$invitation->email} cancelled"))->success()->send();
+            Notification::make()->title(e(__('Invitation for :email cancelled', ['email' => $invitation->email])))->success()->send();
         }
     }
 
@@ -362,14 +385,14 @@ class WorkspaceSettings extends Page implements HasTable
         // list of strangers.
         $key = 'add-member:'.$this->user()->id;
         if (RateLimiter::tooManyAttempts($key, self::ADDS_PER_HOUR)) {
-            Notification::make()->title('Too many people added for now')
-                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+            Notification::make()->title(__('Too many people added for now'))
+                ->body(__('Try again in :minutes minutes.', ['minutes' => ceil(RateLimiter::availableIn($key) / 60)]))->danger()->send();
 
             return;
         }
         $role = WorkspaceRole::tryFrom($data['role']);
         if ($role === null || ! $this->can('assignRole', $role)) {
-            Notification::make()->title('You cannot give that role.')->danger()->send();
+            Notification::make()->title(__('You cannot give that role.'))->danger()->send();
 
             return;
         }
@@ -383,7 +406,7 @@ class WorkspaceSettings extends Page implements HasTable
 
             return;
         }
-        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $email, $role, (int) ($data['days'] ?? Invitations::DAYS)), "Invitation sent to {$email}");
+        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $email, $role, (int) ($data['days'] ?? Invitations::DAYS)), __('Invitation sent to :email', ['email' => $email]));
     }
 
     private function addWithPassword(string $email, string $name, WorkspaceRole $role): void
@@ -405,13 +428,13 @@ class WorkspaceSettings extends Page implements HasTable
         }
         $password = Str::password(20, symbols: false);
         $user = User::query()->create(['name' => $name ?: Str::before($email, '@'), 'email' => $email, 'password' => $password]);
-        if (! $this->attempt(fn () => app(Workspaces::class)->addMember($workspace, $user, $role), "{$user->name} added")) {
+        if (! $this->attempt(fn () => app(Workspaces::class)->addMember($workspace, $user, $role), __(':name added', ['name' => $user->name]))) {
             return;
         }
         app(Invitations::class)->tellAdded($workspace, $this->user(), $user);
         app(AuditLog::class)->record('member_added', $this->user()->id, $workspace, "Added {$email} to {$workspace->name}");
-        Notification::make()->title('One-time password for '.e($email))
-            ->body("{$password}\nShare it privately; they can change it on their profile after signing in.")
+        Notification::make()->title(__('One-time password for :email', ['email' => e($email)]))
+            ->body($password."\n".__('Share it privately; they can change it on their profile after signing in.'))
             ->persistent()->warning()->send();
     }
 
@@ -434,7 +457,7 @@ class WorkspaceSettings extends Page implements HasTable
     private function assignableRoles(): array
     {
         return collect(WorkspaceRole::cases())->filter(fn (WorkspaceRole $r): bool => $this->can('assignRole', $r))
-            ->mapWithKeys(fn (WorkspaceRole $r): array => [$r->value => $r->label()])->all();
+            ->mapWithKeys(fn (WorkspaceRole $r): array => [$r->value => __($r->label())])->all();
     }
 
     /** @return list<array{id: int, email: string, role: string, expires: string, sent: string|null}> */
@@ -442,7 +465,7 @@ class WorkspaceSettings extends Page implements HasTable
     {
         return WorkspaceInvitation::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('accepted_at')->where('expires_at', '>', now())
             ->orderBy('expires_at')->limit(100)->get()
-            ->map(fn (WorkspaceInvitation $i): array => ['id' => $i->id, 'email' => $i->email, 'role' => $i->role->label(), 'expires' => $i->expires_at->diffForHumans(),
+            ->map(fn (WorkspaceInvitation $i): array => ['id' => $i->id, 'email' => $i->email, 'role' => __($i->role->label()), 'expires' => $i->expires_at->diffForHumans(),
                 'sent' => $i->created_at?->diffForHumans()])
             ->all();
     }
@@ -452,8 +475,9 @@ class WorkspaceSettings extends Page implements HasTable
     {
         return WorkspaceInviteLink::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('revoked_at')->where('expires_at', '>', now())
             ->with('creator')->orderBy('expires_at')->limit(100)->get()->filter(fn (WorkspaceInviteLink $l): bool => $l->usable())
-            ->map(fn (WorkspaceInviteLink $l): array => ['id' => $l->id, 'role' => $l->role->label(), 'by' => $l->creator->name ?? '—',
-                'uses' => $l->max_uses === null ? "{$l->uses} joined" : "{$l->uses} of {$l->max_uses} joined", 'expires' => $l->expires_at->diffForHumans()])
+            ->map(fn (WorkspaceInviteLink $l): array => ['id' => $l->id, 'role' => __($l->role->label()), 'by' => $l->creator->name ?? '—',
+                'uses' => $l->max_uses === null ? __(':uses joined', ['uses' => $l->uses]) : __(':uses of :max joined', ['uses' => $l->uses, 'max' => $l->max_uses]),
+                'expires' => $l->expires_at->diffForHumans()])
             ->values()->all();
     }
 
@@ -465,7 +489,7 @@ class WorkspaceSettings extends Page implements HasTable
         }
         $seats = app(PlanLimits::class)->summary((int) CurrentWorkspace::id())['seats'];
 
-        return $seats['limit'] === null ? null : "{$seats['used']} of {$seats['limit']} seats taken (open invitations count).";
+        return $seats['limit'] === null ? null : __(':used of :limit seats taken (open invitations count).', ['used' => $seats['used'], 'limit' => $seats['limit']]);
     }
 
     /** One row of App\Policies\WorkspacePolicy for the signed-in person in the current workspace. */
