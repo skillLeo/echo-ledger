@@ -1819,6 +1819,34 @@ pub fn retry_upload(app: &AppHandle, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// Retry all (BE-03) on this computer: every failed upload of this account goes back to the queue at once. Returns how
+/// many; with none nothing changes.
+pub fn retry_failed_uploads(app: &AppHandle) -> AppResult<usize> {
+    let state = app.state::<crate::AppState>();
+    let path = paths::uploads(&state.data_dir);
+    let n = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut queue = UploadQueue::load(&path);
+        let n = queue.retry_failed(state.owner().as_ref());
+        if n > 0 {
+            queue.save(&path)?;
+        }
+        n
+    };
+    if n > 0 {
+        state.upload_notify.notify_one();
+        emit_uploads(app);
+        emit_status(app);
+    }
+    Ok(n)
+}
+
+/// Records that this computer ran the Retry all asked at `at` (`retry_requested_at`), so it runs here only once.
+pub fn note_retry_all_ran(app: &AppHandle, at: &str) {
+    let state = app.state::<crate::AppState>();
+    let _ = crate::activity::RetryAllRan { at: Some(at.to_string()) }.save(&paths::retry_all_ran(&state.data_dir));
+}
+
 /// `upload_discard`: removes the item, deletes its audio, and queues its server session (if any) for deletion.
 pub fn discard_upload(app: &AppHandle, id: &str) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
@@ -2398,6 +2426,14 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let fresh = seen.fresh(&items);
     let _ = seen.save(&path);
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
+    // A Retry all asked from any app (the phone, the web console, this window): this computer retries the failed uploads
+    // it holds once (BE-03), whether or not it has any.
+    if let Some(asked) = answer.get("retry_requested_at").and_then(serde_json::Value::as_str)
+        && crate::activity::RetryAllRan::load(&paths::retry_all_ran(&state.data_dir)).due(Some(asked))
+    {
+        let _ = retry_failed_uploads(app);
+        note_retry_all_ran(app, asked);
+    }
     let settings = state.settings();
     let minutes = local_minutes();
     // Each item goes through its own category (Phase 1C): its switch, its sound and the quiet hours; a recording the

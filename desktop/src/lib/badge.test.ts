@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionCount, badgeLabel, badgeSpoken, isProblem, needsAction } from "./badge";
+import { actionCount, badgeLabel, badgeSpoken, isFailure, isProblem, needsAction, railBadge, railBadgeLabel, repeatWords, uploadGroupTitle } from "./badge";
 
 const item = (kind: string | null, read = false) => ({ kind, read });
 
@@ -69,3 +69,32 @@ describe("the Activity badge counts only what needs the person (v1.6, P6)", () =
   });
 });
 
+describe("the rail's one Activity number (UX-08, BE-04)", () => {
+  it("is the server's number (the same on the phone and the web console) plus the calls waiting on this computer, in its colour", () => {
+    const items = [item("transcript_failed"), item("upload_failed"), item("budget_reached")];
+    // The server merged and resolved what it counts: its number wins over the list read here.
+    expect(railBadge({ count: 1, label: "1", tone: "accent" }, items, 2)).toEqual({ count: 3, tone: "accent", shared: true });
+    expect(railBadge({ count: 2, label: "2", tone: "danger" }, [], 0)).toEqual({ count: 2, tone: "danger", shared: true });
+    expect(railBadge({ count: 0, label: null, tone: "accent" }, items, 0)).toEqual({ count: 0, tone: "accent", shared: true });
+  });
+
+  it("offline or from an older server: counted here from the list, red only when something failed", () => {
+    expect(railBadge(null, [item("budget_reached"), item("upgrade_approved")], 1)).toEqual({ count: 3, tone: "accent", shared: false });
+    expect(railBadge(undefined, [item("budget_reached"), item("upload_failed")], 0)).toEqual({ count: 2, tone: "danger", shared: false });
+    // A failure already read or resolved neither counts nor turns it red.
+    expect(railBadge(null, [item("upload_failed", true), { kind: "upload_failed", read: false, resolved: true }], 0)).toEqual({ count: 0, tone: "accent", shared: false });
+    expect(railBadge(null, null, 2)).toEqual({ count: 2, tone: "accent", shared: false });
+  });
+
+  it("failures: failed transcripts and uploads and the server's problem, not the monthly limit or an upgrade reply", () => {
+    for (const kind of ["transcript_failed", "upload_failed", "server_problem"]) expect(isFailure(kind), kind).toBe(true);
+    for (const kind of ["budget_reached", "upgrade_approved", "missed_recording", null]) expect(isFailure(kind), String(kind)).toBe(false);
+  });
+
+  it("says the number up to 99, then 99+; the group's line and how often", () => {
+    expect([0, 1, 99, 100, 250].map(railBadgeLabel)).toEqual([null, "1", "99", "99+", "99+"]);
+    expect(uploadGroupTitle(1)).toBe("1 recording didn't finish uploading");
+    expect(uploadGroupTitle(3)).toBe("3 recordings didn't finish uploading");
+    expect([undefined, null, 1, 2].map(repeatWords)).toEqual([null, null, null, "2 times"]);
+  });
+});

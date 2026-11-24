@@ -9,6 +9,7 @@ import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
+import { railBadgeLabel } from "../../lib/badge";
 
 /** Sent by a page to show its place's panel (Settings' home: Show groups): the panel, or in a narrow window its flyout. */
 export const SHOW_PANEL_EVENT = "echoledger:show-panel";
@@ -30,8 +31,10 @@ const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} 
  * badge (Activity's, the only one) or a dot (Live's red while recording, Setup's when something needs doing). Its
  * tooltip, after 500 ms or on keyboard focus, gives the name and the shortcut ("Library ⌘1").
  */
-export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, dotKind, shortcut, keys, expanded, place }: {
+export function RailItem({ icon, label, current, onClick, count, countTone, dot, dotLabel, dotKind, shortcut, keys, expanded, place }: {
   icon: IconType; label: string; current: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; count?: number; dot?: boolean; dotLabel?: string;
+  /** The number's colour: red only when something failed (UX-08); the accent otherwise. */
+  countTone?: "accent" | "danger";
   /** Live's dot is red (a call is recorded); the others are the accent. */
   dotKind?: "live";
   /** Its flyout is open (a narrow window); left out where there is none. */
@@ -48,7 +51,7 @@ export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, 
         data-place={place} aria-keyshortcuts={keys} onClick={onClick} {...tipProps}>
         <span className="el-rail__icon">
           <Icon icon={icon} size="md" />
-          {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+          {count ? <span className={`el-rail__count el-num${countTone === "danger" ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(count)}</span>
             : dot ? <span className={`el-rail__dot${dotKind ? ` el-rail__dot--${dotKind}` : ""}`} aria-hidden="true" /> : null}
         </span>
         <span className="el-rail__label" aria-hidden="true">{label}</span>

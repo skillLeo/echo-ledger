@@ -141,6 +141,11 @@ pub mod paths {
         data_dir.join("activity_seen.json")
     }
 
+    /// When this computer last ran a Retry all (`retry_requested_at`, BE-03), so each one runs here once.
+    pub fn retry_all_ran(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("retry_all_ran.json")
+    }
+
     /// The app lock's PIN hash (B16); kept out of the settings the UI reads.
     pub fn app_lock(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("app_lock.json")

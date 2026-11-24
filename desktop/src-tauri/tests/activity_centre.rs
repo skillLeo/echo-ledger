@@ -78,3 +78,28 @@ async fn the_api_lists_and_marks_read() {
     assert_eq!(requests[1].json(), json!({"ids": ["n1"]}));
     assert_eq!(requests[2].json(), json!({}));
 }
+
+#[tokio::test]
+async fn the_badge_the_groups_and_retry_all() {
+    // 2.0.0-r: the one Activity number, the groups, one group's items and Retry all.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("GET", "/api/badge", Reply::json(200, json!({"count": 4, "label": "4", "tone": "danger"})))
+            .fixed("GET", "/api/activity/groups", Reply::json(200, json!({"data": [{"group": "upload_failed", "count": 3, "unread": 2, "session_ids": ["s1", "s2", "s3"], "at": "2026-11-25T09:00:00Z"}]})))
+            .fixed("GET", "/api/activity", Reply::json(200, json!({"data": [], "unread_count": 0, "retry_requested_at": null})))
+            .fixed("POST", "/api/activity/retry-all", Reply::json(202, json!({"retry_requested_at": "2026-11-25T09:05:00Z", "count": 3}))),
+    );
+    common::init_tls();
+    let api = ApiClient::new(&server.base_url(), &[], Some(TOKEN.to_string())).unwrap();
+
+    assert_eq!(api.badge().await.unwrap(), json!({"count": 4, "label": "4", "tone": "danger"}));
+    assert_eq!(api.activity_groups().await.unwrap()["data"][0]["count"], 3);
+    api.activity_in_group("upload_failed", 50).await.unwrap();
+    let asked = api.activity_retry_all("upload_failed").await.unwrap();
+    assert_eq!(asked["retry_requested_at"], "2026-11-25T09:05:00Z", "a 202 is an answer");
+    let requests = server.requests();
+    let query = requests[2].query();
+    assert_eq!(common::query_value(query, "group").as_deref(), Some("upload_failed"));
+    assert_eq!(common::query_value(query, "limit").as_deref(), Some("50"));
+    assert_eq!(requests[3].json(), json!({"group": "upload_failed"}));
+}

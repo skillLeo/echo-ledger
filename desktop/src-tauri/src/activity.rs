@@ -56,6 +56,36 @@ pub struct ActivityItem {
     pub resolved: bool,
 }
 
+/// The only Activity group (2.0.0-r): uploads that didn't finish, shown as one line with Retry all.
+pub const UPLOAD_FAILED_GROUP: &str = "upload_failed";
+
+/// `retry_all_ran.json`: the last Retry all (its `retry_requested_at`) this computer ran (BE-03).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryAllRan {
+    #[serde(default)]
+    pub at: Option<String>,
+}
+
+impl RetryAllRan {
+    pub fn load(path: &Path) -> Self {
+        std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(self)?)?;
+        std::fs::rename(tmp, path)
+    }
+
+    /// Whether the person's latest Retry all (`requested`, from any app) is newer than the one this computer ran, so it
+    /// runs here now: once per Retry all and device. An unreadable time is never a reason to run.
+    pub fn due(&self, requested: Option<&str>) -> bool {
+        let parse = |v: &str| chrono::DateTime::parse_from_rfc3339(v).ok();
+        let Some(asked) = requested.and_then(parse) else { return false };
+        self.at.as_deref().and_then(parse).is_none_or(|ran| asked > ran)
+    }
+}
+
 /// `activity_seen.json`: the ids already shown, so a restart never repeats them.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Seen {
@@ -140,6 +170,26 @@ mod tests {
         assert_eq!(serde_json::to_value(&fixed).unwrap()["resolved"], true, "passed on to the window");
         let older: ActivityItem = serde_json::from_value(serde_json::json!({ "id": "a1", "kind": "upload_failed" })).unwrap();
         assert!(!older.resolved, "an older server's item: not resolved");
+    }
+
+    #[test]
+    fn a_retry_all_runs_once_on_this_computer_and_only_when_newer() {
+        let never = RetryAllRan::default();
+        assert!(never.due(Some("2026-11-25T09:00:00Z")), "never ran here: the latest one runs");
+        assert!(!never.due(None), "nobody asked");
+        assert!(!never.due(Some("not a time")), "an unreadable time runs nothing");
+        let ran = RetryAllRan { at: Some("2026-11-25T09:00:00Z".into()) };
+        assert!(!ran.due(Some("2026-11-25T09:00:00Z")), "the same one: not again");
+        assert!(!ran.due(Some("2026-11-25T14:00:00+05:00")), "the same moment in another zone: not again");
+        assert!(!ran.due(Some("2026-11-25T08:59:00Z")), "an older one: no");
+        assert!(ran.due(Some("2026-11-25T09:00:01Z")), "a newer one: yes");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("retry_all_ran.json");
+        assert_eq!(RetryAllRan::load(&path), never, "no file: never ran");
+        ran.save(&path).unwrap();
+        assert_eq!(RetryAllRan::load(&path), ran);
+        std::fs::write(&path, b"{oops").unwrap();
+        assert_eq!(RetryAllRan::load(&path), never, "a damaged file: as if never ran");
     }
 
     #[test]

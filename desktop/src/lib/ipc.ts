@@ -512,6 +512,37 @@ export interface ActivityItem {
   at: string | null;
   /** The problem is over (2.0.0-r; a server_problem once the server's check passes: "Fixed: uploads work again"). */
   resolved?: boolean;
+  /** How many times it happened to this recording (2.0.0-r; 1 for most): the server keeps one item per recording and kind. */
+  repeat_count?: number;
+  /** `upload_failed` for an upload that didn't finish (2.0.0-r), else null. */
+  group?: string | null;
+}
+
+/** The one Activity number (2.0.0-r, `GET /api/badge`), the same on the phone and the web console. */
+export interface ActivityBadge {
+  count: number;
+  /** null at 0, the number up to 99, then "99+". */
+  label: string | null;
+  /** "danger" when one of the counted items is a failure. */
+  tone: "accent" | "danger";
+}
+
+/** A group of Activity items with at least one unresolved (2.0.0-r, `GET /api/activity/groups`). */
+export interface ActivityGroup {
+  group: string;
+  /** The group's unresolved items. */
+  count: number;
+  unread: number;
+  session_ids: string[];
+  /** The newest one's time. */
+  at: string | null;
+}
+
+/** Retry all's answer: when it was asked, how many the server knows of, and how many were retried on this computer. */
+export interface RetryAllAnswer {
+  retry_requested_at: string | null;
+  count: number;
+  here: number;
 }
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
@@ -2258,7 +2289,14 @@ export const api = {
   restoreSession: (id: string) => invoke<{ data: LibraryItem }>("session_restore", { id }),
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
-  activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number }>("activity_list", { limit }),
+  activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number; retry_requested_at?: string | null }>("activity_list", { limit }),
+  /** One group's items (2.0.0-r: "upload_failed"), newest first. */
+  activityGroupItems: (group: string, limit = 50) => invoke<{ data: ActivityItem[] }>("activity_group_list", { group, limit }),
+  activityGroups: () => invoke<{ data: ActivityGroup[] }>("activity_groups"),
+  /** Retry all (BE-03): this computer's failed uploads at once, and the person's other devices through the server. */
+  activityRetryAll: (group: string) => invoke<RetryAllAnswer>("activity_retry_all", { group }),
+  /** The one Activity number (2.0.0-r); the window counts its own when it fails. */
+  badge: () => invoke<ActivityBadge>("badge_get"),
   exportSettings: () => invoke<string>("settings_export"),
   importSettings: (text: string) => invoke<Settings>("settings_import", { text }),
   markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),

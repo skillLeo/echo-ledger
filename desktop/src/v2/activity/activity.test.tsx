@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makePendingItem, makeSkippedItem, makeStatus } from "../../test/fixtures";
 import { Shell } from "../shell/Shell";
-import { ActivityV2 } from "./ActivityV2";
+import { ActivityV2, retryAllWords } from "./ActivityV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -178,6 +178,74 @@ describe("the v2 Activity page", () => {
     const counted = (onItems.mock.calls.at(-1)?.[0] ?? []) as { id: string }[];
     expect(counted.map((i) => i.id)).toEqual(["s1", "s2"]);
     expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
+  });
+
+  it("UX-08: uploads that didn't finish are one line with Retry all that opens to show each; a repeated item says how often", async () => {
+    const failed = (id: string, body: string, over = {}) =>
+      ({ id, kind: "upload_failed", title: "Upload didn't finish", body, session_id: `s-${id}`, read: false, at: NOW.toISOString(), group: "upload_failed", resolved: false, repeat_count: 1, ...over });
+    const three = [failed("u1", "WhatsApp call", { repeat_count: 2 }), failed("u2", "Voice note"), failed("u3", "Zoom call", { read: true })];
+    respond("activity_list", { data: [...three, ITEMS[0], { ...ITEMS[0], id: "n9", title: "Uploaded", kind: "upload_failed", group: "upload_failed", resolved: true, read: true }], unread_count: 3, retry_requested_at: null });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 3, unread: 2, session_ids: ["s-u1", "s-u2", "s-u3"], at: NOW.toISOString() }] });
+    respond("activity_group_list", { data: three });
+    respond("activity_retry_all", { retry_requested_at: NOW.toISOString(), count: 3, here: 2 });
+    // This computer's own line goes: the server's line counts every device's.
+    const { say } = await show(makeStatus({ failedUploads: 2 }));
+    const needs = within(screen.getByRole("list", { name: "Needs action" }));
+    expect(screen.queryByText("Uploads that need you")).toBeNull();
+    const line = row("3 recordings didn't finish uploading");
+    // Its items are inside it, not on their own; the one that reached the server since is done, in the day's list.
+    expect(needs.queryByText(/WhatsApp call/)).toBeNull();
+    expect(screen.queryAllByText("Upload didn't finish")).toHaveLength(0);
+    expect(row("Uploaded")).toBeInTheDocument();
+    expect(needs.getByText("Transcription failed")).toBeInTheDocument();
+    // Opens to show each one, the repeated one saying how often.
+    const opener = within(line).getByRole("button", { name: "3 recordings didn't finish uploading" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(opener);
+    await act(flushAsync);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    expect(callsOf("activity_group_list")).toEqual([{ group: "upload_failed", limit: 50 }]);
+    const group = within(screen.getByTestId("upload-group"));
+    expect(group.getAllByText("Upload didn't finish")).toHaveLength(3);
+    expect(group.getByText("WhatsApp call · 2 times")).toBeInTheDocument();
+    expect(group.getByText("Voice note")).toBeInTheDocument();
+    // Retry all: here and on the other devices, said so; the list is read again.
+    const before = callsOf("activity_list").length;
+    fireEvent.click(within(line).getByRole("button", { name: "Retry all" }));
+    await act(flushAsync);
+    expect(callsOf("activity_retry_all")).toEqual([{ group: "upload_failed" }]);
+    expect(say).toHaveBeenCalledWith("Trying again. Your other devices try theirs too.");
+    expect(callsOf("activity_list").length).toBeGreaterThan(before);
+    fireEvent.click(opener);
+    expect(screen.queryByTestId("upload-group")).toBeNull();
+  });
+
+  it("UX-08: one upload that didn't finish says Retry; offline Retry all says only this computer tried; with nothing to retry, the error", async () => {
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 1, unread: 1, session_ids: ["s-u1"], at: null }] });
+    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1 });
+    const { say } = await show();
+    const line = row("1 recording didn't finish uploading");
+    fireEvent.click(within(line).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenCalledWith("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    // Nothing here and the server can't be reached: the error, in red.
+    fail("activity_retry_all", "The server is unreachable.");
+    fireEvent.click(within(row("1 recording didn't finish uploading")).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenLastCalledWith("The server is unreachable.", true);
+  });
+
+  it("retryAllWords: here and elsewhere, only elsewhere, or only here while offline", () => {
+    expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 2 })).toBe("Trying again. Your other devices try theirs too.");
+    expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 0 })).toBe("Asked your other devices to try again.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1 })).toBe("Trying again on this computer. You're offline, so your other devices weren't asked.");
+  });
+
+  it("the page's line says the rail's number when it has it (the server's, UX-08)", async () => {
+    const props = { onOpenRecording: vi.fn(), onReview: vi.fn(), onFailed: vi.fn() };
+    render(<div className="el-root"><ActivityV2 status={makeStatus()} needsYou={4} {...props} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText(/^4 things need you\./)).toBeInTheDocument();
   });
 
   it("loading, a load error with Retry, and All caught up", async () => {

@@ -911,6 +911,20 @@ impl UploadQueue {
     pub fn failed(&self) -> usize {
         self.items.iter().filter(|i| i.is_failed()).count()
     }
+
+    /// Retry all (BE-03): every failed upload this account may send goes back to the queue, as its own Retry does (one
+    /// more automatic full restart allowed again). Another account's items stay as they are. Returns how many.
+    pub fn retry_failed(&mut self, current: Option<&crate::owner::Owner>) -> usize {
+        let mut n = 0;
+        for item in self.items.iter_mut().filter(|i| i.is_failed() && crate::owner::may_upload(i.owner.as_ref(), current)) {
+            item.state = states::QUEUED.into();
+            item.full_restarts = 0;
+            item.attempts = 0;
+            item.last_error = None;
+            n += 1;
+        }
+        n
+    }
 }
 
 /// Streaming usage reports waiting for `POST /api/usage` (`usage.json`).

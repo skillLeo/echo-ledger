@@ -2014,6 +2014,60 @@ pub async fn activity_list(state: State<'_, AppState>, limit: Option<u32>) -> Ap
     state.api()?.activity(limit.unwrap_or(30).clamp(1, 100)).await
 }
 
+/// One group's items (2.0.0-r; `upload_failed` is the only one), newest first.
+#[tauri::command]
+pub async fn activity_group_list(state: State<'_, AppState>, group: String, limit: Option<u32>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    if group != crate::activity::UPLOAD_FAILED_GROUP {
+        return Err(AppError::msg("This group does not exist."));
+    }
+    state.api()?.activity_in_group(&group, limit.unwrap_or(50).clamp(1, 100)).await
+}
+
+/// The groups with an unresolved item (2.0.0-r): "3 recordings didn't finish uploading".
+#[tauri::command]
+pub async fn activity_groups(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.activity_groups().await
+}
+
+/// The one Activity number (2.0.0-r, `GET /api/badge`): the same on the phone and the web console. The window counts its
+/// own when this fails (offline, an older server).
+#[tauri::command]
+pub async fn badge_get(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.badge().await
+}
+
+/// Retry all (BE-03): this computer's failed uploads go back to the queue at once, and the server asks the person's other
+/// devices to do the same. `{retry_requested_at, count, here}`: `here` is how many were retried on this computer. Offline,
+/// what this computer holds is retried all the same (`retry_requested_at` null); with nothing here either, the error.
+#[tauri::command]
+pub async fn activity_retry_all(app: AppHandle, group: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    if group != crate::activity::UPLOAD_FAILED_GROUP {
+        return Err(AppError::msg("This group does not exist."));
+    }
+    let here = crate::actions::retry_failed_uploads(&app)?;
+    let asked = match app.state::<AppState>().api() {
+        Ok(api) => api.activity_retry_all(&group).await,
+        Err(e) => Err(e),
+    };
+    let _ = app.emit("activity:updated", 0u64);
+    match asked {
+        Ok(mut answer) => {
+            // This computer has just run it: the next poll doesn't run it again.
+            if let Some(at) = answer.get("retry_requested_at").and_then(serde_json::Value::as_str) {
+                crate::actions::note_retry_all_ran(&app, at);
+            }
+            answer["here"] = serde_json::json!(here);
+            Ok(answer)
+        }
+        Err(_) if here > 0 => Ok(serde_json::json!({ "retry_requested_at": null, "count": here, "here": here })),
+        Err(e) => Err(e),
+    }
+}
+
 /// Marks the given notifications read, or all of them.
 #[tauri::command]
 pub async fn activity_read(app: AppHandle, ids: Option<Vec<String>>) -> AppResult<serde_json::Value> {

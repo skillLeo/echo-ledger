@@ -1976,6 +1976,36 @@ async fn the_discard_queue_deletes_sessions_and_treats_404_as_done() {
     assert_eq!(queue.items, ["S3", "S4"]);
 }
 
+// ---- Retry all (BE-03) --------------------------------------------------------------------------------------------
+
+#[test]
+fn retry_all_puts_back_every_failed_upload_of_this_account_and_nothing_else() {
+    use desktop_lib::owner::Owner;
+    let me = Owner::new("https://ledger.example.test", Some("ayesha@example.test"));
+    let other = Owner::new("https://ledger.example.test", Some("sara@example.test"));
+    let item = |name: &str, state: &str, owner: Option<&Owner>| PendingUpload {
+        dir: PathBuf::from(format!("/tmp/recordings/{name}")),
+        state: state.into(),
+        attempts: 4,
+        full_restarts: 1,
+        last_error: Some("The server could not verify this upload.".into()),
+        owner: owner.cloned(),
+        ..PendingUpload::default()
+    };
+    let mut queue = UploadQueue {
+        items: vec![item("a", "failed", None), item("b", "failed", Some(&me)), item("c", "uploading", None), item("d", "failed", Some(&other))],
+    };
+    assert_eq!(queue.retry_failed(Some(&me)), 2, "mine and the ones made before accounts; not Sara's, not one on its way");
+    let by = |id: &str| queue.items.iter().find(|i| i.id() == id).unwrap().clone();
+    for id in ["a", "b"] {
+        let i = by(id);
+        assert_eq!((i.state.as_str(), i.attempts, i.full_restarts, i.last_error.as_deref()), ("queued", 0, 0, None), "{id}: as its own Retry does");
+    }
+    assert_eq!(by("c").state, "uploading");
+    assert_eq!(by("d").state, "failed", "another account's stays as it is");
+    assert_eq!(queue.retry_failed(Some(&me)), 0, "nothing failed of mine: nothing to do");
+}
+
 // ---- Whose recording it is (v1.5) ------------------------------------------------------------------------------
 
 #[tokio::test]
