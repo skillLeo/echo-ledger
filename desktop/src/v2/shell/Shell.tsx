@@ -130,6 +130,8 @@ export type ShellProps = {
   nav?: {
     /** v21_panel_flyout (UX-02). */
     panelFlyout?: boolean;
+    /** Whose layout the panels keep (the server, the email and the workspace); null until known. */
+    layoutFor?: string | null;
     panels?: Partial<Record<Place, ReactNode>>;
     feet?: Partial<Record<Place, ReactNode>>;
     onPlace?: (place: Place, again: boolean) => void;
@@ -340,7 +342,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
       tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
   );
   return (
-    <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout}
+    <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
       libraryCount={nav?.libraryCount} activityCount={activity} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
