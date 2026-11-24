@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Filament\Support\SettingsContext;
+use App\Models\Device;
 use App\Models\RequestLink;
 use App\Services\Sharing\RequestLinks;
 use Filament\Actions\Action;
+use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
 
 /*
@@ -115,6 +117,28 @@ it('draws the Sign in a device window from the new frame\'s own copy, in Urdu wi
     $as(false, 'en');
     expect(mountedWindow(Livewire::test(ListDevices::class)->mountAction('pair'))['pairing']->getView())->toBe('filament.pair-device');
     expect(view('filament.pair-device', ['getState' => $field])->render())->toContain('Waiting for the app…')->toContain('Server: https://echoledger.test<br>');
+});
+
+it('opens a device row\'s Sign in again window from the new frame\'s own copy in the new frame, and classic\'s view in classic (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    // The table shows signed-in devices by default (its Show filter): Show › Signed out lists this row.
+    $window = fn (): array => mountedWindow(Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out')->mountAction(TestAction::make('signInAgain')->table($device->fresh())));
+
+    $as(true, 'ur');
+    expect($window()['pairing']->getView())->toBe('filament.v2.pair-device');
+    $as(false, 'en');
+    expect($window()['pairing']->getView())->toBe('filament.pair-device');
 });
 
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {
