@@ -290,6 +290,9 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["menu bar", "status bar", "icon", "tray"], ru: ["menu bar icon"], ur: ["مینو بار"] },
   { id: "app.menu_bar_timer", title: "Show timer in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["menu bar", "timer", "recording time", "clock"], ru: ["timer"], ur: ["ٹائمر"] },
+  // FIX-12: Windows' ✕.
+  { id: "app.on_close", title: "When I close the window", page: null, root: "App", kind: "choice", requires: { os: "windows" }, resettable: true,
+    keywords: ["close", "quit", "exit", "background", "tray", "notification area"], ru: ["band karo"], ur: ["بند کریں"] },
   { id: "app.dock_badge", title: "Show count on the app icon", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["dock", "badge", "count", "number", "app icon"], ru: ["dock ginti"], ur: ["ڈاک", "گنتی"] },
 
