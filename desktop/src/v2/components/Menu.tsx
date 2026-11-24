@@ -57,6 +57,8 @@ type ListProps = {
    */
   anchor?: HTMLElement | null;
   align?: "start" | "end";
+  /** A title line on top, not an item ("3 recordings", UX-22). */
+  title?: string;
 };
 
 /** The gap a menu keeps from the window's edges. */
@@ -123,7 +125,7 @@ export function Layer({ from, children }: { from: Element | null; children: Reac
  * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
  * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
  */
-export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end" }: ListProps) {
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", title }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);
@@ -245,7 +247,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
-          data-active={i === active || undefined}
+          data-active={i === active || undefined} data-action={item.action}
           onMouseEnter={() => { setActive(i); if (!room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
           {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
@@ -270,6 +272,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   const list = (
     <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
+      {title && <li role="presentation" className="el-menu__title el-caption el-body-strong">{title}</li>}
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
         if (!group) return rows;
@@ -380,7 +383,11 @@ export function Menu({ label, items: given, button, chip }: {
  * The same menu at the pointer (a right-click on a row) or under a focused row (Shift+F10, the context-menu key).
  * It stays inside the window; Esc, a press outside or a pick closes it, and focus goes back to where it was.
  */
-export function ContextMenu({ label, items, at, onClose }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void }) {
+export function ContextMenu({ label, items, at, onClose, title }: {
+  label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void;
+  /** A title line on top, when several things are chosen ("3 recordings", UX-22). */
+  title?: string;
+}) {
   const list = useRef<HTMLUListElement | null>(null);
   const back = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
   const [place, setPlace] = useState(at);
@@ -406,7 +413,7 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
   };
   return (
     <Layer from={back.current}>
-      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
+      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list} title={title}
         style={{ left: place.x, top: place.y }}
         onBack={close} onLeave={close} onPick={(item) => { close(); item.onPick?.(); }} />
     </Layer>

@@ -183,9 +183,9 @@ describe("selection mode", () => {
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
     const menu = screen.getByRole("menu", { name: "More for Habib & Co." });
-    // From the foot: Delete, Send to WhatsApp…, Copy for AI, then Export.
+    // From the foot: Move to trash, then Export (UX-22's order).
     fireEvent.keyDown(menu, { key: "End" });
-    for (let i = 0; i < 3; i++) fireEvent.keyDown(menu, { key: "ArrowUp" });
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
     expect(menuItem("Export")).toHaveFocus();
     fireEvent.keyDown(menu, { key: "ArrowRight" });
     expect(screen.getByRole("menuitem", { name: "Word (.docx)" })).toHaveFocus();
@@ -280,29 +280,27 @@ describe("the row ⋮ and the right-click menu", () => {
     await act(flushAsync);
   };
 
-  it("a row's ⋮: Open, Select, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
+  it("a row's ⋮ (UX-22, 3b): Open | Pin or Unpin · Important · Labels › · Move › | Rename… · Export › | Move to trash, last and red", async () => {
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
     respond("library_refresh", pinned);
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
-      "Open", "SelectX", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
-    ]);
-    expect(menuItem("Select")).toHaveAttribute("aria-keyshortcuts", "X");
-    // Every item has its icon, Open and Select too.
-    expect(within(menu).getAllByRole("menuitem").filter((m) => !m.querySelector("svg")).map((m) => m.textContent)).toEqual([]);
-    expect([...menu.querySelectorAll(".el-menu__group")].map((g) => g.textContent)).toEqual(["Organise", "Export", "Danger"]);
-    expect(menuItem("Delete")).toHaveClass("el-menu__option--danger");
-    expect(menuItem("Delete")).toHaveAttribute("aria-keyshortcuts", "Delete");
+    const words = () => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    expect(words()).toEqual(["Open", "Unpin", "Mark as important", "Labels", "Move to project", "Rename…", "Export", "Move to trash"]);
+    // Hairlines between 3b's groups, no group headers; every item has its icon but a tick item.
+    expect(menu.querySelectorAll(".el-menu__separator")).toHaveLength(3);
+    expect(menu.querySelectorAll(".el-menu__group")).toHaveLength(0);
+    expect(menuItem("Move to trash")).toHaveClass("el-menu__option--danger");
+    expect(menuItem("Move to trash")).toHaveAttribute("aria-keyshortcuts", "Delete");
     fireEvent.click(menuItem("Unpin"));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["usman"], action: "unpin", clientId: null, label: null }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Unpinned");
-    // An untranscribed recording offers Transcribe; a transcribed one doesn't.
+    // An Audio only recording offers Transcribe; a transcribed one doesn't.
     fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
-    expect(menuItem("Transcribe…")).toBeInTheDocument();
+    expect(menuItem("Transcribe")).toBeInTheDocument();
   });
 
   it("a row's hover actions, in place of when and how long (UX-06): Transcribe for Audio only, Pin or Unpin, Label, then ⋯; none while picking", async () => {
@@ -331,28 +329,24 @@ describe("the row ⋮ and the right-click menu", () => {
     expect(document.querySelectorAll(".el-rec__actions")).toHaveLength(0);
   });
 
-  it("Select, from the ⋮ or a right-click, starts selection mode with exactly that row ticked", async () => {
+  it("Select, Keep forever, Copy for AI and Send to WhatsApp left the row menu (3b) for their homes: X and the box, the bar's ⋮ and Export", async () => {
     await show();
-    const ticked = () => rows().filter((r) => r.getAttribute("aria-pressed") === "true").map((r) => r.textContent);
-    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
-    fireEvent.click(menuItem("Select"));
-    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
-    expect(row("Voice note")).toHaveAttribute("aria-pressed", "true");
-    expect(ticked()).toHaveLength(1);
-    // While selecting, the menu no longer offers it; × ends selection as when Select or X started it.
-    fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 10, clientY: 10 });
-    expect(screen.queryByRole("menuitem", { name: "Select" })).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    fireEvent.click(within(bar()).getByRole("button", { name: "Cancel selection" }));
-    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
-
     fireEvent.contextMenu(row("Habib & Co."), { clientX: 120, clientY: 300 });
     const menu = screen.getByRole("menu", { name: "Recording actions" });
-    expect(within(menu).getByRole("menuitem", { name: "Select" })).toHaveTextContent("SelectX");
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Select" }));
+    expect(within(menu).queryByText(/^(Select|Keep forever|Copy for AI|Send to WhatsApp…)$/)).toBeNull();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    // X (or the row's box) starts selection with exactly that row ticked.
+    act(() => row("Habib & Co.").focus());
+    fireEvent.keyDown(row("Habib & Co."), { key: "x" });
     expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
-    expect(row("Habib & Co.")).toHaveAttribute("aria-pressed", "true");
-    expect(ticked()).toHaveLength(1);
+    expect(rows().filter((r) => r.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    // The bar's ⋮ keeps Keep forever and Send to WhatsApp…; its Export keeps Copy for AI.
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    expect(menuItem("Keep forever")).toBeInTheDocument();
+    expect(menuItem("Send to WhatsApp…")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menu", { name: "More actions" }), { key: "Escape" });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
+    expect(menuItem("Copy for AI")).toBeInTheDocument();
   });
 
   it("Rename: a new title, or empty for the automatic one", async () => {
@@ -377,7 +371,9 @@ describe("the row ⋮ and the right-click menu", () => {
     respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
     respond("whatsapp_open", true);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+    // Send to WhatsApp… lives in the selection bar's ⋮ and on the recording page (UX-22: not in the row menu).
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
     const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -403,7 +399,8 @@ describe("the row ⋮ and the right-click menu", () => {
     });
     const open = async () => {
       await show();
-      fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+      fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+      fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
       fireEvent.click(menuItem("Send to WhatsApp…"));
       await act(flushAsync);
       return screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -595,7 +592,8 @@ describe("the row ⋮ and the right-click menu", () => {
     respond("share_create", { url: "https://ledger.example.com/s/abc", id: "sh1" });
     respond("whatsapp_open", false);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
+    fireEvent.click(row("Voice note"), { metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
     const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
@@ -621,7 +619,7 @@ describe("the row ⋮ and the right-click menu", () => {
     fireEvent.click(row("Voice note"));
     fireEvent.contextMenu(row("Voice note"), { clientX: 10, clientY: 10 });
     const many = screen.getByRole("menu", { name: "Actions for 2 recordings" });
-    fireEvent.click(within(many).getByRole("menuitem", { name: /^Delete 2/ }));
+    fireEvent.click(within(many).getByRole("menuitem", { name: "Move to trash" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "voice"], action: "delete", clientId: null, label: null }]);
   });

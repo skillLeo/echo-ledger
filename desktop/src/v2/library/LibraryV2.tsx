@@ -9,7 +9,7 @@
 import { PanelToggle } from "../shell/NavRail";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
+import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
@@ -19,10 +19,13 @@ import {
   Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion, BackToTop, scrollRootOf,
 } from "../components";
-import { binHours, binSentence, isUntranscribed, rowModel, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
+import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
 import { RecordingRow } from "./RecordingRow";
 import { usePageTitle } from "../pageTitle";
 import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
+import { contextItems, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE } from "../actions/contextMenus";
+import { currentPlatform, popupNative } from "../actions/popup";
+import { choiceItems, registerAction, type ActionContext } from "../actions/registry";
 import {
   activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
@@ -47,8 +50,9 @@ import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLa
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
-  TranscribeDialog, WhatsAppDialog,
+  TranscribeDialog, WhatsAppDialog, ZIP_FORMATS,
 } from "./organise";
+import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 
 /** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
 export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
@@ -181,7 +185,7 @@ export type LibraryV2Props = {
   onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -329,7 +333,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
-  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[] } | null>(null);
+  /** Our right-click menu (Windows; a Mac shows the system's): a recording's or the picked ones', or the list's space. */
+  const [context, setContext] = useState<{ at: { x: number; y: number }; ids: string[]; space?: true } | null>(null);
   const [organise, setOrganise] = useState<Organise | null>(null);
   const endSelection = useCallback(() => {
     setSelecting(false);
@@ -905,7 +910,13 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       ) : (
         <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={`Label ${r.title}`} title="Label" onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
       )}
-      <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+      {/* The same menu as a right-click (UX-22): the system's on a Mac, ours elsewhere. */}
+      {currentPlatform() === "macos" ? (
+        <Button size="sm" variant="quiet" icon={Icons.MoreIcon} aria-label={`More for ${r.title}`} aria-haspopup="menu"
+          onClick={(e) => showMenu({ at: menuPointFor(e.currentTarget), ids: [item.id] })} />
+      ) : (
+        <Menu label={`More for ${r.title}`} items={() => recordingMenu([item.id]).items} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+      )}
     </>
   );
 
@@ -1011,7 +1022,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   };
   const rowMenu = (item: LibraryItem, e: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLButtonElement>) => {
     const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
-    setContext({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
+    showMenu({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
   };
   /** A row's checkbox: ticks it (Shift: the range from the last one ticked). */
   const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
@@ -1168,10 +1179,139 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setOrganise(null);
     void load();
   };
+  // UX-22 (PLAN_V2_1_POLISH 3b): a recording's right-click menu and its ⋯ are one menu from actions.json; each item
+  // sends its id and the registry runs it (the handlers below). Only what fits: what doesn't apply, or can't run here,
+  // is left out. Several have the title "3 recordings".
+  const recordingContext = (ids: readonly string[]): ActionContext => {
+    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const every = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
+    const one = chosen.length === 1 ? chosen[0] : null;
+    return {
+      platform: currentPlatform(), targets: [...ids],
+      state: {
+        pinned: every((i) => !!i.pinned), important: every((i) => !!i.important), keptForever: every((i) => !!i.keep),
+        unread: every((i) => i.opened === false && !readHere.has(i.id)), hasTranscript: !!one && !isUntranscribed(one),
+      },
+    };
+  };
+  /** A choice of one (a project, a sort order): a radio item. */
+  const oneOf = (item: MenuItem): MenuItem => ({ ...item, radio: true });
+  const recordingMenu = (ids: readonly string[]): { title?: string; items: MenuItem[] } => {
+    // More than the core takes at once: the menu says so and does nothing else.
+    if (ids.length > MAX_BULK) return { title: manyTitle(ids.length), items: [{ label: `Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`, disabled: true }] };
+    const ctx = recordingContext(ids);
+    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const one = chosen.length === 1 ? chosen[0] : null;
+    // One recording: Transcribe only while it is Audio only (Ask about this once it has a transcript).
+    const list = one ? RECORDING_ONE.filter((id) => id !== "recording.transcribe" || rowState(one)?.key === "audio_only") : RECORDING_MANY;
+    const inList = (key: string) => chosen.length > 0 && chosen.every((i) => (i.labels ?? []).some((l) => listKey(l) === key));
+    const where = one ? one.client?.id ?? "none" : null;
+    return {
+      title: manyTitle(ids.length),
+      items: contextItems(list, ctx, {
+        "recording.labels": [
+          ...(lists ? choiceItems("recording.labels", lists.map((l) => ({ value: l.key, label: l.name, checked: inList(l.key) })), ctx) : []),
+          ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
+        ],
+        "recording.moveToProject": choiceItems("recording.moveToProject", [
+          { value: "none", label: "No project", checked: where === "none" },
+          ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
+        ], ctx).map(oneOf),
+        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: f.label })), ctx),
+      }),
+    };
+  };
+  const listSpaceMenu = (): MenuItem[] => {
+    const ctx: ActionContext = { platform: currentPlatform(), state: { layoutList: layout === "list", layoutTable: layout === "table" } };
+    return contextItems(LIST_SPACE, ctx, {
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
+      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label, checked: density === d })), ctx).map(oneOf),
+    });
+  };
+  /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
+  const showMenu = (next: { at: { x: number; y: number }; ids: string[]; space?: true }) => {
+    if (currentPlatform() !== "macos") {
+      setContext(next);
+      return;
+    }
+    const menu = next.space ? { title: undefined, items: listSpaceMenu() } : recordingMenu(next.ids);
+    void popupNative(menu.items, next.at, menu.title).then((shown) => { if (!shown) setContext(next); });
+  };
+  /** The list's empty space (below or beside the rows, in the box that scrolls; not a row, a field or a menu): its own menu. */
+  const spaceMenu = useRef<(e: MouseEvent) => void>(() => undefined);
+  spaceMenu.current = (e: MouseEvent) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (!target || e.defaultPrevented || open || trash || layout === "table" || !items) return;
+    if (target.closest("li, a, button, input, textarea, select, [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
+    e.preventDefault();
+    showMenu({ at: { x: e.clientX, y: e.clientY }, ids: [], space: true });
+  };
+  useEffect(() => {
+    const box = scrollRootOf(root.current);
+    if (!box) return;
+    const on = (e: MouseEvent) => spaceMenu.current(e);
+    box.addEventListener("contextmenu", on);
+    return () => box.removeEventListener("contextmenu", on);
+  }, []);
+  /** Move to project › a project (or No project), as Move to project… does. */
+  const moveTo = async (ids: readonly string[], projectId: string | null) => {
+    const title = ids.length === 1 ? (items ?? []).find((i) => i.id === ids[0])?.title ?? null : null;
+    try {
+      await moveRecordings(ids, projectId);
+      say(projectId ? movedText(ids.length, title, (projects ?? []) as unknown as ClientFolder[], projectId)
+        : ids.length === 1 ? `Took “${title || "the recording"}” out of its project` : `Took ${ids.length} recordings out of their projects`);
+      await load();
+    } catch (e) {
+      say(errorMessage(e));
+    }
+  };
+  // What the Library's menus do (the registry runs these; one code path for every menu that sends these ids).
+  const runs: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    "recording.open": (c) => { if (c.targets?.[0]) setOpenId(c.targets[0]); },
+    "recording.transcribe": (c) => setOrganise({ kind: "transcribe", ids: [...(c.targets ?? [])] }),
+    "recording.pin": (c) => void bulk(c.targets ?? [], c.state?.pinned ? "unpin" : "pin", c.state?.pinned ? "Unpinned" : "Pinned"),
+    "recording.important": (c) => void bulk(c.targets ?? [], c.state?.important ? "unimportant" : "important", c.state?.important ? "Not important" : "Marked as important"),
+    "recording.labels": (c) => {
+      const list = lists?.find((l) => l.key === c.value);
+      const ids = c.targets ?? [];
+      const all = ids.length > 0 && ids.every((id) => ((items ?? []).find((i) => i.id === id)?.labels ?? []).some((l) => listKey(l) === c.value));
+      if (list) void putInList(ids, list, !all);
+    },
+    "label.new": (c) => (lists ? setNewLabel({ ids: [...(c.targets ?? [])] }) : setOrganise({ kind: "label", ids: [...(c.targets ?? [])] })),
+    "recording.moveToProject": (c) => void moveTo(c.targets ?? [], c.value === "none" ? null : c.value ?? null),
+    "file.rename": (c) => {
+      const one = (items ?? []).find((i) => i.id === c.targets?.[0]);
+      if (one && c.targets?.length === 1) setOrganise({ kind: "rename", item: one });
+    },
+    "recording.exportAs": (c) => {
+      const chosen = (items ?? []).filter((i) => c.targets?.includes(i.id));
+      if (c.value) void exportRecordings(c.targets ?? [], c.value as BulkExportFormat, say, shownExportView(chosen));
+    },
+    "recording.moveToTrash": (c) => deleteOrAsk(c.targets ?? []),
+    "file.newRecording": onRecord ? () => onRecord() : undefined,
+    "file.importAudio": onImport ? () => onImport() : undefined,
+    "view.sortBy": (c) => { if (c.value) setChoice({ ...choice, sort: c.value as SortKey }); },
+    "view.groupBy": (c) => { if (c.value) setChoice({ ...choice, group: c.value as LibraryViewChoice["group"] }); },
+    "view.asList": () => setLayout("list"),
+    "view.asTable": () => setLayout("table"),
+    "view.density": (c) => { if (c.value) setDensity(c.value as Density); },
+    "edit.selectAll": () => pickAll(),
+  };
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+  const runnable = Object.keys(runs).filter((id) => runs[id]).join(" ");
+  useEffect(() => {
+    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx)));
+    return () => offs.forEach((off) => off());
+  }, [runnable]);
+
   const dialogs = (
     <>
-      {context && <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`}
-        items={menuFor(context.ids)} at={context.at} onClose={() => setContext(null)} />}
+      {context && (context.space
+        ? <ContextMenu label="List actions" items={listSpaceMenu()} at={context.at} onClose={() => setContext(null)} />
+        : <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`} title={manyTitle(context.ids.length)}
+          items={recordingMenu(context.ids).items} at={context.at} onClose={() => setContext(null)} />)}
       {organise?.kind === "move" && <MoveDialog ids={organise.ids} title={organise.title} current={organise.current} onClose={closeOrganise} say={say} />}
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
       {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} onClose={closeOrganise} say={say} />}

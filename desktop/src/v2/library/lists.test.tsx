@@ -331,13 +331,15 @@ describe("labels in the sidebar and the Library", () => {
     expect(rowTitles()).toEqual(["bilal", "ayesha", "usman"]);
   });
 
-  it("a server without labels shows no LABELS section, and Label… stays in the menu", async () => {
+  it("a server without labels shows no LABELS section; the menu's Labels › New label… opens the Label dialog", async () => {
     respond("lists_get", null);
     await show();
     expect(nav().queryByRole("list", { name: "Labels" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
-    expect(screen.queryByRole("menuitem", { name: "Labels" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Label…" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Labels" }));
+    expect([...screen.getByRole("menu", { name: "Labels" }).querySelectorAll('[role^="menuitem"]')].map((m) => m.textContent)).toEqual(["New label…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "New label…" }));
+    expect(screen.getByRole("dialog", { name: /^Label/ })).toBeInTheDocument();
   });
 
   it("a label shown and deleted on another device gives way to All, and the labels are read again", async () => {
