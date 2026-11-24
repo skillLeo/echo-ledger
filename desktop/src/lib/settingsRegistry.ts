@@ -259,7 +259,7 @@ export const SETTINGS: readonly SettingEntry[] = [
     description: "The rail shows its icons without their names. Point at an icon to see its name.",
     keywords: ["rail", "icons only", "hide names", "hide labels", "labels", "compact", "smaller"], ru: ["sirf icons", "naam chhupao"], ur: ["صرف آئیکن"] },
   { id: "appearance.zoom", title: "Zoom", page: "appearance", kind: "slider", requires: { zoom: true }, resettable: true,
-    description: "Zoom in and out, or back to 100%. The page says this computer's keys.",
+    description: "Zoom in and out, or back to 100%.",
     keywords: ["zoom", "zoom in", "zoom out", "bigger", "smaller", "scale", "magnify", "actual size"], ru: ["bara karo", "chhota karo"], ur: ["زوم", "بڑا کریں"] },
   { id: "appearance.clock", title: "Times", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["12", "12-hour", true], ["24", "24-hour"]), keywords: ["clock", "time format", "am pm"], ru: ["waqt", "ghanta"], ur: ["وقت"] },

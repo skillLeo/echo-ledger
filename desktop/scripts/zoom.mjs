@@ -3,9 +3,11 @@
 // v21_zoom on and that zoom kept (so the title row has its chip). Saved under docs/design/screens/desktop/zoom/:
 // <width>-<zoom>-<lang>.png, and the zoom's own parts in light and dark at 1280 and 125%: ui-avatar-row-<theme>.png (the
 // avatar's Zoom row), ui-chip-menu-<theme>.png (the chip and its menu), ui-bubble-<theme>.png, ui-settings-<theme>.png
-// (Settings › Appearance › Zoom). Measured on each: nothing wider than the window (no sideways scroll), the title row's
-// title whole, the title row on screen, every rail item to its last (Account) inside the window, Settings and Account
-// shown, the chip in the row unless at 100%, nothing of the page under the window's buttons. The run fails on any of that.
+// (Settings › Appearance › Zoom), and ui-more-<theme>.png (⋯ More's menu at 1280 and 200%). Measured on each: nothing
+// wider than the window (no sideways scroll), the title row's title whole, the title row on screen, every rail item to
+// its last (Account) inside the window, Settings and Account shown, no place only partly shown (the ones that don't fit
+// whole are in ⋯ More, which then has Activity's badge), the chip in the row unless at 100%, nothing of the page under
+// the window's buttons. The run fails on any of that.
 //   node scripts/zoom.mjs [67,100,150,200]
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -57,6 +59,18 @@ try {
       const items = [...document.querySelectorAll(".el-rail .el-rail__item")];
       const last = items.at(-1)?.getBoundingClientRect();
       const named = items.map((el) => el.getAttribute("aria-label") ?? "");
+      // Each item whole: a place inside the places' box (which cuts what overflows it), every item inside the window.
+      const box = document.querySelector(".el-rail__places")?.getBoundingClientRect();
+      const partly = items.filter((el) => {
+        const r = el.getBoundingClientRect();
+        const inPlaces = !!el.closest(".el-rail__places") && box;
+        const top = inPlaces ? Math.max(box.top, 0) : 0;
+        const bottom = inPlaces ? Math.min(box.bottom, innerHeight) : innerHeight;
+        return r.top < top - 0.5 || r.bottom > bottom + 0.5;
+      }).map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim());
+      const inRail = [...document.querySelectorAll(".el-rail__places [data-place]")].map((el) => el.getAttribute("data-place"));
+      const more = document.querySelector(".el-rail__more .el-rail__item");
+      const badge = document.querySelector('.el-rail [data-place="activity"] .el-rail__count') ? "activity" : more?.querySelector(".el-rail__count") ? "more" : "none";
       const chip = !!document.querySelector('[data-testid="title-row"] .el-zoom-chip');
       const panel = document.querySelector('[data-testid="nav-panel"]');
       // The system's buttons' spot (drawn by the fixture at their native size): nothing of ours that takes a press under it.
@@ -72,17 +86,25 @@ try {
         row: row ? row.right <= innerWidth + 1 && row.left >= -1 : false,
         rail: !!last && last.bottom <= innerHeight + 1 && named.includes("Settings") && named.some((n) => n.startsWith("Account")),
         chip,
+        partly,
+        reach: inRail.length === 5 || !!more,
+        moved: more ? 5 - inRail.length : 0,
+        badge,
         panel: panel ? (panel.classList.contains("el-panel--flyout") ? "flyout" : "docked") : "hidden",
         under,
       };
     });
     const name = `${width}-${zoom}-${lang}`;
     await page.screenshot({ path: join(out, `${name}.png`) });
-    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${m.cut ? "CUT" : "whole"}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
+    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${m.cut ? "CUT" : "whole"}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${m.moved ? `${m.moved} in More` : "every place shown"}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
     if (m.sideways) problems.push(`${name}: wider than the window`);
     if (m.cut) problems.push(`${name}: the title is cut`);
     if (!m.row) problems.push(`${name}: the title row is off the screen`);
     if (!m.rail) problems.push(`${name}: the rail is cut before Settings and Account`);
+    if (m.partly.length) problems.push(`${name}: only partly shown in the rail: ${m.partly.join(", ")}`);
+    if (!m.reach) problems.push(`${name}: a place is neither in the rail nor in More`);
+    // The fixture's Activity has items that need the person: its badge shows, on Activity or on More.
+    if (m.badge === "none") problems.push(`${name}: Activity's badge is gone`);
     if (m.chip !== (zoom !== 100)) problems.push(`${name}: the chip is ${m.chip ? "shown at 100%" : "missing"}`);
     if (m.under.length) problems.push(`${name}: under the window's buttons: ${m.under.join(", ")}`);
     await page.close();
@@ -111,7 +133,13 @@ try {
     await page.getByRole("slider", { name: "Zoom" }).waitFor();
     await page.getByRole("slider", { name: "Zoom" }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(out, `ui-settings-${theme}.png`) });
-    console.log(`ui ${theme}: the avatar's row, the chip's menu, the bubble ("${bubble?.trim()}"), Settings › Appearance › Zoom`);
+    await page.close();
+    // ⋯ More at 200% (1280): the places that don't fit whole, Activity's count with it.
+    page = await open(1280, 200, "en", theme);
+    await page.getByTestId("rail-more").getByRole("button").click();
+    await page.getByRole("menu", { name: "More places" }).waitFor();
+    await page.screenshot({ path: join(out, `ui-more-${theme}.png`) });
+    console.log(`ui ${theme}: the avatar's row, the chip's menu, the bubble ("${bubble?.trim()}"), Settings › Appearance › Zoom, ⋯ More at 200%`);
     await page.close();
   }
 } finally {

@@ -63,6 +63,49 @@ export function railItemProps(place: Place) {
 }
 
 /**
+ * How many of `total` places the rail shows whole in `room` px of `each` px items (a high zoom, UX-07): all of them when
+ * they fit, else one fewer than fit, the last slot being "⋯ More". `null` (nothing measured yet, or no layout): all.
+ */
+export function railKeeps(total: number, room: number, each: number): number {
+  if (!(room > 0) || !(each > 0)) return total;
+  const fit = Math.floor((room + 0.5) / each);
+  return fit >= total ? total : Math.max(0, fit - 1);
+}
+
+/**
+ * "⋯ More" (UX-07): the places that don't fit whole in the rail (a high zoom), as a menu of them, each with its icon,
+ * shortcut and Activity's count. It carries Activity's badge and Live's dot when they are in it, and is the selected
+ * item (its menu ticking the page) while the page is one of its places.
+ */
+export function RailMore({ places, current, icons, activityCount, liveDot, liveDotWords, onPick }: {
+  places: readonly Place[]; current: Place | null; icons: Record<Place, IconType>; activityCount?: number;
+  liveDot?: boolean; liveDotWords?: string; onPick: (place: Place) => void;
+}) {
+  const count = places.includes("activity") && activityCount ? activityCount : undefined;
+  const dot = !count && places.includes("live") && !!liveDot;
+  const here = !!current && places.includes(current);
+  const [tipProps, tip] = useTip("More");
+  const spoken = ["More", count ? `${PLACE_NAMES.activity} ${count}` : null, places.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null]
+    .filter(Boolean).join(", ");
+  const items: MenuItem[] = places.map((p) => ({
+    label: PLACE_NAMES[p], icon: icons[p], shortcut: placeKey(p), count: p === "activity" ? activityCount || undefined : undefined,
+    // The page is one of them: it is ticked (no tick column otherwise).
+    ...(here ? { checked: current === p, radio: true } : {}), onPick: () => onPick(p),
+  }));
+  return (
+    <div className="el-rail__more" data-testid="rail-more">
+      <Menu label="More places" items={items} align="start"
+        button={{ variant: "quiet", className: "el-rail__item", "aria-label": spoken, "aria-current": here ? "page" : undefined, ...tipProps,
+          text: <><span className="el-rail__icon"><Icon icon={Icons.MoreIcon} size="md" />
+            {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+              : dot ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" /> : null}</span>
+            <span className="el-rail__label" aria-hidden="true">More</span></> }} />
+      {tip}
+    </div>
+  );
+}
+
+/**
  * A place's panel: its name, its ⋯ menu and ⊟ (hide; ⌘\ too), what it lists, and its foot. As a flyout (a narrow
  * window) it floats over the page and closes once something in it is chosen, on Esc, or on a press outside.
  */

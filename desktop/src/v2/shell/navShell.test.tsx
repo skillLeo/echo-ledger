@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { FLYOUT_BELOW, NavShell, RAIL_FULL_FROM } from "./NavShell";
-import type { Place } from "./NavRail";
+import { railKeeps, type Place } from "./NavRail";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -215,6 +215,46 @@ describe("the three levels", () => {
     Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
     act(() => { window.dispatchEvent(new Event("resize")); });
     expect(document.querySelector(".el-shell")).not.toHaveClass("el-shell--short");
+  });
+
+  it("a high zoom (UX-07): only whole places in the rail, the rest in ⋯ More with Activity's badge and Live's dot; Settings and Account stay", () => {
+    expect(railKeeps(5, 0, 56)).toBe(5);
+    expect(railKeeps(5, 280, 56)).toBe(5);
+    expect(railKeeps(5, 279.6, 56)).toBe(5);
+    expect(railKeeps(5, 279, 56)).toBe(3);
+    expect(railKeeps(5, 150, 56)).toBe(1);
+    expect(railKeeps(5, 40, 56)).toBe(0);
+    setWidth(1440);
+    Object.defineProperty(window, "innerHeight", { value: 370, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    // The places' box has 150 px left above the foot; an item is 56 px: one place whole, then More.
+    const box = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const height = this.classList.contains("el-rail__places") ? 150 : this.classList.contains("el-rail__item") ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 72, bottom: height, width: 72, height, toJSON: () => ({}) } as DOMRect;
+    });
+    const onPlace = vi.fn();
+    try {
+      render(<App onPlace={onPlace} />);
+      const names = rail().getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
+      expect(names).toEqual(["Record", "More ways to record", "Library", "More, Activity 2, Live recording", "Settings", "Account, Ayesha Khan, needs setup"]);
+      const more = rail().getByRole("button", { name: /^More, / });
+      expect(more.querySelector(".el-rail__label")!.textContent).toBe("More");
+      expect(more.querySelector(".el-rail__count")!.textContent).toBe("2");
+      expect(more).not.toHaveAttribute("aria-current");
+      fireEvent.click(more);
+      const menu = screen.getByRole("menu", { name: "More places" });
+      expect([...menu.querySelectorAll('[role^="menuitem"] .el-menu__label')].map((m) => m.textContent)).toEqual(["Projects", "Live", "Ask", "Activity"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: /^Activity/ }));
+      expect(onPlace).toHaveBeenLastCalledWith("activity", false);
+      // The page is one of More's places: More is the selected item, and its menu ticks it.
+      expect(rail().getByRole("button", { name: /^More, / })).toHaveAttribute("aria-current", "page");
+      fireEvent.click(rail().getByRole("button", { name: /^More, / }));
+      expect(within(screen.getByRole("menu", { name: "More places" })).getByRole("menuitemradio", { name: /^Activity/ })).toHaveAttribute("aria-checked", "true");
+    } finally {
+      box.mockRestore();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+    }
   });
 
   it("Record's menu (DES-02): New recording, Import audio files, the Auto-record tick on or off, the Record page", () => {

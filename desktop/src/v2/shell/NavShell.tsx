@@ -11,7 +11,7 @@ import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
 import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
-import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
+import { PageHistoryContext, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, railItemProps, railKeeps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
@@ -229,7 +229,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const press = (p: Place) => {
     const again = p === place;
     if (narrow) {
-      opener.current = document.querySelector<HTMLElement>(`.el-rail [data-place="${p}"]`);
+      // Its rail item, or ⋯ More when it is in there (a high zoom).
+      opener.current = document.querySelector<HTMLElement>(`.el-rail [data-place="${p}"]`) ?? document.querySelector<HTMLElement>(".el-rail__more .el-rail__item");
       setFlyout(!!panels[p]);
     }
     onPlace(p, again);
@@ -466,6 +467,27 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
   };
+  // A high zoom (UX-07): the places that don't fit whole above Settings and Account go into "⋯ More" (a menu of them);
+  // none is ever cut. Their room is measured (the places' box takes what the rail has left), and again as it changes.
+  const placesBox = useRef<HTMLDivElement>(null);
+  const [space, setSpace] = useState<{ room: number; each: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = placesBox.current;
+    if (!el) return;
+    const measure = () => {
+      const item = el.querySelector<HTMLElement>(".el-rail__item");
+      const next = { room: el.getBoundingClientRect().height, each: item?.getBoundingClientRect().height ?? 0 };
+      setSpace((was) => (was && was.room === next.room && was.each === next.each ? was : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [compactRail, short]);
+  const places = RAIL_PLACES.filter((p) => p !== "settings");
+  const keeps = space ? railKeeps(places.length, space.room, space.each) : places.length;
+  const inMore = places.slice(keeps);
   const railPlace = (p: Place) => (
     <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
       expanded={narrow && panels[p] ? flyout && place === p : undefined}
@@ -492,7 +514,12 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
           {winRow && <BrandMark size={20} className="el-rail__mark" />}
         </div>
         <RecordSplit stops={stops} time={status.kind === "recording" ? status.time : undefined} busy={!!pressing} onPress={pressRecord} menu={recordMenu} ctx={recordCtx} />
-        <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
+        <div ref={placesBox} className="el-rail__places">
+          {places.slice(0, keeps).map(railPlace)}
+          {inMore.length > 0 && (
+            <RailMore places={inMore} current={place} icons={icons} activityCount={activityCount} liveDot={liveDot} liveDotWords={liveDotWords} onPick={press} />
+          )}
+        </div>
         <div className="el-rail__foot">
           {!short && <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />}
           {!short && onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}

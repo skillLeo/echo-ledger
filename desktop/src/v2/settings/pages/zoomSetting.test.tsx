@@ -55,6 +55,33 @@ describe("Settings › Appearance › Zoom (UX-07)", () => {
     expect(zoomNow()).toBe(100);
   });
 
+  it("what a drag showed goes once the zoom changes elsewhere, the slider loses focus, or it is let go where it started", async () => {
+    await show(true);
+    const slider = screen.getByRole("slider", { name: "Zoom" });
+    // Dragged to 150%, then ⌘+ (or the chip) changes the zoom: the row says the zoom, not the drag.
+    fireEvent.input(slider, { target: { value: "7" } });
+    expect(slider).toHaveAttribute("aria-valuetext", "150%");
+    act(() => void setZoom(125, true, async () => undefined));
+    expect(screen.getByRole("slider", { name: "Zoom" })).toHaveAttribute("aria-valuetext", "125%");
+    // Dragged, then focus goes elsewhere with nothing applied.
+    fireEvent.input(slider, { target: { value: "8" } });
+    expect(slider).toHaveAttribute("aria-valuetext", "175%");
+    fireEvent.blur(slider);
+    expect(slider).toHaveAttribute("aria-valuetext", "125%");
+    // Let go somewhere else: the change that follows applies it, so the drag's value stays until then.
+    fireEvent.input(slider, { target: { value: "8" } });
+    fireEvent.pointerUp(slider);
+    expect(slider).toHaveAttribute("aria-valuetext", "175%");
+    // Let go where it started (no change follows): the drag's value goes.
+    fireEvent.input(slider, { target: { value: "6" } });
+    expect(slider).toHaveAttribute("aria-valuetext", "125%");
+    fireEvent.input(slider, { target: { value: "7" } });
+    (slider as HTMLInputElement).value = "6";
+    fireEvent.pointerUp(slider);
+    expect(slider).toHaveAttribute("aria-valuetext", "125%");
+    expect(zoomNow()).toBe(125);
+  });
+
   it("Reset to defaults puts 100% back too", async () => {
     await show(true);
     fireEvent.change(screen.getByRole("slider", { name: "Zoom" }), { target: { value: "8" } });

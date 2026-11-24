@@ -159,6 +159,10 @@ export function SliderSetting({ id, value, min, max, step, format, onChange, onR
   const input = useRef<HTMLInputElement>(null);
   const live = useRef(onChange);
   live.current = onChange;
+  const now = useRef(value);
+  now.current = value;
+  // The value changed elsewhere (⌘+, the chip, Reset): the row shows it, not what a drag left.
+  useEffect(() => setDraft(null), [value]);
   useEffect(() => {
     const el = input.current;
     if (!onRelease || !el) return;
@@ -166,8 +170,22 @@ export function SliderSetting({ id, value, min, max, step, format, onChange, onR
       setDraft(null);
       live.current(Number(el.value));
     };
+    // A drag let go where it started fires no change: nothing to apply, so what it showed goes. Any other release is the
+    // change's (it follows), which applies it.
+    const letGo = () => {
+      if (Number(el.value) === now.current) setDraft(null);
+    };
+    const left = () => setDraft(null);
     el.addEventListener("change", done);
-    return () => el.removeEventListener("change", done);
+    el.addEventListener("pointerup", letGo);
+    el.addEventListener("pointercancel", letGo);
+    el.addEventListener("blur", left);
+    return () => {
+      el.removeEventListener("change", done);
+      el.removeEventListener("pointerup", letGo);
+      el.removeEventListener("pointercancel", letGo);
+      el.removeEventListener("blur", left);
+    };
   }, [onRelease]);
   const shown = draft ?? value;
   return (
