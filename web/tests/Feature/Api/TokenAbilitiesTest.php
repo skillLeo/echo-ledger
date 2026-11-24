@@ -119,6 +119,12 @@ function abilityRoutes(): array
         'erase from bin' => ['DELETE', "/api/bin/{$id}", 'sessions:write'],
         'activity' => ['GET', '/api/activity', 'library:read'],
         'mark activity read' => ['POST', '/api/activity/read', 'library:read'],
+        // Since 2.0.0-r (BE-04).
+        'the badge' => ['GET', '/api/badge', 'library:read'],
+        // Since 2.0.0-r (BE-02).
+        'activity groups' => ['GET', '/api/activity/groups', 'library:read'],
+        // Since 2.0.0-r (BE-03).
+        'retry all uploads' => ['POST', '/api/activity/retry-all', 'sessions:write'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

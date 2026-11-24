@@ -153,17 +153,21 @@ final class LibraryFilters
         };
     }
 
+    /** Since 2.0.0-r: the glossary's states, `facets.state`, in the contract's order (docs/API.md BE-05). */
+    public const STATE_NAMES = ['transcribed', 'audio_only', 'transcribing', 'waiting_to_upload', 'failed', 'waiting'];
+
     /**
-     * The glossary state of a recording (docs/PLAN_V2_1_POLISH.md section 1), from its one Status: `failed` ("Failed ·
-     * Retry"), `waiting` (a call waiting for Keep or Discard, in Needs you), `waiting_to_upload` (not uploaded yet),
-     * `transcribing` ("Transcribing…"), `audio_only` (audio kept, no transcript) or null (transcribed: the row shows its
-     * words). The console's rows, its Audio only place and its Status filter all read this, so they agree.
+     * The glossary state of a recording (docs/PLAN_V2_1_POLISH.md section 1, `facets.state` since 2.0.0-r), from its one
+     * Status: `failed` ("Failed · Retry"), `waiting` (a call waiting for the person's choice after it, in Needs you),
+     * `waiting_to_upload` (not uploaded yet), `transcribing` ("Transcribing…"), `audio_only` (audio kept, no transcript)
+     * or `transcribed` (the row shows its words, no state). The API, the console's rows, its Audio only place and its
+     * Status filter all read this, so they agree.
      */
-    public static function state(string $status, string $sessionStatus): ?string
+    public static function state(string $status, string $sessionStatus): string
     {
         return match ($status) {
             'failed' => 'failed',
-            'transcribed' => null,
+            'transcribed' => 'transcribed',
             'not_transcribed' => 'audio_only',
             default => match ($sessionStatus) {
                 SessionStatus::Recording->value => 'waiting',
@@ -184,20 +188,23 @@ final class LibraryFilters
 
     /**
      * What a library item carries since 2.0.0-p (`facets`): the recording's Source, Status and Language, so the apps
-     * count with the server's words for them, and since 2.0.0-q its kind.
+     * count with the server's words for them, since 2.0.0-q its kind and since 2.0.0-r its state.
      *
-     * @return array{source: string, status: string, language: string, kind: string}
+     * @return array{source: string, status: string, language: string, kind: string, state: string}
      */
     public static function itemFacets(CaptureSession $session, bool $uploadFailed, ?string $finalStatus, ?string $finalLanguage): array
     {
         $source = self::source($session->source_app->value, $session->origin);
+        $status = self::status($session->status->value, $uploadFailed, $finalStatus);
 
         return [
             'source' => $source,
-            'status' => self::status($session->status->value, $uploadFailed, $finalStatus),
+            'status' => $status,
             'language' => self::language($finalLanguage, $session->language),
             // Since 2.0.0-q: the recording's one kind (docs/API.md "The Library's kinds").
             'kind' => self::kind($source),
+            // Since 2.0.0-r: its one state, the glossary's (docs/API.md "The glossary's states").
+            'state' => self::state($status, $session->status->value),
         ];
     }
 

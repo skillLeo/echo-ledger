@@ -34,7 +34,7 @@ final class InterfaceFlags
      * they are not the design: off (the admin's lists only) or everyone, never opt-in, and the person's design choice
      * does not change them.
      */
-    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane'];
+    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar'];
 
     /** The nine console flags: "the new design" a person can try, and what `ui_design.current` reads. */
     public const CONSOLE = [
@@ -67,6 +67,8 @@ final class InterfaceFlags
         'v21_panel_flyout' => 'v2.1: the panel opens over the page under 1200 px',
         'v21_zoom' => 'v2.1 desktop and web: zoom in Settings › Appearance',
         'v21_preview_pane' => 'v2.1 desktop and web: the Library\'s preview pane',
+        // Since 2.0.0-s.
+        'v21_win_titlebar' => 'v2.1 desktop on Windows: the custom title row',
     ];
 
     /** @var array<string, InterfaceFlag>|null */

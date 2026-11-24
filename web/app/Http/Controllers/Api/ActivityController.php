@@ -8,24 +8,66 @@ use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\ActivityFeed;
+use App\Services\UploadRetries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Validation\Rule;
 
 /** The activity centre for device apps (since v1.1, plan B18). */
 final class ActivityController extends Controller
 {
-    /** GET /api/activity?limit= — newest first, with the unread count. */
+    /** The Activity groups (contract 2.0.0-r, BE-02): only upload failures are grouped. */
+    public const GROUPS = ['upload_failed'];
+
+    /** GET /api/activity?limit=&group= — newest first, with the unread count; since 2.0.0-r one group's items only. */
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate(['limit' => ['nullable', 'integer', 'min:1', 'max:100']]);
+        $data = $request->validate(['limit' => ['nullable', 'integer', 'min:1', 'max:100'], 'group' => ['nullable', 'string', Rule::in(self::GROUPS)]]);
         $user = $this->owner($request);
-        $items = $user->notifications()->latest()->limit((int) ($data['limit'] ?? 30))->get();
+        $query = $user->notifications()->latest();
+        if (($data['group'] ?? null) !== null) {
+            $query->where('dedupe_key', 'like', $data['group'].':%');
+        }
+        $items = $query->limit((int) ($data['limit'] ?? 30))->get();
 
         return response()->json([
             'data' => $items->map(fn (DatabaseNotification $n): array => ActivityFeed::payload($n))->values(),
             'unread_count' => $user->unreadNotifications()->count(),
+            // Since 2.0.0-r (BE-03): the person's latest Retry all; an app newer than its own last run retries.
+            'retry_requested_at' => UploadRetries::requestedAt($user),
         ]);
+    }
+
+    /**
+     * GET /api/activity/groups (contract 2.0.0-r, BE-02): each group that holds an unresolved item, with how many, how
+     * many unread, their recordings and the newest one's time ("3 recordings didn't finish uploading · Retry all").
+     */
+    public function groups(Request $request): JsonResponse
+    {
+        $user = $this->owner($request);
+        $groups = [];
+        foreach (self::GROUPS as $group) {
+            $items = $user->notifications()->where('dedupe_key', 'like', $group.':%')->whereNull('resolved_at')->latest()->get();
+            if ($items->isNotEmpty()) {
+                $groups[] = ['group' => $group, 'count' => $items->count(), 'unread' => $items->whereNull('read_at')->count(),
+                    'session_ids' => $items->map(fn (DatabaseNotification $n): ?string => ActivityFeed::payload($n)['session_id'])->filter()->values()->all(),
+                    'at' => $items->first()->created_at?->toAtomString()];
+            }
+        }
+
+        return response()->json(['data' => $groups, 'retry_requested_at' => UploadRetries::requestedAt($user)]);
+    }
+
+    /**
+     * POST /api/activity/retry-all (contract 2.0.0-r, BE-03): `{"group": "upload_failed"}`. The devices hold the files,
+     * so this asks them: `retry_requested_at` becomes now, and each app retries every failed upload it holds once.
+     */
+    public function retryAll(Request $request, UploadRetries $retries): JsonResponse
+    {
+        $request->validate(['group' => ['required', 'string', Rule::in(self::GROUPS)]]);
+
+        return response()->json($retries->requestAll($this->owner($request)), 202);
     }
 
     /** POST /api/activity/read — the given ids, or everything when no ids are sent. */

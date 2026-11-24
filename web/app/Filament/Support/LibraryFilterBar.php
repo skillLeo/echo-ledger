@@ -109,7 +109,7 @@ final class LibraryFilterBar
      * The filter panel: every section with its options, counts, what is ticked, is / is not and the custom dates.
      *
      * @param  array<string, array{op: string, values: list<string>, from?: string, to?: string}>  $filters
-     * @param  array{sections: array<string, list<array<string, mixed>>>}  $facets
+     * @param  array{sections: array<string, list<array<string, mixed>>>, states?: array<string, int>}  $facets
      * @return list<array{key: string, label: string, op: string, on: bool, values: list<string>, from: string|null, to: string|null, options: list<array<string, mixed>>}>
      */
     public static function panel(array $filters, array $facets): array
@@ -130,7 +130,8 @@ final class LibraryFilterBar
                     $value = (string) $option['value'];
                     $options[] = ['value' => $value, 'label' => self::optionLabel($section, $value, $option), 'count' => (int) $option['count'],
                         'on' => in_array($value, $ticked, true), 'child' => ($option['parent_id'] ?? null) !== null,
-                        ...($section === 'labels' ? self::dot($option['color'] ?? null) : [])];
+                        ...($section === 'labels' ? self::dot($option['color'] ?? null) : []),
+                        ...($section === 'status' && $value === 'processing' ? ['parts' => self::processingParts($facets['states'] ?? [], (int) $option['count'])] : [])];
                 }
             }
             $sections[] = ['key' => $section, 'label' => self::sectionLabel($section), 'op' => $filter['op'] ?? 'is', 'on' => $filter !== null,
@@ -138,6 +139,28 @@ final class LibraryFilterBar
         }
 
         return $sections;
+    }
+
+    /**
+     * What In progress (Status `processing`) holds, from the glossary's states (contract 2.0.0-r, BE-05): "2 transcribing ·
+     * 1 waiting to upload". The filter keeps its one value; its parts come from the facets' `states`, so they are given
+     * only while they are that option's recordings (they add up to its count: the Status filter keeps `processing`).
+     *
+     * @param  array<string, int>  $states
+     */
+    public static function processingParts(array $states, int $count): ?string
+    {
+        $transcribing = (int) ($states['transcribing'] ?? 0);
+        $waiting = (int) ($states['waiting_to_upload'] ?? 0);
+        if ($count === 0 || $transcribing + $waiting !== $count) {
+            return null;
+        }
+        $parts = array_filter([
+            $transcribing > 0 ? trans_choice('1 transcribing|:count transcribing', $transcribing) : null,
+            $waiting > 0 ? trans_choice('1 waiting to upload|:count waiting to upload', $waiting) : null,
+        ]);
+
+        return implode(' · ', $parts);
     }
 
     /**

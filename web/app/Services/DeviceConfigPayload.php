@@ -66,6 +66,8 @@ final class DeviceConfigPayload
                 'max_recording_bytes' => (int) config('echoledger.max_recording_bytes'),
                 'accepted_mimes' => array_values((array) config('echoledger.accepted_mimes')),
             ],
+            // Since 2.0.0-r (BE-03): when the apps retry a failed upload on their own.
+            'upload_retry' => UploadRetries::schedule(),
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
             'markers' => ['tags' => $this->settings->markerTags()],
