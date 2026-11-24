@@ -505,7 +505,7 @@ Builds:
    Alt+← and the mouse's back button.
 3. Press F5, Ctrl+R, Ctrl+P and F12 on the Library. Pass: nothing happens.
 4. Right-click selected transcript words. Pass: a short menu: Cut, Copy, Paste, Select all only (no Print, no Share).
-   Right-click inside the search field. Pass: Undo and spelling suggestions are there too.
+   Right-click inside the search field. Pass: Cut, Copy, Paste, Select all (Undo and spelling come in 2.0.15).
 
 After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour). Pending
 approvals you can give from tonight's devices: VISUAL-OK (the look), rows OK (the Library rows), NAV-OK (the sidebar
