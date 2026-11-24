@@ -8,6 +8,7 @@ import { stepOf, stepStates, type Step } from "../../lib/progress";
 import { itemState } from "../../lib/library";
 import { filedByRuleText } from "../../lib/sharing";
 import { Button, Icons } from "../components";
+import { sayProblem, type Say } from "./organise";
 
 /** The steps' words: what each is called before, while and after it runs. */
 const STEP_WORDS: Record<Step, { waiting: string; active: string; done: string }> = {
@@ -26,7 +27,7 @@ export function RecordingStepsV2({ item, improving, say }: {
   item: Pick<LibraryItem, "id" | "status" | "transcript">;
   /** The views are being written (the converting line says how far). */
   improving: boolean;
-  say: (message: string) => void;
+  say: Say;
 }) {
   const [asked, setAsked] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -42,7 +43,7 @@ export function RecordingStepsV2({ item, improving, say }: {
       await api.notifyWhenReady(item.id);
       setAsked(true);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     } finally {
       setAsking(false);
     }

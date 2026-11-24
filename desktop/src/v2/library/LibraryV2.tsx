@@ -47,7 +47,7 @@ import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLa
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
-  TranscribeDialog, WhatsAppDialog,
+  sayProblem, TranscribeDialog, WhatsAppDialog,
 } from "./organise";
 
 /** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
@@ -101,7 +101,7 @@ const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'));
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
-type Message = { id: number; text: string; action?: { label: string; run: () => void } };
+type Message = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
 
 const readPanel = () => {
   try {
@@ -277,10 +277,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     anchor.current = null;
   }, []);
 
-  const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
+  const say = useCallback((text: string, action?: Message["action"], error?: boolean) => setMessage({ id: ++seq.current, text, action, error }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
   // the list is away (Trash, a selection, a recording open).
-  const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
+  const queue = useLibraryQueue(useCallback((text: string, error?: boolean) => say(text, undefined, error), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -629,10 +629,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
         run: () => void api.restoreSession(item.id).then(async () => {
           await load();
           setFocusAfter({ rowId: item.id, seq: ++seq.current });
-        }).catch((e) => say(errorMessage(e))),
+        }).catch((e) => sayProblem(say, errorMessage(e))),
       });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -652,7 +652,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     }
     await load();
     const left = ids.length - back;
-    say(left === 0 ? `${recordingsWord(back)} back` : `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
+    if (left === 0) say(`${recordingsWord(back)} back`);
+    else sayProblem(say, `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
   };
   /** Delete a whole view or more than this many: asked first. */
   const ASK_ABOVE = 20;
@@ -676,7 +677,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       const gone = await api.bulkSessions([...ids], "delete");
       endSelection();
       if (!gone) {
-        say("Nothing was moved to Trash. Try again, or reload the Library.");
+        sayProblem(say, "Nothing was moved to Trash. Try again, or reload the Library.");
         void load();
         return;
       }
@@ -706,7 +707,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
       say(`${recordingsWord(gone)} moved to Trash · ${kept}`, { label: "Undo", run: () => void restoreMany(ids) });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   /**
@@ -720,11 +721,11 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       await api.bulkSessions([...ids], on ? "label" : "unlabel", null, list.name);
       say(on ? `Added to ${list.name}` : `Removed from ${list.name}`, changed.length ? {
         label: "Undo",
-        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => say(errorMessage(e))),
+        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => sayProblem(say, errorMessage(e))),
       } : undefined);
       await Promise.all([load(), reloadLists()]);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
@@ -733,7 +734,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       say(ids.length === 1 ? done : `${done} · ${recordingsWord(changed)}`);
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -787,7 +788,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       await load();
       say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const eraseNow = async (b: BinItem) => {
@@ -797,7 +798,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
       say(`"${b.title || "Recording"}" deleted forever`);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
 
@@ -868,7 +869,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       endSelection();
       await load();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -1070,7 +1071,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   const toasts = (
     <ToastRegion>
       {message && (
-        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run}
+        <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error}
           onClose={() => setMessage((m) => (m?.id === message.id ? null : m))} />
       )}
     </ToastRegion>
@@ -1082,7 +1083,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
   const recordingPage = open && (
-    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
@@ -1209,7 +1210,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           {!trash && !choosing && (filtersOn > 0 || changed) && (
             <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}
               onSaveView={() => setSavingView(true)} onSaveChanges={changed && savedView ? () => {
-                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => say(errorMessage(e)));
+                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => sayProblem(say, errorMessage(e)));
               } : undefined} />
           )}
           {top && scope.kind === "view" && scope.view === "all" && !filtersOn && !query && !choosing && <LibraryTop {...top} items={items} />}
