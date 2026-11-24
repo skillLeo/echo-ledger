@@ -126,6 +126,7 @@
     { "id": "text.copyWithTime", "label": "Copy with time", "icon": "CopyIcon", "when": ["hasTranscript"] },
     { "id": "text.ask", "label": "Ask about this", "icon": "AskIcon", "when": ["hasTranscript"] },
     { "id": "text.share", "label": "Share", "icon": "ShareIcon" },
+    { "id": "activity.retry", "label": "Retry", "icon": "RefreshIcon" },
 
     { "id": "live.stopRecording", "label": "Stop recording", "menu": "Live", "icon": "StopIcon", "mac": "⌘.", "win": "Ctrl+.", "when": ["recording"] },
     { "id": "live.pauseRecording", "label": "Pause recording", "menu": "Live", "mac": "⌥⌘.", "win": "Ctrl+Shift+.", "when": ["recording"], "state": { "key": "paused", "on": "Resume recording" } },
