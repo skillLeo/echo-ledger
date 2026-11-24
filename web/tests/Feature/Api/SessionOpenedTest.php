@@ -6,6 +6,10 @@ use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Models\CaptureSession;
 use App\Models\SessionOpen;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Sharing\Teammates;
+use App\Services\Workspaces\Workspaces;
+use Illuminate\Support\Facades\Event;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -77,9 +81,15 @@ it('marks a recording unread again: opened false and library.unread one more, th
     $this->postJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
     $before = unreadCount($this);
     $updatedAt = $this->session->refresh()->updated_at;
+    // A minute on, so a touch of updated_at would show; and no event of the recording (a save, an update) goes out.
+    $this->travel(1)->minutes();
+    Event::fake();
 
     $this->deleteJson("/api/sessions/{$this->session->id}/opened")->assertNoContent();
 
+    $writes = array_values(array_filter(array_keys(Event::dispatchedEvents()), fn (string $name): bool => str_starts_with($name, 'eloquent.')
+        && ! str_starts_with($name, 'eloquent.retrieved:') && str_ends_with($name, CaptureSession::class)));
+    expect($writes)->toBe([], 'marking unread sends no event of a change to the recording');
     expect(openedInLibrary($this))->toBeFalse()
         ->and(unreadCount($this))->toBe($before + 1)
         ->and(SessionOpen::query()->where('capture_session_id', $this->session->id)->count())->toBe(0)
@@ -119,4 +129,20 @@ it('answers 404 for a recording of a teammate the person cannot read, the same a
     $this->postJson("/api/sessions/{$hidden->id}/opened")->assertNotFound();
     $this->deleteJson("/api/sessions/{$hidden->id}/opened")->assertNotFound();
     expect(SessionOpen::query()->where('capture_session_id', $hidden->id)->count())->toBe(1);
+});
+
+it('marks unread a recording a teammate sent: 204, and only the person\'s own open goes', function () {
+    $me = User::query()->findOrFail($this->device->user_id);
+    $mate = User::factory()->create();
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+    $sent = CaptureSession::factory()->create(['user_id' => $mate->id, 'workspace_id' => $this->device->workspace_id]);
+    app(Teammates::class)->send($mate, $sent, [$me->email], null);
+    app('auth')->forgetGuards();
+    SessionOpen::mark($sent->id, $mate->id);
+    $this->postJson("/api/sessions/{$sent->id}/opened")->assertNoContent();
+    expect(app(Teammates::class)->readable($me, $sent->id))->not->toBeNull();
+
+    $this->deleteJson("/api/sessions/{$sent->id}/opened")->assertNoContent();
+
+    expect(SessionOpen::query()->where('capture_session_id', $sent->id)->pluck('user_id')->all())->toBe([$mate->id]);
 });
