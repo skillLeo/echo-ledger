@@ -6,12 +6,13 @@ import { api, errorMessage, type FilingRule, type RuleKind } from "../../lib/ipc
 import { SOURCE_APP_LABELS } from "../../lib/format";
 import { RULE_APPS, RULE_KINDS, ruleText } from "../../lib/sharing";
 import { Button, Card, Icons, List, ListRow, Select, TextField } from "../components";
+import { sayProblem, type Say } from "../library/organise";
 
 export function RulesV2({ projectId, projectName, say }: {
   projectId: string;
   projectName: string;
   /** One message with at most one action (the page's Toast). */
-  say: (text: string, action?: { label: string; run: () => void }) => void;
+  say: Say;
 }) {
   const [rules, setRules] = useState<FilingRule[] | null | undefined>(undefined);
   const [kind, setKind] = useState<RuleKind>("title");
@@ -55,7 +56,7 @@ export function RulesV2({ projectId, projectName, say }: {
       setRules((list) => [...(list ?? []).filter((r) => r.id !== data.id), data]);
       say("Rule restored");
     } catch (e) {
-      say(`The rule couldn't be restored: ${errorMessage(e)}`);
+      sayProblem(say, `The rule couldn't be restored: ${errorMessage(e)}`);
     }
   };
   const remove = async (rule: FilingRule) => {

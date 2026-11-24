@@ -103,8 +103,8 @@ export function WorkspaceV2({
   const [ws, setWs] = useState<ClientWorkspace | null>(null);
   const [wsFailed, setWsFailed] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [message, setMessage] = useState<{ id: number; text: string; action?: { label: string; run: () => void } } | null>(null);
-  const say = useCallback((text: string, action?: { label: string; run: () => void }) => setMessage({ id: Date.now(), text, action }), []);
+  const [message, setMessage] = useState<{ id: number; text: string; action?: { label: string; run: () => void }; error?: boolean } | null>(null);
+  const say = useCallback((text: string, action?: { label: string; run: () => void }, error?: boolean) => setMessage({ id: Date.now(), text, action, error }), []);
   const update: WorkspaceUpdate = useCallback((change) => setWs((cur) => (cur ? change(cur) : cur)), []);
   const askLocked = useLocked("ai_notes");
   const screensLock = useLockedTag("screen_moments");
@@ -114,7 +114,7 @@ export function WorkspaceV2({
       await navigator.clipboard.writeText(await api.clientBundle(project.id));
       say("Copied the brief, memory and recent call notes for AI");
     } catch (e) {
-      say(typeof e === "string" ? e : "The project couldn't be copied. Try again.");
+      say(typeof e === "string" ? e : "The project couldn't be copied. Try again.", undefined, true);
     }
   };
 
@@ -216,7 +216,7 @@ export function WorkspaceV2({
         {tab === "screens" && <ScreensTab project={project as ClientFolder} notify={notify} onOpenRecording={onOpenRecording} onProjectChanged={onProjectChanged} />}
       </Tabs>
       <ToastRegion>
-        {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} onClose={() => setMessage(null)} />}
+        {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error} onClose={() => setMessage(null)} />}
       </ToastRegion>
     </div>
   );

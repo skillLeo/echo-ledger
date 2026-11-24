@@ -11,6 +11,7 @@ import { confirmAction } from "../../lib/confirm";
 import { usePoll } from "../../lib/usePoll";
 import { notesWorking } from "../../views/main/CallNotes";
 import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, Progress, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { sayProblem, type Say } from "./organise";
 
 /** Find in this transcript: the field, "N of M", previous and next; Enter, Shift+Enter and Esc as classic. */
 export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
@@ -80,7 +81,7 @@ export function ReplaceDialog({ transcriptId, onReplaced, onClose, say }: {
   transcriptId: string;
   onReplaced: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
@@ -123,7 +124,7 @@ export function SpeakersDialog({ sessionId, labels, names, hasProject, onSaved, 
   hasProject: boolean;
   onSaved: (names: Record<string, string>) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(labels.map((l) => [l, names[l] ?? ""])));
   const [remember, setRemember] = useState(false);
@@ -166,7 +167,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
   edited: boolean;
   onRestored: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [revisions, setRevisions] = useState<TranscriptRevision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,7 +185,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
       say("The original text is back");
       onClose();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   return (
@@ -204,7 +205,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
 }
 
 /** The call notes of a recording in a project: written on the server, in English or Roman Urdu; a line plays its moment. */
-export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: (text: string) => void }) {
+export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: Say }) {
   const [notes, setNotes] = useState<CallNotes | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<AnswerLanguage>("en");
@@ -233,7 +234,7 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
       setNotes((await api.writeSessionNotes(sessionId, lang)).data);
       setLanguage(lang);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     } finally {
       setBusy(false);
     }

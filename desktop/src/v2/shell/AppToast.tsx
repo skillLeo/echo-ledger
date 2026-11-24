@@ -15,7 +15,7 @@ export function AppToastV2({ message, onClose, duration }: {
   const toast = (m: AppMessage) => (
     <div className="el-app-toast__item" data-testid="app-toast" key={m.id}>
       <Toast message={m.onOpen ? <button type="button" className="el-toast__open" onClick={() => { m.onOpen!(); onClose(); }}>{m.text}</button> : m.text}
-        undo={false} onClose={onClose} duration={duration(m)} />
+        undo={false} error={m.error} onClose={onClose} duration={duration(m)} />
     </div>
   );
   return (

@@ -11,6 +11,7 @@ import {
   addToListItems, deleteListWords, labelColourName, listChipMenuItems, menuPointFor, type LabelColour,
 } from "../components";
 import type { MenuItem } from "../components/Menu";
+import { sayProblem, type Say } from "./organise";
 
 /** A label's key: its name in lower case, as the server keys it. */
 export const listKey = (name: string) => name.toLowerCase();
@@ -117,7 +118,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   onOpen: (key: string) => void;
   /** The label shown was deleted or renamed away: the Library goes back to All. */
   onGone: () => void;
-  say: (text: string) => void;
+  say: Say;
   /** The recordings' labels changed (a rename, a recolour or a delete): the Library is synced once. */
   onLibraryChanged: () => void;
 }) {
@@ -151,7 +152,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
     try {
       await fn();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
       // The label may be gone (deleted on another device: list_not_found): read them again.
       await reload();
     } finally {

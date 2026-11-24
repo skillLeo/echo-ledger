@@ -1188,7 +1188,7 @@ export default function MainApp() {
                   counts={libraryCounts} labelCounts={labelCounts} onScope={openScope}
                   shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
                   onNewView={() => { if (tab !== "library") openScope(libraryScope); setFiltersRequest({ seq: ++navigations.current }); }}
-                  say={(text) => notify(text, false, NO_TARGET)} onLibraryChanged={() => void syncLibrary().catch(() => undefined)} />
+                  say={(text, _action, error) => notify(text, !!error, NO_TARGET)} onLibraryChanged={() => void syncLibrary().catch(() => undefined)} />
               </Suspense>
             ) : undefined}
             libraryAttention={(libraryCounts?.needs ?? 0) > 0}
