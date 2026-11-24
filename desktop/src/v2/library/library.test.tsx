@@ -321,6 +321,11 @@ describe("LibraryV2", () => {
     await show();
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
     await act(flushAsync);
+    // The glossary's word, grey (no warning chip): never "Untranscribed" or "Not transcribed yet".
+    const page = document.querySelector(".el-page__meta") as HTMLElement;
+    expect(within(page).getByText("Audio only")).not.toHaveClass("el-badge--warning");
+    expect(screen.getByRole("heading", { name: "Audio only" })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/untranscribed|not transcribed/i);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "Transcribe this recording?" });

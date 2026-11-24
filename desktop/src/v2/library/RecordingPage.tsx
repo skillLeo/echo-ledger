@@ -31,6 +31,7 @@ import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
+import { rowState, STATE_WORDS } from "./model";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
@@ -752,7 +753,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {state === "ready" ? <Badge tone="success">Transcribed</Badge>
               : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
-                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
+                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge>{rowState(item)?.text ?? STATE_WORDS.audio_only}</Badge>}
           </p>
           {(item.labels?.length ?? 0) > 0 && (
             <ul className="el-recording__labels" aria-label="Labels">
@@ -899,7 +900,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           ) : state === "no_audio" ? (
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
-            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
+            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : rowState(item)?.text ?? STATE_WORDS.audio_only}
               body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
                 : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
                 : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}

@@ -842,7 +842,7 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
     respond("upgrade_request_latest", null);
     respond("account_get", { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
     await renderPaired({ budget: "reached" });
-    expect(banner()).toHaveTextContent("Monthly transcription limit reached. Recordings are kept but not transcribed.");
+    expect(banner()).toHaveTextContent("Monthly transcription limit reached. New recordings are kept as audio only.");
     expect(banner()).toHaveClass("danger");
     // A state: it never hides by itself (Notice's own tests prove a notice without a time has no timer).
     expect(banner()!.querySelector(".notice-timer")).toBeNull();

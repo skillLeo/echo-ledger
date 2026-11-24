@@ -60,8 +60,8 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
     const inFolder = item.client && item.client.id !== project.id ? item.client.name : null;
     return (
       <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={<>{inFolder ? `${inFolder} · ` : null}<RowMetaText r={r} /></>}
- mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
-        endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
+        mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
+        endTop={r.when} endBottom={r.duration ? <span className="el-ltr">{r.duration}</span> : undefined}
         onPointerDown={onMoveRecordings ? (e) => beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title]) }), onMoveRecordings) : undefined}
         onClick={() => { if (!dragJustEnded()) onOpenRecording(item.id); }} />
     );
