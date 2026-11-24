@@ -2548,7 +2548,10 @@ For a call, an app takes the first of these that has a rule, and uses its action
 4. **The default**: the person's `after_call`.
 
 A rule whose action is `ask` means "follow the default" for that step's contact, group or Source and stops the
-search there: the person called is asked about as the default says, even if a later step has a rule.
+search there: the person called is asked about as the default says, even if a later step has a rule, **except that a
+`dont_record` at a later step (the group, the Source, or the default itself) still applies**: privacy first. "Ask me"
+for Ahmed and "Don't record" for Zoom: a Zoom call with Ahmed is not recorded. A rule with any other action at an
+earlier step wins as before: "Transcribe every call" for Ahmed records him even on Zoom.
 After the call, a project with "Always transcribe calls in this project" (`transcribe_calls: "always"`) still turns
 an `ask` or `always_audio` result into a transcript when the call is filed into it, as before; it never undoes a
 `dont_record`, since there is no recording.
@@ -2589,9 +2592,11 @@ One rule: `{"kind": "contact", "number": "+92 300 1234567", "name": "Ahmed Khan"
 `{"kind": "group", "group": "unknown_numbers", "action": "ask"}` or `{"kind": "source", "source_app": "zoom",
 "action": "always_transcribe"}` → `201` with the rule. There is one rule per contact, group or Source: a second one
 for the same replaces its action (and name) and answers `200`.
-- `number` is stored as the phone sends it, normalised: spaces, dashes, dots and brackets removed, a leading `00`
-  becomes `+`. Matching compares numbers in that form, and the last 10 digits when one side has no country code. A
-  contact without a number (a desktop call known by name only) is matched by `name`, ignoring case and extra spaces.
+- `number` is stored as the phone sends it, normalised: a leading `00` becomes `+`, a trunk `(0)` right after the
+  country code is dropped ("+44 (0)20 7946 0958" is `+442079460958`), then spaces, dashes, dots and brackets are
+  removed. Matching takes the exact number first; else the one rule with the same last 10 digits when one side has no
+  country code. When two or more rules share those 10 digits (the same local number in two countries), none of them
+  matches and the call goes on to the next step. A contact without a number (a desktop call known by name only) is matched by `name`, ignoring case and extra spaces.
   A contact rule needs `number` or `name`.
 - `name` is for showing only ("For Ahmed Khan: Transcribe every call"), 1 to 120 characters.
 - `group` is `favourites` | `saved_contacts` | `unknown_numbers`. `source_app` is any Source but `voice_note` and

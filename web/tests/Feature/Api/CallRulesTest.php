@@ -128,6 +128,16 @@ describe('the rules', function () {
             ->and(app(CallRules::class)->resolve($this->person->fresh(), name: 'Weekly Sync'))->toBe('dont_record');
     });
 
+    it('drops a trunk "(0)" after the country code', function () {
+        expect(CallRules::normalizeNumber('+44 (0)20 7946 0958'))->toBe('+442079460958')
+            ->and(CallRules::normalizeNumber('+92 (0)300 1234567'))->toBe('+923001234567')
+            ->and(CallRules::normalizeNumber('0044 (0)20 7946 0958'))->toBe('+442079460958')
+            ->and(CallRules::normalizeNumber('(0300) 123-4567'))->toBe('03001234567');
+        $rule = callRule($this, ['kind' => 'contact', 'number' => '+92 (0)300 1234567', 'action' => 'dont_record']);
+        expect($rule['number'])->toBe('+923001234567')
+            ->and(app(CallRules::class)->resolve($this->person->fresh(), number: '+92 300 1234567'))->toBe('dont_record');
+    });
+
     it('refuses a rule it cannot match, with codes', function () {
         $this->postJson('/api/call-rules', ['kind' => 'contact', 'action' => 'ask'])->assertStatus(422)->assertJsonPath('error_codes.number.0.code', 'required');
         $this->postJson('/api/call-rules', ['kind' => 'contact', 'number' => 'call me', 'action' => 'ask'])->assertStatus(422)->assertJsonPath('error_codes.number.0.code', 'invalid_number');
@@ -207,8 +217,36 @@ describe('which rule wins', function () {
 
     it('stops at a rule of "ask" and follows the default from there', function () {
         $resolve = $this->resolve;
-        expect($resolve(number: '+923005550000', groups: ['favourites'], source: 'zoom'))->toBe('always_audio')
+        expect($resolve(number: '+923005550000', groups: ['saved_contacts'], source: 'zoom'))->toBe('always_audio')
             ->and($resolve(number: '+923009999999', groups: ['unknown_numbers'], source: 'zoom'))->toBe('always_audio');
+    });
+
+    it('lets a later "Don\'t record" win over "ask": privacy first', function () {
+        $resolve = $this->resolve;
+        callRule($this, ['kind' => 'source', 'source_app' => 'google_meet', 'action' => 'dont_record']);
+        // Contact "ask" + Source "Don't record".
+        expect($resolve(number: '+923005550000', source: 'google_meet'))->toBe('dont_record')
+            // Group "ask" + Source "Don't record".
+            ->and($resolve(number: '+923009999999', groups: ['unknown_numbers'], source: 'google_meet'))->toBe('dont_record')
+            // Contact "ask" + group "Don't record".
+            ->and($resolve(number: '+923005550000', groups: ['favourites'], source: 'zoom'))->toBe('dont_record')
+            // Another choice at an earlier step still wins: Ahmed is transcribed even where Meet is not recorded.
+            ->and($resolve(number: '+923001234567', source: 'google_meet'))->toBe('always_transcribe');
+
+        // "ask" + the default "Don't record".
+        $this->putJson('/api/call-rules/settings', ['after_call' => 'dont_record'])->assertOk();
+        expect(($this->resolve)(number: '+923005550000', source: 'whatsapp'))->toBe('dont_record')
+            ->and(($this->resolve)(number: '+923001234567', source: 'whatsapp'))->toBe('always_transcribe');
+    });
+
+    it('takes the exact number first, and none of two that share their last 10 digits', function () {
+        $resolve = $this->resolve;
+        callRule($this, ['kind' => 'contact', 'number' => '+443001234567', 'action' => 'dont_record']);
+        // Exact matches pick their own country.
+        expect($resolve(number: '+923001234567'))->toBe('always_transcribe')
+            ->and($resolve(number: '+443001234567'))->toBe('dont_record')
+            // Without a country code both share the last 10 digits: no guess, the default.
+            ->and($resolve(number: '03001234567', source: 'whatsapp'))->toBe('always_audio');
     });
 
     it('drops short and missed calls unless the person keeps them', function () {
