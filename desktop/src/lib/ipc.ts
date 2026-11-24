@@ -1117,7 +1117,7 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
-export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
+export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
   id: string;
