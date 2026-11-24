@@ -43,7 +43,7 @@ export function contextItems(ids: readonly string[], ctx: ActionContext, childre
         const kids = children[item.action];
         return kids?.length ? [{ ...item, items: [...kids] }] : [];
       }
-      return canRun(item.action) ? [item] : [];
+      return canRun(item.action, ctx.kind) ? [item] : [];
     });
     shown.forEach((item, at) => out.push(at === 0 && out.length > 0 ? { ...item, separator: true } : { ...item, separator: undefined }));
     group = [];

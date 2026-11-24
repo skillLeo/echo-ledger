@@ -1,7 +1,7 @@
 // A sub-menu's choices (UX-22): a label's name, a project, a format, a sort order. They send the sub-menu's action with
 // their value, and checkMenu takes their words only under that sub-menu.
 import { describe, expect, it, vi } from "vitest";
-import { canRun, checkMenu, choiceItems, menuItems, registerAction } from "./registry";
+import { canRun, checkMenu, choiceItems, menuItems, registerAction, runAction } from "./registry";
 
 describe("a sub-menu's choices", () => {
   it("send the sub-menu's action with their value; checkMenu takes them under it and nowhere else", () => {
@@ -25,5 +25,23 @@ describe("a sub-menu's choices", () => {
     expect(checkMenu([{ ...labels, items: formats.slice(0, 1) }], "windows")).toEqual(['"Word (.docx)": a choice outside its sub-menu (recording.exportAs)']);
     // An unknown action can't have choices.
     expect(() => choiceItems("recording.nope", [], ctx)).toThrow("recording.nope is not in actions.json");
+  });
+
+  it("one id, several kinds of thing: each runs where its kind is (Rename… of a recording, of a view)", () => {
+    const recording = vi.fn();
+    const view = vi.fn();
+    const offs = [registerAction("file.rename", recording, "recording"), registerAction("file.rename", view, "view")];
+    expect([canRun("file.rename", "recording"), canRun("file.rename", "view"), canRun("file.rename", "label"), canRun("file.rename")]).toEqual([true, true, false, false]);
+    expect(runAction("file.rename", { platform: "macos", targets: ["r1"], kind: "recording" })).toBe(true);
+    expect(runAction("file.rename", { platform: "macos", targets: ["v1"], kind: "view" })).toBe(true);
+    expect(runAction("file.rename", { platform: "macos", targets: ["l1"], kind: "label" })).toBe(false);
+    expect(recording.mock.calls.map(([c]) => c.targets)).toEqual([["r1"]]);
+    expect(view.mock.calls.map(([c]) => c.targets)).toEqual([["v1"]]);
+    // One registered without a kind takes any.
+    const any = vi.fn();
+    offs.push(registerAction("file.rename", any));
+    expect(runAction("file.rename", { platform: "macos", targets: ["l1"], kind: "label" })).toBe(true);
+    expect(any).toHaveBeenCalledTimes(1);
+    offs.forEach((off) => off());
   });
 });

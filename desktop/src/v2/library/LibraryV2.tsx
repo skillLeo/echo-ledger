@@ -1187,7 +1187,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const every = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
     const one = chosen.length === 1 ? chosen[0] : null;
     return {
-      platform: currentPlatform(), targets: [...ids],
+      platform: currentPlatform(), targets: [...ids], kind: "recording",
       state: {
         pinned: every((i) => !!i.pinned), important: every((i) => !!i.important), keptForever: every((i) => !!i.keep),
         unread: every((i) => i.opened === false && !readHere.has(i.id)), hasTranscript: !!one && !isUntranscribed(one),
@@ -1222,7 +1222,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     };
   };
   const listSpaceMenu = (): MenuItem[] => {
-    const ctx: ActionContext = { platform: currentPlatform(), state: { layoutList: layout === "list", layoutTable: layout === "table" } };
+    const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
       "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: SORT_NAMES[k], checked: choice.sort === k })), ctx).map(oneOf),
       "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: GROUP_NAMES[k], checked: choice.group === k })), ctx).map(oneOf),
@@ -1304,7 +1304,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   runsRef.current = runs;
   const runnable = Object.keys(runs).filter((id) => runs[id]).join(" ");
   useEffect(() => {
-    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx)));
+    // Each for its kind of thing: the list's space, else a recording (the sidebar's Rename… of a view is its own).
+    const offs = runnable.split(" ").filter(Boolean).map((id) => registerAction(id, (ctx) => runsRef.current[id]?.(ctx), (LIST_SPACE as readonly string[]).includes(id) ? "list" : "recording"));
     return () => offs.forEach((off) => off());
   }, [runnable]);
 
