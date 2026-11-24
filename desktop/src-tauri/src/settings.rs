@@ -544,6 +544,8 @@ impl Settings {
             settings.main_share_hide = None;
             settings.share_notice = true;
         }
+        // "Until I quit" ended when the last run did: this launch starts with the main window shown in screen shares.
+        settings.main_share_hide = crate::privacy::share::at_launch(settings.main_share_hide);
         for action in crate::shortcuts::ADDED_LATER {
             if let Some(accelerator) = action.default_accelerator() {
                 settings.shortcuts.entry(action).or_insert_with(|| accelerator.to_string());

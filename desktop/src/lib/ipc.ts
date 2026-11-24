@@ -1707,14 +1707,14 @@ export interface ShareSeen {
 }
 
 /** Until when the main window is hidden from screen shares (v2.0). */
-export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" };
+export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" } | { kind: "until_quit" };
 export interface MainShareHide {
   until: HideUntil;
   sinceMs: number;
 }
 /** What the person picks under "Hide from screen shares". */
 export type HideFor =
-  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" }
+  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" } | { kind: "until_quit" }
   | { kind: "custom"; minutes: number };
 /** The two windows hidden from screen shares unless the person shows them, each on its own. */
 export type PinnedWindow = "card" | "captions";

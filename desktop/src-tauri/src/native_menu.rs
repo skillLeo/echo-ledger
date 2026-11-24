@@ -222,8 +222,7 @@ pub enum CoreStep {
     TogglePill,
 }
 
-/// The core's step for a pick (pure); none for what only the page can do. Until I Quit is the core's "until I turn it
-/// off" (the setting it keeps).
+/// The core's step for a pick (pure); none for what only the page can do.
 pub fn core_step(action: &str) -> Option<CoreStep> {
     use crate::privacy::share::HideFor;
     Some(match action {
@@ -233,7 +232,7 @@ pub fn core_step(action: &str) -> Option<CoreStep> {
         "live.autoRecord" => CoreStep::ToggleAutoRecord,
         "live.hide15" => CoreStep::HideFromShares(HideFor::Minutes15),
         "live.hide60" => CoreStep::HideFromShares(HideFor::Hour1),
-        "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilOff),
+        "live.hideUntilQuit" => CoreStep::HideFromShares(HideFor::UntilQuit),
         "live.stopHiding" => CoreStep::StopHiding,
         "live.hideWordsNow" => CoreStep::HideWindows,
         "window.pill" => CoreStep::TogglePill,
