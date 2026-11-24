@@ -1031,6 +1031,7 @@ class PostCallPromptTest : AppTest() {
         DecisionPopup.deleted(app, app.peekRecording("call-1")!!, "dark", 5_000)
         pumpUntil("on its way out again") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
         ShadowSettings.setCanDrawOverlays(false)
+        val timersBefore = timeoutWork("call-1").map { it.id }.toSet()
         CallLines.detach(again)
         again.shown.single().actions.away(4_000)
         pumpUntil("left to choose again") {
@@ -1039,8 +1040,15 @@ class PostCallPromptTest : AppTest() {
         assertTrue("not deleted yet", app.peekRecording("call-1")!!.notDeletedYet)
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
         pumpUntil("its delete called off") { discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED } }
-        // Its backstop is called off right after the mark (never kept by itself either).
-        pumpUntil("never kept by itself either") { timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED } }
+        // Taken back and left to the person in one write: no "kept after 10 s" was ever started for it, so a process
+        // that dies at any point of the take-back can never keep or send the call.
+        DecisionPopup.drainForTest()
+        assertEquals("no keep timer started", timersBefore, timeoutWork("call-1").map { it.id }.toSet())
+        assertTrue(timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED })
+        // Even its own Delete running late (as after a death) finds nothing to delete and keeps nothing.
+        runBlocking { Decisions.finishDiscard(app, "call-1") }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(noUpload("call-1"))
     }
 
     /** Blocks the calls' decision channel in Android's settings (the permission itself stays granted). */

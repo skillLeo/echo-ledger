@@ -632,14 +632,19 @@ object DecisionPopup {
                 choices.remove(id)
                 // Not deleted meanwhile: the call waits for the person ("Not deleted yet"); with the card busy (another
                 // call's question or line), its own "Deleted · Undo" shows once that one is over, as [deleted] holds one.
-                val back = Decisions.undoDiscard(app, id, widget = false) ?: return
-                if (back.state != "pending_decision") return
+                // Taken back and left to the person in one write: no "kept after 10 s" ever runs for it, so a process death
+                // at any point can never keep or send a call the person chose to delete.
+                val back = Decisions.undoDiscard(app, id, widget = false, leftToPerson = true) ?: return
+                if (back.state != "pending_decision") {
+                    // Kept before its Delete: kept again, and sent.
+                    com.echoledger.mobile.net.UploadWorker.enqueue(app, id)
+                    return
+                }
                 withContext(Dispatchers.Main) {
                     if (isShowing && android.provider.Settings.canDrawOverlays(app)) {
                         waiting += Held(back, settings(app).themeMode, deleteLineMs = leftMs)
                     }
                 }
-                Decisions.chooseAgain(app, id, notDeletedYet = true)
             }
 
             pick != Pick.DELETE && rec.state == "queued" -> Notifications.choiceLine(app, rec, pick == Pick.TRANSCRIBE, leftMs)

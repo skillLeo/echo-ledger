@@ -269,7 +269,16 @@ object Decisions {
      * ("queued"; the caller shows "Saved" again, whose time the upload waits for). Null when its time was over and it
      * is gone.
      */
-    suspend fun undoDiscard(context: Context, recordingId: String, widget: Boolean = true): LocalRecording? {
+    suspend fun undoDiscard(
+        context: Context,
+        recordingId: String,
+        widget: Boolean = true,
+        /**
+         * True: nobody saw an Undo for it, so a call that waited goes back to the person ("Not deleted yet. Choose
+         * again.") in the same write, with no "kept after 10 s" ever started: no process death can keep or send it.
+         */
+        leftToPerson: Boolean = false
+    ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         DiscardLaterWorker.cancel(context, recordingId)
         // A server copy an upload reached meanwhile: its delete is stopped if it has not run, else the next upload
@@ -277,15 +286,18 @@ object Decisions {
         val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
             when {
-                it.state == DISCARDING -> it.copy(
-                    state = it.discardedFrom ?: WAITING,
-                    discardAt = null,
-                    discardedFrom = null,
-                    undoIn = null,
-                    restoredDelete = false,
-                    notDeletedYet = false,
-                    restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
-                )
+                it.state == DISCARDING -> {
+                    val waits = (it.discardedFrom ?: WAITING) == WAITING
+                    it.copy(
+                        state = it.discardedFrom ?: WAITING,
+                        discardAt = null,
+                        discardedFrom = null,
+                        undoIn = null,
+                        restoredDelete = leftToPerson && waits,
+                        notDeletedYet = leftToPerson && waits,
+                        restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
+                    )
+                }
 
                 // A delete whose store was never written (the process died after its Undo was posted): taken back too.
                 it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false, notDeletedYet = false)
@@ -293,8 +305,9 @@ object Decisions {
                 else -> it
             }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
-        // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one.
-        if (back.state == WAITING) DecisionTimeoutWorker.schedule(context, recordingId)
+        // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one;
+        // left to the person, nothing keeps it by itself.
+        if (back.state == WAITING && !leftToPerson) DecisionTimeoutWorker.schedule(context, recordingId)
         if (widget) WidgetStateStore.refresh(context)
         return back
     }
