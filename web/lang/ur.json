@@ -1474,5 +1474,15 @@
     "Read by a connected app": "منسلک ایپ نے پڑھا",
     "List made": "فہرست بنائی",
     "List renamed": "فہرست کا نام بدلا",
-    "List deleted": "فہرست حذف کی"
+    "List deleted": "فہرست حذف کی",
+    "Added": "شامل",
+    "Not added": "شامل نہیں",
+    ":on of :total emails on": ":total میں سے :on ای میلز آن",
+    "Two-step on": "دو مرحلوں والا سائن اِن آن",
+    "Two-step off": "دو مرحلوں والا سائن اِن آف",
+    ":count signed in": ":count سائن اِن",
+    "1 person|:count people": "1 شخص|:count افراد",
+    "Email": "ای میل",
+    "Current plan": "موجودہ پلان",
+    "Payment details": "ادائیگی کی تفصیل"
 }

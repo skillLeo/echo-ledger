@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use App\Filament\Auth\EditProfile;
+use App\Filament\Support\CommandPalette;
 use App\Filament\Support\SettingsContext;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Services\Accounts\SettingsIndex;
+use App\Services\Accounts\SettingsRegistry;
 use Filament\Actions\Action;
 use Livewire\Livewire;
 
@@ -200,4 +203,86 @@ it('words the promo code window and its answer in Urdu, and keeps their English'
 
     expect($promo('ur'))->toBe(['پرومو کوڈ', 'لاگو کریں', 'ہم یہ کوڈ نہیں پہچانتے۔ ہجے چیک کریں۔'])
         ->and($promo('en'))->toBe(['Promo code', 'Apply', "We don't know this code. Check the spelling."]);
+});
+
+/**
+ * A Settings search result as shown (`data-result` = the setting's id): its title, path and value.
+ *
+ * @return array{title: ?string, path: ?string, value: ?string}|null
+ */
+function settingsUrduHit(string $html, string $id): ?array
+{
+    $doc = new DOMDocument;
+    @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
+    $xpath = new DOMXPath($doc);
+    $row = $xpath->query('//a[@data-result="'.$id.'"]')->item(0);
+    if ($row === null) {
+        return null;
+    }
+    $text = function (string $class) use ($xpath, $row): ?string {
+        $node = $xpath->query('.//*[contains(@class, "'.$class.'")]', $row)->item(0);
+
+        return $node !== null ? trim($node->textContent) : null;
+    };
+
+    return ['title' => $text('el-set-title'), 'path' => $text('el-set-sub'), 'value' => $text('el-set-value')];
+}
+
+it('finds a setting in Urdu by its Urdu and its English words, and shows its title and path in Urdu', function () {
+    settingsUrduAs($this, 'ur');
+    foreach (['پاس ورڈ', 'password', 'پاس'] as $query) {
+        expect(settingsUrduHit(settingsUrduHtml($this, '/app/settings?q='.rawurlencode($query)), 'security.password'))
+            ->toBe(['title' => 'پاس ورڈ', 'path' => 'ترتیبات › سائن اِن اور سکیورٹی › پاس ورڈ', 'value' => null], $query);
+    }
+    expect(settingsUrduHtml($this, '/app/settings?q='.rawurlencode('پاس ورڈ')))->toContain('<mark>پاس</mark> <mark>ورڈ</mark>')
+        ->and(settingsUrduHit(settingsUrduHtml($this, '/app/settings?q=security'), 'security'))
+        ->toBe(['title' => 'سائن اِن اور سکیورٹی', 'path' => 'ترتیبات › سائن اِن اور سکیورٹی', 'value' => 'دو مرحلوں والا سائن اِن آف']);
+});
+
+it('keeps Settings search in English exactly as it was', function () {
+    settingsUrduAs($this, 'en');
+    $html = settingsUrduHtml($this, '/app/settings?q=password');
+    expect(settingsUrduHit($html, 'security.password'))->toBe(['title' => 'Password', 'path' => 'Settings › Sign-in & security › Password', 'value' => null])
+        ->and($html)->toContain('<mark>Password</mark>')
+        ->and(settingsUrduHit(settingsUrduHtml($this, '/app/settings?q=security'), 'security'))
+        ->toBe(['title' => 'Sign-in & security', 'path' => 'Settings › Sign-in & security', 'value' => 'Two-step off'])
+        // The registry's own Urdu words still find it in English, shown in English.
+        ->and(settingsUrduHit(settingsUrduHtml($this, '/app/settings?q='.rawurlencode('پاس ورڈ')), 'security.password')['title'] ?? null)->toBe('Password');
+});
+
+it('searches a row\'s shown words only in that language, never typo-forgiven', function () {
+    $ids = fn (string $query): array => array_map(fn (array $hit): string => (string) $hit['entry']['id'], (new SettingsIndex(SettingsRegistry::entries()))->search($query)['settings']);
+
+    app()->setLocale('ur');
+    expect($ids('کلید ہٹائیں'))->toContain('key.remove')
+        ->and($ids('موجودہ پلان'))->toContain('plan.current')
+        ->and($ids('کلید ہٹایں'))->not->toContain('key.remove')
+        ->and(SettingsIndex::marked('سائن اِن', 'سائن ان'))->toBe('<mark>سائن</mark> <mark>اِن</mark>');
+
+    app()->setLocale('en');
+    expect($ids('کلید ہٹائیں'))->toBe([])
+        ->and($ids('remove key'))->toContain('key.remove');
+});
+
+it('words the values beside the Settings rows in Urdu, and keeps their English', function () {
+    settingsUrduAs($this, 'ur');
+    expect(settingsUrduHtml($this, '/app/settings'))->toContain('دو مرحلوں والا سائن اِن آف')->not->toContain('Two-step off')
+        ->toMatch('/\d+ میں سے \d+ ای میلز آن/u')->not->toMatch('/emails on/');
+
+    settingsUrduAs($this, 'en');
+    expect(settingsUrduHtml($this, '/app/settings'))->toContain('Two-step off')->toMatch('/\d+ of \d+ emails on/')->not->toContain('دو مرحلوں');
+});
+
+it('shows a settings hit in the command palette with its Urdu title and path, and its English unchanged', function () {
+    $hits = fn (string $query): string => collect(app(CommandPalette::class)->getResults($query)?->getCategories()['Settings'] ?? [])
+        ->map(fn ($result): string => html_entity_decode(strip_tags((string) $result->title), ENT_QUOTES | ENT_HTML5, 'UTF-8'))->implode('|');
+
+    settingsUrduAs($this, 'ur');
+    SettingsContext::forget();
+    expect($hits('پاس ورڈ'))->toContain('پاس ورڈ · ترتیبات › سائن اِن اور سکیورٹی › پاس ورڈ')
+        ->and($hits('password'))->toContain('پاس ورڈ · ترتیبات › سائن اِن اور سکیورٹی › پاس ورڈ')->not->toContain('Settings ›');
+
+    settingsUrduAs($this, 'en');
+    SettingsContext::forget();
+    expect($hits('password'))->toContain('Password · Settings › Sign-in & security › Password')->not->toContain('ترتیبات');
 });

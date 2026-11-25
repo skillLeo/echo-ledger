@@ -1,6 +1,7 @@
 {{--
     Settings search (since v1.7): each setting with the start of the matched words in bold, where it is ("Settings ›
-    Appearance › Theme") and its value; then questions from Help. ↑ ↓ move, Enter opens, Esc clears.
+    Appearance › Theme") and its value; then questions from Help. ↑ ↓ move, Enter opens, Esc clears. Titles and paths
+    read in the console's language.
 --}}
 @php
     use App\Services\Accounts\SettingsIndex;
@@ -16,10 +17,10 @@
                 @php($entry = $hit['entry'])
                 @php($value = $context->tag($entry) === null ? $context->value($entry) : null)
                 <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}"
-                    aria-label="{{ __(':setting, in :place', ['setting' => $entry['title'], 'place' => SettingsIndex::breadcrumb($entry)]) }}{{ $value ? ', '.$value : '' }}">
+                    aria-label="{{ __(':setting, in :place', ['setting' => SettingsIndex::title($entry), 'place' => SettingsIndex::breadcrumb($entry)]) }}{{ $value ? ', '.$value : '' }}">
                     @svg($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
                     <span class="el-set-text">
-                        <span class="el-set-title">{!! SettingsIndex::marked((string) $entry['title'], $query) !!}</span>
+                        <span class="el-set-title">{!! SettingsIndex::marked(SettingsIndex::title($entry), $query) !!}</span>
                         <span class="el-set-sub">{{ SettingsIndex::breadcrumb($entry) }}</span>
                     </span>
                     @if ($context->tag($entry))
@@ -38,11 +39,13 @@
         <x-el.section :title="__('Help')">
             @foreach ($results['help'] as $hit)
                 @php($entry = $hit['entry'])
+                @php($answer = __((string) $entry['answer']))
+                @php($stop = str_contains($answer, '. ') ? '.' : (str_contains($answer, '۔ ') ? '۔' : null))
                 <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}">
                     @svg('heroicon-o-question-mark-circle', ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
                     <span class="el-set-text">
-                        <span class="el-set-title">{!! SettingsIndex::marked((string) $entry['title'], $query) !!}</span>
-                        <span class="el-set-sub">{{ \Illuminate\Support\Str::before((string) $entry['answer'], '. ').(str_contains((string) $entry['answer'], '. ') ? '.' : '') }}</span>
+                        <span class="el-set-title">{!! SettingsIndex::marked(SettingsIndex::title($entry), $query) !!}</span>
+                        <span class="el-set-sub">{{ $stop === null ? $answer : \Illuminate\Support\Str::before($answer, $stop.' ').$stop }}</span>
                     </span>
                 </a>
             @endforeach
@@ -60,7 +63,7 @@
                     <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}">
                         @svg($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
                         <span class="el-set-text">
-                            <span class="el-set-title">{{ $entry['title'] }}</span>
+                            <span class="el-set-title">{{ SettingsIndex::title($entry) }}</span>
                             <span class="el-set-sub">{{ SettingsIndex::breadcrumb($entry) }}</span>
                         </span>
                     </a>
