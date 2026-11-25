@@ -99,8 +99,8 @@
  "WEB-NAV-017": {
   "type": "control",
   "page": "library",
-  "scope": "sidebar",
-  "key": "button|help"
+  "scope": "usermenu",
+  "key": "menuitem|account › keyboard shortcuts ?"
  },
  "WEB-NAV-018": {
   "type": "control",
@@ -820,7 +820,7 @@
   "keys": [
    "a|bilal qureshi bilal@qureshi-textiles.example personal personal, owner",
    "a|upgrade",
-   "a|plan & usage personal"
+   "a|plan & billing personal"
   ]
  },
  "WEB-SET-002": {

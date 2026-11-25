@@ -343,7 +343,7 @@ final class SettingsIndex
      */
     public static function title(array $entry): string
     {
-        $title = (string) $entry['title'];
+        $title = SettingsRegistry::titleOf($entry);
         $shown = __($title);
 
         return is_string($shown) ? $shown : $title;
@@ -359,7 +359,7 @@ final class SettingsIndex
     public static function path(array $entry): array
     {
         $page = $entry['page'] ?? null;
-        $title = (string) $entry['title'];
+        $title = SettingsRegistry::titleOf($entry);
         if ($page === null) {
             return ['Settings', $title];
         }

@@ -115,7 +115,7 @@ dataset('library side pages in English', [
     'search with results, classic' => ['library-side-classic-search-en', '/app/search?q=proforma', false],
     'search without results, classic' => ['library-side-classic-search-none-en', '/app/search?q=zebra+crossing', false],
     'recently deleted, classic' => ['library-side-classic-deleted-en', '/app/recently-deleted', false],
-    // On the top plan the avatar menu has Plan and usage (Plan & usage in classic) in place of Upgrade.
+    // On the top plan: classic's avatar menu has Plan & usage in place of Upgrade.
     'search on the top plan, new frame' => ['library-side-search-top-en', '/app/search?q=proforma', true, 'business'],
     'search on the top plan, classic' => ['library-side-classic-search-top-en', '/app/search?q=proforma', false, 'business'],
     // Older and "5 matches" on every result; Recently deleted with nothing in it.

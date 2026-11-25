@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\CaptureSessions\Widgets;
 
 use App\Filament\Auth\EditProfile;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\SettingsContext;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
@@ -64,7 +65,8 @@ class PlanLimitWidget extends Widget
                 'key' => 'Transcripts use your own Groq key.',
                 default => 'This month\'s minutes are used up',
             },
-            'action' => $limit === 'key' ? 'Add key' : 'Plan & usage',
+            // UX-18: the page's name in the new console is the account menu's (classic keeps its words).
+            'action' => $limit === 'key' ? 'Add key' : (ConsoleV2::any() ? 'Plan & billing' : 'Plan & usage'),
             'url' => $limit === 'key' ? EditProfile::settingsUrl('transcription-key') : EditProfile::settingsUrl('plan'),
             'state' => $limit.':'.now()->format('Y-m'),
         ];

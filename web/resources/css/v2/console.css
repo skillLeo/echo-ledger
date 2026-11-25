@@ -695,6 +695,34 @@ body.el-resizing {
     font-size: var(--el-text-body-size);
 }
 
+/* Plan & billing says the problem the avatar's dot shows: the dot again, then the words, under the item's name. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-problem) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--el-space-2);
+}
+
+.v2-um-problem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    color: var(--el-role-danger-default);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-um-dot.is-inline {
+    position: static;
+    border: 0;
+}
+
+/* Theme's three items take the focus as the menu's items do (its arrows reach them). */
+.v2-um-theme [role='menuitemradio']:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(var(--el-focus-width) * -1);
+    background-color: var(--el-role-bg-surface);
+}
+
 /* An item's key ("Keyboard shortcuts  ?"), and the Zoom row's, at its end. */
 .v2-um .fi-dropdown-list-item-label:has(> .v2-um-key) {
     display: flex;
@@ -3246,6 +3274,17 @@ button.v2-row-tile:focus-visible,
 .v2-um-trigger.is-rail[aria-expanded='true'] .v2-avatar {
     outline: var(--el-focus-width) solid var(--el-role-accent-default);
     outline-offset: 0;
+}
+
+/* The top bar's button (no rail): the avatar as it is, the dot on its corner. */
+.v2-um-hit.is-plain {
+    width: auto;
+    height: auto;
+}
+
+.v2-um-hit.is-plain .v2-um-dot {
+    inset-block-start: 0;
+    inset-inline-end: 0;
 }
 
 .v2-um-dot {

@@ -63,7 +63,7 @@ final class UnusualUsage
             foreach ($staff as $admin) {
                 Mail::to($admin->email)->queue(new UnusualUsageMail($user->name, $user->email, $rounded, $limit, url('/admin/customers/'.$user->id)));
                 app(ActivityFeed::class)->post($admin, 'unusual_usage', 'Unusual use', "{$user->name} ({$user->email}) recorded {$rounded} hours in a day.", null, 'heroicon-o-exclamation-triangle',
-                    url: ViewCustomer::getUrl(['record' => $user], panel: 'admin', isAbsolute: false), actor: $user);
+                    url: ViewCustomer::getUrl(['record' => $user], panel: 'admin', isAbsolute: false));
             }
         } catch (Throwable $e) {
             report($e);

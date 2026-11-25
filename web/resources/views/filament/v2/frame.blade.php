@@ -102,10 +102,15 @@
                             <span class="v2-rail-label" aria-hidden="true">{{ __('Setup') }}</span>
                         </a>
                     @endif
-                    <button type="button" class="v2-rail-item" x-on:click="$dispatch('el-help')" title="{{ __('Help and shortcuts') }}" data-module="help" tabindex="-1">
-                        <span class="v2-rail-icon"><x-el.v2.icon name="help" /></span>
-                        <span class="v2-rail-label">{{ __('Help') }}</span>
-                    </button>
+                    {{-- UX-18: Help is the Help page here and in the account menu (one name, one place); the shortcuts'
+                         dialog is Keyboard shortcuts, in the account menu and on ?. On the Help page Settings is the
+                         place you are on (About & help is its group). --}}
+                    @if (\App\Filament\Pages\Help::canAccess())
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}" class="v2-rail-item" title="{{ __('Help') }}" data-module="help" tabindex="-1">
+                            <span class="v2-rail-icon"><x-el.v2.icon name="help" /></span>
+                            <span class="v2-rail-label">{{ __('Help') }}</span>
+                        </a>
+                    @endif
                     @if ($places->has('settings'))
                         @include('filament.v2.frame-rail-item', ['place' => $places['settings'], 'mac' => $mac])
                     @endif

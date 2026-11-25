@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use App\Filament\Auth\EditProfile;
 use App\Filament\Support\SettingsContext;
-use App\Models\CaptureSession;
+use App\Models\Plan;
 use App\Models\SentItem;
 use App\Models\UpgradeRequest;
+use App\Models\UsageLedgerEntry;
+use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
@@ -81,6 +83,18 @@ it('names Account in Urdu too', function () {
         ->and($m[2] ?? '')->toBe('اکاؤنٹ، تھیم اور ترتیبات');
 });
 
+it('puts Theme\'s three options in the menu as items its arrows reach (menuitemradio in a labelled group)', function () {
+    accountConsole(true);
+    $menu = accountMenuOf((string) $this->get('/app/sessions')->assertOk()->getContent());
+    preg_match('~<span class="v2-segmented" role="group" aria-labelledby="(v2-um-theme-rail)">(.*?)</span>~s', $menu, $group);
+    expect($group[1] ?? '')->toBe('v2-um-theme-rail')
+        ->and($menu)->toContain('<span id="v2-um-theme-rail">Theme</span>')
+        ->and(substr_count($group[2] ?? '', 'role="menuitemradio" tabindex="-1" x-bind:aria-checked='))->toBe(3)
+        ->and($menu)->not->toContain('role="radio"');
+    // The header describes the menu (the panel's aria-describedby, set by resources/js/a11y-core.cjs).
+    expect($menu)->toContain('data-account-head id="v2-um-head-rail" data-menu-description>');
+});
+
 it('shows the dot only for an account problem: a payment staff asked for again', function () {
     $request = UpgradeRequest::query()->create(['user_id' => $this->owner->id, 'workspace_id' => $this->owner->current_workspace_id, 'plan' => 'pro', 'status' => UpgradeRequest::PENDING]);
     accountConsole(true);
@@ -91,7 +105,15 @@ it('shows the dot only for an account problem: a payment staff asked for again',
     SettingsContext::forget();
     $menu = accountMenuOf((string) $this->get('/app/sessions')->getContent());
     expect($menu)->toContain('aria-label="Account, Saif Hassam, a payment needs your attention"')
-        ->toContain('<span class="v2-um-dot" aria-hidden="true"></span>');
+        ->toContain('<span class="v2-um-dot" aria-hidden="true"></span>')
+        // Plan & billing says it, with the same dot.
+        ->toMatch('~data-account-item="plan"\s*>.*?<span class="fi-dropdown-list-item-label">\s*Plan &amp; billing<span class="v2-um-problem"><span class="v2-um-dot is-inline" aria-hidden="true"></span>A payment needs your attention</span>~s');
+    // Without the rail (the top bar's button) the dot shows too, as its name says.
+    app(InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+    SettingsContext::forget();
+    $top = (string) $this->get('/app/sessions')->getContent();
+    expect($top)->toContain('class="fi-user-menu-trigger v2-um-trigger" aria-label="Account, Saif Hassam, a payment needs your attention"')
+        ->toMatch('~<span class="v2-um-hit is-plain">'.ACCOUNT_BLOCK.'<span class="v2-avatar is-coloured is-drawn"[^>]*></span>\s*'.ACCOUNT_END.'<span class="v2-um-dot" aria-hidden="true"></span></span>~');
 });
 
 it('opens a menu with the header, then Add photo without a photo, Theme, Plan & billing, Settings, Keyboard shortcuts, Help, Sign out', function () {
@@ -103,10 +125,10 @@ it('opens a menu with the header, then Add photo without a photo, Theme, Plan & 
         ->toContain('href="'.e(EditProfile::settingsUrl('plan')).'"')
         ->toContain("x-on:click=\"\$dispatch('el-help')\"")
         ->toContain('<kbd class="v2-um-key" aria-hidden="true">?</kbd>')
-        ->toMatch('~role="radiogroup" aria-labelledby="v2-um-theme">.*System.*Light.*Dark~s')
+        ->toMatch('~role="group" aria-labelledby="v2-um-theme-rail">.*System.*Light.*Dark~s')
         ->not->toContain('data-account-item="zoom"')->not->toContain('>Upgrade<');
     // The header is who it is (not a link): the 40 px avatar, the name, the email, the plan and the month's minutes.
-    preg_match('~<div class="v2-um-head" data-account-head>.*?</div>~s', $menu, $head);
+    preg_match('~<div class="v2-um-head" data-account-head[^>]*>.*?</div>~s', $menu, $head);
     expect($head[0] ?? '')->toContain('<span class="v2-avatar is-large is-coloured" data-avatar-color="0"')
         ->toContain('<span class="v2-um-name"><bdi>Saif Hassam</bdi></span>')
         ->toContain('<span class="v2-um-email"><bdi dir="ltr">saif@example.com</bdi></span>')
@@ -121,11 +143,19 @@ it('opens a menu with the header, then Add photo without a photo, Theme, Plan & 
         ->and($menu)->toContain('href="'.e(EditProfile::settingsUrl('profile')).'"')->toMatch('~>\s*Edit profile\s*<~');
 });
 
-it('says the plan and the month\'s minutes in the header', function () {
+it('says the plan as written and the month\'s minutes in the header, in English and in Urdu', function () {
+    Plan::query()->where('key', 'free')->update(['monthly_minutes' => 30]);
+    Workspace::query()->whereKey($this->owner->current_workspace_id)->update(['plan_id' => Plan::query()->where('key', 'free')->value('id'), 'plan_expires_at' => null]);
+    UsageLedgerEntry::query()->create(['workspace_id' => $this->owner->current_workspace_id, 'user_id' => $this->owner->id, 'source' => 'server', 'report_id' => 'menu-minutes',
+        'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => 12 * 60000, 'channels' => 1, 'billed_ms' => 12 * 60000,
+        'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
+    $line = fn (): string => preg_match('~<span class="v2-um-plan">([^<]+)</span>~', (string) $this->get('/app/sessions')->assertOk()->getContent(), $m) === 1
+        ? str_replace(["\u{2068}", "\u{2069}"], '', html_entity_decode($m[1], ENT_QUOTES)) : '';
+
     accountConsole(true);
-    $line = preg_match('~<span class="v2-um-plan">([^<]+)</span>~', (string) $this->get('/app/sessions')->getContent(), $m) === 1 ? $m[1] : '';
-    $plan = SettingsContext::current()?->plan();
-    expect($line)->toStartWith((string) $plan?->name)->toMatch('~^[^·]+( · \d[\d,]* of \d[\d,]* min used this month)?$~u');
+    expect($line())->toBe('Free · 12 of 30 min used this month');
+    accountConsole(true, 'ur');
+    expect($line())->toBe('Free · اس مہینے 30 میں سے 12 منٹ استعمال ہوئے');
 });
 
 it('adds the Zoom row only where v21_zoom is on: the browser\'s own keys, as a page can\'t set its zoom', function () {
@@ -156,28 +186,45 @@ it('draws Settings › Profile with a 96 px avatar and a camera badge that adds 
 });
 
 it('shows on Activity the avatar of the person an item is about, in the new console only', function () {
-    $session = Fx::session($this->owner, Fx::device($this->owner));
     app(ActivityFeed::class)->sharedWithYou($this->owner, ActivityFeed::line(':name sent you :title', ['name' => 'Farah Khan', 'title' => 'Call']), 'Open it in Shared with me.', null, $this->farah);
     // One from before UX-18 (no actor_id): its sender, as Sent to keeps them.
     $older = Fx::session($this->farah, Fx::device($this->farah));
     SentItem::query()->create(['workspace_id' => $older->workspace_id, 'from_user_id' => $this->farah->id, 'to_user_id' => $this->owner->id, 'kind' => 'recording',
         'capture_session_id' => $older->id, 'title' => 'Older call', 'sent_at' => now()]);
     app(ActivityFeed::class)->sharedWithYou($this->owner, 'Farah Khan sent you Older call', 'Open it in Shared with me.', $older->id);
-    // Not about a person: its tile, as before.
+    // Not about a person: its tile, as before. A warning about a person keeps its tile too: it is the only sign.
     app(ActivityFeed::class)->post($this->owner, 'budget_warn', 'Most of your minutes are used', '80% of this month.', null, 'heroicon-o-chart-bar');
-    expect(CaptureSession::query()->whereKey($session->id)->exists())->toBeTrue();
+    app(ActivityFeed::class)->post($this->owner, 'unusual_usage', 'Unusual use', 'Farah Khan recorded 9 hours in a day.', null, 'heroicon-o-exclamation-triangle', actor: $this->farah);
 
     accountConsole(true);
     $html = (string) $this->get('/app/activity')->assertOk()->getContent();
     $farah = '<span class="v2-avatar is-list is-coloured" data-avatar-color="4" style="background-color: var(--el-role-avatar-4)" aria-hidden="true">FK</span>';
     expect(substr_count($html, $farah))->toBe(2)
-        ->and($html)->toContain('<span class="el-tile el-tile-amber">');
+        ->and($html)->toContain('<span class="el-tile el-tile-amber">')
+        ->and(substr_count($html, '<span class="el-tile el-tile-slate">'))->toBe(1, 'Unusual use keeps its tile');
 
     // Classic: every row keeps its tile, byte for byte.
     accountConsole(false);
     $classic = (string) $this->get('/app/activity')->assertOk()->getContent();
     expect($classic)->not->toContain('v2-avatar')->toContain('<span class="el-tile el-tile-slate">')
         ->toMatch('~</svg></span>\n                <span class="el-row-main">~');
+});
+
+it('shows the latest sender of a share from before UX-18, as its title names them', function () {
+    $omar = Fx::user(['name' => 'Omar Malik', 'email' => 'omar@example.com']);
+    $omar->forceFill(['avatar_color' => 1])->save();
+    $call = Fx::session($this->farah, Fx::device($this->farah));
+    // Omar's row is written first, Farah's after it; Omar sent it last.
+    foreach ([[$omar, now()], [$this->farah, now()->subDay()]] as [$from, $at]) {
+        SentItem::query()->create(['workspace_id' => $call->workspace_id, 'from_user_id' => $from->id, 'to_user_id' => $this->owner->id, 'kind' => 'recording',
+            'capture_session_id' => $call->id, 'title' => 'Call', 'sent_at' => $at]);
+    }
+    app(ActivityFeed::class)->sharedWithYou($this->owner, 'Omar Malik sent you Call', 'Open it in Shared with me.', $call->id);
+
+    accountConsole(true);
+    expect((string) $this->get('/app/activity')->assertOk()->getContent())
+        ->toContain('<span class="v2-avatar is-list is-coloured" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" aria-hidden="true">OM</span>')
+        ->not->toContain('aria-hidden="true">FK</span>');
 });
 
 it('keeps who an item is about with the item: a share\'s sender, a customer\'s receipt for staff', function () {

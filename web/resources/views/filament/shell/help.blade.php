@@ -1,6 +1,7 @@
 {{--
     Help & shortcuts (since v1.6, P4): the sidebar's button, the top bar's ? and the ? key open it; Esc closes it. The
-    keys work on every page except while you type.
+    keys work on every page except while you type. In the new console it is Keyboard shortcuts (UX-18: the account
+    menu's item and ?), Help being the Help page; classic keeps its title byte for byte.
 --}}
 @php
     $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
@@ -39,7 +40,7 @@
         <div class="el-help-backdrop" x-on:click.self="open = false">
             <div class="el-help" role="dialog" aria-modal="true" aria-labelledby="el-help-title" x-init="$nextTick(() => $el.querySelector('button')?.focus())">
                 <header class="el-help-head">
-                    <h2 id="el-help-title">{{ __('Help & shortcuts') }}</h2>
+                    <h2 id="el-help-title">{{ \App\Filament\Support\ConsoleV2::any() ? __('Keyboard shortcuts') : __('Help & shortcuts') }}</h2>
                     <button type="button" class="el-icon-btn" x-on:click="open = false" aria-label="{{ __('Close') }}">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
                 </header>
                 @foreach ($keys as $section => $rows)

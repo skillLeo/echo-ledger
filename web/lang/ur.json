@@ -1828,7 +1828,7 @@
     "The transcript is not ready yet.": "ٹرانسکرپٹ ابھی تیار نہیں ہے۔",
     ":name, :role, workspace": ":name، :role، ورک اسپیس",
     ":name. Change project": ":name۔ پروجیکٹ بدلیں",
-    "Opens plan and usage.": "پلان اور استعمال کھولتا ہے۔",
+    "Opens plan and billing.": "پلان اور بلنگ کھولتا ہے۔",
     "This plan isn't available right now. Please choose another.": "یہ پلان ابھی دستیاب نہیں۔ براہِ کرم کوئی اور چنیں۔",
     "Only the owner of :workspace can upgrade it. Ask them to upgrade.": "اسے صرف :workspace کا مالک اپ گریڈ کر سکتا ہے۔ ان سے اپ گریڈ کرنے کو کہیں۔",
     "Only the owner of this workspace can upgrade it. Ask them to upgrade.": "اس ورک اسپیس کو صرف اس کا مالک اپ گریڈ کر سکتا ہے۔ ان سے اپ گریڈ کرنے کو کہیں۔",
@@ -2071,5 +2071,6 @@
     "Add photo": "تصویر لگائیں",
     "Change photo": "تصویر بدلیں",
     "Edit profile": "پروفائل میں ترمیم کریں",
-    "Plan & billing": "پلان اور بلنگ"
+    "Plan & billing": "پلان اور بلنگ",
+    "A payment needs your attention": "ایک ادائیگی پر توجہ درکار ہے"
 }

@@ -198,8 +198,14 @@ class Activity extends Page
     }
 
     /**
+     * UX-18: the kinds whose item shows the person it is about (their face in the tile's place): neutral ones only. A
+     * warning or a failure keeps its tile, the only sign of what it is.
+     */
+    public const PERSON_KINDS = ['shared_with_you', 'upgrade_requested'];
+
+    /**
      * UX-18: the person each item is about, by the item's id: its actor_id (since UX-18), else for a share from before
-     * it the sender, as Sent to keeps them. Only people who are still there.
+     * it the latest sender, as Sent to keeps them. Only neutral kinds (PERSON_KINDS), and only people who are still there.
      *
      * @param  Collection<int, DatabaseNotification>  $notifications
      * @return array<string, User>
@@ -210,6 +216,9 @@ class Activity extends Page
         $ids = [];
         $shares = [];
         foreach ($notifications as $notification) {
+            if (! in_array(ActivityFeed::kindOf($notification), self::PERSON_KINDS, true)) {
+                continue;
+            }
             $actor = $notification->data['viewData']['actor_id'] ?? null;
             $session = $notification->data['viewData']['session_id'] ?? null;
             if (is_int($actor) || (is_string($actor) && ctype_digit($actor))) {
@@ -219,7 +228,9 @@ class Activity extends Page
             }
         }
         if ($shares !== [] && $user instanceof User) {
-            $senders = SentItem::query()->where('to_user_id', $user->id)->whereIn('capture_session_id', array_values($shares))->pluck('from_user_id', 'capture_session_id');
+            // The latest sender wins (the item says the latest one's name): oldest first, each later one replaces it.
+            $senders = SentItem::query()->where('to_user_id', $user->id)->whereIn('capture_session_id', array_values($shares))
+                ->orderBy('sent_at')->orderBy('id')->pluck('from_user_id', 'capture_session_id');
             foreach ($shares as $id => $session) {
                 if (isset($senders[$session])) {
                     $ids[$id] = (int) $senders[$session];
