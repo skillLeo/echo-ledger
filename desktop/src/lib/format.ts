@@ -49,28 +49,43 @@ export function clockTime(date: Date): string {
     : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+/** When something happened, in parts, in the window's language: the day ("Today", "Yesterday", "23 Nov") and the time. */
+export type WhenParts = { day: string; time: string; today: boolean; yesterday: boolean };
+
+/**
+ * The parts of formatWhen, for a place that shows only one of them (Activity's time today, a project's last call, a
+ * row's time): never by splitting formatWhen's line, which in Urdu is one right-to-left run. In Urdu the day is آج, کل
+ * or "23 نومبر" and the time keeps its space from breaking ("2:00 PM" whole). Null with no date, or one that isn't.
+ */
+export function whenParts(iso?: string | null, now: Date = new Date()): WhenParts | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const today = date.toDateString() === now.toDateString();
+  const before = new Date(now);
+  before.setDate(now.getDate() - 1);
+  const yesterday = date.toDateString() === before.toDateString();
+  const urdu = language() === "ur";
+  const time = urdu ? clockTime(date).replace(/\s/g, "\u00A0") : clockTime(date);
+  if (today) return { day: urdu ? t("Today") : "Today", time, today, yesterday };
+  if (yesterday) return { day: urdu ? t("Yesterday") : "Yesterday", time, today, yesterday };
+  return { day: date.toLocaleDateString(urdu ? "ur-PK" : [], { month: "short", day: "numeric" }), time, today, yesterday };
+}
+
+/** One of whenParts' parts as a line shows it: as it is in English; in Urdu in its own isolate, closed. */
+export function whenPart(part: string): string {
+  return language() === "ur" ? isolate(part) : part;
+}
+
 /**
  * When something happened: "Today · 2:00 PM", "Yesterday · 2:00 PM", "23 Nov · 2:00 PM". In Urdu the day and the time
- * are each their own isolated run inside one right-to-left run (آج, کل, "23 نومبر"; "2:00 PM" kept whole, its space
- * one that doesn't break), so neither a left-to-right box (.el-ltr) nor a sentence around it swaps the month and the
- * time or puts PM on its own line. English as it always was.
+ * are each their own isolated run inside one right-to-left run, so neither a left-to-right box (.el-ltr) nor a sentence
+ * around it swaps the month and the time or puts PM on its own line. English as it always was.
  */
 export function formatWhen(iso?: string, now: Date = new Date()): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const sameDay = date.toDateString() === now.toDateString();
-  const time = clockTime(date);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const wasYesterday = date.toDateString() === yesterday.toDateString();
-  if (language() === "ur") {
-    const day = sameDay ? t("Today") : wasYesterday ? t("Yesterday") : date.toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
-    return `${RLI}${isolate(day)} · ${isolate(time.replace(/\s/g, "\u00A0"))}${PDI}`;
-  }
-  if (sameDay) return `Today · ${time}`;
-  if (wasYesterday) return `Yesterday · ${time}`;
-  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
+  const parts = whenParts(iso, now);
+  if (!parts) return "";
+  return language() === "ur" ? `${RLI}${whenPart(parts.day)} · ${whenPart(parts.time)}${PDI}` : `${parts.day} · ${parts.time}`;
 }
 
 export function timestamp(ms: number): string {

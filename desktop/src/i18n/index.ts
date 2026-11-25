@@ -96,8 +96,11 @@ export function isolate(value: string): string {
 
 /** U+2067 RIGHT-TO-LEFT ISOLATE: a run that reads right to left whatever surrounds it (lib/format's Urdu dates). */
 export const RLI = "\u2067";
-/** Letters of the right-to-left scripts (Hebrew, Arabic, Urdu, Syriac, Thaana and their presentation forms). */
-const RTL_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC]/;
+/**
+ * Letters of the right-to-left scripts: Hebrew, Arabic, Urdu, Syriac, Thaana and their presentation forms, and those
+ * past the basic plane (Hanifi Rohingya, Adlam and the rest, U+10800–U+10FFF and U+1E800–U+1EFFF).
+ */
+const RTL_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
 
 /**
  * The text of a line, when it is text: a string, a number, or a list of them (an RLM put before a line); null for

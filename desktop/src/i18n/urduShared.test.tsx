@@ -9,7 +9,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FSI, lineDir, PDI, resetLanguageForTests, RLI, setLanguage } from "./index";
-import { formatWhen, setClock24 } from "../lib/format";
+import { formatWhen, setClock24, whenPart, whenParts } from "../lib/format";
+import { shortWhen } from "../views/main/ActivityCentre";
+import { clientSummary } from "../views/main/ClientAvatar";
+import { rowTime } from "../views/main/LibraryView";
 import { Dialog, ListRow, Toast, ToastRegion } from "../v2/components";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +40,12 @@ describe("lineDir: a line's direction from its own words", () => {
     expect(lineDir(`${FSI}3${PDI} ریکارڈنگز`, "ur")).toBe("rtl");
     // An isolate the value left open hides what follows, as UAX #9 reads it.
     expect(lineDir(`${FSI}Imran ہٹائیں`, "ur")).toBe("auto");
+    // Nested isolates are skipped as a whole; digits before a Latin word don't decide.
+    expect(lineDir(`${FSI}a${FSI}b${PDI}c${PDI} ریکارڈ`, "ur")).toBe("rtl");
+    expect(lineDir("3 recordings", "ur")).toBe("ltr");
+    expect(lineDir(`${FSI}3${PDI} recordings`, "ur")).toBe("ltr");
+    // Right-to-left letters past the basic plane (Adlam, Hanifi Rohingya).
+    expect([lineDir("\u{1E900}\u{1E901}", "ur"), lineDir("\u{10D00}", "ur")]).toEqual(["rtl", "rtl"]);
     // Only an isolate, or no letter at all: the browser's choice.
     expect([lineDir(`${FSI}Acme Ltd${PDI}`, "ur"), lineDir("12:34", "ur"), lineDir("", "ur")]).toEqual(["auto", "auto", "auto"]);
     // A right-to-left mark (D2's lines) or a left-to-right one decides.
@@ -103,6 +112,62 @@ describe("formatWhen: a date and its time", () => {
       expect(open).toBeGreaterThanOrEqual(0);
     }
     expect(open).toBe(0);
+  });
+});
+
+describe("whenParts: one part of a date where a place shows only one, in Urdu never split from formatWhen's run", () => {
+  const now = new Date(2026, 10, 25, 15, 0);
+  const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0).toISOString();
+  const balanced = (text: string) => {
+    let open = 0;
+    for (const char of text) {
+      if (char === RLI || char === FSI || char === "\u2066") open++;
+      if (char === PDI) open--;
+      if (open < 0) return false;
+    }
+    return open === 0;
+  };
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now }));
+  afterEach(() => vi.useRealTimers());
+
+  it("English: the same words as splitting formatWhen's line did", () => {
+    expect(whenParts(at(25, 14), now)).toMatchObject({ day: "Today", today: true, yesterday: false });
+    expect(whenParts(null)).toBeNull();
+    expect(whenParts("not a date")).toBeNull();
+    for (const iso of [at(25, 14), at(24, 9), at(23, 14)]) {
+      const line = formatWhen(iso, now);
+      const [day, time] = line.split(" · ");
+      expect(shortWhen(iso)).toBe(line.startsWith("Today · ") ? time : day);
+      expect(rowTime(iso)).toBe(line.startsWith("Today · ") || line.startsWith("Yesterday · ") ? time : day);
+      expect(clientSummary(2, iso)).toBe(`2 recordings · Last call ${day}`);
+    }
+    expect(shortWhen(null)).toBe("");
+  });
+
+  it("Urdu: Activity's today shows its time and an older one its day, each in a closed isolate", async () => {
+    resetLanguageForTests({ Today: "آج", Yesterday: "کل" });
+    await urdu();
+    const time = (h: number) => new Date(2026, 10, 25, h).toLocaleTimeString("ur-PK", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, NBSP);
+    const date = new Date(2026, 10, 23).toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
+    expect(shortWhen(at(25, 14))).toBe(`${FSI}${time(14)}${PDI}`);
+    expect(shortWhen(at(23, 14))).toBe(`${FSI}${date}${PDI}`);
+    expect(shortWhen(at(24, 9))).toBe(`${FSI}کل${PDI}`);
+    expect(rowTime(at(24, 9))).toBe(`${FSI}${time(9)}${PDI}`);
+    for (const iso of [at(25, 14), at(24, 9), at(23, 14)]) expect([shortWhen(iso), rowTime(iso), formatWhen(iso, now)].every(balanced)).toBe(true);
+    expect(whenPart("x")).toBe(`${FSI}x${PDI}`);
+  });
+
+  it("Urdu: a project's summary keeps its day closed, so what follows stays after it", async () => {
+    resetLanguageForTests({ Today: "آج", Yesterday: "کل" });
+    await urdu();
+    const date = new Date(2026, 10, 23).toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
+    const summary = clientSummary(2, at(23, 14));
+    expect(summary).toBe(`2 recordings · Last call ${FSI}${date}${PDI}`);
+    // ProjectsListV2 adds " · 3 folders": outside every isolate, after the date.
+    const line = `${summary} · 3 folders`;
+    expect(balanced(line)).toBe(true);
+    expect(line.endsWith(`${PDI} · 3 folders`)).toBe(true);
+    expect(clientSummary(0, at(23, 14))).toBe("No recordings yet");
   });
 });
 
