@@ -135,9 +135,9 @@ it('keeps a short word\'s general meaning in ur.json and its narrower one in a g
 it('never gives a one-word key a question word in ur.json', function () {
     $urdu = json_decode((string) file_get_contents(lang_path('ur.json')), true, 512, JSON_THROW_ON_ERROR);
     $questions = ['کس', 'کیا', 'کون', 'کب', 'کہاں', 'کیوں', 'کیسے', 'کتنا', 'کتنے', 'کتنی', 'کونسا', 'کونسی'];
-    // English question words are questions in Urdu too. 'Inside' (a project's folder) was there before this rule; its
-    // owner moves it to a context key.
-    $allowed = ['who', 'what', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom', 'inside'];
+    // English question words are questions in Urdu too. ('Inside', a project's folder, is client_context.field_inside
+    // since W-221.)
+    $allowed = ['who', 'what', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom'];
     $found = [];
     foreach ($urdu as $key => $value) {
         $words = preg_split('/[\s،۔؟?!:]+/u', trim((string) $value), -1, PREG_SPLIT_NO_EMPTY) ?: [];

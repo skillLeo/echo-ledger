@@ -12,7 +12,7 @@ import { fillWidth } from "../../../lib/motion";
 import { setting } from "../../../lib/settingsRegistry";
 import { canUpgrade, dismissRequest, limitText, percentOf, planHighlights, requestShown, usageText } from "../../../views/main/Upgrade";
 import { Badge, Button, Card, Dialog, Icons, ListRow } from "../../components";
-import { Group } from "./rows";
+import { Group, SectionTitle } from "./rows";
 
 const METERS: readonly (readonly [string, string, string])[] = [
   ["storage_bytes", "Storage", "plan.usage.storage"],
@@ -274,7 +274,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
       {matrix && <FeatureTable e={e} />}
       {allowed && above.length > 0 && (
         <section className="el-group" id="plans-above" aria-labelledby="plans-head">
-          <h2 id="plans-head" className="el-caption el-body-strong el-group__title">Plans</h2>
+          <SectionTitle id="plans-head">Plans</SectionTitle>
           {above.map((p, i) => {
             const below = i > 0 ? above[i - 1] : current;
             return (

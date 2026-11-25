@@ -4,7 +4,7 @@
 import { useState, type ReactNode } from "react";
 import { Icon, Icons, SearchField } from "../components";
 import type { IconType } from "../components/Button";
-import { GOAL_GROUPS, groupOf, sectionFor } from "../settings/SettingsV2";
+import { GOAL_GROUPS, entryOf, groupOf, sectionFor } from "../settings/groups";
 import { searchSettings } from "../../lib/settingsIndex";
 import { SETTINGS, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
 
@@ -78,8 +78,8 @@ export function ActivityPanel({ show, needs, onShow }: { show: ActivityShow; nee
 }
 
 /**
- * Settings: a search over every setting (two letters or more: the matches, each opening where it lives), else its
- * groups; a group opens its first page, whose inner list has the rest.
+ * Settings: a search over every setting (two letters or more: the matches, each opening its group's page scrolled to
+ * it), else its groups; a group opens its page, with all its sections (UX-11: two levels, no inner list).
  */
 export function SettingsPanel({ current, onOpen, available }: { current: string | null; onOpen: (id: string) => void; available: (entry: SettingEntry) => boolean }) {
   const [find, setFind] = useState("");
@@ -97,7 +97,7 @@ export function SettingsPanel({ current, onOpen, available }: { current: string 
         </Group>
       ) : (
         <Group>
-          {groups.map((g) => <Row key={g.title} icon={g.icon} label={g.title} current={here?.title === g.title} onClick={() => onOpen(g.ids[0])} />)}
+          {groups.map((g) => <Row key={g.title} icon={g.icon} label={g.title} current={here?.title === g.title} onClick={() => onOpen(entryOf(g))} />)}
         </Group>
       )}
     </>
