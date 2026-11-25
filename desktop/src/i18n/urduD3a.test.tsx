@@ -3,7 +3,7 @@
 // isolate; the same words in English as before (Settings' own tests are in English, unchanged). Plan names stay as
 // written (LEAD 23). The registry's words (titles, descriptions, options) are D3b's.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,6 +111,28 @@ describe("D3a's words, in English as before and in Urdu", () => {
 });
 
 describe("Settings in Urdu", () => {
+  it("a footer's line that starts with a value reads right to left; in English the footer is as before", async () => {
+    respond("lock_status", { enabled: true, locked: false, hasPin: true, osMethod: "touch_id", retryAfterSeconds: 0 });
+    await page("lock", false);
+    expect(screen.getByText("Touch ID or your PIN unlocks it. Recording keeps running while it's locked.")).not.toHaveAttribute("dir");
+    cleanup();
+    await urdu();
+    await page("lock", false);
+    expect(screen.getByText(/یا آپ کا PIN اسے کھولتا ہے/)).toHaveAttribute("dir", "rtl");
+  });
+
+  it("search still finds settings by their English words, in the panel and on the home", async () => {
+    await urdu();
+    render(<div className="el-root"><SettingsPanel current={null} onOpen={vi.fn()} available={() => true} /></div>);
+    fireEvent.change(screen.getByRole("searchbox", { name: "ترتیبات میں تلاش" }), { target: { value: "storage" } });
+    expect(within(screen.getByRole("list", { name: "نتائج" })).getAllByRole("button").length).toBeGreaterThan(0);
+    cleanup();
+    render(<div className="el-root"><SettingsV2 available={() => true} renderPage={() => null} /></div>);
+    await act(flushAsync);
+    fireEvent.change(screen.getByRole("searchbox", { name: "ترتیبات میں تلاش" }), { target: { value: "storage" } });
+    expect(within(screen.getByRole("list", { name: "نتائج" })).getAllByRole("button").length).toBeGreaterThan(0);
+  });
+
   it("the home: each group's title and line in Urdu, its English title still its id", async () => {
     await urdu();
     render(<div className="el-root"><SettingsV2 available={() => true} renderPage={() => null} /></div>);
@@ -151,7 +173,8 @@ describe("Settings in Urdu", () => {
     resetEntitlementsForTests(e);
     await urdu();
     await page("plan", false);
-    expect(screen.getByText(`${iso("Pro")} پلان`)).toBeInTheDocument();
+    // The title starts with the plan's name in its isolate: its direction is its Urdu words' (lineDir), not dir="auto".
+    expect(screen.getByText(`${iso("Pro")} پلان`)).toHaveAttribute("dir", "rtl");
     expect(screen.getByRole("button", { name: `${iso("Ultra")} پر اپ گریڈ کریں` })).toBeInTheDocument();
     const minutes = screen.getByTestId("meter-monthly_minutes");
     expect(minutes).toHaveTextContent(`آپ اپنے ${iso(85)}% منٹ استعمال کر چکے ہیں۔`);

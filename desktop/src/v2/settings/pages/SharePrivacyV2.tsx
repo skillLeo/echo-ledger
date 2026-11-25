@@ -245,7 +245,7 @@ export function ShareCheckPageV2() {
               <List label={t("Meeting apps to test")} className="el-group__rows">
                 {status.apps.filter((a) => a.version).map((a) => (
                   <ListRow key={a.app} compact title={a.line} meta={versionLine(a) ?? undefined}
-                    control={<Button size="sm" onClick={() => void startGuided(a.app)} disabled={busy} aria-label={`${a.needsTest ? t("Test") : t("Test again")} ${a.name}`}>{a.needsTest ? t("Test") : t("Test again")}</Button>} />
+                    control={<Button size="sm" onClick={() => void startGuided(a.app)} disabled={busy} aria-label={a.needsTest ? t("Test :app", { app: a.name }) : t("Test :app again", { app: a.name })}>{a.needsTest ? t("Test") : t("Test again")}</Button>} />
                 ))}
               </List>
             ) : <p className="el-secondary el-check-none">{t("No meeting apps found on this Mac.")}</p>}

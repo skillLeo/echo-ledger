@@ -2,13 +2,13 @@
 // the rows every page is built from. A row's title, description and options come from the settings registry
 // (lib/settingsRegistry.ts), the same words search, the phone and the console use.
 import { PanelToggle, usePageHistory } from "../../shell/NavRail";
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, createContext, Fragment, isValidElement, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, type Settings, type SettingsPatch } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
 import { confirmAction } from "../../../lib/confirm";
 import { highlightSetting } from "../../../views/main/SettingsControls";
 import { Button, Card, Icons, List, ListRow, Loading, Radio, Segmented, Select, SkeletonRow, Toggle } from "../../components";
-import { t } from "../../../i18n";
+import { isRtl, lineDir, t } from "../../../i18n";
 
 /** On a Mac the way back's keys are ⌘[ (Alt+← and Ctrl+[ elsewhere). */
 const MAC_KEYS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -189,6 +189,20 @@ export function SectionTitle({ id, className = "el-caption el-body-strong el-gro
   return <Heading className={className} id={id}>{children}</Heading>;
 }
 
+/**
+ * A footer's lines, each in the direction of its own words (lineDir) in a right-to-left window: the browsers' dir="auto"
+ * on the footer reads the first letter even inside a value's isolate ("Touch ID یا آپ کا PIN …"). A line that says its
+ * own dir keeps it; English is as it always was.
+ */
+function linesInTheirDirection(node: ReactNode): ReactNode {
+  if (!isRtl()) return node;
+  return Children.map(node, (child) => {
+    if (!isValidElement<{ children?: ReactNode; dir?: string }>(child)) return child;
+    if (child.type === Fragment) return linesInTheirDirection(child.props.children);
+    return child.type === "p" && child.props.dir === undefined ? cloneElement(child, { dir: lineDir(child.props.children) }) : child;
+  });
+}
+
 /** A group of rows in one card, with an optional heading and the lines under it. */
 export function Group({ title, footer, children }: { title?: string; footer?: ReactNode; children: ReactNode }) {
   const id = useId();
@@ -196,7 +210,7 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
     <section className="el-group" aria-labelledby={title ? id : undefined}>
       {title && <SectionTitle id={id}>{title}</SectionTitle>}
       <Card><List label={title ?? t("Settings")} className="el-group__rows">{children}</List></Card>
-      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{footer}</div>}
+      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{linesInTheirDirection(footer)}</div>}
     </section>
   );
 }
