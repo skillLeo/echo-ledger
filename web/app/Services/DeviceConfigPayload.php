@@ -106,6 +106,10 @@ final class DeviceConfigPayload
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),
+            // Since 2.0.0-w (docs/API.md "Call rules"): the person's After each call settings and the rules' version, only
+            // while the call_rules flag is on for them.
+            ...(app(InterfaceFlags::class)->active(InterfaceFlags::CALL_RULES, $device->user, $device->workspace_id)
+                ? ['call_rules' => app(CallRules::class)->settings($device->user)] : []),
             // Since 1.9.0-g (docs/API_ASSIST.md): the relay host's pins, only while Live Assist is on for this person.
             ...(app(InterfaceFlags::class)->active(InterfaceFlags::LIVE_ASSIST, $device->user, $device->workspace_id)
                 ? ['relay_pins' => $this->settings->relayPins()] : []),

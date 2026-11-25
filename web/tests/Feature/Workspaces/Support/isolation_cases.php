@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
+use App\Models\CallDeclinedOffer;
+use App\Models\CallRule;
 use App\Models\LabelList;
 use App\Models\MissedRecording;
 use App\Models\Passkey;
@@ -185,15 +187,22 @@ function isoWorld(bool $sameWorkspace = false): array
         'created_by' => $bob->id, 'expires_at' => now()->addDay()]);
     // Since 2.0.0-l: a passkey of Bob's (account and security from the apps).
     $bobPasskey = Passkey::query()->create(['user_id' => $bob->id, 'name' => 'BOB-SECRET-DEVICE passkey', 'credential_id' => 'bob-credential', 'credential' => '{}']);
+    // Since 2.0.0-w: call rules on for everyone, and a rule of Bob's naming a person he calls.
+    app(InterfaceFlags::class)->set(InterfaceFlags::CALL_RULES, true, 0, [], []);
+    $bobRule = CallRule::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'match_key' => '+923009990001', 'number' => '+923009990001',
+        'name' => 'BOB-SECRET-CLIENT contact', 'action' => 'dont_record']);
+    // Since 2.0.0-x: an offer Bob turned down, naming the same person.
+    CallDeclinedOffer::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'number' => '+923009990001', 'name' => 'BOB-SECRET-CLIENT declined',
+        'match_key' => '+923009990001', 'declined_at' => now()]);
     app('auth')->forgetGuards();
 
-    return compact('bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
+    return compact('bobRule', 'bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id, $b['bobPasskey']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id, $b['bobPasskey']->id, $b['bobRule']->id];
 }
 
 /**
@@ -343,6 +352,13 @@ function isoApiCases(array $b): array
         'api.sessions.show' => ['GET', "/api/sessions/{$s}", [], 404],
         'api.sessions.opened' => ['POST', "/api/sessions/{$s}/opened", [], 404],
         'api.sessions.unopened' => ['DELETE', "/api/sessions/{$s}/opened", [], 404],
+        // Since 2.0.0-y: B's recording among many is listed back as not found, never marked, never an error.
+        'api.sessions.opened.many' => ['POST', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
+        'api.sessions.unopened.many' => ['DELETE', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
         // Live Translate holds no workspace data; without a Soniox key it says so and leaks nothing of the other one.
         'api.live-translate.token' => ['POST', '/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'],
             fn (TestResponse $r): bool => $r->status() === 503 && $r->json('code') === 'provider_not_configured'],
@@ -369,6 +385,19 @@ function isoApiCases(array $b): array
         'api.account.ui' => ['PUT', '/api/account/ui', ['classic' => true], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('ui_classic') === true],
         // Since 2.0.0-g: the calling person's own design switch.
         'api.account.ui.show' => ['GET', '/api/account/ui', [], 'list'],
+        // Since 2.0.0-w: call rules are the calling person's own, account-wide. Bob's rule is never listed, changed or
+        // removed; a rule for the same number is the caller's own new one.
+        'api.call-rules' => ['GET', '/api/call-rules', [], 'list'],
+        'api.call-rules.settings' => ['PUT', '/api/call-rules/settings', ['after_call' => 'always_audio'], 'list'],
+        'api.call-rules.store' => ['POST', '/api/call-rules', ['kind' => 'contact', 'number' => '+923009990001', 'action' => 'always_audio'],
+            fn (TestResponse $r): bool => $r->status() === 201 && $r->json('action') === 'always_audio'],
+        'api.call-rules.update' => ['PATCH', "/api/call-rules/{$b['bobRule']->id}", ['action' => 'ask'], 404],
+        'api.call-rules.destroy' => ['DELETE', "/api/call-rules/{$b['bobRule']->id}", [], 404],
+        // Since 2.0.0-x: preferences and turned-down offers are the calling person's own; Bob's never show.
+        'api.call-rules.preferences' => ['PATCH', '/api/call-rules/preferences', ['hint_seen' => true], 'list'],
+        'api.call-rules.declined' => ['POST', '/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'],
+            fn (TestResponse $r): bool => $r->status() === 201],
+        'api.call-rules.declined.forget' => ['DELETE', '/api/call-rules/declined', [], fn (TestResponse $r): bool => $r->status() === 204],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.

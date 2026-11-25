@@ -1270,3 +1270,20 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   another app (`retry_requested_at`, run once per account on this computer).
 - So the desktop doesn't read `GET /api/config` `upload_retry` (1, 5 and 30 minutes). The phone and the web console
   follow it.
+
+## 2026-11-26 00:05 PKT — production web deploy of v1.1 0d6c1d09 (BE-06 profile, W-INC-1125 alert)
+- **What went out:** 923e7c4e → 0d6c1d09 (61 files, `public/build` whole, bundle sha256 399e2ff7…): contract 2.0.0-u
+  (avatar colour names), BE-06 (the profile inside the apps and the console: language, avatar_color, photo), decision 18
+  on the console header (the title never cut, search on the right), U13-web, U9e's WhatsApp panel in Urdu, the
+  W-INC-1125 alert (a `server_problem` Activity item for super admins when the scheduled PHP check fails, 2.0.0-v), and
+  UX-22's web menus. No composer or npm change. One scheduler change: `echoledger:health --report --web`.
+- **Backup:** ~/echoledger-backups/pre-1126-20261125-190255 (db.sql.gz, web.tgz, env.backup, SHA256SUMS).
+- **Rehearsal:** on a copy of that dump on the Mac, 2027_01_02_000001 (users.avatar_color) up, down, up; the column
+  checks 1 each time; counts unchanged; the local dump deleted.
+- **Live:** down 19:04:46 → up 19:05:52 UTC; migrate --force ran the one migration; 0 pending. Checks: /app/login 200,
+  /api/config, /api/views and /api/badge 401, /.env 403, /health/php 200 (also from the server itself); counts
+  unchanged (3 users, 341 sessions, 294 transcripts, 311 notifications, failed_jobs 53); `schedule:list` shows the
+  `--web` line every 5 minutes; `echoledger:health --web` and deploy/check-php.sh PASS for the CLI and the web PHP;
+  no new log errors; no unread `server_problem`.
+- **Still to do by the owner:** mail is `log` on production, so no alert, sign-in code or invitation email leaves the
+  server until alerts@skillleo.com is set in Admin › Settings › Email (see the mail setup note).

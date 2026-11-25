@@ -142,7 +142,7 @@ it('renews on a label\'s colour set through PUT /api/labels/color, written witho
 
 describe('Needs you and the shared folder', function () {
     it('keeps the waiting calls of Needs you with filters or a search', function () {
-        $waiting = CaptureSession::factory()->open()->create(['user_id' => $this->me->id, 'source_app' => 'zoom', 'title' => 'Invoice call']);
+        $waiting = CaptureSession::factory()->waiting()->create(['user_id' => $this->me->id, 'source_app' => 'zoom', 'title' => 'Invoice call']);
         $failed = reviewed($this->me, ['source_app' => 'zoom', 'title' => 'Invoice failed'], TranscriptStatus::Failed->value);
         reviewed($this->me, ['source_app' => 'whatsapp', 'status' => SessionStatus::Failed, 'title' => 'Other'], null);
 

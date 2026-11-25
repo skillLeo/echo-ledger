@@ -36,6 +36,9 @@ final class InterfaceFlags
      */
     public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar'];
 
+    /** Since 2.0.0-w (B5): the person's call rules on the server. Off (the admin's lists) or everyone, like V21. */
+    public const CALL_RULES = 'call_rules';
+
     /** The nine console flags: "the new design" a person can try, and what `ui_design.current` reads. */
     public const CONSOLE = [
         'ui_v2.shell', 'ui_v2.home', 'ui_v2.library', 'ui_v2.recording_controls', 'ui_v2.after_call', 'ui_v2.live',
@@ -69,6 +72,8 @@ final class InterfaceFlags
         'v21_preview_pane' => 'v2.1 desktop and web: the Library\'s preview pane',
         // Since 2.0.0-s.
         'v21_win_titlebar' => 'v2.1 desktop on Windows: the custom title row',
+        // Since 2.0.0-w.
+        'call_rules' => 'Call rules: After each call and the rules per contact and app, kept for the whole account',
     ];
 
     /** @var array<string, InterfaceFlag>|null */
@@ -77,7 +82,7 @@ final class InterfaceFlags
     /** @return list<string> every flag, in the contract's order */
     public static function names(): array
     {
-        return [...self::UI_V2, self::LIVE_ASSIST, ...self::V21];
+        return [...self::UI_V2, self::LIVE_ASSIST, ...self::V21, self::CALL_RULES];
     }
 
     /** Whether [$flag] can be opt-in: only the design's ui_v2.* flags; live_assist and the v21 flags are off or everyone. */

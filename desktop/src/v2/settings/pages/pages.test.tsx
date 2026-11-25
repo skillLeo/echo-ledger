@@ -777,6 +777,19 @@ describe("Plan & usage v2", () => {
     expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
   });
 
+  it("D-230: near the uploads a day the meter says uploads, never team members; a team with no plan known says who manages it", async () => {
+    const e = sampleEntitlements("pro");
+    e.limits.uploads_per_day = { limit: 200, used: 170 };
+    await showPlan(e);
+    expect(screen.getByTestId("meter-uploads_per_day")).toHaveTextContent("You've used 85% of your daily uploads.");
+    expect(screen.getByTestId("meter-uploads_per_day")).not.toHaveTextContent("team members");
+    cleanup();
+    respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
+    await showPlan({ ...sampleEntitlements("pro"), plan: null });
+    expect(screen.getByText("Qureshi Textiles's plan is managed by its owner.")).toBeInTheDocument();
+    expect(screen.queryByText(/is on Your/)).toBeNull();
+  });
+
   it("a team's member: the plan's facts, who manages it, and no button", async () => {
     respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
     await showPlan(sampleEntitlements("pro"));
