@@ -134,7 +134,7 @@ class Login extends BaseLogin
         try {
             $answer = app(EmailCodes::class)->start($email);
         } catch (ApiError $e) {
-            throw ValidationException::withMessages(['data.email' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.email' => self::codeError($e)]);
         }
         if ($answer['account'] === 'existing' && User::query()->where('email', $email)->whereNotNull('suspended_at')->exists()) {
             throw ValidationException::withMessages(['data.email' => __(self::SUSPENDED)]);
@@ -173,7 +173,7 @@ class Login extends BaseLogin
                 $this->data['turnstile'] = null;
                 $this->dispatch('turnstile-reset');
             }
-            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+            Notification::make()->title(self::codeError($e))->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }
@@ -201,7 +201,7 @@ class Login extends BaseLogin
                 return null;
             }
         } catch (ApiError $e) {
-            throw ValidationException::withMessages(['data.code' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.code' => self::codeError($e)]);
         }
         if ($user->hasTwoFactor()) {
             $this->step = self::STEP_OTP;
@@ -231,7 +231,7 @@ class Login extends BaseLogin
         } catch (ApiError $e) {
             $this->step = self::STEP_CODE;
 
-            throw ValidationException::withMessages(['data.code' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.code' => self::codeError($e)]);
         }
         $user = User::query()->where('email', $this->confirmedEmail)->firstOrFail();
         if (! app(TwoFactorCodes::class)->verify($user, trim((string) ($this->data['otp'] ?? '')))) {
@@ -258,7 +258,7 @@ class Login extends BaseLogin
             $user = DB::transaction(function () use ($codes, $state): User {
                 $email = $codes->redeemSignUpToken((string) $this->signUpToken);
                 if (User::query()->where('email', $email)->exists()) {
-                    throw new ApiError(422, 'invalid_code', __('An account with this email exists already. Sign in instead.'));
+                    throw new ApiError(422, 'invalid_code', 'An account with this email exists already. Sign in instead.', ['account' => 'existing']);
                 }
                 $codes->assertMaySignUp($email);
                 $user = app(SignUp::class)->create(['name' => (string) $state['name'], 'email' => $email, 'password' => Str::password(40)],
@@ -271,7 +271,7 @@ class Login extends BaseLogin
         } catch (ApiError $e) {
             $this->signUpToken = null;
             $this->step = self::STEP_EMAIL;
-            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+            Notification::make()->title(self::codeError($e))->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }
@@ -281,6 +281,37 @@ class Login extends BaseLogin
         $this->redirect(GetTheApps::getUrl(panel: 'app'));
 
         return null;
+    }
+
+    /**
+     * The words for an answer of EmailCodes (docs/API.md "Sign-up and sign-in with an email code") in the console's
+     * language; the API's own words stay English. Each English line is the API's, word for word.
+     */
+    public static function codeError(ApiError $e): string
+    {
+        $extra = $e->extra();
+        $left = $extra['attempts_left'] ?? null;
+
+        return match ($e->apiCode()) {
+            'invalid_code' => match (true) {
+                is_int($left) && $left > 0 => trans_choice('That code is not right. :count try left.|That code is not right. :count tries left.', $left),
+                is_int($left) => __('That code is not right. Ask for a new one.'),
+                ($extra['account'] ?? null) === 'existing' => __('An account with this email exists already. Sign in instead.'),
+                // EmailCodes::redeemSignUpToken ("This sign-up has expired. Start again with your email."), or any other
+                // wording of the API's: its own words, in the console's language when they have a line.
+                default => __($e->getMessage()),
+            },
+            'code_expired' => __('This code has expired. Ask for a new one.'),
+            'resend_too_soon' => is_int($extra['resend_after'] ?? null)
+                ? __('Wait :seconds seconds before asking for a new code.', ['seconds' => (string) $extra['resend_after']])
+                : __($e->getMessage()),
+            'too_many_attempts' => __('Too many codes asked for. Try again later.'),
+            'turnstile_failed' => __('The check that you are not a robot did not pass. Try it again.'),
+            'sign_up_closed' => __('Sign-up is closed on this server. Ask the owner for an invitation.'),
+            'email_not_allowed' => __('This email address cannot be used to sign up. Use your usual email address.'),
+            'sign_up_limit' => __('Too many new accounts from this network today. Try again tomorrow.'),
+            default => __($e->getMessage()),
+        };
     }
 
     /** Whether the Turnstile check shows with the email, on the first step: on the sign-up page (since v1.6.2). */
@@ -378,7 +409,7 @@ class Login extends BaseLogin
                 ->visible(fn (): bool => $this->step === self::STEP_OTP),
             TextInput::make('name')->label(__('Your name'))->required(fn (): bool => $this->step === self::STEP_PROFILE)->maxLength(120)->autocomplete('name')
                 ->visible(fn (): bool => $this->step === self::STEP_PROFILE),
-            Text::make(RecordingConsent::TEXT)->visible(fn (): bool => $this->step === self::STEP_PROFILE),
+            Text::make(__(RecordingConsent::TEXT))->visible(fn (): bool => $this->step === self::STEP_PROFILE),
             Checkbox::make('accept_terms')
                 // One sentence; each link is made around its own words (escaped), the address never inside the words.
                 ->label(new HtmlString(__('I accept the <terms>Terms</terms> and the <privacy>Privacy Policy</privacy>', [

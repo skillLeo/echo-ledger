@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ApiError;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\AccountBeingDeleted;
 use App\Filament\Pages\Help;
 use App\Filament\Pages\Upgrade\ChoosePlan;
@@ -14,6 +16,7 @@ use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Entitlements\PaymentProofs;
+use App\Services\Entitlements\PromoCodes;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\Help\SupportMessages;
 use App\Services\SettingsRepository;
@@ -274,7 +277,7 @@ it('words Send receipt in Urdu, with its tiles, its answers and its notice, and 
         '<span>اسکرین شاٹ یا PDF یہاں چھوڑیں، یا <strong>فائل چنیں</strong></span>',
         'JPEG، PNG، WebP یا PDF، زیادہ سے زیادہ 5 MB۔ اس بار '.upgradeUrduIsolated('2').' اور فائلیں۔',
         '<label for="el-tid">ٹرانزیکشن ID (اختیاری)</label>', 'آپ کی رسید پر Transaction ID، TID یا Reference no. کے نام سے۔',
-        '<label for="el-payer">ادا کرنے والا اکاؤنٹ (اختیاری)</label>', 'آپ کی رسید صرف ہماری ادائیگیوں کی ٹیم دیکھتی ہے۔',
+        '<label for="el-payer">ادا کرنے والے کا نام (اختیاری)</label>', 'آپ کی رسید صرف ہماری ادائیگیوں کی ٹیم دیکھتی ہے۔',
         '>ادائیگی کی تفصیل</a>',
     ], [
         '<h1 class="el-set-h1">Send receipt</h1>', 'aria-label="Receipt 1, image, open full size"', 'aria-label="Remove receipt 1"',
@@ -325,7 +328,9 @@ it('words the request\'s page in Urdu while it waits, with the amount and refere
         'class="el-btn el-btn-primary">ادائیگی کی تفصیل</a>',
         '<h2 class="el-set-head">پیش رفت</h2>', '<span class="el-set-title">درخواست دی گئی</span>', '<span class="el-set-title">رسید بھیجی گئی</span>',
         '<span class="el-set-title">ہماری ٹیم نے چیک کی</span>', '<span class="el-set-title">'.upgradeUrduIsolated('Pro').' آن</span>',
-        'aria-label="'.upgradeUrduIsolated('درخواست دی گئی').'، مکمل، '.upgradeUrduIsolated(upgradeUrduIsolated('17 Nov').'، '.upgradeUrduIsolated('11:42 am')).'"',
+        // The day and the time in Urdu (month name, صبح), kept whole.
+        'aria-label="'.upgradeUrduIsolated('درخواست دی گئی').'، مکمل، '.upgradeUrduIsolated(upgradeUrduIsolated('17 نومبر').'، '.upgradeUrduIsolated('11:42 صبح')).'"',
+        '<span class="el-set-value" style="max-width:60%;white-space:normal;overflow-wrap:anywhere">17 نومبر 2026</span>',
         'aria-label="'.upgradeUrduIsolated('رسید بھیجی گئی').'، جاری"', 'aria-label="'.upgradeUrduIsolated(upgradeUrduIsolated('Pro').' آن').'، ابھی نہیں"',
         '<h2 class="el-set-head">تفصیلات</h2>', '<span class="el-set-title">پلان</span>', upgradeUrduIsolated('Pro').'، 1 مہینہ',
         '<span class="el-set-title">رقم</span>', '<span class="el-set-title">حوالہ</span>', 'aria-label="حوالہ کاپی کریں"',
@@ -349,9 +354,10 @@ it('words the request\'s page in Urdu once the receipt is sent, its tile with th
 
     upgradeUrduBoth($ur, $en, [
         '<span class="el-plan-card-name">آپ کی ادائیگی چیک ہو رہی ہے</span>', '<span class="el-tag">جانچ میں</span>',
-        'ہمیں آپ کی رسید '.upgradeUrduIsolated('17 Nov').' کو '.upgradeUrduIsolated('11:42 am').' پر ملی۔',
-        '<span class="el-set-title">ٹرانزیکشن ID</span>', '<span class="el-set-title">ادا کرنے والا اکاؤنٹ</span>',
-        '<h2 class="el-set-head">رسیدیں</h2>', '<span class="el-rtile-meta">'.upgradeUrduIsolated('17 Nov').' کو بھیجی گئی</span>',
+        'ہمیں آپ کی رسید '.upgradeUrduIsolated('17 نومبر').' کو '.upgradeUrduIsolated('11:42 صبح').' پر ملی۔',
+        // The Details row holds the name the payment came from.
+        '<span class="el-set-title">ٹرانزیکشن ID</span>', '<span class="el-set-title">ادا کرنے والے کا نام</span>',
+        '<h2 class="el-set-head">رسیدیں</h2>', '<span class="el-rtile-meta">'.upgradeUrduIsolated('17 نومبر').' کو بھیجی گئی</span>',
         '<span class="el-set-title">ادائیگی کی تفصیل</span>',
     ], [
         '<span class="el-plan-card-name">Checking your payment</span>', '<span class="el-tag">In review</span>', 'We got your receipt on 17 Nov at 11:42 am.',
@@ -400,8 +406,8 @@ it('says "You\'re on Pro" in Urdu on an approved request, with the date kept who
     };
 
     expect($approved('ur'))->toContain('>آپ '.upgradeUrduIsolated('Pro').' پر ہیں</h1>')
-        ->toContain('شکریہ۔ '.upgradeUrduIsolated('Pro').'، '.upgradeUrduIsolated('17 December 2026').' تک آن ہے۔')->toContain('>ہو گیا</a>')
-        ->toContain(upgradeUrduIsolated('17 Dec 2026').' تک')->not->toContain("You're on Pro");
+        ->toContain('شکریہ۔ '.upgradeUrduIsolated('Pro').'، '.upgradeUrduIsolated('17 دسمبر 2026').' تک آن ہے۔')->toContain('>ہو گیا</a>')
+        ->toContain(upgradeUrduIsolated('17 دسمبر 2026').' تک')->not->toContain("You're on Pro")->not->toContain('December');
     expect($approved('en'))->toContain(">You're on Pro</h1>")->toContain('Thank you. Pro is on until 17 December 2026.')->toContain('until 17 Dec 2026')
         ->not->toContain('شکریہ');
 });
@@ -504,4 +510,60 @@ it('words Help in Urdu, its empty search and its Contact support window, and Eng
     expect($words)->toBe(['Contact support', "Your message goes to {$address}; the reply comes to your email.", 'Send',
         'Subject', 'Message', "Attach my devices' latest reports · Their app versions and the checks of their setup (recording, captions, permissions). No recordings, no words."]);
     $page->assertNotified('Message sent');
+});
+
+it('words the services\' own answers on Upgrade in Urdu (a code for another plan, a request still waiting), each word for word in English', function () {
+    PromoCode::query()->create(['code' => 'ULTRA20', 'plan' => 'business', 'percent' => 20, 'months' => 1, 'one_per_person' => true, 'active' => true]);
+    // The answers as the services give them (their words stay English), then as each page shows them.
+    $answers = function (string $language): array {
+        upgradeUrduAs($this, $language);
+        UpgradeRequest::query()->delete();
+        $page = Livewire::test(ChoosePlan::class)->assertSet('plan', 'pro')->set('promoOpen', true)->set('promo', 'ULTRA20')->call('applyPromo');
+        $other = $page->get('promoError');
+        try {
+            app(PromoCodes::class)->checkThrottled($this->owner, 'ULTRA20', 'pro', '10.0.0.1');
+            $otherApi = null;
+        } catch (ApiError $e) {
+            $otherApi = [$e->getMessage(), EditProfile::promoError($e)];
+        }
+        app(UpgradeRequests::class)->create($this->owner, (int) $this->owner->current_workspace_id, 'pro', null);
+        try {
+            app(UpgradeRequests::class)->create($this->owner, (int) $this->owner->current_workspace_id, 'pro', null);
+            $pending = null;
+        } catch (ApiError $e) {
+            $pending = [$e->getMessage(), (new ReflectionMethod(ChoosePlan::class, 'pendingError'))->invoke(null, $e)];
+        }
+
+        return [$other, $otherApi, $pending];
+    };
+
+    [$other, [$api, $shown], [$pendingApi, $pending]] = $answers('ur');
+    expect($other)->toBe('یہ کوڈ '.upgradeUrduIsolated('Business').' کے لیے ہے۔')->and($shown)->toBe($other)->and($api)->toBe('This code is for Business.')
+        ->and($pending)->toBe('آپ کی '.upgradeUrduIsolated('Pro').' کی درخواست ابھی انتظار میں ہے۔ فیصلہ ہوتے ہی ہم آپ کو بتائیں گے۔')
+        ->and($pendingApi)->toBe('Your request for Pro is still waiting. We will tell you once it is decided.');
+
+    // English: exactly the services' own words.
+    [$other, [$api, $shown], [$pendingApi, $pending]] = $answers('en');
+    expect($other)->toBe('This code is for Business.')->and($shown)->toBe($api)->and($pending)->toBe($pendingApi);
+});
+
+it('words a declined request in Urdu, its step "not approved" in the request\'s own words and its tag in the general one, and English as before', function () {
+    $declined = function (string $language): string {
+        upgradeUrduAs($this, $language);
+        UpgradeRequest::query()->delete();
+        $request = upgradeUrduRequest($this->owner);
+        app(UpgradeRequests::class)->decline($request, Fx::user(), 'We could not find this payment.');
+        SettingsContext::forget();
+
+        return upgradeUrduPage($this, UpgradeFlow::statusUrl($request));
+    };
+
+    upgradeUrduBoth($declined('ur'), $declined('en'), [
+        '<span class="el-plan-card-name">ہم آپ کی ادائیگی کی تصدیق نہیں کر سکے</span>', '<span class="el-tag">منظور نہیں</span>',
+        '<span class="el-set-title">منظور نہیں ہوئی</span>', 'aria-label="'.upgradeUrduIsolated('منظور نہیں ہوئی').'، مکمل، ',
+        'اگر آپ ادائیگی کر چکے ہیں تو اپنی ٹرانزیکشن ID کے ساتھ ہماری ای میل کا جواب دیں، ہم دوبارہ دیکھیں گے۔',
+    ], [
+        "<span class=\"el-plan-card-name\">We couldn't confirm your payment</span>", '<span class="el-tag">Not approved</span>',
+        '<span class="el-set-title">Not approved</span>', 'aria-label="Not approved, done, 17 Nov, 11:42 am"',
+    ]);
 });

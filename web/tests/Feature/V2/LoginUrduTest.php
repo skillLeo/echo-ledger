@@ -2,18 +2,23 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ApiError;
 use App\Filament\Auth\Login;
+use App\Filament\Auth\RequestPasswordReset;
 use App\Mail\EmailCodeMail;
+use App\Services\Accounts\EmailCodes;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Support\RecordingConsent;
 use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
 use Filament\Notifications\NotificationMailbox;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -197,18 +202,19 @@ it('words the two-step step, its wrong code and the lock in each language', func
         'That code is wrong or was used already.', 'Too many failed sign-ins. Try again later.'],
 ]);
 
-it('words the sign-up step in each language, the Terms one sentence with its two links', function (string $language, string $heading, string $sub, string $name, string $button, string $terms, string $accept) {
+it('words the sign-up step in each language, the Terms one sentence with its two links', function (string $language, string $heading, string $sub, string $name, string $button, string $terms, string $accept, string $consent) {
     app()->setLocale($language);
     $page = signInAtProfile();
-    expect($page->html())->toContain($heading)->toContain($sub)->toContain($name)->toContain($button)->toContain($terms);
+    expect($page->html())->toContain($heading)->toContain($sub)->toContain($name)->toContain($button)->toContain($terms)->toContain($consent);
     $page->fillForm(['name' => 'Omar', 'accept_terms' => false])->call('authenticate')->assertHasFormErrors(['accept_terms' => $accept]);
 })->with([
     'Urdu' => ['ur', 'اپنا اکاؤنٹ بنائیں', 'آخری مرحلہ: آپ کا نام، اور شرائط۔', 'آپ کا نام', 'میرا اکاؤنٹ بنائیں',
         'میں <a href="https://echoledger.test/terms" target="_blank" class="underline">شرائط</a> اور <a href="https://echoledger.test/privacy" target="_blank" class="underline">پرائیویسی پالیسی</a> سے متفق ہوں',
-        'اپنا اکاؤنٹ بنانے کے لیے شرائط اور پرائیویسی پالیسی قبول کریں۔'],
+        'اپنا اکاؤنٹ بنانے کے لیے شرائط اور پرائیویسی پالیسی قبول کریں۔',
+        'ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کا تقاضا ہو، اپنی میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔'],
     'English as before' => ['en', 'Create your account', 'Last step: your name, and the Terms.', 'Your name', 'Create my account',
         'I accept the <a href="https://echoledger.test/terms" target="_blank" class="underline">Terms</a> and the <a href="https://echoledger.test/privacy" target="_blank" class="underline">Privacy Policy</a>',
-        'Accept the Terms and the Privacy Policy to make your account.'],
+        'Accept the Terms and the Privacy Policy to make your account.', RecordingConsent::TEXT],
 ]);
 
 it('renders the English sign-up page, with the Google button, and its invitation-only line byte for byte as before', function () {
@@ -219,3 +225,103 @@ it('renders the English sign-up page, with the Google button, and its invitation
     app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
     signInGolden('signup-en-invited', normaliseClassic((string) $this->get('/app/register')->assertOk()->getContent(), (string) session()->token()));
 });
+
+/** A code that is not [$right]. */
+function signInWrongCode(string $right): string
+{
+    return $right === '000000' ? '111111' : '000000';
+}
+
+it('answers a wrong email code with the tries left, then an expired code, in each language', function (string $language, string $four, string $one, string $none, string $expired, string $wait) {
+    app()->setLocale($language);
+    $page = Livewire::test(Login::class)->fillForm(['email' => 'farah@example.test'])->call('authenticate')->call('emailCode')->assertSet('step', Login::STEP_CODE);
+    $wrong = signInWrongCode(signInCode('farah@example.test'));
+    $page->fillForm(['code' => $wrong])->call('authenticate')->assertHasFormErrors(['code' => $four]);
+    foreach (range(1, 2) as $ignored) {
+        $page->fillForm(['code' => $wrong])->call('authenticate');
+    }
+    $page->fillForm(['code' => $wrong])->call('authenticate')->assertHasFormErrors(['code' => $one]);
+    $page->fillForm(['code' => $wrong])->call('authenticate')->assertHasFormErrors(['code' => $none]);
+
+    // A new code at once: wait; a minute later it comes, and ten minutes after that it has expired.
+    signInNotices();
+    $page->call('emailCode');
+    expect(signInNotices())->toContain($wait);
+    Carbon::setTestNow(now()->addMinutes(2));
+    Mail::fake();
+    $page->call('emailCode');
+    $right = signInCode('farah@example.test');
+    Carbon::setTestNow(now()->addMinutes(EmailCodes::CODE_MINUTES + 1));
+    $page->fillForm(['code' => $right])->call('authenticate')->assertHasFormErrors(['code' => $expired]);
+})->with([
+    'Urdu' => ['ur', 'یہ کوڈ درست نہیں۔ '.signInIsolated('4').' کوششیں باقی ہیں۔', 'یہ کوڈ درست نہیں۔ '.signInIsolated('1').' کوشش باقی ہے۔',
+        'یہ کوڈ درست نہیں۔ نیا کوڈ منگوائیں۔', 'اس کوڈ کی میعاد ختم ہو گئی ہے۔ نیا کوڈ منگوائیں۔', 'نیا کوڈ منگوانے سے پہلے '.signInIsolated('60').' سیکنڈ انتظار کریں۔'],
+    'English as before' => ['en', 'That code is not right. 4 tries left.', 'That code is not right. 1 try left.', 'That code is not right. Ask for a new one.',
+        'This code has expired. Ask for a new one.', 'Wait 60 seconds before asking for a new code.'],
+]);
+
+it('says every email-code answer in English word for word as the API does, and in Urdu in Urdu', function () {
+    $codes = app(EmailCodes::class);
+    $catch = function (Closure $call): ApiError {
+        try {
+            $call();
+        } catch (ApiError $e) {
+            return $e;
+        }
+        throw new RuntimeException('no ApiError');
+    };
+    $errors = [];
+    $codes->send('farah@example.test', null, '10.0.0.9');
+    $right = signInCode('farah@example.test');
+    foreach ([4, 3, 2, 1, 0] as $ignored) {
+        $errors[] = $catch(fn () => $codes->check('farah@example.test', signInWrongCode($right)));
+    }
+    $errors[] = $catch(fn () => $codes->check('farah@example.test', $right));
+    $errors[] = $catch(fn () => $codes->send('farah@example.test', null, '10.0.0.9'));
+    foreach (range(1, EmailCodes::PER_EMAIL_HOUR - 1) as $ignored) {
+        Carbon::setTestNow(now()->addSeconds(EmailCodes::RESEND_SECONDS + 1));
+        $codes->send('farah@example.test', null, '10.0.0.9');
+    }
+    Carbon::setTestNow(now()->addSeconds(EmailCodes::RESEND_SECONDS + 1));
+    $errors[] = $catch(fn () => $codes->send('farah@example.test', null, '10.0.0.9'));
+    app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+    $errors[] = $catch(fn () => $codes->start('someone.new@example.test'));
+    app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+    $errors[] = $catch(fn () => $codes->start('someone@mailinator.com'));
+    app(CredentialVault::class)->put('turnstile', 'site_key', '0x4AAAA-site');
+    app(CredentialVault::class)->put('turnstile', 'secret_key', '0x4AAAA-secret');
+    Http::fake(['challenges.cloudflare.com/*' => Http::response(['success' => false])]);
+    $errors[] = $catch(fn () => $codes->send('someone.new@example.test', 'bad-answer', '10.0.0.10', requireTurnstile: true));
+    foreach (range(1, $codes->signUpsPerIpDay()) as $ignored) {
+        $codes->countSignUp('10.0.0.11');
+    }
+    $errors[] = $catch(fn () => $codes->assertSignUpQuota('10.0.0.11'));
+    $errors[] = $catch(fn () => $codes->redeemSignUpToken('not-a-token'));
+    $errors[] = new ApiError(422, 'invalid_code', 'An account with this email exists already. Sign in instead.', ['account' => 'existing']);
+
+    app()->setLocale('en');
+    expect(array_map(Login::codeError(...), $errors))->toBe(array_map(fn (ApiError $e): string => $e->getMessage(), $errors))
+        ->and(array_map(fn (ApiError $e): string => $e->apiCode(), $errors))->toBe(['invalid_code', 'invalid_code', 'invalid_code', 'invalid_code', 'invalid_code',
+            'code_expired', 'resend_too_soon', 'too_many_attempts', 'sign_up_closed', 'email_not_allowed', 'turnstile_failed', 'sign_up_limit', 'invalid_code', 'invalid_code']);
+
+    app()->setLocale('ur');
+    $urdu = array_map(Login::codeError(...), $errors);
+    expect($urdu[0])->toBe('یہ کوڈ درست نہیں۔ '.signInIsolated('4').' کوششیں باقی ہیں۔')
+        ->and($urdu[4])->toBe('یہ کوڈ درست نہیں۔ نیا کوڈ منگوائیں۔')
+        ->and(array_slice($urdu, 5))->toBe(['اس کوڈ کی میعاد ختم ہو گئی ہے۔ نیا کوڈ منگوائیں۔', 'نیا کوڈ منگوانے سے پہلے '.signInIsolated((string) $errors[6]->extra()['resend_after']).' سیکنڈ انتظار کریں۔',
+            'بہت زیادہ کوڈ منگوائے گئے۔ بعد میں دوبارہ کوشش کریں۔', 'اس سرور پر نئے اکاؤنٹ بنانا بند ہے۔ مالک سے دعوت مانگیں۔',
+            'اس ای میل ایڈریس سے اکاؤنٹ نہیں بن سکتا۔ اپنا معمول کا ای میل ایڈریس استعمال کریں۔', 'روبوٹ نہ ہونے کی جانچ کامیاب نہیں ہوئی۔ دوبارہ کوشش کریں۔',
+            'آج اس نیٹ ورک سے بہت زیادہ نئے اکاؤنٹس بنے۔ کل دوبارہ کوشش کریں۔', 'اکاؤنٹ بنانے کا وقت ختم ہو گیا۔ اپنی ای میل سے دوبارہ شروع کریں۔',
+            'اس ای میل کا اکاؤنٹ پہلے سے موجود ہے۔ اس کی جگہ سائن اِن کریں۔']);
+    RateLimiter::clear('sign-ups-per-ip:'.hash('sha256', '10.0.0.11'));
+});
+
+it('answers Forgot password in each language', function (string $language, string $notice) {
+    app()->setLocale($language);
+    signInNotices();
+    Livewire::test(RequestPasswordReset::class)->fillForm(['email' => 'farah@example.test'])->call('request');
+    expect(signInNotices())->toContain($notice);
+})->with([
+    'Urdu' => ['ur', 'اپنی ای میل دیکھیں · اگر کوئی اکاؤنٹ یہ ایڈریس استعمال کرتا ہے تو نیا پاس ورڈ چننے کا لنک آ رہا ہے۔'],
+    'English as before' => ['en', 'Check your email · If an account uses that address, a link to choose a new password is on its way.'],
+]);

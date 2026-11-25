@@ -133,10 +133,19 @@ trait ManagesPlanPage
     public static function promoError(ApiError $e): string
     {
         return match ($e->apiCode()) {
-            'promo_other_plan' => $e->getMessage(),
+            'promo_other_plan' => self::otherPlanError($e),
             'rate_limited' => __('Too many tries. Please try again in a minute.'),
             default => __("We don't know this code. Check the spelling."),
         };
+    }
+
+    /** PromoCodes::otherPlan's "This code is for {plan}." in the console's language: the plan by the key it carries. */
+    private static function otherPlanError(ApiError $e): string
+    {
+        $key = $e->extra()['plan'] ?? null;
+        $name = is_string($key) ? Plan::query()->where('key', $key)->value('name') : null;
+
+        return is_string($name) ? __('This code is for :plan.', ['plan' => $name]) : $e->getMessage();
     }
 
     /** The request card's Dismiss (an approved or declined request). */

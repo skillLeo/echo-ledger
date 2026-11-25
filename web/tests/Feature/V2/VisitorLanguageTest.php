@@ -40,7 +40,7 @@ it('reads the sign-in page in Urdu for a browser that asks for Urdu: right to le
         ->toMatch('~<html[^>]*lang="ur"[^>]*dir="rtl"~')
         ->toContain('سائن اِن کریں یا اکاؤنٹ بنائیں')->not->toContain('Sign in or create an account')
         ->toContain('font-family: "Noto Nastaliq Urdu"')
-        ->toContain('<span lang="ur" aria-current="true" style="font-weight:600;color:var(--gray-950)">اردو</span>')
+        ->toContain('<span lang="ur" aria-current="true" style="font-weight:600;color:var(--text)">اردو</span>')
         ->toMatch('~<a href="[^"]*\?lang=en" lang="en" hreflang="en"[^>]*>English</a>~');
 })->with(['ur', 'ur-PK', 'ur-PK,ur;q=0.9,en;q=0.8']);
 
@@ -49,7 +49,7 @@ it('reads the sign-in page in English for an English, another or no browser lang
         ->toMatch('~<html[^>]*lang="en"~')
         ->toContain('Sign in or create an account')->not->toContain('سائن اِن کریں')
         ->not->toContain('Noto Nastaliq Urdu')
-        ->toContain('<span lang="en" aria-current="true" style="font-weight:600;color:var(--gray-950)">English</span>')
+        ->toContain('<span lang="en" aria-current="true" style="font-weight:600;color:var(--text)">English</span>')
         ->toMatch('~<a href="[^"]*\?lang=ur" lang="ur" hreflang="ur"[^>]*>اردو</a>~');
 })->with([['en-GB,en;q=0.9'], ['fr-FR,fr;q=0.9'], ['en-US,ur;q=0.5'], [null]]);
 
@@ -166,4 +166,24 @@ it('words the sign-up page in the visitor\'s language, and its invitation-only l
     expect(html_entity_decode(visitorPage($this, '/app/register', cookies: [VisitorLanguage::COOKIE => 'ur']), ENT_QUOTES))
         ->toContain('اس سرور پر اکاؤنٹ صرف دعوت سے بنتا ہے۔ اسے چلانے والے سے یا کسی ورک اسپیس کے مالک سے دعوت مانگیں، پھر ان کا بھیجا ہوا لنک کھولیں۔')
         ->not->toContain('Sign-up on this server is by invitation.');
+});
+
+it('says a signed-out answer varies by Accept-Language and Cookie, so a cache never hands one visitor\'s language to another', function () {
+    app()->setLocale('en');
+    // Every Vary value the answer carries (Symfony keeps each one it was given).
+    $vary = $this->withHeaders(['Accept-Language' => 'ur'])->get('/app/login')->assertOk()->baseResponse->getVary();
+    expect($vary)->toContain('Accept-Language')->toContain('Cookie');
+});
+
+it('changes nothing for ?lang= once signed in: no cookie, and the account\'s language stays', function () {
+    [$owner] = webParityWorld();
+    webParityDesign(true);
+    $prefs = is_array($owner->console_preferences) ? $owner->console_preferences : [];
+    $prefs['shell'] = ['app_language' => 'en'];
+    $owner->forceFill(['console_preferences' => $prefs])->save();
+    $this->actingAs($owner->fresh(), 'web');
+    app()->setLocale('en');
+
+    $page = $this->get('/app/settings?lang=ur')->assertOk()->assertCookieMissing(VisitorLanguage::COOKIE);
+    expect((string) $page->getContent())->toMatch('~<html[^>]*lang="en"~');
 });

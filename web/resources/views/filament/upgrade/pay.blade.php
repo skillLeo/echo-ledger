@@ -25,7 +25,7 @@
         </section>
 
         @foreach ($accounts as $account)
-            <x-el.section :title="$loop->count > 1 ? __('Pay to, account :number', ['number' => (string) $loop->iteration]) : __('Pay to')">
+            <x-el.section :title="$loop->count > 1 ? __('Pay to, account :number', ['number' => (string) $loop->iteration]) : __('upgrade_context.pay_to_label')">
                 @foreach ($account['rows'] as [$label, $value, $copies, $mono, $copyLabel])
                     <div class="el-set-row el-copy-row" x-data="{ copied: false }">
                         <span class="el-set-text">

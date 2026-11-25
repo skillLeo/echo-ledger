@@ -12,7 +12,6 @@ use App\Filament\Support\UpgradeFlow;
 use App\Models\User;
 use App\Services\Entitlements\PaymentProofs;
 use App\Support\Brand;
-use App\Support\Formats;
 use Filament\Actions\Action;
 use Filament\Panel;
 use Filament\Support\Exceptions\Halt;
@@ -81,9 +80,9 @@ class RequestStatus extends RequestPage
                 [__('Amount'), UpgradeFlow::amount($request), null],
                 is_string($payload['promo_code'] ?? null) ? [__('Promo code'), (string) $payload['promo_code'], null] : null,
                 UpgradeFlow::reference($request) !== null ? [__('Reference'), (string) UpgradeFlow::reference($request), (string) UpgradeFlow::reference($request)] : null,
-                [__('Requested'), Formats::shortDate($request->created_at, year: true), null],
+                [__('Requested'), UpgradeFlow::day($request->created_at, year: true), null],
                 is_string($payment['reference'] ?? null) && $payment['reference'] !== '' ? [__('Transaction ID'), (string) $payment['reference'], null] : null,
-                is_string($payment['payer_name'] ?? null) && $payment['payer_name'] !== '' ? [__('Paid from'), (string) $payment['payer_name'], null] : null,
+                is_string($payment['payer_name'] ?? null) && $payment['payer_name'] !== '' ? [__('upgrade_context.paid_from_label'), (string) $payment['payer_name'], null] : null,
             ])),
             'proofs' => $this->proofs(),
             'erased' => ($payment['erased'] ?? false) === true,

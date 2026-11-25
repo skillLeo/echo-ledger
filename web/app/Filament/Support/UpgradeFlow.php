@@ -17,6 +17,7 @@ use App\Services\Entitlements\PromoCodes;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\SettingsRepository;
 use App\Support\Formats;
+use DateTimeInterface;
 use Illuminate\Support\Carbon;
 
 /**
@@ -176,7 +177,7 @@ final class UpgradeFlow
         return match ($stage) {
             'in_review' => ['stage' => $stage, 'title' => __('Checking your payment'), 'tag' => __('In review'), 'tone' => 'neutral',
                 'body' => array_filter([
-                    ($paid = $payment['paid_at'] ?? null) !== null ? __('We got your receipt on :date at :time.', ['date' => Formats::shortDate((string) $paid), 'time' => Formats::time((string) $paid)]) : __('We got your receipt.'),
+                    ($paid = $payment['paid_at'] ?? null) !== null ? __('We got your receipt on :date at :time.', ['date' => self::day((string) $paid), 'time' => self::clock((string) $paid)]) : __('We got your receipt.'),
                     is_string($payment['review_hours'] ?? null) ? (string) $payment['review_hours'] : null,
                 ]),
                 'primary' => ['label' => 'View request', 'url' => self::statusUrl($request)], 'secondary' => null],
@@ -202,10 +203,44 @@ final class UpgradeFlow
         };
     }
 
+    /**
+     * A day as Formats::shortDate writes it, in the console's language: "17 Nov" (this year) or "17 Nov 2026", in Urdu
+     * "17 نومبر" or "17 نومبر 2026". English is Formats' own format, byte for byte.
+     */
+    public static function day(DateTimeInterface|string|null $at, bool $year = false): string
+    {
+        $date = Formats::local($at);
+        if ($date === null) {
+            return '';
+        }
+        $withYear = $year || $date->year !== Formats::local(now())?->year;
+
+        return ConsoleDates::format($date, $withYear ? 'j M Y' : 'j M', $withYear ? 'j F Y' : 'j F');
+    }
+
+    /** A day as Formats::longDate writes it ("9 December 2026"), in Urdu "9 دسمبر 2026". */
+    public static function longDay(DateTimeInterface|string|null $at): string
+    {
+        $date = Formats::local($at);
+
+        return $date !== null ? ConsoleDates::format($date, 'j F Y', 'j F Y') : '';
+    }
+
+    /** A time as Formats::time writes it ("3:42 pm" or "15:42", as the person chose), in Urdu "3:42 شام". */
+    public static function clock(DateTimeInterface|string|null $at): string
+    {
+        $date = Formats::local($at);
+        if ($date === null || ! ConsoleDates::urdu()) {
+            return Formats::time($at);
+        }
+
+        return ConsoleDates::time($date, Shell::preferences()['clock'] === '24h' ? 'H:i' : 'g:i a');
+    }
+
     public static function approvedLine(UpgradeRequest $request, string $plan): string
     {
         return $request->approved_until !== null
-            ? __('Thank you. :plan is on until :date.', ['plan' => $plan, 'date' => Formats::longDate($request->approved_until)])
+            ? __('Thank you. :plan is on until :date.', ['plan' => $plan, 'date' => self::longDay($request->approved_until)])
             : __('Thank you. :plan is on.', ['plan' => $plan]);
     }
 
@@ -229,7 +264,7 @@ final class UpgradeFlow
         $times['requested'] ??= $request->created_at->toAtomString();
         $payment = is_array($payload['payment'] ?? null) ? $payload['payment'] : [];
         $times['receipt_sent'] ??= $payment['paid_at'] ?? null;
-        $when = fn (?string $at): ?string => $at !== null ? __(':date, :time', ['date' => Formats::shortDate($at), 'time' => Formats::time($at)]) : null;
+        $when = fn (?string $at): ?string => $at !== null ? __(':date, :time', ['date' => self::day($at), 'time' => self::clock($at)]) : null;
 
         $steps = [['label' => __('Requested'), 'state' => 'done', 'at' => $when($times['requested']), 'note' => null]];
         $sent = $times['receipt_sent'] !== null;
@@ -241,11 +276,11 @@ final class UpgradeFlow
         $decided = $request->decided_at?->toAtomString() ?? ($times['decided'] ?? null);
 
         return match ($stage) {
-            'declined' => [...$steps, ['label' => __('Not approved'), 'state' => 'done', 'at' => $when($decided), 'note' => null]],
+            'declined' => [...$steps, ['label' => __('upgrade_context.step_not_approved'), 'state' => 'done', 'at' => $when($decided), 'note' => null]],
             'cancelled' => [...$steps, ['label' => __('Cancelled by you'), 'state' => 'done', 'at' => $when($times['cancelled'] ?? $decided), 'note' => null]],
             'approved' => [...$steps,
                 ['label' => __('Checked by our team'), 'state' => 'done', 'at' => $when($decided), 'note' => null],
-                ['label' => __(':plan on', ['plan' => $plan]), 'state' => 'done', 'at' => $request->approved_until !== null ? __('until :date', ['date' => Formats::shortDate($request->approved_until, year: true)]) : null, 'note' => null]],
+                ['label' => __(':plan on', ['plan' => $plan]), 'state' => 'done', 'at' => $request->approved_until !== null ? __('until :date', ['date' => self::day($request->approved_until, year: true)]) : null, 'note' => null]],
             default => [...$steps,
                 ['label' => __('Checked by our team'), 'state' => $stage === 'in_review' ? 'current' : 'upcoming', 'at' => null, 'note' => null],
                 ['label' => __(':plan on', ['plan' => $plan]), 'state' => 'upcoming', 'at' => null, 'note' => null]],
@@ -261,7 +296,7 @@ final class UpgradeFlow
     {
         $user = $context->user;
         if ($user->deletes_at !== null) {
-            return ['icon' => 'heroicon-o-exclamation-triangle', 'tone' => 'warning', 'text' => __('Your account will be deleted on :date.', ['date' => Formats::shortDate($user->deletes_at)]),
+            return ['icon' => 'heroicon-o-exclamation-triangle', 'tone' => 'warning', 'text' => __('Your account will be deleted on :date.', ['date' => self::day($user->deletes_at)]),
                 'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion'), 'dismiss' => null, 'action' => ['label' => __('Cancel deletion'), 'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion')]];
         }
         $request = $context->latestRequest();
@@ -281,12 +316,12 @@ final class UpgradeFlow
         $expires = $context->workspace()?->plan_expires_at;
         $current = $context->plan();
         if ($expires !== null && $current->key !== Plan::FREE && $expires->isFuture() && $expires->lessThanOrEqualTo(now()->addDays(7))) {
-            return ['icon' => 'heroicon-o-calendar', 'tone' => 'warning', 'text' => __(':plan ends on :date.', ['plan' => $current->name, 'date' => Formats::shortDate($expires)]), 'url' => EditProfile::settingsUrl('plan'), 'dismiss' => null, 'action' => null];
+            return ['icon' => 'heroicon-o-calendar', 'tone' => 'warning', 'text' => __(':plan ends on :date.', ['plan' => $current->name, 'date' => self::day($expires)]), 'url' => EditProfile::settingsUrl('plan'), 'dismiss' => null, 'action' => null];
         }
         if ($request !== null && $stage === 'approved' && self::showsDecided($request, $context)) {
             $on = self::planName($request->approved_plan ?? $request->plan);
             $text = $request->approved_until !== null
-                ? __("You're on :plan until :date", ['plan' => $on, 'date' => Formats::shortDate($request->approved_until, year: true)])
+                ? __("You're on :plan until :date", ['plan' => $on, 'date' => self::day($request->approved_until, year: true)])
                 : __("You're on :plan", ['plan' => $on]);
 
             return ['icon' => 'heroicon-o-check-circle', 'tone' => 'success', 'text' => $text,

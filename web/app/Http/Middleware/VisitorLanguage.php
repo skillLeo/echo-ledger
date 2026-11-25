@@ -16,7 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
  * person picked on the sign-in page (kept in a cookie for signed-out pages only), else the browser's Accept-Language,
  * else English. Signed in, this does nothing: the account's console language (ConsoleLanguage) always wins.
  *
- * Persistent, so the sign-in form's own requests (its errors and notices) read in the same language.
+ * Persistent, so the sign-in form's own requests (its errors and notices) read in the same language. A signed-out
+ * answer says it varies by Accept-Language and Cookie, so no cache can hand one visitor's language to another.
  */
 final class VisitorLanguage
 {
@@ -46,6 +47,9 @@ final class VisitorLanguage
             App::setLocale($language);
         }
 
-        return $next($request);
+        $response = $next($request);
+        $response->setVary(['Accept-Language', 'Cookie'], replace: false);
+
+        return $response;
     }
 }

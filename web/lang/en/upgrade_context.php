@@ -14,4 +14,10 @@ return [
     'tile_sent' => 'Sent :date',
     // The tag of a request the person cancelled, beside Approved and Waiting: a state, not a sentence.
     'tag_cancelled' => 'Cancelled',
+    // Pay for {plan}: the heading over the account to pay into.
+    'pay_to_label' => 'Pay to',
+    // The request's Details: the name the payment came from (lang/ur.json's "Paid from" is where it came from).
+    'paid_from_label' => 'Paid from',
+    // The request's steps: the last one of a declined request (the request, feminine in Urdu).
+    'step_not_approved' => 'Not approved',
 ];

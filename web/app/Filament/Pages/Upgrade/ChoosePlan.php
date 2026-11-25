@@ -176,7 +176,7 @@ class ChoosePlan extends Page
                 return;
             }
             $this->error = match ($e->apiCode()) {
-                'request_pending' => $e->getMessage(),
+                'request_pending' => self::pendingError($e),
                 'not_allowed' => ($workspace = $context->workspace()->name ?? null) !== null
                     ? __('Only the owner of :workspace can upgrade it. Ask them to upgrade.', ['workspace' => $workspace])
                     : __('Only the owner of this workspace can upgrade it. Ask them to upgrade.'),
@@ -194,6 +194,19 @@ class ChoosePlan extends Page
         SettingsContext::forget();
         app(Entitlements::class)->forget();
         $this->redirect($request->status === UpgradeRequest::APPROVED ? UpgradeFlow::statusUrl($request) : UpgradeFlow::payUrl($request));
+    }
+
+    /** UpgradeRequests' "still waiting" answer in the console's language (the API's own words stay English). */
+    private static function pendingError(ApiError $e): string
+    {
+        $key = $e->extra()['request']['plan'] ?? null;
+        if (! is_string($key) || $key === '') {
+            return $e->getMessage();
+        }
+
+        // The plan's name as UpgradeRequests writes it: its name, else its key.
+        return __('Your request for :plan is still waiting. We will tell you once it is decided.',
+            ['plan' => (string) (Plan::query()->where('key', $key)->value('name') ?? $key)]);
     }
 
     /** @return array<string, mixed> */

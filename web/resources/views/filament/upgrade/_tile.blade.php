@@ -12,7 +12,7 @@
         </a>
     @endif
     @if ($proof['sent'])
-        <span class="el-rtile-meta">{{ __('upgrade_context.tile_sent', ['date' => \App\Support\Formats::shortDate($proof['created_at'] ?? null)]) }}</span>
+        <span class="el-rtile-meta">{{ __('upgrade_context.tile_sent', ['date' => \App\Filament\Support\UpgradeFlow::day($proof['created_at'] ?? null)]) }}</span>
     @elseif ($removable ?? false)
         <button type="button" class="el-rtile-x" wire:click="removeProof('{{ $proof['id'] }}')" aria-label="{{ __('Remove receipt :number', ['number' => (string) $number]) }}">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
     @endif

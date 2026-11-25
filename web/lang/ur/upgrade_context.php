@@ -11,4 +11,7 @@ return [
     'page_title' => 'اپ گریڈ',
     'tile_sent' => ':date کو بھیجی گئی',
     'tag_cancelled' => 'منسوخ',
+    'pay_to_label' => 'ادائیگی اس اکاؤنٹ میں',
+    'paid_from_label' => 'ادا کرنے والے کا نام',
+    'step_not_approved' => 'منظور نہیں ہوئی',
 ];

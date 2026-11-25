@@ -6,6 +6,7 @@ namespace App\Filament\Pages\Upgrade;
 
 use App\Filament\Auth\EditProfile;
 use App\Filament\Support\UpgradeFlow;
+use App\Services\Entitlements\PaymentDetails;
 use App\Services\Entitlements\UpgradeRequests;
 use Filament\Panel;
 
@@ -73,9 +74,9 @@ class PayForPlan extends RequestPage
         }
         $reference = UpgradeFlow::reference($request);
         $note = is_string($payment['note'] ?? null) && trim((string) $payment['note']) !== '' ? trim((string) $payment['note']) : null;
-        // The server's own note when staff wrote none (PaymentDetails::note) is the reference line below: in the
+        // The server's own note when staff wrote none (PaymentDetails::defaultNote) is the reference line below: in the
         // console's language. A note staff wrote shows as written.
-        if ($reference !== null && $note === "Put {$reference} in the transfer's note.") {
+        if ($reference !== null && $note === PaymentDetails::defaultNote($reference)) {
             $note = null;
         }
         $instructions = $accounts === [] ? ($note ?? (string) (UpgradeFlow::payload($request)['payment_instructions'] ?? app(UpgradeRequests::class)->paymentInstructions())) : null;
