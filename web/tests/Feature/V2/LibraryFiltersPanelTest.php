@@ -423,7 +423,7 @@ describe('Urdu', function () {
         $this->actingAs($this->owner->fresh(), 'web');
         $html = (string) $this->get('/app/sessions?'.http_build_query(['f' => lfIs('source', ['whatsapp'])]))->assertOk()->getContent();
 
-        expect($html)->toContain('dir="rtl"')->toContain('آپ کی توجہ چاہیے')->toContain('میرے ویوز')->toContain('ترتیب اور منظر')
+        expect($html)->toContain('dir="rtl"')->toContain('آپ کی توجہ چاہیے')->toContain('میرے ویوز')->toContain('ترتیب اور انداز')
             ->toContain('سب صاف کریں')->toContain('ویو کے طور پر محفوظ کریں')->toContain('آڈیو فائلیں درآمد کریں')->toContain('واٹس ایپ');
     });
 });

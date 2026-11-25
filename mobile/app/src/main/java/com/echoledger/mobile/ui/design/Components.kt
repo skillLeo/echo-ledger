@@ -75,6 +75,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
@@ -84,9 +91,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.ui.Brand
@@ -670,26 +679,125 @@ fun InlineBanner(
         BannerKind.Warning -> Triple(c.warningFill.copy(alpha = if (c.isDark) 0.14f else 0.18f), c.warning, Icons.Rounded.WarningAmber)
         BannerKind.Error -> Triple(c.dangerSoft, c.danger, Icons.Rounded.ErrorOutline)
     }
+    val style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal)
+    val measurer = rememberTextMeasurer()
+    // Its widest word, between spaces: Android breaks inside a word only when the word is wider than the line, and keeps
+    // "Re-transcribe" whole even where a hyphen could end a line (P-114).
+    val widestWord = remember(text, style, measurer) {
+        text.split(' ', '\n').filter { it.isNotEmpty() }
+            .maxOfOrNull { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width } ?: 0
+    }
     SwipeAway(onGone = close, modifier = modifier) {
-        Row(
-            Modifier.fillMaxWidth().clip(
+        Layout(
+            content = {
+                Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+                Text(
+                    text,
+                    style = style,
+                    color = c.text,
+                    modifier = Modifier.padding(vertical = Space.s2)
+                )
+                if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
+                // BarIcon's ×, read last by TalkBack even when the action goes under the text.
+                IconButton(onClick = close, modifier = Modifier.size(48.dp).semantics { traversalIndex = 1f }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = Brand.Muted, modifier = Modifier.size(24.dp))
+                }
+            },
+            modifier = Modifier.fillMaxWidth().clip(
                 RoundedCornerShape(Radius.md)
             ).background(bg)
                 .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
                 .padding(start = Space.s3, top = Space.s1, bottom = Space.s1),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(Space.s2))
-            Text(
-                text,
-                style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal),
-                color = c.text,
-                modifier = Modifier.weight(1f).padding(vertical = Space.s2)
-            )
-            if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
-            BarIcon(Icons.Rounded.Close, "Dismiss", close)
+            measurePolicy = remember(widestWord) { BannerRow(gap = Space.s2, actionInset = Space.s3, widestWord = widestWord) }
+        )
+    }
+}
+
+/**
+ * [InlineBanner]'s icon, text, optional action and ×. Until 2.0.x they were a centred Row with the text taking what was
+ * left, so on a small phone with large text the action squeezed the text until "Re-transcribe" broke inside the word
+ * (P-114). Now the action goes under the text, its label in line with the text ([actionInset] is the button's own
+ * padding), only when the text's widest word ([widestWord], in px) would not fit beside it; otherwise every part is measured and placed
+ * exactly as that Row did (InlineBannerLayoutTest, at 393 and 360 dp, both directions).
+ */
+private class BannerRow(private val gap: Dp, private val actionInset: Dp, private val widestWord: Int) : MeasurePolicy {
+    override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val gapPx = gap.roundToPx()
+        if (!constraints.hasBoundedWidth) {
+            // Nothing to share (a scrolling or intrinsic parent): every part at its own width, side by side.
+            val all = measurables.map { it.measure(loose) }
+            val height = (all.maxOfOrNull { it.height } ?: 0).coerceAtLeast(constraints.minHeight)
+            return layout(all.sumOf { it.width } + gapPx, height) {
+                var x = 0
+                all.forEachIndexed { i, part ->
+                    part.placeRelative(x, Alignment.CenterVertically.align(part.height, height))
+                    x += part.width + if (i == 0) gapPx else 0
+                }
+            }
         }
+        val action = if (measurables.size == 4) measurables[2] else null
+        val width = constraints.maxWidth
+        // As the Row measured: the parts without a weight first, each in what was left, then the text in the rest.
+        val icon = measurables[0].measure(loose)
+        var used = icon.width + gapPx
+        val button = action?.measure(loose.copy(maxWidth = (width - used).coerceAtLeast(0)))
+        used += button?.width ?: 0
+        val closer = measurables.last().measure(loose.copy(maxWidth = (width - used).coerceAtLeast(0)))
+        used += closer.width
+        val room = (width - used).coerceAtLeast(0)
+        val area = room + (button?.width ?: 0)
+        val beside = button == null || room >= widestWord
+        val textWidth = if (beside) room else area
+        val words = measurables[1].measure(loose.copy(minWidth = textWidth, maxWidth = textWidth))
+        val middle = if (beside) maxOf(words.height, button?.height ?: 0) else words.height + button!!.height
+        val height = maxOf(icon.height, middle, closer.height).coerceAtLeast(constraints.minHeight)
+        fun y(h: Int) = Alignment.CenterVertically.align(h, height)
+        return layout(width, height) {
+            val textX = icon.width + gapPx
+            icon.placeRelative(0, y(icon.height))
+            if (beside) {
+                words.placeRelative(textX, y(words.height))
+                button?.placeRelative(textX + room, y(button.height))
+            } else {
+                val top = y(middle)
+                words.placeRelative(textX, top)
+                button!!.placeRelative(textX - actionInset.roundToPx(), top + words.height)
+            }
+            closer.placeRelative(textX + area, y(closer.height))
+        }
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int {
+        // At its narrowest the action is under the text.
+        val action = if (measurables.size == 4) measurables[2].minIntrinsicWidth(height) else 0
+        return measurables[0].minIntrinsicWidth(height) + gap.roundToPx() + maxOf(measurables[1].minIntrinsicWidth(height), action) +
+            measurables.last().minIntrinsicWidth(height)
+    }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int =
+        measurables.sumOf { it.maxIntrinsicWidth(height) } + gap.roundToPx()
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int =
+        heightAt(measurables, width) { part, w -> part.minIntrinsicHeight(w) }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int =
+        heightAt(measurables, width) { part, w -> part.maxIntrinsicHeight(w) }
+
+    private fun IntrinsicMeasureScope.heightAt(parts: List<IntrinsicMeasurable>, width: Int, of: (IntrinsicMeasurable, Int) -> Int): Int {
+        if (width == Constraints.Infinity) return parts.maxOf { of(it, Constraints.Infinity) }
+        val action = if (parts.size == 4) parts[2] else null
+        val iconWidth = parts[0].maxIntrinsicWidth(Constraints.Infinity)
+        val actionWidth = action?.maxIntrinsicWidth(Constraints.Infinity) ?: 0
+        val closeWidth = parts.last().maxIntrinsicWidth(Constraints.Infinity)
+        val room = (width - iconWidth - gap.roundToPx() - actionWidth - closeWidth).coerceAtLeast(0)
+        val beside = action == null || room >= widestWord
+        val middle = if (beside) {
+            maxOf(of(parts[1], room), action?.let { of(it, actionWidth) } ?: 0)
+        } else {
+            of(parts[1], room + actionWidth) + of(action!!, actionWidth)
+        }
+        return maxOf(of(parts[0], iconWidth), middle, of(parts.last(), closeWidth))
     }
 }
 

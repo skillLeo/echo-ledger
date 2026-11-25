@@ -11,16 +11,16 @@
     $inApp = Shell::inApp();
 @endphp
 <div class="fi-topbar-ctn el-tb-ctn">
-    <nav class="fi-topbar el-tb" aria-label="Top bar">
+    <nav class="fi-topbar el-tb" aria-label="{{ __('Top bar') }}">
         <button type="button" class="el-tb-icon el-tb-menu" x-data x-on:click="$store.sidebar.open($event.currentTarget)"
-            aria-controls="fi-main-sidebar" x-bind:aria-expanded="$store.sidebar.isOpen ? 'true' : 'false'" aria-label="Open the menu">
+            aria-controls="fi-main-sidebar" x-bind:aria-expanded="$store.sidebar.isOpen ? 'true' : 'false'" aria-label="{{ __('Open the menu') }}">
             @svg('heroicon-o-bars-3', ['aria-hidden' => 'true'])
         </button>
 
         @if ($inApp)
             @include('filament.shell.workspace-switcher')
         @else
-            <span class="el-tb-admin-label">Admin panel</span>
+            <span class="el-tb-admin-label">{{ __('Admin panel') }}</span>
         @endif
 
         {{-- The admin panel finds its pages in the sidebar's Find a page and its customers on Customers. --}}

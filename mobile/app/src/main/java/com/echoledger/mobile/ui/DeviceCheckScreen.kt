@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
@@ -136,7 +137,8 @@ fun DeviceCheckSection(vm: MainViewModel, settings: AppSettings, onSetup: () -> 
             }
             BrandStepsCard(brand)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+        // P-118: when both don't fit, Send to my admin goes under Copy report, never cut.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
             EchoButton("Copy report", {
                 scope.launch {
                     clipboard.setClipEntry(ClipData.newPlainText("device check", DeviceCheck.report(facts, rows)).toClipEntry())

@@ -30,6 +30,7 @@ use App\Models\User;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Library\LibraryFacets;
 use App\Services\LibraryOrganiser;
+use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Services\Titles\TitleSql;
 use App\Services\TranscribeLater;
@@ -136,7 +137,7 @@ final class CaptureSessionsTable
                     ->searchable()->preload(),
                 SelectFilter::make('status')->label(__('Status'))->options(self::choices(SessionStatus::class)),
                 SelectFilter::make('tag')->label(__('Bookmark tag'))
-                    ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => __($tag), app(SettingsRepository::class)->markerTags())))
+                    ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => in_array($tag, SessionMarkers::DEFAULT_TAGS, true) ? __($tag) : $tag, app(SettingsRepository::class)->markerTags())))
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('markers', fn (Builder $m): Builder => $m->where('tag', $data['value']))),
                 SelectFilter::make('label')->label(__('Label'))
