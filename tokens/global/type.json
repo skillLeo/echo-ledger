@@ -105,6 +105,16 @@
         "fontWeight": 600
       }
     },
+    "section": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "14px",
+        "lineHeight": "20px",
+        "fontWeight": 500
+      },
+      "$description": "A section's title (v2.1 UX-16): text only, 14 sp medium in the secondary colour"
+    },
     "caption": {
       "$type": "typography",
       "$value": {

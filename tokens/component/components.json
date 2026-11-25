@@ -105,6 +105,11 @@
       "size": {
         "$type": "dimension",
         "$value": "40px"
+      },
+      "badge": {
+        "$type": "dimension",
+        "$value": "16px",
+        "$description": "The source app's mark on a phone row's avatar (v2.1 UX-16)"
       }
     },
     "status-dot": {

@@ -98,10 +98,12 @@ class V2LibraryParityTest : ScreenTest() {
         pumpUntil("synced again") { server.requestsTo("GET", "/api/library").size > before }
     }
 
+    /** v2.1 UX-16: a pinned row sits in the Pinned group, which says it; the row carries no pin of its own. */
     @Test
-    fun aPinnedRowCarriesThePinMarkAndAnUnpinnedOneDoesNot() {
+    fun aPinnedRowSitsInThePinnedGroupWithoutAMarkOfItsOwn() {
         seed(listOf(item("01JA", "Bilal Traders", "\"pinned\":true"), item("01JB", "Rehman and Sons Textiles")), "Bilal Traders")
-        compose.onAllNodes(hasContentDescription("Pinned"), useUnmergedTree = true).assertCountEquals(1)
+        compose.onNode(hasText("Pinned", substring = true) and androidx.compose.ui.test.isHeading()).assertExists()
+        compose.onAllNodes(hasContentDescription("Pinned"), useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
@@ -281,15 +283,13 @@ class V2LibraryParityTest : ScreenTest() {
         }
     }
 
+    /** v2.1 UX-16: one colour dot, its first list's, named with all its lists for screen readers. */
     @Test
-    fun aRowShowsItsListsAsColourDotsNamedForScreenReaders() {
+    fun aRowShowsItsFirstListsDotNamedWithAllItsLists() {
         val lists = "\"labels\":[\"Clients\",\"Home\",\"Family\",\"Extra\"],\"label_colors\":{\"Clients\":\"#16a34a\"}"
         seed(listOf(item("01JA", "Bilal Traders", lists)), "Bilal Traders")
-        listOf("Clients", "Home", "Family").forEach {
-            compose.onAllNodes(hasContentDescription(it), useUnmergedTree = true).assertCountEquals(1)
-        }
-        // Up to three.
-        compose.onAllNodes(hasContentDescription("Extra"), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Clients, Home, Family, Extra"), useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodes(hasContentDescription("Home"), useUnmergedTree = true).assertCountEquals(0)
         // Each dot's colour is the label's in label_colors (capitals ignored); a label without one has none.
         val row = vm.library.value.single()
         assertEquals("#16a34a", com.echoledger.mobile.ui.v2.library.LibraryModel.labelColour(row, "Clients"))
@@ -297,11 +297,12 @@ class V2LibraryParityTest : ScreenTest() {
         assertEquals(null, com.echoledger.mobile.ui.v2.library.LibraryModel.labelColour(row, "Home"))
     }
 
+    /** v2.1 UX-16: how long kept audio stays left the row for its page (RecordingPageTest); the rule is the same. */
     @Test
-    fun audioKeptWithoutATranscriptSaysHowManyDaysAreLeft() {
+    fun audioKeptWithoutATranscriptNoLongerSaysItsDaysLeftOnTheRow() {
         val expires = java.time.OffsetDateTime.now().plusDays(17).plusHours(6).toString()
         seed(listOf(item("01JA", "Bilal Traders", "\"expires_at\":\"$expires\"", finalStatus = null)), "Bilal Traders")
-        compose.onNodeWithText("Audio · 18 days left", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Audio · 18 days left", useUnmergedTree = true).assertCountEquals(0)
         val now = java.time.Instant.parse("2026-11-21T10:00:00Z")
         assertEquals(1, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft("2026-11-21T11:00:00+00:00", now))
         assertEquals(0, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft("2026-11-20T11:00:00+00:00", now))

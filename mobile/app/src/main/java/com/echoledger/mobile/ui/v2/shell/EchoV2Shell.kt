@@ -30,8 +30,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.core.Readiness
@@ -734,10 +733,21 @@ internal object RecordHint {
 @Composable
 private fun RecordHintBubble(onClose: () -> Unit) {
     val c = EchoV2.colors
+    // With TalkBack on, a tap is a double tap and a long press a double tap and hold: the hint says so in its words.
+    val context = LocalContext.current
+    val talkBack = remember {
+        context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)?.isTouchExplorationEnabled == true
+    }
+    val words = stringResource(if (talkBack) R.string.v2_rs_hint_talkback else R.string.v2_rs_hint)
+    // Said once, never a place for TalkBack's focus: a double tap then always lands on Record, not on the hint.
+    val view = androidx.compose.ui.platform.LocalView.current
+    LaunchedEffect(words) { if (talkBack) view.announceForAccessibility(words) }
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         androidx.compose.material3.Surface(
             onClick = onClose,
-            modifier = Modifier.padding(bottom = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8),
+            modifier = Modifier
+                .padding(bottom = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8)
+                .clearAndSetSemantics { this[RecordHintText] = words },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(
                 com.echoledger.mobile.ui.v2.tokens.EchoTokens.Component.menuRadius
             ),
@@ -746,18 +756,19 @@ private fun RecordHintBubble(onClose: () -> Unit) {
             shadowElevation = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Elevation.floating
         ) {
             androidx.compose.material3.Text(
-                stringResource(R.string.v2_rs_hint),
+                words,
                 style = EchoV2.type.meta,
-                modifier = Modifier
-                    .padding(
-                        horizontal = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s12,
-                        vertical = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8
-                    )
-                    .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+                modifier = Modifier.padding(
+                    horizontal = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s12,
+                    vertical = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8
+                )
             )
         }
     }
 }
+
+/** The Record hint's words (tests read them here; TalkBack hears them once, announced, and never focuses the hint). */
+internal val RecordHintText = androidx.compose.ui.semantics.SemanticsPropertyKey<String>("RecordHintText")
 
 /** What the Live tab says of the calls and Live Translate (they left the New sheet, v2.1 UX-15). */
 @Composable
