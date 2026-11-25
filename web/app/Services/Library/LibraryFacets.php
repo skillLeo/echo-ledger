@@ -355,7 +355,8 @@ final class LibraryFacets
             if ($failed === true) {
                 $total++;
                 $kinds[LibraryFilters::kind($row['source'])]++;
-                $states[LibraryFilters::state($row['status'], $row['session_status'])]++;
+                $states[LibraryFilters::state($row['status'], $row['session_status'],
+                    LibraryFilters::isWaiting($row['session_status'], $row['ended'], $row['started'], $now))]++;
             }
             // A row counts in a section's options when every other section keeps it: it failed none, or only that one.
             foreach (LibraryFilters::SECTIONS as $section) {
