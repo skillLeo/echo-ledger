@@ -1,6 +1,9 @@
 package com.echoledger.mobile.ui
 
 import android.content.ClipboardManager
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
@@ -130,6 +133,10 @@ class SessionScreenTest : ScreenTest() {
         // The page head scrolls away; the bar is now the only place with the title.
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(2)
         compose.waitForIdle()
+        val pageHead = SemanticsMatcher("the page head's title (tap to Rename)") {
+            it.config.getOrNull(SemanticsActions.OnClick)?.label == "Rename"
+        }
+        compose.onAllNodes(pageHead).assertCountEquals(0)
 
         compose.onAllNodesWithText("Call with Acme").assertCountEquals(0)
         compose.onNodeWithText("Hisaab ki baat").assertExists()

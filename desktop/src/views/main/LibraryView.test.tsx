@@ -200,6 +200,28 @@ describe("LibraryView list", () => {
     expect(callsOf("session_organise").map((c) => c.patch)).toEqual([{ title: "Acme renewal call" }]);
   });
 
+  it("starts Rename empty over an automatic title from a server that doesn't say where titles come from (U19)", async () => {
+    await renderLibrary([...ITEMS, makeItem("a", { title: "Payment terms call", title_auto: true })]);
+    await selectItem("Payment terms call");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Payment terms call" }));
+    const box = within(detail()).getByRole("textbox", { name: "Title" });
+    expect(box).toHaveValue("");
+    expect(box).toHaveAttribute("placeholder", "Payment terms call");
+  });
+
+  it("clears the person's own title back to the one EchoLedger gives it (U19)", async () => {
+    respondWith("session_organise", ({ id }) => ({ data: { ...makeItem(id as string), title: "Call with Acme", title_source: "person" } }));
+    const { notify } = await renderLibrary([...ITEMS, makeItem("o", { title: "Acme renewal", title_source: "own" })]);
+    await selectItem("Acme renewal");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Acme renewal" }));
+    const box = within(detail()).getByRole("textbox", { name: "Title" });
+    fireEvent.change(box, { target: { value: "" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await flushAsync();
+    expect(callsOf("session_organise").map((c) => c.patch)).toEqual([{ title: null }]);
+    expect(notify).toHaveBeenCalledWith("Back to the title EchoLedger gives it", false, anyTarget);
+  });
+
   it("says 'recording' for exactly one", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();

@@ -178,6 +178,12 @@ fun SessionScreen(
                 if (vm.organise(item.id, title = title)) {
                     shownTitle = title.ifEmpty { null }
                     shownIsOwn = title.isNotEmpty()
+                    // The server's own title after a clear, and where it came from, as the view-ready reading below.
+                    vm.refreshQuietly().join()
+                    vm.library.value.firstOrNull { it.id == item.id }?.let { fresh ->
+                        if (fresh.title != null) shownTitle = fresh.title
+                        shownIsOwn = ownTitle(fresh)
+                    }
                 }
             }
         }, onDismiss = { renamingTitle = false })

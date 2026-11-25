@@ -225,7 +225,7 @@ fun LibraryScreen(
             scope.launch {
                 if (vm.organise(item.id, title = title)) {
                     picked = emptySet()
-                    vm.showMessage("Renamed")
+                    vm.showMessage(if (title.isEmpty()) "Back to the title EchoLedger gives it" else "Renamed")
                 }
             }
         }, onDismiss = { renaming = null })

@@ -14,10 +14,10 @@ import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.TextButton
 
 /**
- * Whether [item]'s title is one the person chose (2.0.0-k title_source "own"), and so theirs to edit in Rename. An older
- * server, which doesn't say, counts as theirs: the box keeps the title, as before.
+ * Whether [item]'s title is one the person chose (2.0.0-k title_source "own"), and so theirs to edit in Rename. From a
+ * server that doesn't say, a title it wrote from what was said (title_auto) is not; any other is, as before.
  */
-fun ownTitle(item: LibraryItem): Boolean = item.titleSource == null || item.titleSource == "own"
+fun ownTitle(item: LibraryItem): Boolean = item.titleSource == "own" || (item.titleSource == null && !item.titleAuto)
 
 /**
  * What Rename's box holds and when Save does something (U19, 2.0.0-k, as on the desktop). A title the person chose
@@ -26,7 +26,9 @@ fun ownTitle(item: LibraryItem): Boolean = item.titleSource == null || item.titl
  */
 class RenameBox(val current: String, val own: Boolean = true) {
     var text by mutableStateOf(if (own) current else "")
-    val canSave: Boolean get() = text.trim() != (if (own) current else "").trim()
+
+    /** Whether Save changes anything; when it doesn't, Save just closes (as on the desktop). */
+    val saves: Boolean get() = text.trim() != (if (own) current else "").trim()
     val hint: String get() =
         if (own) "Leave it empty for the title EchoLedger gives it." else "Type a title of your own, or leave it empty to keep this one."
     val placeholder: String? get() = current.takeUnless { own || it.isBlank() }
@@ -57,7 +59,7 @@ fun RenameDialog(current: String, onRename: (String) -> Unit, onDismiss: () -> U
         onDismissRequest = onDismiss,
         title = { Text("Rename") },
         text = { RenameField(box) },
-        confirmButton = { TextButton(onClick = { onRename(box.text.trim()) }, enabled = box.canSave) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { if (box.saves) onRename(box.text.trim()) else onDismiss() }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

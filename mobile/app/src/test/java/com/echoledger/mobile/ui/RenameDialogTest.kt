@@ -26,12 +26,19 @@ class RenameDialogTest : ScreenTest() {
     private fun field(text: String) = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(text))
 
     @Test
-    fun `only a title the person renamed it to is theirs, or one from a server that doesn't say`() {
-        fun item(source: String?) =
-            LibraryItem(id = "r1", title = "Call with Omar", titleSource = source, updatedAt = "2026-10-20T10:05:00+00:00")
+    fun `only a title the person renamed it to is theirs, never a machine title`() {
+        fun item(source: String?, auto: Boolean = false) = LibraryItem(
+            id = "r1",
+            title = "Call with Omar",
+            titleSource = source,
+            titleAuto = auto,
+            updatedAt = "2026-10-20T10:05:00+00:00"
+        )
         assertTrue(ownTitle(item("own")))
-        assertTrue(ownTitle(item(null)))
         listOf("person", "auto", "app").forEach { assertFalse(it, ownTitle(item(it))) }
+        // A server that doesn't say where a title came from: its automatic one is not the person's; any other is.
+        assertTrue(ownTitle(item(null)))
+        assertFalse(ownTitle(item(null, auto = true)))
     }
 
     @Test
@@ -41,9 +48,9 @@ class RenameDialogTest : ScreenTest() {
 
         compose.onNode(hasSetTextAction()).assert(field("Acme renewal"))
         compose.onNodeWithText("Leave it empty for the title EchoLedger gives it.").assertExists()
-        assertFalse("unchanged", box.canSave)
+        assertFalse("unchanged", box.saves)
         compose.onNode(hasSetTextAction()).performTextClearance()
-        assertTrue("emptied: back to EchoLedger's title", box.canSave)
+        assertTrue("emptied: back to EchoLedger's title", box.saves)
         assertEquals("", box.text)
     }
 
@@ -54,11 +61,11 @@ class RenameDialogTest : ScreenTest() {
 
         compose.onNode(hasSetTextAction()).assert(field(""))
         compose.onNodeWithText("Type a title of your own, or leave it empty to keep this one.").assertExists()
-        assertFalse("empty over it: nothing to save", box.canSave)
+        assertFalse("empty over it: nothing to save", box.saves)
         compose.onNode(hasSetTextAction()).performClick()
         compose.onNodeWithText("Call with Omar", useUnmergedTree = true).assertExists()
         compose.onNode(hasSetTextAction()).performTextInput("Omar, the March order")
-        assertTrue(box.canSave)
+        assertTrue(box.saves)
         assertEquals("Omar, the March order", box.text)
     }
 }

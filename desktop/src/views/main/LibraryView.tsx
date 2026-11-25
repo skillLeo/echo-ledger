@@ -1162,10 +1162,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const replaceItem = (id: string, change: (item: LibraryItem) => LibraryItem) => setItems((list) => list.map((i) => (i.id === id ? change(i) : i)));
   /**
    * U19 (2.0.0-k), as in the new design: only a title the person chose is theirs to edit. "Call with …", an automatic
-   * title or the app's name start the box empty, with that title as its placeholder; an older server (no title_source)
-   * keeps the title in the box.
+   * title or the app's name start the box empty, with that title as its placeholder. From a server that doesn't say
+   * (no title_source), a title it wrote from what was said (title_auto) is not the person's either; any other is.
    */
-  const ownTitle = (item: LibraryItem) => item.title_source === undefined || item.title_source === "own";
+  const ownTitle = (item: LibraryItem) => item.title_source === "own" || (item.title_source === undefined && !item.title_auto);
   const titleBox = (item: LibraryItem) => ownTitle(item)
     ? { initial: item.title ?? "", placeholder: "Leave it empty for the title EchoLedger gives it.", hint: "Leave it empty for the title EchoLedger gives it." }
     : { initial: "", placeholder: item.title ?? undefined, hint: "Type a title of your own, or leave it empty to keep this one." };
@@ -1177,13 +1177,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (title === (ownTitle(item) ? item.title ?? "" : "").trim()) return;
     // An empty title asks the server for its automatic one again (Phase 1C, `title: null`); a title the person types is
     // theirs, and the server never replaces it.
-    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false }));
+    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false, title_source: "own" }));
     try {
       const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
       notify(title ? "Renamed" : "Back to the title EchoLedger gives it", false, { kind: "recording", id: item.id });
     } catch (e) {
-      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
+      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto, title_source: item.title_source }));
       notify(errorMessage(e), true);
     }
   };
