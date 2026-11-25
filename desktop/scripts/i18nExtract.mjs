@@ -16,6 +16,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { textsIn } from "../src/i18n/rawText.ts";
+import { DESKTOP_OVERRIDES } from "../src/i18n/overrides.ts";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(desktop, "src");
@@ -145,7 +146,8 @@ if (list) {
 }
 // --seed: src/i18n/ur.json, the Urdu of every string of the new design, its palette, src/lib and src/components that
 // the web's lang/ur.json already has as it is (the same English key, the web's Urdu), sorted. Kept entries stay (a
-// translation made for the desktop is never dropped); the web's wins where both have one only when --seed=web.
+// translation made for the desktop is never dropped); the web's wins where both have one only when --seed=web, and never
+// over a named desktop override (src/i18n/overrides.ts).
 if (process.argv.some((a) => a === "--seed" || a.startsWith("--seed="))) {
   const file = join(src, "i18n", "ur.json");
   let kept = {};
@@ -159,7 +161,7 @@ if (process.argv.some((a) => a === "--seed" || a.startsWith("--seed="))) {
   const out = { ...kept };
   let added = 0;
   for (const { text } of shown) {
-    if (web[text] === undefined || (out[text] !== undefined && !webWins)) continue;
+    if (web[text] === undefined || (out[text] !== undefined && (!webWins || text in DESKTOP_OVERRIDES))) continue;
     if (out[text] === undefined) added++;
     out[text] = web[text];
   }

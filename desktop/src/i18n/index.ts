@@ -15,8 +15,11 @@ export type Lang = "en" | "ur";
 export const LANGS: readonly Lang[] = ["en", "ur"];
 /** The languages written right to left. */
 const RTL = new Set<Lang>(["ur"]);
-export const FSI = "⁨";
-export const PDI = "⁩";
+/** U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE, written as escapes (the characters are invisible). */
+export const FSI = "\u2068";
+export const PDI = "\u2069";
+/** The isolates' openers: U+2066 LEFT-TO-RIGHT, U+2067 RIGHT-TO-LEFT and U+2068 FIRST STRONG. */
+const OPENERS = new Set(["\u2066", "\u2067", "\u2068"]);
 
 /** Each catalogue, loaded when its language is first chosen (English is the keys themselves). */
 const CATALOGUES: Record<Exclude<Lang, "en">, () => Promise<Record<string, string>>> = {
@@ -70,17 +73,41 @@ export function resetLanguageForTests(catalogue?: Record<string, string>) {
 
 export type Values = Record<string, string | number | null | undefined>;
 
-/** A value in a right-to-left line, in its own isolate: a Latin name or a number keeps its direction. */
+/**
+ * A value in a right-to-left line, in its own isolate: a Latin name or a number keeps its direction. The web's
+ * IsolatingTranslator::isolate exactly: an empty value stays empty, and a closing mark (PDI) with no opener of its own
+ * inside the value is dropped, so a typed name can't close this isolate early and let what follows (an override such as
+ * U+202E) flip the sentence; whatever the value leaves open is closed by the final PDI.
+ */
 export function isolate(value: string): string {
-  return `${FSI}${value}${PDI}`;
+  if (value === "") return value;
+  let depth = 0;
+  let safe = "";
+  for (const char of value) {
+    if (OPENERS.has(char)) depth++;
+    else if (char === PDI) {
+      if (depth === 0) continue;
+      depth--;
+    }
+    safe += char;
+  }
+  return `${FSI}${safe}${PDI}`;
 }
 
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
 export function stripIsolates(text: string): string {
-  return text.replace(/[⁦-⁩]/g, "");
+  return text.replace(/[\u2066-\u2069]/g, "");
 }
 
-const upperFirst = (s: string) => (s ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : s);
+// Laravel's Str::upper and Str::ucfirst (mb_strtoupper): the same capitals whatever this computer's locale is (a
+// Turkish system's "i" is still "I").
+const upper = (s: string) => s.toUpperCase();
+const upperFirst = (s: string) => {
+  const first = s.codePointAt(0);
+  if (first === undefined) return s;
+  const char = String.fromCodePoint(first);
+  return upper(char) + s.slice(char.length);
+};
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -94,7 +121,7 @@ export function fill(line: string, values: Values, rtl = isRtl()): string {
     const value = raw === null || raw === undefined ? "" : String(raw);
     const wrap = (v: string) => (rtl ? isolate(v) : v);
     map.set(`:${upperFirst(key)}`, wrap(upperFirst(value)));
-    map.set(`:${key.toLocaleUpperCase()}`, wrap(value.toLocaleUpperCase()));
+    map.set(`:${upper(key)}`, wrap(upper(value)));
     map.set(`:${key}`, wrap(value));
   }
   if (map.size === 0) return line;
@@ -108,45 +135,70 @@ export function t(text: string, values?: Values): string {
   return values ? fill(line, values) : line;
 }
 
-/** Which plural form: English's and Urdu's rules are the same (one for 1, the other for the rest), as Laravel's. */
+/** Which plural form (Laravel's getPluralIndex, on the number's absolute value): English's and Urdu's rules are the same. */
 function pluralIndex(lang: Lang, n: number): number {
+  const abs = Math.abs(n);
   switch (lang) {
     case "en":
     case "ur":
     default:
-      return n === 1 ? 0 : 1;
+      return abs === 1 ? 0 : 1;
   }
 }
 
-/** A segment's condition (Laravel's MessageSelector): `{0}` exactly, `[2,5]` a range, `[6,*]` and `[*,1]` open ones. */
+/** A string PHP reads as a number ("2", "-1", "1.5", ".5"). */
+const numeric = (s: string) => /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(s);
+/** PHP 8's comparison of a number with a string: as numbers when the string is numeric, else as strings. */
+const compare = (n: number, s: string): number => {
+  if (numeric(s)) return Math.sign(n - Number(s));
+  const text = String(n);
+  return text < s ? -1 : text > s ? 1 : 0;
+};
+
+/**
+ * A segment's condition, as Laravel's MessageSelector reads it: `{0}` exactly, `[2,5]` a range, `[6,*]` and `[*,1]` open
+ * ones. Its characters are only Laravel's (`-?`, digits, `|*,.`), so "[Draft] :count file" is not a condition, and an
+ * empty `{}` never matches.
+ */
 function conditionHolds(condition: string, n: number): boolean {
   if (condition.includes(",")) {
-    const [from, to] = condition.split(",", 2).map((s) => s.trim());
-    if (to === "*" && n >= Number(from)) return true;
-    if (from === "*" && n <= Number(to)) return true;
-    return n >= Number(from) && n <= Number(to);
+    const comma = condition.indexOf(",");
+    const from = condition.slice(0, comma);
+    const to = condition.slice(comma + 1);
+    if (to === "*" && compare(n, from) >= 0) return true;
+    if (from === "*" && compare(n, to) <= 0) return true;
+    if (compare(n, from) >= 0 && compare(n, to) <= 0) return true;
   }
-  return condition.split(/\s*,\s*/).some((c) => Number(c) === n);
+  return compare(n, condition) === 0;
 }
 
-/** Laravel's trans_choice on a line: an explicit `{n}` or `[a,b]` segment first, else the language's plural form. */
+/** Laravel's condition: `{` or `[`, its characters, `}` or `]`. */
+const CONDITION = /^[{[]([-?\d|*,.]*)[}\]](.*)$/s;
+const CONDITION_PREFIX = /^[{[][-?\d|*,.]*[}\]]/;
+
+/**
+ * Laravel's trans_choice on a line (MessageSelector::choose): an explicit `{n}` or `[a,b]` segment first (trimmed), else
+ * the language's plural form of the segments without their conditions (as written, not trimmed).
+ */
 export function choose(line: string, n: number, lang: Lang = current): string {
   const segments = line.split("|");
-  const explicit = /^[{[]([^[\]{}]*)[}\]](.*)$/s;
   for (const part of segments) {
-    const m = explicit.exec(part);
+    const m = CONDITION.exec(part);
     if (m && conditionHolds(m[1], n)) return m[2].trim();
   }
-  const bare = segments.map((part) => part.replace(/^[{[]([^[\]{}]*)[}\]]/, "").trim());
+  const bare = segments.map((part) => part.replace(CONDITION_PREFIX, ""));
   if (bare.length === 1) return bare[0];
   return bare[pluralIndex(lang, n)] ?? bare[0];
 }
 
-/** trans_choice: the words for `text` ("one|other", English's being the key) for `count`, `:count` filled in too. */
+/**
+ * trans_choice: the words for `text` ("one|other", English's being the key) for `count`. As Laravel, `:count` is the
+ * number given unless the values say their own (`{ count: count(n) }` for "3,000" or Urdu's digits).
+ */
 export function tc(text: string, count: number, values?: Values): string {
   const line = lines[text] ?? text;
-  // As Laravel, :count is the number given, whatever the values say.
-  return fill(choose(line, count), { ...values, count });
+  const filled = values?.count === undefined || values.count === null ? { ...values, count } : values;
+  return fill(choose(line, count), filled);
 }
 
 function subscribe(listener: () => void): () => void {

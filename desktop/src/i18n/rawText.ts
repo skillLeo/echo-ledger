@@ -2,10 +2,12 @@
 // and what the raw-text guard (guard.test.ts) refuses in an area already converted. Never part of the app: only the
 // script and the tests import it (it needs the compiler).
 //   - text between JSX tags;
-//   - the props that are words (aria-label, title, placeholder, label, meta, hint, body…);
+//   - the props that are words (aria-label, title, placeholder, label, meta, hint, body…), and any other string prop that
+//     reads as words (value="Not connected"), except the few that never are (NOT_WORD_PROPS: className, id, role…);
 //   - other string and template literals that read as words ("Couldn't sync", `Clear ${name}`), not ids, keys, class
 //     names, URLs, event names or comparisons (e.key === "Escape").
-// Text given to t() or tc() is "translated"; anything else "raw". A template's values become Laravel's placeholders
+// Text given to t() or tc() (or to a name they were given: `const { t: say } = useT()`, `import { t as say }`) is
+// "translated"; anything else "raw". A template's values become Laravel's placeholders
 // (`Clear ${name}` → "Clear :name"), the catalogue's keys.
 import ts from "typescript";
 
@@ -17,6 +19,15 @@ export const WORD_PROPS = new Set([
   "body", "heading", "description", "subtitle", "caption", "footer", "text", "message", "tooltip", "confirmLabel", "cancelLabel",
   "emptyText", "detail", "summary", "note", "help", "words", "action", "actionLabel", "okLabel", "loadingLabel", "doneLabel",
 ]);
+/**
+ * String props that are never words: classes, ids, roles, types, links, keys, a variant's, size's, tone's or icon's
+ * name, an anchor, SVG path data, a font, key names; any data-* and any …Class or …ClassName.
+ */
+export const NOT_WORD_PROPS = new Set([
+  "className", "id", "role", "type", "href", "src", "key", "anchor", "variant", "size", "tone", "icon", "d", "fontFamily",
+  "aria-keyshortcuts", "keyshortcuts",
+]);
+const notWordProp = (name: string) => NOT_WORD_PROPS.has(name) || name.startsWith("data-") || /Class(Name)?$/.test(name);
 /** The calls that translate: t("…"), tc("…|…", n) and a hook's own (useT().t). */
 const TRANSLATE_CALLS = new Set(["t", "tc"]);
 /** Calls whose string arguments are never shown: ids, selectors, events, storage, the core's commands. */
@@ -52,16 +63,38 @@ const calleeName = (call: ts.CallExpression | ts.NewExpression): string => {
   const callee = call.expression;
   return ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
 };
-/** Whether the string is the text given to t() or tc() (their first argument). */
-const translatedBy = (node: ts.Node): boolean => {
+/** Whether the string is the text given to t() or tc() (their first argument), under any of `names`. */
+const translatedBy = (node: ts.Node, names: ReadonlySet<string>): boolean => {
   const parent = node.parent;
-  return !!parent && ts.isCallExpression(parent) && parent.arguments[0] === node && TRANSLATE_CALLS.has(calleeName(parent));
+  return !!parent && ts.isCallExpression(parent) && parent.arguments[0] === node && names.has(calleeName(parent));
 };
+
+/** The names t and tc go by in a file: their own, and any they are given (`{ t: say } = useT()`, `{ t as say }`). */
+function translatorsIn(sf: ts.SourceFile): Set<string> {
+  const names = new Set(TRANSLATE_CALLS);
+  const visit = (node: ts.Node): void => {
+    if (ts.isBindingElement(node) && node.propertyName && ts.isIdentifier(node.propertyName) && ts.isIdentifier(node.name) && TRANSLATE_CALLS.has(node.propertyName.text)) names.add(node.name.text);
+    if (ts.isImportSpecifier(node) && node.propertyName && TRANSLATE_CALLS.has(node.propertyName.text)) names.add(node.name.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return names;
+}
+
+/** Whether a literal sits in the value of a prop that is never words (className={on ? "a b" : "c"}), not deeper in JSX. */
+function inNotWordProp(node: ts.Node, sf: ts.SourceFile): boolean {
+  for (let at = node.parent; at; at = at.parent) {
+    if (ts.isJsxAttribute(at)) return notWordProp(at.name.getText(sf));
+    if (ts.isJsxElement(at) || ts.isJsxSelfClosingElement(at) || ts.isJsxFragment(at) || ts.isFunctionLike(at) || ts.isSourceFile(at)) return false;
+  }
+  return false;
+}
 
 /** Every piece of text a person can see in one .ts or .tsx file. */
 export function textsIn(path: string, code: string): FoundText[] {
   const sf = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: FoundText[] = [];
+  const translators = translatorsIn(sf);
   const add = (node: ts.Node, kind: FoundText["kind"], text: string, translated = false) => {
     const t = text.replace(/\s+/g, " ").trim();
     if (t) found.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, kind, text: t, translated });
@@ -86,11 +119,15 @@ export function textsIn(path: string, code: string): FoundText[] {
           add(e, "prop", templateKey(e));
           return;
         }
-      } else if (ts.isStringLiteral(init)) return; // className, id, data-*, role…: not words
+      } else if (ts.isStringLiteral(init)) {
+        // Any other prop that reads as words (value="Not connected"), unless it is one that never is.
+        if (!notWordProp(name) && wordy(init.text)) add(init, "prop", init.text);
+        return;
+      }
     }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
       const text = ts.isTemplateExpression(node) ? templateKey(node) : node.text;
-      if (translatedBy(node)) {
+      if (translatedBy(node, translators)) {
         add(node, "literal", text, true);
         if (ts.isTemplateExpression(node)) ts.forEachChild(node, visit);
         return;
@@ -100,7 +137,7 @@ export function textsIn(path: string, code: string): FoundText[] {
       if ((ts.isPropertyAssignment(parent) && parent.name === node) || ts.isElementAccessExpression(parent) || ts.isCaseClause(parent)) return;
       if (ts.isBinaryExpression(parent) && [ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.InKeyword].includes(parent.operatorToken.kind)) return;
       if ((ts.isCallExpression(parent) || ts.isNewExpression(parent)) && NOT_SHOWN_CALLS.test(calleeName(parent))) return;
-      if (ts.isJsxAttribute(parent)) return;
+      if (ts.isJsxAttribute(parent) || inNotWordProp(node, sf)) return;
       if (wordy(text.replace(/:[A-Za-z_]\w*/g, "x"))) add(node, "literal", text);
       if (ts.isTemplateExpression(node)) ts.forEachChild(node, visit);
       return;

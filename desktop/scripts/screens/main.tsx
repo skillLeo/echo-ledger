@@ -333,8 +333,10 @@ const commands: Record<string, (args: Args) => unknown> = {
   // "&applang=ur" (with v21_urdu in uiflags): the account's language is Urdu, so the app speaks it (src/i18n); the
   // Language setting's PATCH is answered as the server would.
   account_get: () => ({ ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT), language: accountLanguage }),
+  // Only the language is answered; every other account action (the Security page's "security"…) gets nothing, as before.
   account_call: ({ action, body }) => {
-    if (action === "language") accountLanguage = String((body as { language?: string } | null)?.language ?? "en");
+    if (action !== "language") return null;
+    accountLanguage = String((body as { language?: string } | null)?.language ?? "en");
     return { ok: true, status: 200, data: { ...ACCOUNT, language: accountLanguage }, code: null, message: null, accepts: [], errorCodes: null, errors: null };
   },
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
