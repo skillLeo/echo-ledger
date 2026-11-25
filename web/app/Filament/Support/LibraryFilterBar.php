@@ -15,6 +15,7 @@ use App\Services\Library\LibraryFacets;
 use App\Services\Library\LibraryFilters;
 use App\Services\Library\SavedViews;
 use App\Services\Lists\LabelLists;
+use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -93,12 +94,15 @@ final class LibraryFilterBar
         };
     }
 
-    /** A bookmark tag (kept in lower case) as the settings spell it, in the console's language. */
+    /**
+     * A bookmark tag (kept in lower case) as the settings spell it: a default tag in the console's language, an admin's
+     * own as typed (a tag named like a lang group would come back from __() as an array).
+     */
     private static function tagName(string $key): string
     {
         foreach (app(SettingsRepository::class)->markerTags() as $tag) {
             if (mb_strtolower($tag) === $key) {
-                return __($tag);
+                return in_array($tag, SessionMarkers::DEFAULT_TAGS, true) ? __($tag) : $tag;
             }
         }
 
