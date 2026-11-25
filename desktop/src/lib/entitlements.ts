@@ -4,7 +4,6 @@
 // what its plan leaves out).
 import { useSyncExternalStore } from "react";
 import { api, type Entitlements, type OfferedPlan, type PaymentStage, type PromoCheck, type UpgradeRequest } from "./ipc";
-import { language, t } from "../i18n";
 
 /** undefined: not read yet; null: an older server (or signed out). */
 let current: Entitlements | null | undefined = undefined;
@@ -218,10 +217,8 @@ export function isTopPlan(e: Entitlements | null | undefined): boolean {
 
 /** The price of a plan as written: the server's text ("Rs 2,999 a month"), else from its rupees, else its old text. */
 export function priceText(plan: Pick<OfferedPlan, "price" | "price_pkr" | "price_text">): string | null {
-  const pkr = typeof plan.price_pkr === "number" && plan.price_pkr > 0 ? Math.round(plan.price_pkr) : null;
-  // The server's words in English; in another language the app's own, from the amount, when the server gives it.
-  if (plan.price_text?.trim() && (language() === "en" || pkr === null)) return plan.price_text.trim();
-  if (pkr !== null) return t("Rs :amount a month", { amount: pkr.toLocaleString("en-US") });
+  if (plan.price_text?.trim()) return plan.price_text.trim();
+  if (typeof plan.price_pkr === "number" && plan.price_pkr > 0) return `Rs ${Math.round(plan.price_pkr).toLocaleString("en-US")} a month`;
   const old = plan.price?.trim();
   return old && /\d/.test(old) ? old.replace(/\s*\/\s*month$/i, " a month") : null;
 }

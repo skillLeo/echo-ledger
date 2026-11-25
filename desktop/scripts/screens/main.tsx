@@ -197,6 +197,11 @@ function privacyStatus() {
     permission: !screen.includes("-error"),
     floatingOpen: true,
     displays: mac ? 2 : 1,
+    // `&mainhide=1`: the main window hidden from screen shares until 16:30 today (the core's English words beside it).
+    ...(params.get("mainhide") === "1" ? {
+      mainHide: { until: { kind: "at", at_ms: new Date(new Date().setHours(16, 30, 0, 0)).getTime() }, sinceMs: Date.now() },
+      mainHiddenUntil: "until 16:30",
+    } : {}),
   };
 }
 const free = planParam === "free" || screen.endsWith("-free");

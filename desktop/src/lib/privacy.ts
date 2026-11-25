@@ -4,7 +4,8 @@
 // share"; nothing here promises more than the check measured.
 import { useEffect, useState } from "react";
 import { api, listenTo, type CheckOutcome, type LastCheck, type MeetingAppRow, type PrivacyBadge, type PrivacyStatus, type ShareCheckView } from "./ipc";
-import { dateLocale, isRtl, t, tc } from "../i18n";
+import { isRtl, isolate, language, t, tc } from "../i18n";
+import { whenParts } from "./format";
 
 export const BADGE_LABEL: Record<PrivacyBadge, string> = {
   get private() { return t("Private"); },
@@ -26,7 +27,10 @@ export const BADGE_HINT: Record<PrivacyBadge, string> = {
 /** "Zoom", "Zoom and Teams", "Zoom, Teams and Slack" (pure). */
 export function nameList(names: string[]): string {
   if (names.length <= 1) return names.join("");
-  return t(":names and :last", { names: names.slice(0, -1).join(isRtl() ? "، " : ", "), last: names[names.length - 1] });
+  // In a right-to-left window each name in its own isolate, joined with the Urdu comma, the run marked right to left
+  // (an RLM first) so the names read in their order from the right.
+  const first = isRtl() ? `\u200F${names.slice(0, -1).map(isolate).join("، ")}` : names.slice(0, -1).join(", ");
+  return t(":names and :last", { names: first, last: names[names.length - 1] });
 }
 
 /** "today", "yesterday", or "on 12 Nov" (pure; `now` for tests). */
@@ -36,7 +40,9 @@ export function checkedWhen(at: string, now: Date = new Date()): string {
   const days = Math.round((day(now) - day(then)) / 86_400_000);
   if (days <= 0) return t("today");
   if (days === 1) return t("yesterday");
-  return t("on :date", { date: `${then.getDate()} ${then.toLocaleString(dateLocale(), { month: "short" })}` });
+  // English as it always was; in another language the day as every date line says it (whenParts: "12 نومبر").
+  const date = language() === "en" ? `${then.getDate()} ${then.toLocaleString("en-GB", { month: "short" })}` : whenParts(at, now)?.day ?? "";
+  return t("on :date", { date });
 }
 
 export interface ResultLine {

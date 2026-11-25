@@ -1,9 +1,9 @@
 // Why a call was or wasn't recorded (A1.8; since D-014 in Settings › Calls & meetings, no longer on Home): one plain
 // line per app using the microphone, saying what EchoLedger will do and why, so a call that was not recorded can be
 // understood instead of silently missed. Plain words only: never how sound is captured.
-import { formatTime, processName, rowDate, sourceAppLabel } from "./format";
+import { formatTime, processName, rowDate, sourceAppLabel, whenParts } from "./format";
 import type { IgnoreReason, MicUser, NotRecordedMic } from "./ipc";
-import { t } from "../i18n";
+import { language, t } from "../i18n";
 
 /** Why an app is not recorded, in plain words (the window's language): the reason on its own, for "…, because …". */
 const NOT_RECORDED: Record<IgnoreReason, string> = {
@@ -78,9 +78,13 @@ export function seenWhen(iso: string, now: Date = new Date()): string {
   const time = formatTime(at);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (at.toDateString() === now.toDateString()) return t("at :time", { time });
-  if (at.toDateString() === yesterday.toDateString()) return t("yesterday at :time", { time });
-  return t("on :date at :time", { date: rowDate(iso, now), time });
+  // In another language the day and the time as every date line says them (whenParts: the time kept whole); English
+  // as it always was.
+  const parts = language() === "en" ? null : whenParts(iso, now);
+  const said = parts?.time ?? time;
+  if (at.toDateString() === now.toDateString()) return t("at :time", { time: said });
+  if (at.toDateString() === yesterday.toDateString()) return t("yesterday at :time", { time: said });
+  return t("on :date at :time", { date: parts?.day ?? rowDate(iso, now), time: said });
 }
 
 /** The line about the last app not recorded (pure), kept by the core since EchoLedger started, so a call from before

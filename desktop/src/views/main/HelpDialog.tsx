@@ -7,7 +7,6 @@ import { prettyShortcut } from "../../lib/format";
 import { paletteKeys } from "../../lib/shell";
 import { PLAYER_KEYS } from "../../lib/player";
 import { Sheet } from "./ProjectDialogs";
-import { t } from "../../i18n";
 
 /**
  * The keys of the main window (they work while EchoLedger is in front, never while typing in a field). `threeLevels`:
@@ -40,10 +39,10 @@ export function navKeys(platform: string): readonly [string, string][] {
   const mod = platform === "macos" ? "⌘" : "Ctrl+";
   const alt = platform === "macos" ? "⌥" : "Alt+";
   return [
-    [`${mod}1 … ${mod}6`, t("Library, Projects, Live, Ask, Activity, Settings")],
-    [`${alt}1 … ${alt}9`, t("The panel's views: the Library's, then My views")],
-    [`${mod}\\`, t("Hide or show the panel")],
-    [`${mod}[ / ${mod}]`, t("Back or forward through the Library's views and filters")],
+    [`${mod}1 … ${mod}6`, "Library, Projects, Live, Ask, Activity, Settings"],
+    [`${alt}1 … ${alt}9`, "The panel's views: the Library's, then My views"],
+    [`${mod}\\`, "Hide or show the panel"],
+    [`${mod}[ / ${mod}]`, "Back or forward through the Library's views and filters"],
   ];
 }
 

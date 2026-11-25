@@ -4,7 +4,8 @@
 // choice. Words: "Hide from screen shares" / "Show in screen shares", nothing more.
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type HideFor, type PinnedWindow, type PrivacyStatus, type WindowShareState, type WindowShareView } from "../lib/ipc";
-import { t } from "../i18n";
+import { language, t } from "../i18n";
+import { whenParts } from "../lib/format";
 
 /** "Custom…": 1 minute to 7 days (privacy::share::CUSTOM_*). */
 export const CUSTOM_MAX_MINUTES = 7 * 24 * 60;
@@ -83,10 +84,31 @@ export function HideFromSharesButton({ callDetected, label = t("Hide from screen
   );
 }
 
-/** What the main window's row says (pure): shown, or hidden and until when. */
-export function mainShareValue(status: Pick<PrivacyStatus, "mainHide" | "mainHiddenUntil"> | null): string {
+/**
+ * What the main window's row says (pure): shown, or hidden and until when. In English the core's words ("until 14:30",
+ * "until you show it"); in another language one whole sentence for each kind of "until", the day and time from
+ * whenParts (the core's phrase is English).
+ */
+export function mainShareValue(status: Pick<PrivacyStatus, "mainHide" | "mainHiddenUntil"> | null, now: Date = new Date()): string {
   if (!status?.mainHide) return t("Shown in screen shares");
-  return status.mainHiddenUntil ? t("Hidden :until", { until: status.mainHiddenUntil }) : t("Hidden from screen shares");
+  if (language() === "en") return status.mainHiddenUntil ? t("Hidden :until", { until: status.mainHiddenUntil }) : t("Hidden from screen shares");
+  const until = status.mainHide.until;
+  switch (until.kind) {
+    case "until_off": return t("Hidden until you show it");
+    case "until_quit": return t("Hidden until you quit EchoLedger");
+    case "call_ends": return t("Hidden until this call ends");
+    case "at": {
+      const at = new Date(until.at_ms);
+      const parts = whenParts(at.toISOString(), now);
+      if (!parts) return t("Hidden from screen shares");
+      if (parts.today) return t("Hidden until :time", { time: parts.time });
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      if (at.toDateString() === tomorrow.toDateString()) return t("Hidden until tomorrow :time", { time: parts.time });
+      return t("Hidden until :day :time", { day: parts.day, time: parts.time });
+    }
+    default: return t("Hidden from screen shares");
+  }
 }
 
 /** Settings: the main window shown, with Hide from screen shares, or hidden with Show now. */

@@ -99,7 +99,7 @@ export function limitText(key: string, value: number | null | undefined): string
     case "retention_days":
       return value >= 365 && value % 365 === 0 ? tc(":count year|:count years", value / 365) : tc(":count day|:count days", value, { count: count(value) });
     case "uploads_per_day":
-      return t("Up to :count", { count: count(value) });
+      return tc("Up to :count", value, { count: count(value) });
     case "seats":
       return value <= 1 ? t("Just you") : tc("Up to :count people", value, { count: count(value) });
     default:
@@ -111,8 +111,10 @@ export function limitText(key: string, value: number | null | undefined): string
 export function usageText(key: string, limit: LimitEntitlement): string {
   const used = limit.used ?? 0;
   if (key === "storage_bytes") return limit.limit ? t(":used of :limit", { used: fileSize(used), limit: fileSize(limit.limit) }) : fileSize(used);
-  if (key === "monthly_minutes") return limit.limit ? t(":used of :limit min", { used: count(used), limit: count(limit.limit) }) : t(":used min", { used: count(used) });
-  return limit.limit ? t(":used of :limit", { used: count(used), limit: count(limit.limit) }) : count(used);
+  if (key === "monthly_minutes") {
+    return limit.limit ? tc(":used of :limit min", limit.limit, { used: count(used), limit: count(limit.limit) }) : tc(":used min", used, { used: count(used) });
+  }
+  return limit.limit ? tc(":used of :limit", limit.limit, { used: count(used), limit: count(limit.limit) }) : count(used);
 }
 
 /** How full a limit is (0–100), none without a limit. */

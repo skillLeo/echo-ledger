@@ -123,7 +123,9 @@ const macKeyRows = (): readonly [string, string][] => [
  */
 export function appKeys(platform: string, threeLevels = false): readonly [string, string][] {
   const rows = appKeyRows();
-  const base = threeLevels ? rows.flatMap((row) => (row[0] === "[" ? navKeys(platform) : [row])) : rows;
+  // The three levels' keys are Help's list's too (English there until Help is converted): said here in the window's language.
+  const nav = (): [string, string][] => navKeys(platform).map(([keys, what]) => [keys, t(what)]);
+  const base = threeLevels ? rows.flatMap((row) => (row[0] === "[" ? nav() : [row])) : rows;
   if (platform !== "macos") return base;
   return [...base.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...macKeyRows()];
 }

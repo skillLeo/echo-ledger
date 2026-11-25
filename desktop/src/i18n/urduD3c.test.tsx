@@ -3,13 +3,13 @@
 // moments' notes, the microphone test, the account rows, sign-in activity) in the window's language. English is exactly
 // as before (the helpers' own tests are unchanged); each sentence is one key, its values isolated in Urdu.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { flushAsync, resetTauriMock, respond } from "../test/tauri";
 import { makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../test/fixtures";
-import { resetEntitlementsForTests, priceText } from "../lib/entitlements";
+import { closeUpgradeSheet, openUpgradeSheet, resetEntitlementsForTests, priceText } from "../lib/entitlements";
 import { AFTER_EACH_CALL_OPTIONS, alwaysOffer, groupedAudio } from "../lib/callChoice";
 import { decisionText, lastNotRecordedLine } from "../lib/explainer";
 import { checkedWhen, nameList, resultLine } from "../lib/privacy";
@@ -22,6 +22,11 @@ import { MONTHLY_NOTE, WINDOWS_WHOLE_SCREEN } from "../views/main/ScreenSettings
 import { NOT_SHOWN } from "../views/main/SecuritySettings";
 import { CAPTIONS_SHARE_LINE } from "../views/main/CaptureSettings";
 import { BADGE_LABEL } from "../lib/privacy";
+import { mainShareValue } from "../components/ShareVisibility";
+import { clockTime } from "../lib/format";
+import { navKeys, windowKeys } from "../views/main/HelpDialog";
+import { appKeys } from "../views/main/AppSettings";
+import { UpgradeSheet } from "../views/main/UpgradeFlow";
 import { SettingsPagesV2 } from "../v2/settings/pages/SettingsPagesV2";
 import { textsIn } from "./rawText";
 import ur from "./ur.json";
@@ -48,7 +53,7 @@ const SHOWN_CONSTANTS = [
   ...Object.values(PrivacySettings.ALWAYS_SHOWN).map((r) => r.subtitle), ...Object.values(PrivacySettings.LIVE_TRANSLATE_SUBTITLE), PrivacySettings.ZOOM_SETTING,
   PrivacySettings.HIDDEN_WHILE_SHARING, PrivacySettings.ONE_WINDOW_TIP, PrivacySettings.LIMITS, PrivacySettings.GUIDED_ALONE, ...Object.values(PrivacySettings.LINE_FIX_LABEL),
   PrivacySettings.OPEN_SYSTEM_SETTINGS, MONTHLY_NOTE, WINDOWS_WHOLE_SCREEN.trim(), CUSTOM_RANGE, NOT_SHOWN, CAPTIONS_SHARE_LINE, ...Object.values(ROLE_LABEL),
-  ...Object.values(BADGE_LABEL),
+  ...Object.values(BADGE_LABEL), ...navKeys("windows").map(([, what]) => what),
 ];
 
 beforeEach(() => {
@@ -77,7 +82,8 @@ describe("D3c's words, in English as before and in Urdu", () => {
     expect(lastNotRecordedLine({ ...last, user: { ...last.user, reason: null } }, NOW)).toBe("Last not recorded: Slack at 9:40 am.");
     await urdu();
     expect(decisionText(last.user)).toBe("ریکارڈ نہیں ہوتی: یہ کوئی ایسی کال ایپ نہیں جسے EchoLedger جانتا ہو");
-    expect(lastNotRecordedLine(last, NOW)).toBe(`آخری بار ریکارڈ نہیں ہوئی: ${iso("Slack")} ${iso(`${iso("9:40 am")} پر`)}، کیونکہ ${iso("یہ کوئی ایسی کال ایپ نہیں جسے EchoLedger جانتا ہو")}۔`);
+    // The time as every date line has it in Urdu (whenParts: kept whole with a no-break space).
+    expect(lastNotRecordedLine(last, NOW)).toBe(`آخری بار ریکارڈ نہیں ہوئی: ${iso("Slack")} ${iso(`${iso(clockTime(new Date(2026, 10, 26, 9, 40)).replace(/\s/g, "\u00A0"))} پر`)}، کیونکہ ${iso("یہ کوئی ایسی کال ایپ نہیں جسے EchoLedger جانتا ہو")}۔`);
   });
 
   it("the plan's limits and usage: counts agree with their numbers in Urdu; English as it always was", async () => {
@@ -110,10 +116,41 @@ describe("D3c's words, in English as before and in Urdu", () => {
     const pro = sampleEntitlements("pro").plans[1];
     expect(priceText(pro)).toBe("Rs 2,999 a month");
     await urdu();
-    expect(checkedWhen(at, NOW)).toBe(`${iso(`12 ${new Date(at).toLocaleString("ur-PK", { month: "short" })}`)} کو`);
-    expect(nameList(["Zoom", "Teams", "Slack"])).toBe(`${iso("Zoom، Teams")} اور ${iso("Slack")}`);
+    expect(checkedWhen(at, NOW)).toBe(`${iso("12 نومبر")} کو`);
+    // Each name in its own isolate, the run right to left (an RLM first), so they read in order from the right.
+    expect(nameList(["Zoom", "Teams", "Slack"])).toBe(`${iso(`\u200F${iso("Zoom")}، ${iso("Teams")}`)} اور ${iso("Slack")}`);
     expect(updateLine({ phase: "downloading", version: "2.1.0", progress: 45 } as never)).toBe(`EchoLedger ${iso("2.1.0")} ڈاؤن لوڈ ہو رہا ہے · ${iso(45)}%`);
-    expect(priceText(pro)).toBe(`Rs ${iso("2,999")} ماہانہ`);
+    // priceText stays the server's English (classic's upgrade sheet); Plan & usage says its own (planPrice).
+    expect(priceText(pro)).toBe("Rs 2,999 a month");
+  });
+
+  it("the main window hidden: in English the core's words; in Urdu one sentence for each kind of until", async () => {
+    const at = (h: number, m: number, days = 0) => new Date(2026, 10, 26 + days, h, m).getTime();
+    const hide = (until: object, words: string) => ({ mainHide: { until, sinceMs: 0 } as never, mainHiddenUntil: words });
+    expect(mainShareValue(hide({ kind: "until_off" }, "until you show it"), NOW)).toBe("Hidden until you show it");
+    expect(mainShareValue(hide({ kind: "at", at_ms: at(16, 30) }, "until 16:30"), NOW)).toBe("Hidden until 16:30");
+    await urdu();
+    expect(mainShareValue(hide({ kind: "until_off" }, "until you show it"), NOW)).toBe("جب تک آپ اسے دکھائیں نہیں، چھپا ہوا");
+    expect(mainShareValue(hide({ kind: "until_quit" }, "until you quit EchoLedger"), NOW)).toBe("EchoLedger بند کرنے تک چھپا ہوا");
+    expect(mainShareValue(hide({ kind: "call_ends" }, "until this call ends"), NOW)).toBe("اس کال کے ختم ہونے تک چھپا ہوا");
+    const time = (h: number, m: number, days = 0) => clockTime(new Date(at(h, m, days))).replace(/\s/g, "\u00A0");
+    expect(mainShareValue(hide({ kind: "at", at_ms: at(16, 30) }, "until 16:30"), NOW)).toBe(`${iso(time(16, 30))} تک چھپا ہوا`);
+    expect(mainShareValue(hide({ kind: "at", at_ms: at(8, 0, 1) }, "until tomorrow 08:00"), NOW)).toBe(`کل ${iso(time(8, 0, 1))} تک چھپا ہوا`);
+    expect(mainShareValue(hide({ kind: "at", at_ms: at(14, 30, 3) }, "until Sat 29 14:30"), NOW)).toBe(`${iso("29 نومبر")} کو ${iso(time(14, 30, 3))} تک چھپا ہوا`);
+  });
+
+  it("classic's lists stay English in an Urdu window: Help's keys and the upgrade sheet's plans; Settings' own are Urdu", async () => {
+    await urdu();
+    const help = windowKeys("windows", true).map(([, what]) => what);
+    expect(help).toContain("Hide or show the panel");
+    expect(help.filter((what) => /[\u0600-\u06FF]/.test(what))).toEqual([]);
+    expect(appKeys("windows", true).map(([, what]) => what)).toContain("پینل چھپائیں یا دکھائیں");
+    resetEntitlementsForTests(sampleEntitlements("free"));
+    respond("upgrade_request_latest", null);
+    render(<UpgradeSheet />);
+    act(() => openUpgradeSheet(null, {}));
+    expect(screen.getByRole("radio", { name: /^Pro, Rs 2,999 a month/ })).toBeInTheDocument();
+    act(() => closeUpgradeSheet());
   });
 });
 
@@ -130,5 +167,31 @@ describe("Settings in Urdu", () => {
     const line = within(screen.getByTestId("why-not-recorded")).getByText("Krisp").closest("li")!;
     expect(line).toHaveAttribute("dir", "rtl");
     expect(line).toHaveTextContent(`Krisp: ${iso("ریکارڈ نہیں ہوتی: یہ کوئی ایسی کال ایپ نہیں جسے EchoLedger جانتا ہو")}`);
+  });
+
+  it("Plan & usage: a meter's value reads in its words' direction, the price in Urdu, a highlight in its own", async () => {
+    const e = sampleEntitlements("pro");
+    resetEntitlementsForTests(e);
+    respond("get_settings", makeSettings());
+    respond("account_get", null);
+    respond("upgrade_request_latest", null);
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "plan", seq: 1 }} onHome={vi.fn()} run={(fn) => fn().catch(() => undefined)} status={makeStatus()} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    expect(screen.getByTestId("meter-monthly_minutes").querySelector(".el-meter-row__value")).toHaveAttribute("dir", "ltr");
+    cleanup();
+    await urdu();
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "plan", seq: 1 }} onHome={vi.fn()} run={(fn) => fn().catch(() => undefined)} status={makeStatus()} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    const value = screen.getByTestId("meter-monthly_minutes").querySelector(".el-meter-row__value")!;
+    expect(value).toHaveAttribute("dir", "rtl");
+    expect(value).toHaveTextContent(`${iso(600)} میں سے ${iso(230)} منٹ`);
+    // Said in full, the reset day without a stray comma ("1 دسمبر"): the year isn't cut from an Urdu date by an English rule.
+    const spoken = within(screen.getByTestId("meter-monthly_minutes")).getByRole("meter").getAttribute("aria-label")!;
+    expect(spoken).toContain(`${iso(`${iso(600)} میں سے ${iso(230)} منٹ`)} استعمال ہوا`);
+    expect(spoken).toContain(iso(new Date(2026, 11, 1).toLocaleDateString("ur-PK", { day: "numeric", month: "long" })));
+    const ultra = screen.getByTestId("plan-ultra");
+    expect(ultra).toHaveTextContent(`Rs ${iso("12,499")} ماہانہ`);
+    // The server's highlights stay its English, each left to right.
+    expect(within(ultra).getByText("A team of up to 10 people")).toHaveAttribute("dir", "ltr");
   });
 });
