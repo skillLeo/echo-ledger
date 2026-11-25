@@ -24,7 +24,7 @@ import { sourceAppLabel } from "../../lib/format";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../lib/explainer";
 import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { SKIP_SHORTER_THAN } from "../../lib/pending";
+import { skipShorterThan } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
 import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
@@ -90,7 +90,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
       <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
-        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => [String(s), label] as const)}
+        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan("en").map(([s, label]) => [String(s), label] as const)}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Section>
       <Section title="Websites">
@@ -171,13 +171,13 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
     const pattern = rulePattern(rule);
     const label = isNeverRule(rule) ? `Never record ${pattern}` : `Record calls on ${pattern}`;
     return (
-      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
         <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} onClick={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />
       </EntityRow>
     );
   };
   const userRow = (rule: SiteRule) => (
-    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
       <button type="button" className="btn ghost compact" aria-label={`Remove ${rulePattern(rule)}`} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>Remove</button>
     </EntityRow>
   );

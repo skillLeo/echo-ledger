@@ -269,7 +269,8 @@ describe("a shared recording, read-only, in Urdu", () => {
     await openReader();
     expect(screen.getByRole("button", { name: "شیئر شدہ" })).toBeInTheDocument();
     expect(screen.getByText("صرف پڑھنے کے لیے")).toBeInTheDocument();
-    expect(screen.getByText(`${iso("Urdu")} میں ٹرانسکرائب ہوئی`)).toHaveAttribute("dir", "rtl");
+    // The language's name is lib/languages' (in the account's language since D4).
+    expect(screen.getByText(`${iso("اردو")} میں ٹرانسکرائب ہوئی`)).toHaveAttribute("dir", "rtl");
     // The lines of pieces (when · how long · project; the source and device) run in the window's direction, the date
     // formatWhen's run in its .el-ltr box.
     const recorded = screen.getByTestId("recorded");
@@ -320,13 +321,13 @@ describe("a shared recording, read-only, in Urdu", () => {
     fireEvent.click(within(bar).getByRole("button", { name: "متن کاپی کریں" }));
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("کاپی ہو گیا", false, undefined);
-    // The menu's own items are the shared parts' (v2/components), still in English.
+    // The menu's own items are the shared parts' (v2/components), in the account's language since D4.
     fireEvent.click(within(bar).getByRole("button", { name: "کاپی کے مزید طریقے" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy with timestamps" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "وقت کے ساتھ کاپی کریں" }));
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("وقت کے ساتھ کاپی ہو گیا", false, undefined);
     fireEvent.click(within(bar).getByRole("button", { name: "کاپی کے مزید طریقے" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "اے آئی کے لیے کاپی کریں" }));
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("اے آئی کے لیے کاپی ہو گیا، غیر یقینی الفاظ کے نوٹ کے ساتھ", false, undefined);
     // What goes to the clipboard has no isolates.

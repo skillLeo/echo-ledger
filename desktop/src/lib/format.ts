@@ -1,6 +1,6 @@
 // Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
 // language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
-import { dateLocale, isolate, language, numberLocale, PDI, RLI, t } from "../i18n/locale.ts";
+import { dateLocale, isolate, language, numberLocale, PDI, RLI, t, wordsIn, type Lang } from "../i18n/locale.ts";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
@@ -23,9 +23,23 @@ export const SOURCE_APP_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-/** The display label of a `source_app` id; an id the app does not know yet is shown as is. */
-export function sourceAppLabel(app: string): string {
-  return SOURCE_APP_LABELS[app] ?? app;
+/**
+ * The display label of a `source_app` id: an app by its name in every language, the three that are words ("Phone call",
+ * "Voice note", "Other") in the window's language, or in English with `lang` "en" (a window still in English); an id
+ * the app does not know yet is shown as is.
+ */
+export function sourceAppLabel(app: string, lang?: Lang): string {
+  const { t } = wordsIn(lang);
+  switch (app) {
+    case "phone_call":
+      return t("Phone call");
+    case "voice_note":
+      return t("Voice note");
+    case "other":
+      return t("Other");
+    default:
+      return SOURCE_APP_LABELS[app] ?? app;
+  }
 }
 
 export function formatDuration(ms?: number | null): string {
@@ -187,8 +201,8 @@ export function copiedTranscript(
 }
 
 /** Display form of an accelerator for the current platform. */
-export function prettyShortcut(accelerator: string | undefined, platform: string): string {
-  if (!accelerator) return "Not set";
+export function prettyShortcut(accelerator: string | undefined, platform: string, lang?: Lang): string {
+  if (!accelerator) return wordsIn(lang).t("Not set");
   return accelerator
     .split("+")
     .map((k) => {

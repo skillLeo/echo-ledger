@@ -246,3 +246,16 @@ export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+/**
+ * t and tc in `lang`, for words a window still in English shows too (lib's helpers): the window's language (the
+ * default), or "en" whatever the window's is: the English key itself, its values filled in and never isolated, as t()
+ * and tc() give it in English. A classic caller passes "en", so its English sentence never gets an Urdu piece.
+ */
+export function wordsIn(lang?: Lang): { t: (text: string, values?: Values) => string; tc: (text: string, n: number, values?: Values) => string } {
+  if (lang !== "en") return { t, tc };
+  return {
+    t: (text, values) => (values ? fill(CONTEXT_EN[text] ?? text, values, false) : CONTEXT_EN[text] ?? text),
+    tc: (text, n, values) => fill(choose(CONTEXT_EN[text] ?? text, n, "en"), values?.count === undefined || values.count === null ? { ...values, count: n } : values, false),
+  };
+}

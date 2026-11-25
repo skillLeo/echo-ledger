@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { navKeys } from "./HelpDialog";
 import { api, type AppStatus, type Settings, type SettingsPatch, type ShortcutAction, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut } from "../../lib/format";
-import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
+import { LANGUAGE_OPTIONS, languageLabel, menuLabel } from "../../lib/languages";
 import type { Preferences } from "../../lib/shell";
 import type { ThemeChoice } from "../../lib/theme";
 import { conflictFor } from "../../lib/shortcutConflicts";
@@ -20,7 +20,7 @@ type Patch = (p: SettingsPatch) => Promise<boolean>;
 const opts = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
 /** Automatic, English, Urdu, Arabic, then the more languages (lib/languages). */
-export const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = LANGUAGE_OPTIONS.map((o) => [o.value ?? "", o.more ? o.label : menuLabel(o)] as const);
+export const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = LANGUAGE_OPTIONS.map((o) => [o.value ?? "", o.more ? languageLabel(o.value, "en") : menuLabel(o, "en")] as const);
 
 /** "Automatic", "English": the language row's value. */
 export function languageValue(language: string | null | undefined): string {

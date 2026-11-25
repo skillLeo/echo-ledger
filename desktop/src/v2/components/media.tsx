@@ -2,6 +2,7 @@ import { memo, type CSSProperties, type MouseEvent, type MouseEvent as ReactMous
 import { Button } from "./Button";
 import { Avatar } from "./layout";
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./icons";
+import { t, useT } from "../../i18n";
 
 /** 1104 → "18:24", 4000 → "1:06:40": durations read left-to-right in every language. */
 export function clock(seconds: number): string {
@@ -18,7 +19,8 @@ export type PlayerProps = {
   duration: number;
   onToggle: () => void;
   onSeek: (seconds: number) => void;
-  labels?: { play: string; pause: string; seek: string; of: string };
+  /** The controls' names; in the window's language by default. `of` joins the time read out ("0:12 of 3:00"). */
+  labels?: { play: string; pause: string; seek: string; of?: string };
   /** More controls after the time (speed). */
   end?: ReactNode;
   /** Back and forward 10 seconds beside Play, named by `skipLabels`. */
@@ -27,10 +29,12 @@ export type PlayerProps = {
 };
 
 /** Play or pause, the position slider and the time. Media controls never mirror in right-to-left. */
-export function Player({
-  playing, position, duration, onToggle, onSeek, labels = { play: "Play", pause: "Pause", seek: "Position", of: "of" }, end, onSkip,
-  skipLabels = { back: "Back 10 seconds", forward: "Forward 10 seconds" },
-}: PlayerProps) {
+export function Player({ playing, position, duration, onToggle, onSeek, labels: given, end, onSkip, skipLabels: givenSkip }: PlayerProps) {
+  const { t } = useT();
+  const labels = given ?? { play: t("Play"), pause: t("Pause"), seek: t("Position") };
+  const skipLabels = givenSkip ?? { back: t("Back 10 seconds"), forward: t("Forward 10 seconds") };
+  // The time read out, whole: "0:12 of 3:00" (a caller's own `of` joins it as it says).
+  const valueText = labels.of ? `${clock(position)} ${labels.of} ${clock(duration)}` : t(":position of :duration", { position: clock(position), duration: clock(duration) });
   return (
     // dir="ltr": skip back, play, skip forward and the slider read left to right in every language (D4 7).
     <div className="el-player" dir="ltr">
@@ -39,7 +43,7 @@ export function Player({
       {onSkip && <Button variant="quiet" icon={ForwardIcon} aria-label={skipLabels.forward} title={skipLabels.forward} onClick={() => onSkip(10)} />}
       <div className="el-player__track">
         <input type="range" className="el-player__range" min={0} max={duration} step={1} value={position} aria-label={labels.seek}
-          aria-valuetext={`${clock(position)} ${labels.of} ${clock(duration)}`} onChange={(e) => onSeek(Number(e.target.value))} />
+          aria-valuetext={valueText} onChange={(e) => onSeek(Number(e.target.value))} />
         <span className="el-player__time el-num">{clock(position)} / {clock(duration)}</span>
       </div>
       {end}
@@ -49,7 +53,7 @@ export function Player({
 
 export type Segment = { speaker: string; start: number; text: string };
 
-const defaultPlayLabel = (s: Segment) => `Play from ${clock(s.start)}`;
+const defaultPlayLabel = (s: Segment) => t("Play from :time", { time: clock(s.start) });
 /** A speaker's initial for the avatar at the start of their turn. */
 export const speakerInitial = (name: string): string => [...name.trim()][0]?.toUpperCase() ?? "?";
 
@@ -66,6 +70,8 @@ const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, acti
   title: string | undefined;
   onPlayLine?: (index: number) => void;
   playLabel: (segment: Segment) => string;
+  /** The window's language: a line is drawn again in a new one (its play label). */
+  lang?: string;
 }) {
   return (
     <li className={`el-segment${active ? " el-segment--active" : ""}${turn ? ` el-segment--${turn}` : ""}`} aria-current={active || undefined}>
@@ -119,6 +125,7 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
   /** A right-click on a line, a speaker's name or selected words (one handler for the list: lines stay as drawn). */
   onMenu?: (e: TranscriptMenuEvent) => void;
 }) {
+  const { lang: words } = useT();
   const menu = onMenu && ((e: ReactMouseEvent<HTMLOListElement>) => {
     const line = (e.target as HTMLElement).closest("li.el-segment");
     if (!line || !e.currentTarget.contains(line)) return;
@@ -131,7 +138,7 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
     <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang} onContextMenu={menu || undefined}>
       {segments.map((s, i) => (
         <TranscriptLine key={`${s.start}-${i}`} segment={s} index={i} active={i === activeIndex} text={renderText?.(i)} note={note?.(i) ?? null}
-          after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel}
+          after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel} lang={words}
           turn={grouped ? (i > 0 && segments[i - 1].speaker === s.speaker ? "cont" : "start") : undefined} />
       ))}
     </ol>

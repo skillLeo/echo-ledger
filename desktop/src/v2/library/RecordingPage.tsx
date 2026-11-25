@@ -3,7 +3,7 @@
 // Library's one menu (organise.tsx) with this page's parts: Change language, the Export ▸ in the view on screen with
 // PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy (the text at once, its chevron
 // for the other ways) · Export ▾; over the
-// transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
+// transcript: Show as (Roman Urdu · اردو · English · Original), as classic. In the account's language (src/i18n).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api, errorMessage, type ExportFormat, type LearnOffer, type LibraryItem, type TranscriptionLanguage, type TranscriptSuggestion, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
@@ -15,17 +15,17 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, newTerms, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { playerHint, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, newTerms, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
-import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
+import { defaultViewOf, improvingView, transcribingLine, viewName, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
 import { canTryAgain, failureLine, languageLabel, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, usedBackupEngine } from "../../lib/languages";
 import { openSettingsSection } from "../../lib/entitlements";
 import { playbackExpired } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
-import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
-import { LockedChip, NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
+import { pdfHint, WAVE_BARS } from "../../views/main/TranscriptTools";
+import { LockedChip, needsKeyText } from "../../views/main/Upgrade";
 import { BackupEngineLine, FiledByLineV2, LearnOfferV2, RecordingStepsV2, VocabularyOfferV2 } from "./recordingExtras";
 import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
@@ -37,8 +37,9 @@ import { choiceItems, type ActionContext } from "../actions/registry";
 import { useActions } from "../actions/useActions";
 import { SourceAvatar } from "./SourceAvatar";
 import { rowState, STATE_WORDS } from "./model";
-import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, RenameDialog, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
+import { aiHeader, LanguageDialog, recordingExportItems, RenameDialog, sayProblem, TranscribeDialog, WhatsAppDialog, type Say } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
+import { lineDir, useT, withParts, wordsIn, type Lang } from "../../i18n";
 
 type Tab = "transcript" | "notes" | "details";
 
@@ -54,9 +55,12 @@ export function primarySize(detail: Record<string, unknown>): number | null {
   return typeof size === "number" && size > 0 ? size : null;
 }
 
-/** Tooltips of what the engine was not sure of (kept as heard), as classic's. */
-export const UNSURE_WORD = "Not sure of this word. Click to hear it.";
-export const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
+/** Tooltips of what the engine was not sure of (kept as heard), as classic's: in the window's language, or English with
+ * `lang` "en" (UNSURE_WORD and UNSURE_LINE, as the tests read them). */
+export const unsureWord = (lang?: Lang) => wordsIn(lang).t("Not sure of this word. Click to hear it.");
+export const unsureLine = (lang?: Lang) => wordsIn(lang).t("The engine was not sure of this line. Click to hear it.");
+export const UNSURE_WORD = unsureWord("en");
+export const UNSURE_LINE = unsureLine("en");
 /**
  * The words with timings join back into the line's text, ignoring spaces, punctuation and capitals (engines send words
  * without the line's commas and full stops): only then are they drawn one by one.
@@ -70,7 +74,8 @@ export function wordsMatch(words: readonly { text: string }[], text: string): bo
 /** No speaker names yet: one empty object, so what is worked out from them keeps while the page reads. */
 const NO_NAMES: Record<string, string> = {};
 /** Double-check: what a second transcription heard on a line it disagreed on (never the engine's name, D-132). */
-export const SECOND_HEARD = "A second transcription heard:";
+export const secondHeard = (lang?: Lang) => wordsIn(lang).t("A second transcription heard:");
+export const SECOND_HEARD = secondHeard("en");
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 
 export type RecordingPageProps = {
@@ -92,9 +97,9 @@ export type RecordingPageProps = {
 };
 
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
-/** Show as: the views in classic's order, the original words last, and their names. */
+/** Show as: the views in classic's order, the original words last, and their names (Urdu's in its own letters). */
 const VIEW_ORDER: TranscriptView[] = ["roman", "urdu", "english"];
-const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "اردو" };
+const viewLabel = (view: TranscriptView) => (view === "urdu" ? "اردو" : viewName(view));
 const VIEWS_POLL_MS = 5_000;
 type ShowAs = "original" | TranscriptView;
 
@@ -103,6 +108,7 @@ const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
 export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onItemChanged }: RecordingPageProps) {
+  const { t, tc, rtl, lang } = useT();
   const [sharing, setSharing] = useState(false);
   // Rename by pressing the title (a click, a tap, or Enter on it): the Rename dialog, as the Library's Rename… and the
   // other apps have it, pre-filled only with the person's own title. Closed, the keyboard is back on the title.
@@ -307,7 +313,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const rules = Array.isArray(offers) ? offers : [];
       setLearn(rules);
       setVocabTerms(rules.length ? [] : newTerms(before, text));
-      onMessage("Line saved");
+      onMessage(t("Line saved"));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
@@ -360,7 +366,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           focusReview.current = true;
         }
       }
-      onMessage(accept ? `Changed to “${fix.to}”` : "Suggestion dismissed");
+      onMessage(accept ? t("Changed to “:to”", { to: fix.to }) : t("Suggestion dismissed"));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     } finally {
@@ -390,8 +396,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
         if (from < pos) continue;
         out.push(raw.text.slice(pos, from));
         out.push(
-          <button key={f.id} type="button" className="el-suggest" aria-expanded={openFix === f.id} title={`Suggested: ${f.to}${f.reason ? ` (${f.reason})` : ""}`}
-            aria-label={`Suggested fix: ${raw.text.slice(from, to)} to ${f.to}`} onClick={(e) => { e.stopPropagation(); setOpenFix(openFix === f.id ? null : f.id); }}>
+          <button key={f.id} type="button" className="el-suggest" aria-expanded={openFix === f.id}
+            title={f.reason ? t("Suggested: :to (:reason)", { to: f.to, reason: f.reason }) : t("Suggested: :to", { to: f.to })}
+            aria-label={t("Suggested fix: :from to :to", { from: raw.text.slice(from, to), to: f.to })} onClick={(e) => { e.stopPropagation(); setOpenFix(openFix === f.id ? null : f.id); }}>
             {raw.text.slice(from, to)}
           </button>,
         );
@@ -410,7 +417,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
         <span key={wi}>
           {uncertainWord(w) ? (
             // Out of the Tab order (a long transcript would be hundreds of stops): the line's time plays it from the keys.
-            <button type="button" tabIndex={-1} className={cls} title={UNSURE_WORD} aria-label={`${w.text}, not sure of this word${canPlay ? ", play it" : ""}`}
+            <button type="button" tabIndex={-1} className={cls} title={unsureWord()}
+              aria-label={canPlay ? t(":word, not sure of this word, play it", { word: w.text }) : t(":word, not sure of this word", { word: w.text })}
               disabled={!canPlay} onClick={(e) => { e.stopPropagation(); playWord(w.start_ms); }}>{w.text}</button>
           ) : <span className={cls} data-on={wi === on || undefined}>{w.text}</span>}
           {wi < words.length - 1 ? " " : ""}
@@ -424,14 +432,14 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (parts.length === 1) return undefined;
     return parts.map((part, k) => {
       const marked = /^\[\?([^\]]+)\]$/.exec(part);
-      return marked ? <span key={k} className="el-word el-word--unsure" title={UNSURE_WORD}>{marked[1]}</span> : part;
+      return marked ? <span key={k} className="el-word el-word--unsure" title={unsureWord()}>{marked[1]}</span> : part;
     });
   };
   /** The words a line has in the transcript itself (never a Show as view's): what an edit starts from. */
   const rawText = (i: number) => (transcript.state === "ready" ? transcript.value?.segments[i]?.text ?? segments[i].text : segments[i].text);
   const lineText = (i: number, on = -1): ReactNode | undefined => {
     if (editing && editLine === i) return <LineEditor text={rawText(i)} onSave={(t) => void saveLine(i, t)} onCancel={() => setEditLine(null)} />;
-    if (editing) return <button type="button" className="el-line-edit" aria-label={`Edit line ${i + 1}: ${rawText(i)}`} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{rawText(i)}</button>;
+    if (editing) return <button type="button" className="el-line-edit" aria-label={t("Edit line :n: :text", { n: i + 1, text: rawText(i) })} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{rawText(i)}</button>;
     const inLine = matches.map((m, index) => ({ ...m, index })).filter((m) => m.seg === i);
     if (!inLine.length) return viewText(i) !== null ? viewMarks(segments[i].text) : heardText(i, on);
     return markParts(segments[i].text, inLine).map((p, k) => (p.match === null ? <span key={k}>{p.text}</span>
@@ -450,24 +458,26 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
   const deleteScreen = async (screen: ScreenMoment) => {
-    if (!(await confirmAction({ title: `Delete screen ${screen.index}?`, body: "The recording and its transcript stay.", confirm: "Delete", tone: "danger" }))) return;
+    if (!(await confirmAction({ title: t("Delete screen :index?", { index: screen.index }), body: t("The recording and its transcript stay."), confirm: t("Delete"), tone: "danger" }))) return;
     try {
       await api.deleteScreen(item.id, screen.id);
       setScreenOpen(null);
       reloadScreens();
-      onMessage(`Screen ${screen.index} deleted`);
+      onMessage(t("Screen :index deleted", { index: screen.index }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   // When, how long, then the project (its own button after this line).
-  const meta = [source, formatWhen(item.started_at), formatDuration(item.duration_ms)].filter(Boolean).join(" · ");
+  const metaParts = [source, formatWhen(item.started_at), formatDuration(item.duration_ms)].filter((p): p is string => !!p);
+  const meta = metaParts.join(" · ");
   // A transcription waiting for its engine says when it tries again; a failed one says why.
   const engineRetry = tDetail && isTranscribing(tDetail.status) ? retryLine(tDetail) : null;
   const failureCode = tDetail?.status === "failed" ? tDetail.error_code ?? null : item.transcript?.final_error_code ?? null;
+  const liveParts = partsText(item.transcript?.final_progress);
   const liveLine = tDetail?.kind === "live"
-    ? `Live captions (final transcript pending${partsText(item.transcript?.final_progress) ? ` · ${partsText(item.transcript?.final_progress)}` : ""})` : null;
+    ? (liveParts ? t("Live captions (final transcript pending · :parts)", { parts: liveParts }) : t("Live captions (final transcript pending)")) : null;
   const closeRename = () => {
     setRenaming(false);
     titleButton.current?.focus();
@@ -478,7 +488,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     setBusy(true);
     try {
       await api.retranscribe(item.id, language);
-      onMessage(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
+      onMessage(t("Re-transcribing in :language. The current transcript stays until the new one is ready.", { language: languageLabel(language) }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     } finally {
@@ -494,7 +504,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (!yes) return;
     try {
       await api.addReplacement(offer.from, offer.to, offer.client_id);
-      onMessage(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
+      onMessage(t(":project's transcripts will write “:to” from now on", { project: offer.client_name, to: offer.to }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
@@ -503,7 +513,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     try {
       await api.addToVocabulary(term, item.client?.id ?? null);
       setVocabTerms((terms) => terms.filter((t) => t !== term));
-      onMessage(`Added “${term}” to the vocabulary`);
+      onMessage(t("Added “:term” to the vocabulary", { term }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
@@ -514,18 +524,18 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const left = (item.labels ?? []).filter((l) => l !== label);
       const saved = await api.organiseSession(item.id, { labels: left });
       onItemChanged?.({ id: item.id, labels: saved?.data?.labels ?? left });
-      onMessage(`Label removed: ${label}`);
+      onMessage(t("Label removed: :label", { label }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
   };
   /** The fix box's buttons: Review and each decision put the keyboard there, or back on Review. */
   const fixBox = (fix: TranscriptSuggestion) => (
-    <div className="el-suggest-pop" role="group" aria-label="Suggested fix" data-fix={fix.id}>
-      <span dir="auto">Change <b>{fix.from}</b> to <b>{fix.to}</b>?{fix.reason ? <span className="el-secondary"> ({fix.reason})</span> : null}</span>
-      <Button size="sm" variant="primary" loading={fixBusy} loadingLabel="Changing…" onClick={() => void decideFix(fix, true)}>Accept</Button>
-      <Button size="sm" disabled={fixBusy} onClick={() => void decideFix(fix, false)}>Dismiss</Button>
-      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close" onClick={() => closeFix()} />
+    <div className="el-suggest-pop" role="group" aria-label={t("Suggested fix")} data-fix={fix.id}>
+      <span dir={rtl ? "rtl" : "auto"}>{withParts(t("Change :from to :to?"), { from: <b>{fix.from}</b>, to: <b>{fix.to}</b> })}{fix.reason ? <span className="el-secondary"> ({fix.reason})</span> : null}</span>
+      <Button size="sm" variant="primary" loading={fixBusy} loadingLabel={t("Changing…")} onClick={() => void decideFix(fix, true)}>{t("Accept")}</Button>
+      <Button size="sm" disabled={fixBusy} onClick={() => void decideFix(fix, false)}>{t("Dismiss")}</Button>
+      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Close")} onClick={() => closeFix()} />
     </div>
   );
 
@@ -533,9 +543,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   // line being played is drawn again as it plays (its word heard now).
   const parts = useMemo(() => segments.map((_, i) => ({
     text: lineText(i),
-    note: showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span>
-      : viewText(i) === null && tDetail?.segments[i]?.check ? <span className="el-segment__check" dir="auto"><b>{SECOND_HEARD}</b> {tDetail.segments[i].check!.text}</span> : null,
-    title: viewText(i) === null && tDetail?.segments[i]?.uncertain ? UNSURE_LINE : undefined,
+    note: showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· {t("original words")}</span>
+      : viewText(i) === null && tDetail?.segments[i]?.check ? <span className="el-segment__check" dir="auto"><b>{secondHeard()}</b> {tDetail.segments[i].check!.text}</span> : null,
+    title: viewText(i) === null && tDetail?.segments[i]?.uncertain ? unsureLine() : undefined,
     after: (() => {
       const at = screensAfter.get(i);
       const fix = pendingFix?.index === i ? fixBox(pendingFix) : null;
@@ -543,7 +553,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     })(),
   })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [segments, editing, editLine, matches, findCurrent, tDetail, fixesShown, openFix, fixBusy, screensAfter, canPlay, showAs, views]);
+  [segments, editing, editLine, matches, findCurrent, tDetail, fixesShown, openFix, fixBusy, screensAfter, canPlay, showAs, views, lang]);
   const renderText = (i: number) => (i === active && activeWordAt >= 0 ? lineText(i, activeWordAt) : parts[i]?.text);
   const audioError = () => {
     if (refreshedLink.current) return setPlaybackError(playbackExpired());
@@ -569,9 +579,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const people = [...new Set(lines.map((l) => l.speaker))];
       // The header's language is the view's when the lines are in one ("Roman Urdu"), as the server writes it.
       await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people, exportView)}\n\n${body}` : body);
-      onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
+      onMessage(forAi ? t("Copied for AI, with the note on unsure words") : withTimestamps ? t("Copied with timestamps") : t("Copied"));
     } catch {
-      sayProblem(onMessage, "Could not access the clipboard");
+      sayProblem(onMessage, t("Could not access the clipboard"));
     }
   };
   // ⌘P on a Mac, Ctrl+P elsewhere: print the transcript (its print page, where Save as PDF is too), not the window
@@ -601,8 +611,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (!tDetail) return;
     try {
       const path = await api.exportTranscript(tDetail.id, format, true, true, exportView);
-      if (format === "html") onMessage("Opened the print page in your browser: choose Save as PDF there");
-      else if (path) onMessage(`Saved to ${path}`);
+      if (format === "html") onMessage(t("Opened the print page in your browser: choose Save as PDF there"));
+      else if (path) onMessage(t("Saved to :path", { path }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
@@ -610,8 +620,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const packAs = async (format: MeetingPackFormat, withAudio: boolean) => {
     try {
       const path = await api.meetingPack(item.id, format, exportView, withAudio);
-      if (format === "pdf") onMessage("Opened the meeting pack in your browser: choose Save as PDF there");
-      else if (path) onMessage(`Saved to ${path}`);
+      if (format === "pdf") onMessage(t("Opened the meeting pack in your browser: choose Save as PDF there"));
+      else if (path) onMessage(t("Saved to :path", { path }));
     } catch (e) {
       sayProblem(onMessage, errorMessage(e));
     }
@@ -628,23 +638,25 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
     exportAs: (f) => void exportsRef.current.exportAs(f),
     packAs: (item.screen_count ?? 0) > 0 ? (f, a) => void exportsRef.current.packAs(f, a) : undefined,
-    view: exportView ? VIEW_LABELS[exportView] : null,
-  }), [exportView, item.screen_count]);
+    view: exportView ? viewLabel(exportView) : null,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [exportView, item.screen_count, lang]);
+  const exportWord = t("Export");
   const recordingMenu = useMemo(() => menu({
-    organise: canChangeLanguage ? [{ label: CHANGE_LANGUAGE, icon: Icons.LanguagesIcon, onPick: () => setLanguageOpen(true) }] : [],
-    export: canExport ? { label: "Export", icon: Icons.DownloadIcon, group: "Export", items: exportItems } : undefined,
-    export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); }) }],
+    organise: canChangeLanguage ? [{ label: t("Change language and re-transcribe…"), icon: Icons.LanguagesIcon, onPick: () => setLanguageOpen(true) }] : [],
+    export: canExport ? { label: exportWord, icon: Icons.DownloadIcon, group: exportWord, items: exportItems } : undefined,
+    export_more: [{ label: t("Save audio"), icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage(t("Audio saved")); }) }],
     whatsapp: () => setWhatsApp(true),
     ai: () => void copyRef.current(false, true),
-  }).filter((i) => canExport || i.label !== "Export"),
+  }).filter((i) => canExport || i.label !== exportWord),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [menu, canChangeLanguage, canExport, exportItems, item.id]);
+  [menu, canChangeLanguage, canExport, exportItems, item.id, lang]);
   const sendToWhatsApp = () => setWhatsApp(true);
 
   const toggle = () => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) void a.play().catch(() => sayProblem(onMessage, "The audio didn't play. Try again in a moment."));
+    if (a.paused) void a.play().catch(() => sayProblem(onMessage, t("The audio didn't play. Try again in a moment.")));
     else a.pause();
   };
   const seek = (s: number) => {
@@ -670,7 +682,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (currentPlatform() !== "macos") return setPageMenu({ label, at, items });
     void popupNative(items, at).then((shown) => { if (!shown) setPageMenu({ label, at, items }); });
   };
-  const copyWords = (text: string, said = "Copied") => void navigator.clipboard?.writeText(text).then(() => onMessage(said)).catch(() => sayProblem(onMessage, "Couldn't copy."));
+  const copyWords = (text: string, said = t("Copied")) => void navigator.clipboard?.writeText(text).then(() => onMessage(said)).catch(() => sayProblem(onMessage, t("Couldn't copy.")));
   useActions("transcript", {
     // From a line's or selected words' start (state.at), or the waveform's moment (value).
     "player.playFromHere": (c) => {
@@ -684,13 +696,13 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const merged = { ...names, [from]: speakerName(names, to) };
       void api.renameSpeakers(item.id, merged, false).then((r) => {
         if (mounted.current) setDetail((d) => (d.state === "ready" ? { state: "ready", value: { ...d.value, names: r.speaker_names } } : d));
-        onMessage(`Merged into ${speakerName(names, to)}`);
+        onMessage(t("Merged into :name", { name: speakerName(names, to) }));
       }).catch((e) => sayProblem(onMessage, errorMessage(e)));
     },
     "edit.copy": (c) => { if (c.value) copyWords(c.value); },
     "text.copyWithTime": (c) => {
       const at = Number(c.state?.at) || 0;
-      if (c.value) copyWords(`[${timestamp(at * 1000)}] ${c.value}`, "Copied with its time");
+      if (c.value) copyWords(`[${timestamp(at * 1000)}] ${c.value}`, t("Copied with its time"));
     },
     "edit.selectAll": () => {
       const list = document.querySelector<HTMLElement>('ol.el-transcript[aria-label="Transcript"]');
@@ -707,7 +719,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (e.selected) {
       if (platform === "macos") return;
       e.preventDefault();
-      showPageMenu("Selected words", e.at, contextItems(["edit.copy", "text.copyWithTime", "text.ask", "-", "player.playFromHere", "-", "edit.selectAll"],
+      showPageMenu(t("Selected words"), e.at, contextItems(["edit.copy", "text.copyWithTime", "text.ask", "-", "player.playFromHere", "-", "edit.selectAll"],
         { ...ctx, value: e.selected }));
       return;
     }
@@ -720,7 +732,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       }));
       return;
     }
-    showPageMenu(`Line at ${timestamp(line.start * 1000)}`, e.at, contextItems(["player.playFromHere"], { ...ctx, value: String(line.start) }));
+    showPageMenu(t("Line at :time", { time: timestamp(line.start * 1000) }), e.at, contextItems(["player.playFromHere"], { ...ctx, value: String(line.start) }));
   };
   // The selected-words bar (3b), on every platform: [Play from here] [Ask about this] [Copy with time] [Share] above the
   // words selected in the transcript (what can't run here is left out).
@@ -755,7 +767,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     { platform: currentPlatform(), kind: "transcript", value: picked.text, state: { hasAudio: canPlay, hasTranscript: true, at: String(picked.at) } }) : [];
   /** The waveform's right-click: Play from here, at the moment under the pointer. */
   const waveMenu = (ms: number, at: { x: number; y: number }) =>
-    showPageMenu("Waveform", at, contextItems(["player.playFromHere"], { platform: currentPlatform(), kind: "transcript", value: String(ms / 1000), state: { hasAudio: canPlay } }));
+    showPageMenu(t("Waveform"), at, contextItems(["player.playFromHere"], { platform: currentPlatform(), kind: "transcript", value: String(ms / 1000), state: { hasAudio: canPlay } }));
   // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s, as classic; never while typing.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
@@ -816,75 +828,80 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     }
   };
 
+  /** Where it was recorded, in words (an id the app doesn't know yet as it is). */
+  const deviceWords = (device: string) => (device === "phone" ? t("Phone") : device === "desktop" ? t("Computer") : device === "web" ? t("Web") : device);
+
   if (detail.state === "error" && transcript.state !== "ready") {
     return (
       <div className="el-page">
-        <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Library</Button>
-        <EmptyState tone="error" icon={Icons.ErrorIcon} title="This recording didn't open" body={detail.message}
-          action={<Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+        <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{t("Library")}</Button>
+        <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("This recording didn't open")} body={detail.message}
+          action={<Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
       </div>
     );
   }
 
   return (
     <div className="el-page" ref={page}>
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack} aria-keyshortcuts="Escape">Library</Button>
+      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack} aria-keyshortcuts="Escape">{t("Library")}</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
-          <span className="el-visually-hidden" id="el-recording-rename-hint">Press the title to rename the recording</span>
+          <span className="el-visually-hidden" id="el-recording-rename-hint">{t("Press the title to rename the recording")}</span>
           <h1 className="el-title-l" dir="auto">
-            <button type="button" ref={titleButton} className="el-recording__title" title="Rename" aria-describedby="el-recording-rename-hint" aria-haspopup="dialog"
+            <button type="button" ref={titleButton} className="el-recording__title" title={t("Rename")} aria-describedby="el-recording-rename-hint" aria-haspopup="dialog"
               onClick={(e) => {
                 // A Mac doesn't focus a button on a click: the dialog gives the keyboard back to what had it when it opened.
                 e.currentTarget.focus();
                 setRenaming(true);
               }}>
-              {item.title?.trim() || "Recording"}
+              {item.title?.trim() || t("Recording")}
             </button>
           </h1>
           <p className="el-page__meta el-secondary">
             <SourceAvatar item={item} size="sm" />
-            <span dir="auto">{meta}</span>
+            {/* Pieces joined by dots: in Urdu the list reads right to left from its first piece, each piece in its own
+                isolate (a Latin app name and a number would otherwise run together left to right); English as always. */}
+            <span dir={rtl ? "rtl" : "auto"}>{rtl ? metaParts.flatMap((part, i) => [i ? " · " : null, <bdi key={i}>{part}</bdi>]) : meta}</span>
             {item.client && (onOpenProject
-              ? <Button size="sm" variant="quiet" icon={Icons.FolderIcon} onClick={() => onOpenProject(item.client!.id)} aria-label={`Open project ${item.client.name}`}>{item.client.name}</Button>
+              ? <Button size="sm" variant="quiet" icon={Icons.FolderIcon} onClick={() => onOpenProject(item.client!.id)} aria-label={t("Open project :name", { name: item.client.name })}>{item.client.name}</Button>
               : <span dir="auto">{item.client.name}</span>)}
-            {item.title_auto && item.title?.trim() && <Badge>Automatic title</Badge>}
-            {state === "ready" ? <Badge tone="success">Transcribed</Badge>
-              : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
-                : state === "no_audio" ? <Badge>Nothing was heard</Badge>
-                  : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge>{rowState(item)?.text ?? STATE_WORDS.audio_only}</Badge>}
+            {item.title_auto && item.title?.trim() && <Badge>{t("Automatic title")}</Badge>}
+            {state === "ready" ? <Badge tone="success">{t("Transcribed")}</Badge>
+              : state === "failed" ? <Badge tone="danger">{t("Transcription failed")}</Badge>
+                : state === "no_audio" ? <Badge>{t("Nothing was heard")}</Badge>
+                  : item.transcript?.final_status ? <Badge tone="accent">{t("Transcribing…")}</Badge> : <Badge>{rowState(item)?.text ?? STATE_WORDS.audio_only}</Badge>}
           </p>
           {(item.labels?.length ?? 0) > 0 && (
-            <ul className="el-recording__labels" aria-label="Labels">
+            <ul className="el-recording__labels" aria-label={t("Labels")}>
               {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={item.label_colors?.[l] ?? null} onRemove={() => void removeLabel(l)} /></li>)}
             </ul>
           )}
           <RecordingStepsV2 item={item} improving={barView !== null && tDetail?.kind === "final"} say={onMessage} />
-          {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {engine && <p className="el-caption el-secondary">{t("Transcribed in :engine", { engine })}</p>}
           {tDetail?.kind === "final" && tDetail.status === "completed" && version === "final" && usedBackupEngine(tDetail) && !isTranscribing(item.transcript?.final_status) && (
             <BackupEngineLine busy={busy} onRetranscribe={() => void retranscribeSame()} />
           )}
           <FiledByLineV2 item={item} />
           {/* What the plan leaves out here, each with the plan that has it (classic's locked chips; none when all are in). */}
           <p className="el-recording__locked el-caption" data-testid="locked-chips">
-            {item.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
-            {tDetail?.kind === "final" && <LockedChip feature="views" label="Roman Urdu · English · اردو" />}
-            {tDetail?.kind === "final" && <LockedChip feature="double_check" label="Double-check" />}
-            {!screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
-            <LockedChip feature="connector" label="Ask an AI assistant" />
+            {item.transcript?.final_status && <LockedChip feature="premium_engines" label={t("Premium engines")} />}
+            {tDetail?.kind === "final" && <LockedChip feature="views" label={`${viewLabel("roman")} · ${viewLabel("english")} · ${viewLabel("urdu")}`} />}
+            {tDetail?.kind === "final" && <LockedChip feature="double_check" label={t("Double-check")} />}
+            {!screens?.length && <LockedChip feature="screen_moments" label={t("Screens")} />}
+            <LockedChip feature="connector" label={t("Ask an AI assistant")} />
           </p>
-          {engineRetry && <p className="el-caption el-secondary" role="status" dir="auto">{engineRetry}</p>}
-          {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
+          {engineRetry && <p className="el-caption el-secondary" role="status" dir={lineDir(engineRetry)}>{engineRetry}</p>}
+          {warning && <p className="el-caption el-row__error" role="status" dir={lineDir(warning)}>{warning}</p>}
         </div>
         <div className="el-page__actions">
-          <Button variant="quiet" icon={Icons.LinkIcon} onClick={() => setSharing(true)} title="Share a view-only link or send to a teammate">Share</Button>
-          <Menu label="Recording actions" items={recordingMenu} button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }} />
+          <Button variant="quiet" icon={Icons.LinkIcon} onClick={() => setSharing(true)} title={t("Share a view-only link or send to a teammate")}>{t("Share")}</Button>
+          <Menu label={t("Recording actions")} items={recordingMenu} button={{ variant: "quiet", icon: Icons.MoreIcon, title: t("More") }} />
         </div>
       </header>
       {screens && screens.length > 0 && <ScreensStrip screens={screens} onOpen={setScreenOpen} />}
       <Card className="el-page__player">
         {detail.state === "loading" ? (
-          <Loading label="Loading the audio"><Skeleton shape="block" /></Loading>
+          <Loading label={t("Loading the audio")}><Skeleton shape="block" /></Loading>
         ) : (
           <>
             {detail.state === "ready" && detail.value.url && (
@@ -897,15 +914,15 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               durationMs={durationS * 1000} nowMs={position * 1000} onSeek={(ms) => seek(ms / 1000)} onMenu={waveMenu} />
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
-              end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
+              end={<Select label={t("Playback speed")} hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
                 options={SPEEDS.map((v) => ({ value: v, label: `${v}×`, dir: "ltr" as const }))} />} />
             <div className="el-recording__toggles">
-              <Toggle label="Skip silence" checked={skipSilence} onChange={setSkipSilence} />
-              <Toggle label="Follow" checked={follow} onChange={setFollow} />
-              <span className="el-caption el-secondary el-recording__keys">{PLAYER_HINT}</span>
+              <Toggle label={t("Skip silence")} checked={skipSilence} onChange={setSkipSilence} />
+              <Toggle label={t("Follow")} checked={follow} onChange={setFollow} />
+              <span className="el-caption el-secondary el-recording__keys">{playerHint()}</span>
             </div>
             {bookmarks.length > 0 && (
-              <ul className="el-bookmarks" aria-label="Bookmarks">
+              <ul className="el-bookmarks" aria-label={t("Bookmarks")}>
                 {bookmarks.map((b) => (
                   <li key={b.id}>
                     <Button size="sm" variant="secondary" icon={Icons.PinIcon} title={b.note ?? undefined} disabled={!(detail.state === "ready" && detail.value.url)}
@@ -920,61 +937,61 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
         )}
       </Card>
       {canExport && (
-        <div className="el-recording__actions" role="toolbar" aria-label="Share, copy and export">
-          <Button icon={Icons.SendIcon} disabled={busy} onClick={sendToWhatsApp}>Send to WhatsApp…</Button>
+        <div className="el-recording__actions" role="toolbar" aria-label={t("Share, copy and export")}>
+          <Button icon={Icons.SendIcon} disabled={busy} onClick={sendToWhatsApp}>{t("Send to WhatsApp…")}</Button>
           {/* Copy: the main part copies the text without timestamps at once; the chevron has the other ways. */}
-          <SplitButton label="Copy" icon={Icons.CopyIcon} mainLabel="Copy text" onClick={() => void copy(false)} menuLabel="More copy options"
+          <SplitButton label={t("Copy")} icon={Icons.CopyIcon} mainLabel={t("Copy text")} onClick={() => void copy(false)} menuLabel={t("More copy options")}
             items={copyMenuItems({ withTimestamps: () => void copy(true), forAi: () => void copy(false, true) })} />
-          <Menu label={exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export"} items={exportItems}
-            button={{ icon: Icons.DownloadIcon, iconEnd: Icons.ChevronDownIcon, text: exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export", title: PDF_HINT }} />
+          <Menu label={exportView ? t("Export as :view", { view: viewLabel(exportView) }) : exportWord} items={exportItems}
+            button={{ icon: Icons.DownloadIcon, iconEnd: Icons.ChevronDownIcon, text: exportView ? t("Export as :view", { view: viewLabel(exportView) }) : exportWord, title: pdfHint() }} />
         </div>
       )}
-      <Tabs label="Recording" value={tab} onChange={setTab} tabs={[{ value: "transcript", label: "Transcript" }, ...(item.client ? [{ value: "notes" as Tab, label: "Call notes" }] : []), { value: "details", label: "Details" }]}>
+      <Tabs label={t("Recording")} value={tab} onChange={setTab} tabs={[{ value: "transcript", label: t("Transcript") }, ...(item.client ? [{ value: "notes" as Tab, label: t("Call notes") }] : []), { value: "details", label: t("Details") }]}>
         {tab === "notes" ? (
           <CallNotesV2 sessionId={item.id} say={onMessage} onSeek={(ms) => { setTab("transcript"); seek(ms / 1000); void audio.current?.play().catch(() => undefined); }} />
         ) : tab === "transcript" ? (
           transcript.state === "loading" ? (
-            <Loading label="Loading the transcript">
+            <Loading label={t("Loading the transcript")}>
               {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} width={i % 2 ? "medium" : "long"} />)}
             </Loading>
           ) : transcript.state === "error" ? (
-            <EmptyState tone="error" icon={Icons.ErrorIcon} title="The transcript didn't load" body={transcript.message}
-              action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+            <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("The transcript didn't load")} body={transcript.message}
+              action={<Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
           ) : segments.length > 0 ? (
             <>
               {alternateId && (
                 <div className="el-recording__viewbar">
-                  <Segmented label="Version" value={version} onChange={(v) => { setEditing(false); setVersion(v); }}
-                    options={[{ value: "final" as const, label: "Current" },
-                      { value: "alternate" as const, label: `Previous${item.transcript?.alternate_language ? ` (${languageLabel(item.transcript.alternate_language)})` : ""}` }]} />
+                  <Segmented label={t("Version")} value={version} onChange={(v) => { setEditing(false); setVersion(v); }}
+                    options={[{ value: "final" as const, label: t("Current") },
+                      { value: "alternate" as const, label: item.transcript?.alternate_language ? t("Previous (:language)", { language: languageLabel(item.transcript.alternate_language) }) : t("Previous") }]} />
                 </div>
               )}
-              {liveLine && <p className="el-caption el-secondary" role="status" data-testid="live-line">{liveLine}</p>}
+              {liveLine && <p className="el-caption el-secondary" role="status" data-testid="live-line" dir={lineDir(liveLine)}>{liveLine}</p>}
               {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
                 <div className="el-recording__viewbar">
-                  {editing ? <span className="el-caption el-secondary">Show as is off while you edit: you edit the words as heard.</span> : <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
-                    options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
-                      { value: "original" as ShowAs, label: "Original" }]} />}
+                  {editing ? <span className="el-caption el-secondary">{t("Show as is off while you edit: you edit the words as heard.")}</span> : <Segmented label={t("Show as")} value={showAs} onChange={(v) => void chooseView(v)}
+                    options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: viewLabel(v) })),
+                      { value: "original" as ShowAs, label: t("Original") }]} />}
                   {barView && <ConvertingLine view={barView} percent={viewPercent(views?.progress ?? viewsInfo?.progress, barView)} />}
                   {!barView && failedView && <ConvertingLine view={failedView} failed retrying={retrying} onRetry={() => void retryViews()} />}
                   {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
                   {showAs !== "original" && !barView && !failedView && (
                     <span className="el-caption el-secondary" role="status">
-                      {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
-                        : views?.status === "failed" ? `The view could not be made: ${views.error ?? "try again later."}`
-                          : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
+                      {views?.status === "ready" ? t(":view view. The transcript itself is unchanged.", { view: viewLabel(showAs) })
+                        : views?.status === "failed" ? (views.error ? t("The view could not be made: :reason", { reason: views.error }) : t("The view could not be made: try again later."))
+                          : t("Writing the :view view… this takes a minute or two.", { view: viewLabel(showAs) })}
                     </span>
                   )}
                 </div>
               )}
               {canEdit && (
-                <div className="el-recording__viewbar" role="toolbar" aria-label="Transcript tools">
-                  <span className="el-caption el-secondary">{transcript.state === "ready" && transcript.value?.edited_at ? "Final transcript · edited" : "Final transcript"}</span>
-                  <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-pressed={findOpen} aria-keyshortcuts="Meta+F Control+F" onClick={() => setFindOpen(!findOpen)}>Find</Button>
-                  <Button size="sm" variant="quiet" icon={Icons.RenameIcon} aria-pressed={editing} onClick={() => { if (!editing) void chooseView("original"); setEditing(!editing); setEditLine(null); }}>{editing ? "Done editing" : "Edit text"}</Button>
-                  <Button size="sm" variant="quiet" onClick={() => setTool("replace")}>Find and replace</Button>
-                  <Button size="sm" variant="quiet" icon={Icons.UserIcon} onClick={() => setTool("speakers")}>Speakers</Button>
-                  <Button size="sm" variant="quiet" icon={Icons.ClockIcon} onClick={() => setTool("history")}>History</Button>
+                <div className="el-recording__viewbar" role="toolbar" aria-label={t("Transcript tools")}>
+                  <span className="el-caption el-secondary">{transcript.state === "ready" && transcript.value?.edited_at ? t("Final transcript · edited") : t("Final transcript")}</span>
+                  <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-pressed={findOpen} aria-keyshortcuts="Meta+F Control+F" onClick={() => setFindOpen(!findOpen)}>{t("Find")}</Button>
+                  <Button size="sm" variant="quiet" icon={Icons.RenameIcon} aria-pressed={editing} onClick={() => { if (!editing) void chooseView("original"); setEditing(!editing); setEditLine(null); }}>{editing ? t("Done editing") : t("Edit text")}</Button>
+                  <Button size="sm" variant="quiet" onClick={() => setTool("replace")}>{t("Find and replace")}</Button>
+                  <Button size="sm" variant="quiet" icon={Icons.UserIcon} onClick={() => setTool("speakers")}>{t("Speakers")}</Button>
+                  <Button size="sm" variant="quiet" icon={Icons.ClockIcon} onClick={() => setTool("history")}>{t("History")}</Button>
                 </div>
               )}
               {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
@@ -982,19 +999,19 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               {learn[0] && <LearnOfferV2 key={`${learn[0].from}-${learn[0].to}`} offer={learn[0]} onAnswer={(yes) => void answerLearn(yes)} />}
               {!learn.length && <VocabularyOfferV2 terms={vocabTerms} projectName={item.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />}
               {fixesShown.length > 0 && (
-                <p className="el-suggestions el-caption" role="status" dir="auto">
-                  <span>{fixesShown.length === 1 ? "1 suggested fix" : `${fixesShown.length} suggested fixes`}: words that may have been misheard are underlined.</span>
-                  <Button ref={reviewButton} size="sm" variant="quiet" icon={Icons.SparkleIcon} onClick={() => openFixAndFocus(fixesShown[0].id)}>Review</Button>
+                <p className="el-suggestions el-caption" role="status" dir={rtl ? "rtl" : "auto"}>
+                  <span>{tc(":count suggested fix: words that may have been misheard are underlined.|:count suggested fixes: words that may have been misheard are underlined.", fixesShown.length)}</span>
+                  <Button ref={reviewButton} size="sm" variant="quiet" icon={Icons.SparkleIcon} onClick={() => openFixAndFocus(fixesShown[0].id)}>{t("Review")}</Button>
                 </p>
               )}
-              <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
+              <Transcript label={t("Transcript")} grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
                 onMenu={transcriptMenu}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => parts[i]?.note} lineTitle={(i) => parts[i]?.title} after={(i) => parts[i]?.after} />
               {/* The selected words' bar, right after the transcript (Tab reaches it from the words). */}
               {picked && pickedItems.length > 0 && (
                 // A press here keeps the selection (the words stay chosen while the bar acts on them).
-                <div role="toolbar" aria-label="Selected words" className="el-selection-bar" style={{ left: picked.x, top: picked.y }} onMouseDown={(e) => e.preventDefault()}>
+                <div role="toolbar" aria-label={t("Selected words")} className="el-selection-bar" style={{ left: picked.x, top: picked.y }} onMouseDown={(e) => e.preventDefault()}>
                   {pickedItems.map((i) => (
                     <Button key={i.action} size="sm" variant="quiet" icon={i.icon} data-action={i.action} onClick={() => i.onPick?.()}>{i.label}</Button>
                   ))}
@@ -1002,38 +1019,39 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               )}
             </>
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
-            <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
+            <EmptyState icon={Icons.TranscriptIcon} title={t("The transcript is empty")} body={t("No speech was detected in this recording.")} />
           ) : state === "processing" && item.transcript?.final_status ? (
-            <EmptyState icon={Icons.TranscriptIcon} title="Transcribing"
-              body={`${transcribingLine(item.transcript?.final_progress ?? tDetail?.progress)} The transcript appears here when it is ready. You can keep working meanwhile.`} />
+            <EmptyState icon={Icons.TranscriptIcon} title={t("Transcribing")}
+              body={`${transcribingLine(item.transcript?.final_progress ?? tDetail?.progress)} ${t("The transcript appears here when it is ready. You can keep working meanwhile.")}`} />
           ) : state === "no_audio" ? (
-            <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
+            <EmptyState icon={Icons.MicIcon} title={t("Nothing was heard")} body={t("The recording has no sound to transcribe. Check the microphone and system audio before the next call.")} />
           ) : (
-            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : rowState(item)?.text ?? STATE_WORDS.audio_only}
-              body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
-                : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
-                : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
+            <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? t("The transcription failed") : rowState(item)?.text ?? STATE_WORDS.audio_only}
+              body={state === "failed" ? (failureCode === "needs_transcription_key" ? needsKeyText()
+                : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} ${t("Transcribe it again to read, search and share what was said.")}`)
+                : item.duration_ms ? t("Transcribe this recording to read, search and share what was said. It is :length long.", { length: formatDuration(item.duration_ms) })
+                  : t("Transcribe this recording to read, search and share what was said.")}
               action={state === "failed" && needsKeyAction(failureCode)
-                ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => openSettingsSection("transcription-key")}>{failureCode === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}</Button>
+                ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => openSettingsSection("transcription-key")}>{failureCode === "own_key_rejected" ? t("Check my Groq key") : t("Add my Groq key")}</Button>
                 : state === "failed" && canTryAgain(failureCode)
-                ? <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void tryAgain()}>Try again</Button>
-                : <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
+                ? <Button variant="primary" loading={busy} loadingLabel={t("Starting…")} onClick={() => void tryAgain()}>{t("Try again")}</Button>
+                : <Button variant="primary" loading={busy} loadingLabel={t("Starting…")} onClick={() => setTranscribeOpen(true)}>{t("Transcribe")}</Button>} />
           )
         ) : (
           <dl className="el-details">
-            <dt>Recorded</dt><dd>{formatWhen(item.started_at) || "Unknown"}</dd>
-            <dt>Length</dt><dd className="el-num">{formatDuration(item.duration_ms) || "Unknown"}</dd>
-            {source && <><dt>Source</dt><dd>{source}</dd></>}
-            {item.source_device && <><dt>Recorded on</dt><dd>{{ phone: "Phone", desktop: "Computer", web: "Web" }[item.source_device] ?? item.source_device}</dd></>}
-            {item.device?.name && <><dt>Device</dt><dd>{item.device.name}</dd></>}
-            {item.client?.name && <><dt>Project</dt><dd>{item.client.name}</dd></>}
-            {item.language_chip && <><dt>Language</dt><dd>{item.language_chip}</dd></>}
-            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>File size</dt><dd className="el-num">{fileSize(detail.value.sizeBytes)}</dd></> : null}
+            <dt>{t("Recorded")}</dt><dd>{formatWhen(item.started_at) || t("Unknown")}</dd>
+            <dt>{t("Length")}</dt><dd className="el-num">{formatDuration(item.duration_ms) || t("Unknown")}</dd>
+            {source && <><dt>{t("Source")}</dt><dd>{source}</dd></>}
+            {item.source_device && <><dt>{t("Recorded on")}</dt><dd>{deviceWords(item.source_device)}</dd></>}
+            {item.device?.name && <><dt>{t("Device")}</dt><dd>{item.device.name}</dd></>}
+            {item.client?.name && <><dt>{t("Project")}</dt><dd>{item.client.name}</dd></>}
+            {item.language_chip && <><dt>{t("Language")}</dt><dd>{item.language_chip}</dd></>}
+            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>{t("File size")}</dt><dd className="el-num">{fileSize(detail.value.sizeBytes)}</dd></> : null}
             {item.transcript?.final_provider_label || item.transcript?.final_provider
-              ? <><dt>Transcription engine</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
-            <dt>Kept</dt><dd>{item.keep ? "Forever" : "Until auto clean-up (Settings › Storage)"}</dd>
-            <dt>Labels</dt><dd>{item.labels?.length ? item.labels.join(", ") : "None"}</dd>
-            <dt>Pinned</dt><dd>{item.pinned ? "Yes" : "No"}</dd>
+              ? <><dt>{t("Transcription engine")}</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
+            <dt>{t("Kept")}</dt><dd>{item.keep ? t("Forever") : t("Until auto clean-up (Settings › Storage)")}</dd>
+            <dt>{t("Labels")}</dt><dd>{item.labels?.length ? item.labels.join(", ") : t("None")}</dd>
+            <dt>{t("Pinned")}</dt><dd>{item.pinned ? t("Yes") : t("No")}</dd>
           </dl>
         )}
       </Tabs>

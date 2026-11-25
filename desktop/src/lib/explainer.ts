@@ -32,7 +32,8 @@ export function decisionText(user: Pick<MicUser, "decision" | "reason">): string
 
 /** The app as people know it: the call app's name, the website, or the program's name. */
 export function micUserName(user: Pick<MicUser, "app" | "site" | "name">): string {
-  return user.app ? sourceAppLabel(user.app) : user.site?.trim() || processName(user.name);
+  // In English, as the sentences that name it ("Last not recorded: …") still are.
+  return user.app ? sourceAppLabel(user.app, "en") : user.site?.trim() || processName(user.name);
 }
 
 /** Whether an app using the microphone is left unrecorded (pure): what the "last one not recorded" line is about. */
