@@ -180,7 +180,7 @@ class AssistPreps extends Page implements HasTable
                         }
                     }),
                 TextInput::make('title')->label(__('Title'))->placeholder(__('Interview at Acme'))->maxLength(200),
-                TextInput::make('counterpart')->label(__('With'))->placeholder(__('Sara Khan'))->maxLength(200),
+                TextInput::make('counterpart')->label(__('assist_context.with_person'))->placeholder(__('Sara Khan'))->maxLength(200),
                 TextInput::make('company')->label(__('Company'))->maxLength(200),
                 Select::make('client_id')->label(__('Project'))->placeholder(__('None'))->searchable()->live()
                     ->options(fn (): array => self::projects()->pluck('name', 'id')->all())

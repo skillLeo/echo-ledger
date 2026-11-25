@@ -53,8 +53,8 @@
         @if ($r['outages'] !== [])
             <div style="overflow-x:auto;margin-top:1rem"><table style="width:100%;font-size:.85rem;border-collapse:collapse" data-relay-outages>
                 <caption style="text-align:left;font-size:.8rem;opacity:.7;padding-bottom:.25rem">{{ __('Outages in the last 7 days') }}</caption>
-                <thead><tr style="text-align:left;opacity:.7"><th scope="col" style="padding:.5rem .75rem">From</th><th scope="col" style="padding:.5rem .75rem">To</th>
-                    <th scope="col" style="padding:.5rem .75rem;text-align:right">{{ __('Length') }}</th><th scope="col" style="padding:.5rem .75rem">{{ __('Why') }}</th></tr></thead>
+                <thead><tr style="text-align:left;opacity:.7"><th scope="col" style="padding:.5rem .75rem">{{ __('assist_context.outage_from') }}</th><th scope="col" style="padding:.5rem .75rem">{{ __('assist_context.outage_to') }}</th>
+                    <th scope="col" style="padding:.5rem .75rem;text-align:right">{{ __('Length') }}</th><th scope="col" style="padding:.5rem .75rem">{{ __('assist_context.outage_why') }}</th></tr></thead>
                 <tbody>
                 @foreach ($r['outages'] as $o)
                     <tr><td style="{{ $cell }}">{{ $at($o['from']) }}</td><td style="{{ $cell }}">{{ $o['to'] === null ? __('still down') : $at($o['to']) }}</td>

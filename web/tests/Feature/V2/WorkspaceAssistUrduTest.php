@@ -117,29 +117,34 @@ it('has an Urdu line for every word of the Workspace and Live Assist pages', fun
 });
 
 it('keeps a short word\'s general meaning in ur.json and its narrower one in a group file, English unchanged', function () {
-    // Lead decision on ur.json (2026-11-26): ur.json is global, so a one-word key means what a toggle or a plain list
-    // would; a page that means something narrower reads a context key, whose English is the same word.
+    // ur.json is global, so a one-word key means what a toggle or a plain list would; a page that means something
+    // narrower reads a context key, whose English is the same word.
     $context = ['assist_context.col_platform' => 'On', 'assist_context.relay_up' => 'Up', 'assist_context.relay_down' => 'Down', 'assist_context.suggestion_used' => 'Used',
+        'assist_context.with_person' => 'With', 'assist_context.outage_from' => 'From', 'assist_context.outage_to' => 'To', 'assist_context.outage_why' => 'Why',
         'workspace_context.col_sent' => 'Sent'];
     $urdu = json_decode((string) file_get_contents(lang_path('ur.json')), true, 512, JSON_THROW_ON_ERROR);
     foreach ($context as $key => $english) {
         expect(__($key, [], 'en'))->toBe($english, $key)
             ->and(__($key, [], 'ur'))->not->toBe($key, $key)->not->toBe($english, $key)
-            ->and($urdu[$english] ?? '')->not->toBe('', "{$english} keeps a general meaning in ur.json");
+            ->and(in_array($english, ['From', 'To'], true) || ($urdu[$english] ?? '') !== '')->toBeTrue("{$english} keeps a general meaning in ur.json");
     }
-    expect($urdu['On'])->toBe('آن')->and($urdu['Up'])->toBe('اوپر')->and($urdu['Down'])->toBe('نیچے');
+    expect($urdu['On'])->toBe('آن')->and($urdu['Off'])->toBe('آف')->and($urdu['Up'])->toBe('اوپر')->and($urdu['Down'])->toBe('نیچے')
+        ->and($urdu['Why'])->toBe('کیوں');
 });
 
 it('never gives a one-word key a question word in ur.json', function () {
     $urdu = json_decode((string) file_get_contents(lang_path('ur.json')), true, 512, JSON_THROW_ON_ERROR);
     $questions = ['کس', 'کیا', 'کون', 'کب', 'کہاں', 'کیوں', 'کیسے', 'کتنا', 'کتنے', 'کتنی', 'کونسا', 'کونسی'];
-    // English question words are questions in Urdu too. 'With' and 'Inside' were there before this rule (the recording
-    // details, a project's folder); their owners move them to a context key.
-    $allowed = ['who', 'what', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom', 'with', 'inside'];
+    // English question words are questions in Urdu too. 'Inside' (a project's folder) was there before this rule; its
+    // owner moves it to a context key.
+    $allowed = ['who', 'what', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom', 'inside'];
     $found = [];
     foreach ($urdu as $key => $value) {
-        if (preg_match("/^[A-Za-z][A-Za-z'-]*$/", (string) $key) === 1 && ! in_array(strtolower((string) $key), $allowed, true)
-            && array_intersect(preg_split('/[\s،۔؟?!:]+/u', (string) $value) ?: [], $questions) !== []) {
+        $words = preg_split('/[\s،۔؟?!:]+/u', trim((string) $value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        // کیا is also the past of "do" ("محفوظ کیا"): a question only as the first word, or when the line asks (؟).
+        $asks = array_intersect($words, array_diff($questions, ['کیا'])) !== []
+            || (in_array('کیا', $words, true) && (($words[0] ?? '') === 'کیا' || str_ends_with(trim((string) $value), '؟')));
+        if (preg_match("/^[A-Za-z][A-Za-z'-]*$/", (string) $key) === 1 && ! in_array(strtolower((string) $key), $allowed, true) && $asks) {
             $found[] = "{$key} => {$value}";
         }
     }

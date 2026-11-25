@@ -160,7 +160,7 @@
                     <p style="margin:0;white-space:pre-line">{{ $r['follow_up_email']['body'] }}</p>
                     <div style="margin-top:.75rem">
                         <x-filament::button color="gray" size="sm" icon="heroicon-o-clipboard" :x-data="$copyEmail"
-                            x-on:click="window.navigator.clipboard.writeText(text); $tooltip('{{ __('Copied') }}', { timeout: 1500 })">{{ __('Copy email') }}</x-filament::button>
+                            x-on:click="window.navigator.clipboard.writeText(text); $tooltip(@js(__('Copied')), { timeout: 1500 })">{{ __('Copy email') }}</x-filament::button>
                     </div>
                 </x-filament::section>
             @endif
