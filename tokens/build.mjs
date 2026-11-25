@@ -7,7 +7,7 @@ import StyleDictionary from 'style-dictionary';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
-const SHARED = ['global/**/*.json', 'semantic/layout.json', 'component/**/*.json'].map((p) => `${here}/${p}`);
+const SHARED = ['global/**/*.json', 'semantic/layout.json', 'semantic/tint.json', 'component/**/*.json'].map((p) => `${here}/${p}`);
 const HEADER = 'Generated from tokens/ by `npm run build` in tokens/. Do not edit: change the JSON there instead.';
 
 export const OUTPUTS = {
@@ -131,6 +131,11 @@ ${dims('focus')}
 
     object Icon {
 ${dims('icon')}
+    }
+
+    /** How much of a colour role a tint lays over a surface (0 to 1). */
+    object Tint {
+${props(group('tint'), (t) => `const val ${camel(t.path.slice(1))} = ${t.$value}f`)}
     }
 
     /** Shadow depth of the floating layers (DESIGN_SYSTEM: shadows only on floating layers). */

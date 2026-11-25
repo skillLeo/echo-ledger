@@ -52,5 +52,5 @@
         </button>
     </x-el.section>
 @endif
-<p class="el-set-foot">The theme is kept in this browser. The others follow your account.</p>
-<div class="el-btn-row"><button type="button" class="el-btn el-btn-text" wire:click="mountAction('resetPage')">Reset to defaults</button></div>
+<p class="el-set-foot">{{ __('The theme is kept in this browser. The others follow your account.') }}</p>
+<div class="el-btn-row"><button type="button" class="el-btn el-btn-text" wire:click="mountAction('resetPage')">{{ __('Reset to defaults') }}</button></div>

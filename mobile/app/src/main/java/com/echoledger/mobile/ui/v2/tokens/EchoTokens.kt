@@ -154,21 +154,9 @@ object EchoTokens {
         val full = 999.dp
     }
 
-    /** Tints laid over a surface. */
-    object Tint {
-        /**
-         * The row you came back to (v2.1 UX-25): a neutral grey, the text colour over the page as the desktop mixes it,
-         * 6 % in light and 9 % in dark; never the accent, so it never reads as selected.
-         */
-        const val returnedLight = 0.06f
-        const val returnedDark = 0.09f
-    }
-
     object Layout {
         val pagePaddingDesktop = 24.dp
         val pagePaddingMobile = 16.dp
-
-        /** One UI's minimum side margin (v2.1 UX-14): the Library's header, chips and rows. */
         val pagePaddingPhone = 24.dp
         val rowComfortable = 56.dp
         val rowCompact = 44.dp
@@ -196,6 +184,12 @@ object EchoTokens {
         val xl = 40.dp
     }
 
+    /** How much of a colour role a tint lays over a surface (0 to 1). */
+    object Tint {
+        const val returnedLight = 0.06f
+        const val returnedDark = 0.09f
+    }
+
     /** Shadow depth of the floating layers (DESIGN_SYSTEM: shadows only on floating layers). */
     object Elevation {
         val floating = 8.dp
@@ -218,6 +212,7 @@ object EchoTokens {
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
         val listRowHeightMobileTall = 72.dp
+        val bigButtonHeight = 56.dp
         val recordButton = 56.dp
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500

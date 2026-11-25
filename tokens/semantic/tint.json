@@ -1,0 +1,14 @@
+{
+  "tint": {
+    "returned-light": {
+      "$type": "number",
+      "$value": 0.06,
+      "$description": "The row you came back to (v2.1 UX-25): the text colour over the page in light, a neutral grey as the desktop's"
+    },
+    "returned-dark": {
+      "$type": "number",
+      "$value": 0.09,
+      "$description": "The same in dark"
+    }
+  }
+}

@@ -6,7 +6,10 @@
 --}}
 <x-el.section>
     <div class="el-set-row el-profile-photo" id="setting-profile.photo" tabindex="-1" data-setting="profile.photo">
-        @if ($photo !== null)
+        @if ($v2)
+            {{-- DES-08: the one avatar component, as in the avatar menu (a photo that fails shows the initials). --}}
+            <x-el.avatar :person="$person" size="xl" />
+        @elseif ($photo !== null)
             <img class="el-profile-avatar" src="{{ $photo }}" alt="" width="56" height="56">
         @else
             <span class="el-profile-avatar is-initials" data-avatar-color="{{ $color }}" style="background-color: var(--el-role-avatar-{{ $color }})" aria-hidden="true">{{ $initials }}</span>
@@ -63,6 +66,6 @@
 </x-el.section>
 @if ($team)
     <x-el.section>
-        <x-el.row setting="profile.workspace" title="Workspace" :value="$workspace" />
+        <x-el.row setting="profile.workspace" :title="__('Workspace')" :value="$workspace" />
     </x-el.section>
 @endif

@@ -19,7 +19,6 @@ import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
 import { sharedTitle } from "./model";
 import { senderOf } from "../../views/main/SharedView";
-import "./shared.css";
 import { RequestLinkSheet } from "./RequestLinkSheet";
 
 /** What each tab lists, read when the page opens; null while loading (a server without it gives an empty list). */
@@ -195,14 +194,14 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   const withMePanel = (
     <>
       {loading(data.withMe, "Loading what was shared with you…")}
-      {data.withMe?.length === 0 && <EmptyState icon={Icons.UserIcon} title="Nothing sent to you yet" body="When a teammate sends you a recording or a project, it shows here." />}
+      {data.withMe?.length === 0 && <EmptyState icon={Icons.UsersIcon} title="Nothing sent to you yet" body="When a teammate sends you a recording or a project, it shows here." />}
       {data.withMe && data.withMe.length > 0 && (
         <Card>
           <List label="Shared with me" className="el-group__rows">
             {data.withMe.map((item) => {
               const title = sharedTitle(item);
               return (
-                <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focused}
+                <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focused} actionsShown="always" metaLines={2}
                   leading={item.session ? <SourceAvatar item={item.session} /> : undefined} icon={item.session ? undefined : Icons.FolderIcon}
                   endTop={item.saved_at ? "Saved" : undefined}
                   // A recording opens read-only; a project sent to you has nothing to open until it is saved: its menu opens.
@@ -229,7 +228,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
               const title = titleOf(link);
               const items = linkMenu(link);
               return (
-                <ListRow key={link.id} rowId={link.id} icon={link.client_id && !link.session_id ? Icons.FolderIcon : Icons.LinkIcon} title={title}
+                <ListRow key={link.id} rowId={link.id} icon={link.client_id && !link.session_id ? Icons.FolderIcon : Icons.LinkIcon} title={title} actionsShown="always" metaLines={2}
                   meta={<>{audienceText(link)} · {viewsLine(link)}{link.expires_at && <> · until {when(link.expires_at)}</>}</>}
                   badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
                   onClick={link.session_id || link.client_id ? () => openLink(link) : undefined}
@@ -249,7 +248,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     const title = link.title || "Request link";
     const items = requestMenu(link);
     return (
-      <ListRow key={link.id} rowId={link.id} icon={Icons.InboxIcon} title={title}
+      <ListRow key={link.id} rowId={link.id} icon={Icons.RequestFilesIcon} title={title} actionsShown="always" metaLines={2}
         meta={[projectName(link.client_id) ? `Into ${projectName(link.client_id)}` : "Into no project", receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
         endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
         badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
@@ -260,7 +259,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   const requestsPanel = (
     <>
       {loading(data.requests, "Loading your request links…")}
-      {data.requests?.length === 0 && <EmptyState icon={Icons.InboxIcon} title="No request links yet" body="A request link lets anyone send you voice notes and files, without an account." />}
+      {data.requests?.length === 0 && <EmptyState icon={Icons.RequestFilesIcon} title="No request links yet" body="A request link lets anyone send you voice notes and files, without an account." />}
       {data.requests && data.requests.length > 0 && <Card><List label="Request links" className="el-group__rows">{requestRows(data.requests)}</List></Card>}
     </>
   );
@@ -273,7 +272,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
           <p className="el-secondary" dir="auto">What teammates sent you, the links you made, and links people use to send you files.</p>
         </div>
         <div className="el-page__actions">
-          <Button variant="primary" icon={Icons.InboxIcon} onClick={() => setNewRequest(true)}>New request link</Button>
+          <Button variant="primary" icon={Icons.PlusIcon} onClick={() => setNewRequest(true)}>New request link</Button>
         </div>
       </header>
 
