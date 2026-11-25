@@ -4,7 +4,10 @@
 // the same items, an item that can't run now greyed, never hidden; show/hide items say the current state; Title Case.
 // macOS's own items (About, Services, Hide, Undo, Copy, Minimize, Full Screen…) are the system's (`native`). The page
 // sends the model to the core (app_menu_set), which draws it; a pick comes back as `menu:action`, run by the registry.
+// The menus' and items' words are the window's language (D-248), Title Case in English only; useMenuBar draws the bar
+// again when the language changes.
 import { ACTIONS, accelerator, actionLabel, available, canRun, findAction, type ActionContext } from "./registry";
+import { t } from "../../i18n";
 
 /** One place in the layout: an action, a line, or a sub-menu (its own title, or an action's; its choices from the page). */
 type Layout = string | { title?: string; action?: string; items?: readonly Layout[]; choices?: true; after?: readonly Layout[] };
@@ -77,6 +80,14 @@ export const MENU_BAR: readonly { title: string; role?: "window" | "help"; items
   { title: "Help", role: "help", items: ["help.help", LINE, "help.shortcuts", "help.whatsNew", "help.tour", LINE, "help.setupHealth", "help.reportProblem"] },
 ];
 
+/**
+ * The menus' and titled sub-menus' names that mean something else elsewhere in the catalogue (Edit's ترمیم, not the
+ * button's ترمیم کریں; the View menu, not the layout; Find's menu, not the button): a key of their own (context.ts).
+ */
+const TITLE_KEYS: Readonly<Record<string, string>> = { Edit: "actions_context.menu_edit", View: "actions_context.menu_view", Find: "actions_context.menu_find" };
+/** A menu's or a titled sub-menu's name in the window's language (EchoLedger, the app's own menu, as it is). */
+const menuTitle = (title: string) => t(TITLE_KEYS[title] ?? title);
+
 /** What the core draws (app_menu.rs): our items, macOS's own, lines and sub-menus. */
 export type { NativeBarEntry as NativeEntry, NativeMenuBar } from "../../lib/ipc";
 import type { NativeBarEntry as NativeEntry, NativeMenuBar } from "../../lib/ipc";
@@ -147,7 +158,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}, kind
         ...(core ? { core: coreItem(action.id, at) } : {}),
       };
     }
-    const label = layout.title ?? (layout.action ? actionLabel(layout.action, at) : "");
+    const label = layout.title !== undefined ? menuTitle(layout.title) : layout.action ? actionLabel(layout.action, at) : "";
     if (layout.choices && layout.action) {
       const id = layout.action;
       const can = runs(id) && available(id, at);
@@ -160,7 +171,7 @@ export function menuBarModel(ctx: ActionContext, choices: MenuChoices = {}, kind
     }
     return { kind: "submenu", action: layout.action, label, enabled: true, items: (layout.items ?? []).map(entry) };
   };
-  return { menus: MENU_BAR.map((m) => ({ title: m.title, ...(m.role ? { role: m.role } : {}), items: m.items.map(entry) })) };
+  return { menus: MENU_BAR.map((m) => ({ title: menuTitle(m.title), ...(m.role ? { role: m.role } : {}), items: m.items.map(entry) })) };
 }
 
 /** Every action id the layout names (for its own checks). */

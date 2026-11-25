@@ -2,6 +2,10 @@
 // (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page by name (a project, a
 // smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups: Actions,
 // Settings, Pages, Recordings. It is the window's one search: the top bar's field and the sidebar's Search open it.
+// One of the classic pieces the new design shows, in the window's language (D-248): its frame (the field, the groups'
+// names, the foot, the empty lines), the action list's commands (found by their words in that language and by their
+// English) and the Settings pages' "Go to" lines. Its own commands (paletteCommands) and the shell's pages are still
+// English.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
@@ -14,6 +18,7 @@ import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements }
 import { BadgeMark } from "./Upgrade";
 import { LucideSearchIcon, LucideXIcon } from "../../components/Icons";
 import { ACTIONS, actionLabel, available, canRun, runAction, type ActionContext } from "../../v2/actions/registry";
+import { t, withParts } from "../../i18n";
 
 export interface PaletteCommand {
   id: string;
@@ -61,6 +66,24 @@ export function paletteScore(query: string, command: Pick<PaletteCommand, "label
   const startsWithTyped = (words: string[]) => typed.every((word, i) => (i < last ? words[i] === word : words[i]?.startsWith(word)));
   const place = GO_TO.test(command.label) ? wordsOf(command.label.replace(GO_TO, "")) : null;
   return startsWithTyped(name) || (place !== null && startsWithTyped(place)) ? 3 : 2;
+}
+
+/**
+ * How well an action list's command matches (pure, D-248): by its words in the window's language or by its English,
+ * whichever matches better, so in Urdu "پن" and "pin" both find Pin by its name. In English the two are one.
+ */
+export function actionScore(query: string, shown: string, english: string, keywords: string): number {
+  const own = paletteScore(query, { label: shown, keywords });
+  return shown === english ? own : Math.max(own, paletteScore(query, { label: english, keywords }));
+}
+
+/**
+ * A page's line ("Go to Storage · Settings › App"): in the window's language when the page's name is (a Settings page,
+ * ranked by its English `name`), so no line is half English; a page named in English (the shell's) as it was.
+ */
+export function goToLine(page: Pick<PageEntry, "label" | "group" | "name">): string {
+  const go = page.name !== undefined ? t("Go to :page", { page: page.label }) : `Go to ${page.label}`;
+  return `${go}${page.group ? ` · ${page.group}` : ""}`;
 }
 
 /** Whether a row matches what was typed at all ([`paletteScore`] above 0). */
@@ -270,7 +293,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   // Pages by name (a project, a folder, Devices…) that no command above already opens.
   const pageRows = ranked(pages.filter((p) => !matching.some((c) => c.label === `Go to ${p.name ?? p.label}`)),
     (p) => (query.trim() ? paletteScore(query, { label: p.name ?? p.label, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
-  const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+  const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: goToLine(p), run: p.open }));
   // Shown in the window's language, ranked by the name they answer to (the English title what was typed matches).
   const settingHits: (PaletteCommand & { crumb: string; rank: string })[] = query.trim().length >= 2 && settings
     ? settings(query).map((x) => ({ id: `setting-${x.id}`, label: x.title, crumb: x.breadcrumb, rank: x.name ?? x.title, run: x.open })) : [];
@@ -289,21 +312,23 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const projectRows = pageRows.filter((p) => isProject(p.row.id));
     const otherPages = pageRows.filter((p) => !isProject(p.row.id));
     // The window's own state (can it record, the ticks), so a command shows only where it can run, in its state's words.
-    // The search list speaks in sentence case (3b: only the Mac's menus use Title Case).
+    // The search list speaks in sentence case (3b: only the Mac's menus use Title Case), in the window's language.
     const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording, ...actionState } };
     const words = (id: string) => actionLabel(id, { ...ctx, platform: "windows" });
+    // Its English: what the palette's own commands are named (one command is listed once), and what may be typed.
+    const english = (id: string) => actionLabel(id, { ...ctx, platform: "windows" }, "en");
     const taken = new Set(matching.map((c) => c.label.toLowerCase()));
-    const registry = ranked(ACTIONS.filter((a) => canRun(a.id) && available(a.id, ctx) && !taken.has(words(a.id).toLowerCase())),
-      (a) => (q ? paletteScore(query, { label: words(a.id), keywords: `${a.label} ${a.menu ?? ""}` }) : 0))
+    const registry = ranked(ACTIONS.filter((a) => canRun(a.id) && available(a.id, ctx) && !taken.has(english(a.id).toLowerCase())),
+      (a) => (q ? actionScore(query, words(a.id), english(a.id), `${a.label} ${a.menu ?? ""}`) : 0))
       .map(({ row: a, score }) => ({
-        row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? "On" : "Off") : undefined,
+        row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? t("On") : t("Off")) : undefined,
           run: () => void runAction(a.id, ctx) } as PaletteCommand,
         score,
       }));
-    const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: "Show all in the list", run: () => onShowAll(q) }] : [];
+    const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: t("Show all in the list"), run: () => onShowAll(q) }] : [];
     const ask: PaletteCommand[] = onAsk && q.length >= 2
-      ? [{ id: "ask", label: `Ask about “${q}”`, view: <>Ask about “<bdi>{q}</bdi>”</>, run: () => onAsk(q) }] : [];
-    const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+      ? [{ id: "ask", label: t("Ask about “:q”", { q }), view: <>{withParts(t("Ask about “:q”"), { q: <bdi>{q}</bdi> })}</>, run: () => onAsk(q) }] : [];
+    const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: goToLine(p), run: p.open }));
     return [
       ["Recordings", [...recordings, ...showAll], [...recordings.map((r) => nameScore(r.label)), ...showAll.map(() => 0)]],
       ["Projects", projectRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: p.label, run: p.open })), projectRows.map((p) => p.score)],
@@ -372,19 +397,19 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       e.preventDefault();
       dismiss();
     }}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t("Command palette")} onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
-          <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder="Search recordings, settings, pages… or type a command"
+          <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder={t("Search recordings, settings, pages… or type a command")}
             role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={options[selected] ? `${listId}-${options[selected].id}` : undefined}
             dir="auto" onChange={(e) => { setQuery(e.target.value); setChosen(null); }} />
-          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setChosen(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
+          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label={t("Clear")} onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setChosen(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
-        <div id={listId} className="palette-list" role="listbox" aria-label="Results">
+        <div id={listId} className="palette-list" role="listbox" aria-label={t("Results")}>
           {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
           {groups.map(([name, list]) => (
             <div key={name} role="group" aria-labelledby={`${listId}-g-${name}`} className="palette-group">
-              <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{name}</div>
+              <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{t(name)}</div>
               {list.map((o) => {
                 const i = options.indexOf(o);
                 const record = found.find((r) => `rec-${r.session.id}` === o.id);
@@ -406,7 +431,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
             </div>
           ))}
         </div>
-        <div className="palette-foot small muted">↑ ↓ to choose · Enter to run · Esc to close</div>
+        <div className="palette-foot small muted">{t("↑ ↓ to choose · Enter to run · Esc to close")}</div>
       </div>
     </div>
   );
@@ -437,7 +462,7 @@ export function marked(title: string, query: string): ReactNode {
  * for another rather than saying nothing matches. */
 export function emptyLine(query: string, lookingUp: boolean): string {
   const q = query.trim();
-  if (q.length === 1) return "Type one more letter to search recordings.";
-  if (lookingUp) return "Searching recordings and transcripts…";
-  return `Nothing matches “${q}” in recordings, transcripts, settings or pages.`;
+  if (q.length === 1) return t("Type one more letter to search recordings.");
+  if (lookingUp) return t("Searching recordings and transcripts…");
+  return t("Nothing matches “:q” in recordings, transcripts, settings or pages.", { q });
 }

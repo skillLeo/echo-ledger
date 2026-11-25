@@ -9,6 +9,7 @@ import { ContextMenu, menuPointFor, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { api } from "../../lib/ipc";
 import { actionLabel, ariaKeys, nativeItems, shortcutOf, type ActionContext } from "../actions/registry";
+import { isolate, isRtl } from "../../i18n";
 
 /** Whether menus are the system's own here: the Mac app (the core marks <html data-platform="macos"> before the page). */
 const nativeMenus = () => typeof document !== "undefined" && document.documentElement.dataset.platform === "macos";
@@ -35,7 +36,8 @@ export function RecordSplit({ stops, time, busy, onPress, menu, ctx }: {
   };
   const nowId = stops ? "live.stopRecording" : "file.newRecording";
   const keys = shortcutOf(nowId, ctx.platform);
-  const [nowTip, nowTipShown] = useTip(`${actionLabel(nowId, ctx)}${keys ? ` ${keys}` : ""}`);
+  // The command in the window's language; its keys read left to right in every language (⌘N, never N⌘ after Urdu).
+  const [nowTip, nowTipShown] = useTip(`${actionLabel(nowId, ctx)}${keys ? ` ${isRtl() ? isolate(keys) : keys}` : ""}`);
   const [moreTip, moreTipShown] = useTip("More ways to record");
   const context = (e: React.MouseEvent) => {
     e.preventDefault();

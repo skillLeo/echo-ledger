@@ -11,4 +11,11 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // Quiet hours' two times, a row each under Quiet hours (ur.json's "From" is a sender's, ماخذ).
   "settings_context.quiet_from": "From",
   "settings_context.quiet_to": "To",
+  // The Mac menu bar's Edit, View and Find (Edit › Find) menus (D-248): menus' names, not the buttons' verbs (ur.json's
+  // "Edit" is ترمیم کریں, "Find" تلاش کریں) nor the layout (انداز).
+  "actions_context.menu_edit": "Edit",
+  "actions_context.menu_view": "View",
+  "actions_context.menu_find": "Find",
+  // The window's Zoom (Window › Zoom) and the avatar's: the size, not the meeting app (ur.json's "Zoom" is the brand).
+  "actions_context.zoom": "Zoom",
 };

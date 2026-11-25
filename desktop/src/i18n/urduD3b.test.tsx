@@ -128,7 +128,7 @@ describe("the window's search (the palette) in Urdu", () => {
       settings={(q) => paletteSettings(q, () => true, open)} pages={palettePages(() => true, open)} />);
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "storage" } });
-    expect(within(screen.getByRole("group", { name: "Settings" })).getAllByRole("option", { name: /اسٹوریج/ }).length).toBeGreaterThan(0);
+    expect(within(screen.getByRole("group", { name: "ترتیبات" })).getAllByRole("option", { name: /اسٹوریج/ }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("option", { name: /Go to Storage/ })).toBeNull();
     fireEvent.keyDown(input, { key: "Enter" });
     expect(open).toHaveBeenCalledWith("storage");

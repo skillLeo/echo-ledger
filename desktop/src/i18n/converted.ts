@@ -67,4 +67,7 @@ export const CONVERTED: readonly string[] = [
   "lib/explainer.ts",
   "lib/privacy.ts",
   "lib/zoom.ts",
+  // D-248: the system's right-click menus on a Mac (their words are the registry's and the callers', through t(); the
+  // registry, the menu bar and contextMenus.ts keep only key names and the checks' own messages besides).
+  "v2/actions/popup.ts",
 ];

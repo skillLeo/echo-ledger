@@ -2,10 +2,13 @@
 // and sends the action's id: the Mac menu bar, right-click menus, a row's ⋯, Record's menu, the avatar's menu, ⌘K,
 // the menu-bar and tray menu, the Dock menu, the Windows Jump List. A screen registers what an id does where it can
 // (registerAction) and the registry runs it (runAction) when its conditions hold. Labels follow the app's state
-// ("Pin" or "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
-// with a label, a shortcut or an action that isn't in the file fails.
+// ("Pin" or "Unpin") and are said in the window's language (D-248: the catalogue's words for the English label, "…"
+// and all; a window still in English asks for "en"); Mac menus get Title Case in English only (Urdu has no case), Mac
+// right-click menus no shortcuts. checkMenu() is the test's: a menu with a label, a shortcut or an action that isn't in
+// the file fails.
 import list from "./actions.json";
 import { latinKey } from "./latinKey";
+import { language, wordsIn, type Lang } from "../../i18n";
 import * as Icons from "../components/icons";
 import type { IconType } from "../components/Button";
 import type { MenuItem } from "../components/Menu";
@@ -72,6 +75,8 @@ export type ActionContext = {
   value?: string;
   /** What it acts on ("recording", "view", "label", "trash"…): one id (Rename…) can mean each, done by its own screen. */
   kind?: string;
+  /** The words' language: the window's when left out, "en" for a window still in English (classic). */
+  lang?: Lang;
 };
 
 /** The conditions `when` names. Left unsaid, a state that is usually so (can record, has audio) holds. */
@@ -113,16 +118,40 @@ export function macTitle(label: string): string {
   }).join(" ");
 }
 
-/** The command's words now: its state's (Unpin, Show sidebar, Undo Move to trash), in the platform's case. */
-export function actionLabel(id: string, ctx: ActionContext): string {
+/**
+ * Labels whose word means something else elsewhere in the catalogue, with a key of their own (context.ts): the
+ * window's Zoom and the avatar's Zoom are not the meeting app's (ur.json's "Zoom" is the brand, Latin in Urdu).
+ */
+const LABEL_KEYS: Readonly<Record<string, string>> = { "window.zoom": "actions_context.zoom", "account.zoom": "actions_context.zoom" };
+
+/** Whether words in `lang` are English: "en", or the window's language when it is (wordsIn's reading of `lang`). */
+const inEnglish = (lang?: Lang) => lang === "en" || language() === "en";
+
+/**
+ * One of an action's labels (actions.json's English: its label or its other state's) as shown: the catalogue's words
+ * in `lang`, in the Mac's Title Case in English only; Urdu is as written (it has no case).
+ */
+function shownWords(a: Action, words: string, platform: Platform, lang?: Lang): string {
+  const said = wordsIn(lang).t(words === a.label ? LABEL_KEYS[a.id] ?? words : words);
+  return platform === "macos" && inEnglish(lang) ? macTitle(said) : said;
+}
+
+/**
+ * The command's words now: its state's (Unpin, Show sidebar, Undo move to trash), in the language asked for (the
+ * window's unless `lang` or the context says "en") and the platform's case. "Undo <what>" is English's own sentence:
+ * in another language the command is said alone.
+ */
+export function actionLabel(id: string, ctx: ActionContext, lang: Lang | undefined = ctx.lang): string {
   const a = need(id);
-  let label = a.label;
-  if (a.state?.key && a.state.on && ctx.state?.[a.state.key]) label = a.state.on;
-  if (a.state?.named) {
+  if (a.state?.named && inEnglish(lang)) {
     const what = ctx.state?.[a.state.named];
-    if (typeof what === "string" && what) label = `${a.label} ${what.charAt(0).toLocaleLowerCase()}${what.slice(1)}`;
+    if (typeof what === "string" && what) {
+      const label = `${a.label} ${what.charAt(0).toLocaleLowerCase()}${what.slice(1)}`;
+      return ctx.platform === "macos" ? macTitle(label) : label;
+    }
   }
-  return ctx.platform === "macos" ? macTitle(label) : label;
+  const on = !!(a.state?.key && a.state.on && ctx.state?.[a.state.key]);
+  return shownWords(a, on ? a.state!.on! : a.label, ctx.platform, lang);
 }
 
 export function shortcutOf(id: string, platform: Platform): string | null {
@@ -266,7 +295,8 @@ export function checkMenu(items: readonly (MenuItem & { action?: string })[], pl
       if (!a) out.push(`"${item.label}": ${item.action} is not in actions.json`);
       else {
         const ctx = { platform };
-        const words = [a.label, a.state?.on].filter((w): w is string => !!w).map((w) => (platform === "macos" ? macTitle(w) : w));
+        // The label in the window's language, as menuItems says it.
+        const words = [a.label, a.state?.on].filter((w): w is string => !!w).map((w) => shownWords(a, w, platform));
         const ok = words.includes(item.label) || (!!a.state?.named && item.label.startsWith(actionLabel(a.id, ctx)));
         if (!ok) out.push(`"${item.label}": ${a.id} is "${words[0]}"`);
         const keys = [platform === "macos" ? a.mac : a.win, ...(platform === "macos" ? a.macAlso : a.winAlso)];
