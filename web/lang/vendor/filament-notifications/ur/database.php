@@ -8,7 +8,7 @@ return [
         'heading' => 'اطلاعات',
         'actions' => [
             'mark_all_as_read' => [
-                'label' => 'سب کو پڑھا ہوا کریں',
+                'label' => 'سب کو پڑھی ہوئی کریں',
             ],
         ],
     ],
