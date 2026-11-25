@@ -413,11 +413,31 @@ const commands: Record<string, (args: Args) => unknown> = {
   activity_retry_all: () => ({ retry_requested_at: new Date().toISOString(), count: 3, here: 1 }),
   badge_get: () => (grouped ? { count: 4, label: "4", tone: "danger" } : null),
   // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
+  // `&hits=1` too: each with a line of its transcript where the word was said (the Library's "In transcripts").
   search_library: ({ query }) => {
     const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();
-    const data = params.get("found") === "1" && q ? ITEMS.filter((i) => i.title?.toLowerCase().includes(q)).map((session) => ({ session, hit_count: 1, hits: [] })) : [];
+    const hit = (session: (typeof ITEMS)[number]) => {
+      const snippet = `Can we go over the ${q} before Friday?`;
+      const at = snippet.toLowerCase().indexOf(q);
+      return [{ transcript_id: `t-${session.id}`, kind: "final", segment_index: 3, start_ms: 84_000, end_ms: 88_000, speaker: "Ahmed", snippet, highlights: [[at, q.length]] as [number, number][] }];
+    };
+    const data = params.get("found") === "1" && q
+      ? ITEMS.filter((i) => i.title?.toLowerCase().includes(q)).map((session) => ({ session, hit_count: params.get("hits") === "1" ? 3 : 1, hits: params.get("hits") === "1" ? hit(session) : [] }))
+      : [];
     return { data, next_page: null };
   },
+  // `&bin=1`: three recordings in Trash, one with no title, erased 48 hours after they were deleted.
+  bin_list: () => {
+    if (params.get("bin") !== "1") return null;
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const erase = (h: number) => new Date(Date.now() + (48 - h) * 3_600_000).toISOString();
+    return { data: [
+      { id: "b1", title: "Supplier call with Bilal", client: null, started_at: hoursAgo(30), duration_ms: 754_000, deleted_at: hoursAgo(2), erase_at: erase(2) },
+      { id: "b2", title: "", client: null, started_at: hoursAgo(50), duration_ms: 65_000, deleted_at: hoursAgo(20), erase_at: erase(20) },
+      { id: "b3", title: "Weekly sync (old)", client: null, started_at: hoursAgo(200), duration_ms: 2_520_000, deleted_at: hoursAgo(40), erase_at: erase(40) },
+    ] };
+  },
+  trash_keep_hours: () => 48,
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),

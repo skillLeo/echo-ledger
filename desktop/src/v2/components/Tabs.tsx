@@ -2,7 +2,8 @@ import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 /** `badge`: the plan a locked tab's feature is in ("Pro"), shown after its name. */
 /** `count`: how many the tab lists (a project's recordings, its files), after its name. */
-export type TabItem<T extends string> = { value: T; label: string; badge?: string | null; count?: number | string | null; countLabel?: string };
+/** `lang`: the label's own language when it isn't the window's (the Language setting's "اردو" is "ur", "English" "en"). */
+export type TabItem<T extends string> = { value: T; label: string; badge?: string | null; count?: number | string | null; countLabel?: string; lang?: string };
 
 /** Arrow keys in reading order: in right-to-left, ArrowLeft moves forward. Home and End jump to the ends. */
 function nextIndex(e: KeyboardEvent<HTMLElement>, at: number, count: number): number | null {
@@ -81,7 +82,9 @@ export function Segmented<T extends string>({ label, options, value, onChange }:
       {options.map((o, i) => (
         <button key={o.value} type="button" role="radio" className="el-segmented__item" aria-checked={i === at}
           tabIndex={i === at ? 0 : -1} onClick={() => onChange(o.value)}>
-          {o.label}
+          {/* D-223: each label in its own direction (an English "12-hour" stays left to right in an Urdu window), and in
+              its own language when it says one (Nastaliq at the Urdu size for "اردو"). */}
+          <span dir="auto" lang={o.lang}>{o.label}</span>
         </button>
       ))}
     </div>
