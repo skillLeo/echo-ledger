@@ -27,24 +27,31 @@ import org.junit.Test
 class UploadStoppedTest : AppTest() {
     private val id = DEFAULT_RECORDING_ID
 
+    /**
+     * The server holds the upload's first call until the test lets it go, after the stop (P-108): it used to give up
+     * after 10 s and answer 503 by itself. On a busy computer that answer could come before the stop, and the upload
+     * then failed as any upload does, with its message. The waits here are far longer than a slow run needs.
+     */
+    private fun holdSessionsUntil(reached: CountDownLatch, release: CountDownLatch) = server.on("POST", "/api/sessions") {
+        reached.countDown()
+        release.await(SLOW_RUN_SECONDS * 2, TimeUnit.SECONDS)
+        FakeServer.json(503, """{"message":"late"}""")
+    }
+
     @Test
     fun `an upload stopped in the middle stays queued and says nothing`() {
         runBlocking { app.pairLocally(server) }
         app.storeRecording(id = id)
         val reached = CountDownLatch(1)
         val release = CountDownLatch(1)
-        server.on("POST", "/api/sessions") {
-            reached.countDown()
-            release.await(10, TimeUnit.SECONDS)
-            FakeServer.json(503, """{"message":"late"}""")
-        }
+        holdSessionsUntil(reached, release)
 
         val future = TestListenableWorkerBuilder<UploadWorker>(app).setInputData(workDataOf("recording_id" to id)).build().startWork()
-        assertTrue("the upload reached the server", reached.await(10, TimeUnit.SECONDS))
-        pumpUntil("the recording to show as uploading") { app.graph.recordings.get(id)?.state == "uploading" }
+        assertTrue("the upload reached the server", reached.await(SLOW_RUN_SECONDS, TimeUnit.SECONDS))
+        pumpUntil("the recording to show as uploading", SLOW_RUN_SECONDS * 1_000) { app.graph.recordings.get(id)?.state == "uploading" }
         future.cancel(true) // what Android does when it stops the work
         release.countDown()
-        pumpUntil("the stopped upload to settle") { app.graph.recordings.get(id)?.state != "uploading" }
+        pumpUntil("the stopped upload to settle", SLOW_RUN_SECONDS * 1_000) { app.graph.recordings.get(id)?.state != "uploading" }
 
         val rec = app.graph.recordings.get(id)!!
         assertEquals("queued", rec.state)
@@ -58,20 +65,16 @@ class UploadStoppedTest : AppTest() {
         app.storeRecording(id = id)
         val reached = CountDownLatch(1)
         val release = CountDownLatch(1)
-        server.on("POST", "/api/sessions") {
-            reached.countDown()
-            release.await(10, TimeUnit.SECONDS)
-            FakeServer.json(503, """{"message":"late"}""")
-        }
+        holdSessionsUntil(reached, release)
 
         val future = TestListenableWorkerBuilder<UploadWorker>(app).setInputData(workDataOf("recording_id" to id)).build().startWork()
-        assertTrue("the upload reached the server", reached.await(10, TimeUnit.SECONDS))
-        pumpUntil("the recording to show as uploading") { app.graph.recordings.get(id)?.state == "uploading" }
+        assertTrue("the upload reached the server", reached.await(SLOW_RUN_SECONDS, TimeUnit.SECONDS))
+        pumpUntil("the recording to show as uploading", SLOW_RUN_SECONDS * 1_000) { app.graph.recordings.get(id)?.state == "uploading" }
         // The person discards the call: the Discard calls the upload off, as Android does.
         runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
         future.cancel(true)
         release.countDown()
-        pumpUntil("the stopped upload to settle") { future.isDone }
+        pumpUntil("the stopped upload to settle", SLOW_RUN_SECONDS * 1_000) { future.isDone }
         awaitAppIdle()
 
         assertEquals("never put back to queued", com.echoledger.mobile.calls.Decisions.DISCARDING, app.graph.recordings.get(id)?.state)
@@ -97,5 +100,10 @@ class UploadStoppedTest : AppTest() {
             val text = UploadWorker.friendly(e)
             assertFalse(text, text.contains("Exception") || text.contains("unexpected end") || text.contains("("))
         }
+    }
+
+    private companion object {
+        /** Enough for one step of a run on a computer busy with other test suites. */
+        const val SLOW_RUN_SECONDS = 60L
     }
 }

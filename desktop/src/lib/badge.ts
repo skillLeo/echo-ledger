@@ -10,20 +10,23 @@ export const BADGE_READ_LIMIT = 50;
 /** Answers to an upgrade request (docs/API.md "Upgrade requests"). */
 const UPGRADE_REPLIES = new Set(["upgrade_approved", "upgrade_declined"]);
 
+/** The server lacks what uploads need (2.0.0-v, super admins only): a problem, drawn as the server's. */
+export const SERVER_PROBLEM = "server_problem";
+
 /** A problem the person has to look at: the phone's rule (fail, error, problem) and the monthly limit reached. */
 export function isProblem(kind: string | null | undefined): boolean {
   const k = (kind ?? "").toLowerCase();
   return k.includes("fail") || k.includes("error") || k.includes("problem") || k === "budget_reached";
 }
 
-/** An unread notification that asks something of the person. */
-export function needsAction(item: Pick<ActivityItem, "kind" | "read">): boolean {
-  if (item.read) return false;
+/** An unread notification that asks something of the person; a problem that is over (resolved) no longer does. */
+export function needsAction(item: Pick<ActivityItem, "kind" | "read" | "resolved">): boolean {
+  if (item.read || item.resolved) return false;
   return isProblem(item.kind) || UPGRADE_REPLIES.has(item.kind ?? "");
 }
 
 /** The badge's number: unread problems and upgrade replies, plus calls waiting for a decision. */
-export function actionCount(items: readonly Pick<ActivityItem, "kind" | "read">[] | null | undefined, waitingCalls = 0): number {
+export function actionCount(items: readonly Pick<ActivityItem, "kind" | "read" | "resolved">[] | null | undefined, waitingCalls = 0): number {
   const unread = (items ?? []).filter(needsAction).length;
   return unread + Math.max(0, Math.floor(waitingCalls || 0));
 }
