@@ -15,7 +15,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
-import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, ACTIVITY_PEOPLE, PERSON_PHOTO, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
@@ -411,10 +411,13 @@ const commands: Record<string, (args: Args) => unknown> = {
   // and the failed transcript: 4, red).
   activity_list: () => {
     // `&deviceunread=1` (D-233): the new device's notification not read yet (it has nowhere to go: a plain row, Mark read).
-    const data = (grouped ? ACTIVITY_GROUPED : ACTIVITY).map((a) => (params.get("deviceunread") === "1" && a.kind === "device_paired" ? { ...a, read: false } : a));
+    const data = [...(params.get("actors") === "1" ? ACTIVITY_PEOPLE : []), ...(grouped ? ACTIVITY_GROUPED : ACTIVITY)]
+      .map((a) => (params.get("deviceunread") === "1" && a.kind === "device_paired" ? { ...a, read: false } : a));
     return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
   },
   activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),
+  // `&actors=1` (2.0.0-aa): the teammate's picture, as the core's kept copy.
+  account_avatar_image: (args: Args) => (args.version === 1763700000 ? PERSON_PHOTO : null),
   activity_group_list: () => ({ data: grouped ? UPLOADS_FAILED : [] }),
   activity_retry_all: () => ({ retry_requested_at: new Date().toISOString(), count: 3, here: 1 }),
   badge_get: () => (grouped ? { count: 4, label: "4", tone: "danger" } : null),

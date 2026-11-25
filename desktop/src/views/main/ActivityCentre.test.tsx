@@ -71,6 +71,29 @@ describe("activity page (B18)", () => {
     expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
   });
 
+  it("2.0.0-aa: an item about a person shows their picture, else their initials in their colour, in the tile's place", async () => {
+    const photo = "data:image/webp;base64,UklGRg==";
+    respond("activity_list", { data: [
+      { id: "a1", kind: "shared_with_you", title: "Ana sent you Call with Omar", body: "for tomorrow", session_id: "s9", read: false, at: "2026-10-28T10:00:00Z",
+        actor: { id: 12, name: "Ana Malik", avatar_url: "https://ledger.example.test/api/avatars/12/1763700000?signature=x", avatar_version: 1763700000, avatar_color: 3 } },
+      { id: "a2", kind: "receipt_requested", title: "Sara asked for a receipt", body: "", session_id: null, read: false, at: "2026-10-28T09:30:00Z",
+        actor: { id: 7, name: "Sara Khan", avatar_url: null, avatar_version: null, avatar_color: 5 } },
+      { ...ITEMS[0], actor: null },
+      ITEMS[1],
+    ], unread_count: 2 });
+    respondWith("account_avatar_image", (args) => ((args as { version: number }).version === 1763700000 ? photo : null));
+    renderPage();
+    const tile = (title: string) => screen.getByText(title).closest("li")!.querySelector(".activity-tile")!;
+    await waitFor(() => expect(tile("Ana sent you Call with Omar").querySelector("img")).toHaveAttribute("src", photo));
+    expect(tile("Ana sent you Call with Omar")).toHaveClass("person");
+    expect(tile("Sara asked for a receipt")).toHaveTextContent("SK");
+    expect(tile("Sara asked for a receipt")).toHaveAttribute("data-colour", "5");
+    // actor null, or no key (an older server): the kind's tile as before.
+    expect(tile("Transcript ready")).not.toHaveClass("person");
+    expect(tile("Pixel 9 paired")).not.toHaveClass("person");
+    expect(tile("Pixel 9 paired")).toHaveClass("neutral");
+  });
+
   it("words the line for each case", () => {
     expect(activitySubtitle(1, 3)).toBe("1 thing needs you. Your other notifications follow, newest first.");
     expect(activitySubtitle(0, 1)).toBe("Nothing needs you. 1 notification you have not read yet.");
