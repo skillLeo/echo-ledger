@@ -390,8 +390,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const shared = smartFolder === "shared";
   const folderBase = useMemo(() => {
     if (smartView) return items.filter((i) => inSmartView(i, smartView));
-    if (!smartFolder || smartFolder === "shared") return items;
-    if (folderItems === null) return items.filter((i) => inFolderHere(i, smartFolder) === true);
+    // A call's session still `recording` (being recorded, or waiting for Keep or Discard) is only in Waiting, as on the
+    // server and in the new design (contract 2.0.0-z).
+    const listed = items.filter((i) => i.status !== "recording");
+    if (!smartFolder || smartFolder === "shared") return listed;
+    if (folderItems === null) return listed.filter((i) => inFolderHere(i, smartFolder) === true);
     const saved = new Map(items.map((i) => [i.id, i]));
     return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
   }, [items, smartFolder, folderItems, smartView]);

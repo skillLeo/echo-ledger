@@ -38,9 +38,10 @@ final class ActivityActors
             }
         }
         if ($shares !== []) {
-            // Only what was sent to this recipient: who else a recording went to is never read here. The newest send wins.
+            // Only what was sent to this recipient: who else a recording went to is never read here. The latest send wins
+            // (the item names the latest sender): oldest first, each later one replaces it; within one second, the later row.
             $senders = SentItem::query()->where('to_user_id', $recipient->id)->whereIn('capture_session_id', array_values(array_unique($shares)))
-                ->orderBy('sent_at')->pluck('from_user_id', 'capture_session_id');
+                ->orderBy('sent_at')->orderBy('id')->pluck('from_user_id', 'capture_session_id');
             foreach ($shares as $id => $session) {
                 if (isset($senders[$session])) {
                     $ids[$id] = (int) $senders[$session];

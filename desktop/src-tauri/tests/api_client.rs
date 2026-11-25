@@ -681,6 +681,16 @@ async fn transcripts_are_posted_and_deletes_accept_an_empty_204() {
     assert_eq!(status, 404);
 }
 
+#[tokio::test]
+async fn the_end_of_a_call_is_a_patch_with_when_it_ended_and_how_long_it_lasted() {
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/S1", Reply::json(200, json!({"data": {"id": "S1"}}))));
+    let c = client(&server);
+    c.end_call("S1", "2026-11-26T09:40:12.345Z", 125_000).await.unwrap();
+    let sent = &server.requests()[0];
+    assert_eq!((sent.method.as_str(), sent.target.as_str()), ("PATCH", "/api/sessions/S1"));
+    assert_eq!(sent.json(), json!({"ended_at": "2026-11-26T09:40:12.345Z", "duration_ms": 125000}), "only the end, never an organise key");
+}
+
 // ---- Status code mapping ---------------------------------------------------------------------------------------
 
 #[tokio::test]
@@ -1455,4 +1465,82 @@ async fn a_share_check_result_is_posted_with_only_the_documented_fields() {
     );
     let refused = MockServer::start(Router::new().fixed("POST", "/api/diagnostics/share-checks", Reply::json(422, json!({"message": "The given data was invalid.", "code": "validation_failed"}))));
     assert_eq!(server_error(client(&refused).share_check_report(&report).await).0, 422);
+}
+
+// ---- Mark as read / unread for many (contract 2.0.0-y) ------------------------------------------------------------
+
+/// The server's answer for a chunk: every id done but those starting with "x", which it does not find.
+fn opened_answer(request: &common::Recorded) -> Action {
+    let ids: Vec<String> = serde_json::from_value(request.json()["ids"].clone()).unwrap();
+    let (gone, done): (Vec<String>, Vec<String>) = ids.into_iter().partition(|id| id.starts_with('x'));
+    Reply::json(200, json!({"done": done, "not_found": gone})).into()
+}
+
+#[tokio::test]
+async fn mark_as_read_and_unread_for_many_send_one_request_per_200_ids_and_join_the_answers() {
+    let server = MockServer::start(
+        Router::new().route("POST", "/api/sessions/opened", |r, _| opened_answer(r)).route("DELETE", "/api/sessions/opened", |r, _| opened_answer(r)),
+    );
+    let mut ids: Vec<String> = (0..449).map(|n| format!("r{n:03}")).collect();
+    ids.insert(300, "x-gone".into());
+    let read = client(&server).sessions_opened(&ids).await.unwrap().expect("a 2.0.0-y server");
+    let sent = server.requests_to("POST", "/api/sessions/opened");
+    assert_eq!(sent.iter().map(|r| r.json()["ids"].as_array().unwrap().len()).collect::<Vec<_>>(), vec![200, 200, 50]);
+    assert_eq!(sent[0].json()["ids"][0], json!("r000"));
+    assert_eq!(sent[1].json()["ids"][100], json!("x-gone"), "in the order given");
+    assert_eq!(read.done.len(), 449);
+    assert_eq!(read.not_found, vec!["x-gone".to_string()]);
+
+    let unread = client(&server).sessions_unopened(&ids[..3]).await.unwrap().unwrap();
+    assert_eq!(server.requests_to("DELETE", "/api/sessions/opened")[0].json(), json!({"ids": ["r000", "r001", "r002"]}));
+    assert_eq!(unread, OpenedMany { done: vec!["r000".into(), "r001".into(), "r002".into()], not_found: vec![] });
+    assert!(server.requests().iter().all(|r| r.path() == "/api/sessions/opened"), "never DELETE /api/sessions/{{id}}");
+}
+
+#[tokio::test]
+async fn an_older_server_without_the_bulk_route_gives_none_so_the_page_goes_one_by_one() {
+    // Today's live server: POST answers 405; DELETE reaches DELETE /api/sessions/{id} with the id "opened" (404, or 403
+    // for someone who may not record); a 200 without `done` is not this answer either.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/sessions/opened", Reply::json(405, json!({"error": {"code": "method_not_allowed", "message": "Method not allowed."}})))
+            .fixed("DELETE", "/api/sessions/opened", Reply::json(404, json!({"error": {"code": "not_found", "message": "Session not found."}}))),
+    );
+    let ids: Vec<String> = (0..450).map(|n| format!("r{n}")).collect();
+    assert_eq!(client(&server).sessions_opened(&ids).await.unwrap(), None);
+    assert_eq!(client(&server).sessions_unopened(&ids).await.unwrap(), None);
+    assert_eq!(server.requests().len(), 2, "one try each, not one per chunk");
+    for (status, body) in [(403, json!({"error": {"code": "forbidden", "message": "No."}})), (200, json!({"changed": 3})), (204, Value::Null)] {
+        let reply = if status == 204 { Reply::empty(204) } else { Reply::json(status, body) };
+        let other = MockServer::start(Router::new().fixed("DELETE", "/api/sessions/opened", reply));
+        assert_eq!(client(&other).sessions_unopened(&ids[..2]).await.unwrap(), None, "{status}");
+    }
+}
+
+#[tokio::test]
+async fn a_server_down_busy_or_out_of_reach_is_an_error_never_an_older_server() {
+    // Only an older server's answers make the page go one by one; anything else must not turn into a request per
+    // recording (the device's requests are limited).
+    let ids: Vec<String> = (0..450).map(|n| format!("r{n}")).collect();
+    for (method, status) in [("POST", 503), ("POST", 429), ("POST", 408), ("POST", 403), ("POST", 422), ("DELETE", 500)] {
+        let server = MockServer::start(Router::new().fixed(method, "/api/sessions/opened", Reply::json(status, json!({"message": "No."}))));
+        let api = client(&server);
+        let answer = if method == "POST" { api.sessions_opened(&ids).await } else { api.sessions_unopened(&ids).await };
+        assert!(matches!(answer, Err(AppError::Server { status: s, .. }) if s == status), "{method} {status}: {answer:?}");
+        assert_eq!(server.requests().len(), 1, "{method} {status}: one try");
+    }
+    // Out of reach: nothing listens there.
+    let gone = ApiClient::new("http://127.0.0.1:9", &[], Some(TOKEN.to_string())).expect("local client");
+    assert!(gone.sessions_opened(&ids[..2]).await.is_err());
+}
+
+#[tokio::test]
+async fn a_later_chunk_that_fails_keeps_what_was_done_and_its_ids_are_in_neither_list() {
+    let server = MockServer::start(Router::new().route("POST", "/api/sessions/opened", |r, nth| {
+        if nth == 0 { opened_answer(r) } else { Reply::json(503, json!({"error": {"code": "unavailable", "message": "Try later."}})).into() }
+    }));
+    let ids: Vec<String> = (0..250).map(|n| format!("r{n}")).collect();
+    let answer = client(&server).sessions_opened(&ids).await.unwrap().unwrap();
+    assert_eq!(answer.done, ids[..200].to_vec());
+    assert!(answer.not_found.is_empty());
 }

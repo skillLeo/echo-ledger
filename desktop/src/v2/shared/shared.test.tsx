@@ -3,6 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { CALL_SEGMENTS, makeItem, makeTranscript } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
@@ -318,6 +321,20 @@ describe("the v2 Shared page", () => {
     await act(flushAsync);
     expect(callsOf("request_link_revoke")).toEqual([{ id: "r1" }]);
     expect(notify).toHaveBeenCalledWith("Request link revoked", false, undefined);
+  });
+
+  it("D-234: See your request links is in the sheet's footer, never in its scrolling body, on a line of its own", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "New request link" }));
+    const sheet = screen.getByRole("dialog", { name: "Request files" });
+    const link = within(sheet).getByRole("button", { name: "See your request links" });
+    expect(link.closest(".el-dialog__actions")).not.toBeNull();
+    expect(link.closest(".el-dialog__body")).toBeNull();
+    // First in the footer, a line of its own, so Close and Make link stay together under it.
+    const aside = link.closest(".el-dialog__aside")!;
+    expect(aside.parentElement?.firstElementChild).toBe(aside);
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toContain(".el-dialog__actions > .el-dialog__aside { flex-basis: 100%; display: flex; justify-content: flex-start; }");
   });
 
   it("New request link: title, files go to, stops working, limits, Make link, Copy; See your request links opens the tab, where Revoke is", async () => {

@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.shell
 
 import android.content.res.Resources
 import com.echoledger.mobile.R
+import com.echoledger.mobile.account.AccountFormat
 import com.echoledger.mobile.core.SourceApp
 
 /** A recording's source in the screen's language, from the server's `source_app` key (never its English label). */
@@ -165,7 +166,8 @@ object VmMessages {
     fun localize(res: Resources, english: String): String {
         exact[english]?.let { return res.getString(it) }
         for (t in templates) {
-            t.pattern.matchEntire(english)?.let { m -> return res.getString(t.key, m.groupValues[1]) }
+            // The value sits between the sentence's own isolate marks: it can't close them early or leave one open.
+            t.pattern.matchEntire(english)?.let { m -> return res.getString(t.key, AccountFormat.balanced(m.groupValues[1])) }
         }
         return english
     }

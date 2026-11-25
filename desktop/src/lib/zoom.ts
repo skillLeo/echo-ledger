@@ -6,6 +6,7 @@
 //   touchpad's pinch builds up and steps about every 100 px, so it doesn't jump.
 import { useSyncExternalStore } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { t } from "../i18n";
 
 /** Chrome's steps, in percent. */
 export const ZOOM_STEPS = [67, 75, 80, 90, 100, 110, 125, 150, 175, 200] as const;
@@ -16,7 +17,7 @@ export const ZOOM_KEY = "echoledger-zoom";
 export const ZOOM_EVENT = "echoledger:zoom";
 /** The keys' hint, in this computer's words (Settings › Appearance › Zoom). */
 export function zoomHint(mac: boolean): string {
-  return mac ? "Shortcut: ⌘+ and ⌘−, ⌘0 to reset." : "Shortcut: Ctrl+ and Ctrl−, Ctrl+0 to reset, or Ctrl + the mouse wheel.";
+  return mac ? t("Shortcut: ⌘+ and ⌘−, ⌘0 to reset.") : t("Shortcut: Ctrl+ and Ctrl−, Ctrl+0 to reset, or Ctrl + the mouse wheel.");
 }
 
 /** A pinch (or a wheel's small moves) this far, in pixels, is one step. */
@@ -111,9 +112,9 @@ export function watchZoomWheel(win: Window = window, step: (dir: 1 | -1) => void
     }
     e.preventDefault();
     // A pause (PINCH_IDLE_MS) starts over: what a pinch left half built never steps the next one.
-    const t = now();
-    if (t - at > PINCH_IDLE_MS) built = 0;
-    at = t;
+    const tick = now();
+    if (tick - at > PINCH_IDLE_MS) built = 0;
+    at = tick;
     // Lines and pages are a notch each (a mouse's wheel in line mode); pixels build up, in the screen's own: a zoomed
     // page hears a notch as that much less, so one notch stays one step at 150% and 200%.
     const px = e.deltaMode === 0 ? e.deltaY * factor() : Math.sign(e.deltaY) * PINCH_STEP;

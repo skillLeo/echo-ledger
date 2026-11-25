@@ -5,7 +5,7 @@
 // state only and goes when the page closes. Names: docs/DESIGN_SYSTEM.md "Screen-share privacy names".
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, type PrivacyBadge, type MeetingApp, type MeetingAppRow, type OldWindowsSharing, type PrivacyStatus, type Settings, type SettingsPatch, type ShareCheckView, type ShareHiding } from "../../lib/ipc";
-import { checkedWhen, demoLeft, resultLine, summary, usePrivacyStatus } from "../../lib/privacy";
+import { checkedWhen, demoLeft, demoMinutes, resultLine, summary, usePrivacyStatus } from "../../lib/privacy";
 import { setting } from "../../lib/settingsRegistry";
 import { prettyShortcut } from "../../lib/format";
 import { ActionRow, InfoRow, LinkRow, Section, SelectRow, SwitchRow, Tag, useCopied } from "./SettingsControls";
@@ -13,6 +13,7 @@ import { PrivacyBadgeView } from "../../components/PrivacyBadge";
 import { MainShareControl, PinnedShareControl, mainShareValue } from "../../components/ShareVisibility";
 import { StateBanner } from "../../components/StateBanner";
 import { AlertIcon } from "../../components/Icons";
+import { t, tc } from "../../i18n";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
@@ -29,9 +30,10 @@ export const HONEST_LINE: Record<"macos" | "windows", string> = {
 };
 /** The main window's own line (since v2.0). */
 export const SHARE_PRIVACY_MAIN = "The main window shows in screen shares unless you hide it for a while.";
-/** The footnote under the windows' rows: the main window's line, then this system's honest line, once. */
+/** The footnote under the windows' rows: the main window's line, then this system's honest line, once (two whole
+ * sentences, each in the window's language). */
 export function shareFootnote(platform: string | null | undefined): string {
-  return platform === "macos" || platform === "windows" ? `${SHARE_PRIVACY_MAIN} ${HONEST_LINE[platform]}` : SHARE_PRIVACY_MAIN;
+  return platform === "macos" || platform === "windows" ? `${t(SHARE_PRIVACY_MAIN)} ${t(HONEST_LINE[platform])}` : t(SHARE_PRIVACY_MAIN);
 }
 /** The rows for the windows that are never hidden (I-02: they are in the person's own screenshots and recordings). The
  * dictation box is the stated exception among the live words (decision 8): it shows the person's own words, typed into
@@ -115,17 +117,19 @@ function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
 
 /** The last check in a few words, for its row (pure). */
 export function lastCheckValue(result: "pass" | "fail" | "error" | null, at: string | null, now: Date = new Date(), reason: string | null = null): string {
-  if (!result || !at) return "Not checked yet";
-  if (result === "pass" && reason === "old_windows") return `Black box, ${checkedWhen(at, now)}`;
-  if (result === "pass") return `Hidden, ${checkedWhen(at, now)}`;
-  if (result === "fail") return `Visible, ${checkedWhen(at, now)}`;
-  return "Nothing measured";
+  if (!result || !at) return t("Not checked yet");
+  if (result === "pass" && reason === "old_windows") return t("Black box, :when", { when: checkedWhen(at, now) });
+  if (result === "pass") return t("Hidden, :when", { when: checkedWhen(at, now) });
+  if (result === "fail") return t("Visible, :when", { when: checkedWhen(at, now) });
+  return t("Nothing measured");
 }
 
 export function statusValue(s: PrivacyStatus, demoSeconds: number | null): { text: string; tone?: "warning" } {
-  if (s.hiding === "off") return { text: "Off", tone: "warning" };
-  if (demoSeconds) return { text: `Shown for ${demoLeft(demoSeconds)?.replace(" left", "")}`, tone: "warning" };
-  return s.badge === "visible" ? { text: s.badgeLabel, tone: "warning" } : { text: s.badgeLabel };
+  if (s.hiding === "off") return { text: t("Off"), tone: "warning" };
+  const minutes = demoMinutes(demoSeconds);
+  if (minutes !== null) return { text: tc("Shown for :count min", minutes), tone: "warning" };
+  // The core's word for the badge, one of the app's own (Private, Black box…), said in the window's language.
+  return s.badge === "visible" ? { text: t(s.badgeLabel), tone: "warning" } : { text: t(s.badgeLabel) };
 }
 
 /** The demo's time left, counted down here between the core's updates. */
@@ -157,9 +161,9 @@ export function hiddenValue(s: PrivacyStatus | null): string | null {
   switch (hiddenReason(s)) {
     case "person":
     case "share_bar":
-      return "Hidden";
+      return t("Hidden");
     case "share":
-      return "Hidden while you share your screen";
+      return t("Hidden while you share your screen");
     default:
       return null;
   }
@@ -167,8 +171,8 @@ export function hiddenValue(s: PrivacyStatus | null): string | null {
 
 /** "Move to the other display": what it says before and after (pure). */
 export function displaysValue(floatingOpen: boolean, moved: boolean): string {
-  if (!floatingOpen) return "Nothing open to move";
-  return moved ? "Moved: share your main display" : "Then share your main display";
+  if (!floatingOpen) return t("Nothing open to move");
+  return moved ? t("Moved: share your main display") : t("Then share your main display");
 }
 
 /** Settings › Screen-share privacy. */
@@ -279,7 +283,7 @@ function ZoomStep() {
 /** The version a meeting app's result is kept for: Chrome's for Meet, which runs in it. */
 export function versionLine(row: MeetingAppRow): string | null {
   if (!row.version) return null;
-  return row.app === "meet" ? `Chrome ${row.version}` : `Version ${row.version}`;
+  return row.app === "meet" ? t("Chrome :version", { version: row.version }) : t("Version :version", { version: row.version });
 }
 
 function AppLine({ row }: { row: MeetingAppRow }) {

@@ -77,6 +77,17 @@ describe("the shared fixture (contract 2.0.0-p)", () => {
       .toEqual({ count: fixture.needs_you.count, failed: fixture.needs_you.failed, waiting: fixture.needs_you.waiting, stuck: fixture.needs_you.stuck });
   });
 
+  it("contract 2.0.0-z: recording 41 (over, ended_at) and 42 (no end, started the day before) are waiting at the file's now", () => {
+    const call = (n: string) => items.find((i) => i.id.endsWith(n))!;
+    const [over, old] = [call("41"), call("42")];
+    expect([over.status, !!over.ended_at, old.status, !!old.ended_at]).toEqual(["recording", true, "recording", false]);
+    expect([needsReason(over, now), needsReason(old, now)]).toEqual(["waiting", "waiting"]);
+    // The same by the rule alone, when the server sent no state.
+    const ruleOnly = (i: LibraryItem) => ({ ...i, facets: { ...i.facets, state: undefined } }) as LibraryItem;
+    expect([needsReason(ruleOnly(over), now), needsReason(ruleOnly(old), now)]).toEqual(["waiting", "waiting"]);
+    expect(needsYouCount(items.map(ruleOnly), { waiting: 0, failedUploads: 0 }, now)).toBe(fixture.library_counts.needs_you);
+  });
+
   for (const set of fixture.filter_sets) {
     it(`${set.name}: the list, its kinds and every option's count`, () => {
       const spec: FilterSpec = readSpec(set.filters);

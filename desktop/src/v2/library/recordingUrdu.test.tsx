@@ -11,14 +11,14 @@ import type { ClientFolder, LibraryItem, TranscriptDetail } from "../../lib/ipc"
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { answerConfirm } from "../../test/confirm";
 import { answerConfirmForTests } from "../../lib/confirm";
-import { makeItem, makePendingItem, makeScreen, makeSkippedItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeScreen, makeSkippedItem, makeTranscript, makeUploadItem } from "../../test/fixtures";
 import { forgetPictures } from "../../lib/screens";
 import { formatWhen, whenParts } from "../../lib/format";
 import { LibraryV2 } from "./LibraryV2";
 import { LabelDialog, LanguageDialog, MoveDialog, RenameDialog, TranscribeDialog, WhatsAppDialog } from "./organise";
 import { failureLine, languageChip, languageLabel, partsText, retryLine, transcribedIn } from "../../lib/languages";
 import { convertingText, etaText, transcribingLine, uploadLine } from "../../lib/progress";
-import { bulkNotice, deletedNotice, discardAllQuestion, heldLine, skippedLine, skippedMeta, skipShorterThan, waitingLine, waitingSummary } from "../../lib/pending";
+import { bulkNotice, deletedNotice, discardAllQuestion, heldLine, skippedLine, skippedMeta, skipShorterThan, uploadTitle, waitingLine, waitingSummary } from "../../lib/pending";
 import { playerHint } from "../../lib/player";
 import { sourceAppLabel } from "../../lib/format";
 import { FSI, PDI, RLI, resetLanguageForTests, setLanguage } from "../../i18n";
@@ -38,7 +38,7 @@ const call = (extra: Partial<LibraryItem> = {}, transcript: Partial<NonNullable<
   ...extra,
 });
 
-async function open(item: LibraryItem, transcript: TranscriptDetail | null = makeTranscript({ id: "tr-bilal" }), detail: Record<string, unknown> = {}) {
+async function open(item: LibraryItem, transcript: TranscriptDetail | null = makeTranscript({ id: "tr-bilal" }), detail: Record<string, unknown> = {}, row: RegExp = /^Bilal Qureshi/) {
   respond("library_list", [item]);
   respond("library_refresh", [item]);
   respond("bin_list", { data: [] });
@@ -47,7 +47,7 @@ async function open(item: LibraryItem, transcript: TranscriptDetail | null = mak
   if (transcript) respond("transcript_detail", transcript);
   render(<LibraryV2 />);
   await act(flushAsync);
-  fireEvent.click(screen.getByRole("button", { name: /^Bilal Qureshi/ }));
+  fireEvent.click(screen.getByRole("button", { name: row }));
   await act(flushAsync);
 }
 const toast = () => document.querySelector(".el-toast-region") as HTMLElement;
@@ -92,6 +92,10 @@ describe("the recording page in Urdu", () => {
     const menu = screen.getByRole("menu", { name: "ریکارڈنگ کے اختیارات" });
     const items = within(menu).getAllByRole("menuitem").map((m) => m.textContent);
     expect(items).toEqual(expect.arrayContaining(["زبان بدلیں اور دوبارہ ٹرانسکرائب کریں…", "ایکسپورٹ", "آڈیو محفوظ کریں"]));
+    // A shortcut's keys read left to right in a right-to-left menu (⇧⌘L, never L⌘⇧).
+    const keys = [...menu.querySelectorAll("kbd")];
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.every((k) => k.getAttribute("dir") === "ltr")).toBe(true);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "ایکسپورٹ" }));
     expect(within(screen.getByRole("menu", { name: "ایکسپورٹ" })).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
       "ورڈ (.docx)", "PDF (پرنٹ)", "متن (.txt)", "مارک ڈاؤن (.md)", "سب ٹائٹلز (.srt)", "ویب سب ٹائٹلز (.vtt)", "JSON (.json)",
@@ -141,7 +145,11 @@ describe("the recording page in Urdu", () => {
     expect(copied).toContain("\n\nNote: [?word]");
     expect(copied).toContain("People: Me, Bilal");
     expect(copied).toContain("Language: ur");
-    expect(copied).not.toMatch(/[⁦-⁩]/);
+    expect(copied).not.toMatch(/[\u2066-\u2069]/);
+    // The header is the web's English, its date too: never an Urdu month inside it.
+    const header = copied.split("\n\n")[0];
+    expect(header).toContain("17 November 2026, 11:42 am · WhatsApp · 1:02:10");
+    expect(header).not.toMatch(/[\u0600-\u06FF]/);
 
     const tools = screen.getByRole("toolbar", { name: "ٹرانسکرپٹ کے ٹولز" });
     expect(tools).toHaveTextContent("حتمی ٹرانسکرپٹ");
@@ -159,6 +167,10 @@ describe("the recording page in Urdu", () => {
     expect(value("کب تک رکھی جائے گی")).toBe("خودکار صفائی تک (ترتیبات › اسٹوریج)");
     expect(value("لیبلز")).toBe("کچھ نہیں");
     expect(value("پن شدہ")).toBe("نہیں");
+    // The values that are names take their own direction.
+    const cell = (term: string) => [...details.querySelectorAll("dt")].find((d) => d.textContent === term)!.nextElementSibling!;
+    expect(["ذریعہ", "پروجیکٹ", "لیبلز"].map((term) => cell(term).querySelector("span")?.getAttribute("dir"))).toEqual(["auto", "auto", "auto"]);
+    expect(cell("دورانیہ").querySelector(".el-num")).toHaveTextContent("1:02:10");
   });
 
   it("transcribing: the steps (done said too), Notify me when ready, the parts and the time left in the empty state", async () => {
@@ -208,6 +220,15 @@ describe("the recording page in Urdu", () => {
     await open(call(), makeTranscript({ id: "tr-bilal", segments: [] }));
     expect(screen.getByRole("heading", { name: "ٹرانسکرپٹ خالی ہے" })).toBeInTheDocument();
     expect(screen.getByText("اس ریکارڈنگ میں کوئی بات سنائی نہیں دی۔")).toBeInTheDocument();
+  });
+
+  it("a voice note the server titled Voice note: its title and its source in the window's words", async () => {
+    // Its Library row reads its first words (D1); the page, its title.
+    await open(call({ title: "Voice note", source_app: "voice_note", source_app_label: "Voice note" }), undefined, {}, /^Hello/);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("وائس نوٹ");
+    const meta = [...document.querySelectorAll(".el-page__meta span[dir]")][0];
+    expect(meta.querySelector("bdi")).toHaveTextContent("وائس نوٹ");
+    expect(document.querySelector(".el-page__meta")?.textContent).not.toMatch(/Voice note/);
   });
 
   it("nothing heard", async () => {
@@ -292,7 +313,8 @@ describe("the organise dialogs in Urdu, with their messages", () => {
     const { unmount } = render(<MoveDialog ids={["a"]} title="Call a" onClose={vi.fn()} say={say} />);
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "پروجیکٹ میں منتقل کریں" });
-    expect(dialog).toHaveAccessibleDescription("“Call a”");
+    // The title is one value of the line: its own isolate.
+    expect(dialog).toHaveAccessibleDescription(`“${iso("Call a")}”`);
     fireEvent.click(within(dialog).getByRole("combobox", { name: /^کہاں منتقل کریں/ }));
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["چنیں…", "کوئی پروجیکٹ نہیں", "Acme", "نیا پروجیکٹ…"]);
     fireEvent.click(screen.getByRole("option", { name: "Acme" }));
@@ -409,6 +431,14 @@ describe("the words the page shows, from lib", () => {
     expect(waitingLine(items)).toBe(`${iso(2)} کالز انتظار میں`);
     const oldest = whenParts(new Date(2026, 10, 15, 10).toISOString())!.day;
     expect(waitingSummary(items)).toBe(`${iso(2)} کالز انتظار میں · سب سے پرانی ${iso(oldest)} · مجموعی ${iso("2:00")}`);
+    // One waiting call: its day in whenParts' shape, in its own isolate, in the time zone asked for.
+    const one = [makePendingItem("a", { startedAt: "2026-10-31T02:00:00Z", durationMs: 36_000 })];
+    const day = (timeZone: string) => new Intl.DateTimeFormat("ur-PK", { month: "short", day: "numeric", timeZone }).format(Date.parse("2026-10-31T02:00:00Z"));
+    expect(waitingSummary(one, "UTC")).toBe(`${iso(1)} کال انتظار میں · ${iso(day("UTC"))} · مجموعی ${iso("0:36")}`);
+    expect(waitingSummary(one, "America/New_York")).toBe(`${iso(1)} کال انتظار میں · ${iso(day("America/New_York"))} · مجموعی ${iso("0:36")}`);
+    expect(day("UTC")).not.toBe(day("America/New_York"));
+    // A phone call's title is its label once.
+    expect(uploadTitle(makeUploadItem("u", { sourceApp: "phone_call" }))).toBe("فون کال");
     // A skipped call's line: the caller isolated, the date formatWhen's own run.
     const skipped = makeSkippedItem("s", { callerName: "Omar", title: null, reason: "too_short" });
     expect(skippedMeta(skipped, NOW).startsWith(`${iso("Omar")} کے ساتھ کال · ${formatWhen(skipped.startedAt, NOW)}`)).toBe(true);

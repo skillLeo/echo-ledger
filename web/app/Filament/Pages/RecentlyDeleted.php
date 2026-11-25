@@ -12,6 +12,7 @@ use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\ObjectMenus;
+use App\Filament\Support\RtlIcons;
 use App\Models\CaptureSession;
 use App\Services\RetentionPolicy;
 use App\Services\Workspaces\ConsoleAccess;
@@ -126,7 +127,7 @@ class RecentlyDeleted extends Page implements HasTable
                     ->state(fn (CaptureSession $r): string => $r->deleted_at?->copy()->addHours(CaptureSession::binHours())->diffForHumans() ?? ''),
             ])
             ->recordActions([
-                Action::make('restore')->label(__('Restore'))->icon(Heroicon::OutlinedArrowUturnLeft)
+                Action::make('restore')->label(__('Restore'))->icon(RtlIcons::icon(Heroicon::OutlinedArrowUturnLeft))
                     ->authorize(fn (CaptureSession $record): bool => Gate::allows('restore', $record))
                     ->action(function (CaptureSession $record): void {
                         try {

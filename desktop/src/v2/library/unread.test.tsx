@@ -8,6 +8,7 @@ import type { LibraryItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
+import { runAction } from "../actions/registry";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -41,6 +42,10 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     respond("list_clients", { data: [] });
     respond("session_unopen", null);
     respond("session_opened", null);
+    // A server before 2.0.0-y (the core's null for the bulk route): one request per recording, as these cases were
+    // written; the cases for many below answer the bulk route.
+    respond("sessions_unopened", null);
+    respond("sessions_opened", null);
     respondWith("sessions_bulk", (args) => (args as { ids: string[] }).ids.length);
   });
   afterEach(() => {
@@ -144,5 +149,206 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     expect(dotOf("Bilal Qureshi")).not.toBeNull();
     expect(dotOf("Usman Chaudhry")).toBeNull();
     expect(screen.getByText(/1 of 2 marked as unread/)).toBeInTheDocument();
+  });
+
+  // Contract 2.0.0-y: one request per 200 ids (POST or DELETE /api/sessions/opened through the core's sessions_opened
+  // and sessions_unopened); an older server's answer (anything but a 200 with done: null from the core, or an error)
+  // gets one request per recording, as above.
+  const many = Array.from({ length: 450 }, (_, n) => makeItem(`r${n}`, { title: `Call ${n}`, source_app: "zoom", started_at: new Date(2026, 10, 24, 8).toISOString(), opened: true, transcript: done("Hello", `t${n}`) }));
+  const allDone = (args: unknown) => ({ done: (args as { ids: string[] }).ids, not_found: [] });
+  const bar = () => screen.getByRole("toolbar", { name: "Selected recordings" });
+
+  it("450 picked, Ctrl+Shift+U: three requests (200, 200, 50), not 450; the dots and the Unread count follow", async () => {
+    respond("library_list", many);
+    respond("library_refresh", many);
+    respondWith("sessions_unopened", allDone);
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("450 selected");
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    const sent = callsOf("sessions_unopened").map((c) => c.ids as string[]);
+    expect(sent.map((ids) => ids.length)).toEqual([200, 200, 50]);
+    expect(sent.flat()).toEqual(many.map((i) => i.id));
+    expect(callsOf("session_unopen")).toEqual([]);
+    expect(unreadCount(onItems)).toBe(450);
+    expect(screen.getByText("Marked 450 recordings as unread")).toBeInTheDocument();
+  }, 60_000);
+
+  it("Mark all as read: one request per 200, and it says so once the answers are in", async () => {
+    const unread = many.map((i) => ({ ...i, opened: false }));
+    respond("library_list", unread);
+    respond("library_refresh", unread);
+    let answer: () => void = () => undefined;
+    const waiting = new Promise<void>((resolve) => { answer = resolve; });
+    respondWith("sessions_opened", async (args) => { await waiting; return allDone(args); });
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    act(() => { runAction("view.markAllRead", { platform: "windows", kind: "place" }); });
+    expect(unreadCount(onItems)).toBe(0);
+    await act(flushAsync);
+    expect(screen.queryByText("Marked 450 recordings as read")).toBeNull();
+    await act(async () => { answer(); await flushAsync(); await flushAsync(); });
+    expect(callsOf("sessions_opened").map((c) => (c.ids as string[]).length)).toEqual([200, 200, 50]);
+    expect(callsOf("session_opened")).toEqual([]);
+    expect(screen.getByText("Marked 450 recordings as read")).toBeInTheDocument();
+  }, 60_000);
+
+  it("an id the server doesn't find leaves the selection quietly, as it was; the rest is marked", async () => {
+    respond("library_list", ITEMS.map((i) => ({ ...i, opened: true })));
+    respond("library_refresh", ITEMS.map((i) => ({ ...i, opened: true })));
+    respondWith("sessions_unopened", () => ({ done: ["bilal"], not_found: ["usman"] }));
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitem", { name: /Mark as unread/ }));
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened")).toEqual([{ ids: ["bilal", "usman"] }]);
+    expect(callsOf("library_refresh").length).toBeGreaterThan(0);
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "true");
+    expect(row("Usman Chaudhry")).toHaveAttribute("aria-pressed", "false");
+    expect(dotOf("Bilal Qureshi")).not.toBeNull();
+    expect(unreadCount(onItems)).toBe(1);
+    // Usman's goes back as it was (read), and no problem is said.
+    expect(dotOf("Usman Chaudhry")).toBeNull();
+    expect(screen.getByText("Marked 1 recording as unread")).toBeInTheDocument();
+    expect(screen.queryByText(/marked as unread ·/)).toBeNull();
+  });
+
+  it("an older server (the core's null: 405, 404, 403 on DELETE, no done): one request per recording, as before", async () => {
+    respond("library_list", ITEMS.map((i) => ({ ...i, opened: true })));
+    respond("library_refresh", ITEMS.map((i) => ({ ...i, opened: true })));
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened")).toEqual([{ ids: ["bilal", "usman"] }]);
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(["bilal", "usman"]);
+    expect(screen.getByText("Marked 2 recordings as unread")).toBeInTheDocument();
+  });
+
+  it("the server down, busy or out of reach: never one request per recording; the dots go back and it says why", async () => {
+    respond("library_list", ITEMS.map((i) => ({ ...i, opened: true })));
+    respond("library_refresh", ITEMS.map((i) => ({ ...i, opened: true })));
+    fail("sessions_unopened", "The server is busy. Try again in a minute.");
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened")).toEqual([{ ids: ["bilal", "usman"] }]);
+    expect(callsOf("session_unopen")).toEqual([]);
+    expect(dotOf("Bilal Qureshi")).toBeNull();
+    expect(dotOf("Usman Chaudhry")).toBeNull();
+    expect(screen.getByText("The server is busy. Try again in a minute.")).toBeInTheDocument();
+  });
+
+  it("an older server and 450 picked: one by one for the first 200 only, the rest put back, and it says so", async () => {
+    respond("library_list", many);
+    respond("library_refresh", many);
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200], "asked once");
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(0, 200).map((i) => i.id));
+    expect(unreadCount(onItems)).toBe(200);
+    expect(screen.getByText("Marked 200 recordings as unread · Up to 200 at a time: unselect 250")).toBeInTheDocument();
+  }, 60_000);
+
+  it("the first 200 taken at once and the next answered as an older server: one by one for exactly the rest", async () => {
+    respond("library_list", many);
+    respond("library_refresh", many);
+    let asked = 0;
+    respondWith("sessions_unopened", (args) => (asked++ === 0 ? allDone(args) : null));
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200, 200], "the third chunk goes one by one too");
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(200).map((i) => i.id));
+    expect(unreadCount(onItems)).toBe(450);
+    expect(screen.getByText("Marked 450 recordings as unread")).toBeInTheDocument();
+  }, 60_000);
+
+  it("one by one and one fails partway: what was done stays marked, the rest goes back, and it says how many of 450", async () => {
+    respond("library_list", many);
+    respond("library_refresh", many);
+    let asked = 0;
+    respondWith("sessions_unopened", (args) => (asked++ === 0 ? allDone(args) : null));
+    respondWith("session_unopen", (args) => ((args as { id: string }).id === "r300" ? Promise.reject("The server did not answer.") : Promise.resolve(null)));
+    const onItems = vi.fn();
+    render(<LibraryV2 onItems={onItems} />);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(200, 301).map((i) => i.id));
+    const [shown, read] = onItems.mock.calls.at(-1) as [LibraryItem[], ReadonlySet<string>];
+    const unreadIds = shown.filter((i) => i.opened === false && !read.has(i.id)).map((i) => i.id);
+    expect(unreadIds).toEqual(many.slice(0, 300).map((i) => i.id));
+    expect(screen.getByText(/^300 of 450 marked as unread · /)).toBeInTheDocument();
+  }, 60_000);
+
+  it("450 picked: the selection bar's More and a right-click still offer Mark as unread, one request per 200", async () => {
+    respond("library_list", many);
+    respond("library_refresh", many);
+    respondWith("sessions_unopened", allDone);
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    expect(bar()).toHaveTextContent("Over 200: only Mark as read or unread. Unselect 250 for the rest");
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    const more = screen.getByRole("menu", { name: "More actions" });
+    expect(within(more).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as unread", "Up to 200 at a time: unselect 250"]);
+    fireEvent.click(within(more).getByRole("menuitem", { name: /Mark as unread/ }));
+    await act(flushAsync);
+    expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200, 200, 50]);
+    expect(screen.getByText("Marked 450 recordings as unread")).toBeInTheDocument();
+
+    // Every one unread now: a right-click on a picked row offers Mark as read, above the limit's line.
+    respondWith("sessions_opened", allDone);
+    fireEvent.contextMenu(row("Call 0"), { clientX: 40, clientY: 60 });
+    const menu = screen.getByRole("menu", { name: "Actions for 450 recordings" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as read", "Up to 200 at a time: unselect 250"]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Mark as read/ }));
+    await act(flushAsync);
+    expect(callsOf("sessions_opened").map((c) => (c.ids as string[]).length)).toEqual([200, 200, 50]);
+  }, 60_000);
+
+  it("every one the server doesn't find: they leave the selection, the Library is synced so they drop out, and it says so", async () => {
+    // Both went to the bin on another device: the server doesn't find them, and the next sync leaves them out.
+    let gone = false;
+    respond("library_list", ITEMS.map((i) => ({ ...i, opened: true })));
+    respondWith("library_refresh", () => (gone ? [] : ITEMS.map((i) => ({ ...i, opened: true }))));
+    respondWith("sessions_unopened", (args) => {
+      gone = true;
+      return { done: [], not_found: (args as { ids: string[] }).ids };
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
+    await act(flushAsync);
+    expect(callsOf("library_refresh").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Bilal Qureshi" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Usman Chaudhry" })).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+    expect(screen.getByText("2 recordings are no longer in your Library")).toBeInTheDocument();
   });
 });

@@ -31,11 +31,12 @@ import { latinKey } from "../actions/latinKey";
 import { useMenuPart } from "../actions/menuState";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, needsReason, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
+import { markOpenedMany, openedProgress } from "./opened";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
 import { syncLibrary } from "./syncClock";
@@ -746,9 +747,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     let made: ReturnType<typeof facetCounts> | null = null;
     return () => (made ??= facetCounts(searched.filter((f) => inTab(f, tab)), applied, prepared.names, Date.now(), undefined, prepared.facts));
   }, [searched, applied, prepared, tab]);
-  // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
-  // which no other view has), whatever the filters and the search, as the server's Needs you does.
-  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
+  // Needs you lists the server's waiting recordings too (a call over and waiting for Keep or Discard: session
+  // `recording`, which no other view has; not one still being recorded), whatever the filters and the search, as the
+  // server's Needs you does.
+  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => needsReason(i, Date.now()) === "waiting") : []), [items, baseView, trash]);
   // The page's tabs (All · Calls · Meetings · Voice notes), by Source, ANDed with the filters; counted with the
   // place, the filters and the search.
   const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
@@ -894,16 +896,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
   };
   /**
-   * Mark as unread (contract 2.0.0-t, DELETE /api/sessions/{id}/opened) or, when every one is unread, Mark as read: here
-   * at once (the dot, Unread and its count), then on every device; what the server refuses is put back, and said.
+   * Mark as unread (contract 2.0.0-t) or, when every one is unread, Mark as read: here at once (the dot, Unread and its
+   * count), then on every device, one request per 200, for any number picked (contract 2.0.0-y; one per recording on an
+   * older server, 200 at most); what the server refuses is put back, and said. One it doesn't find leaves the selection
+   * quietly and the Library is synced, so a recording that is gone drops out.
    */
   const setUnread = async (ids: readonly string[], unread: boolean) => {
-    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const wanted = new Set(ids);
+    const chosen = (items ?? []).filter((i) => wanted.has(i.id));
     if (!chosen.length) return;
-    if (chosen.length > MAX_BULK) {
-      say(tooManyWords(chosen.length));
-      return;
-    }
     const was = new Map(chosen.map((i) => [i.id, { opened: i.opened, read: readHere.has(i.id) }]));
     const put = (next: (id: string) => { opened: boolean | undefined; read: boolean }) => {
       setItems((list) => list?.map((i) => (was.has(i.id) ? { ...i, opened: next(i.id).opened } : i)) ?? list);
@@ -915,20 +916,39 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     };
     const marked = { opened: !unread, read: !unread };
     put(() => marked);
-    // One at a time; what the server took is kept whatever happens after.
-    const done = new Set<string>();
+    // What the server took is kept whatever happens after; only that stays marked.
+    const progress = openedProgress();
+    const settled = (id: string) => (progress.done.has(id) ? marked : was.get(id)!);
+    const unpick = async () => {
+      if (!progress.notFound.size) return;
+      setPicked((now) => new Set([...now].filter((id) => !progress.notFound.has(id))));
+      // None of them is here any more: the selection ends.
+      if ([...was.keys()].every((id) => progress.notFound.has(id))) endSelection();
+      // Gone from here (in the bin, another workspace's): a sync takes them out of the list.
+      const list = await api.refreshLibrary().catch(() => null);
+      if (list) setItems(list);
+      put(settled);
+    };
     try {
-      for (const id of was.keys()) {
-        await (unread ? api.markUnopened(id) : api.markOpened(id));
-        done.add(id);
+      await markOpenedMany([...was.keys()], !unread, progress);
+      // Once more: a sync answered meanwhile from the copy saved before the marks undid them. One the server did not
+      // find, or one left out on an older server, goes back as it was.
+      put(settled);
+      await unpick();
+      const count = progress.done.size;
+      if (!count) {
+        if (progress.notFound.size) say(tc(":count recording is no longer in your Library|:count recordings are no longer in your Library", progress.notFound.size));
+        return;
       }
-      // Once more: a sync answered meanwhile from the copy saved before the marks undid them.
-      put(() => marked);
-      say(unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", was.size) : tc("Marked :count recording as read|Marked :count recordings as read", was.size));
+      const words = unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", count) : tc("Marked :count recording as read|Marked :count recordings as read", count);
+      // An older server, one by one: 200 at most, and the rest says so.
+      say(progress.left.size ? `${words} · ${tooManyWords(was.size - progress.notFound.size)}` : words);
     } catch (e) {
       // Only what was not done goes back; the rest stays marked, and the problem says how many went.
-      put((id) => (done.has(id) ? marked : was.get(id)!));
-      const of = { done: done.size, total: was.size, error: errorMessage(e) };
+      const done = progress.done;
+      put(settled);
+      await unpick();
+      const of = { done: done.size, total: was.size - progress.notFound.size, error: errorMessage(e) };
       sayProblem(say, !done.size ? errorMessage(e) : unread ? tc(":done of :total marked as unread · :error", of.done, of) : tc(":done of :total marked as read · :error", of.done, of));
     }
   };
@@ -944,12 +964,32 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
 
   /**
+   * Mark as read and Mark as unread (contract 2.0.0-y), the right-click's item: each while some picked are the other
+   * way, both for a mix; the key on the one ⇧⌘U runs (Mark as read only when every one is unread). Any number picked:
+   * they go 200 to a request. `context` makes them a right-click's (on a Mac its own words, no keys).
+   */
+  const readItems = (ids: readonly string[], context = false): { key: "read" | "unread"; item: MenuItem }[] => {
+    const wanted = new Set(ids);
+    const chosen = (items ?? []).filter((i) => wanted.has(i.id));
+    const ctx = recordingContext(ids);
+    const unreadHere = (i: LibraryItem) => i.opened === false && !readHere.has(i.id);
+    const anyRead = chosen.some((i) => !unreadHere(i));
+    const as = (unread: boolean) => {
+      const at = { ...ctx, state: { ...ctx.state, unread } };
+      return context ? contextItems(["recording.unread"], at, {}, LIBRARY_KEYS) : menuItems(["recording.unread"], at);
+    };
+    const out: { key: "read" | "unread"; item: MenuItem }[] = [];
+    if (chosen.some(unreadHere)) for (const item of as(true)) out.push({ key: "read", item: { ...item, shortcut: anyRead ? undefined : item.shortcut } });
+    if (anyRead) for (const item of as(false)) out.push({ key: "unread", item });
+    return out;
+  };
+  /**
    * The one menu for a recording or for the picked ones: Organise, Export, then Delete, last and red. `without` leaves
    * out what the selection bar already shows as buttons.
    */
   const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set(), own: RecordingMenuParts = {}): MenuItem[] => {
-    // More than the core takes at once: the menu says so and does nothing else.
-    if (ids.length > MAX_BULK) return [{ label: tooManyWords(ids.length), disabled: true }];
+    // More than the core takes at once: only Mark as read and unread (any number), then a line that says so.
+    if (ids.length > MAX_BULK) return [...readItems(ids).map(({ item }) => item), { label: tooManyWords(ids.length), disabled: true, separator: true }];
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
     const all = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
@@ -979,6 +1019,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     // Mark as important (UX-22): actions.json's item, the same as a right-click's (the selection bar's ⋮ and the
     // recording page's menu have it too).
     for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: organise });
+    // Mark as read and Mark as unread (contract 2.0.0-y).
+    for (const { key, item } of readItems(ids)) add(key, { ...item, group: organise });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
         ? { label: t("Transcribe (:max at a time)", { max: MAX_TRANSCRIBE }), icon: Icons.TranscriptIcon, group: organise, disabled: true }
@@ -1334,8 +1376,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   /** A choice of one (a project, a sort order): a radio item. */
   const oneOf = (item: MenuItem): MenuItem => ({ ...item, radio: true });
   const recordingMenu = (ids: readonly string[]): { title?: string; items: MenuItem[] } => {
-    // More than the core takes at once: the menu says so and does nothing else.
-    if (ids.length > MAX_BULK) return { title: manyTitle(ids.length), items: [{ label: tooManyWords(ids.length), disabled: true }] };
+    // More than the core takes at once: only Mark as read and unread (any number), then a line that says so.
+    if (ids.length > MAX_BULK) {
+      return { title: manyTitle(ids.length), items: [...readItems(ids, true).map(({ item }) => item), { label: tooManyWords(ids.length), disabled: true, separator: true }] };
+    }
     const ctx = recordingContext(ids);
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
@@ -1485,12 +1529,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // A built-in view's menu (the sidebar's, UX-22): Unread's Mark all as read, Audio only's Transcribe all… (it asks with
   // the count and the minutes first, as Transcribe does).
   const placeRuns: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    // Every one unread, read at once, then one request per 200, its answers waited for (contract 2.0.0-y).
     "view.markAllRead": () => {
       const unread = (items ?? []).filter((i) => !i.deleted && i.opened === false && !readHere.has(i.id)).map((i) => i.id);
-      if (!unread.length) return;
-      setReadHere((r) => new Set([...r, ...unread]));
-      for (const id of unread) void api.markOpened(id).catch(() => undefined);
-      say(tc("Marked :count recording as read|Marked :count recordings as read", unread.length));
+      if (unread.length) void setUnread(unread, false);
     },
     "view.transcribeAll": () => {
       const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
@@ -1602,7 +1644,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
-      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
+      menu={(own) => menuFor([open.id], new Set(["open", "select", "read", "unread"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.
@@ -1663,7 +1705,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               <PickBox className="el-lib-toolbar__all" label={allPicked ? t("Unselect all") : t("Select all")} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
               <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? t(":count selected", { count: pickedIds.length }) : t("Select recordings")}</h2>
-              {tooMany && <span className="el-caption el-secondary" role="status">{tooManyWords(pickedIds.length)}</span>}
+              {tooMany && <span className="el-caption el-secondary" role="status">{t("Over :max: only Mark as read or unread. Unselect :extra for the rest", { max: MAX_BULK, extra: pickedIds.length - MAX_BULK })}</span>}
               <div className="el-lib-row2__end">
                 <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
                   onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>
@@ -1680,7 +1722,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                 )}
                 <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title={t("Delete (:key)", { key: "Del" })} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
                   onClick={() => deleteOrAsk(pickedIds)}>{t("Delete")}</Button>
-                {pickedIds.length > 0 && !tooMany && (
+                {pickedIds.length > 0 && (
                   <Menu label={t("More actions")} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
                     items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "transcribe", "export", "ai", "delete"]))} />
                 )}

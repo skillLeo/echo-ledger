@@ -14,7 +14,7 @@ import { screenSaid, screensByLine } from "../../lib/screens";
 import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
-import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, SOURCE_APP_LABELS, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
 import { playerHint, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, newTerms, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewName, viewPercent } from "../../lib/progress";
@@ -468,7 +468,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       sayProblem(onMessage, errorMessage(e));
     }
   };
-  const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
+  // The server's label is English: in another language a known app's label is the app's own (sourceAppLabel: a name as
+  // it is, "Voice note" in the window's words); in English the server's, as always.
+  const source = item.source_app && lang !== "en" && item.source_app in SOURCE_APP_LABELS ? sourceAppLabel(item.source_app)
+    : item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
+  // A voice note the server titled "Voice note" (its automatic title) reads in the window's words, as its Library row.
+  const title = item.source_app === "voice_note" && item.title?.trim() === "Voice note" ? t("Voice note") : item.title?.trim() || t("Recording");
   // When, how long, then the project (its own button after this line).
   const metaParts = [source, formatWhen(item.started_at), formatDuration(item.duration_ms)].filter((p): p is string => !!p);
   const meta = metaParts.join(" · ");
@@ -854,7 +859,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 e.currentTarget.focus();
                 setRenaming(true);
               }}>
-              {item.title?.trim() || t("Recording")}
+              {title}
             </button>
           </h1>
           <p className="el-page__meta el-secondary">
@@ -1038,19 +1043,21 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 : <Button variant="primary" loading={busy} loadingLabel={t("Starting…")} onClick={() => setTranscribeOpen(true)}>{t("Transcribe")}</Button>} />
           )
         ) : (
+          // The values that are names (the app, the device, the project, the labels, the engine) take their own direction,
+          // and a number its own (.el-num), each inline: in Urdu every value still starts at the right, beside its term.
           <dl className="el-details">
             <dt>{t("Recorded")}</dt><dd>{formatWhen(item.started_at) || t("Unknown")}</dd>
-            <dt>{t("Length")}</dt><dd className="el-num">{formatDuration(item.duration_ms) || t("Unknown")}</dd>
-            {source && <><dt>{t("Source")}</dt><dd>{source}</dd></>}
+            <dt>{t("Length")}</dt><dd>{formatDuration(item.duration_ms) ? <span className="el-num">{formatDuration(item.duration_ms)}</span> : t("Unknown")}</dd>
+            {source && <><dt>{t("Source")}</dt><dd><span dir="auto">{source}</span></dd></>}
             {item.source_device && <><dt>{t("Recorded on")}</dt><dd>{deviceWords(item.source_device)}</dd></>}
-            {item.device?.name && <><dt>{t("Device")}</dt><dd>{item.device.name}</dd></>}
-            {item.client?.name && <><dt>{t("Project")}</dt><dd>{item.client.name}</dd></>}
+            {item.device?.name && <><dt>{t("Device")}</dt><dd><span dir="auto">{item.device.name}</span></dd></>}
+            {item.client?.name && <><dt>{t("Project")}</dt><dd><span dir="auto">{item.client.name}</span></dd></>}
             {item.language_chip && <><dt>{t("Language")}</dt><dd>{item.language_chip}</dd></>}
-            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>{t("File size")}</dt><dd className="el-num">{fileSize(detail.value.sizeBytes)}</dd></> : null}
+            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>{t("File size")}</dt><dd><span className="el-num">{fileSize(detail.value.sizeBytes)}</span></dd></> : null}
             {item.transcript?.final_provider_label || item.transcript?.final_provider
-              ? <><dt>{t("Transcription engine")}</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
+              ? <><dt>{t("Transcription engine")}</dt><dd><span dir="auto">{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</span></dd></> : null}
             <dt>{t("Kept")}</dt><dd>{item.keep ? t("Forever") : t("Until auto clean-up (Settings › Storage)")}</dd>
-            <dt>{t("Labels")}</dt><dd>{item.labels?.length ? item.labels.join(", ") : t("None")}</dd>
+            <dt>{t("Labels")}</dt><dd><span dir="auto">{item.labels?.length ? item.labels.join(", ") : t("None")}</span></dd>
             <dt>{t("Pinned")}</dt><dd>{item.pinned ? t("Yes") : t("No")}</dd>
           </dl>
         )}

@@ -12,9 +12,9 @@ use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\ObjectMenus;
 use App\Filament\Support\Shell;
-use App\Models\SentItem;
 use App\Models\User;
 use App\Services\ActionBadge;
+use App\Services\ActivityActors;
 use App\Services\ActivityFeed;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
@@ -219,8 +219,9 @@ class Activity extends Page
     public const PERSON_KINDS = ['shared_with_you', 'upgrade_requested'];
 
     /**
-     * UX-18: the person each item is about, by the item's id: its actor_id (since UX-18), else for a share from before
-     * it the latest sender, as Sent to keeps them. Only neutral kinds (PERSON_KINDS), and only people who are still there.
+     * UX-18: the person each item is about, by the item's id, by the server's one rule (ActivityActors, as the apps'
+     * `actor` since 2.0.0-aa): its actor_id, else for a share from before it the latest sender, as Sent to keeps them;
+     * only people who are still there. The console shows a face only for the neutral kinds (PERSON_KINDS).
      *
      * @param  Collection<int, DatabaseNotification>  $notifications
      * @return array<string, User>
@@ -228,36 +229,9 @@ class Activity extends Page
     private function peopleOf(Collection $notifications): array
     {
         $user = $this->user();
-        $ids = [];
-        $shares = [];
-        foreach ($notifications as $notification) {
-            if (! in_array(ActivityFeed::kindOf($notification), self::PERSON_KINDS, true)) {
-                continue;
-            }
-            $actor = $notification->data['viewData']['actor_id'] ?? null;
-            $session = $notification->data['viewData']['session_id'] ?? null;
-            if (is_int($actor) || (is_string($actor) && ctype_digit($actor))) {
-                $ids[$notification->id] = (int) $actor;
-            } elseif (ActivityFeed::kindOf($notification) === 'shared_with_you' && is_string($session)) {
-                $shares[$notification->id] = $session;
-            }
-        }
-        if ($shares !== [] && $user instanceof User) {
-            // The latest sender wins (the item says the latest one's name): oldest first, each later one replaces it.
-            $senders = SentItem::query()->where('to_user_id', $user->id)->whereIn('capture_session_id', array_values($shares))
-                ->orderBy('sent_at')->orderBy('id')->pluck('from_user_id', 'capture_session_id');
-            foreach ($shares as $id => $session) {
-                if (isset($senders[$session])) {
-                    $ids[$id] = (int) $senders[$session];
-                }
-            }
-        }
-        if ($ids === []) {
-            return [];
-        }
-        $found = User::query()->whereIn('id', array_values(array_unique($ids)))->get()->keyBy('id');
 
-        return array_filter(array_map(fn (int $id): ?User => $found->get($id), $ids));
+        return $user instanceof User ? ActivityActors::of($user, $notifications->filter(
+            fn (DatabaseNotification $notification): bool => in_array(ActivityFeed::kindOf($notification), self::PERSON_KINDS, true))) : [];
     }
 
     private static function tone(?string $kind): string

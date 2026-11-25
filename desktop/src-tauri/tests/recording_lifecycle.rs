@@ -344,6 +344,20 @@ fn after_a_call_applies_to_calls_and_voice_notes_are_always_kept() {
     assert_eq!(pending::CHIP_SECONDS, 8, "the call choice: no answer within 8 s saves the audio only (it was 12 s)");
 }
 
+// ---- the end of a call (contract 2.0.0-z) --------------------------------------------------------------------------
+
+#[test]
+fn a_kept_recording_with_an_open_session_has_an_end_to_send_and_one_without_has_none() {
+    let root = tempfile::tempdir().unwrap();
+    let finished = finished_recording(root.path(), "z");
+    let end = desktop_lib::after_call::call_end(&finished, Some("01JSESSION")).unwrap();
+    assert_eq!(end.session_id, "01JSESSION");
+    assert_eq!(end.ended_at, "2026-10-25T08:01:30.000Z", "UTC, ISO 8601");
+    assert_eq!(end.duration_ms, 90_000);
+    assert!(desktop_lib::after_call::call_end(&finished, None).is_none(), "no open session: nothing is sent");
+    assert!(desktop_lib::after_call::call_end(&finished, Some("")).is_none());
+}
+
 // ---- pending store -----------------------------------------------------------------------------------------------
 
 fn finished_recording(root: &Path, name: &str) -> FinishedRecording {

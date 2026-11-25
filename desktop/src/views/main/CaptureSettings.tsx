@@ -29,6 +29,7 @@ import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
 import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
+import { t } from "../../i18n";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
@@ -139,7 +140,7 @@ function WhyNotRecorded() {
         {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
           <ul className="why-list">
             {users.map((u, i) => (
-              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u, "en")}</b>: {decisionText(u)}</li>
             ))}
           </ul>
         )}
@@ -213,19 +214,19 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
 /** What the test result says to the user, one sentence per side. */
 export function testVerdict(result: Pick<TestResult, "micHeard" | "systemHeard">): string[] {
   return [
-    result.micHeard ? "Your microphone is working." : "We didn't hear your microphone. Check the microphone above and its permission.",
+    result.micHeard ? t("Your microphone is working.") : t("We didn't hear your microphone. Check the microphone above and its permission."),
     result.systemHeard
-      ? "Sound from this computer was captured."
-      : "No sound from this computer was captured. Play something during the test to check the other side of calls.",
+      ? t("Sound from this computer was captured.")
+      : t("No sound from this computer was captured. Play something during the test to check the other side of calls."),
   ];
 }
 
 export const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
-  allowed: "Allowed",
-  denied: "Not allowed",
-  unknown: "Asked on first use",
+  get allowed() { return t("Allowed"); },
+  get denied() { return t("Not allowed"); },
+  get unknown() { return t("Asked on first use"); },
   // Screen Recording only; never the microphone, kept for completeness.
-  reopen: "Allowed: quit and reopen EchoLedger to finish",
+  get reopen() { return t("Allowed: quit and reopen EchoLedger to finish"); },
 };
 
 /** Recording › Microphone & audio. */

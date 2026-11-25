@@ -1,7 +1,7 @@
 // Helpers for the Library's waiting line ("2 calls waiting · Review") and "Uploads that need you" (A2.5, A5.1, v1.5).
 // The words are read when they are asked for, in the account's language (src/i18n), or in English when the caller says
 // `lang` "en": a window still in English (classic's) keeps exactly the English it always had.
-import { formatDuration, formatWhen, sourceAppLabel, whenParts } from "./format";
+import { formatDuration, formatWhen, sourceAppLabel, whenPart } from "./format";
 import type { PendingItem, SkipReason, SkippedItem, UploadItem } from "./ipc";
 import type { ConfirmQuestion } from "./confirm";
 import { language, wordsIn, type Lang } from "../i18n";
@@ -82,7 +82,8 @@ export function waitingLine(items: readonly PendingItem[], lang?: Lang): string 
 /**
  * The one-line summary of the waiting recordings, as the phone shows it:
  * `4 calls waiting · oldest Oct 30 · 2:18 total`, or `1 call waiting · Oct 30 · 0:36 total` for one.
- * Any voice note turns the noun into "recording(s)". An empty list gives "". In Urdu the day is lib/format's whenParts.
+ * Any voice note turns the noun into "recording(s)". An empty list gives "". The day is in `timeZone` (this computer's
+ * by default); in Urdu it has whenParts' shape for a date ("30 اکتوبر") and its own isolate (whenPart, or t()'s).
  */
 export function waitingSummary(items: readonly PendingItem[], timeZone?: string, lang?: Lang): string {
   if (items.length === 0) return "";
@@ -92,16 +93,15 @@ export function waitingSummary(items: readonly PendingItem[], timeZone?: string,
     return Number.isNaN(at) ? min : Math.min(min, at);
   }, Number.POSITIVE_INFINITY);
   const day = !Number.isFinite(oldest) ? ""
-    : english(lang) ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone }).format(oldest)
-      : whenParts(new Date(oldest).toISOString())?.day ?? "";
-  const when = day && (items.length === 1 ? day : t("oldest :day", { day }));
+    : new Intl.DateTimeFormat(english(lang) ? "en-US" : "ur-PK", { month: "short", day: "numeric", timeZone }).format(oldest);
+  const when = day && (items.length === 1 ? (english(lang) ? day : whenPart(day)) : t("oldest :day", { day }));
   const totalMs = items.reduce((sum, i) => sum + (i.durationMs > 0 ? i.durationMs : 0), 0);
   const total = t(":time total", { time: formatDuration(totalMs) || "0:00" });
   return [waitingCount(items, lang), when, total].filter(Boolean).join(" · ");
 }
 
 /** The title when set, else "Call with <name>" when the meeting app named the other side, else `<Label> call`; voice
- * notes read `Voice note`. */
+ * notes read `Voice note`, and a phone call `Phone call` (never "Phone call call"). */
 export function recordingTitle(title: string | null | undefined, sourceApp: string, mode: PendingItem["mode"] = "call", callerName?: string | null, lang?: Lang): string {
   const own = title?.trim();
   if (own) return own;
@@ -109,6 +109,8 @@ export function recordingTitle(title: string | null | undefined, sourceApp: stri
   if (mode !== "call" || sourceApp === "voice_note") return t("Voice note");
   const caller = callerName?.trim();
   if (caller) return t("Call with :name", { name: caller });
+  // The phone's label is already a call.
+  if (sourceApp === "phone_call") return sourceAppLabel(sourceApp, lang);
   return t(":app call", { app: sourceAppLabel(sourceApp, lang) });
 }
 

@@ -78,6 +78,19 @@ describe("the Library's rules", () => {
     for (const item of ITEMS.slice(0, 4)) expect(JSON.stringify(rowModel(item, NOW))).not.toMatch(/untranscribed|not transcribed/i);
   });
 
+  it("contract 2.0.0-z: a call still being recorded reads Waiting to upload; once it is over, Waiting", () => {
+    const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+    const live = makeItem("live", { source_app: "zoom", status: "recording", started_at: ago(3 * 60_000), transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } });
+    expect(rowModel(live, NOW)).toMatchObject({ meta: "Waiting to upload", state: { key: "waiting_to_upload", tone: "quiet" } });
+    expect(rowModel({ ...live, ended_at: ago(60_000) }, NOW)).toMatchObject({ meta: "Waiting", state: { key: "waiting", tone: "quiet" } });
+    // Without an end, after more than 4 hours it counts as over; the server's Waiting wins, and its Waiting to upload,
+    // synced while the call ran, doesn't stop the clock.
+    expect(rowModel({ ...live, started_at: ago(4 * 3_600_000 + 1000) }, NOW)).toMatchObject({ meta: "Waiting" });
+    expect(rowModel({ ...live, facets: { state: "waiting" } }, NOW)).toMatchObject({ meta: "Waiting" });
+    expect(rowModel({ ...live, facets: { state: "waiting_to_upload" } }, NOW)).toMatchObject({ meta: "Waiting to upload" });
+    expect(rowModel({ ...live, started_at: ago(4 * 3_600_000 + 1000), facets: { state: "waiting_to_upload" } }, NOW)).toMatchObject({ meta: "Waiting", state: { key: "waiting" } });
+  });
+
   it("when: the time today, Yesterday, then the date (its year when another); only the time inside a date group", () => {
     expect(rowModel(ITEMS[3], NOW).when).toBe("Yesterday");
     expect(rowModel(ITEMS[3], NOW, undefined, true).when).toBe("4:30 pm");
