@@ -6,7 +6,7 @@
 // words the window shows: the titles, options and descriptions in that language, so "اسٹوریج" finds Storage as "storage"
 // does.
 import { language, subscribeLanguage, t } from "../i18n";
-import { breadcrumbOf, depthOf, SETTINGS, type SettingEntry } from "./settingsRegistry";
+import { breadcrumbOf, depthOf, SETTINGS, shownTitle, type SettingEntry } from "./settingsRegistry";
 
 /** What decides whether an entry is offered here: this computer, the account, the plan. */
 export type Availability = (entry: SettingEntry) => boolean;
@@ -135,7 +135,7 @@ subscribeLanguage(() => {
   cache = null;
 });
 function index(): Indexed[] {
-  cache ??= SETTINGS.map((entry) => indexEntry(entry, language() === "en" ? null : (english) => t(english)));
+  cache ??= SETTINGS.map((entry) => indexEntry(entry, language() === "en" ? null : (english) => (english === entry.title ? shownTitle(entry) : t(english))));
   return cache;
 }
 

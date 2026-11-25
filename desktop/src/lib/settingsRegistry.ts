@@ -392,6 +392,19 @@ export const SETTINGS: readonly SettingEntry[] = [
 
 const BY_ID = new Map(SETTINGS.map((e) => [e.id, e]));
 
+/** Titles that read differently in their place: their context key (i18n/context.ts), whose English is the title. */
+const TITLE_KEYS: Readonly<Record<string, string>> = {
+  "notifications.quiet_from": "settings_context.quiet_from",
+  "notifications.quiet_to": "settings_context.quiet_to",
+};
+/** Entries whose title is a name (a call app): the same in every language, as the app's own name is. */
+const NAMED = new Set(CALL_APPS.map(([app]) => `calls.app.${app}`));
+
+/** An entry's title in the window's language: a name as it is, a title read in its place by its context key. */
+export function shownTitle(entry: SettingEntry): string {
+  return NAMED.has(entry.id) ? entry.title : t(TITLE_KEYS[entry.id] ?? entry.title);
+}
+
 /**
  * An entry as the window shows it: in English the entry itself; in another language a copy whose title, title in the
  * new look, description and options' labels are the catalogue's. An option named in its own language (lang: "اردو",
@@ -401,7 +414,7 @@ function shown(entry: SettingEntry): SettingEntry {
   if (language() === "en") return entry;
   return {
     ...entry,
-    title: t(entry.title),
+    title: shownTitle(entry),
     ...(entry.titleV2 ? { titleV2: t(entry.titleV2) } : {}),
     ...(entry.description ? { description: t(entry.description) } : {}),
     ...(entry.options ? { options: entry.options.map((o) => (o.lang ? o : { ...o, label: t(o.label) })) } : {}),
@@ -417,7 +430,7 @@ export function setting(id: string): SettingEntry {
 
 /** The title the new look shows, in the window's language: its own when it has one ("Trash"), else the title. */
 export function titleV2(entry: SettingEntry): string {
-  return t(entry.titleV2 ?? entry.title);
+  return entry.titleV2 ? t(entry.titleV2) : shownTitle(entry);
 }
 
 /** The entry, or none for an id that is not in the registry. */
