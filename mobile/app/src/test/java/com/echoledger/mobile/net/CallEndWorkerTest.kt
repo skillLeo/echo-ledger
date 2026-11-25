@@ -100,13 +100,19 @@ class CallEndWorkerTest : AppTest() {
     }
 
     @Test
-    fun `an undone delete queues the end again, but not when the call is left to the person while its delete goes ahead`() {
+    fun `an undone delete waiting for its choice queues the end again, kept or left to the person it doesn't`() {
         val rec = stored(state = Decisions.DISCARDING)
         app.graph.recordings.update(rec.id) { it.copy(discardedFrom = "pending_decision") }
         runBlocking { Decisions.undoDiscard(app, rec.id) }
         assertEquals(1, queued().size)
         WorkManager.getInstance(app).cancelUniqueWork(CallEndWorker.workName(sid)).result.get()
         WorkManager.getInstance(app).pruneWork().result.get()
+
+        // Back to kept: its upload's finish carries the end.
+        val kept = stored(state = Decisions.DISCARDING)
+        app.graph.recordings.update(kept.id) { it.copy(discardedFrom = "queued") }
+        runBlocking { Decisions.undoDiscard(app, kept.id) }
+        assertTrue(queued().none { it.state == WorkInfo.State.ENQUEUED })
 
         val left = stored(state = Decisions.DISCARDING)
         runBlocking { Decisions.undoDiscard(app, left.id, leftToPerson = true) }
@@ -127,6 +133,8 @@ class CallEndWorkerTest : AppTest() {
         assertTrue("before the card", end < stop.indexOf("PostCallPrompt.show("))
         val guard = stop.substring(stop.lastIndexOf("if (", end), end)
         for (part in listOf("stored != null", "!silent", "skip == null", "deleteAtMs == null")) assertTrue(part, part in guard)
-        assertTrue("only with a session open", "stored.serverSessionId?.let" in stop.substring(end - 80, end))
+        assertTrue("only while its choice waits", "state == \"pending_decision\"" in guard)
+        assertTrue("only with a session open", "stored.serverSessionId?.takeIf { waiting }" in guard)
+        assertTrue("best-effort", "runCatching { CallEndWorker.enqueue(" in stop.substring(end - 30, end + 30))
     }
 }

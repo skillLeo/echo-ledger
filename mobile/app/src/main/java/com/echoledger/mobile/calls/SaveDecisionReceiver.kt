@@ -381,13 +381,14 @@ object Decisions {
         } else if (back.state == WAITING) {
             DecisionTimeoutWorker.schedule(context, recordingId)
         }
-        // Contract 2.0.0-z: a call whose delete is undone is over and waiting again, so its end reaches the session the
+        // Contract 2.0.0-z: a call whose delete is undone and waits for its choice again sends its end to the session the
         // captions opened (a Stop and delete never sent it; after the card's Discard it was queued already, and the
-        // server keeps the first end). Left to the person, the server's delete goes ahead: no end for a session it deletes.
-        if (!leftToPerson) {
+        // server keeps the first end). Back to kept, its upload's finish carries the end. Left to the person, the server's
+        // delete goes ahead: no end for a session it deletes. Best-effort: it never stops the Undo.
+        if (!leftToPerson && back.state == WAITING) {
             back.serverSessionId?.let { sessionId ->
                 runCatching { Instant.parse(back.endedAt).toEpochMilli() }.getOrNull()?.let { endedAtMs ->
-                    CallEndWorker.enqueue(context, back.id, sessionId, endedAtMs, back.durationMs)
+                    runCatching { CallEndWorker.enqueue(context, back.id, sessionId, endedAtMs, back.durationMs) }
                 }
             }
         }
