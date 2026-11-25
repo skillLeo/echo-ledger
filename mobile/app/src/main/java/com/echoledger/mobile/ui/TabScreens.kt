@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.PhoneMissed
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Devices
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.NotificationsNone
-import androidx.compose.material.icons.rounded.PhoneMissed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -292,7 +292,7 @@ internal fun MissedRecordingRow(item: MissedItem, today: LocalDate, divider: Boo
                 .padding(horizontal = Space.screen, vertical = Space.s3),
             verticalAlignment = Alignment.Top
         ) {
-            IconTile(Icons.Rounded.PhoneMissed, c.danger)
+            IconTile(Icons.AutoMirrored.Rounded.PhoneMissed, c.danger)
             Spacer(Modifier.size(Space.s3))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -430,7 +430,7 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
     val c = LocalEchoColors.current
     val kind = item.kind.orEmpty()
     val (icon, tint) = when {
-        kind == "missed_recording" -> Icons.Rounded.PhoneMissed to c.danger
+        kind == "missed_recording" -> Icons.AutoMirrored.Rounded.PhoneMissed to c.danger
         item.isProblem() -> Icons.Rounded.ErrorOutline to c.danger
         kind.contains("device") -> Icons.Rounded.Devices to c.textMuted
         else -> Icons.Rounded.CheckCircle to c.accentText
