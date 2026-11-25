@@ -199,18 +199,32 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
   const recovered = useRecovered();
-  const row = (i: ActivityItem) => (
-    <li key={i.id}>
-      <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>
+  const row = (i: ActivityItem) => {
+    const inside = (
+      <>
         <ActivityTile kind={i.kind} resolved={i.resolved} />
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
         </span>
         {i.at && <span className="item-time">{shortWhen(i.at)}</span>}
-      </button>
-    </li>
-  );
+      </>
+    );
+    // D-066: only a notification about a recording opens something. One with nowhere to go (a new device, the server's
+    // own problem) isn't a button; while unread it ends with a quiet Mark read, so a problem can be cleared on its own.
+    return (
+      <li key={i.id}>
+        {i.session_id ? (
+          <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>{inside}</button>
+        ) : (
+          <div className={`activity-item static ${i.read ? "" : "unread"}`}>
+            {inside}
+            {!i.read && <button type="button" className="btn text compact" aria-label={`Mark read: ${i.title}`} onClick={() => void choose(i)}>Mark read</button>}
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="activity-page">
