@@ -88,6 +88,21 @@ class RecordingPageTest : ScreenTest() {
         labels = listOf("urgent")
     )
 
+    /** v2.1 UX-16: "Audio · 18 days left" is on the page of audio kept without a transcript (it left the row). */
+    @Test
+    fun audioKeptWithoutATranscriptSaysOnItsPageHowManyDaysAreLeft() {
+        val expires = java.time.OffsetDateTime.now().plusDays(17).plusHours(6).toString()
+        val audioOnly = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, finalStatus = null)
+            .replace("\"updated_at\"", "\"expires_at\":\"$expires\",\"updated_at\"")
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(200, audioOnly.trimEnd().removeSuffix("}") + ""","recordings":[],"transcripts":[],"playback_url":null}""")
+        )
+        open(item().copy(transcript = null, expiresAt = expires))
+        awaitText("Audio · 18 days left")
+    }
+
     private fun open(item: LibraryItem = item(), language: EchoLanguage = EchoLanguage.English) = show {
         EchoV2Theme(darkTheme = false, language = language) {
             val toasts = rememberEchoToastState()

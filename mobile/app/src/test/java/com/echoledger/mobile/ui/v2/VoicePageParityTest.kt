@@ -187,11 +187,15 @@ class VoicePageParityTest : ScreenTest() {
         assertTrue(compose.onAllNodesWithText("Tap to start").fetchSemanticsNodes().isEmpty())
     }
 
+    /** v2.1 UX-16: the v2 Settings list shows the real setting (the voice keyboard on or off), never "Tap to start". */
     @Test
-    fun theSettingsListSaysHoldToTalkWhenItIsChosen() {
+    fun theSettingsListSaysWhetherTheVoiceKeyboardIsOn() {
         val res = V2Testing.resources(EchoLanguage.English)
-        assertEquals("Hold to talk", pageValue(res, "voice", AppSettings(dictationMode = DICTATION_HOLD)))
-        assertEquals("Tap to start", pageValue(res, "voice", AppSettings(dictationMode = DICTATION_TAP)))
+        for (mode in listOf(DICTATION_TAP, DICTATION_HOLD)) {
+            assertEquals("Keyboard off", pageValue(res, "voice", AppSettings(dictationMode = mode)))
+            assertEquals("Keyboard on", pageValue(res, "voice", AppSettings(dictationMode = mode), voiceKeyboard = true))
+        }
+        assertEquals("کی بورڈ آن", pageValue(V2Testing.resources(EchoLanguage.Urdu), "voice", AppSettings(), voiceKeyboard = true))
         // The keyboard reads the same value.
         assertEquals("push_to_talk", DICTATION_HOLD)
     }

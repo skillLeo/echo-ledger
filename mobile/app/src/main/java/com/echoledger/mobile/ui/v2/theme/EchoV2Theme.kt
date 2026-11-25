@@ -211,6 +211,9 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
 
     /** Buttons, labels and chips: 14 sp, strong. */
     val label = EchoTokens.Type.bodyStrong.face(EchoTokens.Type.urduCaption)
+
+    /** A section's title (v2.1 UX-16): 14 sp, medium. */
+    val section = EchoTokens.Type.section.face(EchoTokens.Type.urduCaption)
     val caption = EchoTokens.Type.caption.face(EchoTokens.Type.urduCaption)
     val captionStrong = EchoTokens.Type.caption.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face(EchoTokens.Type.urduCaption)
 
