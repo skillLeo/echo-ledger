@@ -1195,6 +1195,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (open || trash || !items) return;
     if (e.key === "/" && !mod) {
       e.preventDefault();
+      // In the shell the search is the title row's, outside the Library: / opens it as ⌘F (Edit › Find…) does.
+      if (inTitleRowRef.current && runAction("edit.find", { platform: currentPlatform() })) return;
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
       return;
     }
@@ -1233,13 +1235,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     } else if (e.key === "Escape" && panel && !e.defaultPrevented) {
       e.preventDefault();
       setPanel(false);
-    } else if ((e.key === "j" || e.key === "k") && !mod && !e.altKey) {
+    } else if (((e.key === "j" || e.key === "k") || ((e.key === "ArrowDown" || e.key === "ArrowUp") && focused && !e.shiftKey)) && !mod && !e.altKey) {
+      // J K, and ↓ ↑ on a row (FIX-06: the list by arrows too), go from row to row.
       const rows = [...(root.current?.querySelectorAll<HTMLElement>("[data-row-id]") ?? [])];
       if (!rows.length) return;
       e.preventDefault();
       const at = rows.findIndex((r) => r.dataset.rowId === focused);
-      const to = at < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, at + (e.key === "j" ? 1 : -1)));
+      const down = e.key === "j" || e.key === "ArrowDown";
+      const to = at < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, at + (down ? 1 : -1)));
       rows[to].focus();
+      rows[to].scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "x" && focused && !mod) {
       e.preventDefault();
       toggle(focused);

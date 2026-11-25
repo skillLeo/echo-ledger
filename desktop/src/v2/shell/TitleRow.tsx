@@ -72,6 +72,9 @@ function oneLine(start: HTMLElement): number {
   return width;
 }
 
+/** How long the title row's field takes the page's query, if it is one the field sent, for the page catching up. */
+const LATE_ANSWER_MS = 2000;
+
 /** The field's least width and the least drag room left between the title and the field (tokens desktop.search.*). */
 export const FIELD_LEAST = 180;
 export const DRAG_ROOM = 16;
@@ -143,9 +146,36 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
     return () => watch.disconnect();
   }, [title?.title, title?.count, !!toggle, end, narrow, open]);
   const search = title?.search ?? null;
+  // The field's own words: what is typed shows at once. The page's query comes back a moment later, through the title
+  // slot, and a key pressed meanwhile was lost ("invoice" typed fast read "invie"); an answer that is one of the field's
+  // own, late, is let go. A change from the page itself (the search cleared, another view) is taken.
+  const [draft, setDraft] = useState(search?.query ?? "");
+  /** What the field sent the page, and when: an answer that is one of these, lately, is the page catching up. */
+  const sent = useRef<{ value: string; at: number }[]>([]);
+  // Another place or view searches its own words: what the field sent before is no answer of its.
+  const owner = `${place ?? ""}|${search?.placeholder ?? ""}|${search?.scope ?? ""}`;
+  const ownerSeen = useRef(owner);
+  useEffect(() => {
+    const q = search?.query ?? "";
+    const now = Date.now();
+    if (ownerSeen.current !== owner) {
+      ownerSeen.current = owner;
+      sent.current = [];
+    }
+    sent.current = sent.current.filter((s) => now - s.at < LATE_ANSWER_MS);
+    if (q === draft || sent.current.some((s) => s.value === q)) return;
+    setDraft(q);
+    // Only the page's answer (or another page's) moves it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search?.query, owner]);
+  const type = (value: string) => {
+    sent.current = [...sent.current.slice(-30), { value, at: Date.now() }];
+    setDraft(value);
+    search?.setQuery(value);
+  };
   // Searching this view: the scope chip shows while the field has focus or a query.
   const [scoped, setScoped] = useState(false);
-  const shownScope = !!search && (scoped || !!search.query);
+  const shownScope = !!search && (scoped || !!draft);
   useEffect(() => {
     const follow = () => setNarrow(narrowNow());
     window.addEventListener("resize", follow);
@@ -163,7 +193,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
     findButton.current?.focus();
   }, [open]);
   // Words typed stay in sight: the field stays while it has them, even when the window narrows meanwhile.
-  const fieldShown = !tight || (!!search && (open || !!search.query));
+  const fieldShown = !tight || (!!search && (open || !!draft));
   useEffect(() => {
     if (!findSeq) return;
     if (search) {
@@ -178,7 +208,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
   const words = search?.placeholder ?? (place ? SEARCH_WORDS[place] : undefined) ?? EVERYTHING;
   const everyKeys = MAC ? "⌘K" : "Ctrl+K";
   const everything = (typed: string) => {
-    if (search && typed) search.setQuery("");
+    if (search && typed) type("");
     setScoped(false);
     onEverything(typed);
   };
@@ -220,15 +250,15 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
               <span className="el-titlerow__scope">
                 <span dir="auto">In: {search.scope}</span>
                 <button type="button" className="el-titlerow__unscope" aria-label="Search everything instead" title={`Search everything (${everyKeys})`}
-                  onMouseDown={(e) => e.preventDefault()} onClick={() => everything(search.query)}>
+                  onMouseDown={(e) => e.preventDefault()} onClick={() => everything(draft)}>
                   <Icon icon={Icons.CloseIcon} />
                 </button>
               </span>
             )}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={search.query} dir="auto"
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={draft} dir="auto"
               aria-keyshortcuts="Meta+F Control+F"
               onChange={(e) => {
-                search.setQuery(e.target.value);
+                type(e.target.value);
                 // Shown beside the ⌕ button for its words: being typed in, it stays open when they are deleted.
                 if (tight) setOpen(true);
               }}
@@ -239,14 +269,14 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
               onBlur={() => {
                 setScoped(false);
                 // Opened from the ⌕ button and left empty: the field closes back to it (focus stays where it went).
-                if (tight && !search.query) setOpen(false);
+                if (tight && !draft) setOpen(false);
               }}
               onKeyDown={(e) => {
                 if (e.key !== "Escape") return;
                 e.preventDefault();
                 e.stopPropagation();
-                if (search.query) {
-                  search.setQuery("");
+                if (draft) {
+                  type("");
                   // Opened across the row: it stays open, empty, for the next Esc.
                   if (tight) setOpen(true);
                 } else if (tight) {

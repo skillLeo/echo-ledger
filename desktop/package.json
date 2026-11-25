@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "test": "vitest run",
     "screenshots": "node scripts/screenshots.mjs",
-    "check:a11y": "node scripts/axeCheck.mjs"
+    "check:a11y": "node scripts/axeCheck.mjs",
+    "check:keyboard": "node scripts/keyboardLibrary.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

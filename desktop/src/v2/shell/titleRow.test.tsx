@@ -323,6 +323,50 @@ describe("the title row (UX-20)", () => {
     }
   });
 
+  it("typed fast, every key stays: the page's query comes back late (through the title slot) and never undoes one", async () => {
+    vi.useFakeTimers();
+    try {
+      // The page answers a moment later, as the shell's title slot does (a publish, then a render); each view keeps its
+      // own words (Needs you has "invo"), and the page can clear them itself (the no-match state's Clear search).
+      function Page({ view }: { view: string }) {
+        const [queries, setQueries] = useState<Record<string, string>>({ "Needs you": "invo" });
+        const late = (q: string) => window.setTimeout(() => setQueries((all) => ({ ...all, [view]: q })), 30);
+        return (
+          <>
+            <TitleRow {...base} title={{ title: view, count: 11, search: { placeholder: "Search recordings", scope: view, query: queries[view] ?? "", setQuery: late } }} />
+            <button type="button" onClick={() => setQueries((all) => ({ ...all, [view]: "" }))}>Clear search</button>
+          </>
+        );
+      }
+      const { rerender } = render(<Page view="All recordings" />);
+      const field = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      let typed = "";
+      for (const letter of "invoice") {
+        typed += letter;
+        fireEvent.change(field, { target: { value: typed } });
+        // The page answers with an older word while the next key is pressed.
+        act(() => { vi.advanceTimersByTime(10); });
+      }
+      expect(field).toHaveValue("invoice");
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(field).toHaveValue("invoice");
+      // A change from the page itself is taken at once: Clear search, and another view with its own words (even words
+      // the field sent a moment ago, "invo").
+      fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+      expect(field).toHaveValue("");
+      fireEvent.change(field, { target: { value: "invoice" } });
+      act(() => { vi.advanceTimersByTime(200); });
+      rerender(<Page view="Needs you" />);
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveValue("invo");
+      // Esc empties it.
+      fireEvent.keyDown(within(row()).getByRole("searchbox"), { key: "Escape" });
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(within(row()).getByRole("searchbox")).toHaveValue("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("narrow, without a search of the page's own: Search opens the search of everything", () => {
     const wide = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
