@@ -103,7 +103,8 @@ function indexEntry(entry: SettingEntry): Indexed {
     option: withOptions ? words(entry.options?.map((o) => o.label)) : [],
     description: words(entry.kind === "help" ? [entry.answer ?? ""] : entry.description ? [entry.description] : []),
     keyword: words(keywordList),
-    path: words(breadcrumbOf(entry).split(" › ")),
+    // The English path, whatever the window's language: the index is built once.
+    path: words(breadcrumbOf(entry, (english) => english).split(" › ")),
   };
   return {
     entry,
