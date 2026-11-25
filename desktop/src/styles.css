@@ -1661,7 +1661,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .nav-row.active { background: var(--accent-soft); }
 .nav-row.active .set-title { color: var(--accent-text); font-weight: 600; }
 .nav-row.active .set-icon { color: var(--accent-text); }
-.nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text); font-size: var(--text-xs); font-weight: 600; }
+/* Settings' search count only (D-002: a bare .nav-count here turned the sidebar's Activity badge grey). */
+.settings-root .nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text); font-size: var(--text-xs); font-weight: 600; }
 .settings-search { margin-bottom: var(--space-1); }
 .settings-single .settings-search { margin: var(--space-4) 0 0; }
 .set-search { width: 100%; min-width: 0; }
@@ -1815,6 +1816,8 @@ button.state-main:hover { background: var(--surface-3); }
 
 @container settings (max-width: 759px) {
   .profile-card { flex-wrap: wrap; }
+  /* D-229: the words at their own width, so Upgrade wraps under them instead of cutting the email short. */
+  .profile-body { flex: 1 1 auto; }
   .settings-single .set-end { max-width: 55%; }
 }
 .set-sub .btn.inline-link, .set-foot .btn.inline-link { background: transparent; color: var(--accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
