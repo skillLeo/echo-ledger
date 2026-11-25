@@ -438,6 +438,12 @@ describe("wire types", () => {
     expect(known).toContain("v21_urdu");
   });
 
+  it("an Activity item's person has the fields the Rust model reads (2.0.0-aa)", () => {
+    expect(sorted(tsInterfaceKeys("ActivityActor"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ActivityActor"), "ActivityActor", false)));
+    expect(rustFields(rustSourceDeclaring("struct", "ActivityItem"), "ActivityItem", false)).toContain("actor");
+    expect(tsInterfaceKeys("ActivityItem")).toContain("actor");
+  });
+
   it("a screen has the fields the Rust model reads, file_name and said included (2.0.0-e)", () => {
     expect(sorted(tsInterfaceKeys("ScreenMoment"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ScreenMoment"), "ScreenMoment", false)));
   });

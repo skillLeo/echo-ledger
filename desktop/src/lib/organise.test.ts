@@ -25,6 +25,15 @@ describe("the classic Waiting view (contract 2.0.0-z)", () => {
     // All has none of them, as on the server.
     expect(items.filter((i) => inSmartView(i, "all", NOW))).toEqual([]);
   });
+
+  it("D-243: a session still recording is in no view but Waiting, pinned, bookmarked, today's or this week's though it is", () => {
+    const call = makeItem("call", { status: "recording", started_at: ago(5 * 3_600_000), ended_at: ago(60_000), pinned: true, marker_count: 2 });
+    const views = (["all", "today", "this_week", "waiting", "bookmarked", "failed", "pinned"] as const).filter((v) => inSmartView(call, v, NOW));
+    expect(views).toEqual(["waiting"]);
+    // Kept, it is in them as any recording is.
+    const kept = { ...call, status: "uploaded" };
+    expect((["all", "today", "this_week", "bookmarked", "pinned"] as const).every((v) => inSmartView(kept, v, NOW))).toBe(true);
+  });
 });
 
 describe("smart views (B15)", () => {
@@ -44,8 +53,9 @@ describe("smart views (B15)", () => {
 
   it("puts each recording in the right views", () => {
     const ids = (view: Parameters<typeof inSmartView>[1]) => items.filter((i) => inSmartView(i, view, NOW)).map((i) => i.id);
-    expect(ids("today")).toEqual(["today", "waiting"]);
-    expect(ids("this_week")).toEqual(["today", "monday", "waiting"]);
+    // D-243: the call still waiting (session `recording`) is only in Waiting, as on the server, not in Today or This week.
+    expect(ids("today")).toEqual(["today"]);
+    expect(ids("this_week")).toEqual(["today", "monday"]);
     expect(ids("bookmarked")).toEqual(["sunday"]);
     expect(ids("failed")).toEqual(["failed", "tfailed"]);
     expect(ids("waiting")).toEqual(["waiting"]);
@@ -54,8 +64,9 @@ describe("smart views (B15)", () => {
   });
 
   it("counts every view", () => {
-    // All leaves out the call whose session is still `recording` (contract 2.0.0-z: only Waiting has it).
-    expect(smartViewCounts(items, NOW)).toEqual({ all: 5, today: 2, this_week: 3, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
+    // Every view but Waiting leaves out the call whose session is still `recording` (contract 2.0.0-z, D-243: only
+    // Waiting has it).
+    expect(smartViewCounts(items, NOW)).toEqual({ all: 5, today: 1, this_week: 2, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
   });
 });
 

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Tv
-import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -477,7 +477,9 @@ internal fun RecordStage(live: LiveRecording, onAction: ((String) -> Unit)? = nu
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
             if (live.active) {
                 if (pill.discarding) {
-                    StageButton(Icons.Rounded.Undo, "Undo", 48.dp, c.surface2, c.text) { act(RecordingService.ACTION_UNDO_DISCARD) }
+                    StageButton(Icons.AutoMirrored.Rounded.Undo, "Undo", 48.dp, c.surface2, c.text) {
+                        act(RecordingService.ACTION_UNDO_DISCARD)
+                    }
                 } else {
                     StageButton(Icons.Rounded.Close, "Discard", 48.dp, c.surface2, c.danger) {
                         act(RecordingService.ACTION_DISCARD_NOW)

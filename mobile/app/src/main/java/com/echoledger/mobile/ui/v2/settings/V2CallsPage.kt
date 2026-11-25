@@ -210,7 +210,9 @@ fun CallsPage(
                             !on -> stringResource(R.string.v2_calls_app_not)
                             settings.autoRecordArmed -> stringResource(R.string.v2_calls_app_auto)
                             else -> null
-                        }
+                        },
+                        // P-054: dimmed and fixed while Auto-record is off (the note above says why); each choice stays.
+                        enabled = settings.autoRecordArmed
                     )
                 }
                 settings.extraCallApps.forEach { pkg ->
