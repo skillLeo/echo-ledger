@@ -144,4 +144,20 @@ class AccountRulesTest {
         // The after-call card's caller number, the same way.
         assertEquals("\u2068+92 300\u202E1\u2069", com.echoledger.mobile.ui.v2.live.isolated("+92 300\u2069\u202E1"))
     }
+
+    /** A name that opens an isolate and never closes it can't leave the rest of the sentence isolated: each is closed. */
+    @Test
+    fun `every isolate a name opens is closed inside its own`() {
+        assertEquals("\u2068Ali\u2068evil\u2069\u2069", AccountFormat.isolate("Ali\u2068evil"))
+        assertEquals("\u2068Ali\u202E\u2066x\u2069\u2069", AccountFormat.isolate("Ali\u202E\u2066x"))
+    }
+
+    /** Left-to-right text (an address, a code) gets the same two rules inside its LRI…PDI. */
+    @Test
+    fun `an address or code can't close or leave open its isolate either`() {
+        assertEquals("\u2066Ali\u202Eevil\u2069", AccountFormat.ltr("Ali\u2069\u202Eevil"))
+        assertEquals("\u2066Ali\u2068evil\u2069\u2069", AccountFormat.ltr("Ali\u2068evil"))
+        assertEquals("\u2066Ali\u202E\u2066x\u2069\u2069", AccountFormat.ltr("Ali\u202E\u2066x"))
+        assertEquals("", AccountFormat.ltr(""))
+    }
 }

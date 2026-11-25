@@ -156,6 +156,9 @@ class V2WordsTest {
         assertEquals("ayesha@bilaltraders.pk کے طور پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in as ayesha@bilaltraders.pk"))
         assertEquals("3 لوگوں کو بھیج دی گئی", VmMessages.localize(ur, "Sent to 3 people"))
         assertEquals("\u2066echoledger.pk\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to echoledger.pk"))
+        // A server's text set between the sentence's own marks can't close them early or leave one open.
+        assertEquals("\u2066x\u202Ey\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to x\u2069\u202Ey"))
+        assertEquals("\u2066Ali\u2068evil\u2069\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to Ali\u2068evil"))
         // A server's own words have no key and show as they are.
         assertEquals(
             "Monthly limit reached — raise it in Settings",
