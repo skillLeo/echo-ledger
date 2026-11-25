@@ -47,6 +47,9 @@ import { isViewer, ROLE_LABEL, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
+import { call as accountCall, failureText, replyText } from "../../lib/account";
+import { useLanguage, type Lang } from "../../i18n";
+import { accountLanguage, useFollowLanguage } from "../../i18n/language";
 import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
@@ -233,6 +236,32 @@ export default function MainApp() {
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
+  // Desktop Urdu (v21_urdu), in the new design only: the window speaks the account's language (the last one known on
+  // this computer while it loads or can't be read; the system's only when signed out); Settings › Appearance › Language
+  // changes it on the server, for the web and the phone too.
+  const urdu = ui.flags.v21_urdu && !ui.classic && ui.flags["ui_v2.shell"];
+  useFollowLanguage(urdu, flagsKnown, status ? status.paired : null, account);
+  const lang = useLanguage();
+  const [languageError, setLanguageError] = useState<string | null>(null);
+  // One change at a time (PATCH /api/account allows 10 an hour, with name changes): a click while one is on its way,
+  // or on the language the account has already, sends nothing.
+  const languagePending = useRef(false);
+  const changeLanguage = async (next: Lang) => {
+    if (languagePending.current || next === (accountLanguage(account) ?? lang)) return;
+    languagePending.current = true;
+    setLanguageError(null);
+    try {
+      const reply = await accountCall<Account>("language", { language: next });
+      if (!reply.ok) return setLanguageError(replyText(reply));
+      // The server's account as it answers (the same as GET), so the window says what the server has.
+      const data = reply.data && typeof reply.data === "object" ? reply.data : null;
+      setAccount((now) => (now ? { ...now, ...data, language: accountLanguage(data) ?? next } : now));
+    } catch (e) {
+      setLanguageError(failureText(e));
+    } finally {
+      languagePending.current = false;
+    }
+  };
   // The person's photo for the rail's avatar (DES-08), kept on this computer by its version; the initials without one.
   const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
@@ -1118,7 +1147,7 @@ export default function MainApp() {
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
-  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom });
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
   const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
     .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
   const upgradeOpen = !!openUpgradeRequest(entitlements);
@@ -1312,6 +1341,7 @@ export default function MainApp() {
                       : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
                   : hasV2Page(section.id, ui.flags["ui_v2.library"])
                     ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
+                      language={urdu && account ? { value: accountLanguage(account) ?? lang, onChange: (l) => void changeLanguage(l), error: languageError } : undefined}
                       onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>

@@ -538,11 +538,12 @@ pub async fn account_call(app: AppHandle, action: String, id: Option<String>, bo
     ensure_unlocked(&state)?;
     let (method, path) = crate::my_account::route(&action, id.as_deref())?;
     let body = body.unwrap_or(serde_json::Value::Null);
-    if !body.is_null() && !body.is_object() {
+    if (!body.is_null() && !body.is_object()) || !crate::my_account::body_ok(&action, &body) {
         return Err(AppError::msg("That is not something this app can change."));
     }
     let reply = state.api()?.account_request(method, &path, &body).await?;
-    // The name, the picture or the email changed: the shell's avatar and name follow.
+    // The name, the picture or the email changed: announced as `account:changed`. No window listens yet; the main window
+    // takes each change (the language's too) from the reply it gets back.
     if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm") {
         let _ = app.emit("account:changed", ());
     }
