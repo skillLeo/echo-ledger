@@ -67,7 +67,7 @@
         @if ($accounts !== [])
             <p class="el-prose" style="padding-inline:16px">{{ __('Pay from any bank app, JazzCash, Easypaisa, NayaPay or SadaPay.') }}</p>
             @if ($accountTitle)
-                <p class="el-prose" style="padding-inline:16px">{{ __("Your app shows the account title before you confirm. It should say :title. If it doesn't, stop and contact us.", ['title' => $accountTitle]) }}</p>
+                <p class="el-prose" style="padding-inline:16px">{!! __("Your app shows the account title before you confirm. It should say :title. If it doesn't, stop and contact us.", ['title' => e($accountTitle)]) !!}</p>
             @endif
         @endif
 
@@ -75,7 +75,7 @@
             @if (in_array($stage, ['awaiting_payment', 'needs_receipt'], true))
                 <span class="el-set-text"><span class="el-set-sub" style="font-size:14px;line-height:20px">{{ __('Paid? Add a screenshot of the receipt so we can check it.') }}</span></span>
                 <a href="{{ $receiptUrl }}" class="el-btn el-btn-primary">{{ __('Add payment receipt') }}</a>
-                <a href="{{ $backUrl }}" class="el-btn el-btn-text" style="flex-basis:100%;justify-content:flex-start;padding-inline:0">{{ __("I'll pay later") }}</a>
+                <a href="{{ $backUrl }}" class="el-btn el-btn-text" style="flex-basis:100%;justify-content:flex-start;padding-inline:0">{!! htmlspecialchars(__("I'll pay later"), ENT_NOQUOTES) !!}</a>
             @else
                 <span class="el-set-text"><span class="el-set-sub" style="font-size:14px;line-height:20px">{{ __('We have your receipt and are checking it.') }}</span></span>
                 <a href="{{ $statusUrl }}" class="el-btn el-btn-primary">{{ __('View request') }}</a>

@@ -27,7 +27,7 @@
                         @foreach ($this->failed as $i => $failed)
                             <div class="el-rtile is-error" role="alert">
                                 <div class="el-rtile-pic">
-                                    <span>{{ __("Couldn't upload") }}</span>
+                                    <span>{!! htmlspecialchars(__("Couldn't upload"), ENT_NOQUOTES) !!}</span>
                                     <span class="el-rtile-name" style="color:inherit">{{ $failed['name'] }}</span>
                                 </div>
                                 <span class="el-rtile-meta" style="color:var(--danger)">{{ $failed['message'] }}</span>
@@ -68,7 +68,7 @@
                 <div class="el-form-field" style="border-top:1px solid var(--border)">
                     <label for="el-payer">{{ __('Paid from (optional)') }}</label>
                     <input id="el-payer" type="text" wire:model="payerName" maxlength="120" autocomplete="name" aria-describedby="el-payer-help">
-                    <p class="el-field-help" id="el-payer-help">{{ __("The name on the account you paid from, if it isn't yours.") }}</p>
+                    <p class="el-field-help" id="el-payer-help">{!! htmlspecialchars(__("The name on the account you paid from, if it isn't yours."), ENT_NOQUOTES) !!}</p>
                 </div>
             </div>
             <p class="el-set-foot">{{ __('Only our payments team sees your receipt. We delete it 90 days after we decide.') }}</p>

@@ -12,7 +12,7 @@
             <section class="el-set-section">
                 <div class="el-set-box el-approved">
                     @svg('heroicon-o-check-circle', ['aria-hidden' => 'true'])
-                    <h1 class="el-set-h1" style="margin-bottom:4px">{{ __("You're on :plan", ['plan' => \App\Filament\Support\UpgradeFlow::planName($request->approved_plan ?? $request->plan)]) }}</h1>
+                    <h1 class="el-set-h1" style="margin-bottom:4px">{!! __("You're on :plan", ['plan' => e(\App\Filament\Support\UpgradeFlow::planName($request->approved_plan ?? $request->plan))]) !!}</h1>
                     <p class="el-prose" style="margin:0">{{ $approvedLine }}</p>
                     <a href="{{ $backUrl }}" class="el-btn el-btn-primary" style="margin-top:16px;min-width:160px">{{ __('Done') }}</a>
                 </div>

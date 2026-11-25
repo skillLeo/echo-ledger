@@ -84,9 +84,8 @@ function upgradeUrduMain(object $test, string $url, ?UpgradeRequest $request = n
 }
 
 /**
- * Compares [$html] with the copy [$name] saved before the words were wrapped (UPDATE_GOLDEN=1 saves it again). Byte for
- * byte, but for one thing: an apostrophe the old template wrote as it is now comes through {{ __() }}, which writes it
- * as &#039; (the same character on the page), so both sides read it as '.
+ * Compares [$html] with the copy [$name] saved before the words were wrapped (UPDATE_GOLDEN=1 saves it again), byte for
+ * byte: a line with an apostrophe is written raw (ENT_NOQUOTES), as the old template wrote it.
  */
 function upgradeUrduGolden(string $name, string $html): void
 {
@@ -94,9 +93,8 @@ function upgradeUrduGolden(string $name, string $html): void
     if (getenv('UPDATE_GOLDEN') === '1') {
         file_put_contents($file, $html);
     }
-    $apostrophes = fn (string $page): string => str_replace('&#039;', "'", $page);
     expect(file_exists($file))->toBeTrue("no saved copy of {$name}: run with UPDATE_GOLDEN=1 once")
-        ->and($apostrophes($html))->toBe($apostrophes((string) file_get_contents($file)), "the English {$name} changed");
+        ->and($html)->toBe((string) file_get_contents($file), "the English {$name} changed");
 }
 
 /** Signs the person in with the console in this language, in the new design. */
@@ -380,7 +378,7 @@ it('words the Cancel request window and its notice in Urdu, then the cancelled r
     };
 
     $ur = $cancel('ur');
-    expect($ur)->toContain('آپ نے اپنی '.upgradeUrduIsolated('Pro').' کی درخواست منسوخ کر دی')->toContain('<span class="el-tag">منسوخ ہو گیا</span>')
+    expect($ur)->toContain('آپ نے اپنی '.upgradeUrduIsolated('Pro').' کی درخواست منسوخ کر دی')->toContain('<span class="el-tag">منسوخ</span>')
         ->toContain('آپ کسی بھی وقت دوبارہ شروع کر سکتے ہیں۔')->toContain('<span class="el-set-title">آپ نے منسوخ کی</span>')
         ->not->toContain('You cancelled your')->not->toContain('Cancelled by you');
     $en = $cancel('en');

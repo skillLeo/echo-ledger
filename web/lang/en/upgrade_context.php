@@ -12,4 +12,6 @@ return [
     'page_title' => 'Upgrade',
     // Under a receipt already sent, with the day it was sent ("Sent 17 Nov").
     'tile_sent' => 'Sent :date',
+    // The tag of a request the person cancelled, beside Approved and Waiting: a state, not a sentence.
+    'tag_cancelled' => 'Cancelled',
 ];

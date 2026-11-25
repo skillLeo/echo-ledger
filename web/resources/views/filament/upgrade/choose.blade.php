@@ -57,7 +57,7 @@
             <div class="el-set-box">
                 <div class="el-form-field">
                     <label for="el-note">{{ __('Note for our team (optional)') }}</label>
-                    <textarea id="el-note" rows="2" maxlength="500" wire:model="note" placeholder="{{ __("For example, an invoice in my company's name") }}"></textarea>
+                    <textarea id="el-note" rows="2" maxlength="500" wire:model="note" placeholder="{!! htmlspecialchars(__("For example, an invoice in my company's name"), ENT_COMPAT) !!}"></textarea>
                 </div>
             </div>
         </section>
@@ -72,7 +72,7 @@
                 {{ $free ? __('Switch on :plan', ['plan' => $selected?->name ?? '']) : __('Request :plan', ['plan' => $selected?->name ?? '']) }}
             </button>
             @if (! $free)
-                <p class="el-copy-label" style="flex-basis:100%">{{ __("You'll see our bank details on the next screen.") }}</p>
+                <p class="el-copy-label" style="flex-basis:100%">{!! htmlspecialchars(__("You'll see our bank details on the next screen."), ENT_NOQUOTES) !!}</p>
             @endif
             @if ($this->error)
                 <p class="el-error" role="alert" style="flex-basis:100%;margin:0">{{ $this->error }}</p>

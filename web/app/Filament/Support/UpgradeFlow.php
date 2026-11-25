@@ -192,7 +192,7 @@ final class UpgradeFlow
             'approved' => ['stage' => $stage, 'title' => __("You're on :plan", ['plan' => $plan]), 'tag' => __('Approved'), 'tone' => 'success',
                 'body' => [self::approvedLine($request, $plan)],
                 'primary' => null, 'secondary' => ['label' => 'Dismiss', 'action' => 'dismissRequest']],
-            'cancelled' => ['stage' => $stage, 'title' => __('You cancelled your :plan request', ['plan' => $plan]), 'tag' => __('Cancelled'), 'tone' => 'neutral',
+            'cancelled' => ['stage' => $stage, 'title' => __('You cancelled your :plan request', ['plan' => $plan]), 'tag' => __('upgrade_context.tag_cancelled'), 'tone' => 'neutral',
                 'body' => [__('You can start again any time.')], 'primary' => null, 'secondary' => null],
             default => ['stage' => 'awaiting_payment', 'title' => __(':plan requested', ['plan' => $plan]), 'tag' => __('Waiting for payment'), 'tone' => 'neutral',
                 'body' => [$reference !== null
