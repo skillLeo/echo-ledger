@@ -4,21 +4,20 @@
 // read-only (SharedReader), Save to my library makes a copy here, Remove takes it off the list. A link can be revoked
 // after asking; New request link opens the Request files sheet. Every row's ⋮ is always on screen (never on hover only)
 // and its right-click is the same menu; a row press (or Enter on it) opens what it stands for. Times are number isolates
-// so they read the right way round in Urdu. Built from v2 parts only.
+// so they read the right way round in Urdu. Built from v2 parts only. Its words are in the account's language (useT).
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
-import { audienceText, limitsText, linkState, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
-import { formatWhen } from "../../lib/format";
-import { recordingName } from "../../lib/library";
+import { audienceText, limitsText, linkStatus, receivedText, requestStatus, revokeLinkQuestion, revokeRequestQuestion, statusText, viewsText, type LinkStatus } from "../../lib/sharing";
 import { confirmAction } from "../../lib/confirm";
+import { isRtl, t, useT } from "../../i18n";
+import { formatWhen } from "../../lib/format";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { SHARED_TABS, type SharedTab } from "../../views/main/Sidebar";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
-import { sharedTitle } from "./model";
-import { senderOf } from "../../views/main/SharedView";
+import { dated, quoted, senderOf, sharedTitle, SLOT, when, withNode } from "./model";
 import { RequestLinkSheet } from "./RequestLinkSheet";
 
 /** What each tab lists, read when the page opens; null while loading (a server without it gives an empty list). */
@@ -28,21 +27,32 @@ interface SharedData {
   requests: RequestLink[] | null;
 }
 
-const STATE_TONE: Record<"Active" | "Revoked" | "Expired", Tone> = { Active: "success", Revoked: "neutral", Expired: "neutral" };
+const STATE_TONE: Record<LinkStatus, Tone> = { active: "success", revoked: "neutral", expired: "neutral" };
 
 type RowEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>;
 
-/** A time in a row's line, kept left-to-right as one piece inside right-to-left text. */
-/** A date and time with words ("Yesterday · 4:05 PM"): kept left to right in its own face; .el-num is for bare numbers. */
-const when = (iso: string) => <span className="el-ltr">{formatWhen(iso)}</span>;
-
-/** "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”", the time an isolate. */
+/**
+ * "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”". In English the time is its own
+ * left-to-right piece (.el-ltr); in Urdu the line is text, so the row reads its direction from its words (lineDir).
+ */
 export function sharedMeta(item: SharedItem): ReactNode {
-  return <>{item.kind === "project" ? "Project" : "Recording"} from {senderOf(item)}{item.sent_at && <> · {when(item.sent_at)}</>}{item.note ? ` · “${item.note}”` : ""}</>;
+  const name = senderOf(item);
+  const from = item.kind === "project" ? t("Project from :name", { name }) : t("Recording from :name", { name });
+  const note = item.note ? " · " + quoted(item.note) : "";
+  if (isRtl()) return [from, item.sent_at ? formatWhen(item.sent_at) : null].filter(Boolean).join(" · ") + note;
+  return <>{from}{item.sent_at && <> · {when(item.sent_at)}</>}{note}</>;
 }
-/** "3 views · last viewed Today · 9:00 AM", as lib/sharing's viewsText, the time an isolate. */
-const viewsLine = (link: ShareLink): ReactNode =>
-  link.view_count && link.last_viewed_at ? <>{viewsText({ ...link, last_viewed_at: null })} · last viewed {when(link.last_viewed_at)}</> : viewsText(link);
+/**
+ * A link's line: "Anyone with the link · 3 views · last viewed Today · 9:00 AM · until Nov 4 · 9:00 AM", as
+ * sharedMeta: the times their own pieces in English, one line of text in Urdu.
+ */
+function linkMeta(link: ShareLink): ReactNode {
+  if (isRtl()) return [audienceText(link), viewsText(link), link.expires_at ? t("until :date", { date: formatWhen(link.expires_at) }) : null].filter(Boolean).join(" · ");
+  const views = link.view_count && link.last_viewed_at
+    ? withNode(t(":views · last viewed :when", { views: viewsText({ ...link, last_viewed_at: null }), when: SLOT }), when(link.last_viewed_at))
+    : viewsText(link);
+  return <>{audienceText(link)} · {views}{link.expires_at && <> · {withNode(t("until :date", { date: SLOT }), when(link.expires_at))}</>}</>;
+}
 
 export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocusHandled, onOpenRecording, onOpenProject, onSaved }: {
   tab: SharedTab;
@@ -59,6 +69,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   /** Saved: a recording (`session_id`) or a project (`client_id`) is now in this workspace. */
   onSaved?: (saved: { session_id?: string; client_id?: string }, item: SharedItem) => void;
 }) {
+  const { t, tc, lang } = useT();
   const [data, setData] = useState<SharedData>({ withMe: null, links: null, requests: null });
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -99,11 +110,14 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   }, [focusId, data.withMe]);
 
   const titleOf = useMemo(() => {
-    const recordings = new Map(library.map((i) => [i.id, recordingName(i.title)]));
+    const recordings = new Map(library.map((i) => [i.id, i.title?.trim() || t("Recording")]));
     const names = new Map((projects ?? []).map((p) => [p.id, p.name]));
-    return (link: ShareLink) => (link.session_id ? recordings.get(link.session_id) ?? "A recording" : link.client_id ? `Project: ${names.get(link.client_id) ?? "a project"}` : "A link");
-  }, [library, projects]);
-  const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : null);
+    return (link: ShareLink) => (link.session_id ? recordings.get(link.session_id) ?? t("A recording")
+      : link.client_id ? t("Project: :name", { name: names.get(link.client_id) ?? t("a project") }) : t("A link"));
+    // The words are read again when the language changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library, projects, lang]);
+  const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? t("A project") : null);
 
   const save = async (item: SharedItem) => {
     if (busy) return;
@@ -111,7 +125,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     try {
       const saved = await api.saveShared(item.id);
       setData((d) => ({ ...d, withMe: (d.withMe ?? []).map((i) => (i.id === item.id ? { ...i, saved_at: new Date().toISOString() } : i)) }));
-      notify(item.kind === "project" ? `Saved ${item.title ?? "the project"} to your projects` : "Saved to your Library", false,
+      notify(item.kind === "project" ? (item.title !== null ? t("Saved :name to your projects", { name: item.title }) : t("Saved the project to your projects")) : t("Saved to your Library"), false,
         saved?.client_id ? { kind: "project", id: saved.client_id } : saved?.session_id ? { kind: "recording", id: saved.session_id } : NO_TARGET);
       onSaved?.(saved ?? {}, item);
     } catch (e) {
@@ -127,7 +141,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
       await api.removeShared(item.id);
       setData((d) => ({ ...d, withMe: (d.withMe ?? []).filter((i) => i.id !== item.id) }));
       if (openId === item.id) setOpenId(null);
-      notify("Removed from Shared with me", false, NO_TARGET);
+      notify(t("Removed from Shared with me"), false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
@@ -135,20 +149,20 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     }
   };
   const revokeLink = async (link: ShareLink) => {
-    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
+    if (!(await confirmAction(revokeLinkQuestion()))) return;
     try {
       await api.revokeShare(link.id);
-      notify("Link revoked: it stops working at once", false, NO_TARGET);
+      notify(t("Link revoked: it stops working at once"), false, NO_TARGET);
       load();
     } catch (e) {
       notify(errorMessage(e), true);
     }
   };
   const revokeRequest = async (link: RequestLink) => {
-    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
+    if (!(await confirmAction(revokeRequestQuestion()))) return;
     try {
       await api.revokeRequestLink(link.id);
-      notify("Request link revoked", false, NO_TARGET);
+      notify(t("Request link revoked"), false, NO_TARGET);
       void loadRequests();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -156,17 +170,17 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   };
 
   const withMeMenu = (item: SharedItem): MenuItem[] => [
-    ...(item.session ? [{ label: "Open", icon: Icons.TranscriptIcon, onPick: () => setOpenId(item.id) }] : []),
-    ...(item.saved_at ? [] : [{ label: "Save to my library", icon: Icons.DownloadIcon, disabled: busy === item.id, onPick: () => void save(item) }]),
-    { label: "Remove", icon: Icons.TrashIcon, danger: true, disabled: busy === item.id, onPick: () => void remove(item) },
+    ...(item.session ? [{ label: t("Open"), icon: Icons.TranscriptIcon, onPick: () => setOpenId(item.id) }] : []),
+    ...(item.saved_at ? [] : [{ label: t("Save to my library"), icon: Icons.DownloadIcon, disabled: busy === item.id, onPick: () => void save(item) }]),
+    { label: t("Remove"), icon: Icons.TrashIcon, danger: true, disabled: busy === item.id, onPick: () => void remove(item) },
   ];
   const openLink = (link: ShareLink) => (link.session_id ? onOpenRecording(link.session_id) : link.client_id ? onOpenProject(link.client_id) : undefined);
   const linkMenu = (link: ShareLink): MenuItem[] => [
-    ...(link.session_id || link.client_id ? [{ label: "Open", icon: link.session_id ? Icons.TranscriptIcon : Icons.FolderIcon, onPick: () => openLink(link) }] : []),
-    ...(linkState(link) === "Active" ? [{ label: "Revoke", icon: Icons.CloseIcon, danger: true, onPick: () => void revokeLink(link) }] : []),
+    ...(link.session_id || link.client_id ? [{ label: t("Open"), icon: link.session_id ? Icons.TranscriptIcon : Icons.FolderIcon, onPick: () => openLink(link) }] : []),
+    ...(linkStatus(link) === "active" ? [{ label: t("Revoke"), icon: Icons.CloseIcon, danger: true, onPick: () => void revokeLink(link) }] : []),
   ];
   const requestMenu = (link: RequestLink): MenuItem[] =>
-    requestState(link) === "Active" ? [{ label: "Revoke", icon: Icons.CloseIcon, danger: true, onPick: () => void revokeRequest(link) }] : [];
+    requestStatus(link) === "active" ? [{ label: t("Revoke"), icon: Icons.CloseIcon, danger: true, onPick: () => void revokeRequest(link) }] : [];
   const rowMenu = (label: string, items: MenuItem[]) => (e: RowEvent) => {
     if (items.length === 0) return;
     const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
@@ -176,8 +190,8 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
 
   const counts: Record<SharedTab, number | null> = {
     "with-me": data.withMe?.length ?? null,
-    links: data.links ? data.links.filter((l) => linkState(l) === "Active").length : null,
-    requests: data.requests ? data.requests.filter((l) => requestState(l) === "Active").length : null,
+    links: data.links ? data.links.filter((l) => linkStatus(l) === "active").length : null,
+    requests: data.requests ? data.requests.filter((l) => requestStatus(l) === "active").length : null,
   };
   const loading = (list: unknown[] | null, label: string) => list === null && !error && (
     <Loading label={label}><Card><div className="el-group__rows">{[0, 1, 2].map((n) => <SkeletonRow key={n} />)}</div></Card></Loading>
@@ -193,21 +207,21 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
 
   const withMePanel = (
     <>
-      {loading(data.withMe, "Loading what was shared with you…")}
-      {data.withMe?.length === 0 && <EmptyState icon={Icons.UsersIcon} title="Nothing sent to you yet" body="When a teammate sends you a recording or a project, it shows here." />}
+      {loading(data.withMe, t("Loading what was shared with you…"))}
+      {data.withMe?.length === 0 && <EmptyState icon={Icons.UsersIcon} title={t("Nothing sent to you yet")} body={t("When a teammate sends you a recording or a project, it shows here.")} />}
       {data.withMe && data.withMe.length > 0 && (
         <Card>
-          <List label="Shared with me" className="el-group__rows">
+          <List label={t("Shared with me")} className="el-group__rows">
             {data.withMe.map((item) => {
               const title = sharedTitle(item);
               return (
                 <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focused} actionsShown="always" metaLines={2}
                   leading={item.session ? <SourceAvatar item={item.session} /> : undefined} icon={item.session ? undefined : Icons.FolderIcon}
-                  endTop={item.saved_at ? "Saved" : undefined}
+                  endTop={item.saved_at ? t("Saved") : undefined}
                   // A recording opens read-only; a project sent to you has nothing to open until it is saved: its menu opens.
-                  onClick={item.session ? () => setOpenId(item.id) : rowMenu(`Actions for ${title}`, withMeMenu(item))}
-                  onContextMenu={rowMenu(`Actions for ${title}`, withMeMenu(item))}
-                  actions={more(`More for ${title}`, () => withMeMenu(item))} />
+                  onClick={item.session ? () => setOpenId(item.id) : rowMenu(t("Actions for :name", { name: title }), withMeMenu(item))}
+                  onContextMenu={rowMenu(t("Actions for :name", { name: title }), withMeMenu(item))}
+                  actions={more(t("More for :name", { name: title }), () => withMeMenu(item))} />
               );
             })}
           </List>
@@ -218,22 +232,22 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
 
   const linksPanel = (
     <>
-      {loading(data.links, "Loading your links…")}
-      {data.links?.length === 0 && <EmptyState icon={Icons.LinkIcon} title="No links yet" body="Share a recording or a project from its page; the link shows here with its views." />}
+      {loading(data.links, t("Loading your links…"))}
+      {data.links?.length === 0 && <EmptyState icon={Icons.LinkIcon} title={t("No links yet")} body={t("Share a recording or a project from its page; the link shows here with its views.")} />}
       {data.links && data.links.length > 0 && (
         <Card>
-          <List label="My links" className="el-group__rows">
+          <List label={t("My links")} className="el-group__rows">
             {data.links.map((link) => {
-              const state = linkState(link);
+              const state = linkStatus(link);
               const title = titleOf(link);
               const items = linkMenu(link);
               return (
                 <ListRow key={link.id} rowId={link.id} icon={link.client_id && !link.session_id ? Icons.FolderIcon : Icons.LinkIcon} title={title} actionsShown="always" metaLines={2}
-                  meta={<>{audienceText(link)} · {viewsLine(link)}{link.expires_at && <> · until {when(link.expires_at)}</>}</>}
-                  badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
+                  meta={linkMeta(link)}
+                  badge={<Badge tone={STATE_TONE[state]}>{statusText(state)}</Badge>}
                   onClick={link.session_id || link.client_id ? () => openLink(link) : undefined}
-                  onContextMenu={rowMenu(`Actions for ${title}`, items)}
-                  actions={items.length > 0 ? more(`More for ${title}`, () => linkMenu(link)) : undefined} />
+                  onContextMenu={rowMenu(t("Actions for :name", { name: title }), items)}
+                  actions={items.length > 0 ? more(t("More for :name", { name: title }), () => linkMenu(link)) : undefined} />
               );
             })}
           </List>
@@ -244,23 +258,24 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
 
   /** The request links' rows: state, where files go, what came in, the limits, when it stops, and Revoke in the ⋮. */
   const requestRows = (list: RequestLink[]) => list.map((link) => {
-    const state = requestState(link);
-    const title = link.title || "Request link";
+    const state = requestStatus(link);
+    const title = link.title || t("Request link");
     const items = requestMenu(link);
+    const into = projectName(link.client_id);
     return (
       <ListRow key={link.id} rowId={link.id} icon={Icons.RequestFilesIcon} title={title} actionsShown="always" metaLines={2}
-        meta={[projectName(link.client_id) ? `Into ${projectName(link.client_id)}` : "Into no project", receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
-        endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
-        badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
-        onContextMenu={rowMenu(`Actions for ${title}`, items)}
-        actions={items.length > 0 ? more(`More for ${title}`, () => requestMenu(link)) : undefined} />
+        meta={[into ? t("Into :project", { project: into }) : t("Into no project"), receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
+        endTop={link.expires_at ? dated((date) => (state === "active" ? t("Stops :date", { date }) : t("Stopped :date", { date })), link.expires_at) : t("Never stops")}
+        badge={<Badge tone={STATE_TONE[state]}>{statusText(state)}</Badge>}
+        onContextMenu={rowMenu(t("Actions for :name", { name: title }), items)}
+        actions={items.length > 0 ? more(t("More for :name", { name: title }), () => requestMenu(link)) : undefined} />
     );
   });
   const requestsPanel = (
     <>
-      {loading(data.requests, "Loading your request links…")}
-      {data.requests?.length === 0 && <EmptyState icon={Icons.RequestFilesIcon} title="No request links yet" body="A request link lets anyone send you voice notes and files, without an account." />}
-      {data.requests && data.requests.length > 0 && <Card><List label="Request links" className="el-group__rows">{requestRows(data.requests)}</List></Card>}
+      {loading(data.requests, t("Loading your request links…"))}
+      {data.requests?.length === 0 && <EmptyState icon={Icons.RequestFilesIcon} title={t("No request links yet")} body={t("A request link lets anyone send you voice notes and files, without an account.")} />}
+      {data.requests && data.requests.length > 0 && <Card><List label={t("Request links")} className="el-group__rows">{requestRows(data.requests)}</List></Card>}
     </>
   );
 
@@ -268,22 +283,23 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     <div className="el-page el-back-top-room" data-v2="shared">
       <header className="el-page__head">
         <div className="el-page__titles">
-          <h1 className="el-title-l">Shared</h1>
-          <p className="el-secondary" dir="auto">What teammates sent you, the links you made, and links people use to send you files.</p>
+          <h1 className="el-title-l">{t("Shared")}</h1>
+          <p className="el-secondary" dir="auto">{t("What teammates sent you, the links you made, and links people use to send you files.")}</p>
         </div>
         <div className="el-page__actions">
-          <Button variant="primary" icon={Icons.PlusIcon} onClick={() => setNewRequest(true)}>New request link</Button>
+          <Button variant="primary" icon={Icons.PlusIcon} onClick={() => setNewRequest(true)}>{t("New request link")}</Button>
         </div>
       </header>
 
       {error && (
-        <Banner tone="danger" icon={Icons.ErrorIcon} action={<Button size="sm" onClick={load}>Retry</Button>}>
-          Couldn't load everything. {error}
+        <Banner tone="danger" icon={Icons.ErrorIcon} action={<Button size="sm" onClick={load}>{t("Retry")}</Button>}>
+          {t("Couldn't load everything. :error", { error })}
         </Banner>
       )}
 
-      <Tabs label="Shared" value={tab} onChange={onTab}
-        tabs={SHARED_TABS.map(([value, label]) => ({ value, label: counts[value] === null ? label : `${label} · ${counts[value]}` }))}>
+      {/* The tabs' names are the sidebar's (SHARED_TABS, in English), put in the account's language here. */}
+      <Tabs label={t("Shared")} value={tab} onChange={onTab}
+        tabs={SHARED_TABS.map(([value, label]) => ({ value, label: counts[value] === null ? t(label) : tc(":tab · :count", counts[value] ?? 0, { tab: t(label) }) }))}>
         {tab === "with-me" ? withMePanel : tab === "links" ? linksPanel : requestsPanel}
       </Tabs>
 

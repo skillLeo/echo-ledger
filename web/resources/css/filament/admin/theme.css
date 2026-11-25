@@ -905,6 +905,15 @@ thead .fi-ta-selection-cell {
     background-color: var(--surface-2);
 }
 
+/* P-043: a row with nowhere to go keeps the row's padding (and UX-18's avatar), without the pointer or the hover. */
+.el-row-btn.el-row-static {
+    cursor: default;
+}
+
+.el-row-btn.el-row-static:hover {
+    background-color: transparent;
+}
+
 /* One row: tile, title + second line, time and (only when it needs the person) a status. */
 .el-row {
     display: flex;

@@ -123,6 +123,18 @@ class Activity extends Page
         }
     }
 
+    /**
+     * P-043: the quiet Mark as read on a row with nowhere to go (it isn't a button, so a problem is cleared on its own,
+     * never just by being seen). Only the person's own notifications.
+     */
+    public function markRead(string $id): void
+    {
+        $notification = $this->user()?->notifications()->find($id);
+        if ($notification instanceof DatabaseNotification) {
+            $notification->markAsRead();
+        }
+    }
+
     /** UX-22 3b: an Activity item's right-click menu: Open · Mark as read | Retry (an upload that failed). */
     public const OBJECT_ACTIONS = ['activity' => ['place.open', 'activity.markRead', 'activity.retry']];
 
@@ -163,6 +175,7 @@ class Activity extends Page
             // In the reader's language (W-218); notifications made before keep their stored words.
             $item = [...ActivityFeed::payload($notification), ...ActivityFeed::localized($notification)];
             $at = $notification->created_at?->copy()->setTimezone($zone);
+            $target = $this->user() instanceof User ? NoticeTargets::forNotification($notification, $this->user()) : null;
             // In the console's language (W-213: "17 نومبر 2026 · 11:42 صبح"; English reads exactly as before).
             $item += [
                 'time' => $at === null ? '' : ($at->gte($today) ? ConsoleDates::time($at, Shell::timeFormat()) : ConsoleDates::day($at)),
@@ -171,10 +184,12 @@ class Activity extends Page
                 // UX-18: the person it is about, whose avatar takes the tile's place (the new console only).
                 'person' => $people[$notification->id] ?? null,
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
+                // P-043: only an item that opens something is a button; one with nowhere to go is a plain row.
+                'opens' => $target !== null,
                 // UX-22 3b: what its menu leaves out (Open with nothing to open, Mark as read once read, Retry but for a
                 // failed upload).
                 'not' => implode(' ', array_keys(array_filter([
-                    'place.open' => $this->user() instanceof User && NoticeTargets::forNotification($notification, $this->user()) === null,
+                    'place.open' => $this->user() instanceof User && $target === null,
                     'activity.markRead' => (bool) $item['read'],
                     'activity.retry' => $item['kind'] !== 'upload_failed',
                 ]))),

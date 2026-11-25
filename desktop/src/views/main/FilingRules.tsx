@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { api, errorMessage, type ClientFolder, type FilingRule, type LibraryItem, type RuleKind } from "../../lib/ipc";
 import { SOURCE_APP_LABELS } from "../../lib/format";
-import { filedByRuleText, RULE_APPS, RULE_KINDS, ruleText } from "../../lib/sharing";
+import { filedByRuleText, RULE_APPS, ruleKinds, ruleText } from "../../lib/sharing";
 import { PlusIcon, TrashIcon } from "../../components/Icons";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
@@ -53,7 +53,7 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
       const { data } = await api.addClientRule(project.id, kind, text);
       setRules((list) => [...(list ?? []).filter((r) => r.id !== data.id), data]);
       setValue("");
-      notify(`Rule added: ${ruleText(data)}`, false, NO_TARGET);
+      notify(`Rule added: ${ruleText(data, "en")}`, false, NO_TARGET);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -77,7 +77,7 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
       <div className="row">
         <b id={`${kindId}-title`}>Filing rules</b>
         <span className="small muted rules-summary">
-          {rules === undefined ? "Loading…" : unread ? "Couldn't load them. Check the connection." : list.length === 0 ? "None yet" : list.map(ruleText).join(" · ")}
+          {rules === undefined ? "Loading…" : unread ? "Couldn't load them. Check the connection." : list.length === 0 ? "None yet" : list.map((rule) => ruleText(rule, "en")).join(" · ")}
         </span>
         <span className="spacer" />
         <button type="button" className="btn ghost compact" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : "Edit rules"}</button>
@@ -91,8 +91,8 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
             <ul className="rules-list" aria-label={`${project.name} filing rules`}>
               {list.map((rule) => (
                 <li key={rule.id} className="rule-row">
-                  <span className="rule-text" dir="auto">{ruleText(rule)}</span>
-                  <button type="button" className="btn ghost compact icon-only" aria-label={`Remove the rule ${ruleText(rule)}`} disabled={busy} onClick={() => void remove(rule)}><TrashIcon size={15} /></button>
+                  <span className="rule-text" dir="auto">{ruleText(rule, "en")}</span>
+                  <button type="button" className="btn ghost compact icon-only" aria-label={`Remove the rule ${ruleText(rule, "en")}`} disabled={busy} onClick={() => void remove(rule)}><TrashIcon size={15} /></button>
                 </li>
               ))}
             </ul>
@@ -100,7 +100,7 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
           <form className="rule-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
             <label htmlFor={kindId} className="sr-only">Kind of rule</label>
             <select id={kindId} className="select" value={kind} onChange={(e) => { setKind(e.target.value as RuleKind); setValue(""); setError(null); }}>
-              {RULE_KINDS.map(([k, label]) => <option dir="auto" key={k} value={k}>{label}</option>)}
+              {ruleKinds("en").map(([k, label]) => <option dir="auto" key={k} value={k}>{label}</option>)}
             </select>
             <label htmlFor={valueId} className="sr-only">{kind === "app" ? "App" : kind === "contact" ? "Contact number or email" : "Title contains"}</label>
             {kind === "app" ? (
@@ -141,5 +141,5 @@ export function FiledByLine({ item }: { item: Pick<LibraryItem, "id" | "title" |
     return <div className="filed-by small muted" data-testid="filed-by">Filed by contact: the caller is one of {item.client.name}'s contacts</div>;
   }
   if (!byRule) return null;
-  return <div className="filed-by small muted" data-testid="filed-by">{filedByRuleText(item, rules)}</div>;
+  return <div className="filed-by small muted" data-testid="filed-by">{filedByRuleText(item, rules, "en")}</div>;
 }

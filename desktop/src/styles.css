@@ -929,8 +929,8 @@ audio.player { display: none; }
 .activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .activity-item { display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left; background: transparent; border: 0; border-radius: var(--radius-field); padding: 10px var(--space-3); color: var(--text); cursor: pointer; font: inherit; transition: background-color var(--motion-fast) var(--ease-out); }
 .activity-item:hover { background: var(--surface-3); }
-.activity-item:disabled { cursor: default; }
-.activity-item:disabled:hover { background: transparent; }
+.activity-item:disabled, .activity-item.static { cursor: default; }
+.activity-item:disabled:hover, .activity-item.static:hover { background: transparent; }
 .activity-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .activity-title { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 15px; min-width: 0; }
 .activity-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

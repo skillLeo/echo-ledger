@@ -6,8 +6,6 @@
 export const DESKTOP_OVERRIDES: Readonly<Record<string, string>> = {
   "You'll be signed out on every phone, computer and browser, including this one.":
     "This computer, not this browser: in the app \"this one\" is the computer it runs on (اس کمپیوٹر سے بھی), where the web's line says this browser (اس براؤزر سے بھی).",
-  "About & help":
-    "EL-UX's decided term for About on all three is معلومات (D3b review): the group says معلومات اور مدد; the web's line still says تعارف.",
   ":count recordings":
     "Two forms: the account card's count of recordings (one English form, given to tc() alone) says ریکارڈنگ for 1, where the web's line has the plural only.",
 };

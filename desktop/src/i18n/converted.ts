@@ -14,6 +14,12 @@ export const CONVERTED: readonly string[] = [
   "v2/library/model.ts",
   "v2/library/scope.ts",
   "v2/library/syncClock.ts",
+  // D2: Shared with me, its read-only view and the Request files sheet, with the sharing words they show.
+  "v2/shared/",
+  "lib/sharing.ts",
+  // and what the new design opens with them: the share sheet (the recording page's Share) and a project's filing rules.
+  "views/main/ShareDialog.tsx",
+  "v2/workspace/Rules.tsx",
   // D3a: Settings' pages, their rows and frame, the home with the account card, in the new look (the groups' words are
   // translated where they are shown: groups.ts keeps them as English ids; the registry's words are D3b's).
   "v2/settings/AccountCard.tsx",
