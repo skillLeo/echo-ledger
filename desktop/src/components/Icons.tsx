@@ -427,6 +427,10 @@ export const LucideEyeOffIcon = L([
 ]);
 export const LucideFileTextIcon = L(["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]);
 export const LucideXIcon = L(["M18 6 6 18", "m6 6 12 12"]);
+/** A server (Activity's server_problem, 2.0.0-v: the server lacks what uploads need; super admins only). Lucide server. */
+export const LucideServerIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /><rect width="20" height="8" x="2" y="14" rx="2" ry="2" /><path d="M6 6h.01" /><path d="M6 18h.01" /></Svg>
+);
 /** The window's own buttons on Windows (UX-20, v21_win_titlebar): Minimize (Lucide minus) and Maximize (Lucide square). */
 export const LucideMinusIcon = L(["M5 12h14"]);
 export const LucideSquareIcon = (p: IconProps) => (

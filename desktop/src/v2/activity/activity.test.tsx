@@ -115,6 +115,17 @@ describe("the v2 Activity page", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("an upload that has since reached the server (resolved) offers no Retry: only Open", async () => {
+    respond("activity_list", { data: [
+      { id: "n6", kind: "upload_failed", title: "Uploaded", body: "Voice note", session_id: "s6", read: true, resolved: true, at: new Date(2026, 9, 28, 8, 0).toISOString() }], unread_count: 0 });
+    const { onFailed } = await show();
+    fireEvent.contextMenu(row("Uploaded"), { clientX: 20, clientY: 30 });
+    const words = [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    expect(words).toEqual(["Open"]);
+    expect(screen.queryByRole("menuitem", { name: "Retry" })).toBeNull();
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
   it("groups the rest by Today and Earlier, the time today and the day before; a recovered recording says Recovered", async () => {
     respond("recovered_sessions", ["s1"]);
     await show();
@@ -148,6 +159,25 @@ describe("the v2 Activity page", () => {
     expect(callsOf("skipped_restore")).toEqual([{ id: "b" }]);
     expect(line).toHaveTextContent("Skipped 1 short call");
     expect(say).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.");
+  });
+
+  it("2.0.0-v: the server's own problem (super admins only) shows its words as they are, with the server's icon; fixed, it is done", async () => {
+    respond("activity_list", { data: [
+      { id: "s1", kind: "server_problem", title: "Uploads are failing: the server's PHP is missing sodium", body: "sudo apt install php8.3-sodium", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: NOW.toISOString(), resolved: true },
+    ], unread_count: 2 });
+    const { onItems } = await show();
+    const open = row("Uploads are failing: the server's PHP is missing sodium");
+    expect(open).toHaveTextContent("sudo apt install php8.3-sodium");
+    // The server's icon (Lucide server: its two racks' dots), not the bell or the generic error.
+    expect(open.querySelector('svg path[d="M6 6h.01"]')).not.toBeNull();
+    const fixed = row("Fixed: uploads work again");
+    expect(fixed.querySelector('svg path[d="M6 6h.01"]')).toBeNull();
+    expect(fixed.querySelector('svg path[d="m9 12 2 2 4-4"]'), "done: the ready check").not.toBeNull();
+    // Only the open one needs the person.
+    const counted = (onItems.mock.calls.at(-1)?.[0] ?? []) as { id: string }[];
+    expect(counted.map((i) => i.id)).toEqual(["s1", "s2"]);
+    expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
   });
 
   it("loading, a load error with Retry, and All caught up", async () => {
