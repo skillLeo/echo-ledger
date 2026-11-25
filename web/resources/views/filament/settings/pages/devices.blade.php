@@ -11,24 +11,24 @@
             <span class="el-set-value">{{ $device['value'] }}</span>
         </button>
     @endforeach
-    <x-el.row setting="devices.pair" title="Sign in a device" click="mountAction('signInDevice')" />
+    <x-el.row setting="devices.pair" :title="__('Sign in a device')" click="mountAction('signInDevice')" />
 </x-el.section>
 @if ($devices === [])
-    <p class="el-set-foot">No phone or computer is signed in yet.</p>
+    <p class="el-set-foot">{{ __('No phone or computer is signed in yet.') }}</p>
 @endif
 
-<x-el.section title="Connected apps">
+<x-el.section :title="__('Connected apps')">
     @if ($connectorLocked)
-        <x-el.row setting="devices.connected" title="Ask an AI assistant" :href="$connectorUrl" :tag="$connectorTag" />
+        <x-el.row setting="devices.connected" :title="__('Ask an AI assistant')" :href="$connectorUrl" :tag="$connectorTag" />
     @elseif ($apps === [])
-        <x-el.row setting="devices.connected" title="Ask an AI assistant" value="Not connected" />
+        <x-el.row setting="devices.connected" :title="__('Ask an AI assistant')" :value="__('Not connected')" />
     @else
         @foreach ($apps as $app)
             <div class="el-set-row" @if ($loop->first) id="setting-devices.connected" tabindex="-1" data-setting="devices.connected" @endif>
                 <span class="el-set-text"><span class="el-set-title">{{ $app['name'] }}</span><span class="el-set-sub">{{ $app['value'] }}</span></span>
-                <button type="button" class="el-btn el-btn-text is-danger" wire:click="mountAction('disconnectApp', { app: {{ $app['id'] }} })">Disconnect</button>
+                <button type="button" class="el-btn el-btn-text is-danger" wire:click="mountAction('disconnectApp', { app: {{ $app['id'] }} })">{{ __('Disconnect') }}</button>
             </div>
         @endforeach
     @endif
 </x-el.section>
-<p class="el-set-foot">AI assistants you allowed to read your recordings. They can only read.</p>
+<p class="el-set-foot">{{ __('AI assistants you allowed to read your recordings. They can only read.') }}</p>

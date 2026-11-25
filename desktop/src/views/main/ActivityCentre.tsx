@@ -9,8 +9,8 @@ import { useWindowShown } from "../../lib/visibility";
 import { formatWhen } from "../../lib/format";
 import { dayGroup, recordingName } from "../../lib/library";
 import { skippedLine, skippedMeta, uploadTitle, waitingItems, waitingSummary } from "../../lib/pending";
-import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
-import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
+import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon, LucideServerIcon } from "../../components/Icons";
+import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction, SERVER_PROBLEM } from "../../lib/badge";
 import { PageHeader } from "../../components/Page";
 import { CheckIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
@@ -81,7 +81,10 @@ export function useActivityItems(): [ActivityItem[], (items: ActivityItem[]) => 
   return [items, setItems];
 }
 
-function ActivityTile({ kind }: { kind: string | null }) {
+function ActivityTile({ kind, resolved = false }: { kind: string | null; resolved?: boolean }) {
+  // A problem that is over is done; the server's own (server_problem, 2.0.0-v) shows the server, in the problem's red.
+  if (resolved && isProblem(kind)) return <span className="activity-tile"><CheckIcon size={20} /></span>;
+  if (kind === SERVER_PROBLEM) return <span className="activity-tile failed"><LucideServerIcon size={20} /></span>;
   if (isProblem(kind)) return <span className="activity-tile failed"><AlertIcon size={20} /></span>;
   if (kind === "transcript_ready") return <span className="activity-tile"><CheckIcon size={20} /></span>;
   if (kind === "device_paired") return <span className="activity-tile neutral"><DesktopIcon size={20} /></span>;
@@ -199,7 +202,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
   const row = (i: ActivityItem) => (
     <li key={i.id}>
       <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>
-        <ActivityTile kind={i.kind} />
+        <ActivityTile kind={i.kind} resolved={i.resolved} />
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
