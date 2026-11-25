@@ -17,7 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The flags this app knows, as the contract names them.
-pub const KNOWN: [&str; 15] = [
+pub const KNOWN: [&str; 16] = [
     "ui_v2.shell",
     "ui_v2.home",
     "ui_v2.library",
@@ -36,6 +36,8 @@ pub const KNOWN: [&str; 15] = [
     "v21_win_titlebar",
     // UX-07 (PLAN_V2_1_POLISH): zoom like Chrome in the main window (contract 2.0.0-r).
     "v21_zoom",
+    // Desktop Urdu: the window speaks the account's language (src/i18n). Without it here the window never heard it.
+    "v21_urdu",
 ];
 
 /// The event the window hears when the cached flags change.
@@ -175,6 +177,13 @@ mod tests {
             assert!(UiFlags::read(raw.as_ref(), false).flags.values().all(|on| !on), "{raw:?}");
         }
         assert_eq!(UiFlags::default(), UiFlags::read(None, false));
+    }
+
+    #[test]
+    fn the_urdu_flag_reaches_the_window() {
+        // Desktop Urdu: the server's v21_urdu is on for the window only when this list knows it.
+        assert!(UiFlags::read(Some(&json!({"v21_urdu": true})), false).is_on("v21_urdu"));
+        assert!(!UiFlags::read(Some(&json!({"v21_urdu": false})), false).is_on("v21_urdu"));
     }
 
     #[test]
