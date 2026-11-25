@@ -138,6 +138,7 @@ describe("the way back to all recordings", () => {
 
   it("a built-in view's menu (UX-22): Open; Unread's Mark all as read; Audio only's Transcribe all…", async () => {
     respond("session_opened", null);
+    respond("sessions_opened", null); // a server before 2.0.0-y: one request per recording
     respond("sessions_transcribe_estimate", { minutes: 5, minutes_left: 300, items: [] });
     render(<App />);
     await settle();

@@ -122,7 +122,7 @@ final class SharingActions
     {
         return Action::make('send')
             ->label(__('Send to a teammate'))
-            ->icon(Heroicon::OutlinedPaperAirplane)
+            ->icon(RtlIcons::icon(Heroicon::OutlinedPaperAirplane))
             ->modalDescription(__('They find it in Shared with me, can read and play it, and can save their own copy. People without an account here will not receive it.'))
             ->schema([
                 TagsInput::make('to')->label(__('Their emails'))->placeholder('name@example.com')->required()

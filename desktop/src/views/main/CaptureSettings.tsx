@@ -24,11 +24,12 @@ import { sourceAppLabel } from "../../lib/format";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../lib/explainer";
 import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { SKIP_SHORTER_THAN } from "../../lib/pending";
+import { skipShorterThan } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
 import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
+import { t } from "../../i18n";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
@@ -90,7 +91,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
       <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
-        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => [String(s), label] as const)}
+        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan("en").map(([s, label]) => [String(s), label] as const)}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Section>
       <Section title="Websites">
@@ -139,7 +140,7 @@ function WhyNotRecorded() {
         {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
           <ul className="why-list">
             {users.map((u, i) => (
-              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u, "en")}</b>: {decisionText(u)}</li>
             ))}
           </ul>
         )}
@@ -171,13 +172,13 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
     const pattern = rulePattern(rule);
     const label = isNeverRule(rule) ? `Never record ${pattern}` : `Record calls on ${pattern}`;
     return (
-      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
         <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} onClick={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />
       </EntityRow>
     );
   };
   const userRow = (rule: SiteRule) => (
-    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
       <button type="button" className="btn ghost compact" aria-label={`Remove ${rulePattern(rule)}`} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>Remove</button>
     </EntityRow>
   );
@@ -213,19 +214,19 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
 /** What the test result says to the user, one sentence per side. */
 export function testVerdict(result: Pick<TestResult, "micHeard" | "systemHeard">): string[] {
   return [
-    result.micHeard ? "Your microphone is working." : "We didn't hear your microphone. Check the microphone above and its permission.",
+    result.micHeard ? t("Your microphone is working.") : t("We didn't hear your microphone. Check the microphone above and its permission."),
     result.systemHeard
-      ? "Sound from this computer was captured."
-      : "No sound from this computer was captured. Play something during the test to check the other side of calls.",
+      ? t("Sound from this computer was captured.")
+      : t("No sound from this computer was captured. Play something during the test to check the other side of calls."),
   ];
 }
 
 export const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
-  allowed: "Allowed",
-  denied: "Not allowed",
-  unknown: "Asked on first use",
+  get allowed() { return t("Allowed"); },
+  get denied() { return t("Not allowed"); },
+  get unknown() { return t("Asked on first use"); },
   // Screen Recording only; never the microphone, kept for completeness.
-  reopen: "Allowed: quit and reopen EchoLedger to finish",
+  get reopen() { return t("Allowed: quit and reopen EchoLedger to finish"); },
 };
 
 /** Recording › Microphone & audio. */

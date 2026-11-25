@@ -14,6 +14,7 @@ import { fillWidth } from "../../lib/motion";
 import { CheckIcon } from "../../components/ControlIcons";
 import { ActionRow, ConfirmDialog, InfoRow, LinkRow, Section, Tag, rowAttrs } from "./SettingsControls";
 import { confirmAction } from "../../lib/confirm";
+import { t, tc, wordsIn, type Lang } from "../../i18n";
 
 export { UpgradeSheet } from "./UpgradeFlow";
 
@@ -85,21 +86,22 @@ export function LockedChip({ feature, label }: { feature: string; label: string 
 
 /** "3 hours", "30 days", "1 year", "Up to 50": a plan's limits as people read them. */
 export function limitText(key: string, value: number | null | undefined): string {
-  if (value === null) return "No limit";
+  if (value === null) return t("No limit");
   if (value === undefined) return "";
+  // Counts through tc() (the window's language; English as it always was, "1 minutes" included).
   switch (key) {
     case "storage_bytes":
       return fileSize(value);
     case "monthly_minutes":
-      return `${count(value)} minutes`;
+      return tc(":count minutes", value, { count: count(value) });
     case "max_file_minutes":
-      return value >= 60 && value % 60 === 0 ? (value === 60 ? "1 hour" : `${value / 60} hours`) : `${count(value)} minutes`;
+      return value >= 60 && value % 60 === 0 ? tc(":count hour|:count hours", value / 60) : tc(":count minutes", value, { count: count(value) });
     case "retention_days":
-      return value >= 365 && value % 365 === 0 ? (value === 365 ? "1 year" : `${value / 365} years`) : value === 1 ? "1 day" : `${count(value)} days`;
+      return value >= 365 && value % 365 === 0 ? tc(":count year|:count years", value / 365) : tc(":count day|:count days", value, { count: count(value) });
     case "uploads_per_day":
-      return `Up to ${count(value)}`;
+      return tc("Up to :count", value, { count: count(value) });
     case "seats":
-      return value <= 1 ? "Just you" : `Up to ${count(value)} people`;
+      return value <= 1 ? t("Just you") : tc("Up to :count people", value, { count: count(value) });
     default:
       return count(value);
   }
@@ -108,9 +110,11 @@ export function limitText(key: string, value: number | null | undefined): string
 /** "230 of 600 min": used and limit in the same unit. */
 export function usageText(key: string, limit: LimitEntitlement): string {
   const used = limit.used ?? 0;
-  if (key === "storage_bytes") return limit.limit ? `${fileSize(used)} of ${fileSize(limit.limit)}` : fileSize(used);
-  if (key === "monthly_minutes") return limit.limit ? `${count(used)} of ${count(limit.limit)} min` : `${count(used)} min`;
-  return limit.limit ? `${count(used)} of ${count(limit.limit)}` : count(used);
+  if (key === "storage_bytes") return limit.limit ? t(":used of :limit", { used: fileSize(used), limit: fileSize(limit.limit) }) : fileSize(used);
+  if (key === "monthly_minutes") {
+    return limit.limit ? tc(":used of :limit min", limit.limit, { used: count(used), limit: count(limit.limit) }) : tc(":used min", used, { used: count(used) });
+  }
+  return limit.limit ? tc(":used of :limit", limit.limit, { used: count(used), limit: count(limit.limit) }) : count(used);
 }
 
 /** How full a limit is (0–100), none without a limit. */
@@ -210,9 +214,12 @@ export function planHighlights(e: Entitlements, plan: OfferedPlan, below: Offere
   if (own.length > 0) return own.slice(0, 5);
   const lines: string[] = [];
   const minutes = plan.limits.monthly_minutes;
-  if (typeof minutes === "number" && minutes > 0) lines.push(`${count(minutes)} transcription minutes a month${below ? "" : ", no key needed"}`);
+  if (typeof minutes === "number" && minutes > 0) {
+    lines.push(below ? tc(":count transcription minutes a month", minutes, { count: count(minutes) })
+      : tc(":count transcription minutes a month, no key needed", minutes, { count: count(minutes) }));
+  }
   const seats = plan.limits.seats;
-  if (typeof seats === "number" && seats > 1) lines.push(`A team of up to ${count(seats)} people`);
+  if (typeof seats === "number" && seats > 1) lines.push(tc("A team of up to :count people", seats, { count: count(seats) }));
   const before = new Set(below?.features ?? Object.keys(e.features).filter((k) => e.features[k].cost !== "paid" || e.features[k].enabled));
   for (const key of plan.features) {
     if (lines.length >= 5) break;
@@ -239,7 +246,7 @@ export function RequestCard({ e, request, onOpen, onPay, onReceipt, onCancel, on
   const name = planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" });
   const amount = request.amount_due_pkr ? rupees(request.amount_due_pkr) : request.amount_due ?? null;
   const until = request.approved_until ?? e.plan?.expires_at ?? null;
-  const paidAt = request.payment?.paid_at ?? request.timeline?.find((t) => t.step === "receipt_sent")?.at ?? null;
+  const paidAt = request.payment?.paid_at ?? request.timeline?.find((step) => step.step === "receipt_sent")?.at ?? null;
   type Card = { title: string; tag: string; tone?: "warning" | "success"; body: ReactNode; primary?: [string, (() => void) | undefined]; secondary?: [string, (() => void) | undefined, boolean?] };
   const cards: Record<string, Card> = {
     awaiting_payment: {
@@ -569,5 +576,10 @@ export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
   );
 }
 
-/** A recording whose transcript failed because there is no key yet (`needs_transcription_key`). */
-export const NEEDS_KEY_TEXT = "This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.";
+/** A recording whose transcript failed because there is no key yet (`needs_transcription_key`), in the window's language
+ * (or English with `lang` "en"). */
+export function needsKeyText(lang?: Lang): string {
+  return wordsIn(lang).t("This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.");
+}
+/** The same in English, for classic's recording view. */
+export const NEEDS_KEY_TEXT = needsKeyText("en");

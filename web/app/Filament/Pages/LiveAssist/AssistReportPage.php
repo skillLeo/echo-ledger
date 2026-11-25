@@ -8,6 +8,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Concerns\LiveAssistOnly;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\RtlIcons;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Services\Assist\AssistAsk;
@@ -78,7 +79,7 @@ class AssistReportPage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('ask')->label(__('Ask'))->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+            Action::make('ask')->label(__('Ask'))->icon(RtlIcons::icon(Heroicon::OutlinedChatBubbleLeftEllipsis))
                 ->visible(fn (): bool => self::canChange() && $this->session()->ended() && $this->session()->turns()->exists())
                 ->modalHeading(__('Ask about this session'))
                 ->modalDescription(__("Answered from what was said, its summary and its facts, with the moments it rests on. It counts toward this month's allowance."))

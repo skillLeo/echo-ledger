@@ -15,7 +15,10 @@ use App\Services\Assist\AssistAskAi;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistReportFailed;
 use App\Services\Assist\ClaudeAssistReportAi;
+use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -113,6 +116,24 @@ it('asks from the console\'s report page and shows the answer with its moments, 
     fakeAssistAskAi(fails: new AssistReportFailed(ClaudeAssistReportAi::UNAVAILABLE));
     Livewire::test(AssistReportPage::class, ['session' => $session->id])->callAction('ask', ['question' => 'Again?'])
         ->assertNotified('The AI could not answer right now. Try again in a minute.')->assertDontSee('Again?');
+});
+
+it('draws Ask\'s chat bubble mirrored in an Urdu console, and as before in English (W-235)', function () {
+    $device = assistPerson('pro');
+    $session = askableSession($device, practice: false);
+    Filament::setCurrentPanel('app');
+    app(InterfaceFlags::class)->set('ui_v2.shell', true, 0, [], [], 'everyone');
+    $askIcon = function (string $language) use ($device, $session): mixed {
+        $device->user->forceFill(['console_preferences' => ['shell' => ['app_language' => $language]]])->save();
+        test()->actingAs($device->user->fresh(), 'web');
+
+        return Livewire::test(AssistReportPage::class, ['session' => $session->id])->instance()->getAction('ask')->getIcon();
+    };
+
+    $ur = $askIcon('ur');
+    expect($ur)->toBeInstanceOf(Htmlable::class)
+        ->and(trim($ur->toHtml()))->toStartWith('<svg class="v2-icon-flip"')
+        ->and($askIcon('en'))->toBe(Heroicon::OutlinedChatBubbleLeftEllipsis);
 });
 
 it('reserves the worst case first: of several asks at once with room for one, exactly one runs, and settling gives the rest back', function () {

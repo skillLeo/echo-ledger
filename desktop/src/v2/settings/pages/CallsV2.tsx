@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { api, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
 import { CALL_APPS, setting } from "../../../lib/settingsRegistry";
-import { SKIP_SHORTER_THAN } from "../../../lib/pending";
+import { skipShorterThan } from "../../../lib/pending";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../../lib/explainer";
 import { useWindowShown } from "../../../lib/visibility";
 import { sourceAppLabel } from "../../../lib/format";
@@ -14,7 +14,7 @@ import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSetting
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
 import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
-import { t, tc } from "../../../i18n";
+import { isRtl, lineDir, t, tc, withParts } from "../../../i18n";
 
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
@@ -50,7 +50,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         {platform === "macos" && <SwitchSetting id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Group>
       <Group footer={<p>{t("Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.")}</p>}>
-        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
+        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan().map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
       <Group title={t("Websites")}>
@@ -100,11 +100,15 @@ function WhyNotRecordedV2() {
           {users.length === 0 ? <p className="el-secondary">{t("No app is using the microphone now.")}</p> : (
             <ul className="el-why__list">
               {users.map((u, i) => (
-                <li key={`${u.name}-${i}`}><Status kind={TONE_KIND[micTone(u)]}><span className="el-body-strong" dir="auto">{micUserName(u)}</span>: {decisionText(u)}</Status></li>
+                // D-232: one line, the app's name in it as a value; it reads in the direction of what it says (lineDir of
+                // the decision, the line's own words: the name and the decision are values).
+                <li key={`${u.name}-${i}`} dir={isRtl() ? lineDir(decisionText(u)) : undefined}>
+                  <Status kind={TONE_KIND[micTone(u)]}>{withParts(t(":app: :decision", { decision: decisionText(u) }), { app: <span className="el-body-strong" dir="auto">{micUserName(u)}</span> })}</Status>
+                </li>
               ))}
             </ul>
           )}
-          {last && !users.some((u) => sameMicApp(u, last.user)) && <p className="el-secondary" data-testid="last-not-recorded" dir="auto">{lastNotRecordedLine(last)}</p>}
+          {last && !users.some((u) => sameMicApp(u, last.user)) && <p className="el-secondary" data-testid="last-not-recorded" dir={lineDir(lastNotRecordedLine(last))}>{lastNotRecordedLine(last)}</p>}
         </div>
       </Card>
       <p className="el-group__note el-caption el-secondary">{t("EchoLedger records a call when a call app uses your microphone and plays sound.")}</p>

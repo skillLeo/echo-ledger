@@ -8,7 +8,9 @@ use App\Models\Plan;
 use App\Models\SentItem;
 use App\Models\UpgradeRequest;
 use App\Models\UsageLedgerEntry;
+use App\Models\User;
 use App\Models\Workspace;
+use App\Services\ActivityActors;
 use App\Services\ActivityFeed;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
@@ -225,6 +227,33 @@ it('shows the latest sender of a share from before UX-18, as its title names the
     expect((string) $this->get('/app/activity')->assertOk()->getContent())
         ->toContain('<span class="v2-avatar is-list is-coloured" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" aria-hidden="true">OM</span>')
         ->not->toContain('aria-hidden="true">FK</span>');
+});
+
+it('names on Activity the person the apps\' `actor` names, by the server\'s one rule (ActivityActors, 2.0.0-aa)', function () {
+    $omar = Fx::user(['name' => 'Omar Malik', 'email' => 'omar@example.com']);
+    $omar->forceFill(['avatar_color' => 1])->save();
+    $call = Fx::session($this->farah, Fx::device($this->farah));
+    // Sent twice within one second, before UX-18 (no actor_id): the later row is the latest send, on the console as in
+    // the apps.
+    $at = now()->startOfSecond();
+    foreach ([$this->farah, $omar] as $from) {
+        SentItem::query()->create(['workspace_id' => $call->workspace_id, 'from_user_id' => $from->id, 'to_user_id' => $this->owner->id, 'kind' => 'recording',
+            'capture_session_id' => $call->id, 'title' => 'Call', 'sent_at' => $at]);
+    }
+    app(ActivityFeed::class)->sharedWithYou($this->owner, 'Omar Malik sent you Call', 'Open it in Shared with me.', $call->id);
+    // A warning about a person: the apps get its actor, the console keeps its tile (PERSON_KINDS).
+    app(ActivityFeed::class)->post($this->owner, 'unusual_usage', 'Unusual use', 'Farah Khan recorded 9 hours in a day.', null, 'heroicon-o-exclamation-triangle', actor: $this->farah);
+    $items = $this->owner->notifications()->get();
+    $share = $items->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
+
+    expect(array_map(fn (User $person): int => $person->id, ActivityActors::of($this->owner, $items)))
+        ->toEqual([$share->id => $omar->id, $items->firstWhere(fn ($n): bool => $n->id !== $share->id)->id => $this->farah->id]);
+
+    accountConsole(true);
+    expect((string) $this->get('/app/activity')->assertOk()->getContent())
+        ->toContain('<span class="v2-avatar is-list is-coloured" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" aria-hidden="true">OM</span>')
+        ->not->toContain('aria-hidden="true">FK</span>')
+        ->toContain('<span class="el-tile el-tile-slate">');
 });
 
 it('keeps who an item is about with the item: a share\'s sender, a customer\'s receipt for staff', function () {

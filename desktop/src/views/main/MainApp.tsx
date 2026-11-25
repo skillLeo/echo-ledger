@@ -1134,7 +1134,8 @@ export default function MainApp() {
   const libraryCounts = libraryFacts ? {
     ...libraryViewCounts(libraryFacts.facts),
     // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
-    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+    // The calls waiting here add only those the server has no session for (the others are those items): never twice.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisionsHere ?? status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
   } : null;
   const labelCounts: Record<string, number> = {};
   for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;
@@ -1414,7 +1415,7 @@ export default function MainApp() {
         {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
         {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app, "en"))}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
             workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
@@ -1445,7 +1446,7 @@ export default function MainApp() {
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
               liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
-              setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
+              setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
                 // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).

@@ -133,9 +133,13 @@ class AppLanguageNoticesTest : AppTest() {
         assertEquals("ریکارڈنگ", ur[NotifyCategory.RECORDING.channelId])
         assertEquals("کالز اور مسائل", ur[Notifications.CHANNEL_DECISIONS])
         assertTrue(ur.values.none { englishIn(it).isNotEmpty() })
-        // Saving another language renames them (the app does it as it saves).
+        // Saving another language renames them (the app does it as it saves). P-122: every channel is waited for, not
+        // only the first; on a busy run the Calls channel was read while still in Urdu.
         language("en")
-        pumpUntil("renamed") { manager.getNotificationChannel(NotifyCategory.RECORDING.channelId)?.name == "Recording" }
+        pumpUntil("renamed") {
+            manager.getNotificationChannel(NotifyCategory.RECORDING.channelId)?.name == "Recording" &&
+                manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS)?.name == "Calls and problems"
+        }
         assertEquals("Calls and problems", manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS)?.name)
     }
 

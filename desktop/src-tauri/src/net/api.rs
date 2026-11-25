@@ -11,6 +11,9 @@ use super::models::*;
 use super::pinning::build_http_client;
 use crate::error::{AppError, AppResult};
 
+/// Ids per `POST` / `DELETE /api/sessions/opened` request (contract 2.0.0-y: 1 to 200).
+pub const OPENED_IDS_PER_REQUEST: usize = 200;
+
 #[derive(Clone)]
 pub struct ApiClient {
     base: String,
@@ -1014,6 +1017,15 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PATCH /api/sessions/{id}` with the end of a call (contract 2.0.0-z): when it ended and how long it lasted, so
+    /// every device shows it waiting for a choice. The server keeps the first one; an older server answers `200` and
+    /// stores nothing. Not an organise action (`update_session` stays as it is).
+    pub async fn end_call(&self, session_id: &str, ended_at: &str, duration_ms: u64) -> AppResult<()> {
+        let body = json!({ "ended_at": ended_at, "duration_ms": duration_ms });
+        let resp = self.authed(self.http.patch(self.url(&format!("sessions/{session_id}"))))?.json(&body).send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(|_| ())
+    }
+
     pub async fn update_session(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.patch(self.url(&format!("sessions/{id}"))))?.json(patch).send().await?;
         Self::parse(resp).await
@@ -1098,6 +1110,48 @@ impl ApiClient {
     pub async fn session_unopen(&self, id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
         Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/sessions/opened` (since 2.0.0-y): Mark as read for many recordings, one request per
+    /// [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_opened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, true).await
+    }
+
+    /// `DELETE /api/sessions/opened` (since 2.0.0-y): Mark as unread for many recordings, the person's own opens taken
+    /// back, one request per [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_unopened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, false).await
+    }
+
+    /// The ids in chunks of [`OPENED_IDS_PER_REQUEST`], their answers joined. `None` only when the first answer says the
+    /// server is older than the route: `405`, `404` (its `DELETE` reaches `DELETE /api/sessions/{id}` with the id
+    /// "opened" and deletes nothing), `403` for a `DELETE` (that route's answer to someone who may not record), or a
+    /// success without a `done` list; the caller then marks them one by one. Anything else (a 5xx, 408, 429, the network)
+    /// is an error, so a server that is down is never asked once per recording. A later chunk that fails ends the run
+    /// with what was done: its ids are in neither list.
+    async fn opened_many(&self, ids: &[String], opened: bool) -> AppResult<Option<OpenedMany>> {
+        let mut all = OpenedMany::default();
+        for (n, chunk) in ids.chunks(OPENED_IDS_PER_REQUEST).enumerate() {
+            let url = self.url("sessions/opened");
+            let request = if opened { self.http.post(url) } else { self.http.delete(url) };
+            let answer = match self.authed(request)?.json(&json!({ "ids": chunk })).send().await {
+                Err(e) => Err(e.into()),
+                Ok(resp) if resp.status().is_success() => Ok(resp.json::<OpenedMany>().await.ok()),
+                Ok(resp) if matches!(resp.status().as_u16(), 404 | 405) || (resp.status().as_u16() == 403 && !opened) => Ok(None),
+                Ok(resp) => Err(Self::error(resp).await),
+            };
+            match answer {
+                Ok(Some(answer)) => {
+                    all.done.extend(answer.done);
+                    all.not_found.extend(answer.not_found);
+                }
+                Ok(None) if n == 0 => return Ok(None),
+                Err(e) if n == 0 => return Err(e),
+                _ => break,
+            }
+        }
+        Ok(Some(all))
     }
 
     /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).

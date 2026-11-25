@@ -3,7 +3,7 @@
 // file shows its own progress with Cancel and Retry (LibraryQueue).
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, type ClientFolder, type TranscriptionLanguage } from "../../lib/ipc";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, languageLabel, menuLabel } from "../../lib/languages";
 import { fileName, importNotice, importTitle, isImportable } from "../../lib/importFiles";
 import { folderBadge, sortFolders } from "../../lib/organise";
 import { NO_TARGET, type Notify } from "../../lib/notice";
@@ -77,8 +77,8 @@ export function ImportSheet({ paths, notify, onClose }: {
         <div className="row organise-field">
           <label htmlFor={languageField} className="small muted">Language</label>
           <select id={languageField} className="select" value={language} disabled={busy} onChange={(e) => setLanguage(e.target.value)}>
-            {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-            <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
+            {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
+            <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{languageLabel(o.value, "en")}</option>)}</optgroup>
           </select>
         </div>
         <p className="small muted">The project and language apply to every file. Files already in your Library are skipped.</p>

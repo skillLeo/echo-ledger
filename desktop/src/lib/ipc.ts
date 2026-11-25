@@ -988,8 +988,9 @@ export interface LibraryItem {
   ended_at?: string | null;
   /** When its current upload or transcript attempt began (since 2.0.0-p): Needs you's 24 hours are counted from it. */
   processing_since?: string | null;
-  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p). */
-  facets?: { source?: string; status?: string; language?: string } | null;
+  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p), and
+   * its state in the glossary's words (`state`, since 2.0.0-r). */
+  facets?: { source?: string; status?: string; language?: string; kind?: string; state?: string } | null;
 }
 
 /**
@@ -1210,6 +1211,10 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
+
+/** Mark as read / unread for many (contract 2.0.0-y): the recordings marked, and every other id as it was sent. */
+export type OpenedMany = { done: string[]; not_found: string[] };
+
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
@@ -2066,6 +2071,13 @@ export const api = {
   markOpened: (id: string) => invoke<void>("session_opened", { id }),
   /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
   markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
+  /**
+   * Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y), one request per 200 ids; null from an older
+   * server (mark them one by one then).
+   */
+  markOpenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_opened", { ids }),
+  /** Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as markOpenedMany. */
+  markUnopenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_unopened", { ids }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */
