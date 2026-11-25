@@ -1,11 +1,13 @@
 // Sharing a recording or a project (docs/API.md "Share links", "Sending to a teammate", since v1.5). Share link: who
 // may open it (anyone with the link, with a password, or only the people named), downloads on or off, when it stops
 // working; the link is shown once to copy, and every link is listed with its views and Revoke. Send to a teammate: to
-// people with an account on this server, with a note. An older server gets the v1.1 link of a recording.
+// people with an account on this server, with a note. An older server gets the v1.1 link of a recording. The new
+// design's recording page opens it too, so its words are in the account's language (useT), as v2/shared's are.
 import { useCallback, useEffect, useId, useState } from "react";
 import { api, errorMessage, type SentItem, type ShareAudience, type ShareLink, type TranscriptView } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
-import { audienceText, downloadText, EXPIRY_CHOICES, expiryTime, linkState, MAX_PEOPLE, parseEmails, viewsText, type ExpiryChoice, REVOKE_LINK_QUESTION } from "../../lib/sharing";
+import { audienceText, downloadText, expiryChoices, expiryTime, linkState, MAX_PEOPLE, parseEmails, revokeLinkQuestion, viewsText, type ExpiryChoice } from "../../lib/sharing";
+import { t, useT } from "../../i18n";
 import { CopyIcon, SendIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { SharePanel } from "./TranscriptTools";
@@ -17,12 +19,14 @@ export type ShareTarget =
   | { kind: "session"; id: string; title: string | null; hasAudio: boolean }
   | { kind: "project"; id: string; name: string };
 
-const AUDIENCES: readonly (readonly [ShareAudience, string])[] = [
-  ["public", "Anyone with the link"],
-  ["password", "Anyone with the link and a password"],
-  ["people", "Only people I choose"],
+/** Who may open a new link, each choice with its words. */
+const audiences = (): readonly (readonly [ShareAudience, string])[] => [
+  ["public", t("Anyone with the link")],
+  ["password", t("Anyone with the link and a password")],
+  ["people", t("Only people I choose")],
 ];
-const VIEW_NAMES: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "Urdu" };
+/** A transcript view's name. */
+const viewName = (view: TranscriptView) => (view === "roman" ? t("Roman Urdu") : view === "english" ? t("English") : t("Urdu"));
 
 export function ShareDialog({ target, notify, onClose, start = "link", view = null }: {
   target: ShareTarget;
@@ -33,10 +37,11 @@ export function ShareDialog({ target, notify, onClose, start = "link", view = nu
   /** The Show as view on screen: the shared page opens in it. */
   view?: TranscriptView | null;
 }) {
+  const { t } = useT();
   const [part, setPart] = useState<"link" | "send">(start);
   // The links so far; null until they are read, "legacy" on a server older than v1.5.
   const [links, setLinks] = useState<ShareLink[] | "legacy" | null>(null);
-  const name = target.kind === "session" ? target.title || "this recording" : target.name;
+  const name = target.kind === "session" ? target.title || t("this recording") : target.name;
   const load = () =>
     api.sharesOf(target.kind === "session" ? target.id : null, target.kind === "project" ? target.id : null)
       .then((r) => setLinks(r ? r.data : "legacy"), (e) => {
@@ -50,20 +55,20 @@ export function ShareDialog({ target, notify, onClose, start = "link", view = nu
 
   if (links === "legacy") {
     return (
-      <Sheet title={`Share ${name}`} onClose={onClose} className="share-sheet">
+      <Sheet title={t("Share :name", { name })} onClose={onClose} className="share-sheet">
         {target.kind === "session" ? (
           <SharePanel sessionId={target.id} hasAudio={target.hasAudio} notify={notify} onClose={onClose} />
         ) : (
-          <p>Sharing a project needs a newer EchoLedger server. Ask the person who runs it to update.</p>
+          <p>{t("Sharing a project needs a newer EchoLedger server. Ask the person who runs it to update.")}</p>
         )}
       </Sheet>
     );
   }
   return (
-    <Sheet title={`Share ${name}`} onClose={onClose} className="share-sheet">
-      <span className="segmented" role="group" aria-label="Share how">
-        <button type="button" aria-pressed={part === "link"} onClick={() => setPart("link")}>Share link</button>
-        <button type="button" aria-pressed={part === "send"} onClick={() => setPart("send")}>Send to a teammate</button>
+    <Sheet title={t("Share :name", { name })} onClose={onClose} className="share-sheet">
+      <span className="segmented" role="group" aria-label={t("Share how")}>
+        <button type="button" aria-pressed={part === "link"} onClick={() => setPart("link")}>{t("Share link")}</button>
+        <button type="button" aria-pressed={part === "send"} onClick={() => setPart("send")}>{t("Send to a teammate")}</button>
       </span>
       {part === "link" ? (
         <LinkPart target={target} links={links} view={view} notify={notify} onMade={load} />
@@ -72,7 +77,7 @@ export function ShareDialog({ target, notify, onClose, start = "link", view = nu
       )}
       <div className="row sheet-actions">
         <span className="spacer" />
-        <button type="button" className="btn ghost" onClick={onClose}>Close</button>
+        <button type="button" className="btn ghost" onClick={onClose}>{t("Close")}</button>
       </div>
     </Sheet>
   );
@@ -85,6 +90,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
   notify: Notify;
   onMade: () => Promise<void>;
 }) {
+  const { t, tc } = useT();
   const [audience, setAudience] = useState<ShareAudience>("public");
   const [password, setPassword] = useState("");
   const [people, setPeople] = useState("");
@@ -123,7 +129,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
       if (link.url) {
         try {
           await navigator.clipboard.writeText(link.url);
-          notify("Link made and copied", false, { kind: "shared", tab: "links" });
+          notify(t("Link made and copied"), false, { kind: "shared", tab: "links" });
         } catch {
           // No clipboard here: the link is shown to copy.
         }
@@ -139,17 +145,17 @@ function LinkPart({ target, links, view, notify, onMade }: {
     if (!made) return;
     try {
       await navigator.clipboard.writeText(made);
-      notify("Link copied", false, { kind: "shared", tab: "links" });
+      notify(t("Link copied"), false, { kind: "shared", tab: "links" });
     } catch {
-      notify("Could not access the clipboard", true);
+      notify(t("Could not access the clipboard"), true);
     }
   };
   const revoke = async (link: ShareLink) => {
-    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
+    if (!(await confirmAction(revokeLinkQuestion()))) return;
     try {
       await api.revokeShare(link.id);
       await onMade();
-      notify("Link revoked: it stops working at once", false, NO_TARGET);
+      notify(t("Link revoked: it stops working at once"), false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -158,77 +164,79 @@ function LinkPart({ target, links, view, notify, onMade }: {
   return (
     <>
       <fieldset className="share-field">
-        <legend className="small muted">Who can open it</legend>
-        {AUDIENCES.map(([value, label]) => (
+        <legend className="small muted">{t("Who can open it")}</legend>
+        {audiences().map(([value, label]) => (
           <label key={value} className="radio-row">
             <input type="radio" name={group} checked={audience === value} onChange={() => setAudience(value)} />{label}
           </label>
         ))}
         {audience === "password" && (
           <>
-            <label htmlFor={passwordId} className="sr-only">Password</label>
-            <input id={passwordId} className="input" type="password" autoComplete="new-password" minLength={6} maxLength={100} placeholder="Password, 6 or more characters"
+            <label htmlFor={passwordId} className="sr-only">{t("Password")}</label>
+            <input id={passwordId} className="input" type="password" autoComplete="new-password" minLength={6} maxLength={100} placeholder={t("Password, 6 or more characters")}
               value={password} onChange={(e) => setPassword(e.target.value)} />
           </>
         )}
         {audience === "people" && (
           <>
-            <label htmlFor={peopleId} className="sr-only">Their emails</label>
-            <textarea id={peopleId} className="input" rows={2} placeholder="Their emails, separated by commas" value={people} onChange={(e) => setPeople(e.target.value)} />
+            <label htmlFor={peopleId} className="sr-only">{t("Their emails")}</label>
+            <textarea id={peopleId} className="input" rows={2} placeholder={t("Their emails, separated by commas")} value={people} onChange={(e) => setPeople(e.target.value)} />
             <span className="small muted">
-              {parsed.invalid.length > 0 ? `Not an email: ${parsed.invalid.join(", ")}`
-                : parsed.emails.length > MAX_PEOPLE ? `Name ${MAX_PEOPLE} people at most.`
-                  : "They open it signed in to the console with one of these emails."}
+              {parsed.invalid.length > 0 ? t("Not an email: :emails", { emails: parsed.invalid.join(", ") })
+                : parsed.emails.length > MAX_PEOPLE ? tc("Name :count person at most.|Name :count people at most.", MAX_PEOPLE)
+                  : t("They open it signed in to the console with one of these emails.")}
             </span>
           </>
         )}
       </fieldset>
       <div className="toggle-row">
         <span>
-          Allow downloads
-          <span className="small muted" style={{ display: "block" }}>{download ? "The audio and the transcript can be downloaded." : "People can read and listen, not download."}</span>
+          {t("Allow downloads")}
+          <span className="small muted" style={{ display: "block" }}>{download ? t("The audio and the transcript can be downloaded.") : t("People can read and listen, not download.")}</span>
         </span>
-        <button type="button" role="switch" aria-checked={download} aria-label="Allow downloads" className={`switch ${download ? "on" : ""}`} onClick={() => setDownload(!download)} />
+        <button type="button" role="switch" aria-checked={download} aria-label={t("Allow downloads")} className={`switch ${download ? "on" : ""}`} onClick={() => setDownload(!download)} />
       </div>
       <div className="row organise-field">
-        <label htmlFor={expiryId} className="small muted">Stops working</label>
+        <label htmlFor={expiryId} className="small muted">{t("Stops working")}</label>
         <select id={expiryId} className="select" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}>
-          {EXPIRY_CHOICES.map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
+          {expiryChoices().map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
         </select>
         {expiry === "date" && (
           <>
-            <label htmlFor={dayId} className="sr-only">Day</label>
+            <label htmlFor={dayId} className="sr-only">{t("Day")}</label>
             <input id={dayId} className="input" type="date" value={day} onChange={(e) => setDay(e.target.value)} style={{ width: "auto" }} />
           </>
         )}
       </div>
-      {view && <p className="small muted">The page opens in the {VIEW_NAMES[view]} view.</p>}
+      {view && <p className="small muted">{t("The page opens in the :view view.", { view: viewName(view) })}</p>}
       <div className="row">
-        <button type="button" className="btn primary" disabled={busy || !ready || !datedOk} onClick={() => void make()}>{busy ? "Making the link…" : "Make link"}</button>
+        <button type="button" className="btn primary" disabled={busy || !ready || !datedOk} onClick={() => void make()}>{busy ? t("Making the link…") : t("Make link")}</button>
       </div>
       {error && <div className="notice error small" role="alert">{error}</div>}
       {made && (
         <div className="share-made" role="status">
-          <div className="share-made-head"><SuccessCheck size={16} /><b className="small">Link made</b></div>
-          <span className="small muted">Copy it now. It is shown only once.</span>
+          <div className="share-made-head"><SuccessCheck size={16} /><b className="small">{t("Link made")}</b></div>
+          <span className="small muted">{t("Copy it now. It is shown only once.")}</span>
           <code className="share-url">{made}</code>
-          <button type="button" className="btn" onClick={() => void copy()}><CopyIcon size={14} />Copy link</button>
+          <button type="button" className="btn" onClick={() => void copy()}><CopyIcon size={14} />{t("Copy link")}</button>
         </div>
       )}
       <div className="share-links">
-        <b className="small">Links</b>
-        {links === null ? <p className="small muted">Loading…</p> : links.length === 0 ? <p className="small muted">No links yet.</p> : (
-          <ul className="links-list" aria-label="Share links">
+        <b className="small">{t("Links")}</b>
+        {links === null ? <p className="small muted">{t("Loading…")}</p> : links.length === 0 ? <p className="small muted">{t("No links yet.")}</p> : (
+          <ul className="links-list" aria-label={t("Share links")}>
             {links.map((link) => (
               <li key={link.id} className="link-row">
                 <div className="link-main">
                   <span className="link-who">{audienceText(link)}</span>
                   <span className="small muted">
-                    {[linkState(link), `made ${formatWhen(link.created_at)}`, link.expires_at ? `${link.active ? "stops" : "stopped"} ${formatWhen(link.expires_at)}` : "never stops", downloadText(link)].join(" · ")}
+                    {[linkState(link), t("made :date", { date: formatWhen(link.created_at) }),
+                      link.expires_at ? (link.active ? t("stops :date", { date: formatWhen(link.expires_at) }) : t("stopped :date", { date: formatWhen(link.expires_at) })) : t("never stops"),
+                      downloadText(link)].join(" · ")}
                   </span>
                   <span className="small muted">{viewsText(link)}</span>
                 </div>
-                {link.active && <button type="button" className="btn ghost danger compact" onClick={() => void revoke(link)}>Revoke</button>}
+                {link.active && <button type="button" className="btn ghost danger compact" onClick={() => void revoke(link)}>{t("Revoke")}</button>}
               </li>
             ))}
           </ul>
@@ -239,6 +247,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
 }
 
 function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: Notify; onSent: () => void }) {
+  const { t, tc } = useT();
   const [sentItems, setSentItems] = useState<SentItem[]>([]);
   const loadSent = useCallback(async () => {
     try {
@@ -252,7 +261,7 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: Not
   const stop = async (item: SentItem) => {
     try {
       await api.stopSharing(item.id);
-      notify("Stopped sharing", false, NO_TARGET);
+      notify(t("Stopped sharing"), false, NO_TARGET);
       await loadSent();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -271,7 +280,7 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: Not
     setError(null);
     try {
       const sent = await api.sendToTeammate(target.kind, target.id, parsed.emails, note.trim() || null);
-      notify(sent === 1 ? `Sent to ${parsed.emails[0]}` : `Sent to ${sent} people`, false, NO_TARGET);
+      notify(sent === 1 ? t("Sent to :email", { email: parsed.emails[0] }) : tc("Sent to :count person|Sent to :count people", sent), false, NO_TARGET);
       onSent();
     } catch (e) {
       setError(errorMessage(e));
@@ -281,30 +290,30 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: Not
   return (
     <>
       <p className="small muted">
-        They find it in Shared with me, can play and read it, and save a copy of their own. People without an account here will not receive it.
+        {t("They find it in Shared with me, can play and read it, and save a copy of their own. People without an account here will not receive it.")}
       </p>
-      <label htmlFor={toId} className="small muted">Their emails</label>
-      <textarea id={toId} className="input" rows={2} placeholder="ana@example.com, omar@example.com" value={to} onChange={(e) => setTo(e.target.value)} />
-      {parsed.invalid.length > 0 && <span className="small error-text">Not an email: {parsed.invalid.join(", ")}</span>}
-      <label htmlFor={noteId} className="small muted">Note (optional)</label>
-      <textarea id={noteId} className="input" rows={2} maxLength={500} placeholder="For tomorrow's meeting" value={note} onChange={(e) => setNote(e.target.value)} dir="auto" />
+      <label htmlFor={toId} className="small muted">{t("Their emails")}</label>
+      <textarea id={toId} className="input" rows={2} placeholder={t("ana@example.com, omar@example.com")} value={to} onChange={(e) => setTo(e.target.value)} />
+      {parsed.invalid.length > 0 && <span className="small error-text">{t("Not an email: :emails", { emails: parsed.invalid.join(", ") })}</span>}
+      <label htmlFor={noteId} className="small muted">{t("Note (optional)")}</label>
+      <textarea id={noteId} className="input" rows={2} maxLength={500} placeholder={t("For tomorrow's meeting")} value={note} onChange={(e) => setNote(e.target.value)} dir="auto" />
       {error && <div className="notice error small" role="alert">{error}</div>}
       <div className="row">
-        <button type="button" className="btn primary" disabled={busy || !ready} onClick={() => void send()}><SendIcon size={16} />{busy ? "Sending…" : "Send"}</button>
+        <button type="button" className="btn primary" disabled={busy || !ready} onClick={() => void send()}><SendIcon size={16} />{busy ? t("Sending…") : t("Send")}</button>
       </div>
       {sentItems.length > 0 && (
         <div className="share-links">
-          <b className="small">Sent to</b>
-          <ul className="links-list" aria-label="Sent to">
+          <b className="small">{t("Sent to")}</b>
+          <ul className="links-list" aria-label={t("Sent to")}>
             {sentItems.map((item) => (
               <li key={item.id} className="link-row">
                 <div className="link-main">
                   <span className="link-who">{item.to?.name ?? item.to?.email}</span>
                   <span className="small muted">
-                    {[item.to?.name ? item.to?.email : null, item.sent_at ? `sent ${formatWhen(item.sent_at)}` : null, item.saved_at ? "they saved a copy" : null].filter(Boolean).join(" · ")}
+                    {[item.to?.name ? item.to?.email : null, item.sent_at ? t("sent :date", { date: formatWhen(item.sent_at) }) : null, item.saved_at ? t("they saved a copy") : null].filter(Boolean).join(" · ")}
                   </span>
                 </div>
-                <button type="button" className="btn ghost danger compact" onClick={() => void stop(item)}>Stop sharing</button>
+                <button type="button" className="btn ghost danger compact" onClick={() => void stop(item)}>{t("Stop sharing")}</button>
               </li>
             ))}
           </ul>

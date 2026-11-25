@@ -4,22 +4,30 @@
 // choice. Words: "Hide from screen shares" / "Show in screen shares", nothing more.
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type HideFor, type PinnedWindow, type PrivacyStatus, type WindowShareState, type WindowShareView } from "../lib/ipc";
+import { language, t } from "../i18n";
+import { whenParts } from "../lib/format";
 
 /** "Custom…": 1 minute to 7 days (privacy::share::CUSTOM_*). */
 export const CUSTOM_MAX_MINUTES = 7 * 24 * 60;
 export const CUSTOM_RANGE = "Choose between 1 minute and 7 days.";
 export const CUSTOM_UNITS = [["minutes", 1], ["hours", 60], ["days", 1440]] as const;
 export type CustomUnit = (typeof CUSTOM_UNITS)[number][0];
+/** Each unit in the window's language (its key stays the value sent). */
+const UNIT_WORDS: Record<CustomUnit, string> = {
+  get minutes() { return t("minutes"); },
+  get hours() { return t("hours"); },
+  get days() { return t("days"); },
+};
 
 /** The durations the list offers now, in order (pure): "Until this call ends" only while a call is detected. */
 export function hideChoices(callDetected: boolean): { choice: HideFor | null; label: string }[] {
   return [
-    ...(callDetected ? [{ choice: { kind: "call_ends" } as HideFor, label: "Until this call ends" }] : []),
-    { choice: { kind: "minutes15" }, label: "15 min" },
-    { choice: { kind: "hour1" }, label: "1 hour" },
-    { choice: { kind: "tomorrow" }, label: "Until tomorrow" },
-    { choice: { kind: "until_off" }, label: "Until I turn it off" },
-    { choice: null, label: "Custom…" },
+    ...(callDetected ? [{ choice: { kind: "call_ends" } as HideFor, label: t("Until this call ends") }] : []),
+    { choice: { kind: "minutes15" }, label: t("15 min") },
+    { choice: { kind: "hour1" }, label: t("1 hour") },
+    { choice: { kind: "tomorrow" }, label: t("Until tomorrow") },
+    { choice: { kind: "until_off" }, label: t("Until I turn it off") },
+    { choice: null, label: t("Custom…") },
   ];
 }
 
@@ -42,22 +50,22 @@ export function HideDurations({ callDetected, onChosen }: { callDetected: boolea
   };
   const hideCustom = () => {
     const minutes = customMinutes(Number(amount), unit);
-    if (minutes === null) return setProblem(CUSTOM_RANGE);
+    if (minutes === null) return setProblem(t(CUSTOM_RANGE));
     hide({ kind: "custom", minutes });
   };
   return (
-    <div className="share-durations" role="menu" aria-label="Hide from screen shares" data-hit data-testid="share-durations">
+    <div className="share-durations" role="menu" aria-label={t("Hide from screen shares")} data-hit data-testid="share-durations">
       {hideChoices(callDetected).map(({ choice, label }) => (
         <button key={label} type="button" role="menuitem" className="btn compact ghost" aria-expanded={choice ? undefined : custom}
           onClick={() => (choice ? hide(choice) : setCustom((c) => !c))}>{label}</button>
       ))}
       {custom && (
         <div className="share-custom" data-testid="share-custom">
-          <input type="number" min={1} aria-label="How long" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value as CustomUnit)}>
-            {CUSTOM_UNITS.map(([u]) => <option dir="auto" key={u} value={u}>{u}</option>)}
+          <input type="number" min={1} aria-label={t("How long")} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <select aria-label={t("Unit")} value={unit} onChange={(e) => setUnit(e.target.value as CustomUnit)}>
+            {CUSTOM_UNITS.map(([u]) => <option dir="auto" key={u} value={u}>{UNIT_WORDS[u]}</option>)}
           </select>
-          <button type="button" className="btn compact" onClick={hideCustom}>Hide</button>
+          <button type="button" className="btn compact" onClick={hideCustom}>{t("Hide")}</button>
         </div>
       )}
       {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
@@ -66,7 +74,7 @@ export function HideDurations({ callDetected, onChosen }: { callDetected: boolea
 }
 
 /** A button that opens the duration list ("Hide from screen shares", or "Hide ▸" on the notice). */
-export function HideFromSharesButton({ callDetected, label = "Hide from screen shares", onChosen }: { callDetected: boolean; label?: string; onChosen?: () => void }) {
+export function HideFromSharesButton({ callDetected, label = t("Hide from screen shares"), onChosen }: { callDetected: boolean; label?: string; onChosen?: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="share-hide">
@@ -76,10 +84,31 @@ export function HideFromSharesButton({ callDetected, label = "Hide from screen s
   );
 }
 
-/** What the main window's row says (pure): shown, or hidden and until when. */
-export function mainShareValue(status: Pick<PrivacyStatus, "mainHide" | "mainHiddenUntil"> | null): string {
-  if (!status?.mainHide) return "Shown in screen shares";
-  return `Hidden ${status.mainHiddenUntil ?? "from screen shares"}`;
+/**
+ * What the main window's row says (pure): shown, or hidden and until when. In English the core's words ("until 14:30",
+ * "until you show it"); in another language one whole sentence for each kind of "until", the day and time from
+ * whenParts (the core's phrase is English).
+ */
+export function mainShareValue(status: Pick<PrivacyStatus, "mainHide" | "mainHiddenUntil"> | null, now: Date = new Date()): string {
+  if (!status?.mainHide) return t("Shown in screen shares");
+  if (language() === "en") return status.mainHiddenUntil ? t("Hidden :until", { until: status.mainHiddenUntil }) : t("Hidden from screen shares");
+  const until = status.mainHide.until;
+  switch (until.kind) {
+    case "until_off": return t("Hidden until you show it");
+    case "until_quit": return t("Hidden until you quit EchoLedger");
+    case "call_ends": return t("Hidden until this call ends");
+    case "at": {
+      const at = new Date(until.at_ms);
+      const parts = whenParts(at.toISOString(), now);
+      if (!parts) return t("Hidden from screen shares");
+      if (parts.today) return t("Hidden until :time", { time: parts.time });
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      if (at.toDateString() === tomorrow.toDateString()) return t("Hidden until tomorrow :time", { time: parts.time });
+      return t("Hidden until :day :time", { day: parts.day, time: parts.time });
+    }
+    default: return t("Hidden from screen shares");
+  }
 }
 
 /** Settings: the main window shown, with Hide from screen shares, or hidden with Show now. */
@@ -89,7 +118,7 @@ export function MainShareControl({ status }: { status: PrivacyStatus | null }) {
   if (status.mainHide) {
     return (
       <>
-        <button type="button" className="btn compact" onClick={() => void api.privacyMainShow().catch((e) => setProblem(errorMessage(e)))}>Show now</button>
+        <button type="button" className="btn compact" onClick={() => void api.privacyMainShow().catch((e) => setProblem(errorMessage(e)))}>{t("Show now")}</button>
         {problem && <span className="privacy-line warning" role="alert">{problem}</span>}
       </>
     );
@@ -115,7 +144,13 @@ export function useWindowShare(which: PinnedWindow | null): [WindowShareView | n
 }
 
 /** The badge's short word (the full sentence is its label). */
-export const SHORT: Record<WindowShareState, string> = { hidden: "Hidden", shown: "Shown", black_box: "Black box", could_not_hide: "Couldn't hide", not_open: "Hidden" };
+export const SHORT: Record<WindowShareState, string> = {
+  get hidden() { return t("Hidden"); },
+  get shown() { return t("Shown"); },
+  get black_box() { return t("Black box"); },
+  get could_not_hide() { return t("Couldn't hide"); },
+  get not_open() { return t("Hidden"); },
+};
 
 /** The badge on the Live Assist card and the captions: what the system reads back; a click opens the window's own
  * switch. A hit region (`data-hit`), so it stays clickable in a click-through window. */
@@ -148,17 +183,17 @@ export function WindowShareBadge({ compact = true }: { compact?: boolean }) {
 
 /** Where showing it is done: on that window's own badge, never from here. */
 export const SHOW_FROM_BADGE: Record<PinnedWindow, string> = {
-  card: "Show it from the card's own menu",
-  captions: "Show them from the captions' own menu",
+  get card() { return t("Show it from the card's own menu"); },
+  get captions() { return t("Show them from the captions' own menu"); },
 };
 
 /** The card's or the captions' state in a row's value (FIX-01): hidden unless the person showed it from its window. */
 export function pinnedValue(view: Pick<WindowShareView, "state"> | null): string {
   switch (view?.state) {
-    case "shown": return "Shown";
-    case "black_box": return "Black box";
-    case "could_not_hide": return "Couldn't be hidden";
-    default: return "Hidden";
+    case "shown": return t("Shown");
+    case "black_box": return t("Black box");
+    case "could_not_hide": return t("Couldn't be hidden");
+    default: return t("Hidden");
   }
 }
 

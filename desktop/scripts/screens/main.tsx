@@ -197,6 +197,11 @@ function privacyStatus() {
     permission: !screen.includes("-error"),
     floatingOpen: true,
     displays: mac ? 2 : 1,
+    // `&mainhide=1`: the main window hidden from screen shares until 16:30 today (the core's English words beside it).
+    ...(params.get("mainhide") === "1" ? {
+      mainHide: { until: { kind: "at", at_ms: new Date(new Date().setHours(16, 30, 0, 0)).getTime() }, sinceMs: Date.now() },
+      mainHiddenUntil: "until 16:30",
+    } : {}),
   };
 }
 const free = planParam === "free" || screen.endsWith("-free");
@@ -410,7 +415,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   // `&grouped=1` (UX-08): uploads that didn't finish as the server groups them, and its one Activity number (3 of them
   // and the failed transcript: 4, red).
   activity_list: () => {
-    const data = grouped ? ACTIVITY_GROUPED : ACTIVITY;
+    // `&deviceunread=1` (D-233): the new device's notification not read yet (it has nowhere to go: a plain row, Mark read).
+    const data = (grouped ? ACTIVITY_GROUPED : ACTIVITY).map((a) => (params.get("deviceunread") === "1" && a.kind === "device_paired" ? { ...a, read: false } : a));
     return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
   },
   activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),

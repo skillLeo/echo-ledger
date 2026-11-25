@@ -80,6 +80,31 @@ describe("the v2 Activity page", () => {
     expect(screen.queryByRole("button", { name: "Mark all read" })).toBeNull();
   });
 
+  it("D-233: a notification with nowhere to go isn't a button; unread, it has a quiet Mark read; being shown reads nothing", async () => {
+    respond("activity_list", { data: [
+      { id: "d1", kind: "device_paired", title: "Pixel 9 signed in", body: "A new device signed in to your account.", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "p1", kind: "server_problem", title: "Uploads are failing", body: "", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "r1", kind: "transcript_ready", title: "Transcript ready", body: "Acme kickoff", session_id: "s1", read: false, at: NOW.toISOString() },
+      { id: "d0", kind: "device_paired", title: "Laptop signed in", body: "", session_id: null, read: true, at: NOW.toISOString() },
+    ], unread_count: 3 });
+    const { onOpenRecording } = await show();
+    // The recording's row is a button that opens it; the others are plain rows, out of the Tab order.
+    expect(within(row("Transcript ready")).getByRole("button", { name: "Transcript ready" })).toBeInTheDocument();
+    expect(row("Pixel 9 signed in").querySelector(".el-row__hit")).toBeNull();
+    expect(row("Pixel 9 signed in")).not.toHaveClass("el-row--interactive");
+    expect(row("Laptop signed in").querySelector("button")).toBeNull();
+    // Shown, nothing is marked read.
+    expect(callsOf("activity_read")).toEqual([]);
+    // Mark read marks just that one, and goes.
+    fireEvent.click(within(row("Pixel 9 signed in")).getByRole("button", { name: "Mark read: Pixel 9 signed in" }));
+    await act(flushAsync);
+    expect(callsOf("activity_read")).toEqual([{ ids: ["d1"] }]);
+    expect(onOpenRecording).not.toHaveBeenCalled();
+    expect(row("Pixel 9 signed in")).not.toHaveTextContent("Unread");
+    expect(within(row("Pixel 9 signed in")).queryByRole("button")).toBeNull();
+    expect(within(row("Uploads are failing")).getByRole("button", { name: "Mark read: Uploads are failing" })).toBeInTheDocument();
+  });
+
   it("an item's right-click menu (UX-22, 3b): Open · Mark as read | Retry for an upload that stopped; only what fits it", async () => {
     respond("activity_list", { data: [...ITEMS,
       { id: "n4", kind: "upload_failed", title: "Upload failed — retry", body: "Voice note", session_id: "s4", read: true, at: new Date(2026, 9, 28, 8, 0).toISOString() },

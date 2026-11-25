@@ -162,7 +162,7 @@
     <string name="v2_vm_ws_the_export_could_not_be_started">ایکسپورٹ شروع نہیں ہو سکا۔</string>
     <string name="v2_vm_ws_the_file_could_not_be_removed">فائل ہٹائی نہیں جا سکی۔</string>
     <string name="v2_vm_ws_the_files_could_not_be_added">فائلیں شامل نہیں ہو سکیں۔</string>
-    <string name="v2_vm_ws_the_filing_rules_could_not_be_loaded">ترتیب کے اصول لوڈ نہیں ہو سکے۔</string>
+    <string name="v2_vm_ws_the_filing_rules_could_not_be_loaded">فائلنگ کے قواعد لوڈ نہیں ہو سکے۔</string>
     <string name="v2_vm_ws_the_instructions_could_not_be_saved">ہدایات محفوظ نہیں ہو سکیں۔</string>
     <string name="v2_vm_ws_the_line_could_not_be_added">سطر شامل نہیں ہو سکی۔</string>
     <string name="v2_vm_ws_the_line_could_not_be_removed">سطر ہٹائی نہیں جا سکی۔</string>
@@ -177,15 +177,15 @@
     <string name="v2_vm_ws_the_request_link_could_not_be_made">درخواست کا لنک نہیں بن سکا۔</string>
     <string name="v2_vm_ws_the_request_link_could_not_be_turned_off">درخواست کا لنک بند نہیں ہو سکا۔</string>
     <string name="v2_vm_ws_the_request_links_could_not_be_loaded">درخواست کے لنکس لوڈ نہیں ہو سکے۔</string>
-    <string name="v2_vm_ws_the_rule_could_not_be_added">اصول شامل نہیں ہو سکا۔</string>
-    <string name="v2_vm_ws_the_rule_could_not_be_removed">اصول ہٹایا نہیں جا سکا۔</string>
+    <string name="v2_vm_ws_the_rule_could_not_be_added">قاعدہ شامل نہیں ہو سکا۔</string>
+    <string name="v2_vm_ws_the_rule_could_not_be_removed">قاعدہ ہٹایا نہیں جا سکا۔</string>
     <string name="v2_vm_ws_the_setting_could_not_be_saved">ترتیب محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_ws_the_suggestion_could_not_be_saved">تجویز محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_ws_the_text_could_not_be_made">متن نہیں بن سکا۔</string>
     <string name="v2_vm_ws_project_deleted">پروجیکٹ حذف ہو گیا</string>
     <string name="v2_vm_project_deleted_moved">پروجیکٹ حذف ہو گیا · %1$s بغیر پروجیکٹ کی ریکارڈنگز میں منتقل</string>
     <string name="v2_vm_key_refused">Groq نے یہ کی قبول نہیں کی۔ console.groq.com سے دوبارہ کاپی کریں۔</string>
-    <string name="v2_vm_link_not_revoked">لنک منسوخ نہیں ہو سکا۔</string>
+    <string name="v2_vm_link_not_revoked">لنک واپس نہیں لیا جا سکا۔</string>
     <string name="v2_vm_not_deleted">ریکارڈنگ حذف نہیں ہو سکی۔</string>
     <string name="v2_vm_key_not_saved">کی محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_sign_in_first">پہلے اس فون پر سائن ان کریں۔</string>

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { SettingsView } from "./SettingsView";
 import { OnboardingView } from "./OnboardingView";
 import MainApp from "./MainApp";
-import { conflictFor, normaliseAccelerator } from "../../lib/shortcutConflicts";
+import { conflictFor, conflictOwner, normaliseAccelerator } from "../../lib/shortcutConflicts";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeSettings, makeStatus } from "../../test/fixtures";
 
@@ -29,6 +29,18 @@ describe("shortcut conflicts (B19)", () => {
     expect(conflictFor("Command+Space", "macos")).toMatch(/Spotlight/);
     expect(conflictFor("CommandOrControl+Alt+Shift+R", "windows")).toBeNull();
     expect(conflictFor("", "windows")).toBeNull();
+  });
+
+  it("says who else uses one: browsers, many apps, or an app or system by its name (Settings in the new look)", () => {
+    expect(conflictOwner("CommandOrControl+Shift+C", "windows")).toEqual({ kind: "browsers" });
+    expect(conflictOwner("CommandOrControl+Shift+J", "windows")).toEqual({ kind: "browsers" });
+    expect(conflictOwner("CommandOrControl+Shift+V", "windows")).toEqual({ kind: "many_apps" });
+    expect(conflictOwner("Command+Space", "macos")).toEqual({ kind: "app", name: "Spotlight" });
+    expect(conflictOwner("CommandOrControl+Alt+R", "macos")).toEqual({ kind: "app", name: "Safari" });
+    expect(conflictOwner("CommandOrControl+Shift+3", "macos")).toEqual({ kind: "app", name: "macOS" });
+    expect(conflictOwner("Alt+F4", "windows")).toEqual({ kind: "app", name: "Windows" });
+    expect(conflictOwner("CommandOrControl+Alt+R", "windows")).toBeNull();
+    expect(conflictOwner(undefined, "macos")).toBeNull();
   });
 });
 

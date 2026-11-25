@@ -54,9 +54,8 @@ function stateRecording(User $owner, string $state, int $hoursAgo, string $title
             'failed_session' => SessionStatus::Failed,
             default => SessionStatus::Completed,
         }]);
-    if ($state === 'waiting') {
-        $session->update(['ended_at' => null]);
-    }
+    // Since 2.0.0-z (lead decision 20) a call waits for the choice once it is over: it keeps its ended_at. A call still
+    // being recorded (no ended_at, started under 4 hours ago) is not waiting: tests/Feature/Api/WaitingCallsTest.php.
     match ($state) {
         'transcribed' => Fx::transcript($session, "Words of {$title}."),
         'transcribing', 'stuck' => $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing]),
@@ -204,7 +203,8 @@ it('gives every library item its one state, and the facets count each state, add
         $byState = array_fill_keys(LibraryFilters::STATE_NAMES, 0);
         foreach ($items as $item) {
             expect($item['title'])->toBeIn($titles, $name)
-                ->and($item['facets']['state'])->toBe(LibraryFilters::state($item['facets']['status'], $item['status']), "{$name}: {$item['title']}");
+                ->and($item['facets']['state'])->toBe(LibraryFilters::state($item['facets']['status'], $item['status'], LibraryFilters::isWaiting($item['status'],
+                    $item['ended_at'] === null ? null : Carbon::parse($item['ended_at'])->getTimestamp(), Carbon::parse($item['started_at'])->getTimestamp(), now()->getTimestamp())), "{$name}: {$item['title']}");
             $byState[$item['facets']['state']]++;
         }
         expect($byState)->toBe($answer['states'], $name);

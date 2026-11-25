@@ -595,7 +595,16 @@ button.segment.active { background: var(--accent-soft); }
 .queue-rename { padding: 6px 10px; font-weight: 600; }
 .queue-client { height: 36px; padding: 0 var(--space-2); }
 .lang-chip { flex: none; align-self: center; padding: 1px 6px; border-radius: var(--radius-tag); border: 1px solid var(--border-strong); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); }
-.queue-language { height: 32px; width: auto; max-width: 190px; }
+/* D-038: the closed language chip shows the short name; the native select lies transparent over it (its list and its
+   name stay), with select.chip's arrow on the chip. */
+.chip.queue-language { position: relative; height: 32px; width: auto; max-width: 190px; padding-inline-end: 28px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+[dir="rtl"] .chip.queue-language { background-position: 10px 50%, 15px 50%; }
+.queue-language > select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.queue-language > select:disabled { cursor: default; }
+/* The list's own colours, as select.chip's (an .active chip's accent words would reach the list in WebView2). */
+.queue-language > select option { color: var(--text); background: var(--surface); }
+.queue-language:has(> select:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.queue-language:has(> select:disabled) { opacity: 0.5; cursor: default; }
 .queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 .queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-muted); flex: none; }
@@ -929,8 +938,8 @@ audio.player { display: none; }
 .activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .activity-item { display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left; background: transparent; border: 0; border-radius: var(--radius-field); padding: 10px var(--space-3); color: var(--text); cursor: pointer; font: inherit; transition: background-color var(--motion-fast) var(--ease-out); }
 .activity-item:hover { background: var(--surface-3); }
-.activity-item:disabled { cursor: default; }
-.activity-item:disabled:hover { background: transparent; }
+.activity-item:disabled, .activity-item.static { cursor: default; }
+.activity-item:disabled:hover, .activity-item.static:hover { background: transparent; }
 .activity-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .activity-title { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 15px; min-width: 0; }
 .activity-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

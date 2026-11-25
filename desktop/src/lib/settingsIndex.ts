@@ -2,8 +2,11 @@
 // its keywords in English, Roman Urdu and Urdu, and where it lives. The rules are the shared ones (the phone and the
 // console match the same way): normalise, split into words that must all match, score by the best field each word
 // needs, then pins for short ambiguous words and a fuzzy pass only when nothing matched. Pure; settingsIndex.test.ts
-// holds the golden queries.
-import { breadcrumbOf, depthOf, SETTINGS, type SettingEntry } from "./settingsRegistry";
+// holds the golden queries. In another language (desktop Urdu, D3b) the index keeps every English word and adds the
+// words the window shows: the titles, options and descriptions in that language, so "اسٹوریج" finds Storage as "storage"
+// does.
+import { language, subscribeLanguage, t } from "../i18n";
+import { breadcrumbOf, depthOf, SETTINGS, shownTitle, type SettingEntry } from "./settingsRegistry";
 
 /** What decides whether an entry is offered here: this computer, the account, the plan. */
 export type Availability = (entry: SettingEntry) => boolean;
@@ -49,7 +52,8 @@ export function normalise(text: string): string {
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[\u064A\u0649\u0643\u0647\u0629]/g, (c) => URDU_FOLD[c] ?? c)
-    .replace(/[\u0640\u200C\u200D]/g, "")
+    // Tatweel, joiners, and the direction marks and isolates a line in Urdu may carry (U+200E, U+200F, U+2066–2069).
+    .replace(/[\u0640\u200C-\u200F\u2066-\u2069]/g, "")
     .replace(/[&,.·›/()\-'"“”‘’!?:;]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -93,17 +97,30 @@ interface Indexed {
   fuzzy: string[];
 }
 
-function indexEntry(entry: SettingEntry): Indexed {
-  const titles = [entry.title, ...(entry.titleV2 ? [entry.titleV2] : []), ...(entry.aliases ?? [])].map(normalise);
+/**
+ * `say`: the window's words for an English one (none in English). The English stays indexed; the shown words are added
+ * (a title, an option, a description), never in place of it.
+ */
+function indexEntry(entry: SettingEntry, say: ((english: string) => string) | null): Indexed {
+  // The English as it always was, then the shown words that differ from it.
+  const plus = (english: readonly string[], all: readonly string[], ownWords: readonly string[] = english) =>
+    (say ? [...all, ...ownWords.map(say).filter((w) => !all.includes(w))] : [...all]);
+  const own = [entry.title, ...(entry.titleV2 ? [entry.titleV2] : [])];
+  const titles = plus(own, [...own, ...(entry.aliases ?? [])]).map(normalise);
+  const labels = (entry.options ?? []).map((o) => o.label);
+  // An option named in its own language ("English", "اردو") is shown as it is.
+  const labelsShown = plus(labels, labels, (entry.options ?? []).filter((o) => !o.lang).map((o) => o.label));
   const words = (list: readonly string[] | undefined) => (list ?? []).flatMap(tokens).filter(indexable);
+  const englishPath = breadcrumbOf(entry, (english) => english).split(" › ");
   const withOptions = entry.kind === "choice" || entry.kind === "segmented";
   const keywordList = [...(entry.keywords ?? []), ...(entry.ru ?? []), ...(entry.ur ?? [])];
   const fields: Record<Field, string[]> = {
     title: titles.flatMap((t) => t.split(" ")).filter(indexable),
-    option: withOptions ? words(entry.options?.map((o) => o.label)) : [],
-    description: words(entry.kind === "help" ? [entry.answer ?? ""] : entry.description ? [entry.description] : []),
+    option: withOptions ? words(labelsShown) : [],
+    description: words(entry.kind === "help" ? [entry.answer ?? ""] : entry.description ? plus([entry.description], [entry.description]) : []),
     keyword: words(keywordList),
-    path: words(breadcrumbOf(entry).split(" › ")),
+    // The English path, whatever the window's language, and in another language the path as shown too.
+    path: words(plus(englishPath, englishPath)),
   };
   return {
     entry,
@@ -114,9 +131,13 @@ function indexEntry(entry: SettingEntry): Indexed {
   };
 }
 
+/** The index in the window's language, built once per language (a change of language builds it again). */
 let cache: Indexed[] | null = null;
+subscribeLanguage(() => {
+  cache = null;
+});
 function index(): Indexed[] {
-  cache ??= SETTINGS.map(indexEntry);
+  cache ??= SETTINGS.map((entry) => indexEntry(entry, language() === "en" ? null : (english) => (english === entry.title ? shownTitle(entry) : t(english))));
   return cache;
 }
 

@@ -6,6 +6,7 @@
 // sheet at Share link; Send to a teammate…, at Send to a teammate.
 import { useEffect, useState } from "react";
 import { api, errorMessage, type SentItem, type ShareLink } from "../../lib/ipc";
+// The sharing words in English (lang "en"), as the rest of this tab is until it is in the account's language.
 import { audienceText, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
 import { useAccount } from "../../views/main/AccountSettings";
@@ -86,7 +87,7 @@ export function MembersTab({ projectId, projectName, within = [], onShare, onSen
               <ListRow key={m.key} compact title={<span dir="auto">{m.who}</span>} meta={<span dir="auto">{m.email ? `${m.email} · ${m.how}` : m.how}</span>}
                 leading={<Avatar initials={initials(m.email ? m.who : "", m.email ?? m.who)} size="sm" seed={m.email ?? m.who} />} />
             ))}
-            {anyone.length > 0 && <ListRow compact icon={Icons.LinkIcon} iconStyle="plain" title={audienceText(anyone[0])} meta="Through a share link" />}
+            {anyone.length > 0 && <ListRow compact icon={Icons.LinkIcon} iconStyle="plain" title={audienceText(anyone[0], "en")} meta="Through a share link" />}
           </List>
         </Card>
         <p className="el-group__note el-caption el-secondary" dir="auto">
@@ -101,8 +102,8 @@ export function MembersTab({ projectId, projectName, within = [], onShare, onSen
           <Card>
             <List label="Share links" className="el-group__rows">
               {open.map((link) => (
-                <ListRow key={link.id} compact icon={Icons.LinkIcon} iconStyle="plain" title={<span dir="auto">{audienceText(link)}</span>}
-                  meta={[viewsText(link), link.expires_at ? `until ${formatWhen(link.expires_at)}` : null].filter(Boolean).join(" · ")} />
+                <ListRow key={link.id} compact icon={Icons.LinkIcon} iconStyle="plain" title={<span dir="auto">{audienceText(link, "en")}</span>}
+                  meta={[viewsText(link, "en"), link.expires_at ? `until ${formatWhen(link.expires_at)}` : null].filter(Boolean).join(" · ")} />
               ))}
             </List>
           </Card>

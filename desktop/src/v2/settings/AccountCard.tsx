@@ -10,6 +10,7 @@ import { Avatar, Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading,
 import { useDesignSwitch, type UiState } from "../flags";
 import { initials } from "./initials";
 import { useAvatar } from "../../views/main/AccountFlows";
+import { t, tc } from "../../i18n";
 
 export { initials };
 
@@ -17,7 +18,8 @@ export { initials };
 export function minutesLine(used: number | null | undefined, limit: number | null | undefined): string | null {
   if (used == null) return null;
   const u = Math.round(used);
-  return limit != null ? `${u} of ${Math.round(limit)} minutes used this month` : `${u} minutes used this month`;
+  // One English form (as the app has always said it); Urdu's two follow the number.
+  return limit != null ? tc(":used of :limit minutes used this month", u, { used: u, limit: Math.round(limit) }) : tc(":used minutes used this month", u, { used: u });
 }
 
 /** Who is signed in, the plan with Upgrade and the month's minutes (for Settings in the new look, ui_v2.settings). */
@@ -44,7 +46,7 @@ export function AccountCard() {
 
   if (account === undefined) {
     return (
-      <Loading label="Loading your account">
+      <Loading label={t("Loading your account")}>
         <Card className="el-profile"><Skeleton shape="circle" /><span className="el-profile__who"><Skeleton shape="title" width="medium" /><Skeleton width="long" /></span></Card>
       </Loading>
     );
@@ -52,9 +54,9 @@ export function AccountCard() {
   if (!account) {
     return (
       <Card className="el-profile-error">
-        <EmptyState tone="error" icon={Icons.ErrorIcon} title="Your account didn't load"
-          body={error ?? "Settings on this computer still work. Your plan and profile show once the server answers."}
-          action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+        <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("Your account didn't load")}
+          body={error ?? t("Settings on this computer still work. Your plan and profile show once the server answers.")}
+          action={<Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
       </Card>
     );
   }
@@ -77,7 +79,7 @@ export function AccountCard() {
             </span>
           )}
         </div>
-        {canUpgrade && <Button variant="primary" onClick={() => openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })}>Upgrade</Button>}
+        {canUpgrade && <Button variant="primary" onClick={() => openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })}>{t("Upgrade")}</Button>}
       </Card>
     </>
   );
@@ -97,31 +99,31 @@ export function StorageCard() {
   const stored = entitlements?.limits.storage_bytes;
   const usedBytes = stored?.used ?? storage?.recordings_bytes ?? null;
   if (storage === undefined) {
-    return <Loading label="Loading storage"><Card className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></Card></Loading>;
+    return <Loading label={t("Loading storage")}><Card className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></Card></Loading>;
   }
   return (
     <>
       {(usedBytes != null || storage) && (
-        <section className="el-group" aria-label="Storage">
-          <h2 className="el-caption el-body-strong el-group__title">Storage</h2>
+        <section className="el-group" aria-label={t("Storage")}>
+          <h2 className="el-caption el-body-strong el-group__title">{t("Storage")}</h2>
           <Card>
-            <List label="Storage" className="el-group__rows">
+            <List label={t("Storage")} className="el-group__rows">
               {usedBytes != null && (
-                <ListRow compact icon={Icons.StorageIcon} iconStyle="plain" title="Your recordings"
-                  meta={stored?.limit ? undefined : storage ? `${storage.recordings_count} recordings` : undefined}
-                  value={stored?.limit ? `${fileSize(usedBytes)} of ${fileSize(stored.limit)}` : fileSize(usedBytes)} />
+                <ListRow compact icon={Icons.StorageIcon} iconStyle="plain" title={t("Your recordings")}
+                  meta={stored?.limit ? undefined : storage ? tc(":count recordings", storage.recordings_count) : undefined}
+                  value={stored?.limit ? t(":used of :limit", { used: fileSize(usedBytes), limit: fileSize(stored.limit) }) : fileSize(usedBytes)} />
               )}
               {stored?.limit && usedBytes != null && (
                 <li className="el-group__progress">
-                  <Progress label="Storage used" value={usedBytes} max={stored.limit} valueText={`${fileSize(usedBytes)} of ${fileSize(stored.limit)}`} />
+                  <Progress label={t("Storage used")} value={usedBytes} max={stored.limit} valueText={t(":used of :limit", { used: fileSize(usedBytes), limit: fileSize(stored.limit) })} />
                 </li>
               )}
               {storage?.disk_free_bytes != null && (
-                <ListRow compact icon={Icons.ScreenIcon} iconStyle="plain" title="Free on this computer" value={fileSize(storage.disk_free_bytes)} />
+                <ListRow compact icon={Icons.ScreenIcon} iconStyle="plain" title={t("Free on this computer")} value={fileSize(storage.disk_free_bytes)} />
               )}
               {storage && (
-                <ListRow compact icon={Icons.ClockIcon} iconStyle="plain" title="Recordings are kept"
-                  value={storage.retention_days > 0 ? `${storage.retention_days} days` : "Until you delete them"} />
+                <ListRow compact icon={Icons.ClockIcon} iconStyle="plain" title={t("Recordings are kept")}
+                  value={storage.retention_days > 0 ? tc(":days days", storage.retention_days, { days: storage.retention_days }) : t("Until you delete them")} />
               )}
             </List>
           </Card>
@@ -137,11 +139,11 @@ export function ClassicSwitch(_props: { state?: UiState; onState?: (next: UiStat
   const design = useDesignSwitch();
   if (!design.canSwitchBack) return null;
   return (
-    <Card className="el-classic" label="Look">
-      <List label="Look">
-        <ListRow compact icon={Icons.AppearanceIcon} iconStyle="plain" title="You're using the new design"
-          meta={design.error ?? "Classic stays available while the new design is finished."}
-          control={<Button size="sm" loading={design.busy} loadingLabel="Switching…" onClick={() => void design.choose("classic")}>Switch back to classic</Button>} />
+    <Card className="el-classic" label={t("Look")}>
+      <List label={t("Look")}>
+        <ListRow compact icon={Icons.AppearanceIcon} iconStyle="plain" title={t("You're using the new design")}
+          meta={design.error ?? t("Classic stays available while the new design is finished.")}
+          control={<Button size="sm" loading={design.busy} loadingLabel={t("Switching…")} onClick={() => void design.choose("classic")}>{t("Switch back to classic")}</Button>} />
       </List>
     </Card>
   );

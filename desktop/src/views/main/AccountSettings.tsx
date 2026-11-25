@@ -11,6 +11,7 @@ import { CLASSIC_KIT } from "./accountKit";
 import { initials } from "../../v2/settings/initials";
 import { Sheet } from "./ProjectDialogs";
 import { ActionRow, DestructiveRow, InfoRow, LinkRow, Section } from "./SettingsControls";
+import { t } from "../../i18n";
 
 /** How often a data export that is being made is asked about. */
 export const EXPORT_POLL_MS = 5000;
@@ -49,7 +50,7 @@ export function workspaceLine(account: Account | null | undefined, status: Pick<
   const role = roleOf(account, status);
   const team = (account?.workspaces?.length ?? 0) > 1 || (role !== null && role !== "owner") || (status.plan.seats ?? 1) > 1;
   if (!workspace || !team) return null;
-  return role ? `${workspace}, ${ROLE_LABEL[role]}` : workspace;
+  return role ? t(":workspace, :role", { workspace, role: t(ROLE_LABEL[role]) }) : workspace;
 }
 
 /** The server serves the account routes of 2.0.0-l: the name, email, password and two-step are changed here. */
