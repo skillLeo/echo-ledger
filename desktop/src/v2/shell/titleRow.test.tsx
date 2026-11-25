@@ -1,6 +1,6 @@
 // UX-20: the title row's parts (TitleRow); the shell around it is in shellTitleRow.test.tsx.
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { EVERYTHING, SHORT_FIELD, TitleRow, searchFits, type TitleRowProps } from "./TitleRow";
 
@@ -193,5 +193,71 @@ describe("the title row (UX-20)", () => {
     expect(row()).not.toHaveClass("el-titlerow--scrolled");
     rerender(<TitleRow {...base} scrolled />);
     expect(row()).toHaveClass("el-titlerow--scrolled");
+  });
+
+  it("narrow (lead decision 18's narrow case, under 720 CSS px): Search (Ctrl+F) opens the field across the row, the title aside only while it is open; Esc or leaving it empty closes it", () => {
+    const wide = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
+    try {
+      const onEverything = vi.fn();
+      function Page({ seq }: { seq: number }) {
+        const [query, setQuery] = useState("");
+        return (
+          <>
+            <TitleRow {...base} onEverything={onEverything} findSeq={seq}
+              title={{ title: "All recordings", count: 11, search: { placeholder: "Search recordings", scope: "All recordings", query, setQuery } }} />
+            <button type="button">Elsewhere</button>
+          </>
+        );
+      }
+      const { rerender } = render(<Page seq={0} />);
+      expect(row()).toHaveClass("el-titlerow--narrow");
+      expect(row().querySelector(".el-titlerow__name")).toHaveTextContent("All recordings");
+      expect(row().querySelector(".el-titlerow__name")).not.toHaveAttribute("title");
+      expect(within(row()).queryByRole("searchbox")).toBeNull();
+      const search = within(row()).getByRole("button", { name: "Search" });
+      expect(search).toHaveAttribute("title", "Search (Ctrl+F)");
+      expect(search).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F");
+      // Open: the field across the row, focused; the title steps aside.
+      fireEvent.click(search);
+      const field = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      expect(field).toHaveFocus();
+      expect(row()).toHaveClass("el-titlerow--searching");
+      // Esc on an empty field closes it, and focus goes back to Search.
+      fireEvent.keyDown(field, { key: "Escape" });
+      expect(within(row()).queryByRole("searchbox")).toBeNull();
+      expect(row()).not.toHaveClass("el-titlerow--searching");
+      expect(within(row()).getByRole("button", { name: "Search" })).toHaveFocus();
+      // Ctrl+F (the shell counts the presses) opens it too; with words in it, leaving keeps it open.
+      rerender(<Page seq={1} />);
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
+      fireEvent.change(within(row()).getByRole("searchbox"), { target: { value: "invoice" } });
+      fireEvent.blur(within(row()).getByRole("searchbox"));
+      expect(within(row()).getByRole("searchbox")).toHaveValue("invoice");
+      // Emptied and left: closed (focus stays where it went).
+      fireEvent.change(within(row()).getByRole("searchbox"), { target: { value: "" } });
+      fireEvent.blur(within(row()).getByRole("searchbox"));
+      expect(within(row()).queryByRole("searchbox")).toBeNull();
+      // Wide again: the field as before.
+      Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+      expect(row()).not.toHaveClass("el-titlerow--narrow");
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: wide, configurable: true, writable: true });
+    }
+  });
+
+  it("narrow, without a search of the page's own: Search opens the search of everything", () => {
+    const wide = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
+    try {
+      const onEverything = vi.fn();
+      render(<TitleRow {...base} title={{ title: "Activity", count: null }} onEverything={onEverything} />);
+      fireEvent.click(within(row()).getByRole("button", { name: "Search" }));
+      expect(onEverything).toHaveBeenCalledWith("");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: wide, configurable: true, writable: true });
+    }
   });
 });

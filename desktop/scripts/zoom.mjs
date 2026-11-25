@@ -1,16 +1,19 @@
 // UX-07, zoom like Chrome: the main window at 67% to 200% in windows 1024, 1280 and 1440 px wide (740 tall), English and
-// Urdu; the least window (720×560) at 175% and 200%; and Windows' own title row (v21_win_titlebar) at 1280×740 and
-// 720×560, 150% and 200%. As the web view draws it: a page that many CSS pixels narrower, drawn that much bigger
-// (deviceScaleFactor), with v21_zoom on and that zoom kept (so the title row has its chip). Saved under
+// Urdu; the least window (720×560) at 175% and 200% (and Urdu at 200%); and Windows' own title row (v21_win_titlebar)
+// at 1280×740 and 720×560, 150% and 200%. As the web view draws it: a page that many CSS pixels narrower, drawn that
+// much bigger (deviceScaleFactor), with v21_zoom on and that zoom kept (so the title row has its chip). Saved under
 // docs/design/screens/desktop/zoom/: <width>-<zoom>-<lang>.png, 720x560-<zoom>-en.png, win-<window>-<zoom>-en.png, and
 // the zoom's own parts in light and dark at 1280 and 125%: ui-avatar-row-<theme>.png (the avatar's Zoom row),
 // ui-chip-menu-<theme>.png (the chip and its menu), ui-bubble-<theme>.png, ui-settings-<theme>.png (Settings ›
-// Appearance › Zoom), and ui-more-<theme>.png (⋯ More's menu at 1280 and 200%). Measured on each: nothing wider than
-// the window (no sideways scroll), the title row's title whole (from 720 CSS px: below the least width it may be cut),
-// the title row on screen, every rail item to its last (Account) inside the window, Settings and Account shown, no item
-// only partly shown (the places that don't fit whole are in ⋯ More, or in the avatar's menu when not even More fits;
-// read from the menu), Activity's badge on Activity, More or the avatar, the chip in the row unless at 100%, nothing of
-// the page under the window's buttons. The run fails on any of that.
+// Appearance › Zoom), ui-more-<theme>.png (⋯ More's menu at 1280 and 200%) and 720x560-200-en-search.png (the narrow
+// row's search open across it). Measured on each: nothing wider than the window (no sideways scroll), the title row's
+// title whole at every width (never cut, never under another part; in the least window it may wrap or take a line of its
+// own, lead decision 18's narrow case), the title row no wider than its room and on screen, every rail item to its last
+// (Account) inside the window, Settings and Account shown, no item only partly shown (the places that don't fit whole
+// are in ⋯ More, or in the avatar's menu when not even More fits; read from the menu), Activity's badge on Activity, More
+// or the avatar, the chip in the row unless at 100%, nothing of the page under the window's buttons. In the narrow row,
+// Search opens the field across it (the title stepping aside) and Esc closes it back to Search. The run fails on any of
+// that.
 //   node scripts/zoom.mjs [67,100,150,200]
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -25,8 +28,6 @@ process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 const ZOOMS = process.argv[2] ? process.argv[2].split(",").map(Number) : [67, 100, 150, 175, 200];
 const FLAGS = `${V2_FLAGS},v21_zoom`;
 const WIDTHS = [1024, 1280, 1440];
-/** The window's least width (FIX-08). */
-const MIN_WIDTH = 720;
 const HEIGHT = 740;
 /** Every window measured: 1024, 1280 and 1440 by 740 (Urdu at 150%); the least window, 720×560, at 175% and 200%, where
  * not even More may fit (the places are then in the avatar's menu); and Windows' own title row (v21_win_titlebar, its
@@ -37,6 +38,8 @@ for (const width of WIDTHS) for (const zoom of ZOOMS) for (const lang of ["en", 
   RUNS.push({ width, height: HEIGHT, zoom, lang, platform: "macos", name: `${width}-${zoom}-${lang}` });
 }
 for (const zoom of [175, 200].filter((z) => ZOOMS.includes(z))) RUNS.push({ width: 720, height: 560, zoom, lang: "en", platform: "macos", name: `720x560-${zoom}-en` });
+// The narrow row mirrored (Urdu, right to left).
+if (ZOOMS.includes(200)) RUNS.push({ width: 720, height: 560, zoom: 200, lang: "ur", platform: "macos", name: "720x560-200-ur" });
 for (const [width, height, zoom] of [[1280, 740, 150], [1280, 740, 200], [720, 560, 150], [720, 560, 200]].filter(([, , z]) => ZOOMS.includes(z))) {
   RUNS.push({ width, height, zoom, lang: "en", platform: "windows", name: `win-${height === HEIGHT ? width : `${width}x${height}`}-${zoom}-en` });
 }
@@ -113,10 +116,18 @@ try {
         const r = el.getBoundingClientRect();
         return r.width > 0 && r.left < lights.right && r.right > lights.left && r.top < lights.bottom && r.bottom > lights.top;
       }).map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim()) : [];
+      // Cut: an ellipsis or a word wider than its box, or the title under another part of the row.
+      const nameBox = name?.getBoundingClientRect();
+      const covered = !!nameBox && [...document.querySelectorAll('[data-testid="title-row"] button, [data-testid="title-row"] input')].some((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.left < nameBox.right - 0.5 && r.right > nameBox.left + 0.5 && r.top < nameBox.bottom - 0.5 && r.bottom > nameBox.top + 0.5;
+      });
+      const titleRow = document.querySelector('[data-testid="title-row"]');
       return {
         css: innerWidth,
         sideways: doc.scrollWidth > doc.clientWidth + 1,
-        cut: name ? name.scrollWidth > name.clientWidth + 0.5 : true,
+        cut: name ? name.scrollWidth > name.clientWidth + 0.5 || name.scrollHeight > name.clientHeight + 0.5 || getComputedStyle(name).textOverflow === "ellipsis" && name.scrollWidth > name.clientWidth || covered : true,
+        overflow: !!titleRow && titleRow.scrollWidth > titleRow.clientWidth + 1,
         row: row ? row.right <= innerWidth + 1 && row.left >= -1 : false,
         rail: !!last && last.bottom <= innerHeight + 1 && named.includes("Settings") && named.some((n) => n.startsWith("Account")),
         chip,
@@ -142,11 +153,11 @@ try {
       reach = missing.length === 0;
       where = `${moved} in ${m.more ? "More" : "the avatar's menu"}${missing.length ? ` (MISSING: ${missing.join(", ")})` : ""}`;
     }
-    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${m.cut ? (m.css >= MIN_WIDTH ? "CUT" : "cut (below the least width)") : "whole"}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${where}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
+    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${m.cut ? "CUT" : "whole"}${m.overflow ? " ROW OVERFLOWS" : ""}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${where}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
     if (m.sideways) problems.push(`${name}: wider than the window`);
-    // The title truncates only below the window's least width (lead decision 18): a page narrower than 720 CSS px (the
-    // least window at 175% and 200%) may cut it.
-    if (m.cut && m.css >= MIN_WIDTH) problems.push(`${name}: the title is cut`);
+    // The title never loses a word, at any width (lead decision 18; its narrow case wraps it instead).
+    if (m.cut) problems.push(`${name}: the title is cut`);
+    if (m.overflow) problems.push(`${name}: the title row is wider than its room`);
     if (!m.row) problems.push(`${name}: the title row is off the screen`);
     if (!m.rail) problems.push(`${name}: the rail is cut before Settings and Account`);
     if (m.partly.length) problems.push(`${name}: only partly shown in the rail: ${m.partly.join(", ")}`);
@@ -155,6 +166,45 @@ try {
     if (m.badge === "none") problems.push(`${name}: Activity's badge is gone`);
     if (m.chip !== (zoom !== 100)) problems.push(`${name}: the chip is ${m.chip ? "shown at 100%" : "missing"}`);
     if (m.under.length) problems.push(`${name}: under the window's buttons: ${m.under.join(", ")}`);
+    await page.close();
+  }
+  // The narrow row's search (lead decision 18's narrow case): Search opens the field across the row, Esc closes it.
+  {
+    const page = await open(720, 200, "en", "light", { height: 560 });
+    const titleRow = page.getByTestId("title-row");
+    const button = titleRow.getByRole("button", { name: "Search", exact: true });
+    const tip = await button.getAttribute("title");
+    await button.click();
+    const field = titleRow.getByRole("searchbox");
+    await field.waitFor();
+    const m = await page.evaluate(() => {
+      const row = document.querySelector('[data-testid="title-row"]');
+      const input = row.querySelector("input");
+      const title = row.querySelector(".el-titlerow__title");
+      // The row's other parts stay whole beside it: ⊟, ← →, the zoom chip.
+      const kept = [...row.querySelectorAll("button")].filter((b) => !row.querySelector(".el-titlerow__search")?.contains(b)).every((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.left >= row.getBoundingClientRect().left - 0.5 && r.right <= row.getBoundingClientRect().right + 0.5;
+      });
+      // Across the row: the box takes the title's place, from the arrows to the row's end part.
+      const box = row.querySelector(".el-titlerow__search").getBoundingClientRect();
+      const history = row.querySelector(".el-titlerow__history").getBoundingClientRect();
+      const endPart = row.querySelector(".el-titlerow__end").getBoundingClientRect();
+      const near = (a, b) => Math.min(Math.abs(a.left - b.right), Math.abs(b.left - a.right)) <= 16;
+      const across = near(box, history) && near(box, endPart);
+      return { focused: document.activeElement === input, width: box.width, across, titleShown: !!title && title.getBoundingClientRect().width > 0,
+        overflow: row.scrollWidth > row.clientWidth + 1, kept };
+    });
+    await page.screenshot({ path: join(out, "720x560-200-en-search.png") });
+    await page.keyboard.press("Escape");
+    const back = await button.evaluate((el) => document.activeElement === el).catch(() => false);
+    const titleBack = await titleRow.locator(".el-titlerow__name").isVisible();
+    console.log(`720x560-200-en-search: tooltip "${tip}"; field ${Math.round(m.width)} CSS px${m.across ? " across the row" : " NOT ACROSS"}${m.focused ? ", focused" : ""}; title ${m.titleShown ? "SHOWN" : "aside"}; the row's other parts ${m.kept && !m.overflow ? "whole" : "PUSHED OUT"}; Esc: ${back ? "back to Search" : "FOCUS LOST"}, title ${titleBack ? "back" : "MISSING"}`);
+    if (!/^Search \((⌘F|Ctrl\+F)\)$/.test(tip ?? "")) problems.push(`720x560-200-en-search: the tooltip says "${tip}"`);
+    if (!m.focused || !m.across) problems.push("720x560-200-en-search: the field didn't open across the row");
+    if (m.titleShown) problems.push("720x560-200-en-search: the title stays beside the open field");
+    if (m.overflow || !m.kept) problems.push("720x560-200-en-search: the open field pushes the row's other parts out");
+    if (!back || !titleBack) problems.push("720x560-200-en-search: Esc didn't close it back to Search");
     await page.close();
   }
   // The zoom's own parts, light and dark, at 1280 and 125%.

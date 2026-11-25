@@ -2229,6 +2229,26 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 /* No room for the field: a ⌕ button at the row's end. */
 .el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; }
+/* Lead decision 18's narrow case: under the least width (720 CSS px, zoomed in a small window) the search is a ⌕ button
+   and the title keeps every word, wrapping to a second line when it must (the row grows for it); never an ellipsis.
+   The ⌕ button opens the field across the row, the title stepping aside only while it is open. */
+.el-root .el-titlerow.el-titlerow--narrow { block-size: auto; min-block-size: var(--el-desktop-search-height); }
+.el-titlerow--narrow .el-titlerow__start { flex: 1 1 auto; }
+.el-titlerow--narrow .el-titlerow__title { flex: 1 1 auto; align-items: center; }
+.el-titlerow--narrow .el-titlerow__name { white-space: normal; overflow: visible; text-overflow: clip; min-inline-size: min-content; }
+.el-titlerow--narrow .el-titlerow__middle { flex: none; min-inline-size: auto; margin-inline-start: 0; }
+.el-titlerow--searching .el-titlerow__title { display: none; }
+.el-titlerow--searching .el-titlerow__start { flex: none; }
+.el-titlerow--searching .el-titlerow__middle { flex: 1 1 0; min-inline-size: 0; }
+/* Narrow, the open field is only the field: its placeholder and name say what it searches (⌘K searches everything). */
+.el-titlerow--narrow .el-titlerow__keys, .el-titlerow--narrow .el-titlerow__scope { display: none; }
+/* When its words don't fit beside the controls even on two lines, the title takes the line under them. */
+.el-titlerow--below { flex-wrap: wrap; }
+.el-titlerow--below .el-titlerow__start { display: contents; }
+.el-titlerow--below .el-titlerow__title { order: 1; flex: 1 0 100%; box-sizing: border-box; margin: 0; padding: 0 var(--el-space-4) var(--el-space-4); }
+.el-titlerow--below .el-titlerow__middle { margin-inline-start: auto; }
+/* Narrow, the zoom chip says its percentage without its icon (its name and menu are unchanged). */
+.el-titlerow--narrow .el-zoom-chip .el-icon { display: none; }
 .el-titlerow__search {
   display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
   inline-size: 100%; block-size: var(--el-desktop-search-height);
@@ -2337,6 +2357,15 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
 .el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
 .el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
+/* Zoomed with Windows' own title row, the window's buttons keep the system's size, as Windows' own do (as the Mac's
+   do): 46 × 48 points, divided by --el-zoom, the row never shorter than its controls. */
+[data-titlebar="win"] .el-rail__top, [data-titlebar="win"] .el-titlerow, [data-titlebar="win"] .el-panel__head, [data-titlebar="win"] .el-winbuttons {
+  block-size: max(calc(var(--el-desktop-titlerow-height-windows) / var(--el-zoom, 1)), var(--el-desktop-search-height));
+}
+[data-titlebar="win"] .el-winbutton { inline-size: calc(var(--el-desktop-window-button-width) / var(--el-zoom, 1)); }
+[data-titlebar="win"] .el-winbutton .el-icon > svg {
+  inline-size: calc(var(--el-desktop-window-button-glyph) / var(--el-zoom, 1)); block-size: calc(var(--el-desktop-window-button-glyph) / var(--el-zoom, 1));
+}
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {
