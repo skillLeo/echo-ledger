@@ -77,7 +77,7 @@ class Security extends Page implements HasTable
                         default => 'gray',
                     }),
                 TextColumn::make('summary')->label(__('What'))->limit(80)->wrap(),
-                TextColumn::make('actor')->label(__('By'))->formatStateUsing(fn (AuditEvent $record): string => self::actorLabel($record)),
+                TextColumn::make('actor')->label(__('settings_context.col_by'))->formatStateUsing(fn (AuditEvent $record): string => self::actorLabel($record)),
                 TextColumn::make('ip')->label(__('IP address'))->placeholder('—')->toggleable(),
             ])
             // The filter button's badge shows once a filter is on, not as a 0 (see the theme).

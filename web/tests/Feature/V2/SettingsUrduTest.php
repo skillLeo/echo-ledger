@@ -286,3 +286,27 @@ it('shows a settings hit in the command palette with its Urdu title and path, an
     SettingsContext::forget();
     expect($hits('password'))->toContain('Password · Settings › Sign-in & security › Password')->not->toContain('ترتیبات');
 });
+
+it('reads the short context words from lang/*/settings_context.php, and "Settings" still as words in English', function () {
+    app()->setLocale('en');
+    expect(__('Settings'))->toBe('Settings')
+        ->and(array_map(fn (string $k): string => __('settings_context.'.$k), ['col_by', 'recordings_kept', 'password_not_set', 'plan_yours', 'reset_page']))
+        ->toBe(['By', 'Recordings kept', 'Not set', '(yours)', 'Reset']);
+
+    app()->setLocale('ur');
+    expect(__('Settings'))->toBe('ترتیبات')
+        ->and(array_map(fn (string $k): string => __('settings_context.'.$k), ['col_by', 'recordings_kept', 'password_not_set', 'plan_yours', 'reset_page']))
+        ->toBe(['کس نے', 'ریکارڈنگز کتنی دیر رہیں', 'نہیں رکھا', '(آپ کا)', 'واپس لائیں']);
+});
+
+it('shows the context words in place in Urdu, and the same English as before', function () {
+    settingsUrduAs($this, 'ur');
+    expect(settingsUrduRow(settingsUrduHtml($this, '/app/settings/storage'), 'storage.retention'))->toBe('ریکارڈنگز کتنی دیر رہیں');
+    Livewire::test(EditProfile::class, ['subpage' => 'appearance'])
+        ->assertActionExists('resetPage', fn (Action $a): bool => $a->getModalSubmitActionLabel() === 'واپس لائیں');
+
+    settingsUrduAs($this, 'en');
+    expect(settingsUrduRow(settingsUrduHtml($this, '/app/settings/storage'), 'storage.retention'))->toBe('Recordings kept');
+    Livewire::test(EditProfile::class, ['subpage' => 'appearance'])
+        ->assertActionExists('resetPage', fn (Action $a): bool => $a->getModalSubmitActionLabel() === 'Reset');
+});

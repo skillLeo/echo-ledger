@@ -89,7 +89,7 @@ trait ManagesAppPages
         return Action::make('resetPage')->label(__('Reset to defaults'))->color('gray')->link()
             ->requiresConfirmation()->modalIcon(null)
             ->modalHeading(fn (): string => __('Reset :page to defaults?', ['page' => __(SettingsRegistry::pageTitle($this->subpage))]))
-            ->modalDescription(null)->modalSubmitActionLabel(__('Reset'))
+            ->modalDescription(null)->modalSubmitActionLabel(__('settings_context.reset_page'))
             ->action(function (): void {
                 $user = $this->account();
                 $columns = ['appearance.sidebar' => 'style', 'appearance.density' => 'density', 'appearance.clock' => 'clock', 'appearance.library_view' => 'layout', 'transcription.language' => 'language'];

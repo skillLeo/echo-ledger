@@ -104,7 +104,7 @@ trait ManagesPlanPage
         $seats = $plan->limit('seats');
 
         return [
-            ['title' => __('Recordings kept'), 'value' => $retention === null ? __('Until you delete them') : Formats::days((int) $retention)],
+            ['title' => __('settings_context.recordings_kept'), 'value' => $retention === null ? __('Until you delete them') : Formats::days((int) $retention)],
             ['title' => __('Longest recording'), 'value' => $file === null ? __('No limit') : Formats::fileLength((int) $file)],
             ['title' => __('Uploads a day'), 'value' => $uploads === null ? __('No limit') : __('Up to :count', ['count' => number_format((int) $uploads)])],
             ['title' => __('Team members'), 'value' => $seats === null ? __('No limit') : ((int) $seats <= 1 ? __('Just you') : __('Up to :count people', ['count' => number_format((int) $seats)]))],

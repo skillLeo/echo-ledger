@@ -7,6 +7,6 @@
             <div class="el-meter-bar" aria-hidden="true"><div class="el-meter-fill" style="width: {{ $percent }}%"></div></div>
         @endif
     </div>
-    <x-el.row setting="storage.retention" :title="__('Recordings kept')" :value="$retention" />
+    <x-el.row setting="storage.retention" :title="__('settings_context.recordings_kept')" :value="$retention" />
     <x-el.row setting="storage.bin" :title="__('Bin')" :value="$bin" :href="$binUrl" :chevron="$binUrl !== null" />
 </x-el.section>

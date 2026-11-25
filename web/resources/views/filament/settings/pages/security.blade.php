@@ -3,7 +3,7 @@
     browsers signed in, the sign-in activity and Sign out everywhere.
 --}}
 <x-el.section>
-    <x-el.row setting="security.password" :title="__('Password')" click="mountAction('changePassword')" :value="$hasPassword ? null : __('Not set')" />
+    <x-el.row setting="security.password" :title="__('Password')" click="mountAction('changePassword')" :value="$hasPassword ? null : __('settings_context.password_not_set')" />
     <x-el.row setting="security.two_step" :title="__('Two-step sign-in')" :value="$twoStep ? __('On') : __('Off')"
         :click="$twoStep ? 'mountAction(\'disableAppAuthentication\')' : 'mountAction(\'setUpAppAuthentication\')'" />
     @if ($twoStep)

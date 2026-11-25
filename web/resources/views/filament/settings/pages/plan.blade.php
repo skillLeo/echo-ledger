@@ -97,7 +97,7 @@
                     <tr>
                         <th scope="col"><span class="sr-only">{{ __('Feature') }}</span></th>
                         @foreach ($matrixPlans as $column)
-                            <th scope="col">{{ $column['name'] }}@if ($column['yours']) <span>{{ __('(yours)') }}</span>@endif</th>
+                            <th scope="col">{{ $column['name'] }}@if ($column['yours']) <span>{{ __('settings_context.plan_yours') }}</span>@endif</th>
                         @endforeach
                     </tr>
                 </thead>
