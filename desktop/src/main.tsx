@@ -4,8 +4,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
-import { api } from "./lib/ipc";
-import { watchTitlebar } from "./lib/titlebar";
+import { api, listenTo } from "./lib/ipc";
+import { watchTitlebar, watchWinTitlebar } from "./lib/titlebar";
+import { loadZoom, setZoom, ZOOM_DEFAULT } from "./lib/zoom";
 import { installNativeFeel, SYNC_NOW_EVENT } from "./lib/nativeFeel";
 import { watchTitleDoubleClick } from "./lib/titleClick";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -53,6 +54,11 @@ applyTheme(getThemeChoice());
 watchSystemTheme();
 // Account → Preferences (v1.6): the sidebar's style, density and the clock, before anything is drawn.
 applyPreferences(loadPreferences());
+// UX-07: the main window's kept zoom, before it first shows (it is hidden until its page is ready), so it doesn't jump;
+// only when the core's cached flags say v21_zoom is on, so with it off the window never opens zoomed.
+if (label === "main" && loadZoom() !== ZOOM_DEFAULT) {
+  api.uiFlags().then((a) => { if (a.ui_flags?.v21_zoom) setZoom(loadZoom(), false); }, () => undefined);
+}
 
 // C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
 // accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core
@@ -77,6 +83,8 @@ api
       watchTitlebar(a.platform, isFullscreen);
       watchTitleDoubleClick(a.platform);
     }
+    // Windows with v21_win_titlebar: the page draws the title row and the window's buttons (wintitle.rs).
+    if (label === "main" && a.platform === "windows") watchWinTitlebar(api.windowTitlebar, (follow) => listenTo<boolean>("window:titlebar", follow));
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

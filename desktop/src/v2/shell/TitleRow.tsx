@@ -1,9 +1,13 @@
 // The one title row (PLAN_V2_1_POLISH UX-20): the window's toolbar, as in Finder, Mail and VS Code. In the content
-// column: ⊟ while the panel is off the screen (right after the window's buttons), ← →, the page's title with its count,
-// one search field centred in the column, and the status items at the end. Every empty part of it, and the title, moves
-// the window (data-tauri-drag-region="deep": anything in it that can't be clicked); a double click does what the Mac's
-// setting says (lib/titleClick.ts). Buttons and the field never drag. A hairline shows under it only once the page has
-// scrolled. The page's part (title, count, search) comes from pageTitle.tsx.
+// column, start to end: ⊟ while the panel is off the screen (right after the window's buttons), ← →, the page's title
+// with its count, empty space, and the search field at the row's end (the owner's request for 2.0.15, as Mail, Notes and
+// Finder have it), then the status items. The title never gives its words to the search: as the window narrows the
+// empty space goes first, then the field shrinks to its least width, then it becomes a ⌕ button at the end; only when
+// even that leaves no room (a window under the app's 720 px least width) is the title cut, its full words in a
+// tooltip. The count always shows. Every empty part of the row, and the title, moves the window
+// (data-tauri-drag-region="deep": anything in it that can't be clicked); a double click does what the Mac's setting says
+// (lib/titleClick.ts). Buttons and the field never drag. A hairline shows under it only once the page has scrolled. The
+// page's part (title, count, search) comes from pageTitle.tsx.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Icon, Icons } from "../components";
 import type { PageTitle } from "../pageTitle";
@@ -16,18 +20,22 @@ export const SEARCH_WORDS: Partial<Record<Place, string>> = {
   library: "Search recordings", projects: "Search projects", settings: "Search settings",
 };
 export const EVERYTHING = "Search everything";
+/** Below this width the field's placeholder is the short word: its full words (and the scope's chip) stay its name. */
+export const SHORT_FIELD = 220;
+export const SHORT_WORDS = "Search";
 
-/** The field's least width and the drag room it keeps on each side (tokens desktop.search.*). */
-const FIELD_LEAST = 200;
-const DRAG_ROOM = 64;
+/** The field's least width and the least drag room left between the title and the field (tokens desktop.search.*). */
+export const FIELD_LEAST = 180;
+export const DRAG_ROOM = 16;
+/** The gaps between the row's parts: the title's group, the field, the status items (--el-space-8 each). */
+const GAPS = 2 * 8;
 /**
- * Whether the field fits between the row's two ends (pure): 200 px for it and 64 px of free drag space on each side;
- * else it becomes a ⌕ button that opens the same search.
+ * Whether the field fits at the row's end beside the title (pure): `row` is the row's inner width, `start` the whole
+ * width of ⊟, ← → and the title with its count, `end` the status items'. The field needs its least width and the least
+ * drag room; else it becomes a ⌕ button, and the title keeps its words.
  */
 export function searchFits(row: number, start: number, end: number): boolean {
-  // The field is centred in the row, so its room is twice the room on the wider side's end.
-  const half = row / 2 - Math.max(start, end);
-  return half * 2 >= FIELD_LEAST + DRAG_ROOM * 2;
+  return row - start - end - GAPS >= FIELD_LEAST + DRAG_ROOM;
 }
 
 export type TitleRowProps = {
@@ -55,13 +63,29 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
   const tail = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const [fits, setFits] = useState(true);
-  // The field shrinks to a button when the row has no room for it (measured; in a test there is no layout).
+  // The title's words cut (only in a window under the least width, next to the ⌕ button): its tooltip says them.
+  const [cut, setCut] = useState(false);
+  // A narrow field says "Search" (its full words stay its name and tooltip).
+  const [short, setShort] = useState(false);
+  // The field becomes a button when the row has no room for it beside the whole title (measured; in a test there is
+  // no layout). The title's group is measured at its full width, its words uncut.
   useLayoutEffect(() => {
     const el = row.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const natural = (box: HTMLElement | null) => (box ? [...box.children].reduce((sum, c) => sum + (c as HTMLElement).scrollWidth, 0) : 0);
-      setFits(searchFits(el.clientWidth, natural(start.current), natural(tail.current)));
+      // A group's width with the title's words whole (what a cut title hides added back).
+      const whole = (box: HTMLElement | null) => {
+        if (!box) return 0;
+        const name = box.querySelector(".el-titlerow__name") as HTMLElement | null;
+        return box.getBoundingClientRect().width + (name ? Math.max(0, name.scrollWidth - name.clientWidth) : 0);
+      };
+      const style = getComputedStyle(el);
+      const inner = el.clientWidth - (parseFloat(style.paddingInlineStart) || 0) - (parseFloat(style.paddingInlineEnd) || 0);
+      setFits(searchFits(inner, whole(start.current), whole(tail.current)));
+      const name = el.querySelector(".el-titlerow__name") as HTMLElement | null;
+      setCut(!!name && name.scrollWidth > name.clientWidth + 0.5);
+      const middle = el.querySelector(".el-titlerow__middle") as HTMLElement | null;
+      setShort(!!middle && middle.clientWidth > 0 && middle.clientWidth < SHORT_FIELD);
     };
     const watch = new ResizeObserver(measure);
     watch.observe(el);
@@ -105,7 +129,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
         </span>
         {title && (
           <h1 className="el-titlerow__title">
-            <span className="el-titlerow__name" dir="auto">{title.title}</span>
+            <span className="el-titlerow__name" dir="auto" title={cut ? title.title : undefined}>{title.title}</span>
             {title.count !== null && <span className="el-titlerow__count el-num">{title.count}</span>}
           </h1>
         )}
@@ -126,7 +150,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
                 </button>
               </span>
             )}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={search.placeholder} value={search.query} dir="auto"
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={search.query} dir="auto"
               aria-keyshortcuts="Meta+F Control+F" onChange={(e) => search.setQuery(e.target.value)} onFocus={() => setScoped(true)}
               onBlur={() => setScoped(false)}
               onKeyDown={(e) => {
@@ -139,9 +163,10 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
             <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </div>
         ) : (
-          <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" onClick={() => everything("")}>
+          <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" aria-label={words}
+            title={`${words} (${everyKeys})`} onClick={() => everything("")}>
             <Icon icon={Icons.SearchIcon} />
-            <span className="el-titlerow__placeholder">{words}</span>
+            <span className="el-titlerow__placeholder">{short ? SHORT_WORDS : words}</span>
             <kbd className="el-titlerow__keys" dir="ltr" aria-hidden="true">{everyKeys}</kbd>
           </button>
         )}

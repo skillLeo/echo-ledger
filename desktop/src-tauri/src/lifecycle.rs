@@ -277,6 +277,8 @@ pub fn ready(app: &AppHandle, label: &str) {
     }
     if label == MAIN && phase == Phase::Ready {
         reveal_main(app, quiet_open(app));
+        // FIX-12: a window built while recording shows the taskbar's red dot too (Windows).
+        crate::taskbar::overlay(app, app.state::<crate::AppState>().capture.is_recording());
     }
     if let Some(generation) = ready.expire {
         schedule_expiry(app, label, generation);
@@ -454,6 +456,7 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let builder = crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?);
     // On a Mac the page's first frame already leaves the window's buttons their strip (D-214, TITLEBAR_START).
     let builder = if cfg!(target_os = "macos") { builder.initialization_script(TITLEBAR_START) } else { builder };
+    let builder = crate::wintitle::on_builder(app, builder);
     let window = crate::privacy::window(app, builder, MAIN, crate::privacy::Kind::Main, |b| if shielded { b.content_protected(true) } else { b })?;
     crate::material::apply(&window);
     // FIX-10: no browser keys, autofill or password saving (WebView2), before the window first shows.

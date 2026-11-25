@@ -33,6 +33,12 @@ export {
   LucideLogOutIcon as SignOutIcon,
   LucideCalendarIcon as CalendarIcon,
   LucideCopyIcon as CopyIcon,
+  // Activity's server_problem (2.0.0-v).
+  LucideServerIcon as ServerIcon,
+  // The window's own buttons on Windows (UX-20): Restore is two windows, as the system draws it.
+  LucideMinusIcon as WindowMinimizeIcon,
+  LucideSquareIcon as WindowMaximizeIcon,
+  LucideCopyIcon as WindowRestoreIcon,
   LucideSmartphoneIcon as DeviceIcon,
   LucideLaptopIcon as LaptopIcon,
   LucidePencilIcon as RenameIcon,
@@ -80,3 +86,5 @@ export {
   RequestFilesIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
+// UX-07: the zoom's − beside PlusIcon (the avatar's row, the chip), and its glyph, a magnifier with +.
+export { LucideMinusIcon as MinusIcon, LucideZoomInIcon as ZoomIcon } from "../../components/Icons";

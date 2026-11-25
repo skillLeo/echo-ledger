@@ -455,6 +455,9 @@ export interface Settings {
   menuBarIcon: boolean; // FIX-11: EchoLedger's icon in the Mac menu bar
   menuBarTimer: boolean; // FIX-11: the recording's time beside it
   dockBadge: boolean; // FIX-11: the Activity number on the Dock icon
+  closeQuits: boolean; // FIX-12: Windows' ✕ quits ("When I close the window")
+  closeTipShown: boolean; // FIX-12: the first ✕ said EchoLedger keeps running
+  trayTipShown: boolean; // FIX-12: the tray tip after install was shown
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
@@ -507,6 +510,8 @@ export interface ActivityItem {
   session_id: string | null;
   read: boolean;
   at: string | null;
+  /** The problem is over (2.0.0-r; a server_problem once the server's check passes: "Fixed: uploads work again"). */
+  resolved?: boolean;
 }
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
@@ -592,6 +597,7 @@ export interface SettingsPatch {
   menuBarIcon?: boolean;
   menuBarTimer?: boolean;
   dockBadge?: boolean;
+  closeQuits?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
   consentAcknowledged?: boolean;
@@ -886,6 +892,9 @@ export interface LibraryItem {
   title?: string;
   /** The server named it from what was said (Phase 1C); false or missing for a title a person set. */
   title_auto?: boolean;
+  /** Where `title` came from (since 2.0.0-k): a person's own rename, the person called ("Call with …"), the automatic
+   * title, or the app's name for an untitled recording. Missing on older servers. */
+  title_source?: "own" | "person" | "auto" | "app";
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
@@ -1859,6 +1868,8 @@ export const api = {
   /** The floating windows to the display that isn't the main one (so the main one can be shared). */
   privacyMoveToOtherDisplay: () => invoke<void>("privacy_move_to_other_display"),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
+  /** Whether the main window draws its own title row (Windows with v21_win_titlebar, wintitle.rs). */
+  windowTitlebar: () => invoke<boolean>("window_titlebar"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),
   unpair: () => invoke<AppStatus>("unpair"),

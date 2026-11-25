@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FULLSCREEN_SETTLE_MS, TITLEBAR_KEY, applyTitlebar, titlebarMode, watchTitlebar } from "./titlebar";
+import { act, renderHook } from "@testing-library/react";
+import { FULLSCREEN_SETTLE_MS, TITLEBAR_KEY, WIN_TITLEBAR_EVENT, applyTitlebar, applyWinTitlebar, titlebarMode, useWinTitlebar, watchTitlebar, watchWinTitlebar, winTitlebarOn } from "./titlebar";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...path: string[]) => readFileSync(join(here, ...path), "utf8");
@@ -175,5 +176,53 @@ describe("the macOS title-bar strip (D-214)", () => {
     const app = read("..", "views", "main", "MainApp.tsx");
     expect(app).toContain('{!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}');
     expect(app).toContain('{!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}');
+  });
+});
+
+describe("Windows' own title row (UX-20, v21_win_titlebar)", () => {
+  beforeEach(() => applyTitlebar("none"));
+  afterEach(() => applyTitlebar("none"));
+
+  it("is the core's to say: its start script marks the first frame, its answer and its changes follow", async () => {
+    // The start script (run before the page when the window is built without Windows' title bar, wintitle.rs).
+    new Function(read("winTitlebarStart.js"))();
+    expect(winTitlebarOn()).toBe(true);
+    // The Mac's watcher, which main.tsx also starts on Windows, leaves it alone.
+    watchTitlebar("windows", async () => false)();
+    expect(root.dataset.titlebar).toBe("win");
+    // After a reload the core's answer counts (the flag may have changed while the window was open).
+    let follow: (on: boolean) => void = () => undefined;
+    const unlisten = vi.fn();
+    const stop = watchWinTitlebar(async () => false, async (f) => { follow = f; return unlisten; });
+    await flush();
+    expect(winTitlebarOn()).toBe(false);
+    follow(true);
+    expect(root.dataset.titlebar).toBe("win");
+    stop();
+    expect(unlisten).toHaveBeenCalled();
+    follow(false);
+    expect(winTitlebarOn(), "nothing after it stopped").toBe(true);
+  });
+
+  it("tells the parts that draw it once per change, and the hook follows", () => {
+    const told = vi.fn();
+    window.addEventListener(WIN_TITLEBAR_EVENT, told);
+    const { result } = renderHook(() => useWinTitlebar());
+    expect(result.current).toBe(false);
+    act(() => applyWinTitlebar(true));
+    act(() => applyWinTitlebar(true));
+    expect(result.current).toBe(true);
+    expect(told).toHaveBeenCalledTimes(1);
+    act(() => applyWinTitlebar(false));
+    expect(result.current).toBe(false);
+    expect(root.dataset.titlebar).toBeUndefined();
+    window.removeEventListener(WIN_TITLEBAR_EVENT, told);
+  });
+
+  it("main.tsx asks the core on Windows only, in the main window", () => {
+    const main = read("..", "main.tsx");
+    expect(main).toContain('if (label === "main" && a.platform === "windows") watchWinTitlebar(api.windowTitlebar, (follow) => listenTo<boolean>("window:titlebar", follow));');
+    const rust = read("..", "..", "src-tauri", "src", "wintitle.rs");
+    expect(rust).toContain('pub const EVENT: &str = "window:titlebar";');
   });
 });

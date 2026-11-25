@@ -19,7 +19,7 @@ import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOU
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
-import { applyTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
+import { applyTitlebar, applyWinTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -49,6 +49,9 @@ const start = params.get("start");
 if (start !== null && platform === "macos") watchTitlebar("macos", () => new Promise((done) => window.setTimeout(() => done(fullscreen), Number(start))));
 else applyTitlebar(titlebarMode(platform, fullscreen));
 if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTrafficLights(params.get("inactive") === "1");
+// "&wintitle=1" (with platform=windows): the main window with its own title row (v21_win_titlebar), as the core builds it
+// without Windows' title bar (wintitle.rs) and its start script marks the page.
+if (platform === "windows" && params.get("wintitle") === "1") applyWinTitlebar(true);
 
 /**
  * macOS's three window buttons over the page, at the left whatever the page's direction. tao moves the close button's
@@ -57,13 +60,17 @@ if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTra
  */
 function drawTrafficLights(inactive: boolean) {
   const { x, y } = conf.app.windows[0].trafficLightPosition;
+  // "&zoom=<percent>" (UX-07): the page zoomed as the web view does it (scripts/zoom.mjs draws it that much bigger); the
+  // system's buttons keep their size and place, so they are drawn that much smaller in the page's pixels.
+  const z = Number(params.get("zoom") ?? 100) / 100;
+  document.documentElement.style.setProperty("--el-zoom", String(z));
   const strip = document.createElement("div");
   strip.dataset.trafficLights = "";
   strip.setAttribute("aria-hidden", "true");
-  strip.style.cssText = `position: fixed; left: ${x + 1}px; top: ${y - 4}px; width: 54px; height: 12px; z-index: 2147483647; pointer-events: none; display: flex; gap: 8px; direction: ltr;`;
+  strip.style.cssText = `position: fixed; left: ${(x + 1) / z}px; top: ${(y - 4) / z}px; width: ${54 / z}px; height: ${12 / z}px; z-index: 2147483647; pointer-events: none; display: flex; gap: ${8 / z}px; direction: ltr;`;
   for (const colour of inactive ? ["#cfcfcf", "#cfcfcf", "#cfcfcf"] : ["#ff5f57", "#febc2e", "#28c840"]) {
     const light = document.createElement("span");
-    light.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
+    light.style.cssText = `width: ${12 / z}px; height: ${12 / z}px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
     strip.append(light);
   }
   document.body.append(strip);
@@ -349,7 +356,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   lists_get: () => (empty ? [] : [
     { key: "kick-off", name: "Kick-off", color: LABEL_COLOURS.teal, position: 0, count: 1 },
     { key: "invoice", name: "Invoice", color: LABEL_COLOURS.amber, position: 1, count: 1 },
-    { key: "follow up", name: "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
+    // ?longtitle=1: a long label (the title row keeps its name whole, scripts/titleRowSearch.mjs).
+    { key: "follow up", name: params.get("longtitle") === "1" ? "Follow up with Qureshi Textiles & Garments International" : "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
   ]),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
   client_rules: ({ id }) => ({ data: RULES[id as string] ?? [] }),

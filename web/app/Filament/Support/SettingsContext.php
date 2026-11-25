@@ -247,20 +247,23 @@ final class SettingsContext
         $workspace = $this->workspaceId();
         $limits = app(PlanLimits::class);
 
+        // In the console's language (the same English as always).
         return match ((string) $entry['id']) {
-            'transcription.language' => $this->languageName(Shell::preferences($this->user)['language']),
-            'key' => $this->flag('key') ? 'Added' : 'Not added',
-            'notifications' => $this->emailsOn().' of '.count(EmailPreferences::CATEGORIES).' emails on',
-            'storage' => Formats::bytes($limits->storageUsed($workspace)).($this->storageLimit() !== null ? ' of '.Formats::bytes((int) $this->storageLimit()) : ''),
+            'transcription.language' => __($this->languageName(Shell::preferences($this->user)['language'])),
+            'key' => $this->flag('key') ? __('Added') : __('Not added'),
+            'notifications' => __(':on of :total emails on', ['on' => $this->emailsOn(), 'total' => count(EmailPreferences::CATEGORIES)]),
+            'storage' => $this->storageLimit() !== null
+                ? __(':used of :limit', ['used' => Formats::bytes($limits->storageUsed($workspace)), 'limit' => Formats::bytes((int) $this->storageLimit())])
+                : Formats::bytes($limits->storageUsed($workspace)),
             'plan', 'plan.current' => $this->plan()->name,
-            'security' => $this->flag('two_step') ? 'Two-step on' : 'Two-step off',
-            'security.two_step' => $this->flag('two_step') ? 'On' : 'Off',
-            'devices' => ($n = $limits->devicesUsed($workspace, $this->user->id)).' signed in',
-            'workspace' => ($n = $limits->seatsUsed($workspace)) === 1 ? '1 person' : $n.' people',
+            'security' => $this->flag('two_step') ? __('Two-step on') : __('Two-step off'),
+            'security.two_step' => $this->flag('two_step') ? __('On') : __('Off'),
+            'devices' => __(':count signed in', ['count' => $limits->devicesUsed($workspace, $this->user->id)]),
+            'workspace' => trans_choice('1 person|:count people', $n = $limits->seatsUsed($workspace), ['count' => $n]),
             'appearance.sidebar' => ConsoleV2::shell() ? __(Shell::STYLES[ConsoleV2Nav::style($this->user)]) : Shell::STYLES[Shell::preferences($this->user)['style']],
-            'appearance.density' => Shell::DENSITIES[Shell::preferences($this->user)['density']],
-            'appearance.clock' => Shell::preferences($this->user)['clock'] === '24h' ? '24-hour' : '12-hour',
-            'appearance.library_view' => Shell::LAYOUTS[Shell::preferences($this->user)['layout']],
+            'appearance.density' => __(Shell::DENSITIES[Shell::preferences($this->user)['density']]),
+            'appearance.clock' => Shell::preferences($this->user)['clock'] === '24h' ? __('24-hour') : __('12-hour'),
+            'appearance.library_view' => __(Shell::LAYOUTS[Shell::preferences($this->user)['layout']]),
             default => null,
         };
     }

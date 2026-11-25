@@ -76,6 +76,13 @@
         "$value": "72px"
       }
     },
+    "big-button": {
+      "height": {
+        "$type": "dimension",
+        "$value": "56px",
+        "$description": "The one big action of a sheet (the New sheet's Record now, v2.1 UX-15)"
+      }
+    },
     "record-button": {
       "$type": "dimension",
       "$value": "56px",

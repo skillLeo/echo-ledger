@@ -17,7 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The flags this app knows, as the contract names them.
-pub const KNOWN: [&str; 13] = [
+pub const KNOWN: [&str; 15] = [
     "ui_v2.shell",
     "ui_v2.home",
     "ui_v2.library",
@@ -32,6 +32,10 @@ pub const KNOWN: [&str; 13] = [
     "live_assist",
     // UX-02 (PLAN_V2_1_POLISH): the panel docked from 1200 px, a flyout below (contract 2.0.0-r).
     "v21_panel_flyout",
+    // UX-20 (PLAN_V2_1_POLISH): the main window's own title row on Windows (contract 2.0.0-s, wintitle.rs).
+    "v21_win_titlebar",
+    // UX-07 (PLAN_V2_1_POLISH): zoom like Chrome in the main window (contract 2.0.0-r).
+    "v21_zoom",
 ];
 
 /// The event the window hears when the cached flags change.
@@ -142,6 +146,8 @@ pub fn announce(app: &AppHandle) {
     // `live_assist` turned off for this person: a session that runs ends.
     crate::assist::live::stop_unless_enabled(app, &flags);
     if let Some(flags) = state.ui_announced.changed(flags) {
+        // The main window's own title row on Windows follows its flag at once (wintitle.rs).
+        crate::wintitle::follow(app, &flags);
         // Turned on: the scheduled preps get their arming timers.
         if crate::assist::enabled(&flags) {
             crate::assist::live::rearm(app);

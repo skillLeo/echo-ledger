@@ -17,22 +17,34 @@ uses(ApiClient::class);
 
 /*
  * Contract 2.0.0-p: GET /api/library/facets answers within 150 ms for a library of 2,000+ recordings, and a filter set
- * asked again is served from the cache. The rows are written straight in (the factories would take far longer).
+ * asked again is served from the cache. The rows are written straight in (the factories would take far longer). The
+ * times are processor time (W-219), the same as the clock's on a quiet computer.
  */
 
 const SPEED_RECORDINGS = 2100;
 
-/** Milliseconds of the fastest of [$times] runs of [$run] (the first warms nothing that matters: caches are cleared). */
-function fastestMs(int $times, Closure $run): float
+/**
+ * The median processor time of [$times] runs of [$run], in milliseconds (W-219). On a quiet computer it is the time a
+ * run takes: the database is SQLite inside this process, so nothing is waited for. On a busy one the clock also counts
+ * other programs' turns: the fastest of three runs took 214-534 ms by the clock under load, and 30-52 ms of processor
+ * time. A slower query or loop still costs more processor time, so the budgets below are unchanged.
+ */
+function medianCpuMs(int $times, Closure $run): float
 {
-    $best = INF;
-    for ($i = 0; $i < $times; $i++) {
-        $start = hrtime(true);
-        $run();
-        $best = min($best, (hrtime(true) - $start) / 1e6);
-    }
+    $cpu = static function (): float {
+        $used = getrusage();
 
-    return $best;
+        return ($used['ru_utime.tv_sec'] + $used['ru_stime.tv_sec']) * 1e3 + ($used['ru_utime.tv_usec'] + $used['ru_stime.tv_usec']) / 1e3;
+    };
+    $runs = [];
+    for ($i = 0; $i < $times; $i++) {
+        $start = $cpu();
+        $run();
+        $runs[] = $cpu() - $start;
+    }
+    sort($runs);
+
+    return $runs[intdiv($times, 2)];
 }
 
 beforeEach(function () {
@@ -78,16 +90,16 @@ it('counts 2,000+ recordings within 150 ms, and serves a filter set asked again 
     $workspaceId = (int) $this->me->current_workspace_id;
 
     // Nothing cached: the rows read from the database and every section counted.
-    $cold = fastestMs(3, function () use ($facets, $workspaceId, $filters): void {
+    $cold = medianCpuMs(5, function () use ($facets, $workspaceId, $filters): void {
         Cache::flush();
         LibraryFacets::forget($workspaceId, $this->me->id);
         $facets->facets($workspaceId, $this->me->id, LibraryFilters::normalize($filters), null, 'Asia/Karachi');
     });
     // The whole request, served from the cache.
-    $warm = fastestMs(3, fn () => $this->api($this->token)->getJson($query)->assertOk());
+    $warm = medianCpuMs(5, fn () => $this->api($this->token)->getJson($query)->assertOk());
     // Another filter set on the cached rows (each click in the filter panel).
-    $sets = [['pinned'], ['important'], ['keep_forever'], ['pinned', 'important']];
-    $other = fastestMs(3, function () use ($facets, $workspaceId, &$sets): void {
+    $sets = [['pinned'], ['important'], ['keep_forever'], ['pinned', 'important'], ['important', 'keep_forever']];
+    $other = medianCpuMs(5, function () use ($facets, $workspaceId, &$sets): void {
         $facets->facets($workspaceId, $this->me->id, LibraryFilters::normalize(['status' => ['op' => 'is', 'values' => ['failed']], 'marked' => ['op' => 'is_not', 'values' => array_shift($sets)]]), null, 'Asia/Karachi');
     });
 
@@ -102,6 +114,6 @@ it('narrows the list of 2,000+ recordings by the filters within the same budget'
     $filters = json_encode(['source' => ['op' => 'is_not', 'values' => ['voice_note']], 'device' => ['op' => 'is', 'values' => ['phone', 'desktop']]]);
     $this->api($this->token)->getJson('/api/library?limit=50&filters='.urlencode($filters))->assertOk();
 
-    $ms = fastestMs(3, fn () => $this->api($this->token)->getJson('/api/library?limit=50&filters='.urlencode($filters))->assertOk()->assertJsonCount(50, 'data'));
+    $ms = medianCpuMs(5, fn () => $this->api($this->token)->getJson('/api/library?limit=50&filters='.urlencode($filters))->assertOk()->assertJsonCount(50, 'data'));
     expect($ms)->toBeLessThan(400.0, "library list {$ms} ms");
 });

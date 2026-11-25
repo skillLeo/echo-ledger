@@ -45,6 +45,10 @@ const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 const menuOn = (at) => `(() => { const row = document.querySelectorAll('.v2-library .v2-lib-row')[${at}]; const r = row.getBoundingClientRect();`
     + ` row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height / 2 })); })()`;
 
+/** JavaScript that right-clicks the first `selector` a little in from its start (UX-22 3b: an object's menu). */
+const objectMenuOn = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (! el) return; const r = el.getBoundingClientRect();`
+    + ` el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(40, r.width / 2), clientY: r.top + r.height / 2 })); })()`;
+
 /**
  * UX-25: the Library keeps your place, in a short window so that a few recordings already scroll. Back to top shows a
  * screen down, goes to the top and puts the focus on the first row; typing in the search while the list comes back from
@@ -108,6 +112,281 @@ async function keepPlace(page, base) {
     return wrong;
 }
 
+/**
+ * In the page: what in the header loses its words (decision 18, PLAN_V2_1_POLISH). A tab or toolbar label that wraps or
+ * is cut (by its own "…", a box that clips it, the window's edge or something drawn over it), a tab that another control
+ * covers even in part, a search placeholder wider
+ * than its field, a button with no name, and a title that is cut (more lines keep its words, and only come last).
+ * The Library's tabs may scroll sideways (their last step): a tab out of their view is not cut. Answers what went wrong
+ * and the steps the rows took.
+ */
+function headerProblems() {
+    const problems = [];
+    const width = window.innerWidth;
+    const shown = (el) => {
+        for (let a = el; a; a = a.parentElement) {
+            const cs = getComputedStyle(a);
+            if (cs.display === 'none' || cs.visibility === 'hidden' || a.hidden) return false;
+        }
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1 && !getComputedStyle(el).clipPath.startsWith('inset(50%');
+    };
+    const words = (el) => (el.textContent || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    // The lines a label's words take, and the box they fill.
+    const lines = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        let n = 0;
+        let bottom = -Infinity;
+        for (const r of [...range.getClientRects()].filter((x) => x.width > 0.5).sort((a, b) => a.top - b.top)) {
+            if (r.top >= bottom - 1) n++;
+            bottom = Math.max(bottom, r.bottom);
+        }
+        return { n, box: range.getBoundingClientRect() };
+    };
+    const scroller = (a) => a.matches('[data-library-tabs], .v2-page-tabs');
+    const label = (el, what, mayWrap = false) => {
+        if (!shown(el)) return;
+        const { n, box } = lines(el);
+        if (n > 1 && !mayWrap) problems.push(`${what} "${words(el)}" wraps`);
+        if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') problems.push(`${what} "${words(el)}" is cut ("…")`);
+        let scrolled = false;
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+            const overflow = getComputedStyle(a).overflowX;
+            if (overflow === 'visible') continue;
+            const r = a.getBoundingClientRect();
+            const out = box.left < r.left - 1 || box.right > r.right + 1;
+            if (scroller(a) && overflow !== 'hidden' && overflow !== 'clip') {
+                scrolled = out;
+                break;
+            }
+            if (out) {
+                problems.push(`${what} "${words(el)}" is cut by its box`);
+                break;
+            }
+        }
+        if (scrolled) return;
+        if (box.left < -0.5 || box.right > width + 0.5) problems.push(`${what} "${words(el)}" is past the window's edge`);
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        if (hit && !el.contains(hit) && !hit.contains(el) && !(hit.closest('a, button')?.contains(el))) problems.push(`${what} "${words(el)}" is covered`);
+    };
+    const placeholder = (input, what) => {
+        if (!shown(input) || !input.placeholder || !input.matches(':placeholder-shown')) return;
+        const cs = getComputedStyle(input);
+        // The ⌕ button: the field folded, its words hidden.
+        if (getComputedStyle(input, '::placeholder').color.replace(/\s/g, '').endsWith(',0)')) return;
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = cs.font;
+        const need = ctx.measureText(input.placeholder).width;
+        const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (need > room + 1) problems.push(`${what} "${input.placeholder}" is wider than its field (${Math.round(need)} in ${Math.round(room)} px)`);
+    };
+    const named = (el, what) => {
+        if (!shown(el)) return;
+        const name = (el.getAttribute('aria-label') || el.textContent || el.title || (el.labels?.[0]?.textContent ?? '')).trim();
+        if (!name) problems.push(`${what} has no name`);
+        const r = el.getBoundingClientRect();
+        if (!el.closest('[data-library-tabs], .v2-page-tabs') && (r.left < -0.5 || r.right > width + 0.5)) problems.push(`${what} "${name.slice(0, 20)}" is past the window's edge`);
+    };
+    // The top bar.
+    document.querySelectorAll('.v2-tb input').forEach((i) => { placeholder(i, 'the top bar\'s search'); named(i, 'the top bar\'s search'); });
+    document.querySelectorAll('.v2-tb button, .v2-tb a').forEach((b) => named(b, 'a top bar button'));
+    // The Library's toolbar row: the title keeps its words (more lines only as the last step), the tabs and the labels whole.
+    document.querySelectorAll('.v2-lib-crumb, .v2-lib-total').forEach((el) => label(el, 'the title'));
+    document.querySelectorAll('.v2-lib-title bdi').forEach((el) => label(el, 'the title', document.documentElement.dataset.libTitle === 'wraps'));
+    document.querySelectorAll('.v2-lib-tabs .v2-tab > span').forEach((el) => label(el, 'a tab'));
+    // No control covers a tab, even in part: of a scrolling row, the part of each tab in sight.
+    const strip = document.querySelector('.v2-lib-shell.is-right [data-library-tabs]');
+    const controls = [...document.querySelectorAll('.v2-lib-shell.is-right [data-library-crumbs], .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp, .v2-lib-shell.is-right .v2-lib-tools .v2-chip')].filter(shown);
+    if (strip && shown(strip)) {
+        const s = strip.getBoundingClientRect();
+        strip.querySelectorAll('.v2-tab').forEach((tab) => {
+            const t = tab.getBoundingClientRect();
+            const start = Math.max(t.left, s.left);
+            const end = Math.min(t.right, s.right);
+            if (end - start < 1) return;
+            for (const c of controls) {
+                const r = c.getBoundingClientRect();
+                if (Math.min(end, r.right) - Math.max(start, r.left) > 1 && Math.min(t.bottom, r.bottom) - Math.max(t.top, r.top) > 1) {
+                    problems.push(`a tab "${words(tab)}" is covered by ${c.matches('.v2-chip') ? `"${words(c)}"` : c.matches('[data-library-crumbs]') ? 'the title' : 'the search'}`);
+                }
+            }
+        });
+    }
+    document.querySelectorAll('.v2-lib-tools .v2-chip > span:not(.v2-sr)').forEach((el) => label(el, 'a toolbar label'));
+    document.querySelectorAll('.v2-lib-tools .v2-chip').forEach((b) => named(b, 'a toolbar button'));
+    document.querySelectorAll('.v2-library .fi-ta-search-field input').forEach((i) => { placeholder(i, 'the Library\'s search'); named(i, 'the Library\'s search'); });
+    // The row holds as many lines as its step says: one, or the title's and the tabs' (nothing wrapped onto a third).
+    const crumbs = document.querySelector('.v2-lib-shell.is-right [data-library-crumbs]');
+    if (crumbs) {
+        const row = crumbs.parentElement;
+        const items = [crumbs, ...['[data-library-total]', '[data-library-tabs]', '.fi-ta-search-field > .fi-input-wrp', '.v2-lib-tools'].map((s) => row.querySelector(s))]
+            .filter((el) => el && shown(el)).map((el) => el.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+        let taken = 0;
+        let bottom = -Infinity;
+        for (const r of items) {
+            if (r.top >= bottom - 1) taken++;
+            bottom = Math.max(bottom, r.bottom);
+        }
+        const wanted = Number(document.documentElement.dataset.libLines || 1);
+        if (taken !== wanted) problems.push(`the Library's toolbar row takes ${taken} lines, not ${wanted}`);
+    }
+    // Another page's heading, tabs and header buttons.
+    document.querySelectorAll('.fi-header-heading').forEach((el) => label(el, 'the page\'s heading', true));
+    document.querySelectorAll('.v2-page-tabs .v2-tab').forEach((el) => label(el, 'a page tab'));
+    document.querySelectorAll('.fi-header .fi-btn').forEach((b) => {
+        named(b, 'a header button');
+        [...b.querySelectorAll('span')].filter((s) => s.children.length === 0).forEach((s) => label(s, 'a header button'));
+    });
+    const d = document.documentElement.dataset;
+    const steps = Object.keys(d).filter((k) => /^(tb|lib)[A-Z]/.test(k)).map((k) => `${k}=${d[k]}`).join(' ');
+    return { problems: [...new Set(problems)], steps };
+}
+
+/** The console's language for the account signed in (Settings › Appearance), as a person sets it. */
+async function consoleLanguage(page, base, code) {
+    await page.goto(`${base}/app/settings/appearance`, { waitUntil: 'load' });
+    const radio = page.locator(`[data-setting="appearance.app_language"] [role=radio][lang=${code}]`);
+    if ((await radio.getAttribute('aria-checked')) === 'true') return;
+    // Saved, the page is drawn again in that language.
+    await Promise.all([page.waitForEvent('load'), radio.click()]);
+    await page.waitForTimeout(1500);
+}
+
+/**
+ * In the page (W-220): the page itself never scrolls sideways (a wide table scrolls in its own box), naming the box that
+ * pushes it wider; and on a phone the frame's panel, while closed, is out of the window. Right to left the Workspace
+ * page at 390 px was 448 px wide (the invitations table's hidden "Actions" escaped its scrolling box), so the page shifted
+ * and the hidden panel showed over its edge. Answers what went wrong.
+ */
+function pageProblems() {
+    const problems = [];
+    const html = document.documentElement;
+    const over = html.scrollWidth - html.clientWidth;
+    if (over > 1) {
+        // Down from the body, the box whose hiding makes the page narrower, as deep as it goes.
+        let culprit = null;
+        for (let node = document.body, depth = 0; node && depth < 60; depth++) {
+            const next = [...node.children].find((c) => {
+                const before = c.style.display;
+                c.style.display = 'none';
+                const narrower = html.scrollWidth < html.clientWidth + over;
+                c.style.display = before;
+                return narrower;
+            });
+            if (!next) break;
+            culprit = next;
+            node = next;
+        }
+        const what = culprit
+            ? `${culprit.tagName.toLowerCase()}${typeof culprit.className === 'string' && culprit.className.trim() ? '.' + culprit.className.trim().split(/\s+/).slice(0, 2).join('.') : ''} "${(culprit.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`
+            : 'nothing found';
+        problems.push(`the page scrolls sideways by ${over} px (${what})`);
+    }
+    const sidebar = document.querySelector('.fi-main-sidebar');
+    if (sidebar && window.innerWidth < 1024 && !window.Alpine?.store('sidebar')?.isOpen) {
+        const r = sidebar.getBoundingClientRect();
+        const inside = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+        if (inside > 1 && r.height > 1 && getComputedStyle(sidebar).visibility !== 'hidden') problems.push(`the closed panel shows ${Math.round(inside)} px inside the window`);
+    }
+    return problems;
+}
+
+/** The pages pageFits checks, by name: the Workspace page first, then the other pages whose tables are wide. */
+const FIT_PAGES = [['workspace', '/app/workspace'], ['shared', '/app/shared-with-me'], ['links', '/app/shares'], ['usage', '/app/usage'],
+    ['devices', '/app/settings/devices'], ['trash', '/app/recently-deleted']];
+
+/**
+ * W-220: at this width, in English and in Urdu, each of FIT_PAGES fits the window (pageProblems) and its header keeps its
+ * words (headerProblems: the heading and the header's buttons whole, in the window and not covered). The account is left
+ * in English, on the Workspace page. Answers what went wrong.
+ */
+async function pageFits(page, base) {
+    const wrong = [];
+    page.setDefaultTimeout(90000);
+    const width = page.viewportSize().width;
+    try {
+        for (const code of ['en', 'ur']) {
+            await consoleLanguage(page, base, code);
+            for (const [name, path] of FIT_PAGES) {
+                await page.goto(base + path, { waitUntil: 'load' });
+                await page.waitForTimeout(1200);
+                const found = [...await page.evaluate(pageProblems), ...(await page.evaluate(headerProblems)).problems];
+                console.log(`fit ${name} ${width} ${code}: ${found.length ? found.length + ' problems' : 'fits'}`);
+                wrong.push(...found.map((p) => `${name} ${code}: ${p}`));
+            }
+        }
+    } finally {
+        await consoleLanguage(page, base, 'en');
+        await page.goto(base + FIT_PAGES[0][1], { waitUntil: 'load' });
+    }
+
+    return wrong;
+}
+
+/**
+ * Decision 18 on the web console's header: at this width, in English and in Urdu, on the Library (all recordings, a
+ * saved view, and that view with a long name), Live, Activity and Projects, no tab or toolbar label is cut or wrapped,
+ * no placeholder is wider than its field, every button has a name, and the title keeps its words; a folded ⌕ search opens
+ * over its row with a click and folds again on Esc, keeping its words. Logs the steps each row took, and pictures the
+ * header (title-row/<SHOT_PREFIX>-…) as it goes. The account is left in English. Answers what went wrong.
+ */
+async function headerFits(page, base) {
+    const wrong = [];
+    page.setDefaultTimeout(90000);
+    const width = page.viewportSize().width;
+    const shots = `${out}/title-row`;
+    mkdirSync(shots, { recursive: true });
+    const language = (code) => consoleLanguage(page, base, code);
+    try {
+        for (const code of ['en', 'ur']) {
+            await language(code);
+            await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+            const view = await page.evaluate(() => document.querySelector('[data-panel="library"] a[href*="?v="], .v2-panels a[href*="?v="]')?.getAttribute('href') ?? null);
+            const places = [['library', '/app/sessions'], ...(view ? [['view', view], ['view-long', view]] : []), ['live', '/app/live'], ['activity', '/app/activity'], ['projects', '/app/clients']];
+            for (const [name, path] of places) {
+                await page.goto(path.startsWith('http') ? path : base + path, { waitUntil: 'load' });
+                await page.waitForTimeout(1200);
+                if (name === 'view-long') {
+                    // A saved view's name is the person's own: a long one, measured again as its words change.
+                    await page.evaluate(() => { document.querySelector('.v2-lib-title bdi').textContent = 'Calls with the accountant about the yearly return'; });
+                    await page.waitForTimeout(300);
+                }
+                const found = await page.evaluate(headerProblems);
+                console.log(`header ${name} ${width} ${code}: ${found.steps || 'no steps'}`);
+                wrong.push(...found.problems.map((p) => `${name} ${code}: ${p}`));
+                if (['library', 'view-long'].includes(name)) {
+                    await page.screenshot({ path: `${shots}/${process.env.SHOT_PREFIX ?? 'now'}-${name}-${width}-${code}.png`, clip: { x: 0, y: 0, width, height: 240 }, animations: 'disabled' });
+                }
+                // The ⌕ button: a click opens the field over its row; Esc folds it, its words kept (it looks on).
+                const folded = '.v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp';
+                if (name === 'library' && await page.evaluate(() => document.documentElement.dataset.libSearch === 'button')) {
+                    const row = await page.evaluate((s) => document.querySelector(s).parentElement.getBoundingClientRect().width, folded);
+                    await page.click(folded);
+                    await page.keyboard.type('zq', { delay: 40 });
+                    const open = await page.evaluate((s) => document.querySelector(s).getBoundingClientRect().width, folded);
+                    if (open < row - 1) wrong.push(`library ${code}: the ⌕ search opened ${Math.round(open)} px wide, not over its row (${Math.round(row)} px)`);
+                    await page.keyboard.press('Escape');
+                    await page.waitForTimeout(300);
+                    const after = await page.evaluate((s) => { const w = document.querySelector(s); return { width: w.getBoundingClientRect().width, words: w.querySelector('input').value, focus: w.contains(document.activeElement) }; }, folded);
+                    if (after.focus || after.width > 40) wrong.push(`library ${code}: Esc did not fold the ⌕ search`);
+                    if (after.words !== 'zq') wrong.push(`library ${code}: Esc lost the search's words`);
+                    // The search emptied again, so the list is as it was.
+                    await page.click(folded);
+                    await page.fill(`${folded} input`, '');
+                    await page.waitForTimeout(1500);
+                    await page.keyboard.press('Tab');
+                }
+            }
+        }
+    } finally {
+        await language('en');
+        await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+    }
+
+    return wrong;
+}
+
 // Pages by name. A function gets the page and resolves its path (for records whose ids change per database). `run`
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
 const pages = {
@@ -131,10 +410,23 @@ const pages = {
     'library-drawer': { path: '/app/sessions', waitFor: '.el-row', run: "document.querySelector('.el-row')?.click()", full: false, wide: true },
     // UX-25: the place kept coming back from a recording, the opened row's tint, Back to top (keepPlace's checks).
     'library-keep-place': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, wide: true, scenario: keepPlace, settle: 300 },
+    // Decision 18: the header keeps every label and the title's words, in English and Urdu (headerFits' checks).
+    'header-fit': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, scenario: headerFits, settle: 300 },
+    // W-220: the Workspace page and the other pages with wide tables fit a phone in English and Urdu (pageFits' checks;
+    // ONLY=page-fit WIDTHS=390).
+    'page-fit': { path: '/app/workspace', full: false, scenario: pageFits, settle: 300 },
     'library-table': { path: '/app/sessions', run: "document.querySelector('[data-layout=table]')?.click()", after: "document.querySelector('[data-layout=list]')?.click()", wide: true },
     // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
     'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
     'library-menu-sub': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `${menuOn(1)};document.querySelector('.v2-ctx [aria-haspopup=menu]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`, full: false, wide: true },
+    // UX-22 3b: the other objects' menus: a view, a label and Trash in the Library's panel, a project in the Projects
+    // panel, an Activity item, a recording in Trash.
+    'menu-view': { path: '/app/sessions', waitFor: '[data-v2-object="view"]', run: objectMenuOn('[data-v2-object="view"] a'), full: false, wide: true },
+    'menu-label': { path: '/app/sessions', waitFor: '[data-v2-object="label"]', run: objectMenuOn('[data-v2-object="label"] a'), full: false, wide: true },
+    'menu-trash': { path: '/app/sessions', waitFor: '[data-v2-object="trash"]', run: objectMenuOn('[data-v2-object="trash"]'), full: false, wide: true },
+    'menu-project': { path: '/app/clients', waitFor: '[data-v2-object="project"]', run: objectMenuOn('[data-v2-object="project"]'), full: false, wide: true },
+    'menu-activity': { path: '/app/activity', waitFor: '[data-v2-object="activity"]', run: objectMenuOn('[data-v2-object="activity"]'), full: false, wide: true },
+    'menu-trash-row': { path: '/app/recently-deleted', waitFor: '[data-v2-object="trashItem"]', run: objectMenuOn('[data-v2-object="trashItem"]'), full: false, wide: true },
     'library-menu-many': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `[...document.querySelectorAll('.v2-library input.fi-ta-record-checkbox')].slice(0, 2).forEach((b) => b.click());${menuOn(0)}`, full: false, wide: true },
     'library-folder': { path: '/app/sessions?folder=whatsapp' },
     'library-failed': { path: '/app/sessions?tab=failed' },
@@ -190,6 +482,14 @@ const pages = {
     devices: { path: '/app/devices' },
     usage: { path: '/app/usage' },
     workspace: { path: '/app/workspace' },
+    // DES-08: a person's avatar (their photo, else their initials on their colour) in each list of people: Sent to (a
+    // recording's More menu), the avatar menu, Shared with me and the workspace's people and invitations above.
+    'sent-to': { path: async (page) => `/app/sessions/${await recording(page, 'Retainer check-in')}`, full: false,
+        run: "Livewire.all().find((c) => /ViewCaptureSession$/.test(c.name)).$wire.mountAction('sentTo')", settle: 1500 },
+    // On a phone the avatar is in the menu (☰): it opens first.
+    'avatar-menu': { path: '/app/sessions', full: false, settle: 1200,
+        run: "(async () => { if (innerWidth < 1024) { document.querySelector('.v2-tb-menu')?.click(); await new Promise((r) => setTimeout(r, 600)); }"
+            + " [...document.querySelectorAll('.v2-um-trigger')].find((b) => b.getClientRects().length > 0)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); })()" },
     // Settings (since v1.7). Per account: EMAIL=free@echoledger.local SUFFIX=free (php artisan db:seed --class=SettingsTourSeeder).
     'settings-overview': { path: '/app/settings' },
     'settings-plan': { path: '/app/settings/plan' },
@@ -255,6 +555,8 @@ async function requestPath(page, tail) {
 
 // The first Library row whose title matches (the demo data: php artisan db:seed --class=ConsoleTourSeeder).
 async function recording(page, title) {
+    // A new window is still on about:blank, where a fetch cannot reach the console (a page run alone, ONLY=...).
+    if (!page.url().startsWith(base)) await page.goto(`${base}/app`, { waitUntil: 'load' });
     return page.evaluate(async (url) => {
         const html = await (await fetch(url)).text();
         const match = html.match(/data-recording="([0-9A-Za-z]{26})"/);

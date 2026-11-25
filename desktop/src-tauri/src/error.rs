@@ -37,7 +37,7 @@ const PLAIN_CODES: [&str; 11] = [
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 39] = [
+const CODE_TEXT: [(&str, &str); 40] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -77,6 +77,9 @@ const CODE_TEXT: [(&str, &str); 39] = [
     ("duplicate_recording", "This file is already in your Library."),
     ("design_not_available", "The new design isn't open to try yet."),
     ("not_audio_only", "This recording is already transcribed, or its audio is still uploading."),
+    // Transcribe later on a plan that transcribes with the person's own key, before one is added (2.0.0-j). The app
+    // shows "Add my Groq key" beside this sentence (desktop/src/v2/library/organise.tsx keeps the same words).
+    ("needs_transcription_key", "This plan transcribes with your own Groq key. Add it in Settings › Transcription key."),
     ("cannot_retranscribe", "This recording's audio isn't on the server yet, so it can't be transcribed again. Try again once it has uploaded."),
     ("too_large", "This file is too large for the server."),
     ("too_many_labels", "A recording can have 20 labels at most. Remove one first."),
@@ -286,6 +289,14 @@ mod server_text_tests {
         assert_eq!(server(403, "Only the workspace owner can delete recordings made by someone else.", Some("not_allowed")).to_string(), "Only the workspace owner can delete recordings made by someone else.");
         assert_eq!(server(403, "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", Some("ai_budget_reached")).to_string(), "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.");
         assert_eq!(server(409, "File this recording under a client first.", Some("no_client")).to_string(), "File this recording under a client first.");
+    }
+
+    #[test]
+    fn transcribing_without_the_plan_s_own_key_says_where_to_add_it() {
+        assert_eq!(
+            server(403, "Add your transcription key first.", Some("needs_transcription_key")).to_string(),
+            "This plan transcribes with your own Groq key. Add it in Settings › Transcription key."
+        );
     }
 
     #[test]

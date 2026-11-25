@@ -32,6 +32,9 @@ class AccountActionsTest {
 
     private fun sample(name: String) = File("../../docs/api-samples/$name.json").readText()
 
+    /** A field of a sample as the server wrote it, so a regenerated sample (BE-06) never breaks a test. */
+    private fun sampled(name: String, field: String) = Json.parseToJsonElement(sample(name)).jsonObject[field]!!.jsonPrimitive
+
     @Before
     fun setUp() {
         server = FakeServer()
@@ -78,7 +81,7 @@ class AccountActionsTest {
         server.on("PATCH", "/api/account", FakeServer.json(200, sample("account_update")))
         val now = actions.rename("  Sample Owner ").valueOrNull!!
         assertEquals("Sample Owner", only("PATCH", "/api/account").json()["name"]!!.jsonPrimitive.content)
-        assertEquals(1795276846L, now.avatarVersion)
+        assertEquals(sampled("account_update", "avatar_version").content.toLong(), now.avatarVersion)
     }
 
     @Test
@@ -101,7 +104,7 @@ class AccountActionsTest {
         server.on("DELETE", "/api/account/avatar", FakeServer.empty(204))
         val jpeg = byteArrayOf(-1, -40, -1, -32, 1, 2, 3)
         val avatar = actions.uploadAvatar(jpeg).valueOrNull!!
-        assertEquals(1795276846L, avatar.avatarVersion)
+        assertEquals(sampled("account_avatar", "avatar_version").content.toLong(), avatar.avatarVersion)
         val sent = only("POST", "/api/account/avatar")
         assertTrue(sent.headers["Content-Type"]!!.startsWith("multipart/form-data"))
         val body = sent.body!!.toByteArray()
@@ -138,14 +141,14 @@ class AccountActionsTest {
         server.on("POST", "/api/account/email/confirm", FakeServer.json(200, sample("account_email_confirm")))
         server.on("DELETE", "/api/account/email", FakeServer.empty(204))
         val pending = actions.startEmailChange("sample.new@example.test", Proof(password = "pw", otp = "123456")).valueOrNull!!
-        assertEquals("sample.new@example.test", pending.pendingEmail)
+        assertEquals(sampled("account_email", "pending_email").content, pending.pendingEmail)
         val body = only("POST", "/api/account/email").json()
         assertEquals("sample.new@example.test", body["email"]!!.jsonPrimitive.content)
         assertEquals("pw", body["password"]!!.jsonPrimitive.content)
         assertEquals("123456", body["otp"]!!.jsonPrimitive.content)
         val now = actions.confirmEmailChange(" 654321 ").valueOrNull!!
         assertEquals("654321", only("POST", "/api/account/email/confirm").json()["code"]!!.jsonPrimitive.content)
-        assertEquals("sample.new@example.test", now.email)
+        assertEquals(sampled("account_email_confirm", "email").content, now.email)
         assertTrue(EmailChange.finished(now))
         assertTrue(actions.cancelEmailChange() is AccountResult.Done)
     }

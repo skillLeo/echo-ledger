@@ -992,7 +992,7 @@ class ListCaptureSessions extends ListRecords
                     // Since docs/PLAN_NAV_3_LEVELS.md section 4 (the three levels): the filters come from the right, 320 wide,
                     // beside the list from --el-breakpoint-wide (1440) and over it below.
                 ])->extraAttributes(fn (): array => ['class' => ConsoleV2::frame() ? 'v2-lib-shell is-right' : 'v2-lib-shell',
-                    'x-data' => 'elV2LibraryShell({ compose: '.($this->compose === 'view' ? 'true' : 'false').', side: '.(ConsoleV2::frame() ? "'--el-breakpoint-wide'" : "'--el-breakpoint-panel'").' })',
+                    'x-data' => 'elV2LibraryShell({ compose: '.($this->compose === 'view' ? 'true' : 'false').', edit: '.($this->compose === 'filters' ? 'true' : 'false').', side: '.(ConsoleV2::frame() ? "'--el-breakpoint-wide'" : "'--el-breakpoint-panel'").' })',
                     'x-bind:class' => "{ 'is-drawer': drawer, 'is-pushing': filtersOpen && ! drawer }"]),
                 View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
             ]);

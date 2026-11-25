@@ -3,9 +3,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { CALL_SEGMENTS, makeItem, makeTranscript } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
@@ -127,8 +124,8 @@ describe("the v2 Shared page", () => {
     // The ⋮ is in the row without hovering or focusing it, and the page's style keeps it on screen.
     for (const title of ["Call a", URDU, "Acme"]) expect(within(row(title)).getByRole("button", { name: `More for ${title}` })).toBeInTheDocument();
     expect(within(row("Call a")).queryByRole("button", { name: /^(Open|Save)/ })).toBeNull();
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "shared.css"), "utf8");
-    expect(css).toMatch(/\[data-v2=shared\] \.el-row__actions \{ opacity: 1;/);
+    // The design system's row options keep the ⋮ on screen and give the meta two lines (no page-only style).
+    for (const title of ["Call a", URDU, "Acme"]) expect(row(title)).toHaveClass("el-row--actions-always", "el-row--meta-2");
     expect(document.querySelector("[data-v2=shared]")).not.toBeNull();
     // The row is one native button (Enter on it presses it): it opens the recording read-only.
     expect(rowButton("Call a").tagName).toBe("BUTTON");

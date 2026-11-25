@@ -219,6 +219,17 @@
 .el-menu__label { flex: 1; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
+/* A stepping row (UX-07, "Zoom  [−] 100% [+]"): two small buttons and the value between them, at the row's end. */
+.el-menu__stepper { display: inline-flex; align-items: center; gap: var(--el-space-4); margin-inline-start: var(--el-space-16); }
+.el-menu__step {
+  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); padding: 0;
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: var(--el-role-bg-surface); color: inherit; cursor: pointer;
+}
+.el-menu__step:hover:not(:disabled) { background: color-mix(in srgb, var(--el-role-text-primary) 8%, var(--el-role-bg-surface)); }
+.el-menu__step:disabled { color: var(--el-role-text-disabled); border-color: var(--el-role-border-default); cursor: default; }
+/* The value in the app's font with tabular figures, like the title row's chip (never the monospace face). */
+.el-menu__step-value { min-inline-size: var(--el-space-40); text-align: center; }
+.el-menu__step-value.el-num { font-family: inherit; font-size: inherit; line-height: inherit; }
 .el-menu__option[aria-disabled="true"] { color: var(--el-role-text-disabled); cursor: default; }
 .el-menu--has-sub { overflow: visible; max-block-size: none; }
 .el-menu--sub { inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-start: calc(100% - var(--el-space-4)); min-inline-size: calc(var(--el-space-64) * 3); }
@@ -1249,7 +1260,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
    right one) still lines up with the column it sits in, at the window's start edge. */
 /* Chromium (WebView2) and WebKit read only the prefixed value; others read the standard one. */
 .el-row__title, .el-row__meta-text, .el-row__value-text, .el-group__note, .el-plan-card__body p, .el-health__title,
-.el-screens-strip__title {
+.el-screens-strip__title, .el-nav-item__label {
   text-align: match-parent;
   text-align: -webkit-match-parent;
 }
@@ -1639,6 +1650,15 @@ body.dragging-views, body.dragging-views * { cursor: grabbing !important; user-s
 .el-shell__edge:hover, .el-shell__edge:focus-visible { background: var(--el-role-accent-soft); }
 .el-shell__edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
 body.resizing-sidebar { cursor: col-resize; user-select: none; }
+/* UX-03: a panel's edge (ResizeEdge): 8 px over its border, the column cursor, tinted under the pointer and when
+   focused. While it is dragged below the closing width the panel fades: let go and it closes. */
+.el-resize-edge { position: absolute; inset-block: 0; z-index: var(--el-layer-sticky); inline-size: var(--el-space-8); cursor: col-resize; touch-action: none; }
+.el-resize-edge--end { inset-inline-end: calc(-1 * var(--el-space-4)); }
+.el-resize-edge--start { inset-inline-start: calc(-1 * var(--el-space-4)); }
+.el-resize-edge:hover, .el-resize-edge:focus-visible { background: var(--el-role-accent-soft); }
+.el-resize-edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+body.el-resizing { cursor: col-resize; user-select: none; }
+.el-panel[data-closing="true"], .el-filter[data-closing="true"] { opacity: var(--el-desktop-resize-closing-opacity); }
 .el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
 .el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
 @media (width < 780px) {
@@ -1853,14 +1873,26 @@ span.el-nav-section__title { cursor: default; }
   min-block-size: var(--el-space-40);
   border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
-.el-lib-row2__end { display: flex; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
+.el-lib-row2__end { display: flex; flex: none; align-items: center; gap: var(--el-space-4); margin-inline-start: auto; }
 .el-lib-row2.el-selectbar { padding-inline-start: var(--el-space-16); }
 .el-lib-row2.el-selectbar .el-lib-toolbar__all { margin: 0; }
 .el-lib-row2__selected { margin-block: 0; margin-inline-start: var(--el-space-4); font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 /* The page's tabs: All · Calls · Meetings · Voice notes (· Other) with their counts, grey with tabular figures. */
-.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); }
+/* A tab's words never wrap or get cut: with no room the end's labels go first (fitRow.ts), then the tabs scroll sideways
+   as the list chips' row does: one line, no fade (no gradients, DS rule 1), no scrollbar drawn; the tab at the edge
+   shows there is more. */
+.el-lib-tabs { display: flex; align-self: stretch; gap: var(--el-space-4); flex: 0 1 auto; min-inline-size: 0; }
+/* While they scroll the scroller reaches over the row's hairline, so the chosen tab's line still sits on it, and a
+   tab's focus ring is drawn inside it, where the scroller cannot cut it. */
+.el-lib-tabs--scrolls {
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
+  margin-block-end: calc(-1 * var(--el-border-hairline));
+}
+.el-lib-tabs--scrolls::-webkit-scrollbar { display: none; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab { margin-block-end: 0; }
+.el-lib-tabs--scrolls .el-lib-tabs__tab:focus-visible { outline-offset: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset))); }
 .el-lib-tabs__tab {
-  display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer;
+  display: inline-flex; flex: none; align-items: center; gap: var(--el-space-8); border: 0; background: transparent; font: inherit; cursor: pointer; white-space: nowrap;
   padding-block: 0; padding-inline: var(--el-space-12); color: var(--el-role-text-secondary); border-block-end: var(--el-border-strong) solid transparent; margin-block-end: calc(-1 * var(--el-border-hairline));
 }
 .el-lib-tabs__tab:hover { color: var(--el-role-text-primary); }
@@ -1965,7 +1997,7 @@ span.el-nav-section__title { cursor: default; }
    list (a column at the list's end), below that it slides over it. */
 .el-filter {
   display: flex; flex-direction: column; flex: none; order: 2;
-  inline-size: calc(var(--el-space-64) * 5);
+  inline-size: var(--el-filter-width, calc(var(--el-space-64) * 5));
   /* As tall as the window leaves it (--el-lib-room: the window's height, set by the Library), its sections scrolling. */
   position: sticky; inset-block-start: 0; max-block-size: calc(var(--el-lib-room, 100%) - var(--el-space-64));
   background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
@@ -2088,13 +2120,18 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-rail__record--on .el-rail__label { color: var(--el-role-record-default); font-weight: var(--el-text-body-strong-weight); font-variant-numeric: tabular-nums; }
 .el-rail__places, .el-rail__foot { display: flex; flex-direction: column; align-items: center; gap: 0; inline-size: 100%; }
 .el-rail__foot { margin-block-start: auto; padding-block-start: var(--el-space-4); }
+/* The places take what the rail has left above its foot. When even the short rail is taller than the window (a high
+   zoom, UX-07), Settings and Account stay at its foot, the places show only whole items, and the rest go into "⋯ More"
+   (NavShell measures this box); nothing scrolls and nothing is cut. */
+.el-rail__places { flex: 1 1 0; min-block-size: 0; overflow: hidden; }
+.el-rail__foot { flex: none; }
 /* An item: 56 px, the 20 px icon in a 48×28 pill (the accent's tint when selected, 8% on hover), 4 px, the 11 px label. */
-.el-rail__item, .el-rail__me .el-button.el-rail__item {
+.el-rail__item, .el-rail__me .el-button.el-rail__item, .el-rail__more .el-button.el-rail__item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--el-space-4);
   inline-size: 100%; min-block-size: var(--el-desktop-rail-item-height); padding: 0; border: 0; border-radius: 0;
   background: transparent; color: var(--el-role-text-secondary); cursor: pointer; font: inherit;
 }
-.el-rail__item:hover, .el-rail__me .el-button.el-rail__item:hover { background: transparent; color: var(--el-role-text-primary); }
+.el-rail__item:hover, .el-rail__me .el-button.el-rail__item:hover, .el-rail__more .el-button.el-rail__item:hover { background: transparent; color: var(--el-role-text-primary); }
 .el-rail__item:focus-visible { outline: none; }
 .el-rail__icon {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
@@ -2110,6 +2147,12 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-rail-label-size); line-height: var(--el-desktop-text-rail-label-line); font-weight: var(--el-desktop-text-rail-label-weight);
 }
 .el-rail__item[aria-current="page"] .el-rail__label { font-weight: var(--el-text-body-strong-weight); }
+/* The compact rail (Settings › Appearance, View › Theme): icons only, 44 px items (the 28 px pill and 8 px above and
+   below it), and still 72 px wide, since a Mac's window buttons sit in its top cell. Every item keeps its name for
+   assistive tools and in its tooltip; Record keeps its time while recording. */
+.el-rail--compact .el-rail__item, .el-rail--compact .el-rail__me .el-button.el-rail__item { min-block-size: calc(var(--el-desktop-rail-pill-height) + var(--el-space-16)); }
+.el-rail--compact .el-rail__more .el-button.el-rail__item { min-block-size: calc(var(--el-desktop-rail-pill-height) + var(--el-space-16)); }
+.el-rail--compact .el-rail__item .el-rail__label, .el-rail--compact .el-rail__record:not(.el-rail__record--on) .el-rail__label { display: none; }
 /* Badges: on the icon's top-right corner, cut out of it by a ring in the rail's colour. The number (Activity's only):
    16 px tall, 10 px semibold tabular figures, the accent with its text colour; a dot: 8 px (Live's red, recording). */
 .el-rail__count {
@@ -2129,13 +2172,16 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 .el-rail__dot--live { background: var(--el-role-danger-default); }
 /* The avatar (DES-08): 28 px in a 40 px click area, labelled Account like every item. */
-.el-rail__me { inline-size: 100%; }
-.el-rail__me .el-menu-anchor { inline-size: 100%; }
+.el-rail__me, .el-rail__more { inline-size: 100%; }
+.el-rail__me .el-menu-anchor, .el-rail__more .el-menu-anchor { inline-size: 100%; }
+/* ⋯ More (UX-07): its open menu keeps the hover's tint on its pill. */
+.el-rail__more .el-rail__item[aria-expanded="true"] .el-rail__icon { background: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
+.el-rail__more .el-rail__item[aria-current="page"][aria-expanded="true"] .el-rail__icon { background: var(--el-role-accent-soft); }
 .el-rail__me .el-rail__icon { inline-size: var(--el-desktop-avatar-rail-hit); block-size: var(--el-desktop-avatar-rail-hit); }
 .el-rail__me .el-rail__item[aria-expanded="true"] .el-avatar { box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-default); }
 .el-rail__me .el-rail__item:hover .el-rail__icon { background: transparent; }
 .el-rail__me .el-rail__item:hover .el-avatar { box-shadow: 0 0 0 var(--el-space-4) color-mix(in srgb, var(--el-role-text-primary) 8%, transparent); }
-.el-rail__me .el-button.el-rail__item > span { display: contents; }
+.el-rail__me .el-button.el-rail__item > span, .el-rail__more .el-button.el-rail__item > span { display: contents; }
 /* The account menu's head: the 40 px avatar, the name, the email, the plan. */
 .el-menu__header { list-style: none; padding: var(--el-space-8) var(--el-space-12) var(--el-space-12); margin-block-end: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-account-head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: calc(var(--el-space-64) * 4); }
@@ -2151,18 +2197,23 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 
 /* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
-   52 px: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in grey; the one
-   search field centred in the column (28 px, 280–400 px wide, the place in its placeholder, ⌘K at its end); the status
-   items at the end. No line under it until the page has scrolled. */
+   52 px, start to end: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in
+   grey, empty space (it drags the window), the search field at the row's end (28 px, 180–260 px wide, 22 % of the
+   window between, the place in its placeholder, ⌘K at its end), then the status items. Right to left it is mirrored:
+   the field at the left end. As the window narrows the empty space goes first, then the field shrinks to 180 px, then it
+   becomes a ⌕ button; the title's words are never given to the field. No line under it until the page has scrolled. */
 .el-titlerow {
-  flex: none; display: grid; align-items: center; gap: var(--el-space-8);
-  grid-template-columns: minmax(0, 1fr) minmax(var(--el-desktop-search-min-width), var(--el-desktop-search-max-width)) minmax(0, 1fr);
+  flex: none; display: flex; align-items: center; gap: var(--el-space-8);
   block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
   border-block-end: var(--el-border-hairline) solid transparent;
 }
 .el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
 .el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
-.el-titlerow__end { justify-content: flex-end; }
+/* The title's group keeps its whole width beside the field; only beside the ⌕ button (a window under the least width)
+   may it give some, its words cut last. */
+.el-titlerow__start { flex: none; }
+.el-titlerow--compact .el-titlerow__start { flex: 0 1 auto; }
+.el-titlerow__end { flex: none; justify-content: flex-end; }
 .el-titlerow__history { display: inline-flex; flex: none; }
 .el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
 .el-titlerow__name {
@@ -2170,9 +2221,14 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
 }
 .el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
-.el-titlerow__middle { display: flex; justify-content: center; min-inline-size: 0; }
-/* No room for the field: a ⌕ button, and its column gives its width back. */
-.el-titlerow--compact { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+/* The field at the row's end: the empty space before it takes what is left (and drags the window). */
+.el-titlerow__middle {
+  display: flex; justify-content: flex-end; margin-inline-start: auto;
+  flex: 0 1 clamp(var(--el-desktop-search-min-width), var(--el-desktop-search-preferred-width), var(--el-desktop-search-max-width));
+  min-inline-size: var(--el-desktop-search-min-width);
+}
+/* No room for the field: a ⌕ button at the row's end. */
+.el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; }
 .el-titlerow__search {
   display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
   inline-size: 100%; block-size: var(--el-desktop-search-height);
@@ -2201,8 +2257,9 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 [data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: var(--el-desktop-titlerow-keep-clear); }
 
 /* The panel: the place's name, its ⋯ and ⊟; group titles in sentence case; under 1100 px a flyout over the page. */
+/* UX-03: its width is the one kept for the place (--el-panel-width, set by its edge), or the usual one. */
 .el-panel {
-  grid-column: 2; display: flex; flex-direction: column; min-block-size: 0; inline-size: calc(var(--el-space-64) * 4 + var(--el-space-4));
+  grid-column: 2; position: relative; display: flex; flex-direction: column; min-block-size: 0; inline-size: var(--el-panel-width, calc(var(--el-space-64) * 4 + var(--el-space-4)));
   background: var(--el-role-bg-canvas); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
 /* Its containing block is the grid's second column, which starts where the rail ends. */
@@ -2222,7 +2279,7 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   grid-column: 2 / -1; grid-row: 1; position: absolute; inset: 0; z-index: calc(var(--el-layer-overlay) - 1);
   background: color-mix(in srgb, var(--el-role-scrim-default) 30%, transparent);
 }
-.el-shell--flyouts .el-panel { inline-size: calc(var(--el-space-64) * 4 - var(--el-space-16)); }
+.el-shell--flyouts .el-panel { inline-size: var(--el-panel-width, calc(var(--el-space-64) * 4 - var(--el-space-16))); }
 .el-shell--flyouts .el-panel--flyout { animation: el-panel-in var(--el-motion-base) var(--el-motion-ease-out); }
 @keyframes el-panel-in { from { opacity: 0; translate: calc(-1 * var(--el-space-12)) 0; } }
 :dir(rtl) .el-shell--flyouts .el-panel--flyout { animation-name: el-panel-in-rtl; }
@@ -2256,6 +2313,30 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 [data-titlebar="strip"] .el-titlebar + .titlebar-drag { display: none; }
 [data-titlebar="strip"] .el-shell:not(.el-shell--nav) { margin-block-start: var(--el-layout-titlebar-macos); block-size: calc(100% - var(--el-layout-titlebar-macos)); }
 [data-titlebar="strip"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-16); }
+/* ---- Windows' own title row (UX-20, v21_win_titlebar; wintitle.rs, WindowButtons.tsx) -------------------------------
+   No system title bar: the title row is the window's, 48 px. The rail's top cell holds the app's mark (where Windows draws
+   a window's icon) and moves the window; the panel's head is as tall as the row. Minimize, Maximize and Close end the
+   row, flush with the window's edge, 46 px wide and as tall as the row; right to left they mirror with the row, as an
+   app's own title bar does in a right-to-left interface. */
+[data-titlebar="win"] .el-shell--nav .el-rail { padding-block-start: 0; }
+[data-titlebar="win"] .el-rail__top { display: flex; align-items: center; justify-content: center; block-size: var(--el-desktop-titlerow-height-windows); }
+[data-titlebar="win"] .el-rail__lights { display: none; }
+[data-titlebar="win"] .el-titlerow, [data-titlebar="win"] .el-panel__head { block-size: var(--el-desktop-titlerow-height-windows); }
+[data-titlebar="win"] .el-titlerow { padding-inline-end: 0; }
+[data-titlebar="win"] .el-titlerow__end { align-self: stretch; }
+/* The full 48 px: over the row's hairline too, as a system title bar's buttons reach its edge. */
+.el-winbuttons { display: flex; flex: none; align-self: flex-start; block-size: var(--el-desktop-titlerow-height-windows); margin-inline-start: var(--el-space-8); }
+.el-winbutton {
+  display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-desktop-window-button-width); padding: 0;
+  border: 0; border-radius: 0; background: transparent; color: var(--el-role-text-primary); cursor: default; font: inherit;
+}
+.el-winbutton .el-icon > svg { inline-size: var(--el-desktop-window-button-glyph); block-size: var(--el-desktop-window-button-glyph); }
+/* `is-hovered`: the snap layout plugin's own hover for Maximize, whose native window lies over it on Windows 11. */
+:root { --el-winbutton-hover-mix: 8%; --el-winbutton-pressed-mix: 14%; --el-winbutton-close-pressed-mix: 80%; }
+.el-winbutton:hover, .el-winbutton.is-hovered { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-hover-mix), transparent); }
+.el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
+.el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
+.el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {
@@ -2317,3 +2398,39 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-shell--nav .el-panel .el-nav-item { min-block-size: var(--el-desktop-panel-item-height); }
 .el-shell--nav .el-icon:not(.el-icon--md, .el-icon--lg) > svg { inline-size: var(--el-desktop-icon-default); block-size: var(--el-desktop-icon-default); }
 .el-shell--nav .el-rail__icon svg { inline-size: var(--el-desktop-icon-rail); block-size: var(--el-desktop-icon-rail); }
+
+/* ---- Zoom, like Chrome (UX-07, v21_zoom; lib/zoom.ts, shell/Zoom.tsx) ------------------------------------------------
+   The title row's chip while the zoom isn't 100%, and the bubble each change shows near the top for 2 s. */
+.el-zoom-chip { font-variant-numeric: tabular-nums; }
+/* Zoomed on a Mac, the window's buttons stay the system's size and place: the rail's top cell, the title row and the
+   panel's head keep the buttons' row (52 points, divided by --el-zoom, the page's pixels per point), never shorter than
+   the row's own controls; the buttons' spot and the 80 points kept clear stay where they are. */
+[data-platform="macos"] .el-rail__top, [data-platform="macos"] .el-titlerow, [data-platform="macos"] .el-panel__head {
+  block-size: max(calc(var(--el-desktop-titlerow-height) / var(--el-zoom, 1)), var(--el-desktop-search-height));
+}
+[data-platform="macos"]:not([data-titlebar]) .el-rail__top { block-size: var(--el-desktop-titlerow-rail-top-fullscreen); }
+[data-platform="macos"] .el-rail__lights {
+  left: calc(var(--el-desktop-titlerow-lights-left) / var(--el-zoom, 1)); top: calc(var(--el-desktop-titlerow-lights-top) / var(--el-zoom, 1));
+  inline-size: calc(var(--el-desktop-titlerow-lights-width) / var(--el-zoom, 1)); block-size: calc(var(--el-desktop-titlerow-lights-height) / var(--el-zoom, 1));
+}
+[data-platform="macos"] .el-shell--nav .el-titlerow { padding-inline-start: max(var(--el-space-8), calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) - var(--el-desktop-rail-width))); }
+/* Zoomed out, the rail stays at least as wide as the buttons' spot, so they never sit over the panel's name. */
+[data-platform="macos"][data-titlebar] .el-rail {
+  inline-size: max(var(--el-desktop-rail-width), calc((var(--el-desktop-titlerow-lights-left) + var(--el-desktop-titlerow-lights-width)) / var(--el-zoom, 1)));
+}
+[data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1)); }
+.el-zoom-bubble {
+  position: fixed; inset-block-start: var(--el-space-64); inset-inline-start: 50%; translate: -50% 0; z-index: var(--el-layer-toast);
+  display: none; align-items: center; gap: var(--el-space-4); padding: var(--el-space-8) var(--el-space-12);
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2); font-size: var(--el-text-body-size);
+}
+.el-zoom-bubble[data-shown] { display: inline-flex; }
+/* Between changes its live region stays in the page, empty and out of sight, so the next change is said. */
+.el-zoom-bubble:not([data-shown]) {
+  display: block; padding: 0; border: 0; box-shadow: none; background: transparent;
+  inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+:dir(rtl) .el-zoom-bubble { translate: 50% 0; }
+.el-zoom-bubble .el-num { font-family: inherit; font-size: inherit; line-height: inherit; }
+.el-zoom-bubble__reset { padding: 0; border: 0; background: transparent; color: var(--el-role-accent-text); font: inherit; cursor: pointer; text-decoration: underline; }

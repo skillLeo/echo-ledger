@@ -30,9 +30,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.core.Readiness
+import com.echoledger.mobile.privilege.AppCallCapture
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.translate.TranslateMode
 import com.echoledger.mobile.ui.ActivityBadge
@@ -264,6 +267,30 @@ private fun ShellBody(
     val library by vm.library.collectAsState()
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()
+    // v2.1 UX-15: each opening of the app is counted once (not again on a rotation); from the second one, "Tap to record
+    // · Hold for more" over Record, at most three times and never after the first long press.
+    var openCounted by rememberSaveable { mutableStateOf(false) }
+    var recordHint by rememberSaveable { mutableStateOf(false) }
+    var hintAsked by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!openCounted) {
+            openCounted = true
+            vm.updateSettings { it.copy(appOpens = it.appOpens + 1) }
+        }
+    }
+    LaunchedEffect(settings.appOpens) {
+        if (!hintAsked && RecordHint.due(settings)) {
+            hintAsked = true
+            recordHint = true
+            vm.updateSettings { it.copy(recordHintShows = it.recordHintShows + 1) }
+        }
+    }
+    LaunchedEffect(recordHint) {
+        if (recordHint) {
+            kotlinx.coroutines.delay(RecordHint.SHOW_MS)
+            recordHint = false
+        }
+    }
     val missed by vm.missed.collectAsState()
     // Only whether a recording runs: the elapsed time ticks every second, and only the strip above the bar reads it.
     val recording by remember { RecordingService.live.map { it.active }.distinctUntilChanged() }
@@ -323,25 +350,21 @@ private fun ShellBody(
         val lock = settings.plan.lockFor("live_translate")
         V2RecordSheet(
             RecordSheetState(
-                calls = setup.ready.capabilities.appCalls,
-                armed = settings.autoRecordArmed,
-                canArm = setup.ready.capabilities.canCaptureCalls,
                 liveAssist = flags.isOn(UiFlags.LIVE_ASSIST),
                 liveTranslate = settings.plan.liveTranslate,
-                translateLocked = lock?.badge?.takeIf { !settings.plan.liveTranslate },
-                game = translating == com.echoledger.mobile.translate.TranslateMode.GAME,
-                watch = translating == com.echoledger.mobile.translate.TranslateMode.WATCH,
-                blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(context)
+                translateLocked = lock?.badge?.takeIf { !settings.plan.liveTranslate }
             ),
             RecordSheetActions(
                 onRecordNow = ::recordNow,
-                onVoiceAndFiles = { open(LiveEntry.VoiceNote) },
-                onCalls = { open(LiveEntry.Record) },
-                onArm = ::arm,
+                onVoiceNote = { open(LiveEntry.VoiceNote) },
+                onImport = { open(LiveEntry.ImportAudio) },
                 onLiveAssist = { open(LiveEntry.LiveAssist) },
                 onDictation = { open(LiveEntry.Dictation) },
-                onLiveTranslate = { open(LiveEntry.LiveTranslate) },
-                onWatchTranslate = { open(LiveEntry.WatchTranslate) },
+                // Game and video translate, with their state: the Live tab.
+                onTranslate = {
+                    route = V2Route.Tabs
+                    tab = V2Tab.Live
+                },
                 onLocked = classic.upgrade
             ),
             onDismiss = { recordSheet = false }
@@ -596,7 +619,12 @@ private fun ShellBody(
 
                         V2Tab.Live -> if (flags.isOn(UiFlags.LIVE)) {
                             // Live Assist only for this person's flag, and only for sessions on this phone (no viewer role).
-                            V2LiveTab(liveAssist = flags.isOn(UiFlags.LIVE_ASSIST), liveTranslate = true, onOpen = ::open)
+                            V2LiveTab(
+                                liveAssist = flags.isOn(UiFlags.LIVE_ASSIST),
+                                liveTranslate = true,
+                                onOpen = ::open,
+                                status = liveStatus(setup.ready.capabilities, settings.autoRecordArmed, translating, ::arm)
+                            )
                         } else {
                             classic.live()
                         }
@@ -618,6 +646,7 @@ private fun ShellBody(
             Column(Modifier.onSizeChanged { bar.intValue = it.height }) {
                 // While recording: the time and Stop above the bar, as classic's strip; a tap opens the voice page.
                 if (recording) RecordingStrip(onStop = ::recordNow, onOpen = { open(LiveEntry.VoiceNote) })
+                if (recordHint && !recording) RecordHintBubble { recordHint = false }
                 EchoBottomBar(
                     destinations = listOf(
                         EchoDestination(V2Tab.Library.name, text.library, EchoIcons.Library),
@@ -628,7 +657,13 @@ private fun ShellBody(
                     selectedKey = tab.name,
                     onSelect = { tab = V2Tab.valueOf(it) },
                     onReselect = { reselected++ },
-                    centre = { EchoRecordButton(recording, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
+                    centre = {
+                        EchoRecordButton(recording, onTap = ::recordNow, onLongPress = {
+                            recordHint = false
+                            if (!settings.recordHintDone) vm.updateSettings { it.copy(recordHintDone = true) }
+                            recordSheet = true
+                        })
+                    }
                 )
             }
         }
@@ -685,4 +720,80 @@ internal fun openUpdate(context: android.content.Context, vm: com.echoledger.mob
             )
         }
     }
+}
+
+/** The Record hint (v2.1 UX-15): from the second opening of the app, at most three times, never after a long press. */
+internal object RecordHint {
+    const val SHOWS = 3
+    const val SHOW_MS = 8_000L
+
+    fun due(s: com.echoledger.mobile.data.AppSettings): Boolean = s.appOpens >= 2 && !s.recordHintDone && s.recordHintShows < SHOWS
+}
+
+/** "Tap to record · Hold for more", centred over Record; a tap closes it. */
+@Composable
+private fun RecordHintBubble(onClose: () -> Unit) {
+    val c = EchoV2.colors
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Surface(
+            onClick = onClose,
+            modifier = Modifier.padding(bottom = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                com.echoledger.mobile.ui.v2.tokens.EchoTokens.Component.menuRadius
+            ),
+            color = c.textPrimary,
+            contentColor = c.bgSurface,
+            shadowElevation = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Elevation.floating
+        ) {
+            androidx.compose.material3.Text(
+                stringResource(R.string.v2_rs_hint),
+                style = EchoV2.type.meta,
+                modifier = Modifier
+                    .padding(
+                        horizontal = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s12,
+                        vertical = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s8
+                    )
+                    .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+            )
+        }
+    }
+}
+
+/** What the Live tab says of the calls and Live Translate (they left the New sheet, v2.1 UX-15). */
+@Composable
+private fun liveStatus(
+    caps: com.echoledger.mobile.privilege.Capabilities,
+    armed: Boolean,
+    translating: com.echoledger.mobile.translate.TranslateMode?,
+    onArm: (Boolean) -> Unit
+): com.echoledger.mobile.ui.v2.live.LiveStatus {
+    val context = LocalContext.current
+    val calls = stringResource(
+        when (caps.appCalls) {
+            AppCallCapture.NOT_IN_THIS_BUILD -> R.string.v2_rs_calls_web
+            AppCallCapture.NONE -> R.string.v2_rs_calls_android
+            AppCallCapture.NEEDS_HELPER, AppCallCapture.VOICE_ONLY_NEEDS_HELPER -> R.string.v2_rs_calls_setup
+            AppCallCapture.VOICE_ONLY -> R.string.v2_rs_calls_voice
+            AppCallCapture.BOTH_SIDES -> if (armed) R.string.v2_rs_calls_armed else R.string.v2_rs_calls_ready
+        }
+    )
+    val on = stringResource(R.string.v2_rs_on)
+    val off = stringResource(R.string.v2_rs_off)
+    val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(context)
+    return com.echoledger.mobile.ui.v2.live.LiveStatus(
+        armed = armed,
+        canArm = caps.canCaptureCalls,
+        calls = calls,
+        onArm = onArm,
+        game = if (translating == com.echoledger.mobile.translate.TranslateMode.GAME) {
+            stringResource(R.string.v2_rs_game_status, on)
+        } else {
+            blocked ?: stringResource(R.string.v2_rs_game_status, off)
+        },
+        watch = if (translating == com.echoledger.mobile.translate.TranslateMode.WATCH) {
+            stringResource(R.string.v2_rs_watch_status, on)
+        } else {
+            blocked ?: stringResource(R.string.v2_rs_watch_status, off)
+        }
+    )
 }

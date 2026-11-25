@@ -18,7 +18,7 @@
         [__('Started'), $at->translatedFormat('j F Y, '.(\App\Filament\Support\Shell::timeFormat() === 'H:i' ? 'H:i' : 'g:i a'))],
         [__('Length'), CaptureSessionsTable::duration($record->duration_ms) ?: '—'],
         [__('Project'), $record->client?->name ?? '—'],
-        [__('With'), $with !== '' ? $with : '—'],
+        [__('recording_context.with_person'), $with !== '' ? $with : '—'],
         [__('Device'), CaptureSessionsTable::deviceLabel($record)],
         $record->hasNoAudio() ? [__('Status'), __('No audio')] : [__('Transcript'), $final !== null ? __($final->status->getLabel()) : __('Not started')],
         [__('Language'), $final?->language !== null ? __(\App\Stt\LanguageChoice::label($final->language)) : __('Automatic')],

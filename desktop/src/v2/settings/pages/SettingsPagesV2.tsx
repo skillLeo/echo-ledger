@@ -26,10 +26,12 @@ import { StoragePageV2 } from "./StorageV2";
 import { AppearancePageV2, ShortcutsPageV2, useThemeChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
 
-export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false }: {
+export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false, zoom = false }: {
   section: { id: string; seq: number };
   /** The rail · panel · page layout (its keys on the shortcuts page). */
   threeLevels?: boolean;
+  /** Zoom is on (UX-07, v21_zoom): Appearance has its slider. */
+  zoom?: boolean;
   onHome: () => void;
   /** Opens a section outside these pages (Help, from the Mac check); without it the way back is Settings. */
   onSection?: (id: string) => void;
@@ -85,7 +87,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
-      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
+      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} zoom={zoom} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} threeLevels={threeLevels} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements

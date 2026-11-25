@@ -86,8 +86,10 @@ class KeepThePlaceTest : ScreenTest() {
         }
     }
 
+    private var dark = false
+
     private val shell: @androidx.compose.runtime.Composable () -> Unit = {
-        EchoV2Shell(vm, v2, darkTheme = false, classic = classic, onSwitchToClassic = {}, language = EchoLanguage.English)
+        EchoV2Shell(vm, v2, darkTheme = dark, classic = classic, onSwitchToClassic = {}, language = EchoLanguage.English)
     }
 
     private fun list() = compose.onAllNodes(hasScrollToIndexAction()).onFirst()
@@ -139,29 +141,33 @@ class KeepThePlaceTest : ScreenTest() {
         return row.getPixel(4, 4)
     }
 
-    /** Owner's review of UX-25: a neutral grey as the desktop's (the text colour over the page), never teal. */
-    @Test
-    fun `the row come back to is a light neutral grey, not the accent or the selection's tint`() {
+    /**
+     * Owner's review of UX-25: a neutral grey as the desktop's, the text colour over the page at [alpha] (the owner's
+     * 6 % in light, 9 % in dark), never teal: read from what is drawn.
+     */
+    private fun comeBackIsNeutralGrey(dark: Boolean, alpha: Float) {
+        this.dark = dark
         seed()
         show(shell)
         pumpUntil("the list") { shown("Caller 001") }
         openFromTheList("Caller 040")
         back()
         val drawn = returnedColour()
-        val c = com.echoledger.mobile.ui.v2.theme.EchoV2Colors.Light
-        val expected = androidx.compose.ui.graphics.Color(
-            androidx.core.graphics.ColorUtils.compositeColors(
-                com.echoledger.mobile.ui.v2.library.returnedTint(c).toArgb(),
-                c.bgCanvas.toArgb()
-            )
-        ).toArgb()
+        val c = if (dark) com.echoledger.mobile.ui.v2.theme.EchoV2Colors.Dark else com.echoledger.mobile.ui.v2.theme.EchoV2Colors.Light
+        fun over(colour: androidx.compose.ui.graphics.Color, a: Float) =
+            androidx.core.graphics.ColorUtils.compositeColors(colour.copy(alpha = a).toArgb(), c.bgCanvas.toArgb())
         fun near(a: Int, b: Int) = listOf(16, 8, 0).all { shift -> kotlin.math.abs((a shr shift and 0xff) - (b shr shift and 0xff)) <= 3 }
-        assertTrue("the text colour at 6 % over the page: ${Integer.toHexString(drawn)}", near(drawn, expected))
+        assertTrue("the text colour at $alpha over the page: ${Integer.toHexString(drawn)}", near(drawn, over(c.textPrimary, alpha)))
         assertTrue("never the selection's tint", !near(drawn, c.accentSoft.toArgb()))
-        val accented = androidx.core.graphics.ColorUtils.compositeColors(c.accent.copy(alpha = 0.08f).toArgb(), c.bgCanvas.toArgb())
-        assertTrue("never the accent", !near(drawn, accented) && !near(drawn, c.accent.toArgb()))
+        assertTrue("never the accent", !near(drawn, over(c.accent, alpha)) && !near(drawn, c.accent.toArgb()))
         assertTrue("seen against the page", !near(drawn, c.bgCanvas.toArgb()))
     }
+
+    @Test
+    fun `the row come back to is a light neutral grey, not the accent or the selection's tint`() = comeBackIsNeutralGrey(false, 0.06f)
+
+    @Test
+    fun `in dark the row come back to is a neutral grey too, at 9 percent`() = comeBackIsNeutralGrey(true, 0.09f)
 
     /** Review of UX-25: a recording that came in above while one was open never moves the row come back to. */
     @Test

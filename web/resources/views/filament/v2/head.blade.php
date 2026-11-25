@@ -11,6 +11,8 @@
 <style>
     @font-face { font-family: "Noto Nastaliq Urdu"; src: url("{{ asset('fonts/noto-nastaliq-urdu-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
 </style>
+{{-- DES-08: a person's photo that does not load becomes their initials on their colour. --}}
+@includeWhen(($sheet ?? 'console') === 'console', 'filament.v2.avatar-script')
 <script>
     (() => {
         const root = document.documentElement;
@@ -54,8 +56,10 @@
     });
 </script>
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
-{{-- UX-22: a Library row's right-click menu (and Shift+F10, the Menu key). --}}
-@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.context-menu-script')
+{{-- UX-22: a Library row's right-click menu (and Shift+F10, the Menu key); since 3b the other objects' too. --}}
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::any(), 'filament.v2.context-menu-script')
+{{-- Decision 18: the top bar and the Library's toolbar row make room as the desktop's title row does. --}}
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::shell(), 'filament.v2.header-fit')
 {{-- The three levels of navigation (docs/PLAN_NAV_3_LEVELS.md): the rail, the panels, the flyout, the memory and their keys. --}}
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::frame(), 'filament.v2.frame-script')
 {{-- Since 2.0.0-p: the filter panel (open, closed, a drawer) and the keys F, ⌘F / Ctrl+F, Esc and ⌘1…⌘9. --}}
