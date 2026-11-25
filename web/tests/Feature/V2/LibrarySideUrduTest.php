@@ -177,7 +177,7 @@ dataset('search states', [
         '“zebra crossing” کے لیے کچھ نہیں ملا۔ کم الفاظ یا دوسرے فلٹرز آزمائیں۔', 'Nothing found for “zebra crossing”. Try fewer words or other filters.',
     ]],
     'many results' => ['/app/search?q=freight', 'many', [
-        '· 5 مماثلتیں', '· 5 matches',
+        '· 5 نتائج', '· 5 matches',
         'wire:click="nextPage">پرانے نتائج</button>', 'wire:click="nextPage">Older</button>',
     ]],
 ]);
