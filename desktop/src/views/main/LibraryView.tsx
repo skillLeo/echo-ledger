@@ -1160,20 +1160,30 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   // Rename from the row menu (in the list) or by clicking the title of the open recording.
   const [renaming, setRenaming] = useState<{ id: string; where: "list" | "detail" } | null>(null);
   const replaceItem = (id: string, change: (item: LibraryItem) => LibraryItem) => setItems((list) => list.map((i) => (i.id === id ? change(i) : i)));
+  /**
+   * U19 (2.0.0-k), as in the new design: only a title the person chose is theirs to edit. "Call with …", an automatic
+   * title or the app's name start the box empty, with that title as its placeholder. From a server that doesn't say
+   * (no title_source), a title it wrote from what was said (title_auto) is not the person's either; any other is.
+   */
+  const ownTitle = (item: LibraryItem) => item.title_source === "own" || (item.title_source === undefined && !item.title_auto);
+  const titleBox = (item: LibraryItem) => ownTitle(item)
+    ? { initial: item.title ?? "", placeholder: "Leave it empty for the title EchoLedger gives it.", hint: "Leave it empty for the title EchoLedger gives it." }
+    : { initial: "", placeholder: item.title ?? undefined, hint: "Type a title of your own, or leave it empty to keep this one." };
   /** The new name shows at once; the server's answer (and the next sync on other devices) confirms it. */
   const rename = async (item: LibraryItem, text: string) => {
     setRenaming(null);
     const title = text.trim();
-    if (title === (item.title ?? "").trim()) return;
+    // Unchanged, or left empty over a title the person didn't choose: nothing to save.
+    if (title === (ownTitle(item) ? item.title ?? "" : "").trim()) return;
     // An empty title asks the server for its automatic one again (Phase 1C, `title: null`); a title the person types is
     // theirs, and the server never replaces it.
-    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false }));
+    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false, title_source: "own" }));
     try {
       const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
-      notify(title ? "Renamed" : "The automatic title will be used", false, { kind: "recording", id: item.id });
+      notify(title ? "Renamed" : "Back to the title EchoLedger gives it", false, { kind: "recording", id: item.id });
     } catch (e) {
-      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
+      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto, title_source: item.title_source }));
       notify(errorMessage(e), true);
     }
   };
@@ -1412,7 +1422,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <div className="row">
                         {avatar}
                         <div className="item-main">
-                          <TitleEditor className="item-rename" initial={item.title ?? ""} onSave={(t) => void rename(item, t)} onCancel={() => setRenaming(null)} />
+                          <TitleEditor className="item-rename" {...titleBox(item)} onSave={(t) => void rename(item, t)} onCancel={() => setRenaming(null)} />
                           <div className="item-sub">{sub}</div>
                         </div>
                       </div>
@@ -1510,7 +1520,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   {readOnly ? (
                     <h2 className="detail-title" dir="auto" data-motion="title">{recordingName(current.title)}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
-                    <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
+                    <TitleEditor className="detail-title-input" {...titleBox(current)} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
                     <h2 className="detail-title" dir="auto" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{recordingName(current.title)}</button>

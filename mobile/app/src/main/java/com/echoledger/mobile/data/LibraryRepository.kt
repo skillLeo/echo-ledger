@@ -18,8 +18,9 @@ class LibraryRepository(
     private val api: suspend () -> com.echoledger.mobile.net.ApiClient?
 ) {
     /**
-     * [format] 2 since 2.0.0-p: the items carry `ended_at`, `facets` and `processing_since`. A cache kept before has
-     * none of them, so its next sync reads the whole library again (and replaces it) instead of only what changed.
+     * [format] 2 since 2.0.0-p: the items carry `ended_at`, `facets` and `processing_since`; 3 since the phone reads
+     * `title_source` (2.0.0-k, Rename's U19). A cache kept before has none of them, so its next sync reads the whole
+     * library again (and replaces it) instead of only what changed.
      */
     @Serializable
     private data class Cache(
@@ -225,8 +226,8 @@ class LibraryRepository(
     companion object {
         private val CONTEXT = "echoledger.library".toByteArray()
 
-        /** The cache's format: 2 since 2.0.0-p (see [Cache]). */
-        private const val FORMAT = 2
+        /** The cache's format: 2 since 2.0.0-p, 3 since title_source (see [Cache]). */
+        private const val FORMAT = 3
 
         /** Waiting calls are a few: at most this many pages of them are read. */
         private const val MAX_WAITING_PAGES = 10

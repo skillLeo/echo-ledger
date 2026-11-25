@@ -81,10 +81,15 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
   );
 }
 
-/** A title renamed in place: Enter or leaving the field saves (once), Escape cancels; empty clears the title. */
-export function TitleEditor({ initial, className = "", onSave, onCancel }: {
+/**
+ * A title renamed in place: Enter or leaving the field saves (once), Escape cancels; empty clears the title. [hint] is
+ * what the box is for (its tooltip and description); [placeholder], what shows while it is empty.
+ */
+export function TitleEditor({ initial, className = "", placeholder = "Empty: an automatic title from what was said", hint, onSave, onCancel }: {
   initial: string;
   className?: string;
+  placeholder?: string;
+  hint?: string;
   onSave: (title: string) => void;
   onCancel: () => void;
 }) {
@@ -98,7 +103,7 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
   };
   return (
     <input className={`input ${className}`.trim()} aria-label="Title" autoFocus maxLength={MAX_TITLE_CHARS} value={text} dir="auto"
-      placeholder="Empty: an automatic title from what was said"
+      placeholder={placeholder} title={hint}
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {
@@ -360,8 +365,10 @@ export function eraseIn(eraseAt: string, now: number = Date.now()): string {
 export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => void }) {
   const keepHours = useTrashKeepHours();
   const [items, setItems] = useState<BinItem[] | null>(null);
+  // A bin the server could not give is not an empty one (EL-UX's audit): the panel says so, with Try again.
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const load = () => api.bin().then((r) => setItems(r.data ?? []), (e) => { setItems([]); notify(errorMessage(e), true); });
+  const load = () => api.bin().then((r) => { setItems(r.data ?? []); setFailed(false); }, () => setFailed(true));
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -383,7 +390,13 @@ export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => v
     <div className="card bin-panel" role="region" aria-label="Recently deleted">
       <div className="row"><b>Recently deleted</b><span className="spacer" /><button type="button" className="btn ghost small" onClick={onClose}>Close</button></div>
       <p className="small muted">{`Deleted recordings stay here for ${hoursWords(keepHours)}, then their audio and transcripts are erased.`}</p>
-      {items === null ? <p className="small muted">Loading…</p> : items.length === 0 ? <p className="small muted">{`Nothing deleted in the last ${hoursWords(keepHours)}.`}</p> : (
+      {failed ? (
+        <div className="row">
+          <p className="small muted">Couldn't load Recently deleted. Check the internet connection.</p>
+          <span className="spacer" />
+          <button type="button" className="btn ghost small" onClick={() => { setFailed(false); setItems(null); void load(); }}>Try again</button>
+        </div>
+      ) : items === null ? <p className="small muted">Loading…</p> : items.length === 0 ? <p className="small muted">{`Nothing deleted in the last ${hoursWords(keepHours)}.`}</p> : (
         <div className="site-list" role="list">
           {items.map((b) => (
             <div className="site-rule" role="listitem" key={b.id}>
