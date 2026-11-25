@@ -268,7 +268,8 @@ describe('old links', function () {
         $monday = $at('2026-11-22 19:30:00', 'Monday 00:30 in Karachi');
         $sunday = $at('2026-11-22 18:30:00', 'The Sunday before, 23:30 in Karachi');
         $next = $at('2026-11-29 19:00:00', 'Next Monday 00:00 in Karachi');
-        $waiting = $at('2026-11-25 06:55:00', 'Waiting this week', ['status' => SessionStatus::Recording, 'ended_at' => null]);
+        // Since 2.0.0-z a waiting call is over: it has its end (a call still being recorded waits for nothing yet).
+        $waiting = $at('2026-11-25 06:55:00', 'Waiting this week', ['status' => SessionStatus::Recording, 'ended_at' => Carbon::parse('2026-11-25 06:59:00', 'UTC')]);
 
         $page = Livewire::withQueryParams(['tab' => 'this_week'])->test(ListCaptureSessions::class);
         $page->assertSet('lf.date', ['op' => 'is', 'values' => ['custom'], 'from' => '2026-11-23', 'to' => '2026-11-29'])

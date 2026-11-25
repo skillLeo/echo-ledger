@@ -11,6 +11,7 @@ use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Services\LibraryOrganiser;
 use App\Stt\LanguageChoice;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -153,6 +154,39 @@ final class LibraryFilters
         };
     }
 
+    /**
+     * A `recording` session counts as waiting for the person's choice without an `ended_at` once it started this many
+     * hours ago (contract 2.0.0-z, lead decision 20): older apps never send `ended_at` when the call ends, and no call runs
+     * this long, so it is over and waiting (or forgotten), never still being recorded.
+     */
+    public const WAITING_FALLBACK_HOURS = 4;
+
+    /**
+     * Whether a recording waits for the person's choice after a call (contract 2.0.0-z): its session is still `recording`
+     * and the call is over, `ended_at` set (PATCH /api/sessions/{id}) or started over WAITING_FALLBACK_HOURS ago. A
+     * call still being recorded (live captions, an open meeting) is not waiting. Times are Unix seconds.
+     */
+    public static function isWaiting(string $sessionStatus, ?int $endedAt, int $startedAt, int $now): bool
+    {
+        return $sessionStatus === SessionStatus::Recording->value
+            && ($endedAt !== null || $startedAt < $now - self::WAITING_FALLBACK_HOURS * 3600);
+    }
+
+    /**
+     * isWaiting() in SQL, for the `waiting` view, its count and the badge.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
+     */
+    public static function whereWaiting(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('status'), SessionStatus::Recording->value)
+            ->where(fn ($q) => $q->whereNotNull($query->qualifyColumn('ended_at'))
+                ->orWhere($query->qualifyColumn('started_at'), '<', now()->subHours(self::WAITING_FALLBACK_HOURS)));
+    }
+
     /** Since 2.0.0-r: the glossary's states, `facets.state`, in the contract's order (docs/API.md BE-05). */
     public const STATE_NAMES = ['transcribed', 'audio_only', 'transcribing', 'waiting_to_upload', 'failed', 'waiting'];
 
@@ -163,14 +197,15 @@ final class LibraryFilters
      * or `transcribed` (the row shows its words, no state). The API, the console's rows, its Audio only place and its
      * Status filter all read this, so they agree.
      */
-    public static function state(string $status, string $sessionStatus): string
+    public static function state(string $status, string $sessionStatus, bool $waiting = true): string
     {
         return match ($status) {
             'failed' => 'failed',
             'transcribed' => 'transcribed',
             'not_transcribed' => 'audio_only',
             default => match ($sessionStatus) {
-                SessionStatus::Recording->value => 'waiting',
+                // Since 2.0.0-z ([$waiting], isWaiting): a call still being recorded is not waiting yet, not uploaded yet.
+                SessionStatus::Recording->value => $waiting ? 'waiting' : 'waiting_to_upload',
                 SessionStatus::Uploading->value => 'waiting_to_upload',
                 default => 'transcribing',
             },
@@ -204,7 +239,9 @@ final class LibraryFilters
             // Since 2.0.0-q: the recording's one kind (docs/API.md "The Library's kinds").
             'kind' => self::kind($source),
             // Since 2.0.0-r: its one state, the glossary's (docs/API.md "The glossary's states").
-            'state' => self::state($status, $session->status->value),
+            // Since 2.0.0-z: `waiting` only once the call is over (isWaiting).
+            'state' => self::state($status, $session->status->value, self::isWaiting($session->status->value,
+                $session->ended_at?->getTimestamp(), $session->started_at->getTimestamp(), now()->getTimestamp())),
         ];
     }
 
@@ -238,7 +275,8 @@ final class LibraryFilters
     public static function needsYou(string $sessionStatus, string $status, ?int $endedAt, int $startedAt, int $now, ?int $processingSince = null): ?string
     {
         if ($sessionStatus === SessionStatus::Recording->value) {
-            return 'waiting';
+            // Since 2.0.0-z: only once the call is over; a call still being recorded needs nothing yet.
+            return self::isWaiting($sessionStatus, $endedAt, $startedAt, $now) ? 'waiting' : null;
         }
         if ($status === 'failed') {
             return 'failed';

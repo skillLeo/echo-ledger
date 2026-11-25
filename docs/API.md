@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-v (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-z (2026-11-26, decided by EL-Lead, lead decision 20)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-z (decided 2026-11-26 by EL-Lead, lead decision 20; the badge's waiting calls): a call still being recorded is not waiting. `PATCH /api/sessions/{id}` takes `ended_at` (and `duration_ms`) while the session is still `recording`: the call is over and the person's choice is pending. A call is **waiting** when its session is `recording` and has `ended_at`, or started more than 4 hours ago (older apps that never send it). That one rule is used by the `waiting` view, the badge, Needs you and `facets.state`; a `recording` session that is not waiting has the state `waiting_to_upload`. Additions only. (2.0.0-w, -x and -y land separately, before it.)
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
@@ -1128,7 +1129,8 @@ recording itself.
 
 Smart views (`view` on `GET /api/library`): `today` and `this_week` (calendar day or Monday-based week of `started_at`
 in `tz`, an IANA zone, default the console's display zone), `waiting` (still `recording`: the phone or computer has
-not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
+not decided Keep or Discard; since 2.0.0-z only once the call is over: `ended_at` set by `PATCH /api/sessions/{id}`,
+or started more than 4 hours ago), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
 Since 2.0.0-p also `needs_you` ("Needs you" as "Library filters" defines it, waiting calls included) and `unread` (the
 asking person has not opened it: `opened` false). `GET /api/library/views` is unchanged; the counts of these two are in
 `GET /api/library/facets` (`library`).
@@ -1276,8 +1278,9 @@ one transcript or screen moment).
 (those are only in Needs you); never a teammate's or another workspace's (Shared with me is its own list).
 
 **"Needs you"**, one recording at most once, the first that holds:
-1. `waiting`: a call waiting for Keep or Discard (session `recording`; on the phone and the desktop also the after-call
-   card still open, and "Choose again").
+1. `waiting`: a call waiting for Keep or Discard (session `recording`, and since 2.0.0-z the call over: `ended_at` set, or
+   started more than 4 hours ago; on the phone and the desktop also the after-call card still open, and "Choose again").
+   A call still being recorded is not in Needs you.
 2. `failed`: Status `failed` (an upload or a transcript that failed, or the recording failed).
 3. `stuck`: Status `processing` for more than 24 hours since the current attempt began: `processing_since` (the start
    of the current upload or transcript attempt, so a retry starts the clock again); only when none is stored, since
@@ -1422,6 +1425,14 @@ Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a c
 client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retention), `important` (boolean, since 2.0.0-i) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
 ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
 `404 session_not_found`; another owner's client is `404 client_not_found`.
+**The call is over (since 2.0.0-z):** while the session is still `recording` (an open session, `POST /api/sessions`
+without `artifacts`), `ended_at` (ISO 8601, not before `started_at`) and `duration_ms` (optional) say the call has
+ended and the person's choice is pending; nothing is uploaded and the status stays `recording`. From then on the call
+is waiting (the `waiting` view, the badge, Needs you). The device that opened the session sends it when the call ends,
+before it shows the choice (the after-call card or notification). A failed request is retried by the device's queue.
+It is idempotent: an `ended_at` already stored is never moved by a later one, and `duration_ms` is kept the first time.
+A session that is no longer `recording` (finished, or deleted) answers `409 not_recording`, and nothing changes: the
+device drops the request, as the finish or the delete already said more.
 
 ### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
 `{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|important|unimportant|delete", "client_id": "01JB…" | null, "label": "Invoice"}`
@@ -2457,7 +2468,7 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 `GET /api/badge` — `library:read`: `200 {"count": 4, "label": "4", "tone": "accent"}`. It is the one number on the
 Activity icon in every app and in the web console.
 - `count`: unread Activity items that need action, plus calls waiting for the person's choice after a call (Transcribe,
-  Save audio only or Delete). Items that need action are
+  Save audio only or Delete; since 2.0.0-z only once the call is over, never during it). Items that need action are
   a failed transcript or upload, the monthly limit reached, a missed recording, and an answer to an upgrade request. A
   merged item counts once, and a resolved one never counts.
 - `label`: `null` at 0, the number up to 99, then `"99+"`.
@@ -2475,7 +2486,7 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
 | `transcribing` | Transcribing… | a small spinner and the text |
 | `waiting_to_upload` | Waiting to upload | grey text |
 | `failed` | Failed · Retry | red text and a retry icon (the only red on rows) |
-| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only |
+| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only. Since 2.0.0-z only once the call is over (see `PATCH /api/sessions/{id}`); a call still being recorded is `waiting_to_upload` and is not in Needs you |
 
 - Every library item's `facets` gains `state`. `transcribed` comes from Status `transcribed`, `audio_only` from
   `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording`,
