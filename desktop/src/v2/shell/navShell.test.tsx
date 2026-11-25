@@ -18,14 +18,16 @@ const setWidth = (width: number) => {
   window.dispatchEvent(new Event("resize"));
 };
 
-function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn(), avatar = true }: { onPlace?: ReturnType<typeof vi.fn>; onHome?: ReturnType<typeof vi.fn>; toggleCalls?: ReturnType<typeof vi.fn>;
+function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn(), avatar = true, tone }: { onPlace?: ReturnType<typeof vi.fn>; onHome?: ReturnType<typeof vi.fn>; toggleCalls?: ReturnType<typeof vi.fn>;
   /** Without it, the account isn't read yet (no avatar). */
-  avatar?: boolean; }) {
+  avatar?: boolean;
+  /** Activity's badge colour (UX-08): red when something failed. */
+  tone?: "accent" | "danger"; }) {
   const [place, setPlace] = useState<Place | null>("library");
   const panel = (name: string) => <ul aria-label={`${name} views`}><li><button type="button">First {name} view</button></li><li><button type="button" aria-expanded={false}>A group</button></li></ul>;
   return (
     <NavShell place={place} onPlace={(p, again) => { onPlace(p, again); setPlace(p); }} onHome={() => { onHome(); setPlace(null); }}
-      status={{ kind: "ready", text: "Ready to record" }} libraryCount={4} activityCount={2} liveDot liveDotWords="recording" setupAttention onSetupHealth={() => undefined}
+      status={{ kind: "ready", text: "Ready to record" }} libraryCount={4} activityCount={2} activityTone={tone} liveDot liveDotWords="recording" setupAttention onSetupHealth={() => undefined}
       onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} callRecording={{ on: true, toggle: toggleCalls }} onSearch={() => undefined} searchKeys="⌘K"
       me={avatar ? { name: "Ayesha Khan", email: "ayesha@example.test", plan: null } : null} account={avatar ? [{ label: "Sign out", onPick: () => undefined }] : undefined}
       panels={{ library: panel("Library"), projects: panel("Projects"), live: panel("Live"), ask: panel("Ask"), activity: panel("Activity"), settings: panel("Settings") }}
@@ -293,6 +295,47 @@ describe("the three levels", () => {
       expect(within(menu).getByRole("menuitemradio", { name: /^Library/ })).toHaveAttribute("aria-checked", "true");
       fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Activity/ }));
       expect(onPlace).toHaveBeenLastCalledWith("activity", false);
+    } finally {
+      box.mockRestore();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+    }
+  });
+
+  it("Activity's red goes with its badge into More and onto the avatar: the red tone, and \"something failed\" in its name", () => {
+    setWidth(1440);
+    const rects = (places: number) => vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const height = this.classList.contains("el-rail__places") ? places : this.classList.contains("el-rail__item") ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 72, bottom: height, width: 72, height, toJSON: () => ({}) } as DOMRect;
+    });
+    // More holds Activity (one place whole, then More).
+    Object.defineProperty(window, "innerHeight", { value: 370, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    let box = rects(150);
+    try {
+      const { unmount } = render(<App tone="danger" />);
+      const more = rail().getByRole("button", { name: /^More, / });
+      expect(more).toHaveAccessibleName("More, Activity 2, something failed, Live recording");
+      expect(more.querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+      unmount();
+      // Not red when nothing failed.
+      const { unmount: again } = render(<App tone="accent" />);
+      expect(rail().getByRole("button", { name: /^More, / })).toHaveAccessibleName("More, Activity 2, Live recording");
+      expect(rail().getByRole("button", { name: /^More, / }).querySelector(".el-rail__count")).not.toHaveClass("el-rail__count--danger");
+      again();
+    } finally {
+      box.mockRestore();
+    }
+    // Not even More fits: the avatar holds Activity.
+    Object.defineProperty(window, "innerHeight", { value: 280, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    box = rects(40);
+    try {
+      render(<App tone="danger" />);
+      const me = rail().getByRole("button", { name: /^Account, / });
+      expect(me).toHaveAccessibleName("Account, Ayesha Khan, with Library, Projects, Live, Ask and Activity, Activity 2, something failed, Live recording, needs setup");
+      expect(me.querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+      expect(accountTip(["activity"], true)).toBe("Activity; account, theme and settings, something failed");
     } finally {
       box.mockRestore();
       Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });

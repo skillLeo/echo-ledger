@@ -13,6 +13,7 @@ import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
 import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, placeList, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
+import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import type { ShellStatus } from "./status";
@@ -542,12 +543,15 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     : rest;
   // Activity's badge and Live's dot go with them onto the avatar, and it is the selected item while the page is one of them.
   const meCount = inAccount.includes("activity") && activityCount ? activityCount : undefined;
+  // Red, and said, when something failed (UX-08), as on Activity's own item.
+  const meFailed = !!meCount && activityTone === "danger";
   const meLive = !meCount && inAccount.includes("live") && !!liveDot;
   const meHere = !!place && inAccount.includes(place);
   const meName = [`Account, ${me?.name ?? ""}`, inAccount.length ? `with ${placeList(inAccount)}` : null, meCount ? `${PLACE_NAMES.activity} ${meCount}` : null,
+    meFailed ? FAILED_WORDS : null,
     inAccount.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null, short && setupAttention ? "needs setup" : null]
     .filter(Boolean).join(", ");
-  const [meTip, meTipShown] = useTip(accountTip(inAccount));
+  const [meTip, meTipShown] = useTip(accountTip(inAccount, meFailed));
   // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
   const scrim = shown && narrow && panelFlyout;
   return (
@@ -566,7 +570,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
         <div ref={placesBox} className="el-rail__places">
           {places.slice(0, keeps).map(railPlace)}
           {inMore.length > 0 && (
-            <RailMore places={inMore} current={place} icons={icons} activityCount={activityCount} liveDot={liveDot} liveDotWords={liveDotWords} onPick={press} />
+            <RailMore places={inMore} current={place} icons={icons} activityCount={activityCount} activityTone={activityTone} liveDot={liveDot} liveDotWords={liveDotWords} onPick={press} />
           )}
         </div>
         <div className="el-rail__foot">
@@ -589,7 +593,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                 )}
                 button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": meName, "aria-current": meHere ? "page" : undefined, ...meTip,
                   text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
-                    {meCount ? <span className="el-rail__count el-num" aria-hidden="true">{meCount > 99 ? "99+" : meCount}</span>
+                    {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(meCount)}</span>
                       : meLive ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" />
                         : short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
                     <span className="el-rail__label" aria-hidden="true">Account</span></> }} />
