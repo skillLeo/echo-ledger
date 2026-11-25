@@ -92,7 +92,7 @@ final class CaptureSessionInfolist
                     ->state(fn (CaptureSession $r): string => CaptureSessionsTable::duration($r->duration_ms) ?: '—'),
                 TextEntry::make('client.name')->label(__('Project'))->placeholder('—'),
                 // Caller names (since v1.2): who the recording was with, and where the device saw the name.
-                TextEntry::make('caller_name')->label(__('With'))->placeholder('—')->columnSpan(2)
+                TextEntry::make('caller_name')->label(__('recording_context.with_person'))->placeholder('—')->columnSpan(2)
                     ->formatStateUsing(fn (?string $state, CaptureSession $record): string => trim(($state ?? '').' '.($record->caller_number !== null ? '('.$record->caller_number.')' : '')))
                     ->helperText(fn (CaptureSession $record): ?string => match ($record->caller_source) {
                         'whatsapp_notification' => __('From the WhatsApp call notification'),

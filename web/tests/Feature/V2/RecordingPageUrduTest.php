@@ -142,3 +142,17 @@ it('keeps the English words exactly as they were', function () {
     recordingUrduAs($this, 'en', library: false);
     expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))->toMatch('~>\s*Duration\s*</~');
 });
+
+it('reads "With" in the details as the person the call was with, from lang/*/recording_context.php; lang/ur.json keeps its general meaning', function () {
+    recordingUrduAs($this, 'ur');
+    expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))->toContain('<dt>کس کے ساتھ</dt>')
+        ->and(__('With'))->toBe('کے ساتھ');
+    recordingUrduAs($this, 'ur', library: false);
+    expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))->toMatch('~>\s*کس کے ساتھ\s*</~u');
+
+    recordingUrduAs($this, 'en');
+    expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))->toContain('<dt>With</dt>')
+        ->and(__('recording_context.with_person'))->toBe('With');
+    recordingUrduAs($this, 'en', library: false);
+    expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))->toMatch('~>\s*With\s*</~');
+});
