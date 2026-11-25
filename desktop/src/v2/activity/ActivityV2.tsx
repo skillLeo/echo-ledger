@@ -8,11 +8,14 @@ import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityGroup, type ActivityItem, type AppStatus, type PendingItem, type RetryAllAnswer, type SkippedItem, type UploadItem } from "../../lib/ipc";
 import { dayGroup } from "../../lib/library";
+// Activity's lines are still English (not in the account's language yet): lib/pending's words are asked for in English.
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { actionCount, isProblem, needsAction as asksForAction, repeatWords, SERVER_PROBLEM, uploadGroupTitle } from "../../lib/badge";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { activitySubtitle, shortWhen, useInProgress } from "../../views/main/ActivityCentre";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
+import { ActorAvatar } from "./ActorAvatar";
+import { shownPerson } from "../../lib/activityPerson";
 import { ContextMenu, menuPointFor, type MenuItem } from "../components/Menu";
 import { contextItems } from "../actions/contextMenus";
 import { currentPlatform, popupNative } from "../actions/popup";
@@ -239,15 +242,19 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
   // D-233 (classic's D-066): only a notification about a recording opens something, so only it is a button. One with
   // nowhere to go (a new device, the server's own problem, a failure with no recording) is a plain row, out of the Tab
   // order; while unread it ends with a quiet Mark read, so a problem can be cleared on its own, never just by being seen.
-  const row = (i: ActivityItem) => (
-    <ListRow key={i.id} icon={iconOf(i)} title={i.title ?? ""} strong={!i.read}
-      meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body, repeatWords(i.repeat_count)].filter(Boolean).join(" · ")}
-      badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
-      endTop={i.at ? shortWhen(i.at) : undefined} onClick={i.session_id ? () => void choose(i) : undefined}
-      control={!i.session_id && !i.read
-        ? <Button size="sm" variant="quiet" aria-label={`Mark read: ${i.title ?? "Activity"}`} onClick={() => markRead(i)}>Mark read</Button> : undefined}
-      onContextMenu={(e) => openMenu(i, "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget))} />
-  );
+  // An item about a person (contract 2.0.0-aa) shows them in the icon's place, for the kinds that show a face.
+  const row = (i: ActivityItem) => {
+    const person = shownPerson(i);
+    return (
+      <ListRow key={i.id} icon={iconOf(i)} leading={person ? <ActorAvatar actor={person} /> : undefined} title={i.title ?? ""} strong={!i.read}
+        meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body, repeatWords(i.repeat_count)].filter(Boolean).join(" · ")}
+        badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
+        endTop={i.at ? shortWhen(i.at) : undefined} onClick={i.session_id ? () => void choose(i) : undefined}
+        control={!i.session_id && !i.read
+          ? <Button size="sm" variant="quiet" aria-label={`Mark read: ${i.title ?? "Activity"}`} onClick={() => markRead(i)}>Mark read</Button> : undefined}
+        onContextMenu={(e) => openMenu(i, "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget))} />
+    );
+  };
 
   return (
     <div className="el-page el-page--narrow el-back-top-room" data-v2="activity">
@@ -267,7 +274,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
             <List label="Needs action" className="el-group__rows">
               {waiting && (
                 <ListRow icon={Icons.ClockIcon} title="Transcribe or delete?"
-                  meta={pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}
+                  meta={pending.length > 0 ? waitingSummary(pending, undefined, "en") : `${status.pendingDecisions} waiting for your decision`}
                   control={<Button size="sm" onClick={() => onReview(pending[0]?.id ?? null)}>Review</Button>} />
               )}
               {uploads ? (
@@ -326,7 +333,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
       {show !== "needs" && skipped.length > 0 && (
         <section className="el-group" aria-label="Skipped calls" data-testid="skipped-calls">
           <div className="el-group__head">
-            <span className="el-secondary">{skippedLine(skipped.length)}</span>
+            <span className="el-secondary">{skippedLine(skipped.length, "en")}</span>
             <Button size="sm" variant="quiet" aria-expanded={showSkipped} aria-controls={showSkipped ? "skipped-list" : undefined}
               onClick={() => setShowSkipped((v) => !v)}>{showSkipped ? "Hide" : "Show"}</Button>
           </div>
@@ -335,7 +342,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
               <div id="skipped-list">
                 <List label="Skipped calls" className="el-group__rows">
                   {skipped.map((item) => {
-                    const meta = skippedMeta(item);
+                    const meta = skippedMeta(item, undefined, "en");
                     return (
                       <ListRow key={item.id} compact title={meta}
                         control={<Button size="sm" variant="quiet" disabled={restoring !== null} aria-label={`Restore ${meta}`} onClick={() => void restore(item)}>Restore</Button>} />

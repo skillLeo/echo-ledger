@@ -949,6 +949,16 @@ audio.player { display: none; }
 .activity-tile { width: 44px; height: 44px; border-radius: var(--radius-field); display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-text); }
 .activity-tile.failed { background: var(--danger-soft); color: var(--danger); }
 .activity-tile.neutral { background: var(--surface-2); color: var(--text-muted); }
+/* A person's item (contract 2.0.0-aa): their picture in the tile's place, else their initials on their colour. */
+.activity-tile.person { border-radius: 50%; overflow: hidden; color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); font-size: var(--text-md); font-weight: 700; }
+.activity-tile.person > img { width: 100%; height: 100%; object-fit: cover; }
+.activity-tile.person[data-colour="1"] { background: var(--el-role-avatar-1); }
+.activity-tile.person[data-colour="2"] { background: var(--el-role-avatar-2); }
+.activity-tile.person[data-colour="3"] { background: var(--el-role-avatar-3); }
+.activity-tile.person[data-colour="4"] { background: var(--el-role-avatar-4); }
+.activity-tile.person[data-colour="5"] { background: var(--el-role-avatar-5); }
+.activity-tile.person[data-colour="6"] { background: var(--el-role-avatar-6); }
+.activity-tile.person[data-colour="7"] { background: var(--el-role-avatar-7); }
 .action-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--accent-soft); margin-bottom: var(--space-2); }
 .action-card > svg { flex: none; color: var(--accent-text); }
 .action-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }

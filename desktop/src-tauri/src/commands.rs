@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use crate::AppState;
 use crate::error::{AppError, AppResult};
 use crate::net::api::ApiClient;
+use crate::net::models::OpenedMany;
 use crate::net::sync::{LibraryCache, paths};
 pub use crate::net::models::BudgetState;
 use crate::net::uploader::{UploadItem, UploadQueue};
@@ -597,20 +598,19 @@ pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: 
         let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
         format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
     };
-    if let Ok(bytes) = tokio::fs::read(&cached).await {
+    if let Some(bytes) = crate::my_account::read_kept_avatar(&cached).await {
         return Ok(Some(to_url(&bytes)));
     }
     if !crate::account::on_server(&url, &server) {
         return Ok(None);
     }
-    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    // No picture to have (403, 404, 410): the initials. Offline, a timeout or the server busy: an error, so the window
+    // asks again later rather than keeping the initials.
+    let Some(bytes) = state.api()?.avatar_bytes(&url).await? else { return Ok(None) };
     if crate::receipts::sniff(&bytes).is_none() {
         return Ok(None);
     }
-    if let Some(dir) = cached.parent() {
-        let _ = tokio::fs::create_dir_all(dir).await;
-        let _ = tokio::fs::write(&cached, &bytes).await;
-    }
+    let _ = crate::my_account::keep_avatar(&cached, &bytes).await;
     Ok(Some(to_url(&bytes)))
 }
 
@@ -2363,6 +2363,37 @@ pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
         cache.save(&paths::library(&state.data_dir))?;
     }
     Ok(())
+}
+
+/// Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y): one request per 200 ids. The saved Library
+/// follows the server's `done` only. `null` only for an older server's own answer to the first request (`405`, `404`,
+/// `403` for `DELETE`, or a success without `done`): the page then marks them one by one, 200 at most. Any other
+/// failure (a 5xx, 408, 429, the network) is an error, never `null`.
+#[tauri::command]
+pub async fn sessions_opened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
+    opened_many(&app, ids, true).await
+}
+
+/// Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as [`sessions_opened`].
+#[tauri::command]
+pub async fn sessions_unopened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
+    opened_many(&app, ids, false).await
+}
+
+async fn opened_many(app: &AppHandle, ids: Vec<String>, opened: bool) -> AppResult<Option<OpenedMany>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let api = state.api()?;
+    let answer = if opened { api.sessions_opened(&ids).await? } else { api.sessions_unopened(&ids).await? };
+    let Some(answer) = answer else { return Ok(None) };
+    let mut cache = state.library.lock().await;
+    // The server took them: a saved copy that can't be written now is caught up by the next sync, never sent again.
+    if cache.mark_opened_many(&answer, opened)
+        && let Err(e) = cache.save(&paths::library(&state.data_dir))
+    {
+        eprintln!("[echoledger] saving the Library after Mark as read or unread: {e}");
+    }
+    Ok(Some(answer))
 }
 
 /// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps

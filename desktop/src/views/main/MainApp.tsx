@@ -32,6 +32,7 @@ import { registerAction } from "../../v2/actions/registry";
 import { ZOOM_DEFAULT, loadZoom, setZoom, useZoom, watchZoomWheel, zoomBy, zoomKey, zoomNow } from "../../lib/zoom";
 import { ZoomBubble, ZoomChip, zoomStepper } from "../../v2/shell/Zoom";
 import { useAvatar } from "./AccountFlows";
+import { forgetPersonPictures } from "../../v2/activity/ActorAvatar";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
 import { LibraryView } from "./LibraryView";
@@ -314,6 +315,8 @@ export default function MainApp() {
   const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
   // The places' memory is one sign-in's: another sign-in (or none) starts every place afresh.
   useEffect(() => {
+    // The people's pictures asked for are the last sign-in's too (the core forgets its copies then).
+    forgetPersonPictures();
     libraryPlace.current = null;
     lastProject.current = null;
     lastSettings.current = null;
@@ -1415,7 +1418,7 @@ export default function MainApp() {
         {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
         {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app, "en"))}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
             workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
@@ -1446,7 +1449,7 @@ export default function MainApp() {
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
               liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
-              setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
+              setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
                 // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).

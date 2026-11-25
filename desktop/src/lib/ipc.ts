@@ -521,6 +521,30 @@ export interface ActivityItem {
   repeat_count?: number;
   /** `upload_failed` for an upload that didn't finish (2.0.0-r), else null. */
   group?: string | null;
+  /** The person it is about (contract 2.0.0-aa): their picture or initials take the kind's icon's place. Null, or no
+   * key from an older server, for every other item. */
+  actor?: ActivityActor | null;
+}
+
+/** A person the API shows beside something (since 2.0.0-l): Shared with me's `from`, an Activity item's `actor`. */
+export interface Person {
+  name?: string | null;
+  email?: string | null;
+  /** Their picture: a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The colour of the initials' circle without a photo, 0–7 (2.0.0-r); left out, one from the name. */
+  avatar_color?: number | null;
+}
+
+/** The person an Activity item is about (contract 2.0.0-aa): a recording's sender, the staff member who asked for a
+ * receipt, unusual use's person. */
+export interface ActivityActor extends Person {
+  id: number | string;
+  name: string | null;
+  avatar_url: string | null;
+  avatar_version: number | null;
+  avatar_color: number | null;
 }
 
 /** The one Activity number (2.0.0-r, `GET /api/badge`), the same on the phone and the web console. */
@@ -1064,7 +1088,7 @@ export interface ShareOptions {
 export interface SharedItem {
   id: string;
   kind: "session" | "project";
-  from: { name?: string | null; email?: string | null } | null;
+  from: Person | null;
   note: string | null;
   title: string | null;
   sent_at: string | null;
@@ -1211,6 +1235,10 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
+
+/** Mark as read / unread for many (contract 2.0.0-y): the recordings marked, and every other id as it was sent. */
+export type OpenedMany = { done: string[]; not_found: string[] };
+
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
@@ -2067,6 +2095,13 @@ export const api = {
   markOpened: (id: string) => invoke<void>("session_opened", { id }),
   /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
   markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
+  /**
+   * Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y), one request per 200 ids; null from an older
+   * server (mark them one by one then).
+   */
+  markOpenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_opened", { ids }),
+  /** Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as markOpenedMany. */
+  markUnopenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_unopened", { ids }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */

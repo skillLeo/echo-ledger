@@ -385,7 +385,7 @@ export default function PillApp() {
             onMenu={setMenuV2}
             beforeOpen={growFirst}
             model={{
-              elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
+              elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language, "en"), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
               call: live.mode === "call", choice: live.callChoice ?? null, banner,
               warning: missing ? { text: missing, sentence: notRecorded?.sentence ?? live.missing?.[0]?.sentence ?? missing, notRecorded: !!notRecorded } : null,
@@ -454,8 +454,8 @@ export default function PillApp() {
             <PillButton label="Stop recording" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
             <PillButton label="Bookmark this moment" onClick={markNow}><BookmarkIcon size={15} /></PillButton>
             <button type="button" className="rec-lang" data-testid="pill-language" onClick={cycleLanguage}
-              aria-label={`Language: ${languageLabel(live.language)}. Click to change`} title={`Language: ${languageLabel(live.language)} (click to change)`}>
-              {languageChip(live.language)}
+              aria-label={`Language: ${languageLabel(live.language, "en")}. Click to change`} title={`Language: ${languageLabel(live.language, "en")} (click to change)`}>
+              {languageChip(live.language, "en")}
             </button>
             {live.screens && (
               <button type="button" className={`rec-btn rec-screens${live.screens.on ? " on" : " held"}`} data-testid="pill-screens"

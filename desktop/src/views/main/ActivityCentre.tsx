@@ -2,7 +2,11 @@
 // waiting for Keep or Discard, uploads that stopped), the quiet "Skipped 3 short calls" line (v1.5), then the
 // notifications by day. A notification about a recording opens it; the unread count shows beside Activity in the sidebar.
 import { useEffect, useState } from "react";
-import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type LibraryItem, type PendingItem, type SkippedItem, type UploadItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ActivityActor, type ActivityItem, type AppStatus, type LibraryItem, type PendingItem, type SkippedItem, type UploadItem } from "../../lib/ipc";
+import { avatarColour } from "../../v2/components/layout";
+import { initials } from "../../v2/settings/initials";
+import { actorSeed, usePersonPhoto } from "../../v2/activity/ActorAvatar";
+import { personColour, shownPerson } from "../../lib/activityPerson";
 import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
 import { stepOf, uploadLine } from "../../lib/progress";
 import { useWindowShown } from "../../lib/visibility";
@@ -27,10 +31,10 @@ export interface InProgressRow {
 
 /** The rows of In progress (pure): this computer's uploads first, then the Library's recordings still moving. */
 export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InProgressRow[] {
-  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u), line: uploadLine(u), recordingId: null }));
+  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u, "en"), line: uploadLine(u, "en"), recordingId: null }));
   const moving = items
     .filter((i) => !i.deleted)
-    .map((i) => ({ item: i, step: stepOf(i) }))
+    .map((i) => ({ item: i, step: stepOf(i, null, "en") }))
     .filter(({ step }) => step.step !== null)
     .map(({ item, step }) => ({ id: item.id, title: recordingName(item.title), line: step.line ?? "", recordingId: item.id }));
   return [...sending, ...moving];
@@ -79,6 +83,21 @@ export function useActivityItems(): [ActivityItem[], (items: ActivityItem[]) => 
     };
   }, []);
   return [items, setItems];
+}
+
+/**
+ * The person an item is about (contract 2.0.0-aa) in the tile's place, for the kinds that show a face: their picture,
+ * kept here by its version like every avatar, else their initials in their colour; a picture the server no longer gives
+ * shows the initials.
+ */
+function ActorTile({ actor }: { actor: ActivityActor }) {
+  const photo = usePersonPhoto(actor);
+  const [broken, setBroken] = useState<string | null>(null);
+  return (
+    <span className="activity-tile person" data-colour={avatarColour(personColour(actor), actorSeed(actor))} aria-hidden="true">
+      {photo && broken !== photo ? <img src={photo} alt="" onError={() => setBroken(photo)} /> : initials(actor.name, null)}
+    </span>
+  );
 }
 
 function ActivityTile({ kind, resolved = false }: { kind: string | null; resolved?: boolean }) {
@@ -200,9 +219,10 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
 
   const recovered = useRecovered();
   const row = (i: ActivityItem) => {
+    const person = shownPerson(i);
     const inside = (
       <>
-        <ActivityTile kind={i.kind} resolved={i.resolved} />
+        {person ? <ActorTile actor={person} /> : <ActivityTile kind={i.kind} resolved={i.resolved} />}
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
@@ -238,7 +258,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
               <HourglassIcon size={22} />
               <div className="action-card-main">
                 <span className="action-card-title">Transcribe or delete?</span>
-                <span className="small muted">{pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}</span>
+                <span className="small muted">{pending.length > 0 ? waitingSummary(pending, undefined, "en") : `${status.pendingDecisions} waiting for your decision`}</span>
               </div>
               <button type="button" className="btn text" onClick={() => onReview(pending[0]?.id ?? null)}>Review</button>
             </div>
@@ -293,7 +313,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
       {skipped.length > 0 && (
         <section className="skipped-calls" aria-label="Skipped calls" data-testid="skipped-calls">
           <div className="skipped-head">
-            <span className="skipped-line">{skippedLine(skipped.length)}</span>
+            <span className="skipped-line">{skippedLine(skipped.length, "en")}</span>
             <button type="button" className="btn text compact" aria-expanded={showSkipped} aria-controls={showSkipped ? "skipped-list" : undefined}
               onClick={() => setShowSkipped((v) => !v)}>
               {showSkipped ? "Hide" : "Show"}
@@ -302,7 +322,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
           {showSkipped && (
             <ul id="skipped-list" className="skipped-list">
               {skipped.map((item) => {
-                const meta = skippedMeta(item);
+                const meta = skippedMeta(item, undefined, "en");
                 return (
                   <li key={item.id} className="skipped-row">
                     <span className="skipped-meta" dir="auto" title={meta}>{meta}</span>

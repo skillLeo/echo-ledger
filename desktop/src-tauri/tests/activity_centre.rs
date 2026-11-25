@@ -11,7 +11,30 @@ use desktop_lib::net::api::ApiClient;
 const TOKEN: &str = "7|eld_TOKEN_PLACEHOLDER";
 
 fn item(id: &str, read: bool) -> ActivityItem {
-    ActivityItem { id: id.into(), kind: Some("transcript_ready".into()), title: "Transcript ready".into(), body: format!("Call {id}"), session_id: Some(format!("s-{id}")), read, at: None, resolved: false }
+    ActivityItem { id: id.into(), kind: Some("transcript_ready".into()), title: "Transcript ready".into(), body: format!("Call {id}"), session_id: Some(format!("s-{id}")), read, at: None, resolved: false, actor: None }
+}
+
+#[test]
+fn an_item_about_a_person_carries_them_and_one_that_cant_be_read_never_costs_the_item() {
+    // Contract 2.0.0-aa: `actor` is the person, `null`, or no key at all (an older server).
+    let items: Vec<ActivityItem> = serde_json::from_value(json!([
+        {"id": "a", "kind": "shared_with_you", "title": "Ana sent you Call with Omar", "body": "for tomorrow", "session_id": "01JC", "read": false, "at": "2026-11-25T09:00:00Z",
+         "actor": {"id": 12, "name": "Ana", "avatar_url": "https://ledger.example.test/api/avatars/12/1763700000?signature=x", "avatar_version": 1763700000, "avatar_color": 3}},
+        {"id": "b", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call", "session_id": "01JB", "read": false, "at": null, "actor": null},
+        {"id": "c", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call", "session_id": "01JD", "read": true, "at": null},
+        {"id": "d", "kind": "unusual_usage", "title": "Unusual use", "body": "", "session_id": null, "read": false, "at": null, "actor": "Ana"},
+        {"id": "e", "kind": "upgrade_receipt_requested", "title": "A receipt was asked for", "body": "", "session_id": null, "read": false, "at": null, "actor": {"id": 7, "name": "Sara", "avatar_url": null, "avatar_version": null, "avatar_color": 9000}}
+    ]))
+    .unwrap();
+    assert_eq!(items.len(), 5, "every item is read");
+    let ana = items[0].actor.as_ref().unwrap();
+    assert_eq!((ana.id.clone(), ana.name.as_deref(), ana.avatar_version, ana.avatar_color), (Some(json!(12)), Some("Ana"), Some(1_763_700_000), Some(3)));
+    assert!(ana.avatar_url.as_deref().unwrap().contains("/api/avatars/12/1763700000"));
+    assert_eq!(items[1].actor, None, "null: the kind's icon");
+    assert_eq!(items[2].actor, None, "no key (an older server): the same");
+    assert_eq!(items[3].actor, None, "not a person");
+    assert_eq!(items[4].actor, None, "a colour out of range is not this answer");
+    assert_eq!(items[4].title, "A receipt was asked for");
 }
 
 #[test]

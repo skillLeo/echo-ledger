@@ -48,6 +48,20 @@ export const CONVERTED: readonly string[] = [
   "v2/settings/pages/VoiceV2.tsx",
   "v2/settings/pages/route.ts",
   "v2/settings/pages/rows.tsx",
+  // D4: the recording page, its dialogs (rename, transcribe, move, label, change language, Send to WhatsApp; also the
+  // Library's), its steps, offers and screens, the player and the copy menu, and the lib words they show (languages,
+  // progress, the waiting and upload words). lib/player.ts's hint is playerHint() (its one other word is the Space key's
+  // name, Latin in every language) and lib/format.ts's words are sourceAppLabel's and prettyShortcut's: neither file is
+  // listed whole.
+  "v2/library/RecordingPage.tsx",
+  "v2/library/organise.tsx",
+  "v2/library/recordingExtras.tsx",
+  "v2/library/screens.tsx",
+  "v2/components/media.tsx",
+  "v2/components/copyMenu.ts",
+  "lib/languages.ts",
+  "lib/progress.ts",
+  "lib/pending.ts",
   // D3c: the helpers Settings shows whose words are all through t() and tc().
   "lib/callChoice.ts",
   "lib/explainer.ts",

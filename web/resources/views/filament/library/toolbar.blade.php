@@ -89,7 +89,7 @@
         <x-filament::dropdown placement="bottom-end" wire:key="library-menu-{{ $menu }}">
             <x-slot name="trigger">
                 <button type="button" class="el-tool el-menu-trigger" data-menu="{{ $menu }}" aria-haspopup="menu">
-                    @svg($icon, ['aria-hidden' => 'true'])
+                    @svg(...\App\Filament\Support\RtlIcons::of($icon, ['aria-hidden' => 'true']))
                     <span class="el-tool-label">{{ $label }}: <strong>{{ __($options[$current]) }}</strong></span>
                     @svg('heroicon-m-chevron-down', ['aria-hidden' => 'true'])
                 </button>

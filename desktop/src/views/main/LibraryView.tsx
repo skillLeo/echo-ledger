@@ -480,7 +480,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     try {
       await api.retranscribe(current.id, (retranscribeLanguage || null) as TranscriptionLanguage | null);
-      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
+      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null, "en")}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -491,7 +491,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const language = (current.language ?? null) as TranscriptionLanguage | null;
     try {
       await api.retranscribe(current.id, language);
-      notify(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
+      notify(`Re-transcribing in ${languageLabel(language, "en")}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -587,7 +587,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     );
     return () => window.clearTimeout(timer);
   }, [transcribingFinalId, retryAt, recheck]);
-  const retrying = retryLine(waitingFinal);
+  const retrying = retryLine(waitingFinal, undefined, "en");
   // Find starts over for every recording.
   useEffect(() => {
     setFindOpen(false);
@@ -1458,10 +1458,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             <span className="item-time">{rowTime(item.started_at)}</span>
                           </div>
                           <div className="item-sub">
-                            {state === "ready" ? <RowSub sub={sub} line={rowViewsLine(rowViews.summaryFor(item))} /> : (
+                            {state === "ready" ? <RowSub sub={sub} line={rowViewsLine(rowViews.summaryFor(item), "en")} /> : (
                               <span className={`pill ${state}`}>
                                 {state === "processing" ? <span className="spinner" aria-hidden="true" /> : state === "failed" ? <AlertIcon size={14} /> : null}
-                                {state === "processing" ? stepOf(item).line ?? STATE_LABEL[state] : STATE_LABEL[state]}
+                                {state === "processing" ? stepOf(item, null, "en").line ?? STATE_LABEL[state] : STATE_LABEL[state]}
                               </span>
                             )}
                           </div>
@@ -1540,9 +1540,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
-                  {transcribedIn(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript)}</div>}
+                  {transcribedIn(current.transcript, "en") && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript, "en")}</div>}
                   {retrying && (
-                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason) ?? undefined}>{retrying}</div>
+                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, "en") ?? undefined}>{retrying}</div>
                   )}
                   {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && !readOnly && (
                     <div className="backup-line" role="status" data-testid="backup-engine">
@@ -1560,8 +1560,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
                         <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
-                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
+                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}</optgroup>
                         </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
@@ -1573,7 +1573,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
                         <button type="button" aria-pressed={version === "alternate"} onClick={() => setVersion("alternate")}>
-                          Previous{current.transcript?.alternate_language ? ` (${languageLabel(current.transcript.alternate_language)})` : ""}
+                          Previous{current.transcript?.alternate_language ? ` (${languageLabel(current.transcript.alternate_language, "en")})` : ""}
                         </button>
                       </span>
                     )}
@@ -1583,7 +1583,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu (with English words) to keep every word, or click Re-transcribe anyway.
                     </div>
                   )}
-                  {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning)}</div>}
+                  {scriptWarning(current.transcript?.script_warning, "en") && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning, "en")}</div>}
                 </div>
                 {panel === "share" && !readOnly && (
                   <ShareDialog target={{ kind: "session", id: current.id, title: current.title ?? null, hasAudio: !!playbackUrl }} view={exportView} notify={notify} onClose={() => setPanel(null)} />
@@ -1604,7 +1604,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 {transcript ? (
                   transcript.status === "failed" ? (
                     <div className="notice error" style={{ marginTop: 12 }}>
-                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code)}
+                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code, "en")}
                       {/* What happened in the app's own words per `error_code` (D-130; the server's message can name a provider);
                           the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
@@ -1625,11 +1625,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     </div>
                   ) : isTranscribing(transcript.status) ? (
                     // The library's progress is the fresher one: live status re-reads it every few seconds.
-                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingLine(current.transcript?.final_progress ?? transcript.progress)}</p></div>
+                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingLine(current.transcript?.final_progress ?? transcript.progress, "en")}</p></div>
                   ) : (
                     <>
                       <div className="transcript-bar">
-                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
+                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress, "en") ? ` · ${partsText(current.transcript?.final_progress, "en")}` : ""})`}</span>
                         {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
                           && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
@@ -1755,7 +1755,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : readingTranscript ? (
                     <div className="empty" role="status" aria-busy="true" data-testid="transcript-loading"><span className="spinner" aria-hidden="true" /> Loading the transcript…</div>
                   ) : (
-                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : transcriptStatusLine(finalStatus)}</div>
+                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress, "en") : transcriptStatusLine(finalStatus, "en")}</div>
                   )
                 )}
                 {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}

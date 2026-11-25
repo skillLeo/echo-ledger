@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, languageLabel, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
 import {
@@ -29,7 +29,9 @@ import { CALL_WORDS } from "../../lib/callChoice";
 
 /** The closed language chip's words (D-038): the language's short name, "Auto" when none is chosen. */
 function shortLanguage(value: LanguageChoice | undefined): string {
-  return [...MAIN_LANGUAGES, ...MORE_LANGUAGES].find((o) => o.value === (value ?? null))?.label ?? "Auto";
+  // In English, as the rest of this classic list (the options' own labels follow the window's language since D4).
+  const found = [...MAIN_LANGUAGES, ...MORE_LANGUAGES].find((o) => o.value === (value ?? null));
+  return found ? languageLabel(found.value, "en") : "Auto";
 }
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
@@ -46,7 +48,7 @@ const HIGHLIGHT_MS = 4000;
 const asList = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
 const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: string | null) =>
-  [sourceAppLabel(sourceApp), formatWhen(startedAt), formatDuration(durationMs) || "0:00", extra].filter(Boolean).join(" · ");
+  [sourceAppLabel(sourceApp, "en"), formatWhen(startedAt), formatDuration(durationMs) || "0:00", extra].filter(Boolean).join(" · ");
 
 /**
  * The top of the Library list: recordings waiting for Keep / Discard (A2.5), imported files on their way up (with
@@ -147,7 +149,7 @@ export function useLibraryQueue(notify: Notify) {
     try {
       const count = await api.pendingDelete(ids);
       setPending((list) => list.filter((i) => !ids.includes(i.id)));
-      notify(deletedNotice(count), false, { kind: "action", run: () => {
+      notify(deletedNotice(count, "en"), false, { kind: "action", run: () => {
         api.pendingDeleteUndo(ids).then(() => reloadPending(), (e) => notify(errorMessage(e), true));
       } });
     } catch (e) {
@@ -179,7 +181,7 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice(verb, done), false, { kind: "library", view: null });
+    if (done > 0) notify(bulkNotice(verb, done, "en"), false, { kind: "library", view: null });
   };
 
   const keepAll = () => decideAll("Transcribing", (id) => api.pendingKeep(id));
@@ -187,7 +189,7 @@ export function useLibraryQueue(notify: Notify) {
 
   const discardAll = async () => {
     const ids = pending.map((i) => i.id);
-    if (!(await confirmAction(deleteWaitingQuestion(ids.length)))) return;
+    if (!(await confirmAction(deleteWaitingQuestion(ids.length, "en")))) return;
     await deleteLater(ids);
   };
 
@@ -230,7 +232,7 @@ export function useLibraryQueue(notify: Notify) {
     replace(updated);
     if (!item.clientId) return;
     const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === item.clientId);
-    const question = client ? learnPrompt(client.name, client.language, language) : null;
+    const question = client ? learnPrompt(client.name, client.language, language, "en") : null;
     setLearn(question && client ? { itemId: item.id, clientId: client.id, question, language } : null);
   };
 
@@ -254,7 +256,7 @@ export function useLibraryQueue(notify: Notify) {
 
   /** Every recording that waits for one account, after one confirmation. */
   const discardHeld = async (items: UploadItem[]) => {
-    if (!(await confirmAction(discardAllQuestion(items.length)))) return;
+    if (!(await confirmAction(discardAllQuestion(items.length, "en")))) return;
     setBulkBusy(true);
     let done = 0;
     try {
@@ -267,7 +269,7 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice("Discarded", done), false, NO_TARGET);
+    if (done > 0) notify(bulkNotice("Discarded", done, "en"), false, NO_TARGET);
   };
 
   const cancelImport = async (item: UploadItem) => {
@@ -373,9 +375,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     <div className="queue">
       {pending.length > 0 && (
         <section className="queue-section" aria-labelledby="queue-pending-title">
-          <div className="queue-slim" data-testid="waiting-line" title={waitingSummary(pending)}>
+          <div className="queue-slim" data-testid="waiting-line" title={waitingSummary(pending, undefined, "en")}>
             <HourglassIcon size={15} />
-            <h2 id="queue-pending-title" className="queue-slim-label">{waitingLine(pending)}</h2>
+            <h2 id="queue-pending-title" className="queue-slim-label">{waitingLine(pending, "en")}</h2>
             <span className="queue-slim-sep" aria-hidden="true">·</span>
             <button
               type="button"
@@ -395,7 +397,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                 <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Delete all</button>
               </div>
               {pending.map((item) => {
-                const title = pendingTitle(item);
+                const title = pendingTitle(item, "en");
                 const isBusy = bulkBusy || busy === item.id;
                 const knownClient = !item.clientId || (clients ?? []).some((c) => c.id === item.clientId);
                 return (
@@ -421,7 +423,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                             autoFocus
                             maxLength={200}
                             value={renaming.text}
-                            placeholder={pendingTitle({ ...item, title: null })}
+                            placeholder={pendingTitle({ ...item, title: null }, "en")}
                             onChange={(e) => setRename({ id: item.id, text: e.target.value })}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") void saveRename();
@@ -466,9 +468,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                         <span className="queue-language-label" aria-hidden="true">{shortLanguage(item.language)}</span>
                         <select aria-label="Language" title="Language of the transcript" disabled={isBusy}
                           value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
                           <optgroup label="More languages">
-                            {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
+                            {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{languageLabel(o.value, "en")}</option>)}
                           </optgroup>
                         </select>
                       </span>
@@ -496,7 +498,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <span className="queue-count">{importing.length}</span>
           </div>
           {importing.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             const percent = item.state === "uploading" ? item.progress ?? 0 : 0;
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item importing" data-testid={`upload-${item.id}`}>
@@ -504,7 +506,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
                     <div className="queue-title" dir="auto">{title}</div>
-                    <div className="small muted queue-meta">{importProgressText(item)}</div>
+                    <div className="small muted queue-meta">{importProgressText(item, "en")}</div>
                   </div>
                   <button type="button" className="btn ghost compact" disabled={busy === item.id} onClick={() => void cancelImport(item)}>Cancel</button>
                 </div>
@@ -524,7 +526,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <span className="queue-count">{failed.length}</span>
           </div>
           {failed.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             const isBusy = busy === item.id;
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item failed" data-testid={`upload-${item.id}`}>
@@ -552,9 +554,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <h2 className="queue-label">Waiting for another account</h2>
             <span className="queue-count">{items.length}</span>
           </div>
-          <p className="small muted queue-note">{heldLine(account, items.length)}</p>
+          <p className="small muted queue-note">{heldLine(account, items.length, "en")}</p>
           {items.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item" data-testid={`upload-${item.id}`}>
                 <div className="row">
@@ -580,7 +582,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           <div className="row">
             <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
             <div className="item-main">
-              <div className="queue-title" dir="auto">{uploadTitle(item)}</div>
+              <div className="queue-title" dir="auto">{uploadTitle(item, "en")}</div>
               <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
             </div>
             <span className="queue-status"><span className="spinner" aria-hidden="true" />Checking upload…</span>
