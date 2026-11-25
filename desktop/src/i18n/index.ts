@@ -10,6 +10,7 @@
 // window's <html lang dir>: the right-to-left layout, the Nastaliq face for Arabic-script letters and the Urdu type
 // sizes follow from it (styles.css, v2.css).
 import { useSyncExternalStore } from "react";
+import { CONTEXT_EN } from "./context";
 
 export type Lang = "en" | "ur";
 export const LANGS: readonly Lang[] = ["en", "ur"];
@@ -129,9 +130,15 @@ export function fill(line: string, values: Values, rtl = isRtl()): string {
   return line.replace(new RegExp(keys.join("|"), "g"), (hit) => map.get(hit) ?? hit);
 }
 
-/** The words for `text` (English: the key itself), with its values filled in. */
+/** The line for a key: the catalogue's; else a context key's English (context.ts); else the English key itself. */
+const lineOf = (text: string): string => lines[text] ?? CONTEXT_EN[text] ?? text;
+
+/**
+ * The words for `text` (English: the key itself, or a context key's English: t("library_context.saved_view") is
+ * "View"), with its values filled in.
+ */
 export function t(text: string, values?: Values): string {
-  const line = lines[text] ?? text;
+  const line = lineOf(text);
   return values ? fill(line, values) : line;
 }
 
@@ -196,7 +203,7 @@ export function choose(line: string, n: number, lang: Lang = current): string {
  * number given unless the values say their own (`{ count: count(n) }` for "3,000" or Urdu's digits).
  */
 export function tc(text: string, count: number, values?: Values): string {
-  const line = lines[text] ?? text;
+  const line = lineOf(text);
   const filled = values?.count === undefined || values.count === null ? { ...values, count } : values;
   return fill(choose(line, count), filled);
 }

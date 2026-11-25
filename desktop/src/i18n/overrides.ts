@@ -7,5 +7,5 @@ export const DESKTOP_OVERRIDES: Readonly<Record<string, string>> = {
   "Empty trash": `${TERMS}: Trash is ردی`,
   Organise: `${TERMS}: Organise is منظم کریں`,
   "Sort & display": `${TERMS}: layout is انداز`,
-  View: `${TERMS}: a saved view is ویو`,
+  View: `${TERMS}: View is the layout, انداز (a saved view is library_context.saved_view, ویو)`,
 };

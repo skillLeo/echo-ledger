@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { choose, fill, FSI, isolate, PDI, language, resetLanguageForTests, setLanguage, stripIsolates, t, tc, useT } from "./index";
 import { accountLanguage, chosenLanguage, systemLanguage } from "./language";
 import { DESKTOP_OVERRIDES } from "./overrides";
+import { CONTEXT_EN } from "./context";
 import { textsIn } from "./rawText";
 import { count, rowDate, sentenceDate } from "../lib/format";
 import ur from "./ur.json";
@@ -190,6 +191,19 @@ describe("the catalogue (src/i18n/ur.json)", () => {
     // Each override names a line of the catalogue that does differ from the web's (none left over), with its reason.
     const stale = Object.entries(DESKTOP_OVERRIDES).filter(([key, why]) => (web[key] !== undefined && !differ.includes(key)) || !(key in ur) || !why.trim()).map(([key]) => key);
     expect(stale).toEqual([]);
+  });
+
+  it("a word that means something else in one place has a context key: its English in context.ts, its Urdu in ur.json", async () => {
+    const contextKeys = Object.keys(ur).filter((key) => /^[a-z_]+_context\.[a-z_]+$/.test(key));
+    expect(contextKeys.sort()).toEqual(Object.keys(CONTEXT_EN).sort());
+    const names = (s: string) => [...s.matchAll(/:([A-Za-z_]\w*)/g)].map((m) => m[1]).sort().join();
+    expect(contextKeys.filter((key) => names(CONTEXT_EN[key]) !== names((ur as Record<string, string>)[key]))).toEqual([]);
+    // English as before; in Urdu the place's own word, not the plain key's.
+    expect(t("library_context.saved_view")).toBe("View");
+    resetLanguageForTests(ur as Record<string, string>);
+    await setLanguage("ur", { root: false });
+    expect(t("library_context.saved_view")).toBe("ویو");
+    expect(t("View")).toBe("انداز");
   });
 
   it("each Urdu line keeps its English key's placeholders and plural forms", () => {

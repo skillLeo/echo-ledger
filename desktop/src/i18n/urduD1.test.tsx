@@ -73,7 +73,8 @@ describe("D1's words, in English as before and in Urdu", () => {
     expect(syncWords({ at, syncing: false, error: "offline" }, at)).toBe("Last synced just now");
     expect(rowModel(ITEMS[1], NOW).title).toBe("Unknown caller");
     expect(sourceWords(ITEMS[0])).toBe("WhatsApp, on a phone");
-    expect([STATE_WORDS.failed, VIEW_NAMES.today, COLUMN_NAMES.length, scopeName({ kind: "trash" })]).toEqual(["Failed · Retry", "Today", "Length", "Trash"]);
+    expect([STATE_WORDS.failed, VIEW_NAMES.today, COLUMN_NAMES.length, scopeName({ kind: "trash" }), scopeName({ kind: "saved", id: "v9" })])
+      .toEqual(["Failed · Retry", "Today", "Length", "Trash", "View"]);
     await urdu();
     expect(syncWords({ at, syncing: false, error: null }, at + 5 * 60_000)).toBe(`${iso(5)} منٹ پہلے سنک ہوا`);
     expect(syncWords({ at: null, syncing: false, error: null }, at)).toBe("ابھی سنک نہیں ہوا");
@@ -82,6 +83,8 @@ describe("D1's words, in English as before and in Urdu", () => {
     expect(sourceWords(ITEMS[0])).toBe(`${iso("WhatsApp")}، فون پر`);
     expect([STATE_WORDS.failed, VIEW_NAMES.today, COLUMN_NAMES.length, scopeName({ kind: "trash" })]).toEqual(["ناکام · دوبارہ کوشش کریں", "آج", "دورانیہ", "ردی"]);
     expect(scopeName({ kind: "view", view: "all" })).toBe("تمام ریکارڈنگز");
+    // A saved view not read yet is a view (ویو), not the layout (انداز); "View" in English as before.
+    expect(scopeName({ kind: "saved", id: "v9" })).toBe("ویو");
     // A word table's keys stay its ids (Object.keys), whatever the language.
     expect(Object.keys(COLUMN_NAMES)).toEqual(["date", "length", "app", "project", "status", "labels", "device"]);
   });

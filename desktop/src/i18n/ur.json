@@ -675,7 +675,7 @@
   "Usage & limits": "استعمال اور حدیں",
   "Use these names for this project's next recordings": "یہ نام اس پروجیکٹ کی اگلی ریکارڈنگز کے لیے بھی استعمال کریں",
   "Verify": "تصدیق کریں",
-  "View": "ویو",
+  "View": "انداز",
   "View name": "ویو کا نام",
   "Viewer": "ناظر",
   "Views": "ویوز",
@@ -719,6 +719,7 @@
   "erased in :count hour|erased in :count hours": ":count گھنٹے میں مٹ جائے گی|:count گھنٹوں میں مٹ جائے گی",
   "erased soon": "جلد مٹ جائے گی",
   "kept there for :time": ":time تک وہاں رہیں گی",
+  "library_context.saved_view": "ویو",
   "the project": "پروجیکٹ",
   "the recording": "ریکارڈنگ"
 }

@@ -30,7 +30,8 @@ export function scopeName(scope: LibraryScope, names: { saved?: (id: string) => 
   switch (scope.kind) {
     // A library view's name is facets.ts's English, said in the window's language here.
     case "view": return t(LIBRARY_VIEW_NAMES[scope.view]);
-    case "saved": return names.saved?.(scope.id) ?? t("View");
+    // A saved view not read yet: "View" in English, ویو in Urdu (the plain "View" is the layout, انداز).
+    case "saved": return names.saved?.(scope.id) ?? t("library_context.saved_view");
     case "label": return names.label?.(scope.key) ?? t("Label");
     case "trash": return t("Trash");
   }
