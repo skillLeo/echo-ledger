@@ -66,6 +66,18 @@ describe("keep, the undo bin and storage (B17)", () => {
     expect(notify.mock.calls.map((c) => c[0])).toEqual(["Restored", "Erased"]);
   });
 
+  it("says Recently deleted couldn't be loaded, never that it is empty, and Try again loads it (EL-UX's audit)", async () => {
+    fail("bin_list", "Server returned 500: Server Error");
+    render(<BinPanel notify={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByText("Couldn't load Recently deleted. Check the internet connection.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Nothing deleted/)).not.toBeInTheDocument();
+
+    respond("bin_list", { data: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/^Nothing deleted/)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load Recently deleted. Check the internet connection.")).not.toBeInTheDocument();
+  });
+
   it("says why a restore failed", async () => {
     respond("bin_list", { data: [{ id: "s1", title: "Late", client: null, started_at: "2026-10-27T09:00:00Z", duration_ms: 1, deleted_at: "x", erase_at: new Date().toISOString() }] });
     fail("session_restore", "This recording can no longer be restored.");

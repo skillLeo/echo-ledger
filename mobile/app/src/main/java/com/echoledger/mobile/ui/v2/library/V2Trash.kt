@@ -86,8 +86,13 @@ fun daysWords(res: android.content.res.Resources, days: Int): String = if (days 
 @Composable
 fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var items by remember { mutableStateOf<List<BinItemDto>?>(null) }
+    var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
-    LaunchedEffect(reload) { items = vm.bin() }
+    // A Trash the server could not give is not an empty one (EL-UX's audit): it says so, with Try again.
+    LaunchedEffect(reload) {
+        vm.binOrError().onSuccess { items = it }
+        failed = items == null
+    }
     val scope = rememberCoroutineScope()
     V2TrashContent(
         items = items,
@@ -95,11 +100,16 @@ fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, 
         onBack = onBack,
         onRestore = { id -> scope.launch { if (vm.restore(id)) reload++ } },
         onErase = { id -> scope.launch { if (vm.eraseNow(id)) reload++ } },
-        modifier = modifier
+        modifier = modifier,
+        failed = failed,
+        onRetry = {
+            failed = false
+            reload++
+        }
     )
 }
 
-/** Trash without the view model; [items] null while loading. */
+/** Trash without the view model; [items] null while loading; [failed]: the server could not give it ([onRetry] asks again). */
 @Composable
 fun V2TrashContent(
     items: List<BinItemDto>?,
@@ -107,7 +117,9 @@ fun V2TrashContent(
     onBack: () -> Unit,
     onRestore: (String) -> Unit,
     onErase: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    failed: Boolean = false,
+    onRetry: () -> Unit = {}
 ) {
     val c = EchoV2.colors
     val text = v2Text
@@ -117,6 +129,8 @@ fun V2TrashContent(
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(text.trash, onBack = onBack)
         when {
+            failed -> EchoEmptyState(text.trashError, "", icon = EchoIcons.Delete, actionLabel = text.tryAgain, onAction = onRetry)
+
             items == null -> EchoSkeletonList(4, Modifier.weight(1f))
 
             items.isEmpty() -> EchoEmptyState(text.trashEmptyTitle, text.trashKeeps(keepHours), icon = EchoIcons.Delete)

@@ -389,10 +389,12 @@ fun LibraryScreen(
                     if (binOpen) {
                         item(key = "bin") {
                             Box(Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) {
-                                BinSection(load = { vm.bin() }, restore = { vm.restore(it) }, erase = { vm.eraseNow(it) }, onClose = {
-                                    binOpen =
-                                        false
-                                })
+                                BinSection(
+                                    load = { vm.binOrError() },
+                                    restore = { vm.restore(it) },
+                                    erase = { vm.eraseNow(it) },
+                                    onClose = { binOpen = false }
+                                )
                             }
                         }
                     }
