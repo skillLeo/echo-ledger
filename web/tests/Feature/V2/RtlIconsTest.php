@@ -2,17 +2,24 @@
 
 declare(strict_types=1);
 
+use App\Enums\SourceApp;
 use App\Filament\Support\RtlIcons;
+use App\Filament\Support\WhatsAppActions;
+use App\Livewire\ActivityBell;
+use App\Models\MissedRecording;
 use App\Services\ActivityFeed;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * W-234: right to left (Urdu) the icons that point a way or read as text are mirrored, as on the desktop and the phone:
  * Settings' rows (›) and back links (‹), the upgrade pages' way back, the crumbs, Help's "?", a chat bubble, a missed
  * call, sign out (RtlIcons, the new design's v2-icon-flip). In English and in classic they draw byte for byte as
- * before (the goldens hold classic).
+ * before (the goldens hold classic). W-235: the icons Filament draws itself from a Heroicon or a name (an action's, an app's
+ * badge, a notification's) are mirrored the same way (RtlIcons::icon).
  */
 
 beforeEach(function () {
@@ -77,4 +84,41 @@ it('mirrors the rail\'s Help "?" and Ask\'s chat bubble in Urdu, and draws them 
     rtlIconsConsole('en');
     $en = (string) $this->get('/app/sessions')->assertOk()->getContent();
     expect($en)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon"~');
+});
+
+/** Whether [$icon] is given as markup with the mirror's class (RtlIcons::icon), which Filament draws in its own icon. */
+function drawnMirrored(mixed $icon): bool
+{
+    return $icon instanceof Htmlable && str_starts_with(trim($icon->toHtml()), '<svg class="v2-icon-flip"');
+}
+
+it('mirrors the icons Filament draws itself in Urdu: the WhatsApp action, an app\'s chat bubble, a missed call\'s notification (W-235)', function () {
+    $call = Fx::session($this->owner, Fx::device($this->owner));
+    MissedRecording::query()->create(['workspace_id' => $call->workspace_id, 'user_id' => $this->owner->id, 'device_id' => $call->device_id,
+        'client_ref' => 'missed-1', 'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subHour(), 'call_duration_s' => 312, 'reason' => 'permission']);
+    $missed = $this->owner->notifications()->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'missed_recording');
+    $bell = fn (): string => (new ActivityBell)->getNotification($missed)->inline()->toHtml();
+
+    rtlIconsConsole('ur');
+    expect(drawnMirrored(RtlIcons::icon(Heroicon::OutlinedChatBubbleLeftEllipsis)))->toBeTrue()
+        ->and(drawnMirrored(RtlIcons::icon('heroicon-o-phone-x-mark')))->toBeTrue()
+        ->and(drawnMirrored(WhatsAppActions::send(fn () => $call)->getIcon()))->toBeTrue()
+        ->and(drawnMirrored(SourceApp::WhatsApp->getIcon()))->toBeTrue()
+        ->and(drawnMirrored(SourceApp::Telegram->getIcon()))->toBeTrue()
+        // Filament's sized icon holds it (.fi-icon > svg takes its size), as for any icon given as markup.
+        ->and($bell())->toMatch('~<span class="(?=[^"]*\bfi-icon\b)[^"]*\bfi-no-notification-icon\b[^"]*">\s*<svg class="v2-icon-flip" ~');
+    // An icon with no way stays as it is; so does a solid Heroicon, whose drawing changes with the size Filament picks.
+    expect(SourceApp::Zoom->getIcon())->toBe(Heroicon::OutlinedVideoCamera)
+        ->and(RtlIcons::icon(Heroicon::OutlinedCheck))->toBe(Heroicon::OutlinedCheck)
+        ->and(RtlIcons::icon(Heroicon::ChatBubbleLeftRight))->toBe(Heroicon::ChatBubbleLeftRight)
+        ->and(RtlIcons::icon(null))->toBeNull();
+
+    // English, and classic in Urdu: as before, the Heroicon or the name itself.
+    foreach ([['en', true], ['ur', false]] as [$language, $v2]) {
+        rtlIconsConsole($language, $v2);
+        expect(WhatsAppActions::send(fn () => $call)->getIcon())->toBe(Heroicon::OutlinedChatBubbleLeftRight)
+            ->and(SourceApp::WhatsApp->getIcon())->toBe(Heroicon::OutlinedChatBubbleLeftRight)
+            ->and(RtlIcons::icon('heroicon-o-phone-x-mark'))->toBe('heroicon-o-phone-x-mark')
+            ->and($bell())->toMatch('~<svg class="(?=[^"]*\bfi-icon\b)[^"]*\bfi-no-notification-icon\b~')->not->toContain('v2-icon-flip');
+    }
 });

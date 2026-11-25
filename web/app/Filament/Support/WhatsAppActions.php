@@ -33,7 +33,7 @@ final class WhatsAppActions
 
         return Action::make($name)
             ->label(__('Send to WhatsApp…'))
-            ->icon(Heroicon::OutlinedChatBubbleLeftRight)
+            ->icon(RtlIcons::icon(Heroicon::OutlinedChatBubbleLeftRight))
             ->color('gray')
             ->modalHeading(__('Send to WhatsApp'))
             ->modalDescription(__('Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose.'))

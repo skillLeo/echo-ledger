@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use BackedEnum;
+use Filament\Support\Contracts\ScalableIcon;
+use Filament\Support\Enums\IconSize;
+use Illuminate\Contracts\Support\Htmlable;
+
 /**
  * W-234 (the lead's RTL icons decision, as the desktop and the phone have it): right to left, the icons that point a
  * way (a row's ›, a back link's ‹) or read as text (the help "?", which is ؟ in Urdu, a chat bubble, a missed call,
@@ -11,6 +16,10 @@ namespace App\Filament\Support;
  * v2-icon-flip ([dir=rtl] in resources/css/v2/console.css), and it is added only while the console reads right to left,
  * so English and classic draw these icons byte for byte as before. A Blade draws one as
  * `@svg(...RtlIcons::of('heroicon-o-chevron-right', ['aria-hidden' => 'true']))`, the directive's own shape.
+ *
+ * W-235: an icon Filament draws itself (an action's, a badge's, a notification's) takes no class per call, so it is
+ * given as icon(): the same heroicon as markup with the mirror's class, which Filament draws inside its own sized icon
+ * (.fi-icon > svg).
  */
 final class RtlIcons
 {
@@ -51,5 +60,27 @@ final class RtlIcons
     public static function of(string $icon, array $attributes = []): array
     {
         return [$icon, self::attributes($icon, $attributes)];
+    }
+
+    /**
+     * [$icon] for Filament to draw (an action's ->icon(), an enum's getIcon(), a notification's), mirrored right to left:
+     * unchanged unless the console reads right to left and it is one to mirror; then its heroicon as markup with the
+     * mirror's class. Only icons drawn the same at every size (the outlined heroicons, or a name) are given as markup: a
+     * solid Heroicon case changes its drawing with the size Filament picks, so it is left as it is.
+     *
+     * @return ($icon is null ? null : ($icon is string ? string|Htmlable : ($icon is BackedEnum ? BackedEnum|Htmlable : Htmlable)))
+     */
+    public static function icon(string|BackedEnum|Htmlable|null $icon): string|BackedEnum|Htmlable|null
+    {
+        $name = match (true) {
+            $icon instanceof ScalableIcon && $icon instanceof BackedEnum && str_starts_with((string) $icon->value, 'o-') => $icon->getIconForSize(IconSize::Medium),
+            is_string($icon) => $icon,
+            default => null,
+        };
+        if ($name === null || ! self::mirrored($name) || ! ConsoleV2::rtl()) {
+            return $icon;
+        }
+
+        return svg($name, self::CLASS_NAME);
     }
 }
