@@ -18,7 +18,7 @@ import { choiceItems, type ActionContext } from "../actions/registry";
 import { useActions } from "../actions/useActions";
 import { sayProblem, type Say } from "./organise";
 import { libraryTabName, libraryViewName } from "./facets";
-import { t, useLanguage, type Lang } from "../../i18n";
+import { lineDir, t, useLanguage, type Lang } from "../../i18n";
 
 /** What a label's menu runs (contextMenus LABEL's ids). */
 const LABEL_IDS = ["label.showRecordings", "file.rename", "label.colour", "view.moveUp", "view.moveDown", "label.delete"] as const;
@@ -255,6 +255,10 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
   }) : null;
   const words = labelWords();
   const reserved = reservedNames();
+  // Rename: a label already called by a view's name in this language (made on the phone, or before this one was
+  // reserved) keeps it without a word against it; any other view's name is still refused.
+  const own = (editing?.list.name ?? "").trim().toLowerCase();
+  const keepOwn = reserved.filter((r) => r.trim().toLowerCase() !== own);
   return (
     <section className="el-nav-section" aria-label={words.section} ref={section}>
       <div className="el-nav-section__head">
@@ -271,7 +275,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
                 aria-label={`${l.name}, ${counts[l.key] ?? 0}`} onClick={() => onOpen(l.key)}
                 onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openMenu(l, menuPointFor(e.currentTarget)); } }}>
                 <LabelDot name={l.name} colour={l.color} decorative />
-                <span className="el-nav-item__label" dir="auto">{l.name}</span>
+                <span className="el-nav-item__label" dir={lineDir(l.name)}>{l.name}</span>
                 {(counts[l.key] ?? 0) > 0 && <>{" "}<span className="el-nav-item__count el-caption el-num">{counts[l.key]}</span></>}
               </button>
               <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={t("More for :name", { name: l.name })}
@@ -296,8 +300,8 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
       })()}
       <NewListDialog open={creating} onClose={() => setCreating(false)} existing={names} reserved={reserved} usedColours={all.map((l) => l.color)}
         words={{ ...words.newDialog, ...nameWords(words.newDialog.duplicate, reserved) }} onCreate={(name, color) => void create(name, color)} />
-      <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={reserved}
-        words={{ ...words.renameDialog, ...nameWords(words.renameDialog.duplicate, reserved) }}
+      <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={keepOwn}
+        words={{ ...words.renameDialog, ...nameWords(words.renameDialog.duplicate, keepOwn) }}
         onClose={() => setEditing(null)} onRename={(name) => editing && void rename(editing.list, name)} />
       <Dialog open={editing?.kind === "delete"} alert title={asked?.title ?? ""} description={asked?.body} onClose={() => setEditing(null)} closeLabel={t("Close")}
         actions={<><Button onClick={() => setEditing(null)}>{asked?.cancel}</Button><Button variant="danger" loading={busy} loadingLabel={t("Deleting…")} onClick={() => editing && void remove(editing.list)}>{asked?.confirm}</Button></>} />

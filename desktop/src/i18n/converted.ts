@@ -72,6 +72,8 @@ export const CONVERTED: readonly string[] = [
   "v2/library/QueueV2.tsx",
   "v2/library/ImportSheetV2.tsx",
   "v2/library/fitRow.ts",
+  // and the notice after an import (lib/importFiles: its other text is file names and extensions).
+  "lib/importFiles.ts",
   // D3c: the helpers Settings shows whose words are all through t() and tc().
   "lib/callChoice.ts",
   "lib/explainer.ts",

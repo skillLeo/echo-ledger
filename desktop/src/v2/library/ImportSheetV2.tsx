@@ -1,7 +1,7 @@
 // The import sheet in the new design (classic's ImportSheet, the same rules and words): files picked with Upload or
 // dropped on the window become one recording each, named after the file, with one project and language for the whole
 // batch. The core copies them into the upload queue (import_voice_notes); what it couldn't take is said after. Its
-// words are in the window's language (desktop Urdu, D1b); the notice after (lib/importFiles' importNotice) is classic's.
+// words are in the window's language (desktop Urdu, D1b), the notice after it too (lib/importFiles' importNotice).
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, type ClientFolder, type TranscriptionLanguage } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
@@ -9,7 +9,7 @@ import { fileName, importNotice, importTitle, isImportable } from "../../lib/imp
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { Button, Icon, Icons, Select, Sheet } from "../components";
-import { t, tc, useLanguage } from "../../i18n";
+import { lineDir, t, tc, useLanguage } from "../../i18n";
 
 /** "Import :count file|Import :count files": the heading's line, and the button's for more than one file. */
 const importFiles = (count: number) => tc("Import :count file|Import :count files", count);
@@ -61,11 +61,13 @@ export function ImportSheetV2({ paths, notify, onClose }: { paths: string[]; not
         <ul className="el-import__files" aria-label={t("Files to import")}>
           {paths.map((path, i) => {
             const ok = isImportable(path);
+            const title = (ok && importTitle(path)) || fileName(path);
+            const line = ok ? fileName(path) : t("Can't be imported: not a voice note, audio or video file");
             return (
               // The same file can be picked twice: each row has its own key.
               <li key={`${i}:${path}`} className={`el-import__file${ok ? "" : " el-import__file--no"}`} title={path}>
-                <span className="el-body-strong" dir="auto">{(ok && importTitle(path)) || fileName(path)}</span>
-                <span className="el-caption el-secondary" dir="auto">{ok ? fileName(path) : t("Can't be imported: not a voice note, audio or video file")}</span>
+                <span className="el-body-strong" dir={lineDir(title)}>{title}</span>
+                <span className="el-caption el-secondary" dir={lineDir(line)}>{line}</span>
               </li>
             );
           })}

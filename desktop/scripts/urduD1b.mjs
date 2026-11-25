@@ -121,9 +121,9 @@ try {
     await page.evaluate(() => window.__TAURI_INTERNALS__.invoke("plugin:event|emit", { event: "tauri://drag-drop", payload: {
       paths: ["/Users/me/Downloads/PTT-20261030-WA0003.opus", "/Users/me/Movies/Call_with_Acme_Oct.mp4", "/Users/me/Desktop/readme.txt"],
     } }));
-    await page.getByRole("list", { name: "درآمد کی جانے والی فائلیں" }).waitFor();
+    await page.getByRole("list", { name: "امپورٹ کی جانے والی فائلیں" }).waitFor();
     await page.waitForTimeout(400);
-    await shot("import", "فائلیں درآمد کریں");
+    await shot("import", "فائلیں امپورٹ کریں");
     await page.close();
   }
 } finally {

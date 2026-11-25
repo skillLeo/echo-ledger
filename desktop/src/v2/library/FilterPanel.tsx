@@ -7,7 +7,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Button, Icon, Icons, ResizeEdge, SearchField, Segmented, useFocusTrap } from "../components";
 import { Layer, placeMenu, regionOf } from "../components/Menu";
-import { useT } from "../../i18n";
+import { lineDir, useT } from "../../i18n";
 import {
   activeSections, clearSection, pillWords, SECTION_NAMES, SECTIONS, sectionOn, setDate, setNot, toggleValue,
   type DatePreset, type FacetOption, type FilterSpec, type Names, type SectionKey,
@@ -65,7 +65,7 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
         {[{ value: null, label: t("Any time"), count: null }, ...options].map((o) => (
           <label key={o.value ?? "any"} className={`el-filter__option${o.count === 0 && o.value !== "custom" ? " el-filter__option--none" : ""}`}>
             <input type="radio" name={name} checked={chosen === o.value} onChange={() => pick(o.value as DatePreset | null, { from: spec.date?.from, to: spec.date?.to })} />
-            <span className="el-filter__label" dir="auto">{o.label}</span>
+            <span className="el-filter__label" dir={lineDir(o.label)}>{o.label}</span>
             {o.count !== null && o.value !== "custom" && <span className="el-filter__count el-caption el-num">{o.count}</span>}
           </label>
         ))}
@@ -101,7 +101,7 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
         // An option at 0 is dimmed, never hidden or disabled: it can still be ticked (for "is not").
         <label key={o.value} className={`el-filter__option${o.count === 0 ? " el-filter__option--none" : ""}`}>
           <input type="checkbox" checked={values.includes(o.value)} onChange={() => onSpec(toggleValue(spec, section, o.value))} />
-          <span className="el-filter__label" dir="auto">{o.label}</span>
+          <span className="el-filter__label" dir={lineDir(o.label)}>{o.label}</span>
           <span className="el-filter__count el-caption el-num">{o.count}</span>
         </label>
       ))}

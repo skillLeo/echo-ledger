@@ -8,6 +8,10 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // The filter panel's Custom dates, the first day and the last (ur.json's "From" is a sender's, ماخذ): سے and تک.
   "library_context.date_start": "From",
   "library_context.date_end": "To",
+  // The filter panel's own dates (Custom: the two days chosen); a bare "Custom" means other things elsewhere.
+  "library_context.date_custom": "Custom",
+  // Between a filter pill's values ("Source: WhatsApp, Zoom"): Urdu's comma (،) in Urdu.
+  "library_context.values_separator": ", ",
   // A filter section's dot while it is on (a filter applied, لگا ہے; ur.json's "On" is a switch's, آن).
   "library_context.filter_on": "on",
   // The word Upgrade inside a Plan & usage meter's line ("… of your minutes. Upgrade."): in Urdu the noun alone (اپ

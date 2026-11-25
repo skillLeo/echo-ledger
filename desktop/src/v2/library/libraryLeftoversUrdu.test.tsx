@@ -21,6 +21,8 @@ import { filedByRuleText, ruleText } from "../../lib/sharing";
 import { CALL_WORDS } from "../../lib/callChoice";
 import { FSI, PDI, RLI, resetLanguageForTests, setLanguage, t } from "../../i18n";
 import { FiledByLine } from "../../views/main/FilingRules";
+import { LibraryQueue } from "../../views/main/LibraryQueue";
+import { importNotice } from "../../lib/importFiles";
 import {
   facetCounts, LIBRARY_TAB_NAMES, LIBRARY_VIEW_NAMES, libraryViewCounts, libraryViewName, pillWords, prepare, SECTION_NAMES, sourceOf, setDate,
   type FacetOption, type FilterSpec, type SectionKey,
@@ -89,7 +91,7 @@ describe("the facets' names in Urdu", () => {
     expect(["whatsapp", "whatsapp_web", "google_meet", "microsoft_teams", "zoom", "whatsapp_business"].map(source))
       .toEqual(["WhatsApp", "WhatsApp", "Meet", "Teams", "Zoom", "WhatsApp Business"]);
     expect(["phone_call", "voice_note", "other", "facetime"].map(source)).toEqual(["سم کالز", "وائس نوٹس", "دیگر", "دیگر"]);
-    expect(sourceOf(makeItem("i"), new Set(["i"])).label).toBe("درآمد شدہ");
+    expect(sourceOf(makeItem("i"), new Set(["i"])).label).toBe("امپورٹ شدہ");
   });
 
   it("counts worked out in English read in Urdu once the language changes (an option's words are read when shown)", async () => {
@@ -111,7 +113,7 @@ describe("the facets' names in Urdu", () => {
   it("a pill's words: the section and its values each in an isolate, is not, Custom's days in Urdu's months", () => {
     const { names } = prepare(ITEMS, { now: NOW.getTime() });
     const spec: FilterSpec = { source: { op: "is", values: ["whatsapp", "zoom"] }, status: { op: "is_not", values: ["failed"] } };
-    expect(pillWords(spec, "source", names)).toBe(`${iso("ذریعہ")}: ${iso("WhatsApp, Zoom")}`);
+    expect(pillWords(spec, "source", names)).toBe(`${iso("ذریعہ")}: ${iso("WhatsApp، Zoom")}`);
     expect(pillWords(spec, "status", names)).toBe(`${iso("حالت")} نہیں ہے: ${iso("ناکام")}`);
     expect(pillWords({ date: { op: "is_not", values: ["today"] } }, "date", names)).toBe(`${iso("تاریخ")} نہیں ہے: ${iso("آج")}`);
     const range = setDate({}, "custom", { from: "2026-11-09", to: "2026-11-11" });
@@ -187,8 +189,8 @@ describe("the filter panel in Urdu", () => {
     const spec: FilterSpec = { source: { op: "is", values: ["whatsapp", "zoom"] }, status: { op: "is_not", values: ["failed"] } };
     render(<FilterPills spec={spec} onSpec={onSpec} counts={() => all} names={names} onClearAll={vi.fn()} onSaveView={vi.fn()} onSaveChanges={vi.fn()} />);
     const pills = within(screen.getByRole("group", { name: "لگے ہوئے فلٹرز" }));
-    const source = pills.getByRole("button", { name: `${iso("ذریعہ")}: ${iso("WhatsApp, Zoom")}` });
-    expect(source).toHaveAttribute("title", `${iso(`${iso("ذریعہ")}: ${iso("WhatsApp, Zoom")}`)} بدلیں`);
+    const source = pills.getByRole("button", { name: `${iso("ذریعہ")}: ${iso("WhatsApp، Zoom")}` });
+    expect(source).toHaveAttribute("title", `${iso(`${iso("ذریعہ")}: ${iso("WhatsApp، Zoom")}`)} بدلیں`);
     expect(source.querySelector("bdi")).toHaveAttribute("dir", "rtl");
     expect(pills.getByRole("button", { name: `${iso(`${iso("حالت")} نہیں ہے: ${iso("ناکام")}`)} ہٹائیں` })).toBeInTheDocument();
     expect(pills.getAllByRole("button").slice(-3).map((b) => b.textContent)).toEqual(["سب صاف کریں", "تبدیلیاں محفوظ کریں", "ویو کے طور پر محفوظ کریں"]);
@@ -232,7 +234,11 @@ describe("labels in Urdu", () => {
     return say;
   };
   const labels = () => within(screen.getByRole("list", { name: "لیبلز" }));
-  const menuItem = (name: string) => screen.getByRole("menuitem", { name });
+  /**
+   * A label's menu item by its action (actions.json's words are not this package's: D-248 converts them, and these
+   * tests then still find the items).
+   */
+  const action = (id: string) => document.querySelector<HTMLElement>(`[role^="menuitem"][data-action="${id}"]`)!;
 
   it("the section, each label by its own name and count, its ⋮, and + New label", async () => {
     await show();
@@ -273,8 +279,7 @@ describe("labels in Urdu", () => {
     respond("list_delete", 1);
     const say = await show();
     fireEvent.contextMenu(labels().getByRole("button", { name: /^Clients, / }));
-    // The menu's items are actions.json's (not this package's).
-    fireEvent.click(menuItem("Rename…"));
+    fireEvent.click(action("file.rename"));
     const rename = within(screen.getByRole("dialog", { name: "لیبل کا نام بدلیں" }));
     fireEvent.change(rename.getByLabelText("لیبل کا نام"), { target: { value: "home" } });
     expect(rename.getByText(`آپ کے پاس پہلے سے ${iso("Home")} نام کا لیبل ہے۔`)).toBeInTheDocument();
@@ -284,14 +289,15 @@ describe("labels in Urdu", () => {
     expect(say).toHaveBeenLastCalledWith(`نام بدل کر ${iso("Customers")} کر دیا گیا`);
 
     fireEvent.contextMenu(labels().getByRole("button", { name: /^Home, / }));
-    fireEvent.click(menuItem("Colour"));
-    const colours = screen.getByRole("menu", { name: "Colour" });
+    fireEvent.click(action("label.colour"));
+    // Colour's own menu (named by actions.json's word, D-248's): the last one open.
+    const colours = screen.getAllByRole("menu").at(-1)!;
     expect(within(colours).getAllByRole("menuitemradio").map((m) => m.textContent)).toEqual(["سرمئی", "سرخ", "نارنجی", "کہربائی", "سبز", "فیروزی", "نیلا", "گلابی"]);
     expect(within(colours).getByRole("menuitemradio", { name: "کہربائی" })).toHaveAttribute("aria-checked", "true");
     fireEvent.keyDown(screen.getAllByRole("menu")[0], { key: "Escape" });
 
     fireEvent.contextMenu(labels().getByRole("button", { name: /^Family, / }));
-    fireEvent.click(menuItem("Delete label…"));
+    fireEvent.click(action("label.delete"));
     const ask = screen.getByRole("alertdialog", { name: `${iso("Family")} حذف کریں؟` });
     expect(ask).toHaveTextContent("اس کی ریکارڈنگز آپ کی لائبریری میں رہیں گی؛ صرف لیبل ہٹے گا۔");
     expect(within(ask).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["بند کریں", "منسوخ کریں", "حذف کریں"]);
@@ -299,6 +305,20 @@ describe("labels in Urdu", () => {
     await act(flushAsync);
     expect(callsOf("list_delete")).toEqual([{ key: "family" }]);
     expect(say).toHaveBeenLastCalledWith(`${iso("Family")} حذف ہو گیا · اس کی ریکارڈنگز آپ کی لائبریری میں موجود ہیں`);
+  });
+
+  it("Rename of a label already called by a view's Urdu name: no word against its own name, another view's still refused", async () => {
+    respond("lists_get", [{ key: "اہم", name: "اہم", color: "#26978f", position: 0, count: 0 }]);
+    render(<nav aria-label="Main"><LabelsNav counts={{}} current={null} onOpen={vi.fn()} onGone={vi.fn()} say={vi.fn()} onLibraryChanged={vi.fn()} /></nav>);
+    await act(flushAsync);
+    fireEvent.contextMenu(labels().getByRole("button", { name: /^اہم, / }));
+    fireEvent.click(action("file.rename"));
+    const rename = within(screen.getByRole("dialog", { name: "لیبل کا نام بدلیں" }));
+    expect(rename.getByLabelText("لیبل کا نام")).toHaveValue("اہم");
+    expect(rename.queryByText(/لائبریری کے ویوز میں سے ایک ہے/)).toBeNull();
+    fireEvent.change(rename.getByLabelText("لیبل کا نام"), { target: { value: "نہ پڑھی گئی" } });
+    expect(rename.getByText(`${iso("نہ پڑھی گئی")} لائبریری کے ویوز میں سے ایک ہے۔ کوئی اور نام چنیں۔`)).toBeInTheDocument();
+    expect(rename.getByRole("button", { name: "محفوظ کریں" })).toBeDisabled();
   });
 
   it("Labels ▸ in a recording's menu: Labels, in Organise, with New label… at its end", () => {
@@ -414,12 +434,46 @@ describe("the queue at the top of the Library in Urdu", () => {
     respond("upload_list", uploads);
     respond("list_clients", CLIENTS);
     respond("pending_set_language", undefined);
+    respond("pending_keep", undefined);
+    respond("pending_delete", 1);
     respond("upload_retry", undefined);
     respond("upload_discard", undefined);
     render(<LibraryV2 scopeRequest={{ scope: { kind: "view", view }, seq: 1 }} />);
     await act(flushAsync);
   }
   const rowOf = (title: string) => screen.getByText(title).closest("li") as HTMLElement;
+  /** The Library's notices, as shown. */
+  const toasts = () => document.querySelector(".el-toast-region") as HTMLElement;
+
+  it("its questions and notices are the window's language: Delete, Transcribe, an upload's Discard, an import's Cancel", async () => {
+    const asked = answerConfirm().mockReturnValue(true);
+    await show([makePendingItem("p1", { title: "Keep me" }), makePendingItem("p2", { title: "Drop me" })], [
+      makeUploadItem("u1", { state: "failed", title: "Zoom call", lastError: "The server could not verify this upload." }),
+    ]);
+    fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "حذف کریں" }));
+    await act(flushAsync);
+    expect(asked).toHaveBeenLastCalledWith("یہ ریکارڈنگ حذف کریں؟ آپ چند سیکنڈ تک اسے واپس کر سکتے ہیں۔");
+    expect(callsOf("pending_delete")).toEqual([{ ids: ["p2"] }]);
+    // "Deleted · Undo": the notice, its Undo a button of its own.
+    expect(toasts()).toHaveTextContent("حذف ہو گئی");
+    expect(within(toasts()).getByRole("button", { name: "واپس کریں" })).toBeInTheDocument();
+    fireEvent.click(within(rowOf("Keep me")).getByRole("button", { name: "ٹرانسکرائب کریں" }));
+    await act(flushAsync);
+    expect(toasts()).toHaveTextContent("ٹرانسکرپٹ بن رہا ہے…");
+    fireEvent.click(within(rowOf("Zoom call")).getByRole("button", { name: "ضائع کریں" }));
+    await act(flushAsync);
+    expect(asked).toHaveBeenLastCalledWith("یہ ریکارڈنگ ضائع کریں؟ یہ واپس نہیں ہو سکتا۔");
+    expect(toasts()).toHaveTextContent("ضائع کر دی گئی");
+    expect(toasts().textContent).not.toMatch(/Transcribing|Deleted|Discarded|Undo/);
+  });
+
+  it("an import's Cancel says so in Urdu", async () => {
+    await show([], [makeUploadItem("i1", { imported: true, title: "interview.m4a", state: "uploading", progress: 40 })], "all");
+    fireEvent.click(within(rowOf("interview.m4a")).getByRole("button", { name: "منسوخ کریں" }));
+    await act(flushAsync);
+    expect(callsOf("upload_discard")).toEqual([{ id: "i1" }]);
+    expect(toasts()).toHaveTextContent("امپورٹ منسوخ کر دی گئی");
+  });
 
   it("waiting calls: the line, Review and Hide, the bulk buttons, each row's line of pieces and buttons, and its menu", async () => {
     const pending = [
@@ -469,6 +523,11 @@ describe("the queue at the top of the Library in Urdu", () => {
     expect(ask).toHaveTextContent(learnPrompt("Acme Holdings", null, "ur")!);
     expect(ask.textContent).not.toMatch(/Use /);
     expect(within(ask).getAllByRole("button").map((b) => b.textContent)).toEqual(["ہاں", "نہیں"]);
+    respond("client_update", { id: "c1", name: "Acme Holdings", language: "ur" });
+    fireEvent.click(within(ask).getByRole("button", { name: "ہاں" }));
+    await act(flushAsync);
+    expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]);
+    expect(toasts()).toHaveTextContent("اس پروجیکٹ کے لیے محفوظ ہو گئی");
     pick(["نام بدلیں…"]);
     const dialog = within(screen.getByRole("dialog", { name: "نام بدلیں" }));
     expect(dialog.getByRole("textbox", { name: "عنوان" })).toHaveValue("A call");
@@ -478,8 +537,8 @@ describe("the queue at the top of the Library in Urdu", () => {
   it("imports, uploads that need you, another account's and those being checked: their headings with counts, buttons and lines", async () => {
     const importing = [makeUploadItem("i1", { imported: true, title: "interview.m4a", state: "uploading", progress: 40 }), makeUploadItem("i2", { imported: true, title: "notes.mp3" })];
     await show([], importing, "all");
-    expect(screen.getByRole("heading", { name: `درآمد ہو رہی ہیں · ${iso(2)}` })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "درآمد ہو رہی ہیں" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: `امپورٹ ہو رہی ہیں · ${iso(2)}` })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "امپورٹ ہو رہی ہیں" })).toBeInTheDocument();
     expect(rowOf("interview.m4a")).toHaveTextContent(importProgressText(importing[0]));
     expect(screen.getByRole("progressbar", { name: `${iso("interview.m4a")} کا اپ لوڈ` })).toHaveAttribute("aria-valuenow", "40");
     expect(within(rowOf("interview.m4a")).getByRole("button")).toHaveTextContent("منسوخ کریں");
@@ -525,17 +584,17 @@ describe("the import sheet in Urdu", () => {
   it("its heading by the count (one form or the other), its words, the files with the one it can't take, the choices and Import", async () => {
     render(<div className="el-root"><ImportSheetV2 paths={[NOTE, VIDEO, TEXT]} notify={vi.fn()} onClose={vi.fn()} /></div>);
     await act(flushAsync);
-    const dialog = within(screen.getByRole("dialog", { name: `${iso(2)} فائلیں درآمد کریں` }));
+    const dialog = within(screen.getByRole("dialog", { name: `${iso(2)} فائلیں امپورٹ کریں` }));
     expect(dialog.getByText("ہر فائل اپنی الگ ریکارڈنگ بنتی ہے، فائل کے نام سے۔ ویڈیوز ان کی آواز سے ٹرانسکرائب ہوتی ہیں۔")).toBeInTheDocument();
     expect(dialog.getAllByRole("listitem").map((li) => li.lastElementChild?.textContent)).toEqual([
-      "PTT-20261030-WA0003.opus", "Call_with_Acme_Oct.mp4", "درآمد نہیں ہو سکتی: یہ وائس نوٹ، آڈیو یا ویڈیو فائل نہیں",
+      "PTT-20261030-WA0003.opus", "Call_with_Acme_Oct.mp4", "امپورٹ نہیں ہو سکتی: یہ وائس نوٹ، آڈیو یا ویڈیو فائل نہیں",
     ]);
-    expect(dialog.getByRole("list", { name: "درآمد کی جانے والی فائلیں" })).toBeInTheDocument();
+    expect(dialog.getByRole("list", { name: "امپورٹ کی جانے والی فائلیں" })).toBeInTheDocument();
     expect(dialog.getByRole("combobox", { name: /^پروجیکٹ/ })).toHaveTextContent("کوئی پروجیکٹ نہیں");
     expect(dialog.getByRole("combobox", { name: /^زبان/ })).toBeInTheDocument();
     expect(dialog.getByText("پروجیکٹ اور زبان ہر فائل پر لاگو ہوتے ہیں۔ جو فائلیں پہلے سے آپ کی لائبریری میں ہیں وہ چھوڑ دی جاتی ہیں۔")).toBeInTheDocument();
-    expect(dialog.getAllByRole("button").map((b) => b.textContent).slice(-2)).toEqual(["منسوخ کریں", `${iso(2)} فائلیں درآمد کریں`]);
-    expect([importHeading(0), importHeading(1), importHeading(3)]).toEqual(["درآمد کے لیے کچھ نہیں", `${iso(1)} فائل درآمد کریں`, `${iso(3)} فائلیں درآمد کریں`]);
+    expect(dialog.getAllByRole("button").map((b) => b.textContent).slice(-2)).toEqual(["منسوخ کریں", `${iso(2)} فائلیں امپورٹ کریں`]);
+    expect([importHeading(0), importHeading(1), importHeading(3)]).toEqual(["امپورٹ کے لیے کچھ نہیں", `${iso(1)} فائل امپورٹ کریں`, `${iso(3)} فائلیں امپورٹ کریں`]);
   });
 
   it("one file: Import alone; while it imports, Importing…; a refusal is the core's own words and the sheet stays", async () => {
@@ -543,10 +602,10 @@ describe("the import sheet in Urdu", () => {
     respondWith("import_voice_notes", () => new Promise((r) => { answer = r; }));
     const { unmount } = render(<div className="el-root"><ImportSheetV2 paths={[NOTE]} notify={vi.fn()} onClose={vi.fn()} /></div>);
     await act(flushAsync);
-    expect(screen.getByRole("dialog", { name: `${iso(1)} فائل درآمد کریں` })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: `${iso(1)} فائل امپورٹ کریں` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "بند کریں" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "درآمد" }));
-    expect(screen.getByText("درآمد ہو رہی ہیں…")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "امپورٹ" }));
+    expect(screen.getByText("امپورٹ ہو رہی ہیں…")).toBeInTheDocument();
     answer({ queued: 1, duplicates: 0, unsupported: 0, failed: 0 });
     await act(flushAsync);
     unmount();
@@ -554,18 +613,34 @@ describe("the import sheet in Urdu", () => {
     const notify = vi.fn();
     render(<div className="el-root"><ImportSheetV2 paths={[NOTE]} notify={notify} onClose={vi.fn()} /></div>);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "درآمد" }));
+    fireEvent.click(screen.getByRole("button", { name: "امپورٹ" }));
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("The disk is full.", true);
-    expect(screen.getByRole("dialog", { name: `${iso(1)} فائل درآمد کریں` })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: `${iso(1)} فائل امپورٹ کریں` })).toBeInTheDocument();
+  });
+
+  it("the notice after it: each part a whole sentence with its count, in Urdu, leading to Activity", async () => {
+    const notify = vi.fn();
+    render(<div className="el-root"><ImportSheetV2 paths={[NOTE, VIDEO]} notify={notify} onClose={vi.fn()} /></div>);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: `${iso(2)} فائلیں امپورٹ کریں` }));
+    await act(flushAsync);
+    expect(notify).toHaveBeenCalledWith(`${iso(2)} فائلیں امپورٹ ہو رہی ہیں۔ یہ پس منظر میں اپ لوڈ ہوتی ہیں۔`, false, { kind: "page", page: "activity" });
+    expect(importNotice({ queued: 1, duplicates: 1, unsupported: 1, failed: 2 })).toBe([
+      `${iso(1)} فائل امپورٹ ہو رہی ہے۔ یہ پس منظر میں اپ لوڈ ہوتی ہے۔`,
+      `${iso(1)} فائل چھوڑ دی گئی جو پہلے سے اپ لوڈ کے انتظار میں ہے۔`,
+      `${iso(1)} فائل چھوڑ دی گئی جو وائس نوٹ، آڈیو یا ویڈیو فائل نہیں۔`,
+      `${iso(2)} فائلیں پڑھی نہیں جا سکیں۔`,
+    ].join(" "));
+    expect(importNotice({ queued: 0, duplicates: 0, unsupported: 0, failed: 0 })).toBe("امپورٹ کے لیے کچھ نہیں۔");
   });
 
   it("nothing it can take: Nothing to import, Import off; the drop hint", async () => {
     render(<div className="el-root"><ImportSheetV2 paths={[TEXT]} notify={vi.fn()} onClose={vi.fn()} /><DropHintV2 /></div>);
     await act(flushAsync);
-    expect(screen.getByRole("dialog", { name: "درآمد کے لیے کچھ نہیں" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "درآمد" })).toBeDisabled();
-    expect(screen.getByTestId("drop-hint")).toHaveTextContent("درآمد کرنے کے لیے وائس نوٹس، آڈیو یا ویڈیو فائلیں یہاں چھوڑیں");
+    expect(screen.getByRole("dialog", { name: "امپورٹ کے لیے کچھ نہیں" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "امپورٹ" })).toBeDisabled();
+    expect(screen.getByTestId("drop-hint")).toHaveTextContent("امپورٹ کرنے کے لیے وائس نوٹس، آڈیو یا ویڈیو فائلیں یہاں چھوڑیں");
   });
 });
 
@@ -588,6 +663,39 @@ describe("classic callers in an Urdu window keep their English", () => {
   it("lib/sharing's rule lines with lang \"en\": the app's word in English too, nothing isolated", () => {
     expect(ruleText({ kind: "app", value: "phone_call" }, "en")).toBe("From Phone call");
     expect(filedByRuleText({ title: "Standup", source_app: "voice_note" }, [{ id: 1, kind: "app", value: "voice_note" }], "en")).toBe("Filed by rule: from Voice note");
+  });
+
+  it("lib/importFiles' notice after an import with lang \"en\" (classic's import sheet): its English, nothing isolated", () => {
+    const summary = { queued: 3, duplicates: 1, unsupported: 2, failed: 1 };
+    expect(importNotice(summary, "en")).toBe("Importing 3 files. They upload in the background. Skipped 1 file already waiting to upload. "
+      + "Skipped 2 files that are not a voice note, audio or video file. Couldn't read 1 file.");
+    expect(importNotice({ queued: 0, duplicates: 0, unsupported: 0, failed: 0 }, "en")).toBe("Nothing to import.");
+  });
+
+  it("the classic queue (views/main/LibraryQueue) asks and says in English, its notices leading where they always did", async () => {
+    const asked = answerConfirm().mockReturnValue(true);
+    respond("pending_list", [makePendingItem("p1", { title: "Keep me" }), makePendingItem("p2", { title: "Drop me" })]);
+    respond("upload_list", [makeUploadItem("u1", { state: "failed", title: "Zoom call" })]);
+    respond("list_clients", { data: [] });
+    respond("pending_keep", undefined);
+    respond("pending_delete", 1);
+    respond("upload_discard", undefined);
+    const notify = vi.fn();
+    render(<LibraryQueue notify={notify} />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: /^Review$/ }));
+    fireEvent.click(within(screen.getByTestId("pending-p2")).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(asked).toHaveBeenLastCalledWith("Delete this recording? You can undo it for a few seconds.");
+    expect(notify.mock.calls.at(-1)!.slice(0, 2)).toEqual(["Deleted · Undo", false]);
+    fireEvent.click(within(screen.getByTestId("pending-p1")).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(notify).toHaveBeenLastCalledWith("Transcribing…", false, { kind: "library", view: null });
+    fireEvent.click(within(screen.getByTestId("upload-u1")).getByRole("button", { name: "Discard" }));
+    await act(flushAsync);
+    expect(asked).toHaveBeenLastCalledWith("Discard this recording? It can't be undone.");
+    expect(notify).toHaveBeenLastCalledWith("Discarded", false, undefined);
+    for (const [text] of notify.mock.calls) expect(String(text)).not.toMatch(URDU_OR_ISOLATE);
   });
 
   it("the classic Filed by line (views/main/FilingRules) is exactly its English", async () => {

@@ -3,11 +3,11 @@
 // uploads that need the person with Retry / Discard, recordings waiting for another account, and uploads the server is
 // still checking. Built from the v2 card, list rows, buttons and menus only. Every line is in the window's language
 // (desktop Urdu, D1b): its own words through t() and tc(), lib's (the waiting line, the titles, the import's progress,
-// the language question, the call choice's buttons) from their helpers in the same language. The hook's notices and
-// questions are classic's (LibraryQueue.tsx).
+// the call choice's buttons) from their helpers in the same language, and the hook's (useLibraryQueue: its questions,
+// its notices, the language question) in the window's language, as the v2 Library asks it.
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
-import { learnPrompt, MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { heldLine, importProgressText, pendingTitle, uploadTitle, waitingLine, waitingSummary } from "../../lib/pending";
 import type { LibraryQueueState } from "../../views/main/LibraryQueue";
@@ -15,7 +15,7 @@ import { Banner, Button, Card, Dialog, Icons, List, ListRow, Progress, Status, T
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { CALL_WORDS } from "../../lib/callChoice";
-import { isRtl, t, tc, useLanguage } from "../../i18n";
+import { isRtl, lineDir, t, tc, useLanguage } from "../../i18n";
 
 const MAX_TITLE_CHARS = 200;
 
@@ -138,10 +138,6 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false, parts = 
     ];
   };
 
-  // The language question in the window's language: the hook asks it in classic's English.
-  const learnClient = learn ? (clients ?? []).find((c) => c.id === learn.clientId) : undefined;
-  const question = learn ? (learnClient ? learnPrompt(learnClient.name, null, learn.language) : null) ?? learn.question : null;
-
   return (
     <div className="el-library-top" data-testid="library-queue">
       {needs && pending.length > 0 && (
@@ -166,7 +162,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false, parts = 
                       <Button size="sm" variant="primary" onClick={() => void q.answerLearn(true)}>{t("Yes")}</Button>
                       <Button size="sm" variant="quiet" onClick={() => void q.answerLearn(false)}>{t("No")}</Button>
                     </span>}>
-                    {question}
+                    {learn.question}
                   </Banner>
                 </div>
               )}
@@ -178,7 +174,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false, parts = 
                     <ListRow key={item.id} title={title} strong leading={avatar(item)} metaLines={metaLines()}
                       meta={item.restoredDelete ? <>
                         {meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
-                        <span className="el-queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</span>
+                        <span className="el-queue-restored" data-testid="restored-delete" dir={lineDir(CALL_WORDS.restored_delete)}>{CALL_WORDS.restored_delete}</span>
                       </> : meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={t("More for :title", { title })} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />

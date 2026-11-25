@@ -8,10 +8,10 @@
 // Every name the panel, the pills and the tabs show is read when it is asked for, in the window's language (desktop Urdu,
 // D1b): a value is always its id, never its words, so nothing here changes with the language but what is said.
 import type { LibraryItem } from "../../lib/ipc";
-import { SOURCE_APP_LABELS } from "../../lib/format";
+import { calendarDayMonth, SOURCE_APP_LABELS } from "../../lib/format";
 import { languageLabel } from "../../lib/languages";
 import { isWaiting } from "../../lib/organise";
-import { dateLocale, language, t, wordsIn, type Lang } from "../../i18n";
+import { t, wordsIn, type Lang } from "../../i18n";
 
 type Say = (text: string) => string;
 /** Names read when they are asked for: each key's getter says `name(key)` then, in the window's language. */
@@ -113,7 +113,7 @@ export const DATE_NAMES: Record<DatePreset, string> = {
   get today() { return t("Today"); },
   get last_7_days() { return t("Last 7 days"); },
   get this_month() { return t("This month"); },
-  get custom() { return t("Custom"); },
+  get custom() { return t("library_context.date_custom"); },
 };
 
 /**
@@ -585,18 +585,19 @@ export function clearSection(spec: FilterSpec, section: SectionKey): FilterSpec 
  */
 export function pillWords(spec: FilterSpec, section: SectionKey, names: Names): string {
   const c = spec[section]!;
-  const values = section === "date" ? dateWords(c) : c.values.map((v) => optionName(section, v, names)).join(", ");
+  const values = section === "date" ? dateWords(c) : c.values.map((v) => optionName(section, v, names)).join(t("library_context.values_separator"));
   const name = SECTION_NAMES[section];
   return c.op === "is_not" ? t(":section is not: :values", { section: name, values }) : t(":section: :values", { section: name, values });
 }
 
-/** Date's choice in words: a preset's name, or Custom's days ("1 Nov – 15 Nov", "from 1 Nov", "until 15 Nov"). */
+/**
+ * Date's choice in words: a preset's name, or Custom's days ("1 Nov – 15 Nov", "from 1 Nov", "until 15 Nov"), each day
+ * lib/format's (calendarDayMonth: in Urdu Urdu's month).
+ */
 function dateWords(c: Clause): string {
   const preset = c.values[0] as DatePreset;
   if (preset !== "custom") return DATE_PRESETS.includes(preset) ? DATE_NAMES[preset] : preset;
-  // English keeps the system's own order of day and month, as it always has.
-  const locale = language() === "en" ? undefined : dateLocale();
-  const day = (s?: string) => (s ? new Date(`${s}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "");
+  const day = (s?: string) => (s ? calendarDayMonth(s) : "");
   if (c.from && c.to) return t(":from – :to", { from: day(c.from), to: day(c.to) });
   return c.from ? t("from :date", { date: day(c.from) }) : t("until :date", { date: day(c.to) });
 }
