@@ -13,7 +13,7 @@ import { formatWhen, setClock24, whenPart, whenParts } from "../lib/format";
 import { shortWhen } from "../views/main/ActivityCentre";
 import { clientSummary } from "../views/main/ClientAvatar";
 import { rowTime } from "../views/main/LibraryView";
-import { Dialog, ListRow, Toast, ToastRegion } from "../v2/components";
+import { Dialog, ListRow, Sheet, Toast, ToastRegion } from "../v2/components";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RLM = "\u200F";
@@ -168,6 +168,23 @@ describe("whenParts: one part of a date where a place shows only one, in Urdu ne
     expect(balanced(line)).toBe(true);
     expect(line.endsWith(`${PDI} · 3 folders`)).toBe(true);
     expect(clientSummary(0, at(23, 14))).toBe("No recordings yet");
+  });
+});
+
+describe("D-247: a Dialog's and a Sheet's ×", () => {
+  it("is named Close in the window's language; a caller's own word wins", async () => {
+    const { unmount } = render(<><Dialog open title="Rename" onClose={() => undefined} /><Sheet open title="Request files" onClose={() => undefined} /></>);
+    expect(document.querySelectorAll('[data-close="true"]')).toHaveLength(2);
+    for (const button of document.querySelectorAll('[data-close="true"]')) expect(button).toHaveAttribute("aria-label", "Close");
+    unmount();
+    // The app's own catalogue (this file's other cases run on an empty one).
+    resetLanguageForTests();
+    await act(() => setLanguage("ur", { root: false }));
+    const urduView = render(<><Dialog open title="Rename" onClose={() => undefined} /><Sheet open title="Request files" onClose={() => undefined} /></>);
+    for (const button of document.querySelectorAll('[data-close="true"]')) expect(button).toHaveAttribute("aria-label", "بند کریں");
+    urduView.unmount();
+    render(<Dialog open title="Rename" closeLabel="Dismiss" onClose={() => undefined} />);
+    expect(document.querySelector('[data-close="true"]')).toHaveAttribute("aria-label", "Dismiss");
   });
 });
 
