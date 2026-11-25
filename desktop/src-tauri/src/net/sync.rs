@@ -146,6 +146,11 @@ pub mod paths {
         data_dir.join("library.json")
     }
 
+    /// Server sessions to erase from the Trash once deleted (a call rule's "Don't record", contract 2.0.0-w).
+    pub fn purges(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("purges.json")
+    }
+
     /// Activity notifications already shown as OS notifications (B18).
     pub fn activity_seen(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("activity_seen.json")

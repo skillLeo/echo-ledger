@@ -1787,5 +1787,7 @@
   "Copy without timestamps": "وقت کے بغیر کاپی کریں",
   ":toggle plays · :back5 / :forward5 :short · :back10 / :forward10 :long": ":toggle سے چلائیں · :back5 / :forward5 سے :short · :back10 / :forward10 سے :long",
   "This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.": "یہ ریکارڈنگ ٹرانسکرائب نہیں ہوئی۔ اپنی Groq کلید ترتیبات › ٹرانسکرپشن کی کلید میں شامل کریں۔",
-  "PDF (print) opens a print page in your browser: choose Save as PDF there.": "PDF (پرنٹ) آپ کے براؤزر میں پرنٹ والا صفحہ کھولتا ہے: وہاں Save as PDF چنیں۔"
+  "PDF (print) opens a print page in your browser: choose Save as PDF there.": "PDF (پرنٹ) آپ کے براؤزر میں پرنٹ والا صفحہ کھولتا ہے: وہاں Save as PDF چنیں۔",
+  "your call rules say not to record calls in it": "آپ کے کال کے قواعد کے مطابق اس میں کالیں ریکارڈ نہیں ہوتیں",
+  "Not recorded: your call rules say not to record calls in it": "ریکارڈ نہیں ہوتی: آپ کے کال کے قواعد کے مطابق اس میں کالیں ریکارڈ نہیں ہوتیں"
 }

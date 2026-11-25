@@ -1267,3 +1267,30 @@ fn the_recorder_counts_what_the_other_side_delivered_and_whether_it_was_more_tha
     assert_eq!(link.system_frames.load(std::sync::atomic::Ordering::Relaxed), 1_600 + 5 * 1_600);
     assert!(output.duration_ms >= 1_000);
 }
+
+#[test]
+fn a_contact_s_dont_record_stops_and_deletes_with_nothing_queued_but_its_deletion() {
+    // Contract 2.0.0-w, lead decision 25: on the desktop a contact is known only once the call's window names it, so the
+    // recording stops then, captions and Live Translate with it, its folder goes, no upload and no end are queued, and
+    // its server session is deleted and erased from the Trash. One notice says "stopped and deleted".
+    let actions = include_str!("../src/actions.rs");
+    let body = |start: &str| {
+        let from = &actions[actions.find(start).unwrap_or_else(|| panic!("{start}"))..];
+        from[..from.find("\n}\n").unwrap()].to_string()
+    };
+    let caller = body("pub fn set_recording_caller(");
+    assert!(caller.contains("Policy::of(&state).stops_for_caller(&name, &info.source_app, auto)"), "{caller}");
+    assert!(caller.contains("stop_for_contact_rule(&app, info.client_ref, name)"));
+    let stop = body("async fn stop_for_contact_rule(");
+    let order = ["crate::translate::stop(app);", "end_capture(app).await", "drop_for_rule(app,"];
+    let at: Vec<usize> = order.iter().map(|step| stop.find(step).unwrap_or_else(|| panic!("{step}"))).collect();
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "translate stops, then the capture (with its captions), then what was written goes");
+    for never in ["decide_finished(", "enqueue_upload", "queue_call_end", "note_call_end"] {
+        assert!(!stop.contains(never), "{never}: nothing is kept or sent");
+    }
+    let drop = body("fn drop_for_rule(");
+    assert!(drop.contains("delete_recording_folder(dir)") && drop.contains("queue_erase(app, id)") && drop.contains("stopped_words(name)"));
+    assert!(!drop.contains("queue_discard(app"), "deleted and erased, never only to the Trash");
+    assert!(desktop_lib::call_rules::stopped_words(Some("Ahmed Khan")).starts_with("Stopped and deleted"));
+    assert!(!desktop_lib::call_rules::stopped_words(None).to_lowercase().contains("not recorded"));
+}

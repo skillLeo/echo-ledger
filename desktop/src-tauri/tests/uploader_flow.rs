@@ -2197,3 +2197,34 @@ async fn maintenance_stops_the_usage_and_discard_drains_without_dropping_anythin
     assert!(discards.done.is_empty(), "a refused version deletes nothing yet, and forgets nothing");
     assert_eq!(discards.stopped.as_ref().and_then(AppError::hold), Some(desktop_lib::error::ServerHold::UpdateRequired));
 }
+
+#[tokio::test]
+async fn a_call_rule_s_session_is_deleted_then_erased_from_the_trash_and_kept_queued_while_the_trash_is_out_of_reach() {
+    use desktop_lib::net::uploader::{PurgeSet, drain_discards_erasing};
+    // Contract 2.0.0-w (decision 25): DELETE /api/sessions/{id} only moves it to the Trash for 48 h; DELETE /api/bin/{id}
+    // erases it. A session already gone (404) or already erased (404) counts as done.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("DELETE", "/api/sessions/R1", Reply::empty(204))
+            .fixed("DELETE", "/api/bin/R1", Reply::empty(204))
+            .fixed("DELETE", "/api/sessions/R2", Reply::json(404, json!({"message": "Not found."})))
+            .fixed("DELETE", "/api/bin/R2", Reply::json(404, json!({"message": "Not found."})))
+            .fixed("DELETE", "/api/sessions/D1", Reply::empty(204))
+            .fixed("DELETE", "/api/sessions/R3", Reply::empty(204))
+            .fixed("DELETE", "/api/bin/R3", Reply::json(503, json!({"message": "Service Unavailable"}))),
+    );
+    let mut purge = PurgeSet::default();
+    for id in ["R1", "R2", "R3"] {
+        purge.add(id);
+    }
+    purge.add("R1");
+    assert_eq!(purge.items, ["R1", "R2", "R3"], "once each");
+    let ids: Vec<String> = ["R1", "R2", "D1", "R3"].iter().map(|s| s.to_string()).collect();
+    let drain = drain_discards_erasing(&api(&server), &ids, &purge).await;
+    assert_eq!(drain.done, ["R1", "R2", "D1"]);
+    assert_eq!(drain.erased, ["R1", "R2"]);
+    assert!(server.requests_to("DELETE", "/api/bin/D1").is_empty(), "a plain discard stays in the Trash for its 48 hours");
+    assert!(drain.stopped.is_some(), "R3 waits: deleted again next time (404) and erased then");
+    let order: Vec<String> = server.requests().iter().map(|r| r.path().to_string()).collect();
+    assert_eq!(order, ["/api/sessions/R1", "/api/bin/R1", "/api/sessions/R2", "/api/bin/R2", "/api/sessions/D1", "/api/sessions/R3", "/api/bin/R3"]);
+}

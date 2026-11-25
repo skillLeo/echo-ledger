@@ -13,6 +13,7 @@ const NOT_RECORDED: Record<IgnoreReason, string> = {
   get never_record() { return t("it's on your never-record list"); },
   get auto_off() { return t("auto-record is off"); },
   get app_off() { return t("auto-record is off for this app"); },
+  get call_rule() { return t("your call rules say not to record calls in it"); },
 };
 /** The same, as a whole line ("Not recorded: …"): one sentence each, never glued. */
 const NOT_RECORDED_LINE: Record<IgnoreReason, string> = {
@@ -22,6 +23,7 @@ const NOT_RECORDED_LINE: Record<IgnoreReason, string> = {
   get never_record() { return t("Not recorded: it's on your never-record list"); },
   get auto_off() { return t("Not recorded: auto-record is off"); },
   get app_off() { return t("Not recorded: auto-record is off for this app"); },
+  get call_rule() { return t("Not recorded: your call rules say not to record calls in it"); },
 };
 const knownReason = (reason: IgnoreReason | null | undefined): reason is IgnoreReason => !!reason && reason in NOT_RECORDED;
 

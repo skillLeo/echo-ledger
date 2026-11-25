@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
 use crate::net::models::{CallRule, CallRules};
-use crate::settings::{AfterCall, AskWhen, Settings};
+use crate::settings::{AfterCall, AfterEachCall, AskWhen, Settings};
 
 /// The interface flag (docs/API.md "Call rules (since 2.0.0-w)").
 pub const FLAG: &str = "call_rules";
@@ -30,6 +30,9 @@ pub const ASK: &str = "ask";
 pub const ALWAYS_TRANSCRIBE: &str = "always_transcribe";
 pub const ALWAYS_AUDIO: &str = "always_audio";
 pub const DONT_RECORD: &str = "dont_record";
+
+/// Short calls (`short_calls: dont_keep`): shorter than this many seconds, a call isn't kept. The server's, fixed.
+pub const SHORT_CALL_SECONDS: u32 = 30;
 
 /// What the app says when a change can't reach the server: a rule is a deliberate act, so it is never queued.
 pub const OFFLINE_TEXT: &str = "This can't be saved now: EchoLedger can't reach the server. Try again when you're online.";
@@ -51,23 +54,173 @@ pub struct Kept {
     pub rules: CallRules,
 }
 
+/// The one notice when a call rule stopped a recording (decision 25: never "not recorded", as it was, for a moment).
+pub fn stopped_words(name: Option<&str>) -> String {
+    match name.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(name) => format!("Stopped and deleted the recording: your call rule for {name} says Don't record."),
+        None => "Stopped and deleted the recording: your call rules say Don't record for this call.".to_string(),
+    }
+}
+
+/// The file's answer in memory, by its path: the detection reads it every second, the disk only when it changed.
+static MEMORY: std::sync::Mutex<Option<(PathBuf, Option<Kept>)>> = std::sync::Mutex::new(None);
+
+fn remember(file: &Path, kept: Option<Kept>) {
+    *MEMORY.lock().unwrap_or_else(|p| p.into_inner()) = Some((file.to_path_buf(), kept));
+}
+
 /// The answer kept for `sign_in`, or none (none kept, another sign-in's, or a file that can't be read).
 pub fn load(data_dir: &Path, sign_in: &str) -> Option<CallRules> {
-    let kept: Kept = serde_json::from_slice(&std::fs::read(path(data_dir)).ok()?).ok()?;
-    (kept.sign_in == sign_in).then_some(kept.rules)
+    let file = path(data_dir);
+    let known = MEMORY.lock().unwrap_or_else(|p| p.into_inner()).as_ref().filter(|(at, _)| *at == file).map(|(_, kept)| kept.clone());
+    let kept = match known {
+        Some(kept) => kept,
+        None => {
+            let read: Option<Kept> = std::fs::read(&file).ok().and_then(|b| serde_json::from_slice(&b).ok());
+            remember(&file, read.clone());
+            read
+        }
+    };
+    kept.filter(|k| k.sign_in == sign_in).map(|k| k.rules)
 }
 
 pub fn save(data_dir: &Path, sign_in: &str, rules: &CallRules) -> AppResult<()> {
     let file = path(data_dir);
     let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&Kept { sign_in: sign_in.to_string(), rules: rules.clone() })?)?;
-    std::fs::rename(tmp, file)?;
+    let kept = Kept { sign_in: sign_in.to_string(), rules: rules.clone() };
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&kept)?)?;
+    std::fs::rename(tmp, &file)?;
+    remember(&file, Some(kept));
     Ok(())
 }
 
 /// Forgets what was kept (the flag is off, signed out).
 pub fn clear(data_dir: &Path) {
-    let _ = std::fs::remove_file(path(data_dir));
+    let file = path(data_dir);
+    let _ = std::fs::remove_file(&file);
+    remember(&file, None);
+}
+
+/// A contact's name as rules match it (the server's `cleanName` and key): trimmed, each run of whitespace one space, the
+/// first 120 characters, in lower case; none for no name.
+pub fn name_key(name: &str) -> Option<String> {
+    let clean: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect();
+    (!clean.is_empty()).then(|| clean.to_lowercase())
+}
+
+/// The action for a call (pure; the server's `resolve`, docs/API.md "Which rule wins"): the first step with a rule, the
+/// contact (by name: only a rule with no number, as the desktop knows no numbers), then the Source (contact groups are
+/// the phone's: skipped), else the default (`after_call`, `ask` when never chosen). A rule's `ask` follows the default
+/// and stops the search, except that a `dont_record` at a later step or the default still applies.
+pub fn resolve(rules: &CallRules, caller_name: Option<&str>, source_app: Option<&str>) -> String {
+    let default = rules.after_call.clone().unwrap_or_else(|| ASK.to_string());
+    let caller = caller_name.and_then(name_key);
+    let contact = caller.as_ref().and_then(|key| {
+        rules.rules.iter().find(|r| r.kind == "contact" && r.number.as_deref().is_none_or(str::is_empty) && r.name.as_deref().and_then(name_key).as_ref() == Some(key))
+    });
+    let source = source_app.and_then(|app| rules.rules.iter().find(|r| r.kind == "source" && r.source_app.as_deref() == Some(app)));
+    let steps: Vec<&CallRule> = [contact, source].into_iter().flatten().collect();
+    let Some(first) = steps.first() else { return default };
+    if first.action != ASK {
+        return first.action.clone();
+    }
+    let later_dont = steps[1..].iter().any(|r| r.action == DONT_RECORD) || default == DONT_RECORD;
+    if later_dont { DONT_RECORD.to_string() } else { default }
+}
+
+/// What a call follows (pure): while the account's rules are kept (the flag on), the account's settings and rules; else
+/// this computer's own settings, as before. Rules apply only to calls recorded by themselves (lead decision 28): a
+/// recording started by hand is the person's own act, and asks.
+#[derive(Clone, Debug, Default)]
+pub struct Policy {
+    account: Option<CallRules>,
+}
+
+/// What happens to a call once it ends, by the policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallAfter {
+    Choose(AfterCall),
+    /// Not recorded: what was written goes and nothing is uploaded.
+    DontRecord,
+}
+
+impl Policy {
+    /// The policy now: the account's while the flag is on and its answer is kept.
+    pub fn of(state: &crate::AppState) -> Self {
+        Self { account: kept(state) }
+    }
+
+    /// The account's rules (tests, and an answer just read).
+    pub fn account(rules: CallRules) -> Self {
+        Self { account: Some(rules) }
+    }
+
+    pub fn follows_account(&self) -> bool {
+        self.account.is_some()
+    }
+
+    /// Whether calls are recorded by themselves: this computer's switch, or always while the account decides (its
+    /// `dont_record` then decides each call).
+    pub fn auto_mode(&self, settings: &Settings) -> bool {
+        self.account.is_some() || settings.auto_mode
+    }
+
+    /// Whether a call in `source_app` isn't recorded, decided before its caller is known (a Source's or the default's
+    /// `dont_record`; a contact's comes once the name is known).
+    pub fn blocks_at_start(&self, source_app: &str) -> bool {
+        self.account.as_ref().is_some_and(|r| resolve(r, None, Some(source_app)) == DONT_RECORD)
+    }
+
+    /// When to ask under Ask me.
+    pub fn ask_when(&self, settings: &Settings) -> AskWhen {
+        match &self.account {
+            Some(r) if r.ask_when.as_deref() == Some("at_start") => AskWhen::Start,
+            Some(_) => AskWhen::After,
+            None => settings.ask_when,
+        }
+    }
+
+    /// Calls shorter than this many seconds aren't kept (0: all are): the account's Short calls, at the server's fixed
+    /// 30 seconds, or this computer's own choice.
+    pub fn short_call_seconds(&self, settings: &Settings) -> u32 {
+        match &self.account {
+            Some(r) if r.short_calls.as_deref() == Some("keep") => 0,
+            Some(_) => SHORT_CALL_SECONDS,
+            None => settings.skip_calls_shorter_than_s,
+        }
+    }
+
+    /// What a call does once it ends: by the rules for one recorded by itself (with its caller's name, when known, and
+    /// its Source); a call started by hand asks unless this computer's own choice says otherwise.
+    pub fn after(&self, settings: &Settings, caller_name: Option<&str>, source_app: &str, auto: bool) -> CallAfter {
+        let Some(rules) = &self.account else { return CallAfter::Choose(settings.after_call) };
+        if !auto {
+            return CallAfter::Choose(AfterCall::Ask);
+        }
+        match resolve(rules, caller_name, Some(source_app)).as_str() {
+            DONT_RECORD => CallAfter::DontRecord,
+            ALWAYS_TRANSCRIBE => CallAfter::Choose(AfterCall::AlwaysTranscribe),
+            ALWAYS_AUDIO => CallAfter::Choose(AfterCall::AlwaysAudio),
+            _ => CallAfter::Choose(AfterCall::Ask),
+        }
+    }
+
+    /// "After each call" for the start banner and the card's offers: the account's for this Source, or this computer's.
+    pub fn after_each_call(&self, settings: &Settings, source_app: Option<&str>) -> AfterEachCall {
+        let Some(rules) = &self.account else { return settings.after_each_call() };
+        match resolve(rules, None, source_app).as_str() {
+            DONT_RECORD => AfterEachCall::Off,
+            ALWAYS_TRANSCRIBE => AfterEachCall::AlwaysTranscribe,
+            ALWAYS_AUDIO => AfterEachCall::AlwaysAudio,
+            _ => AfterEachCall::Ask,
+        }
+    }
+
+    /// Whether the contact a recording turned out to be with isn't to be recorded: a call recorded by itself whose
+    /// caller's name meets a `dont_record` (decision 25: it stops, and what was written goes).
+    pub fn stops_for_caller(&self, caller_name: &str, source_app: &str, auto: bool) -> bool {
+        auto && self.account.as_ref().is_some_and(|r| resolve(r, Some(caller_name), Some(source_app)) == DONT_RECORD)
+    }
 }
 
 /// This computer's own choice, as the first sync sends it when the account has none (pure): Don't record while calls
@@ -268,6 +421,84 @@ mod tests {
         let busy = AppError::Server { status: 429, message: String::new(), code: None, retry_after_secs: Some(30) };
         assert_eq!(change_error(busy).to_string(), TOO_MANY_CHANGES_TEXT);
         assert_eq!(change_error(gone(Some("not_found"))).to_string(), FLAG_OFF_TEXT);
+    }
+
+    fn rules_of(after_call: Option<&str>, rules: Vec<CallRule>) -> CallRules {
+        CallRules { after_call: after_call.map(str::to_string), rules, ..CallRules::default() }
+    }
+
+    #[test]
+    fn a_name_is_matched_as_the_server_keys_it() {
+        assert_eq!(name_key("  Ahmed \t  KHAN \u{00A0} "), Some("ahmed khan".into()));
+        assert_eq!(name_key("   "), None);
+        assert_eq!(name_key(&"x".repeat(130)).map(|k| k.chars().count()), Some(120));
+        assert_eq!(name_key("ÉMILE Ünal"), Some("émile ünal".into()));
+        assert_eq!(name_key("عائشہ  خان"), Some("عائشہ خان".into()));
+    }
+
+    #[test]
+    fn which_rule_wins_contact_then_source_then_the_default() {
+        let ahmed = |action: &str| rule("c1", "contact", Some("Ahmed Khan"), None, action);
+        let zoom = |action: &str| rule("s1", "source", None, Some("zoom"), action);
+        // The contact first (by name only for a rule without a number), then the Source, then the default.
+        assert_eq!(resolve(&rules_of(Some(ALWAYS_AUDIO), vec![ahmed(ALWAYS_TRANSCRIBE), zoom(DONT_RECORD)]), Some(" ahmed  khan"), Some("zoom")), ALWAYS_TRANSCRIBE);
+        assert_eq!(resolve(&rules_of(Some(ALWAYS_AUDIO), vec![ahmed(ALWAYS_TRANSCRIBE), zoom(DONT_RECORD)]), Some("Sara"), Some("zoom")), DONT_RECORD);
+        assert_eq!(resolve(&rules_of(Some(ALWAYS_AUDIO), vec![zoom(DONT_RECORD)]), None, Some("google_meet")), ALWAYS_AUDIO);
+        assert_eq!(resolve(&rules_of(None, vec![]), None, Some("zoom")), ASK, "never chosen: ask");
+        // A contact rule with a number never matches by name (the desktop knows no numbers).
+        let numbered = CallRule { number: Some("+923001234567".into()), ..ahmed(DONT_RECORD) };
+        assert_eq!(resolve(&rules_of(Some(ASK), vec![numbered]), Some("Ahmed Khan"), Some("zoom")), ASK);
+        // Groups are the phone's: skipped.
+        assert_eq!(resolve(&rules_of(Some(ALWAYS_AUDIO), vec![rule("g1", "group", None, None, DONT_RECORD)]), Some("Ahmed Khan"), Some("zoom")), ALWAYS_AUDIO);
+    }
+
+    #[test]
+    fn ask_follows_the_default_and_stops_the_search_but_a_later_dont_record_wins() {
+        let ahmed_ask = rule("c1", "contact", Some("Ahmed Khan"), None, ASK);
+        // "Ask me" for Ahmed: the default (Save audio only), not Zoom's Transcribe.
+        let rules = rules_of(Some(ALWAYS_AUDIO), vec![ahmed_ask.clone(), rule("s1", "source", None, Some("zoom"), ALWAYS_TRANSCRIBE)]);
+        assert_eq!(resolve(&rules, Some("Ahmed Khan"), Some("zoom")), ALWAYS_AUDIO);
+        // "Ask me" for Ahmed and "Don't record" for Zoom: a Zoom call with Ahmed is not recorded (privacy first).
+        let rules = rules_of(Some(ALWAYS_TRANSCRIBE), vec![ahmed_ask.clone(), rule("s1", "source", None, Some("zoom"), DONT_RECORD)]);
+        assert_eq!(resolve(&rules, Some("Ahmed Khan"), Some("zoom")), DONT_RECORD);
+        // Nor with the default's "Don't record".
+        assert_eq!(resolve(&rules_of(Some(DONT_RECORD), vec![ahmed_ask]), Some("Ahmed Khan"), Some("zoom")), DONT_RECORD);
+        // Any other action at an earlier step wins: "Transcribe every call" for Ahmed records him even on Zoom.
+        let rules = rules_of(Some(DONT_RECORD), vec![rule("c1", "contact", Some("Ahmed Khan"), None, ALWAYS_TRANSCRIBE), rule("s1", "source", None, Some("zoom"), DONT_RECORD)]);
+        assert_eq!(resolve(&rules, Some("Ahmed Khan"), Some("zoom")), ALWAYS_TRANSCRIBE);
+    }
+
+    #[test]
+    fn the_policy_is_this_computer_s_own_while_the_flag_is_off_and_the_account_s_while_on() {
+        let mine = Settings { auto_mode: false, after_call: AfterCall::AlwaysAudio, ask_when: AskWhen::Start, skip_calls_shorter_than_s: 60, ..Settings::default() };
+        let own = Policy::default();
+        assert!(!own.follows_account());
+        assert!(!own.auto_mode(&mine));
+        assert_eq!((own.ask_when(&mine), own.short_call_seconds(&mine)), (AskWhen::Start, 60));
+        assert_eq!(own.after(&mine, Some("Ahmed Khan"), "zoom", true), CallAfter::Choose(AfterCall::AlwaysAudio));
+        assert!(!own.blocks_at_start("zoom"));
+
+        let account = Policy::account(CallRules {
+            after_call: Some(ALWAYS_TRANSCRIBE.into()),
+            ask_when: Some("after_call".into()),
+            short_calls: Some("dont_keep".into()),
+            short_call_seconds: Some(45),
+            rules: vec![rule("s1", "source", None, Some("zoom"), DONT_RECORD), rule("c1", "contact", Some("Ahmed Khan"), None, DONT_RECORD)],
+            ..CallRules::default()
+        });
+        assert!(account.auto_mode(&mine), "the account decides each call");
+        assert_eq!((account.ask_when(&mine), account.short_call_seconds(&mine)), (AskWhen::After, SHORT_CALL_SECONDS), "the server's 30, fixed");
+        assert!(account.blocks_at_start("zoom") && !account.blocks_at_start("google_meet"));
+        assert_eq!(account.after(&mine, None, "google_meet", true), CallAfter::Choose(AfterCall::AlwaysTranscribe));
+        assert_eq!(account.after(&mine, Some("Ahmed Khan"), "google_meet", true), CallAfter::DontRecord);
+        assert!(account.stops_for_caller("ahmed khan", "google_meet", true));
+        // Started by hand (lead decision 28): the person's own act asks, and no rule stops it.
+        assert_eq!(account.after(&mine, Some("Ahmed Khan"), "zoom", false), CallAfter::Choose(AfterCall::Ask));
+        assert!(!account.stops_for_caller("Ahmed Khan", "google_meet", false));
+        let keep = Policy::account(CallRules { short_calls: Some("keep".into()), ..CallRules::default() });
+        assert_eq!(keep.short_call_seconds(&mine), 0);
+        assert_eq!(account.after_each_call(&mine, Some("zoom")), AfterEachCall::Off);
+        assert_eq!(account.after_each_call(&mine, Some("google_meet")), AfterEachCall::AlwaysTranscribe);
     }
 
     #[test]

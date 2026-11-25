@@ -50,6 +50,9 @@ pub enum IgnoreReason {
     AutoOff,
     /// The call app is switched off in Settings → Auto-record.
     AppOff,
+    /// The person's call rules say not to record calls in this app (contract 2.0.0-w: a Source's or the default's
+    /// "Don't record", decided before the caller is known).
+    CallRule,
 }
 
 impl IgnoreReason {
@@ -61,6 +64,7 @@ impl IgnoreReason {
             IgnoreReason::NeverRecord => "never_record",
             IgnoreReason::AutoOff => "auto_off",
             IgnoreReason::AppOff => "app_off",
+            IgnoreReason::CallRule => "call_rule",
         }
     }
 }
@@ -70,6 +74,15 @@ impl IgnoreReason {
 pub fn apply_app_switches(verdict: Verdict, apps: &HashMap<String, bool>) -> Verdict {
     match verdict {
         Verdict::Record(app) if apps.get(app.as_str()) == Some(&false) => Verdict::Ignore(IgnoreReason::AppOff),
+        other => other,
+    }
+}
+
+/// The person's call rules (contract 2.0.0-w): a call app whose calls they don't record (its Source's or the default's
+/// "Don't record") is not started; recording it by hand still works.
+pub fn apply_call_rules(verdict: Verdict, policy: &crate::call_rules::Policy) -> Verdict {
+    match verdict {
+        Verdict::Record(app) if policy.blocks_at_start(app.as_str()) => Verdict::Ignore(IgnoreReason::CallRule),
         other => other,
     }
 }

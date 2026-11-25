@@ -1087,26 +1087,73 @@ pub async fn drain_usage(api: &ApiClient, reports: &[UsageReport]) -> UsageDrain
 #[derive(Debug, Default)]
 pub struct DiscardDrain {
     pub done: Vec<String>,
+    /// Those also erased from the Trash (a call rule's "Don't record").
+    pub erased: Vec<String>,
     pub stopped: Option<AppError>,
 }
 
 /// `DELETE /api/sessions/{id}` for each queued id: `204` and `404` (already gone) are done; a transient failure
 /// stops the drain.
 pub async fn drain_discards(api: &ApiClient, ids: &[String]) -> DiscardDrain {
+    drain_discards_erasing(api, ids, &PurgeSet::default()).await
+}
+
+/// The same, and a session in `purge` (a call rule's "Don't record") is then erased from the Trash too (`DELETE
+/// /api/bin/{id}`): gone (`404`) or refused for good counts as done; a failure that may pass keeps the session queued,
+/// so the next cycle deletes it again (already in the Trash: `404`) and erases it.
+pub async fn drain_discards_erasing(api: &ApiClient, ids: &[String], purge: &PurgeSet) -> DiscardDrain {
     let mut out = DiscardDrain::default();
     for id in ids {
         match api.delete_session(id).await {
-            Ok(()) => out.done.push(id.clone()),
-            Err(e) if e.status() == Some(404) => out.done.push(id.clone()),
+            Ok(()) => {}
+            Err(e) if e.status() == Some(404) => {}
             Err(e) if e.is_permanent() && !matches!(e, AppError::NotPaired) => {
                 eprintln!("[echoledger] deleting session {id} refused: {e}");
-                out.done.push(id.clone());
             }
             Err(e) => {
                 out.stopped = Some(e);
                 break;
             }
         }
+        if purge.contains(id) {
+            match api.erase_from_bin(id).await {
+                Ok(()) => {}
+                Err(e) if e.status() == Some(404) || e.is_permanent() && !matches!(e, AppError::NotPaired) => {}
+                Err(e) => {
+                    out.stopped = Some(e);
+                    break;
+                }
+            }
+            out.erased.push(id.clone());
+        }
+        out.done.push(id.clone());
     }
     out
+}
+
+/// Sessions to erase from the Trash once deleted (`purges.json`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PurgeSet {
+    #[serde(default)]
+    pub items: Vec<String>,
+}
+
+impl PurgeSet {
+    pub fn load(path: &Path) -> Self {
+        load_json(path)
+    }
+
+    pub fn save(&self, path: &Path) -> AppResult<()> {
+        save_json(path, self)
+    }
+
+    pub fn add(&mut self, id: &str) {
+        if !id.is_empty() && !self.contains(id) {
+            self.items.push(id.to_string());
+        }
+    }
+
+    pub fn contains(&self, id: &str) -> bool {
+        self.items.iter().any(|i| i == id)
+    }
 }

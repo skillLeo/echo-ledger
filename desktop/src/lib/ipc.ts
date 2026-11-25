@@ -43,7 +43,7 @@ export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attenti
 export type BudgetState = "ok" | "warn" | "reached";
 export type AskAnswer = "record" | "ignore" | "always_ignore";
 export type MicDecision = "auto_record" | "recording" | "ignored" | "ask" | "off";
-export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off";
+export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off" | "call_rule";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionWidth = "narrow" | "normal" | "wide";
 /** `reopen`: Screen Recording allowed in System Settings while EchoLedger ran, used once it is quit and reopened. */

@@ -19,7 +19,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
 use classify::SourceApp;
-use decide::{AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, apply_app_switches, decide, identify, is_browser_tree, pick_candidate};
+use decide::{AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, apply_app_switches, apply_call_rules, decide, identify, is_browser_tree, pick_candidate};
 use sites::{NEVER, SiteRule, strip_browser_suffix, url_host};
 use state::MicUseEvent;
 
@@ -45,7 +45,7 @@ pub struct MicUser {
     pub site: Option<String>,
     /// "auto_record" | "recording" | "ignored" | "ask" | "off".
     pub decision: String,
-    /// When ignored: "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off".
+    /// When ignored: "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off" | "call_rule".
     pub reason: Option<String>,
 }
 
@@ -275,11 +275,13 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     let rules = &settings.site_rules;
     // A viewer records nothing (v1.5): no automatic start and no "Record?" chip, as if auto-record were off.
     let can_record = state.viewer_refusal().is_none();
-    let auto_mode = settings.auto_mode && can_record;
+    // The account's call rules while the flag is on (2.0.0-w), else this computer's own switch.
+    let policy = crate::call_rules::Policy::of(&state);
+    let auto_mode = policy.auto_mode(settings) && can_record;
     let ask_unknown = settings.ask_unknown_apps && can_record;
     let mut verdicts: Vec<Verdict> = trees
         .iter()
-        .map(|t| apply_app_switches(decide(t, rules, ask_unknown, auto_mode), &settings.auto_record_apps))
+        .map(|t| apply_call_rules(apply_app_switches(decide(t, rules, ask_unknown, auto_mode), &settings.auto_record_apps), &policy))
         .collect();
 
     let (event, recorded, chip) = {

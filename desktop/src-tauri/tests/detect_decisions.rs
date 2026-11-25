@@ -2,9 +2,11 @@
 //! label is decided once at start (plan A1.1-A1.9). Everything here is pure: trees are built by hand.
 
 use desktop_lib::detect::classify::SourceApp;
+use desktop_lib::call_rules::Policy;
 use desktop_lib::detect::decide::{
-    ASK_AGAIN_AFTER_MS, AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, decide, identify, pick_candidate,
+    ASK_AGAIN_AFTER_MS, AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, apply_call_rules, decide, identify, pick_candidate,
 };
+use desktop_lib::net::models::{CallRule, CallRules};
 use desktop_lib::detect::sites::{
     SiteRule, SiteVerdict, builtin_rules, match_site, parse_osascript_list, strip_browser_suffix, url_host,
 };
@@ -635,4 +637,22 @@ fn the_recorded_tree_stays_the_meeting_while_it_records() {
     assert_eq!((found.root_pid, found.app), (300, SourceApp::Whatsapp));
     // The recorded tree is gone: no meeting window for now.
     assert_eq!(meeting_tree(&[tree(900, "Zoom.exe", true, &[])], &[], Some((300, SourceApp::Whatsapp))), None);
+}
+
+// ---- Call rules (contract 2.0.0-w) ----------------------------------------------------------------------------------
+
+#[test]
+fn a_source_or_default_dont_record_never_starts_capture_and_says_why() {
+    let source = |app: &str, action: &str| CallRule { id: app.into(), kind: "source".into(), source_app: Some(app.into()), action: action.into(), ..CallRule::default() };
+    let rules = Policy::account(CallRules { after_call: Some("always_audio".into()), rules: vec![source("zoom", "dont_record"), source("google_meet", "ask")], ..CallRules::default() });
+    assert_eq!(apply_call_rules(Verdict::Record(SourceApp::Zoom), &rules), Verdict::Ignore(IgnoreReason::CallRule));
+    assert_eq!(apply_call_rules(Verdict::Record(SourceApp::GoogleMeet), &rules), Verdict::Record(SourceApp::GoogleMeet), "ask: the default records");
+    assert_eq!(IgnoreReason::CallRule.as_str(), "call_rule");
+    // The default's Don't record: no call starts by itself, but a Source rule that records still does.
+    let quiet = Policy::account(CallRules { after_call: Some("dont_record".into()), rules: vec![source("zoom", "always_transcribe")], ..CallRules::default() });
+    assert_eq!(apply_call_rules(Verdict::Record(SourceApp::MicrosoftTeams), &quiet), Verdict::Ignore(IgnoreReason::CallRule));
+    assert_eq!(apply_call_rules(Verdict::Record(SourceApp::Zoom), &quiet), Verdict::Record(SourceApp::Zoom));
+    // The flag off (no account rules): nothing changes.
+    assert_eq!(apply_call_rules(Verdict::Record(SourceApp::Zoom), &Policy::default()), Verdict::Record(SourceApp::Zoom));
+    assert_eq!(apply_call_rules(Verdict::Ask, &rules), Verdict::Ask);
 }
