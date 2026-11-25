@@ -1025,14 +1025,15 @@ pub struct EndDrain {
     pub stopped: Option<AppError>,
 }
 
-/// `PATCH /api/sessions/{id}` with each queued end, oldest first: `200` is done; `404` (gone), `409` (`not_recording`:
-/// already decided) and `422` drop it; anything else stops the drain so the rest waits for the next cycle.
+/// `PATCH /api/sessions/{id}` with each queued end, oldest first: `200` is done; a refusal for good (`404` gone, `409`
+/// `not_recording` already decided, `422`, a `403` after a role change…) drops it, as `drain_usage` does, so it never
+/// blocks the ends behind it; anything transient (or `NotPaired`) stops the drain so the rest waits for the next cycle.
 pub async fn drain_ends(api: &ApiClient, ends: &[CallEnd]) -> EndDrain {
     let mut out = EndDrain::default();
     for end in ends {
         match api.end_call(&end.session_id, &end.ended_at, end.duration_ms).await {
             Ok(()) => out.done.push(end.session_id.clone()),
-            Err(e) if matches!(e.status(), Some(404 | 409 | 422)) => out.done.push(end.session_id.clone()),
+            Err(e) if e.is_permanent() && !matches!(e, AppError::NotPaired) => out.done.push(end.session_id.clone()),
             Err(e) => {
                 out.stopped = Some(e);
                 break;

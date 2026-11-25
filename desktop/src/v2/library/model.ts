@@ -92,12 +92,13 @@ export function rowState(item: LibraryItem, now: number = Date.now()): RowState 
   const state = (key: RowStateKey): RowState => ({ key, text: STATE_WORDS[key], tone: key === "failed" ? "danger" : "quiet" });
   if (item.transcript?.final_error_code === "no_audio") return state("no_audio");
   const sent = facetsOf(item)?.state;
-  if (sent === "transcribed") return null;
-  if (sent && SERVER_STATES.has(sent)) return state(sent as RowStateKey);
   // A call over and waiting for the person's choice (the session is `recording`, isWaiting): the contract's Status is
   // processing, so its state is Waiting, whatever Status this computer works out (it counts the call in no Status). A
-  // call still being recorded is Waiting to upload (contract 2.0.0-z).
-  if (item.status === "recording") return state(isWaiting(item, now) ? "waiting" : "waiting_to_upload");
+  // call still being recorded is Waiting to upload (contract 2.0.0-z). The server's Waiting wins; its Waiting to upload
+  // may be stale (4 hours passing doesn't sync the item again), so the same rule moves it on.
+  if (item.status === "recording" && (!sent || sent === "waiting" || sent === "waiting_to_upload")) return state(isWaiting(item, now) ? "waiting" : "waiting_to_upload");
+  if (sent === "transcribed") return null;
+  if (sent && SERVER_STATES.has(sent)) return state(sent as RowStateKey);
   switch (statusOf(item)) {
     case "failed": return state("failed");
     case "transcribed": return null;

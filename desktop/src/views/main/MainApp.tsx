@@ -1134,7 +1134,8 @@ export default function MainApp() {
   const libraryCounts = libraryFacts ? {
     ...libraryViewCounts(libraryFacts.facts),
     // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
-    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+    // The calls waiting here add only those the server has no session for (the others are those items): never twice.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisionsHere ?? status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
   } : null;
   const labelCounts: Record<string, number> = {};
   for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;

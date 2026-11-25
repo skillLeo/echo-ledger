@@ -77,9 +77,12 @@ describe("Needs you", () => {
     // Without an end: exactly 4 hours is not yet, 4 hours and a second is.
     expect(needsReason(call({ started_at: ago(4 * 3_600_000) }), now)).toBeNull();
     expect(needsReason(call({ started_at: ago(4 * 3_600_000 + 1000) }), now)).toBe("waiting");
-    // The server's facets.state, when it sent one, decides.
-    expect(needsReason(call({ started_at: ago(5 * 3_600_000), facets: { state: "waiting_to_upload" } }), now)).toBeNull();
+    // The server's "waiting" wins; any other state it sent may be stale (synced while the call ran), so the clock still
+    // moves it on.
     expect(needsReason(call({ started_at: ago(60_000), facets: { state: "waiting" } }), now)).toBe("waiting");
+    expect(needsReason(call({ started_at: ago(4 * 3_600_000 + 1000), facets: { state: "waiting_to_upload" } }), now)).toBe("waiting");
+    expect(needsReason(call({ started_at: ago(3 * 60_000), facets: { state: "waiting_to_upload" } }), now)).toBeNull();
+    expect(needsReason(call({ started_at: ago(3 * 60_000), ended_at: ago(60_000), facets: { state: "waiting_to_upload" } }), now)).toBe("waiting");
   });
   it("counts the calls waiting and the uploads that failed on this computer on top", () => {
     expect(needsYouCount(ITEMS, { waiting: 2, failedUploads: 1 }, NOW.getTime())).toBe(5);

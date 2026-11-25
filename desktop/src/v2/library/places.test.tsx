@@ -179,6 +179,18 @@ describe("the Library's places", () => {
     expect(rows()).toEqual(["over", "bad"]);
   });
 
+  it("in the app, a call waiting here with a server session is counted once in Needs you: the server's item, not again here", async () => {
+    // The core counts 2 calls waiting for a choice; 1 has a session, so the server's waiting item is that one.
+    const over = makeItem("over", { title: "Phone call with Bilal", source_app: "phone_call", started_at: new Date(Date.now() - 5 * 60_000).toISOString(), ended_at: new Date(Date.now() - 60_000).toISOString(), status: "recording", transcript: none });
+    respond("pending_list", []);
+    respond("upload_list", []);
+    inTheApp([...ITEMS, over], { failedUploads: 0, pendingDecisions: 2, pendingDecisionsHere: 1 } as { failedUploads: number; pendingDecisions: number });
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    // The failed one, the server's waiting call, and the one call only this computer knows.
+    expect(within(list).getByRole("button", { name: /^Needs you, / })).toHaveAccessibleName("Needs you, 3");
+  });
+
   it("in the app, each place comes back as it was left; the Library's rail icon pressed again starts it over (PLAN_NAV_3_LEVELS §6)", async () => {
     respond("projects_list", { data: [] });
     inTheApp();

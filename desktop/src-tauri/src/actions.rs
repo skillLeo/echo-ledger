@@ -498,7 +498,6 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     }
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
-        note_call_end(app, &finished, session.as_deref())?;
         decide_finished(app, finished, session, provider, auto, true, None)?;
     }
     clear_captions(app); // after the decision (it reads the buffered turns), so the next session starts empty
@@ -526,7 +525,6 @@ pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
-        note_call_end(app, &finished, session.as_deref())?;
         decide_finished(app, finished, session, provider, auto, false, None)?;
     }
     Ok(())
@@ -686,6 +684,12 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let assist_saved = take_assist_saved(&state, &client_ref);
     let quiet = crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, crate::notifications::local_minutes());
     let outcome = crate::after_call::outcome(OutcomeInput { setting: settings.after_call, ask_when: settings.ask_when, mode, pill, assist_saved, interactive, quiet });
+    // The end of the call (contract 2.0.0-z), before the card shows: from then on every device shows it waiting. Its
+    // session, or one opened while it stopped. Not for one kept at once (its upload's finish carries ended_at); a silent
+    // or skipped one sent its DELETE above. Stop and delete has it too, for its Undo.
+    if !matches!(outcome, Outcome::KeepNow { .. }) {
+        note_call_end(app, &finished, decision.server_session_id().or(late.as_deref()), decision.owner.as_ref());
+    }
     let id = decision.id.clone();
     // The card, or (back to back: something else holds the window) one grouped card with this call saved as audio.
     let before = (outcome == Outcome::Ask && interactive).then(|| surfaces(&state).arrive(&id, !settings.card_hint_seen, Instant::now()));
@@ -1777,13 +1781,22 @@ pub fn queue_usage_report(app: &AppHandle, report: UsageReport) -> AppResult<()>
 }
 
 /// The end of a call, for every device (contract 2.0.0-z): when a recording that has an open server session (captions
-/// or Live Assist opened it) ends and is kept, its end is queued (`ends.json`) before the card shows, so the server
-/// counts the call as waiting for its choice only once it is over. Without an open session nothing is sent; a recording
-/// stopped and deleted sends its DELETE instead.
-fn note_call_end(app: &AppHandle, finished: &FinishedRecording, session: Option<&str>) -> AppResult<()> {
-    match crate::after_call::call_end(finished, session) {
-        Some(end) => queue_call_end(app, end),
-        None => Ok(()),
+/// or Live Assist opened it) ends and its choice is pending, its end is queued (`ends.json`) before the card shows, so
+/// the server counts the call as waiting for its choice only once it is over. Without an open session nothing is sent.
+/// A call made while another account was signed in here waits for that account (`held.json`), as its deletions do.
+/// Best-effort: a hint for the server, so a file that cannot be written never stops the recording being kept.
+fn note_call_end(app: &AppHandle, finished: &FinishedRecording, session: Option<&str>, owner: Option<&crate::owner::Owner>) {
+    let Some(end) = crate::after_call::call_end(finished, session) else { return };
+    let state = app.state::<crate::AppState>();
+    let queued = match held_owner(&state, owner) {
+        Some(owner) => {
+            let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+            crate::owner::hold_end(&state.data_dir, owner, end)
+        }
+        None => queue_call_end(app, end),
+    };
+    if let Err(e) = queued {
+        eprintln!("[echoledger] keeping the end of a call to send: {e}");
     }
 }
 
@@ -2545,6 +2558,43 @@ mod start_up_tests {
         let gate = outside.find("if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {").expect("gated");
         assert!(gate < outside.find("handle_links(app, args)").unwrap() && gate < outside.find(".state::<crate::AppState>()").unwrap());
         assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"));
+    }
+}
+
+#[cfg(test)]
+mod call_end_tests {
+    fn code() -> &'static str {
+        include_str!("actions.rs").split("\n#[cfg(test)]\nmod ").next().unwrap()
+    }
+
+    fn body<'a>(code: &'a str, start: &str) -> &'a str {
+        let from = &code[code.find(start).unwrap_or_else(|| panic!("{start}"))..];
+        &from[..from.find("\n}\n").unwrap()]
+    }
+
+    #[test]
+    fn the_end_of_a_call_is_queued_only_in_decide_finished_after_the_deletes_and_before_the_card() {
+        // Contract 2.0.0-z: one place queues it, after a silent or skipped recording went (its DELETE instead), not for
+        // one kept at once, and before the card shows or the choice is applied.
+        let code = code();
+        assert_eq!(code.matches("note_call_end(app,").count(), 1, "one call site");
+        let decide = body(code, "fn decide_finished(");
+        let end = decide.find("note_call_end(app, &finished, decision.server_session_id().or(late.as_deref()), decision.owner.as_ref());").expect("in decide_finished");
+        assert!(decide.find("if silent {").unwrap() < end && decide.find("return skip_finished(").unwrap() < end, "after the silent and skipped returns");
+        assert!(decide[..end].contains("if !matches!(outcome, Outcome::KeepNow { .. }) {"), "not for one kept at once");
+        for later in ["surfaces(&state).arrive(", "files.add(decision)?;", "Outcome::KeepNow { transcribe } => return keep_decision_as(", "show_or_group(app, done);"] {
+            assert!(end < decide.find(later).unwrap_or_else(|| panic!("{later}")), "before {later}");
+        }
+        // Never in the stop paths themselves: Stop and delete and the quit reach it only through decide_finished.
+        for stop in ["pub async fn stop_and_delete(", "pub async fn stop_recording(", "pub async fn stop_recording_for_quit("] {
+            let path = body(code, stop);
+            assert!(!path.contains("note_call_end") && !path.contains("queue_call_end"), "{stop}");
+            assert!(path.contains("decide_finished(app, finished, session, provider, auto, "), "{stop}");
+        }
+        // Best-effort: its write failing is said in the log, never returned.
+        let note = body(code, "fn note_call_end(");
+        assert!(!note.contains("-> AppResult") && note.contains("if let Err(e) = queued {"), "{note}");
+        assert!(note.contains("crate::owner::hold_end(&state.data_dir, owner, end)"), "another account's waits for it");
     }
 }
 

@@ -18,6 +18,12 @@ describe("the classic Waiting view (contract 2.0.0-z)", () => {
     ];
     expect(items.filter((i) => inSmartView(i, "waiting", NOW)).map((i) => i.id)).toEqual(["over", "older"]);
     expect(smartViewCounts(items, NOW).waiting).toBe(2);
+    // A server state that may be stale (Waiting to upload, synced while the call ran) doesn't stop the clock; its
+    // Waiting wins.
+    expect(inSmartView(call("stale", { started_at: ago(4 * 3_600_000 + 1000), facets: { state: "waiting_to_upload" } }), "waiting", NOW)).toBe(true);
+    expect(inSmartView(call("sent", { started_at: ago(60_000), facets: { state: "waiting" } }), "waiting", NOW)).toBe(true);
+    // All has none of them, as on the server.
+    expect(items.filter((i) => inSmartView(i, "all", NOW))).toEqual([]);
   });
 });
 
@@ -48,7 +54,8 @@ describe("smart views (B15)", () => {
   });
 
   it("counts every view", () => {
-    expect(smartViewCounts(items, NOW)).toEqual({ all: 6, today: 2, this_week: 3, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
+    // All leaves out the call whose session is still `recording` (contract 2.0.0-z: only Waiting has it).
+    expect(smartViewCounts(items, NOW)).toEqual({ all: 5, today: 2, this_week: 3, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
   });
 });
 

@@ -31,12 +31,12 @@ export const WAITING_AFTER_MS = 4 * 60 * 60 * 1000;
 /**
  * Whether a recording waits for the person's choice after a call (contract 2.0.0-z, the server's isWaiting): its session
  * is still `recording` and the call is over, `ended_at` set or started more than 4 hours before [now] (exactly 4 hours is
- * not yet). A call still being recorded is not waiting. The server's `facets.state`, when it sent one, decides.
+ * not yet). A call still being recorded is not waiting. The server's `facets.state` "waiting" wins; any other state it
+ * sent may be stale (the library syncs what changed, and 4 hours passing changes nothing), so only the clock moves it on.
  */
 export function isWaiting(item: LibraryItem, now: number): boolean {
   if (item.status !== "recording") return false;
-  const sent = item.facets?.state;
-  if (sent) return sent === "waiting";
+  if (item.facets?.state === "waiting") return true;
   if (item.ended_at) return true;
   const started = item.started_at ? Date.parse(item.started_at) : NaN;
   return Number.isFinite(started) && now - started > WAITING_AFTER_MS;
@@ -48,7 +48,9 @@ export function inSmartView(item: LibraryItem, view: SmartView, now: Date = new 
   const started = item.started_at ? Date.parse(item.started_at) : NaN;
   switch (view) {
     case "all":
-      return true;
+      // A call's session still `recording` (being recorded, or waiting for Keep or Discard) is in no list but Waiting, as
+      // on the server and in the new design.
+      return item.status !== "recording";
     case "today":
       return started >= startOfDay(now).getTime() && started < startOfDay(now).getTime() + 86_400_000;
     case "this_week": {

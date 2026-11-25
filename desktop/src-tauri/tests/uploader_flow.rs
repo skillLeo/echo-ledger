@@ -2021,6 +2021,23 @@ async fn ends_of_calls_are_sent_and_404_409_422_drop_them_while_5xx_waits_for_th
 }
 
 #[tokio::test]
+async fn an_end_refused_for_good_never_blocks_the_ends_behind_it() {
+    // A 403 (the role changed to viewer) or a 400 is dropped, as a usage report is; 429 and 408 wait like a 5xx.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/sessions/F1", Reply::json(403, json!({"message": "This action is unauthorized."})))
+            .fixed("PATCH", "/api/sessions/F2", Reply::json(400, json!({"message": "Bad request."})))
+            .fixed("PATCH", "/api/sessions/F3", Reply::json(200, json!({"data": {"id": "F3"}})))
+            .fixed("PATCH", "/api/sessions/F4", Reply::json(429, json!({"message": "Too Many Attempts."}))),
+    );
+    let ends: Vec<CallEnd> = ["F1", "F2", "F3", "F4", "F5"].iter().map(|id| end(id)).collect();
+    let drain = drain_ends(&api(&server), &ends).await;
+    assert_eq!(drain.done, ["F1", "F2", "F3"]);
+    assert!(matches!(drain.stopped, Some(AppError::Server { status: 429, .. })), "{:?}", drain.stopped);
+    assert_eq!(server.requests().len(), 4, "F5 waits for the next cycle");
+}
+
+#[tokio::test]
 async fn an_older_server_answers_the_end_with_200_and_the_entry_goes() {
     // Today's live server validates only the keys it knows and answers 200 with the item, storing nothing: no gate.
     let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/OLD", Reply::json(200, json!({"data": {"id": "OLD", "title": null}}))));
