@@ -20,6 +20,13 @@
     $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
     $panels = collect(['library', 'projects', 'live', 'ask', 'activity', 'settings'])->filter(fn (string $key): bool => $places->has($key) && $places[$key]['url'] !== null)->values()->all();
     $config = ['place' => $here, 'panels' => $panels, 'homes' => $places->map(fn (array $p): ?string => $p['url'])->all(), 'scope' => NavFrame::memoryScope()];
+    // FIX-06: the rail is one Tab stop before any script runs: the place you are on (aria-current), else the logo; the
+    // arrows move it (resources/js/a11y-core.cjs, which keeps the same stop after each redraw).
+    $railStop = match (true) {
+        $here !== null && ($places[$here]['url'] ?? null) !== null => $here,
+        (bool) ($rail['setup']['active'] ?? false) => 'setup',
+        default => 'home',
+    };
 @endphp
 <div>
     {{-- format-ignore-start --}}
@@ -42,7 +49,7 @@
             x-on:el-nav-show-panel.window="showPanel($event)">
             <nav class="v2-rail" aria-label="{{ __('Places') }}">
                 <a href="{{ NavFrame::homeUrl() }}" @class(['v2-rail-logo', 'is-on' => $here === null && request()->routeIs('filament.app.pages.dashboard')])
-                    title="{{ __('Home') }}" data-module="home" data-initial="{{ mb_substr(\App\Support\Brand::name(), 0, 1) }}">
+                    title="{{ __('Home') }}" data-module="home" data-initial="{{ mb_substr(\App\Support\Brand::name(), 0, 1) }}" tabindex="{{ $railStop === 'home' ? '0' : '-1' }}">
                     {{-- The brand's first letter is drawn (::before); the link's name is Home. --}}
                     <span class="v2-sr">{{ __('Home') }}</span>
                 </a>
@@ -52,13 +59,13 @@
                          file picker). The web records nothing in the background, so there is no call recording switch. --}}
                     <div class="v2-rail-record">
                         <a href="{{ $upload['record'] }}" @class(['v2-rail-rec', 'is-on' => $upload['active']]) data-sidebar-upload data-record
-                            title="{{ __('Record a voice note') }}">
+                            title="{{ __('Record a voice note') }}" tabindex="-1">
                             <span class="v2-rail-rec-dot" aria-hidden="true"><x-el.v2.icon name="record" /></span>
                             <span class="v2-rail-label">{{ $upload['label'] }}</span>
                         </a>
                         <x-filament::dropdown placement="right-start" wire:key="v2-rail-record-menu">
                             <x-slot name="trigger">
-                                <button type="button" class="v2-rail-rec-more" aria-label="{{ __('Record options') }}" data-record-menu>
+                                <button type="button" class="v2-rail-rec-more" aria-label="{{ __('Record options') }}" data-record-menu tabindex="-1">
                                     <x-el.v2.icon name="chevron-down" />
                                 </button>
                             </x-slot>
@@ -88,12 +95,13 @@
                     @if ($rail['setup'] !== null)
                         {{-- "Setup" under the icon (the rail's names are short); its full name is Setup & health. --}}
                         <a href="{{ $rail['setup']['url'] }}" @class(['v2-rail-item', 'is-on' => $rail['setup']['active']]) @if ($rail['setup']['active']) aria-current="page" @endif
-                            title="{{ $rail['setup']['label'] }}" aria-label="{{ $rail['setup']['label'] }}{{ $rail['setup']['dot'] ? ', '.__('something to set up') : '' }}" data-module="setup">
+                            title="{{ $rail['setup']['label'] }}" aria-label="{{ $rail['setup']['label'] }}{{ $rail['setup']['dot'] ? ', '.__('something to set up') : '' }}" data-module="setup"
+                            tabindex="{{ $railStop === 'setup' ? '0' : '-1' }}">
                             <span class="v2-rail-icon"><x-el.v2.icon name="device" />@if ($rail['setup']['dot'])<span class="v2-rail-dot" aria-hidden="true"></span>@endif</span>
                             <span class="v2-rail-label" aria-hidden="true">{{ __('Setup') }}</span>
                         </a>
                     @endif
-                    <button type="button" class="v2-rail-item" x-on:click="$dispatch('el-help')" title="{{ __('Help and shortcuts') }}" data-module="help">
+                    <button type="button" class="v2-rail-item" x-on:click="$dispatch('el-help')" title="{{ __('Help and shortcuts') }}" data-module="help" tabindex="-1">
                         <span class="v2-rail-icon"><x-el.v2.icon name="help" /></span>
                         <span class="v2-rail-label">{{ __('Help') }}</span>
                     </button>
@@ -101,7 +109,7 @@
                         @include('filament.v2.frame-rail-item', ['place' => $places['settings'], 'mac' => $mac])
                     @endif
                     <div class="v2-rail-avatar">
-                        @include('filament.v2.user-menu', ['placement' => 'right-end'])
+                        @include('filament.v2.user-menu', ['placement' => 'right-end', 'inRail' => true])
                     </div>
                 </div>
             </nav>

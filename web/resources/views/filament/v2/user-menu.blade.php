@@ -2,7 +2,8 @@
     The v2.0 avatar menu: who you are (opens Settings), Upgrade or Plan & usage, Settings, the theme, the admin panel
     for staff, Help, and Sign out last, apart from the rest. Since BE-06 its avatar is the person's photo, else their
     initials in their colour (avatar_color, the tokens' --el-role-avatar-0…7), as in the apps; since DES-08 drawn by the
-    one avatar component (x-el.avatar).
+    one avatar component (x-el.avatar). In the rail ($inRail) it is one of the rail's stops, which the arrows reach
+    (FIX-06); plain PHP writes its tabindex, so Livewire adds no block markers inside the tag.
 --}}
 @php
     use App\Filament\Auth\EditProfile;
@@ -17,7 +18,7 @@
 @if ($context !== null)
     <x-filament::dropdown :placement="$placement ?? 'bottom-end'" teleport width="xs" class="fi-user-menu v2-um">
         <x-slot name="trigger">
-            <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="{{ __('Open the menu for :name', ['name' => $name]) }}">
+            <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="{{ __('Open the menu for :name', ['name' => $name]) }}"<?php if ($inRail ?? false): ?> tabindex="-1"<?php endif; ?>>
                 <x-el.avatar :person="$user" />
             </button>
         </x-slot>

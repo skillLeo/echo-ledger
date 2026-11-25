@@ -1,7 +1,8 @@
 @php $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);'; @endphp
 {{-- Pending invitations (since v1.5, Phase 1C: Resend and Cancel). DES-08: in the new console each address and each
      link's maker have an avatar (an address with no account yet: its first letter on a colour from the address); plain
-     PHP picks it, so Livewire adds no block markers and the classic cells stay byte for byte as they were. --}}
+     PHP picks it, so Livewire adds no block markers and the classic cells stay byte for byte as they were. FIX-06: in
+     the new console the heading rows are marked (v2-plain-thead) for their contrast, the same way. --}}
 <x-filament::section :heading="__('Pending invitations')" :description="($plan ? $plan.' ' : '').__('Each email link works once, for its address only, until it ends. Resend makes a new link; the old one stops working.')">
     @if ($invitations === [])
         <p style="font-size:.85rem;opacity:.7;margin:0">{{ __('No invitation is waiting.') }}</p>
@@ -11,7 +12,7 @@
         <div style="overflow-x:auto;position:relative">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                 <thead>
-                    <tr style="text-align:left;opacity:.7">
+                    <tr style="text-align:left;opacity:.7"<?php if ($v2 ?? false): ?> class="v2-plain-thead"<?php endif; ?>>
                         <th style="padding:.5rem .75rem">{{ __('Email') }}</th><th style="padding:.5rem .75rem">{{ __('Role') }}</th>
                         <th style="padding:.5rem .75rem">{{ __('workspace_context.col_sent') }}</th><th style="padding:.5rem .75rem">{{ __('Ends') }}</th><th style="padding:.5rem .75rem"><span class="el-sr">{{ __('Actions') }}</span></th>
                     </tr>
@@ -41,7 +42,7 @@
         <div style="overflow-x:auto;position:relative">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                 <thead>
-                    <tr style="text-align:left;opacity:.7">
+                    <tr style="text-align:left;opacity:.7"<?php if ($v2 ?? false): ?> class="v2-plain-thead"<?php endif; ?>>
                         <th style="padding:.5rem .75rem">{{ __('Role') }}</th><th style="padding:.5rem .75rem">{{ __('Made by') }}</th><th style="padding:.5rem .75rem">{{ __('People') }}</th>
                         <th style="padding:.5rem .75rem">{{ __('Ends') }}</th><th style="padding:.5rem .75rem"><span class="el-sr">{{ __('Actions') }}</span></th>
                     </tr>

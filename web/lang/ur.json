@@ -1829,5 +1829,8 @@
     "Saved to your library": "آپ کی لائبریری میں محفوظ ہو گیا",
     "Your copy is yours to edit, share or delete. Click to open it.": "یہ کاپی آپ کی ہے: اس میں ترمیم کریں، اسے شیئر یا حذف کریں۔ کھولنے کے لیے کلک کریں۔",
     "This project has no recordings yet.": "اس پروجیکٹ میں ابھی کوئی ریکارڈنگ نہیں ہے۔",
-    "The transcript is not ready yet.": "ٹرانسکرپٹ ابھی تیار نہیں ہے۔"
+    "The transcript is not ready yet.": "ٹرانسکرپٹ ابھی تیار نہیں ہے۔",
+    ":name, :role, workspace": ":name، :role، ورک اسپیس",
+    ":name. Change project": ":name۔ پروجیکٹ بدلیں",
+    "Opens plan and usage.": "پلان اور استعمال کھولتا ہے۔"
 }

@@ -68,7 +68,7 @@ it('words the chips, the banners, the details card and the drawer in Urdu', func
     recordingUrduAs($this, 'ur');
     expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))
         ->toContain('aria-label="ترتیب"')
-        ->toContain('aria-label="پروجیکٹ: Qureshi Textiles۔ بدلیں"')
+        ->toContain('aria-label="Qureshi Textiles۔ پروجیکٹ بدلیں"')
         ->toContain('aria-label="زبان: انگریزی۔ کسی اور زبان میں دوبارہ ٹرانسکرائب کریں"')
         ->toContain('title="رکھی گئی ریکارڈنگز کبھی خود بخود حذف نہیں ہوتیں"')
         ->not->toContain('Kept recordings are never deleted automatically');
@@ -112,7 +112,7 @@ it('keeps the English words exactly as they were', function () {
     recordingUrduAs($this, 'en');
     expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))
         ->toContain('aria-label="Organise"')
-        ->toContain('aria-label="Project: Qureshi Textiles. Change"')
+        ->toContain('aria-label="Qureshi Textiles. Change project"')
         ->toContain('aria-label="Language: English. Transcribe again in another language"')
         ->toContain('title="Kept recordings are never deleted automatically"');
     expect(recordingUrduHtml($this, '/app/sessions/'.$this->silent->id))

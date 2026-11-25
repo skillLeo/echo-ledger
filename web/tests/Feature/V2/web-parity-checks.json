@@ -131,19 +131,19 @@
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › personal · owner"
+  "key": "menuitem|personal owner › personal · owner"
  },
  "WEB-NAV-024": {
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › qureshi textiles team · owner"
+  "key": "menuitem|personal owner › qureshi textiles team · owner"
  },
  "WEB-NAV-025": {
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › manage workspace"
+  "key": "menuitem|personal owner › manage workspace"
  },
  "WEB-NAV-026": {
   "type": "control",
