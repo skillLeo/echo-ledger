@@ -193,6 +193,54 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     font-size: var(--el-text-title-m-size);
 }
 
+/* UX-18: the rail's Account, 28 px with 12 px semibold initials (its target is 40 px: .v2-um-hit). */
+.v2-avatar.is-rail {
+    width: var(--el-desktop-avatar-rail);
+    height: var(--el-desktop-avatar-rail);
+    font-size: var(--el-desktop-text-avatar-rail-size);
+    font-weight: var(--el-desktop-text-avatar-rail-weight);
+}
+
+/* UX-18: Settings › Profile: the 96 px avatar with its camera badge (Add or Change photo) at its bottom end corner. */
+.v2-profile-avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+}
+
+.v2-profile-camera {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+    border: var(--el-space-2) solid var(--el-role-bg-surface);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-profile-camera:hover {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-profile-camera .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* UX-18: Settings › Profile, 96 px. */
+.v2-avatar.is-profile {
+    width: var(--el-desktop-avatar-profile);
+    height: var(--el-desktop-avatar-profile);
+    font-size: var(--el-text-display-size);
+    font-weight: var(--el-text-display-weight);
+}
+
 /* BE-06: the person's initials on their colour (the background is set beside it), or their photo. */
 .v2-avatar.is-coloured {
     color: var(--el-role-avatar-text);
@@ -598,7 +646,7 @@ body.el-resizing {
     color: var(--el-role-accent-text);
 }
 
-/* the avatar menu */
+/* the account menu (UX-18): its header is who it is, not an item */
 .v2-um-head {
     display: flex;
     align-items: center;
@@ -607,8 +655,10 @@ body.el-resizing {
     border-radius: var(--el-radius-sm);
 }
 
-.v2-um-head:hover {
-    background-color: var(--el-role-bg-subtle);
+.v2-um-plan {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
 }
 
 .v2-um-text {
@@ -629,13 +679,65 @@ body.el-resizing {
     text-overflow: ellipsis;
 }
 
-.v2-um-theme {
+.v2-um-theme,
+.v2-um-zoom {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--el-space-8);
     padding: var(--el-space-8);
     font-size: var(--el-text-body-size);
+}
+
+/* UX-07: "Zoom [−] 100% [+]", as Chrome's menu has it. */
+.v2-um-stepper {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--el-space-2);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-um-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-32);
+    min-height: var(--el-component-chip-height);
+    border-radius: var(--el-radius-sm);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-title-s-size);
+    line-height: 1;
+}
+
+.v2-um-step:hover:not(:disabled) {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-um-step:disabled {
+    color: var(--el-role-text-disabled);
+    cursor: not-allowed;
+}
+
+.v2-um-level {
+    min-width: calc(var(--el-space-8) * 6);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+/* An item's key ("Keyboard shortcuts  ?"), at its end. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-key) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-12);
+}
+
+.v2-um-key {
+    color: var(--el-role-text-secondary);
+    font-family: inherit;
+    font-size: var(--el-text-caption-size);
+    white-space: nowrap;
 }
 
 /* the bottom bar on phone-width screens */
@@ -977,11 +1079,6 @@ button.v2-row:hover {
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);
     font-variant-numeric: tabular-nums;
-}
-
-.v2-um .v2-chip {
-    min-height: var(--el-icon-lg);
-    font-size: var(--el-text-caption-size);
 }
 
 /* status: colour, icon and text together; one per row */
@@ -3113,7 +3210,78 @@ button.v2-row-tile:focus-visible,
 }
 
 .v2-rail-avatar {
-    padding-block-start: var(--el-space-4);
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* W-230: Filament moves its sidebar with `translate`, and at rest (0) that still makes the sidebar the box a menu with
+   position: fixed is placed in. Right to left the frame is on the right, so the rail's menus (Account, Record) opened
+   a frame's width off the screen. At rest the frame has none; the phone's drawer still slides. */
+:root .fi-sidebar.v2-frame.fi-sidebar-open {
+    translate: none;
+}
+
+@media (min-width: 64rem) {
+    :root .fi-body.fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar.v2-frame:not(.fi-sidebar-open) {
+        translate: none;
+    }
+}
+
+/* UX-18: the account menu is 20 rem wide (Filament sized a sidebar's user menu by the sidebar, the box it was placed
+   in before W-230). */
+:root .fi-sidebar .fi-user-menu.v2-um .fi-dropdown-panel {
+    width: 20rem;
+    max-width: calc(100vw - var(--el-space-24)) !important;
+}
+
+/* UX-18: the rail's Account, a rail item: a 28 px avatar in a 40 px target, "Account" under it; an 8% tint behind the
+   avatar on hover, a 2 px accent ring round it while its menu is open, and an 8 px dot only for an account problem. */
+.v2-um-trigger.is-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    width: calc(var(--el-space-32) * 2);
+    padding-block-end: var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+}
+
+.v2-um-trigger.is-rail:hover,
+.v2-um-trigger.is-rail[aria-expanded='true'] {
+    color: var(--el-role-text-primary);
+}
+
+.v2-um-hit {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-desktop-avatar-rail-hit);
+    height: var(--el-desktop-avatar-rail-hit);
+    border-radius: var(--el-radius-full);
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-um-trigger.is-rail:hover .v2-um-hit {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent);
+}
+
+.v2-um-trigger.is-rail[aria-expanded='true'] .v2-avatar {
+    box-shadow: 0 0 0 var(--el-space-2) var(--el-role-accent-default);
+}
+
+.v2-um-dot {
+    position: absolute;
+    inset-block-start: var(--el-space-4);
+    inset-inline-end: var(--el-space-4);
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    box-shadow: 0 0 0 var(--el-space-2) var(--el-role-bg-subtle);
 }
 
 /* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
@@ -3857,3 +4025,44 @@ html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crum
     opacity: 1 !important;
     color: var(--el-role-text-secondary);
 }
+
+/* UX-07 and UX-18 (v21_zoom): at a zoom other than 100% (resources/js/zoom-core.cjs) the root's zoom scales the
+   viewport's units too, so a box one screen tall (the page, the frame, a slide-over, the Library's filters, the detail
+   column) is 100dvh over the zoom, and stays one screen tall. */
+html[data-el-zoom].fi,
+html[data-el-zoom] .fi-body,
+html[data-el-zoom] .fi-simple-layout,
+html[data-el-zoom] .fi-body:not(.fi-body-has-topbar) .fi-main-ctn {
+    min-height: calc(100dvh / var(--el-zoom));
+}
+
+html[data-el-zoom] :is(.fi-body.fi-body-has-sidebar-collapsible-on-desktop, .fi-body.fi-body-has-sidebar-fully-collapsible-on-desktop, .fi-body.fi-body-has-top-navigation, .fi-body:not(.fi-body-has-navigation)) .fi-main-ctn {
+    min-height: calc(100dvh / var(--el-zoom) - var(--topbar-height));
+}
+
+html[data-el-zoom] .fi-sidebar,
+html[data-el-zoom] :is(.fi-modal.fi-modal-slide-over, .fi-modal.fi-width-screen) > .fi-modal-window-ctn > .fi-modal-window,
+html[data-el-zoom] .fi-fo-file-upload .fi-fo-file-upload-editor {
+    height: calc(100dvh / var(--el-zoom));
+}
+
+html[data-el-zoom] .fi-body-has-topbar .fi-sidebar {
+    height: calc(100dvh / var(--el-zoom) - var(--topbar-height));
+}
+
+html[data-el-zoom] .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen):is(.fi-modal-has-sticky-header, .fi-modal-has-sticky-footer) > .fi-modal-window-ctn > .fi-modal-window {
+    max-height: calc(100dvh / var(--el-zoom) - 2rem);
+}
+
+html[data-el-zoom] .v2-lib-panel {
+    max-block-size: calc(100dvh / var(--el-zoom) - var(--el-space-64) - var(--el-space-32));
+}
+
+html[data-el-zoom] .el-library-detail {
+    max-height: calc(100dvh / var(--el-zoom) - var(--topbar-height, 4rem) - var(--space-6));
+}
+
+html[data-el-zoom] .el-col {
+    max-height: calc(100dvh / var(--el-zoom) - 56px - var(--space-6));
+}
+

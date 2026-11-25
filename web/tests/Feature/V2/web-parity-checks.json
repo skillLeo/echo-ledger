@@ -149,43 +149,43 @@
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › bq bilal qureshi bilal@qureshi-textiles.example personal"
+  "key": "menuitem|account › add photo"
  },
  "WEB-NAV-027": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › upgrade"
+  "key": "menuitem|account › plan & billing"
  },
  "WEB-NAV-028": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › settings"
+  "key": "menuitem|account › settings"
  },
  "WEB-NAV-029": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › system"
+  "key": "menuitem|account › system"
  },
  "WEB-NAV-030": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › light"
+  "key": "menuitem|account › light"
  },
  "WEB-NAV-031": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › dark"
+  "key": "menuitem|account › dark"
  },
  "WEB-NAV-032": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › sign out"
+  "key": "menuitem|account › sign out"
  },
  "WEB-KEY-001": {
   "type": "html",

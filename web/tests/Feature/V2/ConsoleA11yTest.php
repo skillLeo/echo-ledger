@@ -123,7 +123,7 @@ it('makes the rail one Tab stop before any script runs: the place you are on, el
         ->toMatch('~data-module="projects"[^>]*tabindex="-1"~')
         ->toMatch('~data-module="help" tabindex="-1"~')
         ->toMatch('~data-module="settings"[^>]*tabindex="-1"~')
-        ->toMatch('~class="fi-user-menu-trigger v2-um-trigger" aria-label="[^"]*" tabindex="-1">~');
+        ->toMatch('~class="fi-user-menu-trigger v2-um-trigger is-rail" aria-label="[^"]*" title="[^"]*" tabindex="-1">~');
     expect(substr_count($railOf('/app/settings'), 'tabindex="0"'))->toBe(1)
         ->and($railOf('/app/settings'))->toMatch('~aria-current="page"[^>]*data-module="settings"[^>]*tabindex="0"~');
 

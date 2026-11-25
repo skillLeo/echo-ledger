@@ -1832,5 +1832,15 @@
     "The transcript is not ready yet.": "ٹرانسکرپٹ ابھی تیار نہیں ہے۔",
     ":name, :role, workspace": ":name، :role، ورک اسپیس",
     ":name. Change project": ":name۔ پروجیکٹ بدلیں",
-    "Opens plan and usage.": "پلان اور استعمال کھولتا ہے۔"
+    "Opens plan and usage.": "پلان اور استعمال کھولتا ہے۔",
+    "Account, :name": "اکاؤنٹ، :name",
+    "Account, :name, a payment needs your attention": "اکاؤنٹ، :name، ایک ادائیگی پر توجہ درکار ہے",
+    "Account, theme and settings": "اکاؤنٹ، تھیم اور ترتیبات",
+    ":used of :limit min used this month": "اس مہینے :limit میں سے :used منٹ استعمال ہوئے",
+    "Add photo": "تصویر لگائیں",
+    "Change photo": "تصویر بدلیں",
+    "Edit profile": "پروفائل میں ترمیم کریں",
+    "Plan & billing": "پلان اور بلنگ",
+    "Zoom in": "زوم اِن",
+    "Zoom out": "زوم آؤٹ"
 }

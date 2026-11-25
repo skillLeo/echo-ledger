@@ -63,7 +63,8 @@
                             <span class="v2-rail-rec-dot" aria-hidden="true"><x-el.v2.icon name="record" /></span>
                             <span class="v2-rail-label">{{ $upload['label'] }}</span>
                         </a>
-                        <x-filament::dropdown placement="right-start" wire:key="v2-rail-record-menu">
+                        {{-- W-230: placed on the screen (teleport), not in the rail's scrolling box, which cut it off. --}}
+                        <x-filament::dropdown placement="right-start" teleport wire:key="v2-rail-record-menu">
                             <x-slot name="trigger">
                                 <button type="button" class="v2-rail-rec-more" aria-label="{{ __('Record options') }}" data-record-menu tabindex="-1">
                                     <x-el.v2.icon name="chevron-down" />
@@ -109,7 +110,7 @@
                         @include('filament.v2.frame-rail-item', ['place' => $places['settings'], 'mac' => $mac])
                     @endif
                     <div class="v2-rail-avatar">
-                        @include('filament.v2.user-menu', ['placement' => 'right-end', 'inRail' => true])
+                        @include('filament.v2.user-menu', ['inRail' => true])
                     </div>
                 </div>
             </nav>

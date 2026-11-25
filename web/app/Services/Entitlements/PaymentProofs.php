@@ -229,7 +229,7 @@ final class PaymentProofs
             $amount = $request->amount_due_pkr !== null ? Plan::rupees($request->amount_due_pkr) : (string) $request->amount_due;
             $what = $request->payment_reference !== null ? ' Transaction ID '.$request->payment_reference.'.' : '';
             app(UpgradeRequests::class)->tellStaff($before === UpgradeRequest::STAGE_NEEDS_RECEIPT ? "New receipt for {$plan}" : "Receipt for {$plan}",
-                "{$user->name} ({$user->email}) · {$amount} · {$request->reference_code}.{$what}");
+                "{$user->name} ({$user->email}) · {$amount} · {$request->reference_code}.{$what}", $user);
         }
 
         return $request;

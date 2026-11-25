@@ -141,12 +141,15 @@ it('offers Sidebar style (Light, Dark, Soft grey) for the rail and its panels, s
     expect(navPage($this, $this->owner, $this->pages['library']))->toContain('data-style="soft"');
 });
 
-it('keeps Help and shortcuts in reach, as classic\'s top bar ? does: Help at the rail\'s foot, in the avatar menu, and its dialog on the page', function () {
+it('keeps Help and shortcuts in reach, as classic\'s top bar ? does: Help at the rail\'s foot, in the account menu, and its dialog on the page', function () {
     $html = navPage($this, $this->owner, $this->pages['library']);
     $rail = navRail($html);
     $foot = substr($rail, (int) strpos($rail, 'class="v2-rail-foot"'));
+    // UX-18: the account menu has Keyboard shortcuts (the dialog, its key ?) and Help (the guide) as two items.
+    $items = collect(array_keys(webParityControls($html, 'usermenu')))->filter(fn (string $k): bool => str_starts_with($k, 'menuitem|'));
     expect($foot)->toContain("x-on:click=\"\$dispatch('el-help')\"")->toContain('title="Help and shortcuts"')
-        ->and(collect(array_keys(webParityControls($html, 'usermenu')))->filter(fn (string $k): bool => str_starts_with($k, 'menuitem|') && str_ends_with($k, '› help and shortcuts'))->count())->toBe(1)
+        ->and($items->filter(fn (string $k): bool => str_ends_with($k, '› keyboard shortcuts ?'))->count())->toBe(1)
+        ->and($items->filter(fn (string $k): bool => str_ends_with($k, '› help'))->count())->toBe(1)
         ->and($html)->toContain('x-on:el-help.window="open = true"');
 });
 
