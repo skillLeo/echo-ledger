@@ -76,8 +76,14 @@ describe("the raw-text guard", () => {
       const joined = \`\${done} · \${count}\`;
       const back = \`\${n} back\`;
       const of = \`\${at} of \${total}\`;
-      const home = "Home";`;
-    expect(textsIn("Keys.ts", code).filter((f) => !f.translated).map((f) => f.text)).toEqual([":n back", ":at of :total", "Home"]);
+      const home = "Home";
+      const left = \`\${m}:\${s} left\`;
+      const hint = "Ctrl+K to search";
+      const enter = "Shift+Enter adds a line";
+      const keysOnly = ["Shift+Enter", "Ctrl+Shift+K", "Meta+"];`;
+    expect(textsIn("Keys.ts", code).filter((f) => !f.translated).map((f) => f.text)).toEqual([
+      ":n back", ":at of :total", "Home", ":m::s left", "Ctrl+K to search", "Shift+Enter adds a line",
+    ]);
   });
 
   it("any other string prop that reads as words is text too, except the few that never are", () => {

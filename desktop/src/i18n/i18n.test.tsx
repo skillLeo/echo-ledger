@@ -2,16 +2,27 @@
 // dates and numbers in the window's language, and the seeded catalogue.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { choose, fill, FSI, isolate, PDI, language, resetLanguageForTests, setLanguage, stripIsolates, t, tc, useT } from "./index";
 import { accountLanguage, chosenLanguage, systemLanguage } from "./language";
 import { DESKTOP_OVERRIDES } from "./overrides";
+import { textsIn } from "./rawText";
 import { count, rowDate, sentenceDate } from "../lib/format";
 import ur from "./ur.json";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** The app's sources (no test, no gallery), as the guard reads them. */
+function sourcesIn(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return name === "gallery" || name === "test" ? [] : sourcesIn(path);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) && !name.endsWith(".d.ts") ? [path] : [];
+  });
+}
+
 const CATALOGUE = {
   "Search recordings": "ریکارڈنگز تلاش کریں",
   "Clear :name": ":name صاف کریں",
@@ -182,10 +193,31 @@ describe("the catalogue (src/i18n/ur.json)", () => {
   });
 
   it("each Urdu line keeps its English key's placeholders and plural forms", () => {
-    const names = (s: string) => [...s.matchAll(/:([A-Za-z_]\w*)/g)].map((m) => m[1].toLowerCase()).sort();
+    // A key with one English form may have Urdu's two (one|other) only where the app gives it to tc() alone, which
+    // chooses by the number: "3 of 5 moved" is one form in English, two in Urdu (چلی گئی, چلی گئیں).
+    const counted = new Map<string, Set<string>>();
+    for (const file of sourcesIn(join(here, ".."))) {
+      for (const f of textsIn(file, readFileSync(file, "utf8"))) if (f.via) counted.set(f.text, (counted.get(f.text) ?? new Set()).add(f.via));
+    }
+    const tcOnly = (key: string) => counted.get(key)?.size === 1 && counted.get(key)?.has("tc");
+    const names = (s: string) => [...s.matchAll(/:([A-Za-z_]\w*)/g)].map((m) => m[1].toLowerCase()).sort().join();
+    const forms = (key: string, value: string) => {
+      const english = key.split("|").length;
+      const urdu = value.split("|").length;
+      return english === urdu || (english === 1 && urdu === 2 && !/^[{[]/.test(value) && tcOnly(key));
+    };
+    // Each Urdu form has its English form's placeholders (the one English form's, for each of Urdu's two).
+    const samePlaceholders = (key: string, value: string) => {
+      const english = key.split("|");
+      return value.split("|").every((form, i) => names(form) === names(english[english.length === 1 ? 0 : i] ?? ""));
+    };
     const broken = Object.entries(ur as Record<string, string>)
-      .filter(([key, value]) => names(key).join() !== names(value).join() || key.split("|").length !== value.split("|").length)
+      .filter(([key, value]) => !forms(key, value) || !samePlaceholders(key, value))
       .map(([key]) => key);
     expect(broken).toEqual([]);
+    // The rule holds only for those: a one-form key given to t() with two Urdu forms is refused.
+    expect(forms(":count matches", ":count نتیجہ|:count نتائج")).toBe(true);
+    expect(tcOnly("Search recordings")).toBe(false);
+    expect(forms("Search recordings", "الف|ب")).toBe(false);
   });
 });

@@ -817,7 +817,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     await load();
     const left = ids.length - back;
     if (left === 0) say(tc(":count recording back|:count recordings back", back));
-    else sayProblem(say, firstError ? t(":back back · :left still in Trash: :error", { back, left, error: firstError }) : t(":back back · :left still in Trash", { back, left }));
+    else sayProblem(say, firstError ? tc(":back back · :left still in Trash: :error", back, { back, left, error: firstError }) : tc(":back back · :left still in Trash", back, { back, left }));
   };
   /** Delete a whole view or more than this many: asked first. */
   const ASK_ABOVE = 20;
@@ -849,7 +849,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       if (gone !== ids.length) {
         // Only some went: the server's list says which. Undo brings back only those that are gone from it.
         // When the list can't be read, Undo tries every picked one (those still in the Library just stay).
-        const text = t(":gone of :total moved to Trash · :kept", { gone, total: ids.length, kept });
+        const text = tc(":gone of :total moved to Trash · :kept", gone, { gone, total: ids.length, kept });
         const now = await api.library().catch(() => null);
         // Some stayed: a problem, said as one (never pushed off by a newer message), with Undo for those that went.
         if (!now) {
@@ -929,7 +929,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       // Only what was not done goes back; the rest stays marked, and the problem says how many went.
       put((id) => (done.has(id) ? marked : was.get(id)!));
       const of = { done: done.size, total: was.size, error: errorMessage(e) };
-      sayProblem(say, !done.size ? errorMessage(e) : unread ? t(":done of :total marked as unread · :error", of) : t(":done of :total marked as read · :error", of));
+      sayProblem(say, !done.size ? errorMessage(e) : unread ? tc(":done of :total marked as unread · :error", of.done, of) : tc(":done of :total marked as read · :error", of.done, of));
     }
   };
 
@@ -1423,7 +1423,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     setBin((list) => list?.filter((x) => !all.some((b) => b.id === x.id)) ?? list);
     await loadBin();
-    say(erased === all.length ? tc("Trash emptied · :count recording|Trash emptied · :count recordings", erased) : t("Erased :erased of :total; the rest stay in Trash", { erased, total: all.length }));
+    say(erased === all.length ? tc("Trash emptied · :count recording|Trash emptied · :count recordings", erased) : tc("Erased :erased of :total; the rest stay in Trash", erased, { erased, total: all.length }));
   };
   /** Move to project › a project (or No project), as Move to project… does. */
   const moveTo = async (ids: readonly string[], projectId: string | null) => {
@@ -1748,7 +1748,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       <li key={r.session.id} className="el-hit">
                         <div className="el-hit__head">
                           <span className="el-body-strong" dir="auto">{name}</span>
-                          <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${t(":count matches", { count: r.hit_count })}` : ""}</span>
+                          <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${tc(":count matches", r.hit_count)}` : ""}</span>
                         </div>
                         {r.hits.map((h) => (
                           <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}

@@ -5,8 +5,8 @@
 // never are. D-223: each choice of a Segmented control in its own direction, "اردو" in its own language.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import type { LibraryItem } from "../lib/ipc";
-import { flushAsync, resetTauriMock, respond } from "../test/tauri";
+import type { LibraryItem, ServerView } from "../lib/ipc";
+import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../test/tauri";
 import { makeItem } from "../test/fixtures";
 import { LibraryV2 } from "../v2/library/LibraryV2";
 import { LibraryFoot, LibraryNav } from "../v2/library/LibraryNav";
@@ -16,8 +16,10 @@ import { syncWords } from "../v2/library/syncClock";
 import { sourceWords } from "../v2/library/SourceAvatar";
 import { COLUMN_NAMES } from "../v2/library/LibraryTable";
 import { FindBar } from "../v2/library/TranscriptToolsV2";
+import { viewsStore } from "../v2/library/myViews";
+import { tc } from "./index";
 import { SegmentedSetting } from "../v2/settings/pages/rows";
-import { FSI, PDI, language, resetLanguageForTests, setLanguage, stripIsolates } from "./index";
+import { FSI, PDI, language, resetLanguageForTests, setLanguage } from "./index";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../test/tauri")).eventModule);
@@ -90,9 +92,32 @@ describe("D1's words, in English as before and in Urdu", () => {
     expect(groupTitle({ key: "status:Ready", label: "Ready" })).toBe("تیار");
     expect(groupTitle({ key: "pinned", label: "Pinned" })).toBe("پن شدہ");
     expect(groupTitle({ key: "project:No project", label: "No project" })).toBe("کوئی پروجیکٹ نہیں");
+    // Group by Source: the app's own words for voice notes and for no source; a source's own name stays.
+    expect(groupTitle({ key: "app:Voice notes", label: "Voice notes", items: [{ source_app: "voice_note" }] })).toBe("وائس نوٹس");
+    expect(groupTitle({ key: "app:Other", label: "Other", items: [{ source_app: null, source_app_label: null }] })).toBe("دیگر");
+    expect(groupTitle({ key: "app:Other", label: "Other", items: [{ source_app: "custom", source_app_label: "Other" }] })).toBe("Other");
     // A project or a source named like one of the app's words keeps its own name.
     expect(groupTitle({ key: "project:Today", label: "Today" })).toBe("Today");
     expect(groupTitle({ key: "app:Other", label: "Other" })).toBe("Other");
+  });
+
+  it("an unknown caller shows the person, in either language, and keeps its colour", async () => {
+    const english = rowModel(ITEMS[1], NOW).avatar;
+    expect(english).toMatchObject({ initials: null, icon: "person" });
+    await urdu();
+    expect(rowModel(ITEMS[1], NOW).avatar).toEqual(english);
+    // A named caller's initials and colour are as they were.
+    expect(rowModel(makeItem("o", { title: "Call with Hammad Bhai Uol", source_app: "whatsapp" }), NOW).avatar).toMatchObject({ initials: "HU" });
+  });
+
+  it("a count's Urdu agrees with its number, though English has one form", async () => {
+    expect([tc(":count matches", 1), tc(":gone of :total moved to Trash · :kept", 1, { gone: 1, total: 3, kept: "k" })]).toEqual(["1 matches", "1 of 3 moved to Trash · k"]);
+    await urdu();
+    expect(tc(":count matches", 1)).toBe(`${iso(1)} نتیجہ`);
+    expect(tc(":count matches", 3)).toBe(`${iso(3)} نتائج`);
+    expect(tc(":gone of :total moved to Trash · :kept", 1, { gone: 1, total: 3, kept: "k" })).toBe(`${iso(3)} میں سے ${iso(1)} ردی میں چلی گئی · ${iso("k")}`);
+    expect(tc(":gone of :total moved to Trash · :kept", 2, { gone: 2, total: 3, kept: "k" })).toBe(`${iso(3)} میں سے ${iso(2)} ردی میں چلی گئیں · ${iso("k")}`);
+    expect(tc("Erased :erased of :total; the rest stay in Trash", 1, { erased: 1, total: 2 })).toBe(`${iso(2)} میں سے ${iso(1)} مٹا دی گئی؛ باقی ردی میں ہیں`);
   });
 });
 
@@ -131,7 +156,18 @@ describe("the Library in Urdu", () => {
     expect(screen.getByText(/^حذف شدہ ریکارڈنگز .* تک یہاں رہتی ہیں/)).toBeInTheDocument();
   });
 
-  it("the sidebar's views, Trash and the sync line; a view's copy goes to the server without isolates", async () => {
+  it("the sidebar's views, Trash and the sync line; Duplicate sends the copy's name without isolates", async () => {
+    // The server's views, as myViews.test.tsx's fake keeps them.
+    const views: ServerView[] = [];
+    respondWith("views_get", () => ({ data: views, views_version: views.length }));
+    respondWith("library_views_version", () => views.length);
+    respondWith("view_create", ({ view }) => {
+      const made = { ...(view as ServerView), id: `v${views.length + 1}`, position: views.length };
+      views.push(made);
+      return { data: made, views_version: views.length };
+    });
+    viewsStore.use(null);
+    viewsStore.use("https://ledger.example.test|me@example.test|1");
     await urdu();
     render(<><LibraryNav current="view:all" counts={{ all: 2, needs: 0, unread: 1, important: 0, audio_only: 0 }} labelCounts={{}} onScope={vi.fn()} onNewView={vi.fn()} say={vi.fn()} onLibraryChanged={vi.fn()} /><LibraryFoot trashCurrent={false} onTrash={vi.fn()} onSync={vi.fn()} /></>);
     await act(flushAsync);
@@ -139,7 +175,21 @@ describe("the Library in Urdu", () => {
     expect(screen.getByRole("button", { name: "تمام ریکارڈنگز, 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "ردی" })).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-synced")).toHaveAttribute("title", "ابھی سنک کریں");
-    expect(stripIsolates(`${iso("Calls")} کاپی`)).toBe("Calls کاپی");
+    await act(async () => { await viewsStore.create("Calls", { filters: {}, search: null, sort: "newest", group: "date", density: null }); });
+    await act(flushAsync);
+    const duplicate = async () => {
+      fireEvent.contextMenu(within(screen.getByRole("list", { name: "میرے ویوز" })).getByRole("button", { name: "Calls" }), { clientX: 20, clientY: 30 });
+      fireEvent.click(within(screen.getByRole("menu", { name: "Calls" })).getByRole("menuitem", { name: "Duplicate" }));
+      await act(flushAsync);
+      await act(flushAsync);
+    };
+    const sent = () => callsOf("view_create").map((c) => (c.view as { name: string }).name);
+    await duplicate();
+    expect(sent().at(-1)).toBe("Calls کاپی");
+    await duplicate();
+    expect(sent().at(-1)).toBe("Calls کاپی 2");
+    expect(sent().filter((name) => /[\u2066-\u2069]/.test(name))).toEqual([]);
+    expect(within(screen.getByRole("list", { name: "میرے ویوز" })).getByRole("button", { name: "Calls کاپی 2" })).toBeInTheDocument();
   });
 
   it("Find in a transcript: its field, how many matched, the buttons", async () => {
@@ -155,7 +205,8 @@ describe("the Library in Urdu", () => {
 describe("D-223: a Segmented control's choices in their own direction and language", () => {
   it("each label in a dir=auto span; the Language choices in their own languages", () => {
     respond("get_settings", null);
-    render(<div className="el-root"><SegmentedSetting id="appearance.language" value="en" onChange={vi.fn()} /><SegmentedSetting id="appearance.clock" value="12" onChange={vi.fn()} /></div>);
+    const onChange = vi.fn();
+    render(<div className="el-root"><SegmentedSetting id="appearance.language" value="en" onChange={onChange} /><SegmentedSetting id="appearance.clock" value="12" onChange={vi.fn()} /></div>);
     const urduChoice = screen.getByRole("radio", { name: "اردو" });
     expect(urduChoice.querySelector("span")).toHaveAttribute("dir", "auto");
     expect(urduChoice.querySelector("span")).toHaveAttribute("lang", "ur");
@@ -164,6 +215,8 @@ describe("D-223: a Segmented control's choices in their own direction and langua
     const clock = screen.getAllByRole("radio").find((r) => /12/.test(r.textContent ?? ""))!;
     expect(clock.querySelector("span")).toHaveAttribute("dir", "auto");
     expect(clock.querySelector("span")).not.toHaveAttribute("lang");
-    fireEvent.click(urduChoice);
+    // A press on the label's span is the choice's.
+    fireEvent.click(urduChoice.querySelector("span")!);
+    expect(onChange).toHaveBeenCalledWith("ur");
   });
 });

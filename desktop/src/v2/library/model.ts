@@ -147,15 +147,23 @@ const tintOf = (name: string) => [...name].reduce((h, c) => (h * 31 + (c.codePoi
 
 /** A call's title without "Call with" (UX-06): the name or the number; an untitled call is an unknown caller. */
 export function rowTitle(item: Pick<LibraryItem, "title" | "transcript">, kind: Kind): string {
+  return titleOf(item, kind).title;
+}
+
+/**
+ * rowTitle, and whether it is the app's own word for no title ("Voice note", "Unknown caller", in the window's
+ * language): then the row's initials and tint don't come from it, so they never change with the language.
+ */
+function titleOf(item: Pick<LibraryItem, "title" | "transcript">, kind: Kind): { title: string; fallback: boolean } {
   const raw = (item.title ?? "").trim();
   const name = raw.replace(/^call with\s+/i, "").trim();
   if (kind === "voice_note" && (!raw || /^voice note$/i.test(raw))) {
     // A voice note is titled with its first words when it has a transcript (UX-06), else "Voice note".
     const words = (item.transcript?.preview ?? "").trim().split(/\s+/).filter(Boolean);
-    return words.length ? words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "") : t("Voice note");
+    return words.length ? { title: words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : ""), fallback: false } : { title: t("Voice note"), fallback: true };
   }
-  if (kind === "call" && !name) return t("Unknown caller");
-  return name || recordingName(raw);
+  if (kind === "call" && !name) return { title: t("Unknown caller"), fallback: true };
+  return { title: name || recordingName(raw), fallback: false };
 }
 
 export type RowModel = {
@@ -192,12 +200,13 @@ export function rowModel(item: LibraryItem, now: Date = new Date(), views: Views
   const meta = converting?.state === "making" ? converting.text
     : state === null ? [converting?.text, preview ?? ""].filter(Boolean).join(" · ")
       : parts ? `${state.text} ${parts}` : state.text;
-  const title = rowTitle(item, kind);
-  const initials = kind === "call" ? initialsOf(title) : null;
+  const { title, fallback } = titleOf(item, kind);
+  // From the caller's name, never from the app's words for none: an unknown caller shows the person, in any language.
+  const initials = kind === "call" && !fallback ? initialsOf(title) : null;
   const avatar: RowAvatar = {
     initials,
     icon: kind === "voice_note" ? "mic" : kind === "meeting" ? "calendar" : kind === "call" ? "person" : "file",
-    tint: tintOf(title),
+    tint: tintOf(fallback ? item.id : title),
   };
   return {
     title, meta, state, when: rowWhen(item.started_at, now, timeOnly), duration: rowDuration(item.duration_ms), app, kind, avatar,
@@ -247,7 +256,15 @@ export function trashTime(hours: number | null | undefined): string {
  * Pinned, Recordings, the fallbacks); a project's, a source's or a device's name stays as it is.
  */
 const OWN_GROUP = /^(date|status):|^(pinned|none|project:No project|device:Unknown device|language:Automatic)$/;
-export const groupTitle = (g: { key: string; label: string }): string => (OWN_GROUP.test(g.key) ? t(g.label) : g.label);
+/** Group by Source: lib/libraryGroups' own words for voice notes and for no source at all, not a source's name. */
+const ownSource = (g: { key: string; items?: readonly Pick<LibraryItem, "source_app" | "source_app_label">[] }): boolean => {
+  if (!g.items?.length) return false;
+  if (g.key === "app:Voice notes") return g.items.every((i) => i.source_app === "voice_note");
+  if (g.key === "app:Other") return g.items.every((i) => !i.source_app_label && !i.source_app);
+  return false;
+};
+export const groupTitle = (g: { key: string; label: string; items?: readonly Pick<LibraryItem, "source_app" | "source_app_label">[] }): string =>
+  (OWN_GROUP.test(g.key) || ownSource(g) ? t(g.label) : g.label);
 
 /** "1 recording", "3 recordings": a count of recordings in the window's language. */
 export const recordings = (n: number): string => tc(":count recording|:count recordings", n);
