@@ -1508,6 +1508,23 @@ async fn an_older_server_without_the_bulk_route_gives_none_so_the_page_goes_one_
 }
 
 #[tokio::test]
+async fn a_server_down_busy_or_out_of_reach_is_an_error_never_an_older_server() {
+    // Only an older server's answers make the page go one by one; anything else must not turn into a request per
+    // recording (the device's requests are limited).
+    let ids: Vec<String> = (0..450).map(|n| format!("r{n}")).collect();
+    for (method, status) in [("POST", 503), ("POST", 429), ("POST", 408), ("POST", 403), ("POST", 422), ("DELETE", 500)] {
+        let server = MockServer::start(Router::new().fixed(method, "/api/sessions/opened", Reply::json(status, json!({"message": "No."}))));
+        let api = client(&server);
+        let answer = if method == "POST" { api.sessions_opened(&ids).await } else { api.sessions_unopened(&ids).await };
+        assert!(matches!(answer, Err(AppError::Server { status: s, .. }) if s == status), "{method} {status}: {answer:?}");
+        assert_eq!(server.requests().len(), 1, "{method} {status}: one try");
+    }
+    // Out of reach: nothing listens there.
+    let gone = ApiClient::new("http://127.0.0.1:9", &[], Some(TOKEN.to_string())).expect("local client");
+    assert!(gone.sessions_opened(&ids[..2]).await.is_err());
+}
+
+#[tokio::test]
 async fn a_later_chunk_that_fails_keeps_what_was_done_and_its_ids_are_in_neither_list() {
     let server = MockServer::start(Router::new().route("POST", "/api/sessions/opened", |r, nth| {
         if nth == 0 { opened_answer(r) } else { Reply::json(503, json!({"error": {"code": "unavailable", "message": "Try later."}})).into() }

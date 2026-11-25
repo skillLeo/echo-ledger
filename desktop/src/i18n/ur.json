@@ -1377,5 +1377,7 @@
   "until :date": ":date تک",
   "upgrade": "اپ گریڈ",
   "· original words": "· اصل الفاظ",
-  "“:note”": "“:note”"
+  "“:note”": "“:note”",
+  "Over :max: only Mark as read or unread. Unselect :extra for the rest": ":max سے زیادہ: صرف پڑھا ہوا یا نہ پڑھا ہوا کیا جا سکتا ہے۔ باقی کاموں کے لیے :extra کا انتخاب ختم کریں",
+  ":count recording is no longer in your Library|:count recordings are no longer in your Library": ":count ریکارڈنگ اب آپ کی لائبریری میں نہیں ہے|:count ریکارڈنگز اب آپ کی لائبریری میں نہیں ہیں"
 }

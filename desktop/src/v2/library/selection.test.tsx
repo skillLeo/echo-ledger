@@ -1023,7 +1023,8 @@ describe("Trash, Undo and the limits", () => {
     respond("library_refresh", many);
     await show();
     fireEvent.keyDown(document.body, { key: "a", metaKey: true });
-    expect(bar()).toHaveTextContent("Up to 200 at a time: unselect 1");
+    // Mark as read or unread takes any number (contract 2.0.0-y), so the line says what waits.
+    expect(bar()).toHaveTextContent("Over 200: only Mark as read or unread. Unselect 1 for the rest");
     expect(within(bar()).getByRole("button", { name: "Delete" })).toBeDisabled();
     expect(within(bar()).getByRole("button", { name: "Move to project" })).toBeDisabled();
     fireEvent.click(within(bar()).getByRole("checkbox", { name: "Unselect all" }));
@@ -1043,8 +1044,9 @@ describe("Trash, Undo and the limits", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Up to 200 at a time: unselect 1");
     fireEvent.contextMenu(rows()[0], { clientX: 10, clientY: 10 });
     const menu = screen.getByRole("menu", { name: "Actions for 201 recordings" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Up to 200 at a time: unselect 1"]);
-    expect(within(menu).getByRole("menuitem")).toHaveAttribute("aria-disabled", "true");
+    // Mark as unread first (any number, contract 2.0.0-y), then the limit for the rest.
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Mark as unreadCtrl+Shift+U", "Up to 200 at a time: unselect 1"]);
+    expect(within(menu).getAllByRole("menuitem")[1]).toHaveAttribute("aria-disabled", "true");
   }, 30_000);
 });
 

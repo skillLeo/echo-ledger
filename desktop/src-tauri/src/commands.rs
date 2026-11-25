@@ -2387,8 +2387,11 @@ async fn opened_many(app: &AppHandle, ids: Vec<String>, opened: bool) -> AppResu
     let answer = if opened { api.sessions_opened(&ids).await? } else { api.sessions_unopened(&ids).await? };
     let Some(answer) = answer else { return Ok(None) };
     let mut cache = state.library.lock().await;
-    if cache.mark_opened_many(&answer, opened) {
-        cache.save(&paths::library(&state.data_dir))?;
+    // The server took them: a saved copy that can't be written now is caught up by the next sync, never sent again.
+    if cache.mark_opened_many(&answer, opened)
+        && let Err(e) = cache.save(&paths::library(&state.data_dir))
+    {
+        eprintln!("[echoledger] saving the Library after Mark as read or unread: {e}");
     }
     Ok(Some(answer))
 }

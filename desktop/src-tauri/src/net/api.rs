@@ -1115,26 +1115,31 @@ impl ApiClient {
         self.opened_many(ids, false).await
     }
 
-    /// The ids in chunks of [`OPENED_IDS_PER_REQUEST`], their answers joined. `None` when the first answer is not a `200`
-    /// with a `done` list: an older server (its `POST` answers `405`; its `DELETE` reaches `DELETE /api/sessions/{id}`
-    /// with the id "opened", `404` or `403`, and deletes nothing), so the caller marks them one by one. A later chunk
-    /// that fails ends the run with what was done: its ids are in neither list.
+    /// The ids in chunks of [`OPENED_IDS_PER_REQUEST`], their answers joined. `None` only when the first answer says the
+    /// server is older than the route: `405`, `404` (its `DELETE` reaches `DELETE /api/sessions/{id}` with the id
+    /// "opened" and deletes nothing), `403` for a `DELETE` (that route's answer to someone who may not record), or a
+    /// success without a `done` list; the caller then marks them one by one. Anything else (a 5xx, 408, 429, the network)
+    /// is an error, so a server that is down is never asked once per recording. A later chunk that fails ends the run
+    /// with what was done: its ids are in neither list.
     async fn opened_many(&self, ids: &[String], opened: bool) -> AppResult<Option<OpenedMany>> {
         let mut all = OpenedMany::default();
         for (n, chunk) in ids.chunks(OPENED_IDS_PER_REQUEST).enumerate() {
             let url = self.url("sessions/opened");
             let request = if opened { self.http.post(url) } else { self.http.delete(url) };
             let answer = match self.authed(request)?.json(&json!({ "ids": chunk })).send().await {
-                Ok(resp) if resp.status().as_u16() == 200 => resp.json::<OpenedMany>().await.ok(),
-                _ => None,
+                Err(e) => Err(e.into()),
+                Ok(resp) if resp.status().is_success() => Ok(resp.json::<OpenedMany>().await.ok()),
+                Ok(resp) if matches!(resp.status().as_u16(), 404 | 405) || (resp.status().as_u16() == 403 && !opened) => Ok(None),
+                Ok(resp) => Err(Self::error(resp).await),
             };
             match answer {
-                Some(answer) => {
+                Ok(Some(answer)) => {
                     all.done.extend(answer.done);
                     all.not_found.extend(answer.not_found);
                 }
-                None if n == 0 => return Ok(None),
-                None => break,
+                Ok(None) if n == 0 => return Ok(None),
+                Err(e) if n == 0 => return Err(e),
+                _ => break,
             }
         }
         Ok(Some(all))

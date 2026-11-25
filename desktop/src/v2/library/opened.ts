@@ -1,30 +1,52 @@
 // Mark as read / Mark as unread for many recordings (contract 2.0.0-y): one request per 200 ids (POST or DELETE
-// /api/sessions/opened) in place of one per recording. An older server, which has no such route (anything but a 200
-// with `done`), gets today's one request per recording.
+// /api/sessions/opened) in place of one per recording. Only a server older than the route (the core's null: 405, 404,
+// 403 for DELETE, or no `done`) gets today's one request per recording, and then for 200 at most: the device's
+// requests are limited (240 a minute), so a long run would hold up the sync and the uploads. Any other failure (the
+// server down, busy or out of reach) stops the run: what was done stays, the rest is put back by the caller.
 import { api } from "../../lib/ipc";
 
-/** Ids per request (the contract's 200, the core's MAX_BULK). */
+/** Ids per request (the contract's 200, the core's MAX_BULK), and the most marked one by one on an older server. */
 export const OPENED_PER_REQUEST = 200;
 
-/** What is known so far: kept by the caller, so a failure partway still says what the server took. */
-export type OpenedProgress = { done: Set<string>; notFound: Set<string> };
+/**
+ * What is known so far, kept by the caller, so a failure partway still says what the server took: `done`, the ids it
+ * didn't find (another workspace's, in the bin), and those left out on an older server, beyond the 200 it takes one by
+ * one.
+ */
+export type OpenedProgress = { done: Set<string>; notFound: Set<string>; left: Set<string> };
+
+export const openedProgress = (): OpenedProgress => ({ done: new Set(), notFound: new Set(), left: new Set() });
 
 /**
- * Marks [ids] read ([opened]) or unread, filling [progress] as the answers come. Ids the server did not find (another
- * workspace's, in the bin) go in `notFound`, never an error. Throws the first error of a request made one by one.
+ * Marks [ids] read ([opened]) or unread, filling [progress] as the answers come. Throws the first error (of a request
+ * for many, or of one made one by one); what was done before it is in [progress].
  */
 export async function markOpenedMany(ids: readonly string[], opened: boolean, progress: OpenedProgress): Promise<void> {
   let oneByOne = false;
+  // An older server from the first answer: one by one, for 200 at most. One that took the first requests and not a
+  // later one goes on one by one for the rest.
+  let capped = false;
+  let single = 0;
   for (let at = 0; at < ids.length; at += OPENED_PER_REQUEST) {
     const chunk = ids.slice(at, at + OPENED_PER_REQUEST);
-    const answer = oneByOne ? null : await (opened ? api.markOpenedMany(chunk) : api.markUnopenedMany(chunk)).catch(() => null);
-    if (!answer || !Array.isArray(answer.done)) oneByOne = true;
-    const sent = new Set(chunk);
-    for (const id of oneByOne ? [] : answer!.done) if (sent.has(id)) progress.done.add(id);
-    for (const id of oneByOne ? [] : answer!.not_found ?? []) if (sent.has(id) && !progress.done.has(id)) progress.notFound.add(id);
-    // One by one: on an older server, and for any id an answer left out (a chunk of the core's that failed).
+    if (!oneByOne) {
+      const answer = await (opened ? api.markOpenedMany(chunk) : api.markUnopenedMany(chunk));
+      if (answer && Array.isArray(answer.done)) {
+        const sent = new Set(chunk);
+        for (const id of answer.done) if (sent.has(id)) progress.done.add(id);
+        for (const id of answer.not_found ?? []) if (sent.has(id) && !progress.done.has(id)) progress.notFound.add(id);
+        continue;
+      }
+      oneByOne = true;
+      capped = at === 0;
+    }
     for (const id of chunk) {
       if (progress.done.has(id) || progress.notFound.has(id)) continue;
+      if (capped && single >= OPENED_PER_REQUEST) {
+        progress.left.add(id);
+        continue;
+      }
+      single++;
       await (opened ? api.markOpened(id) : api.markUnopened(id));
       progress.done.add(id);
     }
