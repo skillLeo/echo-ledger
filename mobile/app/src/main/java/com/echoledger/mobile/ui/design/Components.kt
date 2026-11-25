@@ -75,6 +75,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
@@ -87,6 +89,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.ui.Brand
@@ -671,25 +674,65 @@ fun InlineBanner(
         BannerKind.Error -> Triple(c.dangerSoft, c.danger, Icons.Rounded.ErrorOutline)
     }
     SwipeAway(onGone = close, modifier = modifier) {
-        Row(
-            Modifier.fillMaxWidth().clip(
+        Layout(
+            content = {
+                Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+                Text(
+                    text,
+                    style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal),
+                    color = c.text,
+                    modifier = Modifier.padding(vertical = Space.s2)
+                )
+                if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
+                BarIcon(Icons.Rounded.Close, "Dismiss", close)
+            },
+            modifier = Modifier.fillMaxWidth().clip(
                 RoundedCornerShape(Radius.md)
             ).background(bg)
                 .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
                 .padding(start = Space.s3, top = Space.s1, bottom = Space.s1),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(Space.s2))
-            Text(
-                text,
-                style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal),
-                color = c.text,
-                modifier = Modifier.weight(1f).padding(vertical = Space.s2)
-            )
-            if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
-            BarIcon(Icons.Rounded.Close, "Dismiss", close)
+            measurePolicy = remember { bannerRow(Space.s2) }
+        )
+    }
+}
+
+/**
+ * [InlineBanner]'s icon, text, action and ×. Until 2.0.x they were a centred Row with the text taking what was left, so
+ * on a small phone with large text the action squeezed the text until "Re-transcribe" broke inside the word (P-114).
+ * Now the action goes under the text when the text would get less than half of their room, or less than its longest
+ * word; otherwise every part is measured and placed exactly as that Row did (InlineBannerLayoutTest).
+ */
+private fun bannerRow(gap: Dp) = MeasurePolicy { parts, constraints ->
+    val action = if (parts.size == 4) parts[2] else null
+    val loose = constraints.copy(minWidth = 0, minHeight = 0)
+    val width = constraints.maxWidth
+    // As the Row measured: the parts without a weight first, each in what was left, then the text in the rest.
+    val icon = parts[0].measure(loose)
+    var used = icon.width + gap.roundToPx()
+    val button = action?.measure(loose.copy(maxWidth = (width - used).coerceAtLeast(0)))
+    used += button?.width ?: 0
+    val closer = parts.last().measure(loose.copy(maxWidth = (width - used).coerceAtLeast(0)))
+    used += closer.width
+    val room = (width - used).coerceAtLeast(0)
+    val area = room + (button?.width ?: 0)
+    val beside = button == null || (room * 2 >= area && room >= parts[1].minIntrinsicWidth(Constraints.Infinity))
+    val textWidth = if (beside) room else area
+    val words = parts[1].measure(loose.copy(minWidth = textWidth, maxWidth = textWidth))
+    val middle = if (beside) maxOf(words.height, button?.height ?: 0) else words.height + button!!.height
+    val height = maxOf(icon.height, middle, closer.height).coerceAtLeast(constraints.minHeight)
+    fun y(h: Int) = Alignment.CenterVertically.align(h, height)
+    layout(width, height) {
+        val textX = icon.width + gap.roundToPx()
+        icon.placeRelative(0, y(icon.height))
+        if (beside) {
+            words.placeRelative(textX, y(words.height))
+            button?.placeRelative(textX + room, y(button.height))
+        } else {
+            val top = y(middle)
+            words.placeRelative(textX, top)
+            button!!.placeRelative(textX, top + words.height)
         }
+        closer.placeRelative(textX + area, y(closer.height))
     }
 }
 

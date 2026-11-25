@@ -55,6 +55,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -65,20 +66,31 @@ import org.robolectric.annotation.GraphicsMode
  */
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w393dp-h852dp-hdpi")
-class ScreenshotsTest : ScreenTest() {
-    private val outDir = File(System.getProperty("screenshots.dir") ?: "build/screenshots")
+open class ScreenshotsTest : ScreenTest() {
+    /** The F2 sweep's condition when a ClassicSweep test runs these screens (ClassicSweepTest.kt); null here. */
+    protected open val sweep: SweepCondition? = null
+
+    private val outDir get() = sweep?.dir ?: File(System.getProperty("screenshots.dir") ?: "build/screenshots")
 
     private var themeMode by mutableStateOf("dark")
 
     /** Screens draw on the app's window background (MainActivity); give them the same backdrop here. */
     private fun shoot(content: @Composable () -> Unit) = show {
         EchoLedgerTheme(themeMode = themeMode) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+            SweepTextSize(sweep) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+            }
         }
     }
 
-    /** Captures the screen in the dark and then the light theme. */
+    /** Captures the screen in the dark and then the light theme (the sweep: light only, and its text checked). */
     private fun capture(name: String) {
+        sweep?.let {
+            themeMode = "light"
+            compose.mainClock.advanceTimeBy(500)
+            captureOne(name)
+            return
+        }
         themeMode = "dark"
         captureOne("$name-dark")
         themeMode = "light"
@@ -90,8 +102,11 @@ class ScreenshotsTest : ScreenTest() {
         compose.waitForIdle()
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         // Written (or compared) only by the Roborazzi tasks; a plain test run just checks that the screen drew.
-        compose.onRoot().captureRoboImage(File(outDir, "phone-$name.png"))
+        val file = File(outDir, "phone-$name.png")
+        // The sweep keeps its pictures on every run, for a look (build/sweep).
+        if (sweep == null) compose.onRoot().captureRoboImage(file) else compose.onRoot().captureRoboImage(file, SweepCondition.RECORD)
         assertTrue("$name drew nothing", bitmap.width > 0 && distinctColours(bitmap) > 2)
+        sweep?.assertTextWhole(compose, name)
     }
 
     private fun distinctColours(bitmap: Bitmap): Int {
@@ -147,7 +162,7 @@ class ScreenshotsTest : ScreenTest() {
                             "Our main goal for the new website is fewer support calls.",
                             "2026-10-22T10:00:00+00:00"
                         )
-                    )
+                    ) + sweep?.extraItems().orEmpty()
                 )
             )
         )
@@ -327,11 +342,17 @@ class ScreenshotsTest : ScreenTest() {
     /** The action row on a 360 dp phone: Export · Share link · Send, and Send to WhatsApp on the next line. */
     @Test
     @Config(qualifiers = "w360dp-h800dp-hdpi")
-    fun sessionActions360() = sessionActions("session-actions-360", 1f)
+    fun sessionActions360() {
+        skipInSweep()
+        sessionActions("session-actions-360", 1f)
+    }
 
     /** The action row at twice the text size (Android's largest font). */
     @Test
-    fun sessionActionsLargeText() = sessionActions("session-actions-text200", 2f)
+    fun sessionActionsLargeText() {
+        skipInSweep()
+        sessionActions("session-actions-text200", 2f)
+    }
 
     @Test
     fun record() {
@@ -387,8 +408,8 @@ class ScreenshotsTest : ScreenTest() {
         runBlocking { app.pairLocally(server) }
         shoot { SettingsScreen(vm, onSetup = {}) }
         compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
-        compose.onNodeWithText("Block screenshots of EchoLedger").assertExists()
-        compose.onNodeWithText("Hide EchoLedger's live words from screenshots and screen shares").assertExists()
+        compose.onNodeWithText(app.getString(com.echoledger.mobile.R.string.cc_block_screens)).assertExists()
+        compose.onNodeWithText(app.getString(com.echoledger.mobile.R.string.cc_hide_live_words)).assertExists()
         capture("settings-privacy")
     }
 
@@ -543,6 +564,7 @@ class ScreenshotsTest : ScreenTest() {
     /** Twice the phone's text size (C10): nothing overlaps or is cut off. */
     @Test
     fun libraryLargeText() {
+        skipInSweep()
         seedLibrary()
         shoot { LargeText { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) } }
         capture("library-font200")
@@ -550,6 +572,7 @@ class ScreenshotsTest : ScreenTest() {
 
     @Test
     fun settingsLargeText() {
+        skipInSweep()
         runBlocking { app.pairLocally(server) }
         shoot { LargeText { SettingsScreen(vm, onSetup = {}) } }
         capture("settings-font200")
@@ -562,6 +585,35 @@ class ScreenshotsTest : ScreenTest() {
             androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale = 2f),
             content = content
         )
+    }
+
+    /** F2: the classic screens the sweep needs too: signing in, the account, and voice notes shared from another app. */
+    @Test
+    fun signIn() {
+        shoot { PairingScreen(vm) }
+        capture("sign-in")
+    }
+
+    @Test
+    fun account() {
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/account",
+            FakeServer.json(
+                200,
+                """{"name":"Ayesha Khan","email":"ayesha.khan@northwind-traders.example.com","email_verified":true,"two_factor":true}"""
+            )
+        )
+        shoot { AccountScreen(vm, onBack = {}) }
+        pumpUntil("the account to load") { exists("Ayesha Khan") }
+        capture("account")
+    }
+
+    @Test
+    fun sharedNotes() {
+        shoot { SharedNotesScreen(vm, listOf("note-1", "note-2"), onLeave = {}, sourceApp = "WhatsApp") }
+        capture("shared-notes")
     }
 
     @Test
@@ -578,6 +630,7 @@ class ScreenshotsTest : ScreenTest() {
 
     @Test
     fun `design gallery`() {
+        skipInSweep()
         var part by mutableStateOf(0)
         shoot { DesignGallery(part = part) }
         capture("gallery-1")
@@ -791,7 +844,7 @@ class ScreenshotsTest : ScreenTest() {
         capture("settings-phone-app")
 
         // "Import this recording": the file's name and length, and Play, before anything is taken in (v1.8 0.3 review).
-        compose.onNodeWithText("Import this recording").performClick()
+        compose.onNodeWithText("Import this recording").performScrollTo().performClick() // below the fold with large text
         pumpUntil("the question with the file") {
             runCatching { compose.onNodeWithText("Call recording Omar Khan_261116_094215.m4a").assertExists() }.isSuccess
         }
@@ -893,7 +946,10 @@ class ScreenshotsTest : ScreenTest() {
         app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000)
         app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 36_000, startedAt = "2026-10-23T18:30:00Z")
         shoot { WaitingScreen(vm, onBack = {}) }
-        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Save all as audio only").assertExists() }.isSuccess }
+        pumpUntil("the waiting calls") {
+            val saveAll = app.getString(com.echoledger.mobile.R.string.cc_save_audio_all)
+            runCatching { compose.onNodeWithText(saveAll).assertExists() }.isSuccess
+        }
         capture("waiting")
     }
 
@@ -932,8 +988,9 @@ class ScreenshotsTest : ScreenTest() {
     @Test
     fun pill() {
         shoot {
+            // Scrolls, so that on a small phone the last card is not squeezed into what is left of the screen (F2 sweep).
             androidx.compose.foundation.layout.Column(
-                Modifier.padding(16.dp),
+                Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp),
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
             ) {
                 PillView(PillState(elapsedMs = 134_000))
@@ -958,8 +1015,20 @@ class ScreenshotsTest : ScreenTest() {
         capture("pill")
     }
 
+    /** Sizes of their own (twice the text, a fixed width) or the gallery's samples: not part of the sweep's conditions. */
+    private fun skipInSweep() = assumeTrue("its own size, not a sweep condition", sweep == null)
+
     /** Captures every window (the screen with its menu, sheet or dialog) in the dark and then the light theme. */
     private fun captureWindows(name: String) {
+        sweep?.let {
+            themeMode = "light"
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+            com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-$name.png"), SweepCondition.RECORD)
+            it.assertTextWhole(compose, name)
+            return
+        }
         listOf("dark", "light").forEach { mode ->
             themeMode = mode
             compose.waitForIdle()
@@ -1065,6 +1134,9 @@ class ScreenshotsTest : ScreenTest() {
             compose.mainClock.advanceTimeByFrame()
             exists("1 recording(s) could not be uploaded")
         }
+        // The clock runs again for the scroll: on a short screen (split screen) Delete is below the fold, and a scroll
+        // that animates on a stopped clock never ends.
+        compose.mainClock.autoAdvance = true
         compose.onNodeWithText("Delete").performScrollTo()
         captureWindows("record-failed-upload")
     }

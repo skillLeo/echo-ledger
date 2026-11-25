@@ -470,7 +470,11 @@ fun SessionScreen(
                             style = type.bodyM,
                             color = c.textMuted
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                        // P-115: when both don't fit, Delete goes under Run capture test, never cut.
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                            verticalArrangement = Arrangement.spacedBy(Space.s2)
+                        ) {
                             EchoButton("Run capture test", onCaptureTest)
                             // Since v1.8.1 (bug P-007): the same question as the ⋮ menu's Delete.
                             EchoButton("Delete", { confirmDelete = true }, kind = ButtonKind.Secondary)
@@ -1284,7 +1288,8 @@ private fun CaptureTestCard(vm: MainViewModel, farSide: Boolean = true) {
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // P-116: when both don't fit, Copy diagnostics goes under Test call capture, never broken inside a word.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { vm.runCaptureTest() }, enabled = !testing) { Text(if (testing) "Testing… $left s" else "Test call capture") }
             TextButton(onClick = {
                 scope.launch { clipboard.setClipEntry(ClipData.newPlainText("diagnostics", vm.captureDiagnostics()).toClipEntry()) }

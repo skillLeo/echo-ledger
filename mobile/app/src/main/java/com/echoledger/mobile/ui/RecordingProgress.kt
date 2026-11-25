@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,12 +42,14 @@ fun RecordingStepsBlock(itemId: String, steps: RecordingSteps.Steps, onNotify: (
     val type = LocalEchoType.current
     var asked by rememberSaveable(itemId) { mutableStateOf(false) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-        Row(
+        // P-113: on a small phone with large text a step that doesn't fit goes to the next line whole ("Impro|ve" was broken).
+        FlowRow(
             Modifier.semantics {
                 contentDescription = "Progress: " + RecordingSteps.Step.entries.joinToString(", ") { steps.label(it) }
             },
             horizontalArrangement = Arrangement.spacedBy(Space.s3),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(Space.s1),
+            itemVerticalAlignment = Alignment.CenterVertically
         ) {
             RecordingSteps.Step.entries.forEach { step ->
                 val state = steps.states.getValue(step)
