@@ -118,6 +118,8 @@ export type NavShellProps = {
   /** The Library's Needs you: no longer a badge in the rail (DES-01: only Activity has a number), kept for the callers. */
   libraryCount?: number;
   activityCount?: number;
+  /** Activity's badge in red: something failed (UX-08); the accent otherwise. */
+  activityTone?: "accent" | "danger";
   /** Live's red dot: a call is recorded, or call recording is on and listening. */
   liveDot?: boolean;
   liveDotWords?: string;
@@ -151,7 +153,7 @@ export type NavShellProps = {
   children: ReactNode;
 };
 
-export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
+export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, activityTone, liveDot, liveDotWords, setupAttention, onSetupHealth,
   onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, titleEnd, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
@@ -517,7 +519,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const keeps = space ? railKeeps(places.length, space.room, space.each) : places.length;
   const inMore = places.slice(keeps);
   const railPlace = (p: Place) => (
-    <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
+    <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} countTone={p === "activity" ? activityTone : undefined} onClick={() => press(p)}
       expanded={narrow && panels[p] ? flyout && place === p : undefined}
       dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} dotKind={p === "live" ? "live" : undefined} />
   );

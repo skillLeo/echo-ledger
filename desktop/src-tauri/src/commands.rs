@@ -44,6 +44,8 @@ pub struct AppStatus {
     pub elapsed_ms: u64,
     pub pill_hidden: bool,
     pub pending_decisions: usize,
+    /// Those the server doesn't know (no session for them): the rail and the Dock add only these to the server's badge.
+    pub pending_decisions_here: usize,
     pub tray_state: TrayState,
     /// What the workspace's plan and the person's role allow (v1.5).
     pub plan: crate::plan::PlanInfo,
@@ -79,7 +81,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let paused = state.capture.is_paused();
     let pill_hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
     // Only recordings that wait for the person: one whose after-call chip counts down needs nothing (v1.5).
-    let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().waiting();
+    let decisions = DecisionFiles::in_dir(&state.data_dir).load();
+    let (pending_decisions, pending_decisions_here) = (decisions.waiting(), decisions.waiting_here());
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, active > 0);
     let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
     let (calls_ready, ready_problems) = {
@@ -97,7 +100,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, generation, tray_state, paused, mic_note, pending_decisions, switches.clone(), state.viewer_refusal());
     // The Dock icon's number follows the calls waiting (FIX-11).
-    crate::dock::follow_with(app, pending_decisions);
+    crate::dock::follow_with(app, pending_decisions_here);
     // With the main window closed, the menu bar's own commands follow the status too (Pause or Resume Recording…).
     #[cfg(target_os = "macos")]
     crate::app_menu::core_follow(app);
@@ -122,6 +125,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         elapsed_ms: state.capture.elapsed_ms(),
         pill_hidden,
         pending_decisions,
+        pending_decisions_here,
         tray_state,
         plan: state.plan_info(),
         system_audio_note: crate::audio::platform::system_audio_note(),
@@ -2012,6 +2016,53 @@ pub async fn storage_info(state: State<'_, AppState>) -> AppResult<serde_json::V
 pub async fn activity_list(state: State<'_, AppState>, limit: Option<u32>) -> AppResult<serde_json::Value> {
     ensure_unlocked(&state)?;
     state.api()?.activity(limit.unwrap_or(30).clamp(1, 100)).await
+}
+
+/// One group's items (2.0.0-r; `upload_failed` is the only one), newest first.
+#[tauri::command]
+pub async fn activity_group_list(state: State<'_, AppState>, group: String, limit: Option<u32>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    if group != crate::activity::UPLOAD_FAILED_GROUP {
+        return Err(AppError::msg("This group does not exist."));
+    }
+    state.api()?.activity_in_group(&group, limit.unwrap_or(50).clamp(1, 100)).await
+}
+
+/// The groups with an unresolved item (2.0.0-r): "3 recordings didn't finish uploading".
+#[tauri::command]
+pub async fn activity_groups(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.activity_groups().await
+}
+
+/// The one Activity number (2.0.0-r, `GET /api/badge`): the same on the phone and the web console. `null` from a server
+/// older than it (the window then counts its own); any other failure is an error, and the window keeps the last number.
+#[tauri::command]
+pub async fn badge_get(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    match state.api()?.badge().await {
+        Err(e) if e.is_missing_route() => Ok(serde_json::Value::Null),
+        answer => answer,
+    }
+}
+
+/// Retry all (BE-03): this computer's failed uploads go back to the queue at once, and the server asks the person's other
+/// devices to do the same (`activity::retry_all`: `{retry_requested_at, count, here}`, and `others` when the server
+/// couldn't be asked: `offline` or `failed`). Whose uploads and whose request are fixed before anything is sent.
+#[tauri::command]
+pub async fn activity_retry_all(app: AppHandle, group: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    if group != crate::activity::UPLOAD_FAILED_GROUP {
+        return Err(AppError::msg("This group does not exist."));
+    }
+    let owner = state.owner();
+    let answer = crate::activity::retry_all(state.api(), &state.data_dir, &state.queue_lock, owner.as_ref(), &group).await;
+    if let Some(n) = answer.as_ref().ok().and_then(|a| a.get("here")).and_then(serde_json::Value::as_u64) {
+        crate::actions::retried_uploads(&app, usize::try_from(n).unwrap_or(0));
+    }
+    let _ = app.emit("activity:updated", 0u64);
+    answer
 }
 
 /// Marks the given notifications read, or all of them.

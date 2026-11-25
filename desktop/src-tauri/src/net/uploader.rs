@@ -224,6 +224,9 @@ pub struct UploadItem {
     pub progress: Option<u8>,
     /// The account it waits for, when it was made while another account was signed in here (v1.5).
     pub held_for: Option<String>,
+    /// Its recording on the server, once one was made (UX-08: Activity's group of uploads that didn't finish lists it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 impl From<&PendingUpload> for UploadItem {
@@ -240,6 +243,7 @@ impl From<&PendingUpload> for UploadItem {
             imported: p.imported,
             progress: p.progress,
             held_for: None,
+            session_id: p.server_session(),
         }
     }
 }
@@ -910,6 +914,20 @@ impl UploadQueue {
 
     pub fn failed(&self) -> usize {
         self.items.iter().filter(|i| i.is_failed()).count()
+    }
+
+    /// Retry all (BE-03): every failed upload this account may send goes back to the queue, as its own Retry does (one
+    /// more automatic full restart allowed again). Another account's items stay as they are. Returns how many.
+    pub fn retry_failed(&mut self, current: Option<&crate::owner::Owner>) -> usize {
+        let mut n = 0;
+        for item in self.items.iter_mut().filter(|i| i.is_failed() && crate::owner::may_upload(i.owner.as_ref(), current)) {
+            item.state = states::QUEUED.into();
+            item.full_restarts = 0;
+            item.attempts = 0;
+            item.last_error = None;
+            n += 1;
+        }
+        n
     }
 }
 

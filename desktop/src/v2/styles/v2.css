@@ -306,6 +306,9 @@
 .el-row__control { position: relative; flex: none; display: flex; align-items: center; }
 .el-row__error { color: var(--el-role-danger-default); white-space: normal; }
 .el-row__chevron { display: flex; color: var(--el-role-text-secondary); }
+/* A row that opens what follows it in place (aria-expanded): its chevron turns down while open. */
+.el-row:has(> .el-row__hit[aria-expanded="true"]) > .el-row__chevron .el-icon { rotate: 90deg; }
+[dir="rtl"] .el-row:has(> .el-row__hit[aria-expanded="true"]) > .el-row__chevron .el-icon { rotate: -90deg; }
 .el-row__leading--tick { inline-size: var(--el-space-40); block-size: var(--el-space-40); }
 .el-row__tick {
   display: inline-flex; align-items: center; justify-content: center;
@@ -975,6 +978,8 @@ button.el-step__head { cursor: pointer; }
 .el-group__label > .el-group__title { padding-inline: 0; color: var(--el-role-text-primary); }
 .el-group__desc { margin-block-start: calc(-1 * var(--el-space-8)); padding-inline: var(--el-space-4); }
 .el-group__rows { padding: var(--el-space-4); }
+/* Activity's group line opened (UX-08): each of its items under it, set in by the line's icon column. */
+.el-activity__group { list-style: none; padding-inline-start: var(--el-space-40); }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
@@ -2163,6 +2168,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-badge-size); line-height: var(--el-desktop-text-badge-line); font-weight: var(--el-desktop-text-badge-weight);
   font-family: var(--el-desktop-text-badge-font); font-variant-numeric: tabular-nums; text-align: center;
 }
+/* Red only when something failed (UX-08, the server's tone): the same ring; its text on red is 4.5:1 or more in both themes. */
+.el-rail__count--danger { background: var(--el-role-danger-default); }
 .el-rail__dot {
   position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
   inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
