@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-aa (2026-11-25, proposed by EL-Backend at EL-Lead's request; accepted when merged)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-aa (proposed 2026-11-25 by EL-Backend at EL-Lead's request, accepted when merged; UX-18, avatars in Activity): each item of `GET /api/activity` gains `actor`, the person the item is about, or `null`: `{"id", "name", "avatar_url", "avatar_version", "avatar_color"}`, the same person fields the API gives everywhere else (2.0.0-l, 2.0.0-r §6). It is set only on items about one person (a recording sent to you: its sender; a receipt asked for by staff: that staff member; unusual use: the person), and only in the recipient's own list. The picture's URL is the usual signed, versioned one, given only here where the person is shown. Additions only. **Clients** (Mac, Windows and Android ship together): the desktop and the phone show the actor's picture in the item's icon place, or their initials in `avatar_color` without one, cached by `id` and `avatar_version` like every avatar; with `actor` `null`, the kind's icon as today.
 2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20, the badge's waiting calls): a call still being recorded is not waiting. `PATCH /api/sessions/{id}` takes `ended_at` (and `duration_ms`) while the session is still `recording`: the call is over and the person's choice is pending. A call is **waiting** when its session is `recording` and has `ended_at`, or started more than 4 hours ago (older apps that never send it). That one rule is used by the `waiting` view, the badge, Needs you and `facets.state`; a `recording` session that is not waiting has the state `waiting_to_upload`. Additions only. (Built on 2.0.0-w, -x and -y, which land just before it.) **Clients** (Mac, Windows and Android ship together): when a call with an open session ends, both apps send `PATCH /api/sessions/{id}` with `ended_at` and `duration_ms` before they show the choice (the after-call card or notification). It goes through their retry queue; `409 not_recording` and `422` drop it. Both read the waiting rule the same way: the desktop's `facets.ts` and the phone's `LibraryFacets.kt` make a `recording` session `waiting` only with `ended_at` or more than 4 hours after `started_at`, and `waiting_to_upload` otherwise, checked against the shared `web/tests/Fixtures/library-facets.json` (recording 41 has `ended_at`).
 2.0.0-y (accepted 2026-11-25 by EL-Lead; bulk Mark as read / unread): `POST /api/sessions/opened` and `DELETE /api/sessions/opened` take up to 200 ids and do for each what `POST` and `DELETE /api/sessions/{id}/opened` do for one, in one call: `200 {"done": [...], "not_found": [...]}`, a recording the person cannot read listed back, never an error for the whole batch. Additions only. (Built on 2.0.0-w and -x, which land just before it.) **Clients** (Mac, Windows and Android ship together): Mark as read and Mark as unread on a selection send one `POST` or `DELETE /api/sessions/opened` per 200 ids instead of one request each. Both apps set `opened` on the rows from `done` and drop the ids in `not_found` from the selection without an error. The phone also gains Mark as read and Mark as unread for one recording (2.0.0-t's `DELETE /api/sessions/{id}/opened`), which it lacks (lead decision 25).
 2.0.0-x (accepted 2026-11-25 by EL-Lead; CC5, docs/PLAN_CALL_CHOICE.md and docs/PLAN_CALL_RULES.md §3, see "Choices that follow the account (since 2.0.0-x)"): the rest of the call choice's state is kept for the account too, behind the same `call_rules` flag: the two privacy switches (`hide_live_words`, `block_screenshots`), the first-time hint, the "Always do this?" streak and whether it was offered, and the contacts and Sources whose "Always …?" offer the person turned down. `preferences` in `GET /api/call-rules` and in `call_rules` of `GET /api/config`, `PATCH /api/call-rules/preferences`, and `POST` / `DELETE /api/call-rules/declined`. Additions only, no migration. **Clients** (Mac, Windows and Android ship together): behind the same flag, both apps read `preferences` from `call_rules` in `GET /api/config` instead of their own copies, apply `hide_live_words` and `block_screenshots` as their system allows, and send each change with `PATCH /api/call-rules/preferences`, one key at a time (the first-time hint, "Always do this?" offered, the streak). An "Always … for Ahmed?" offer turned down or ignored is `POST /api/call-rules/declined`, and undoing it is `DELETE`; neither app offers it again for anything in `declined` of `GET /api/call-rules`.
@@ -2232,8 +2233,8 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
   - Shared with me `from`;
   - a sent item's `to[]`;
   - `GET /api/account` itself (the person's own).
-  `GET /api/account` `workspaces`, activity items and audit entries name no other person today, so they carry none; a
-  person added there later gets the two fields with it. A URL is only given where the person is already shown, and
+  `GET /api/account` `workspaces` and audit entries name no other person today, so they carry none; a person added
+  there later gets the two fields with it. Since 2.0.0-aa an activity item about a person carries them in `actor`. A URL is only given where the person is already shown, and
   erasing the account deletes the picture.
 
 #### 4. Email change
@@ -2729,9 +2730,16 @@ carries `retry_requested_at`: see "v2.1: flags, Activity, upload retries, the ba
 `limit` 1-100 (default 30), newest first:
 ```json
 {"data": [{"id": "9b1c…", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call",
-           "session_id": "01JB…", "read": false, "at": "…"}],
+           "session_id": "01JB…", "read": false, "at": "…", "actor": null},
+          {"id": "4f0a…", "kind": "shared_with_you", "title": "Ana sent you Call with Omar", "body": "for tomorrow",
+           "session_id": "01JC…", "read": false, "at": "…",
+           "actor": {"id": 12, "name": "Ana", "avatar_url": "https://…", "avatar_version": 1763700000, "avatar_color": 3}}],
  "unread_count": 3}
 ```
+Since 2.0.0-aa every item carries `actor`: the person it is about, or `null`. The server takes the person the item
+was written about. For a recording sent to you before then, it takes the sender, as your Shared with me keeps them,
+and never anyone else the recording went to. Someone who is no longer on the server gives `null`. The apps show the
+picture, or the initials in `avatar_color`, where the item's icon is.
 
 ### `POST /api/activity/read` — `library:read` (since v1.1)
 `{"ids": ["9b1c…"]}` marks those as read; without `ids`, everything. `200 {"unread_count": 0}`.
