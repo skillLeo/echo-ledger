@@ -1283,7 +1283,11 @@ data class AccountDto(
     @SerialName("pending_email") val pendingEmail: String? = null,
     @SerialName("pending_email_expires_at") val pendingEmailExpiresAt: String? = null,
     /** False when this server is not set up for phone passkeys: they are managed on the website. */
-    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false
+    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false,
+    /** The account's language, the same on every device (BE-06): `en` or `ur`; the phone speaks it while signed in. */
+    val language: String? = null,
+    /** The initials circle's colour, 0-7 (role.avatar), picked once by the server (BE-06, DES-08). */
+    @SerialName("avatar_color") val avatarColor: Int? = null
 )
 
 @Serializable

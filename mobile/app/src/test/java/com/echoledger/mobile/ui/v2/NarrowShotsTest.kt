@@ -138,6 +138,7 @@ class NarrowShotsTest : ScreenTest() {
                 for (s in scales) {
                     dark = d
                     language = l
+                    speak(l)
                     scale = s
                     compose.waitForIdle()
                     each()
