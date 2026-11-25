@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, errorMessage, type Settings } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
 import { ListRow, Select, Toggle, type IconType } from "../../components";
+import { t } from "../../../i18n";
 
 /** The switches, in their order on the page. */
 export const STARTUP_IDS = ["app.autostart", "app.on_close", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] as const;
@@ -40,7 +41,7 @@ export function StartupRowV2({ id, settings, onSettings, icon }: {
     return (
       <ListRow compact anchor={id} {...look} title={entry.title}
         control={settings ? <Select label={entry.title} hideLabel value={settings.closeQuits ? "quit" : "keep"}
-          options={[{ value: "keep", label: "Keep running in the background (recommended)" }, { value: "quit", label: "Quit" }]}
+          options={[{ value: "keep", label: t("Keep running in the background (recommended)") }, { value: "quit", label: t("Quit") }]}
           onChange={(v) => void api.updateSettings({ closeQuits: v === "quit" }).then(onSettings, () => undefined)} /> : undefined} />
     );
   }

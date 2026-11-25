@@ -48,7 +48,7 @@ import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
 import { call as accountCall, failureText, replyText } from "../../lib/account";
-import { useLanguage, type Lang } from "../../i18n";
+import { t, useLanguage, type Lang } from "../../i18n";
 import { accountLanguage, useFollowLanguage } from "../../i18n/language";
 import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
@@ -1338,7 +1338,7 @@ export default function MainApp() {
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
                       // Two levels: back to its group's page (About & help), never to "Settings".
-                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: t(HELP_GROUP.title) } : { onBack: onHome })} />
                   : hasV2Page(section.id, ui.flags["ui_v2.library"])
                     ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
                       language={urdu && account ? { value: accountLanguage(account) ?? lang, onChange: (l) => void changeLanguage(l), error: languageError } : undefined}
