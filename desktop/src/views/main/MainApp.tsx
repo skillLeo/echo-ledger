@@ -65,6 +65,7 @@ import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
 import type { Place as NavPlace } from "../../v2/shell/NavRail";
 import { noteRecentProject } from "../../v2/shell/recentProjects";
+import { readKept, writeKept } from "../../v2/shell/kept";
 import type { ActivityShow } from "../../v2/shell/PlacePanels";
 import * as Icons from "../../v2/components/icons";
 import { syncLibrary } from "../../v2/library/syncClock";
@@ -73,6 +74,7 @@ import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
+import { entryOf, groupOf } from "../../v2/settings/groups";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
@@ -105,10 +107,17 @@ const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
+/** Whether the account had no project when last read (kept.ts), so the Projects panel needn't show while they load. */
+const NO_PROJECTS_KEY = "echoledger-no-projects";
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
 /** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
 export const WIZARD_FLAGS_WAIT_MS = 1500;
+/** Help's group in two levels (UX-11): its way back goes to that group's page. */
+const HELP_GROUP = (() => {
+  const group = groupOf("help")!;
+  return { title: group.title, entry: entryOf(group) };
+})();
 /** The pages in words, for a Back link that returns to one ("Library"). */
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
@@ -298,6 +307,13 @@ export default function MainApp() {
   }, [liveViews, signIn, status?.serverUrl]);
   const lastViews = useMemo(() => (signIn ? lastViewsAccount(status?.serverUrl, signIn) : null), [signIn, status?.serverUrl, liveViews]);
   useViewsAccount(liveViews ?? lastViews, liveViews !== null);
+  // UX-09: whether this account had no project when last read, so the Projects panel doesn't show and then go away
+  // (260 px) on a cold start, or stay empty while offline.
+  const projectsAccount = liveViews ?? lastViews;
+  const hadNoProjects = readKept(NO_PROJECTS_KEY, projectsAccount) === "1";
+  useEffect(() => {
+    if (projects) writeKept(NO_PROJECTS_KEY, projectsAccount, projects.length === 0 ? "1" : "0");
+  }, [projects, projectsAccount]);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -322,7 +338,11 @@ export default function MainApp() {
   useEffect(() => setPickedHandler(runPicked), []);
   const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
   // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
-  const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void }>({ open: () => undefined, requestFiles: () => undefined });
+  const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void; tab: (id: string, tab: "memory" | "members") => void }>({
+    open: () => undefined, requestFiles: () => undefined, tab: () => undefined,
+  });
+  /** A project opened on one of its tabs (the project menu's Instructions & memory… and Members…, UX-09). */
+  const [projectTab, setProjectTab] = useState<{ id: string; tab: "memory" | "members"; seq: number } | null>(null);
   // What Live's hiding items follow, as the core works it out (privacy_status): the main window hidden from screen
   // shares now (an expired 15 minutes is not), the person's Hide EchoLedger windows, and its shortcut.
   const [privacyNow, setPrivacyNow] = useState({ hiding: false, windowsHidden: false, hideAllShortcut: "" });
@@ -828,6 +848,9 @@ export default function MainApp() {
       ...MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.())),
       registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
       registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
+      // UX-09: the project's page has a tab for each (Memory & instructions, Members).
+      registerAction("project.instructions", (ctx) => { const id = target(ctx); if (id) projectCommands.current.tab(id, "memory"); }),
+      registerAction("project.members", (ctx) => { const id = target(ctx); if (id) projectCommands.current.tab(id, "members"); }),
     ];
     return () => offs.forEach((off) => off());
   }, [inApp]);
@@ -1033,7 +1056,14 @@ export default function MainApp() {
     setProjectRequest({ kind: "new", seq: ++navigations.current });
   };
   const setupPage = ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic";
-  projectCommands.current = { open: (id) => openProject(id), requestFiles: (id) => setRequestSheet({ projectId: id }) };
+  projectCommands.current = {
+    open: (id) => openProject(id),
+    requestFiles: (id) => setRequestSheet({ projectId: id }),
+    tab: (id, which) => {
+      openProject(id);
+      setProjectTab({ id, tab: which, seq: ++navigations.current });
+    },
+  };
   menuCommands.current = {
     "app.accountPlan": () => openAccount("plan"),
     "app.checkUpdates": () => {
@@ -1194,7 +1224,9 @@ export default function MainApp() {
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
-                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} onSend={ctx.onSend ?? undefined} onRequest={ctx.onRequest ?? undefined}
+                  startTab={projectTab?.id === ctx.project.id ? projectTab : null}
+                  rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
                   onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
                   onBack={() => openProject(ctx.parent?.id ?? null)} onProjects={() => openProject(null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
@@ -1267,15 +1299,18 @@ export default function MainApp() {
               inPanel={ui.flags["ui_v2.library"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
-                ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
+                // Two levels (UX-11): Setup & health is the rail's own place, with no "‹ Settings".
+                ? <SetupHealthV2 platform={status.platform} onBack={ui.flags["ui_v2.library"] ? undefined : onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
                   ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
-                      : { onBack: onHome })} />
-                  : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                      // Two levels: back to its group's page (About & help), never to "Settings".
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
+                  : hasV2Page(section.id, ui.flags["ui_v2.library"])
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
+                      onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
@@ -1353,7 +1388,7 @@ export default function MainApp() {
             workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
-            projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
+            projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned, archived: !!p.archived || !!p.archived_at }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
             onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={(typed?: string) => { setPaletteFrom(typed ?? ""); setPalette(true); }} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
             library={ui.flags["ui_v2.library"] ? (
@@ -1368,6 +1403,9 @@ export default function MainApp() {
             libraryAttention={(libraryCounts?.needs ?? 0) > 0}
             nav={{
               panelFlyout: ui.flags.v21_panel_flyout,
+              noProjects: projects !== null ? projects.length === 0 : hadNoProjects,
+              projectsLoading: projects === null && !projectsError,
+              projectsError: projects === null ? projectsError : null,
               layoutFor: liveViews ?? lastViews,
               // The status items: Restart to update, then the zoom's chip while it isn't 100% (UX-07).
               titleEnd: <><RestartToUpdate appStatus={status} notify={notify} />{zoomOn && <ZoomChip />}</>,
