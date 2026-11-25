@@ -19,7 +19,7 @@
     <string name="cc_when_title">کب پوچھیں</string>
     <string name="cc_when_after">کال کے بعد (تجویز کردہ)</string>
     <string name="cc_when_start">کال کے شروع میں</string>
-    <string name="cc_pill_transcribe">یہ کال ٹرانسکرائب کریں</string>
+    <string name="cc_pill_transcribe">اس کال کو ٹرانسکرائب کریں</string>
     <string name="cc_pill_audio">صرف آڈیو محفوظ کریں</string>
     <string name="cc_pill_stop_delete">روکیں اور حذف کریں</string>
     <string name="cc_start_banner">یہ کال ریکارڈ ہو رہی ہے</string>

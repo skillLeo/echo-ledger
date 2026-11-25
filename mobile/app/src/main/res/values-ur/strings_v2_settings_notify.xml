@@ -28,7 +28,7 @@
     <string name="v2_ntf_sharing">شیئرنگ</string>
     <string name="v2_ntf_sharing_help">کسی نے آپ کے ساتھ ریکارڈنگ یا پروجیکٹ شیئر کیا</string>
     <string name="v2_ntf_account">اکاؤنٹ اور سیکیورٹی</string>
-    <string name="v2_ntf_account_help">کسی نئے ڈیوائس سے سائن ان، اور اکاؤنٹ کی دوسری تبدیلیاں</string>
+    <string name="v2_ntf_account_help">کسی نئے ڈیوائس سے سائن اِن، اور اکاؤنٹ کی دوسری تبدیلیاں</string>
     <string name="v2_ntf_usage">استعمال اور حدیں</string>
     <string name="v2_ntf_usage_help">ماہانہ حد کے قریب یا اس تک</string>
     <string name="v2_ntf_live_translate">لائیو ترجمہ</string>

@@ -75,7 +75,7 @@
     <string name="v2_act_k_upload_failed">اپ لوڈ ناکام</string>
     <string name="v2_act_k_transcript_ready">ٹرانسکرپٹ تیار</string>
     <string name="v2_act_k_transcript_failed">ٹرانسکرپشن ناکام</string>
-    <string name="v2_act_k_device">نئی ڈیوائس سائن ان ہوئی</string>
+    <string name="v2_act_k_device">نئی ڈیوائس سائن اِن ہوئی</string>
     <string name="v2_act_missed">ریکارڈنگ رہ گئی</string>
     <string name="v2_act_phone_call">فون کال</string>
     <string name="v2_act_app_call">%1$s کال</string>

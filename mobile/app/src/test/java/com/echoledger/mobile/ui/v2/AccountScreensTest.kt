@@ -569,7 +569,7 @@ class AccountScreensTest : ScreenTest() {
                 opened = it
             }, onYourData = {})
         }
-        assertTrue(seen("دو مرحلوں والا سائن ان"))
+        assertTrue(seen("دو مرحلوں والا سائن اِن"))
         assertTrue(seen("انتظار میں"))
         assertTrue(seen("⁦ayesha@bilaltraders.pk⁩", substring = false))
         click("پاس ورڈ")

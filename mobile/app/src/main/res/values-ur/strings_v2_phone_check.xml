@@ -16,7 +16,7 @@
     <string name="v2_pc_send">میرے ایڈمن کو بھیجیں</string>
     <string name="v2_pc_sending">بھیجی جا رہی ہے…</string>
     <string name="v2_pc_report_note">رپورٹ میں اس فون کا بنانے والا، ماڈل اور Android ورژن اور اوپر کی لائنیں ہوتی ہیں، انگریزی میں، جیسے آپ کا ایڈمن پڑھتا ہے۔ یہ آپ کے ایڈمن کو صرف بھیجیں پر تھپتھپانے سے جاتی ہے۔</string>
-    <string name="v2_pc_report_note_signed_out">رپورٹ ایڈمن کو بھیجنے کے لیے سائن ان کریں۔ رپورٹ کاپی کرنا ابھی چلتا ہے۔</string>
+    <string name="v2_pc_report_note_signed_out">رپورٹ ایڈمن کو بھیجنے کے لیے سائن اِن کریں۔ رپورٹ کاپی کرنا ابھی چلتا ہے۔</string>
     <string name="v2_pc_keep_running">%1$s پر EchoLedger کو چلتا رکھیں</string>
     <string name="v2_pc_open_settings">ترتیبات کھولیں</string>
     <string name="v2_pc_fix_named">%1$s: %2$s</string>
@@ -46,7 +46,7 @@
     <string name="v2_pc_d_sim_android">سم کالز ریکارڈ کرنے کے لیے Android 12 یا نیا چاہیے۔</string>
     <string name="v2_pc_d_sim_helper">سم کالز ہیلپر کے ذریعے ریکارڈ ہوتی ہیں۔</string>
     <string name="v2_pc_d_sim_on">اسے کالز اور میٹنگز میں آن کریں۔ کچھ فون بنانے والے فون لائن روک دیتے ہیں: ایسا ہو تو ایپ 8 سیکنڈ بعد بتا دیتی ہے۔</string>
-    <string name="v2_pc_d_cap_sign_in">لائیو کیپشنز سائن ان کرنے کے بعد چلتے ہیں۔</string>
+    <string name="v2_pc_d_cap_sign_in">لائیو کیپشنز سائن اِن کرنے کے بعد چلتے ہیں۔</string>
     <string name="v2_pc_d_cap_mic">اپنی کہی بات کے کیپشنز دیکھنے کے لیے مائیکروفون کی اجازت دیں۔</string>
     <string name="v2_pc_d_cap_ok">ریکارڈنگ کے دوران کیپشنز دکھتے ہیں؛ انہیں انٹرنیٹ چاہیے۔</string>
     <string name="v2_pc_d_lt_plan">لائیو ترجمہ آپ کے پلان میں نہیں ہے۔</string>

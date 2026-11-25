@@ -39,7 +39,7 @@
     <string name="v2_setup_fix_set_up">سیٹ اپ کریں</string>
     <string name="v2_setup_fix_restart">دوبارہ شروع کریں</string>
     <string name="v2_setup_fix_turn_on">آن کریں</string>
-    <string name="v2_setup_fix_sign_in">سائن ان کریں</string>
+    <string name="v2_setup_fix_sign_in">سائن اِن کریں</string>
     <string name="v2_setup_fix_storage">جگہ خالی کریں</string>
     <string name="v2_setup_fix_test">ٹیسٹ کال</string>
     <string name="v2_setup_ok_microphone">مائیکروفون کی اجازت ہے</string>
@@ -75,9 +75,9 @@
     <string name="v2_setup_ok_storage">کافی جگہ موجود ہے</string>
     <string name="v2_setup_fail_storage">فون تقریباً بھر چکا ہے</string>
     <string name="v2_setup_why_storage">%1$d MB خالی۔ لمبی کال شاید نہ سما سکے۔</string>
-    <string name="v2_setup_ok_signin">سائن ان ہے</string>
-    <string name="v2_setup_fail_signin">سائن ان نہیں</string>
-    <string name="v2_setup_why_signin">ریکارڈنگز اس فون پر رہیں گی اور سائن ان کے بعد ٹرانسکرائب ہوں گی۔</string>
+    <string name="v2_setup_ok_signin">سائن اِن ہے</string>
+    <string name="v2_setup_fail_signin">سائن اِن نہیں</string>
+    <string name="v2_setup_why_signin">ریکارڈنگز اس فون پر رہیں گی اور سائن اِن کے بعد ٹرانسکرائب ہوں گی۔</string>
     <string name="v2_setup_ok_last_call">آخری کال میں دونوں آوازیں تھیں</string>
     <string name="v2_setup_fail_last_call">آخری کال میں صرف آپ کی آواز ریکارڈ ہوئی</string>
     <string name="v2_setup_why_last_call">وجہ جاننے کے لیے ایک ٹیسٹ کال کریں۔</string>

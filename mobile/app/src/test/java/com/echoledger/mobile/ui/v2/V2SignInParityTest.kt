@@ -171,8 +171,8 @@ class V2SignInParityTest : ScreenTest() {
     @Test
     fun inUrduTheScreenIsInUrdu() {
         page(EchoLanguage.Urdu)
-        assertTrue(seen("سائن ان کریں یا اکاؤنٹ بنائیں"))
-        assertTrue(seen("سائن ان کے دوسرے طریقے"))
+        assertTrue(seen("سائن اِن کریں یا اکاؤنٹ بنائیں"))
+        assertTrue(seen("سائن اِن کے دوسرے طریقے"))
     }
 
     @Test

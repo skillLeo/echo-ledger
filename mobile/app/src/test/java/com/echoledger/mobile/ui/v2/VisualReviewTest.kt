@@ -383,7 +383,7 @@ class VisualReviewTest {
         val urdu = Locale.forLanguageTag("ur-PK")
         assertEquals("اپ لوڈ ناکام", ActivityWords.title(ur.resources, activity("upload_failed", "Upload failed — retry"), urdu))
         assertEquals("ٹرانسکرپٹ تیار", ActivityWords.title(ur.resources, activity("transcript_ready", "Transcript ready"), urdu))
-        assertEquals("نئی ڈیوائس سائن ان ہوئی", ActivityWords.title(ur.resources, activity("device_paired", "Pixel 9 signed in"), urdu))
+        assertEquals("نئی ڈیوائس سائن اِن ہوئی", ActivityWords.title(ur.resources, activity("device_paired", "Pixel 9 signed in"), urdu))
         // English keeps the server's own words; an unknown kind keeps them in every language.
         assertEquals(
             "Pixel 9 signed in",

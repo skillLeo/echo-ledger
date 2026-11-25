@@ -24,8 +24,8 @@
     <string name="v2_tr_key_remove_question">اپنی کلید ہٹائیں؟ جب تک آپ دوبارہ کلید نہ ڈالیں نئی ریکارڈنگز ٹرانسکرائب نہیں ہوں گی۔</string>
     <string name="v2_tr_key_remove_confirm">ہٹائیں</string>
     <string name="v2_tr_key_cancel">منسوخ کریں</string>
-    <string name="v2_tr_key_intro">مفت پلان آپ کی اپنی مفت Groq کلید سے ٹرانسکرائب کرتا ہے۔ اس میں دو منٹ لگتے ہیں:</string>
-    <string name="v2_tr_key_step1">1. console.groq.com کھولیں اور سائن ان کریں (مفت)۔</string>
+    <string name="v2_tr_key_intro">Free پلان آپ کی اپنی مفت Groq کلید سے ٹرانسکرائب کرتا ہے۔ اس میں دو منٹ لگتے ہیں:</string>
+    <string name="v2_tr_key_step1">1. console.groq.com کھولیں اور سائن اِن کریں (مفت)۔</string>
     <string name="v2_tr_key_step2">2. API Keys، پھر Create API key، پھر اسے کاپی کریں۔</string>
     <string name="v2_tr_key_step3">3. اسے یہاں چسپاں کریں اور محفوظ کریں دبائیں۔</string>
     <string name="v2_tr_key_open">console.groq.com کھولیں</string>

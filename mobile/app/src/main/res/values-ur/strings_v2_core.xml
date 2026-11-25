@@ -67,7 +67,7 @@
     <string name="v2_storage_used">%2$d ریکارڈنگز میں \u2066%1$s\u2069</string>
     <string name="v2_upgrade">اپ گریڈ کریں</string>
     <string name="v2_account_error">آپ کا اکاؤنٹ اور پلان لوڈ نہیں ہو سکا۔ اس فون کی ترتیبات کام کر رہی ہیں۔</string>
-    <string name="v2_not_signed_in">سائن ان نہیں</string>
+    <string name="v2_not_signed_in">سائن اِن نہیں</string>
     <string name="v2_clear_search">تلاش صاف کریں</string>
     <string name="v2_close">بند کریں</string>
     <string name="v2_back_to_top">اوپر واپس</string>
@@ -102,7 +102,7 @@
     <string name="v2_vm_offline_check">سرور تک رسائی نہیں ہو سکی۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_server_problem">سرور میں کوئی مسئلہ پیش آیا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_certificate">سرور کا سرٹیفکیٹ وہ نہیں جس کی یہ فون توقع کرتا ہے۔ سرور کا پتہ چیک کریں۔</string>
-    <string name="v2_vm_could_not_sign_in">سائن ان نہیں ہو سکا</string>
+    <string name="v2_vm_could_not_sign_in">سائن اِن نہیں ہو سکا</string>
     <string name="v2_vm_shizuku_start_failed">شیزوکو کے ذریعے کیپچر ہیلپر شروع نہیں ہو سکا۔</string>
     <string name="v2_vm_device_revoked">ڈیوائس ہٹا دی گئی</string>
     <string name="v2_vm_erased">مٹا دی گئی</string>
@@ -120,11 +120,11 @@
     <string name="v2_vm_settings_imported">ترتیبات امپورٹ ہو گئیں</string>
     <string name="v2_vm_settings_saved">ترتیبات محفوظ ہو گئیں</string>
     <string name="v2_vm_shizuku_not_running">شیزوکو نہیں چل رہا۔ اسے (وائرلیس ڈیبگنگ سے) شروع کریں اور دوبارہ کوشش کریں۔</string>
-    <string name="v2_vm_signed_in">سائن ان ہو گیا</string>
-    <string name="v2_vm_signing_in_failed">سائن ان ناکام رہا</string>
+    <string name="v2_vm_signed_in">سائن اِن ہو گیا</string>
+    <string name="v2_vm_signing_in_failed">سائن اِن ناکام رہا</string>
     <string name="v2_vm_stop_recording_first">پہلے ریکارڈنگ روکیں، پھر ٹیسٹ چلائیں۔</string>
     <string name="v2_vm_stopped_sharing">شیئرنگ بند ہو گئی</string>
-    <string name="v2_vm_wrong_sign_in_link">یہ سائن ان لنک اس سائن ان کے لیے نہیں۔ دوبارہ شروع کریں۔</string>
+    <string name="v2_vm_wrong_sign_in_link">یہ سائن اِن لنک اس سائن اِن کے لیے نہیں۔ دوبارہ شروع کریں۔</string>
     <string name="v2_vm_audio_download_failed">آواز ڈاؤن لوڈ نہیں ہو سکی۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_change_not_saved">تبدیلی محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_list_not_saved">فہرست محفوظ نہیں ہو سکی۔</string>
@@ -143,7 +143,7 @@
     <string name="v2_vm_settings_not_saved">ترتیبات محفوظ نہیں ہو سکیں۔</string>
     <string name="v2_vm_term_not_added">لفظ شامل نہیں ہو سکا۔</string>
     <string name="v2_vm_views_not_started">ویوز شروع نہیں ہو سکے۔</string>
-    <string name="v2_vm_signed_out">یہ فون سرور پر سائن آؤٹ کر دیا گیا۔ دوبارہ سائن ان کریں۔</string>
+    <string name="v2_vm_signed_out">یہ فون سرور پر سائن آؤٹ کر دیا گیا۔ دوبارہ سائن اِن کریں۔</string>
     <string name="v2_vm_no_audio_on_server">اس ریکارڈنگ کی آواز سرور پر موجود نہیں۔</string>
     <string name="v2_vm_one_updated">1 ریکارڈنگ اپ ڈیٹ ہو گئی</string>
     <string name="v2_vm_welcome">EchoLedger میں خوش آمدید</string>
@@ -188,11 +188,11 @@
     <string name="v2_vm_link_not_revoked">لنک واپس نہیں لیا جا سکا۔</string>
     <string name="v2_vm_not_deleted">ریکارڈنگ حذف نہیں ہو سکی۔</string>
     <string name="v2_vm_key_not_saved">کی محفوظ نہیں ہو سکی۔</string>
-    <string name="v2_vm_sign_in_first">پہلے اس فون پر سائن ان کریں۔</string>
-    <string name="v2_vm_signed_in_as">%1$s کے طور پر سائن ان ہو گیا</string>
+    <string name="v2_vm_sign_in_first">پہلے اس فون پر سائن اِن کریں۔</string>
+    <string name="v2_vm_signed_in_as">%1$s کے طور پر سائن اِن ہو گیا</string>
     <string name="v2_vm_many_deleted">%1$s حذف ہو گئیں</string>
     <string name="v2_vm_many_updated">%1$s ریکارڈنگز اپ ڈیٹ ہو گئیں</string>
-    <string name="v2_vm_signed_in_to">⁦%1$s⁩ پر سائن ان ہو گیا</string>
+    <string name="v2_vm_signed_in_to">⁦%1$s⁩ پر سائن اِن ہو گیا</string>
     <string name="v2_vm_sent_many">%1$s لوگوں کو بھیج دی گئی</string>
     <string name="v2_vm_term_added">“%1$s” خاص الفاظ میں شامل ہو گیا</string>
     <string name="v2_vm_retranscribing">%1$s میں دوبارہ ٹرانسکرپٹ بن رہا ہے۔ نیا تیار ہونے تک موجودہ ٹرانسکرپٹ رہے گا۔</string>

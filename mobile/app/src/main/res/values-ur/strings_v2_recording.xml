@@ -159,7 +159,7 @@
     <string name="v2_rec_fail_timeout">ٹرانسکرپشن میں بہت دیر لگی اور روک دی گئی۔ دوبارہ کوشش کریں دبائیں۔</string>
     <string name="v2_rec_fail_interrupted">ٹرانسکرپشن رک گئی۔ دوبارہ کوشش کریں دبائیں۔</string>
     <string name="v2_rec_fail_missing">آڈیو پوری طرح سرور تک نہیں پہنچی، یا اب محفوظ نہیں ہے۔</string>
-    <string name="v2_rec_fail_needs_key">فری پلان آپ کی اپنی مفت Groq کی سے ٹرانسکرائب کرتا ہے۔ اسے ترتیبات › ٹرانسکرپشن کی میں شامل کریں، پھر دوبارہ کوشش کریں دبائیں۔</string>
+    <string name="v2_rec_fail_needs_key">Free پلان آپ کی اپنی مفت Groq کلید سے ٹرانسکرائب کرتا ہے۔ اسے ترتیبات › ٹرانسکرپشن کی کلید میں شامل کریں، پھر “دوبارہ کوشش کریں” دبائیں۔</string>
     <string name="v2_rec_fail_own_key">Groq نے آپ کی کی قبول نہیں کی۔ ٹرانسکرپشن کی میں اسے چیک کریں، پھر دوبارہ کوشش کریں۔</string>
     <string name="v2_rec_fail_other">ٹرانسکرپٹ نہیں بن سکا۔ دوبارہ کوشش کریں دبائیں۔</string>
     <string name="v2_rec_retry">دوبارہ کوشش کریں</string>

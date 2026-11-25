@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The v2 screens' words (account and security, contract 2.0.0-l). values/ is English, values-ur/ Urdu: keep the keys the same. -->
 <resources>
-    <string name="v2_acct_section_signin">سائن ان</string>
+    <string name="v2_acct_section_signin">سائن اِن</string>
     <string name="v2_acct_section_data">آپ کا ڈیٹا اور اکاؤنٹ</string>
     <string name="v2_acct_profile">پروفائل</string>
     <string name="v2_acct_profile_sub">نام اور تصویر</string>
@@ -10,12 +10,12 @@
     <string name="v2_acct_password">پاس ورڈ</string>
     <string name="v2_acct_password_value_set">موجود ہے</string>
     <string name="v2_acct_password_value_none">نہیں ہے</string>
-    <string name="v2_acct_two_step">دو مرحلوں والا سائن ان</string>
+    <string name="v2_acct_two_step">دو مرحلوں والا سائن اِن</string>
     <string name="v2_acct_methods">Google اور پاس کیز</string>
     <string name="v2_acct_sessions">براؤزر اور ڈیوائسز</string>
-    <string name="v2_acct_sessions_sub">جہاں آپ سائن ان ہیں</string>
+    <string name="v2_acct_sessions_sub">جہاں آپ سائن اِن ہیں</string>
     <string name="v2_acct_load_failed">آپ کا اکاؤنٹ لوڈ نہیں ہوا۔ کنکشن چیک کریں۔</string>
-    <string name="v2_acct_classic_sub">پروفائل، ای میل، پاس ورڈ، دو مرحلوں والا سائن ان اور پاس کیز</string>
+    <string name="v2_acct_classic_sub">پروفائل، ای میل، پاس ورڈ، دو مرحلوں والا سائن اِن اور پاس کیز</string>
     <string name="v2_acct_open_classic">ایکسپورٹ، ہر جگہ سے سائن آؤٹ یا حذف</string>
     <string name="v2_acct_save">محفوظ کریں</string>
     <string name="v2_acct_continue">جاری رکھیں</string>
@@ -52,7 +52,7 @@
     <string name="v2_acct_email_cancelled">تبدیلی منسوخ ہو گئی</string>
     <string name="v2_acct_email_watching">لنک استعمال کرنے پر یہ اسکرین خود بدل جاتی ہے۔</string>
     <string name="v2_acct_pw_title_set">پاس ورڈ بنائیں</string>
-    <string name="v2_acct_pw_set_help">آپ ابھی Google سے سائن ان کرتے ہیں۔ پاس ورڈ سے آپ اس کے بغیر بھی سائن ان کر سکیں گے۔</string>
+    <string name="v2_acct_pw_set_help">آپ ابھی Google سے سائن اِن کرتے ہیں۔ پاس ورڈ سے آپ اس کے بغیر بھی سائن اِن کر سکیں گے۔</string>
     <string name="v2_acct_pw_current">موجودہ پاس ورڈ</string>
     <string name="v2_acct_pw_new">نیا پاس ورڈ</string>
     <string name="v2_acct_pw_code">آتھنٹیکیٹر ایپ کا کوڈ</string>
@@ -62,7 +62,7 @@
     <string name="v2_acct_rule_met">مکمل</string>
     <string name="v2_acct_rule_unmet">ابھی نہیں</string>
     <string name="v2_acct_pw_sign_out">دوسری ڈیوائسز سے سائن آؤٹ</string>
-    <string name="v2_acct_pw_sign_out_help">باقی ہر فون، کمپیوٹر اور براؤزر سائن آؤٹ ہو جاتا ہے۔ یہ فون سائن ان رہتا ہے۔</string>
+    <string name="v2_acct_pw_sign_out_help">باقی ہر فون، کمپیوٹر اور براؤزر سائن آؤٹ ہو جاتا ہے۔ یہ فون سائن اِن رہتا ہے۔</string>
     <string name="v2_acct_pw_change">پاس ورڈ بدلیں</string>
     <string name="v2_acct_pw_set">پاس ورڈ بنائیں</string>
     <string name="v2_acct_pw_changed">پاس ورڈ بدل گیا</string>
@@ -78,13 +78,13 @@
     <string name="v2_acct_proof_send">کوڈ بھیجیں</string>
     <string name="v2_acct_proof_resend">دوبارہ بھیجیں</string>
     <string name="v2_acct_proof_sent">کوڈ بھیج دیا گیا۔ اپنی ای میل دیکھیں۔</string>
-    <string name="v2_acct_2s_off_body">دو مرحلوں والا سائن ان، سائن ان کے وقت آپ کے فون کی ایپ سے کوڈ مانگتا ہے، اس لیے صرف پاس ورڈ کافی نہیں ہوتا۔</string>
-    <string name="v2_acct_2s_turn_on">دو مرحلوں والا سائن ان آن کریں</string>
+    <string name="v2_acct_2s_off_body">دو مرحلوں والا سائن اِن، سائن اِن کے وقت آپ کے فون کی ایپ سے کوڈ مانگتا ہے، اس لیے صرف پاس ورڈ کافی نہیں ہوتا۔</string>
+    <string name="v2_acct_2s_turn_on">دو مرحلوں والا سائن اِن آن کریں</string>
     <string name="v2_acct_2s_on_body">آن ہے۔ باقی ریکوری کوڈز: %1$d</string>
     <string name="v2_acct_2s_on_plain">آن ہے</string>
     <string name="v2_acct_2s_new_codes">نئے ریکوری کوڈز بنائیں</string>
     <string name="v2_acct_2s_new_codes_body">آپ کے پرانے ریکوری کوڈز کام کرنا بند کر دیں گے۔</string>
-    <string name="v2_acct_2s_turn_off">دو مرحلوں والا سائن ان آف کریں</string>
+    <string name="v2_acct_2s_turn_off">دو مرحلوں والا سائن اِن آف کریں</string>
     <string name="v2_acct_2s_turn_off_body">آپ کے اکاؤنٹ کو صرف پاس ورڈ چاہیے ہو گا۔ آف کرنے کے لیے آتھنٹیکیٹر ایپ کا کوڈ یا ریکوری کوڈ لکھیں۔</string>
     <string name="v2_acct_2s_scan">1. یہ کوڈ اپنی آتھنٹیکیٹر ایپ سے اسکین کریں</string>
     <string name="v2_acct_2s_qr">آتھنٹیکیٹر ایپ کے لیے QR کوڈ</string>
@@ -96,10 +96,10 @@
     <string name="v2_acct_2s_enter">2. ایپ میں دکھایا گیا 6 ہندسوں کا کوڈ لکھیں</string>
     <string name="v2_acct_2s_code">6 ہندسوں کا کوڈ</string>
     <string name="v2_acct_2s_confirm">آن کریں</string>
-    <string name="v2_acct_2s_on_done">دو مرحلوں والا سائن ان آن ہو گیا</string>
-    <string name="v2_acct_2s_off_done">دو مرحلوں والا سائن ان آف ہو گیا</string>
+    <string name="v2_acct_2s_on_done">دو مرحلوں والا سائن اِن آن ہو گیا</string>
+    <string name="v2_acct_2s_off_done">دو مرحلوں والا سائن اِن آف ہو گیا</string>
     <string name="v2_acct_rc_title">اپنے ریکوری کوڈز محفوظ کریں</string>
-    <string name="v2_acct_rc_body">فون کھو جائے تو ہر کوڈ سے ایک بار سائن ان ہو سکتا ہے۔ یہ صرف ابھی دکھائے جا رہے ہیں: انہیں کسی محفوظ جگہ رکھیں۔</string>
+    <string name="v2_acct_rc_body">فون کھو جائے تو ہر کوڈ سے ایک بار سائن اِن ہو سکتا ہے۔ یہ صرف ابھی دکھائے جا رہے ہیں: انہیں کسی محفوظ جگہ رکھیں۔</string>
     <string name="v2_acct_rc_code">کوڈ %1$d: %2$s</string>
     <string name="v2_acct_rc_copy">کاپی کریں</string>
     <string name="v2_acct_rc_share">شیئر کریں</string>
@@ -111,10 +111,10 @@
     <string name="v2_acct_m_linked">جڑا ہوا</string>
     <string name="v2_acct_m_not_linked">جڑا ہوا نہیں</string>
     <string name="v2_acct_m_unlink">Google الگ کریں</string>
-    <string name="v2_acct_m_unlink_body">اس کے بعد آپ پاس ورڈ یا پاس کی سے سائن ان کریں گے۔</string>
+    <string name="v2_acct_m_unlink_body">اس کے بعد آپ پاس ورڈ یا پاس کی سے سائن اِن کریں گے۔</string>
     <string name="v2_acct_m_unlinked">Google الگ ہو گیا</string>
     <string name="v2_acct_m_passkeys">پاس کیز</string>
-    <string name="v2_acct_m_passkeys_help">پاس ورڈ کی جگہ فنگر پرنٹ، چہرے یا اسکرین لاک سے سائن ان کریں۔</string>
+    <string name="v2_acct_m_passkeys_help">پاس ورڈ کی جگہ فنگر پرنٹ، چہرے یا اسکرین لاک سے سائن اِن کریں۔</string>
     <string name="v2_acct_m_no_passkeys">ابھی کوئی پاس کی نہیں۔</string>
     <string name="v2_acct_m_add">پاس کی شامل کریں</string>
     <string name="v2_acct_m_passkey_name">پاس کی کا نام</string>
@@ -122,7 +122,7 @@
     <string name="v2_acct_m_removed">پاس کی ہٹا دی گئی</string>
     <string name="v2_acct_m_renamed">نام بدل گیا</string>
     <string name="v2_acct_m_remove_title">%1$s ہٹائیں؟</string>
-    <string name="v2_acct_m_remove_body">اس سے مزید سائن ان نہیں ہو سکے گا۔</string>
+    <string name="v2_acct_m_remove_body">اس سے مزید سائن اِن نہیں ہو سکے گا۔</string>
     <string name="v2_acct_m_web">پاس کیز ویب سائٹ پر سنبھالیں</string>
     <string name="v2_acct_m_no_provider">اس فون پر پاس کی مینیجر نہیں۔ پاس کیز ویب سائٹ پر سنبھالیں۔</string>
     <string name="v2_acct_m_failed">پاس کی نہیں بنی۔ دوبارہ کوشش کریں۔</string>
@@ -130,13 +130,13 @@
     <string name="v2_acct_m_used">آخری بار %1$s کو استعمال ہوئی</string>
     <string name="v2_acct_m_never_used">ابھی استعمال نہیں ہوئی</string>
     <string name="v2_acct_s_browsers">براؤزر</string>
-    <string name="v2_acct_s_no_browsers">کوئی براؤزر سائن ان نہیں۔</string>
+    <string name="v2_acct_s_no_browsers">کوئی براؤزر سائن اِن نہیں۔</string>
     <string name="v2_acct_s_devices">ڈیوائسز</string>
     <string name="v2_acct_s_this_phone">یہ فون</string>
     <string name="v2_acct_s_sign_out">سائن آؤٹ</string>
     <string name="v2_acct_s_sign_out_of">%1$s سائن آؤٹ کریں</string>
     <string name="v2_acct_s_sign_out_title">%1$s سائن آؤٹ کریں؟</string>
-    <string name="v2_acct_s_sign_out_body">آپ کا اکاؤنٹ استعمال کرنے کے لیے اسے دوبارہ سائن ان کرنا ہو گا۔</string>
+    <string name="v2_acct_s_sign_out_body">آپ کا اکاؤنٹ استعمال کرنے کے لیے اسے دوبارہ سائن اِن کرنا ہو گا۔</string>
     <string name="v2_acct_s_signed_out">سائن آؤٹ ہو گیا</string>
     <string name="v2_acct_s_signed_out_on">%1$s کو سائن آؤٹ ہوا</string>
     <string name="v2_acct_s_active">%1$s کو فعال</string>
@@ -154,16 +154,16 @@
     <string name="v2_acct_err_email_taken">یہ ای میل پہلے سے کسی اور اکاؤنٹ میں ہے۔</string>
     <string name="v2_acct_err_wrong_password">یہ پاس ورڈ درست نہیں۔</string>
     <string name="v2_acct_err_invalid_otp">یہ کوڈ درست نہیں۔ ایپ دیکھ کر دوبارہ کوشش کریں۔</string>
-    <string name="v2_acct_err_otp_missing">دو مرحلوں والا سائن ان آن ہے: آتھنٹیکیٹر ایپ کا کوڈ بھی لکھیں۔</string>
+    <string name="v2_acct_err_otp_missing">دو مرحلوں والا سائن اِن آن ہے: آتھنٹیکیٹر ایپ کا کوڈ بھی لکھیں۔</string>
     <string name="v2_acct_err_invalid_code">یہ کوڈ درست نہیں۔ ای میل دیکھ کر دوبارہ کوشش کریں۔</string>
     <string name="v2_acct_err_proof_required">پہلے تصدیق کریں کہ یہ آپ ہیں۔</string>
     <string name="v2_acct_err_email_locked">آپ کی ای میل حال ہی میں بدلی ہے۔ آپ اسے %1$s کے بعد دوبارہ بدل سکتے ہیں۔</string>
     <string name="v2_acct_err_email_locked_plain">آپ کی ای میل حال ہی میں بدلی ہے۔ چند دن بعد دوبارہ بدل سکتے ہیں۔</string>
     <string name="v2_acct_err_expired">اس کوڈ کی مدت ختم ہو گئی۔ نئے کوڈ کے لیے دوبارہ شروع کریں۔</string>
-    <string name="v2_acct_err_already_enabled">دو مرحلوں والا سائن ان پہلے سے آن ہے۔</string>
-    <string name="v2_acct_err_not_enabled">دو مرحلوں والا سائن ان آف ہے۔</string>
-    <string name="v2_acct_err_required_for_staff">اسٹاف اکاؤنٹس میں دو مرحلوں والا سائن ان آن رہنا چاہیے۔</string>
-    <string name="v2_acct_err_last_method">سائن ان کا یہ آخری طریقہ ہے۔ پہلے پاس ورڈ بنائیں یا پاس کی شامل کریں۔</string>
+    <string name="v2_acct_err_already_enabled">دو مرحلوں والا سائن اِن پہلے سے آن ہے۔</string>
+    <string name="v2_acct_err_not_enabled">دو مرحلوں والا سائن اِن آف ہے۔</string>
+    <string name="v2_acct_err_required_for_staff">اسٹاف اکاؤنٹس میں دو مرحلوں والا سائن اِن آن رہنا چاہیے۔</string>
+    <string name="v2_acct_err_last_method">سائن اِن کا یہ آخری طریقہ ہے۔ پہلے پاس ورڈ بنائیں یا پاس کی شامل کریں۔</string>
     <string name="v2_acct_err_passkeys_unavailable">یہ سرور فون سے پاس کیز نہیں لیتا۔ انہیں ویب سائٹ پر سنبھالیں۔</string>
     <string name="v2_acct_err_too_many_passkeys">آپ کے پاس زیادہ سے زیادہ پاس کیز (10) ہیں۔ پہلے ایک ہٹائیں۔</string>
     <string name="v2_acct_err_invalid_passkey">پاس کی محفوظ نہیں ہو سکی۔ دوبارہ کوشش کریں۔</string>
@@ -176,7 +176,7 @@
     <string name="v2_acct_err_current_device">یہ وہی فون ہے جو آپ استعمال کر رہے ہیں۔ اس کے لیے ترتیبات میں سائن آؤٹ استعمال کریں۔</string>
     <string name="v2_acct_err_not_found">یہ پہلے ہی ہٹ چکا ہے۔</string>
     <string name="v2_acct_err_code_not_needed">اس کی جگہ اپنا پاس ورڈ یا آتھنٹیکیٹر کوڈ استعمال کریں۔</string>
-    <string name="v2_acct_err_signed_out">یہ فون سائن آؤٹ ہو گیا۔ دوبارہ سائن ان کریں۔</string>
+    <string name="v2_acct_err_signed_out">یہ فون سائن آؤٹ ہو گیا۔ دوبارہ سائن اِن کریں۔</string>
     <string name="v2_acct_err_offline">سرور تک رسائی نہیں ہو سکی۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔</string>
     <string name="v2_acct_err_server">سرور میں مسئلہ آیا۔ ایک منٹ بعد کوشش کریں۔</string>
     <string name="v2_acct_err_other">یہ نہیں ہو سکا۔ دوبارہ کوشش کریں۔</string>
