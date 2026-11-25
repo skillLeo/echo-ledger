@@ -1102,6 +1102,30 @@ async fn a_picture_link_that_redirects_is_refused_and_nothing_is_fetched_from_el
     assert_eq!(direct, Some(picture));
 }
 
+#[tokio::test]
+async fn a_picture_that_is_gone_is_none_and_one_that_cant_be_had_now_is_an_error() {
+    // None only when there is no picture to have (the window may keep that); offline or the server busy is an error, so
+    // the window asks again later.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("GET", "/api/avatars/1/1", Reply::empty(403))
+            .fixed("GET", "/api/avatars/2/1", Reply::empty(404))
+            .fixed("GET", "/api/avatars/3/1", Reply::empty(410))
+            .fixed("GET", "/api/avatars/4/1", Reply::json(503, json!({"message": "Service Unavailable"})))
+            .fixed("GET", "/api/avatars/5/1", Reply::json(429, json!({"message": "Too Many Attempts."}))),
+    );
+    let api = client(&server);
+    let at = |n: u32| format!("{}/api/avatars/{n}/1?signature=a", server.base_url());
+    for n in [1, 2, 3] {
+        assert!(matches!(api.avatar_bytes(&at(n)).await, Ok(None)), "{n}");
+    }
+    for n in [4, 5] {
+        assert!(api.avatar_bytes(&at(n)).await.is_err(), "{n}");
+    }
+    let offline = ApiClient::new("http://127.0.0.1:9", &[], Some(TOKEN.to_string())).expect("local client");
+    assert!(offline.avatar_bytes("http://127.0.0.1:9/api/avatars/6/1?signature=a").await.is_err());
+}
+
 // ---- Save audio ------------------------------------------------------------------------------------------------
 
 #[tokio::test]

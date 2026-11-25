@@ -575,15 +575,21 @@ impl ApiClient {
         Self::account_reply(resp).await
     }
 
-    /// A person's picture from its signed link (no token: the signature is the key). `None` for an expired or replaced
-    /// link (`403`, `404`), which the window answers with the copy it has or the initials. Redirects are refused (the
-    /// live client follows none): a picture comes from the link the server signed, never from where it points.
+    /// A person's picture from its signed link (no token: the signature is the key). `None` only when there is no picture
+    /// to have: an expired, replaced or removed link (`403`, `404`, `410`), or a redirect, which is refused (the live
+    /// client follows none: a picture comes from the link the server signed, never from where it points); the window
+    /// answers it with the initials and may keep that answer. Offline, a timeout, a 5xx, a 429 or any other answer is an
+    /// error, so the window asks again later.
     pub async fn avatar_bytes(&self, url: &str) -> AppResult<Option<Vec<u8>>> {
         let resp = self.live.get(url).timeout(AVATAR_TIMEOUT).send().await?;
-        if !resp.status().is_success() {
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(Some(resp.bytes().await?.to_vec()));
+        }
+        if status.is_redirection() || matches!(status.as_u16(), 403 | 404 | 410) {
             return Ok(None);
         }
-        Ok(Some(resp.bytes().await?.to_vec()))
+        Err(Self::error(resp).await)
     }
 
     /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this

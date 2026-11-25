@@ -4,7 +4,7 @@
 // their colour. Every other kind keeps its icon, whoever it is about; with `actor` null, no key (an older server) or
 // something that is no person, the kind's icon as before.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeStatus } from "../../test/fixtures";
 import { ActivityV2 } from "./ActivityV2";
@@ -112,6 +112,26 @@ describe("Activity: the person an item is about (2.0.0-aa)", () => {
     const avatar = rowOf("Ana sent you Call with Omar").querySelector(".el-avatar")!;
     expect(avatar.querySelector("img")).toBeNull();
     expect(avatar).toHaveTextContent("AM");
+  });
+
+  it("offline or the server busy (an error, not null) isn't kept: the next time the page shows, it asks again", async () => {
+    fail("account_avatar_image", "The server could not be reached.");
+    await show();
+    expect(rowOf("Ana sent you Call with Omar").querySelector(".el-avatar img")).toBeNull();
+    expect(callsOf("account_avatar_image")).toHaveLength(1);
+    cleanup();
+    respondWith("account_avatar_image", () => PHOTO);
+    await show();
+    expect(callsOf("account_avatar_image")).toHaveLength(2);
+    expect(rowOf("Ana sent you Call with Omar").querySelector(".el-avatar img")).toHaveAttribute("src", PHOTO);
+    // No picture to have (null) is kept until the next sign-in forgets it.
+    cleanup();
+    forgetPersonPictures();
+    respondWith("account_avatar_image", () => null);
+    await show();
+    cleanup();
+    await show();
+    expect(callsOf("account_avatar_image")).toHaveLength(3);
   });
 
   it("a picture that won't draw shows the initials", async () => {

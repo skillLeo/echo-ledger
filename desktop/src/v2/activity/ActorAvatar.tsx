@@ -13,8 +13,9 @@ export const actorSeed = (actor: Pick<ActivityActor, "id" | "name">) => (actor.n
 
 /**
  * One request per picture for the whole window, kept by where it lives (the server, the person and the version, the
- * signature left out, as the core keeps its copy), a picture the server no longer gives (null) included: thirty shares
- * from one teammate ask once. A call that fails (locked, an error) is not kept, so it is asked again later.
+ * signature left out, as the core keeps its copy), a picture the server no longer gives (null: 403, 404, 410) included:
+ * thirty shares from one teammate ask once. A call that fails (offline, a timeout, the server busy, locked) is not
+ * kept, so it is asked again later. Forgotten at each sign-in and sign-out, as the core forgets its copies.
  */
 const pictures = new Map<string, Promise<string | null>>();
 
@@ -39,7 +40,7 @@ function pictureOf(key: string, person: ActivityActor): Promise<string | null> {
   return asked;
 }
 
-/** For tests: forget the pictures asked for. */
+/** Forget the pictures asked for: another sign-in, or none (MainApp), and tests. */
 export function forgetPersonPictures() {
   pictures.clear();
 }

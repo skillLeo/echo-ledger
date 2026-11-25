@@ -219,9 +219,10 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
 
   const recovered = useRecovered();
   const row = (i: ActivityItem) => {
+    const person = shownPerson(i);
     const inside = (
       <>
-        {shownPerson(i) ? <ActorTile actor={shownPerson(i)!} /> : <ActivityTile kind={i.kind} resolved={i.resolved} />}
+        {person ? <ActorTile actor={person} /> : <ActivityTile kind={i.kind} resolved={i.resolved} />}
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>

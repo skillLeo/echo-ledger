@@ -32,6 +32,7 @@ import { registerAction } from "../../v2/actions/registry";
 import { ZOOM_DEFAULT, loadZoom, setZoom, useZoom, watchZoomWheel, zoomBy, zoomKey, zoomNow } from "../../lib/zoom";
 import { ZoomBubble, ZoomChip, zoomStepper } from "../../v2/shell/Zoom";
 import { useAvatar } from "./AccountFlows";
+import { forgetPersonPictures } from "../../v2/activity/ActorAvatar";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
 import { LibraryView } from "./LibraryView";
@@ -314,6 +315,8 @@ export default function MainApp() {
   const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
   // The places' memory is one sign-in's: another sign-in (or none) starts every place afresh.
   useEffect(() => {
+    // The people's pictures asked for are the last sign-in's too (the core forgets its copies then).
+    forgetPersonPictures();
     libraryPlace.current = null;
     lastProject.current = null;
     lastSettings.current = null;

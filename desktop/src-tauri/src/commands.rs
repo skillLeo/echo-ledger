@@ -603,7 +603,9 @@ pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: 
     if !crate::account::on_server(&url, &server) {
         return Ok(None);
     }
-    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    // No picture to have (403, 404, 410): the initials. Offline, a timeout or the server busy: an error, so the window
+    // asks again later rather than keeping the initials.
+    let Some(bytes) = state.api()?.avatar_bytes(&url).await? else { return Ok(None) };
     if crate::receipts::sniff(&bytes).is_none() {
         return Ok(None);
     }
