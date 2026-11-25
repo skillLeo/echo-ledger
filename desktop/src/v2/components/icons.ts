@@ -33,6 +33,8 @@ export {
   LucideLogOutIcon as SignOutIcon,
   LucideCalendarIcon as CalendarIcon,
   LucideCopyIcon as CopyIcon,
+  // Activity's server_problem (2.0.0-v).
+  LucideServerIcon as ServerIcon,
   // The window's own buttons on Windows (UX-20): Restore is two windows, as the system draws it.
   LucideMinusIcon as WindowMinimizeIcon,
   LucideSquareIcon as WindowMaximizeIcon,
