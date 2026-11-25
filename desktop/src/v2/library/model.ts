@@ -2,20 +2,27 @@
 // views, the WhatsApp-style row and the day groups. Pure functions, so the rules are tested without a window.
 import type { BinItem, LibraryItem, ViewsSummary } from "../../lib/ipc";
 import { rowViewsLine } from "../../lib/progress";
-import { TRASH_KEEP_HOURS_FALLBACK, hoursWords } from "../../lib/trash";
+import { TRASH_KEEP_HOURS_FALLBACK } from "../../lib/trash";
 import { inSmartView } from "../../lib/organise";
 import { dayGroup, itemState, recordingName, searchItems, sortItems } from "../../lib/library";
 import { formatTime, rowDate } from "../../lib/format";
 import { partsText } from "../../lib/languages";
 import { facetsOf, kindOfItem, sourceOf, statusOf, type Kind } from "./facets";
+import { t, tc } from "../../i18n";
 
 /** The saved views (classic's smart views and the new design's Untranscribed), and Trash. */
 export type SavedView = "all" | "today" | "this_week" | "untranscribed" | "waiting" | "pinned" | "bookmarked" | "failed" | "trash";
 export type ListView = Exclude<SavedView, "trash">;
-/** The Views ▾ menu: names in classic's words, in its order (Untranscribed after the dates). */
+/** The Views ▾ menu: names in classic's words, in its order (Untranscribed after the dates), in the window's language. */
 export const VIEW_NAMES: Record<ListView, string> = {
-  all: "All recordings", today: "Today", this_week: "This week", untranscribed: "Untranscribed", waiting: "Waiting for decision",
-  pinned: "Pinned", bookmarked: "Bookmarked", failed: "Failed",
+  get all() { return t("All recordings"); },
+  get today() { return t("Today"); },
+  get this_week() { return t("This week"); },
+  get untranscribed() { return t("Untranscribed"); },
+  get waiting() { return t("Waiting for decision"); },
+  get pinned() { return t("Pinned"); },
+  get bookmarked() { return t("Bookmarked"); },
+  get failed() { return t("Failed"); },
 };
 export const LIST_VIEWS = Object.keys(VIEW_NAMES) as ListView[];
 
@@ -66,8 +73,14 @@ export function dayGroups(items: LibraryItem[], now: Date = new Date()): { label
  */
 export type RowStateKey = "audio_only" | "transcribing" | "failed" | "no_audio" | "waiting_to_upload" | "waiting";
 export type RowState = { key: RowStateKey; text: string; tone: "quiet" | "danger" };
+/** Each state's words, in the window's language. */
 export const STATE_WORDS: Record<RowStateKey, string> = {
-  audio_only: "Audio only", transcribing: "Transcribing…", failed: "Failed · Retry", no_audio: "No audio", waiting_to_upload: "Waiting to upload", waiting: "Waiting",
+  get audio_only() { return t("Audio only"); },
+  get transcribing() { return t("Transcribing…"); },
+  get failed() { return t("Failed · Retry"); },
+  get no_audio() { return t("No audio"); },
+  get waiting_to_upload() { return t("Waiting to upload"); },
+  get waiting() { return t("Waiting"); },
 };
 const SERVER_STATES = new Set(["audio_only", "transcribing", "failed", "waiting_to_upload", "waiting"]);
 
@@ -110,7 +123,7 @@ export function rowWhen(iso: string | null | undefined, now: Date = new Date(), 
   if (!at || Number.isNaN(at.getTime())) return "";
   if (timeOnly || at.toDateString() === now.toDateString()) return formatTime(at);
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  return at.toDateString() === yesterday.toDateString() ? "Yesterday" : rowDate(iso, now);
+  return at.toDateString() === yesterday.toDateString() ? t("Yesterday") : rowDate(iso, now);
 }
 
 /** The date groups whose rows show only the time (their heading says the day). */
@@ -134,15 +147,23 @@ const tintOf = (name: string) => [...name].reduce((h, c) => (h * 31 + (c.codePoi
 
 /** A call's title without "Call with" (UX-06): the name or the number; an untitled call is an unknown caller. */
 export function rowTitle(item: Pick<LibraryItem, "title" | "transcript">, kind: Kind): string {
+  return titleOf(item, kind).title;
+}
+
+/**
+ * rowTitle, and whether it is the app's own word for no title ("Voice note", "Unknown caller", in the window's
+ * language): then the row's initials and tint don't come from it, so they never change with the language.
+ */
+function titleOf(item: Pick<LibraryItem, "title" | "transcript">, kind: Kind): { title: string; fallback: boolean } {
   const raw = (item.title ?? "").trim();
   const name = raw.replace(/^call with\s+/i, "").trim();
   if (kind === "voice_note" && (!raw || /^voice note$/i.test(raw))) {
     // A voice note is titled with its first words when it has a transcript (UX-06), else "Voice note".
     const words = (item.transcript?.preview ?? "").trim().split(/\s+/).filter(Boolean);
-    return words.length ? words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "") : "Voice note";
+    return words.length ? { title: words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : ""), fallback: false } : { title: t("Voice note"), fallback: true };
   }
-  if (kind === "call" && !name) return "Unknown caller";
-  return name || recordingName(raw);
+  if (kind === "call" && !name) return { title: t("Unknown caller"), fallback: true };
+  return { title: name || recordingName(raw), fallback: false };
 }
 
 export type RowModel = {
@@ -179,12 +200,13 @@ export function rowModel(item: LibraryItem, now: Date = new Date(), views: Views
   const meta = converting?.state === "making" ? converting.text
     : state === null ? [converting?.text, preview ?? ""].filter(Boolean).join(" · ")
       : parts ? `${state.text} ${parts}` : state.text;
-  const title = rowTitle(item, kind);
-  const initials = kind === "call" ? initialsOf(title) : null;
+  const { title, fallback } = titleOf(item, kind);
+  // From the caller's name, never from the app's words for none: an unknown caller shows the person, in any language.
+  const initials = kind === "call" && !fallback ? initialsOf(title) : null;
   const avatar: RowAvatar = {
     initials,
     icon: kind === "voice_note" ? "mic" : kind === "meeting" ? "calendar" : kind === "call" ? "person" : "file",
-    tint: tintOf(title),
+    tint: tintOf(fallback ? item.id : title),
   };
   return {
     title, meta, state, when: rowWhen(item.started_at, now, timeOnly), duration: rowDuration(item.duration_ms), app, kind, avatar,
@@ -210,5 +232,39 @@ export function binHours(items: readonly Pick<BinItem, "deleted_at" | "erase_at"
 
 /** The Trash sentence, in the classic Library's words. */
 export function binSentence(hours: number): string {
-  return `Deleted recordings stay here for ${hoursWords(hours)}, then their audio and transcripts are erased.`;
+  return t("Deleted recordings stay here for :time, then their audio and transcripts are erased.", { time: trashTime(hours) });
 }
+
+/** When a recording in Trash is erased: "erased in 5 hours", "erased in 1 hour", "erased soon" (classic's eraseIn). */
+export function eraseInWords(eraseAt: string, now: number = Date.now()): string {
+  const hours = Math.floor((Date.parse(eraseAt) - now) / 3_600_000);
+  return hours >= 1 ? tc("erased in :count hour|erased in :count hours", hours) : t("erased soon");
+}
+
+/**
+ * How long Trash keeps a recording, in the window's language: "48 hours", "1 hour", whole days above 48 hours ("30 days"),
+ * as lib/trash.ts hoursWords says it (which stays English for the pages not in Urdu yet).
+ */
+export function trashTime(hours: number | null | undefined): string {
+  const h = hours ?? TRASH_KEEP_HOURS_FALLBACK;
+  if (h > 48 && h % 24 === 0) return t(":days days", { days: h / 24 });
+  return h === 1 ? t("1 hour") : t(":hours hours", { hours: h });
+}
+
+/**
+ * A group's heading (lib/libraryGroups' English) in the window's language when it is the app's own word (a day, a state,
+ * Pinned, Recordings, the fallbacks); a project's, a source's or a device's name stays as it is.
+ */
+const OWN_GROUP = /^(date|status):|^(pinned|none|project:No project|device:Unknown device|language:Automatic)$/;
+/** Group by Source: lib/libraryGroups' own words for voice notes and for no source at all, not a source's name. */
+const ownSource = (g: { key: string; items?: readonly Pick<LibraryItem, "source_app" | "source_app_label">[] }): boolean => {
+  if (!g.items?.length) return false;
+  if (g.key === "app:Voice notes") return g.items.every((i) => i.source_app === "voice_note");
+  if (g.key === "app:Other") return g.items.every((i) => !i.source_app_label && !i.source_app);
+  return false;
+};
+export const groupTitle = (g: { key: string; label: string; items?: readonly Pick<LibraryItem, "source_app" | "source_app_label">[] }): string =>
+  (OWN_GROUP.test(g.key) || ownSource(g) ? t(g.label) : g.label);
+
+/** "1 recording", "3 recordings": a count of recordings in the window's language. */
+export const recordings = (n: number): string => tc(":count recording|:count recordings", n);
