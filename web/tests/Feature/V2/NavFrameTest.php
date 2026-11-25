@@ -235,7 +235,7 @@ describe('the panels', function () {
     it('gives Settings\' groups of several pages an inner list on the page, keeps its own list out of sight, and searches from the panel', function () {
         $profile = ($this->page)('/app/settings/profile');
         expect($profile)->toContain('data-inner-list')->toMatch('~<nav class="el-settings-nav v2-inner-list" aria-label="Account &amp; plan"~')
-            ->toMatch('~class="v2-inner-item is-on"\s+aria-current="page"\s*>Profile</a>~')->toContain('>Plan &amp; usage</a>')->toContain('>Sign-in &amp; security</a>')
+            ->toMatch('~class="v2-inner-item is-on"\s+aria-current="page"\s*>Profile</a>~')->toContain('>Plan &amp; billing</a>')->toContain('>Sign-in &amp; security</a>')
             ->toMatch('~<nav class="el-settings-nav" aria-label="Settings" hidden>~')
             ->toMatch('~is-on"\s+aria-current="page"\s+data-settings-group="account"~');
         // One page: no inner list.

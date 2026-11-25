@@ -819,6 +819,36 @@
         root.ElLibraryKeysCore = core;
     }
 })(typeof self !== 'undefined' ? self : this, function () {
+    /** The punctuation keys by their place on the keyboard, unshifted and with Shift (latinKey). */
+    const PLACES = {
+        Slash: ['/', '?'], BracketLeft: ['[', '{'], BracketRight: [']', '}'], Backslash: ['\\', '|'], Period: ['.', '>'],
+        Comma: [',', '<'], Minus: ['-', '_'], Equal: ['=', '+'], Semicolon: [';', ':'], Quote: ["'", '"'], Backquote: ['`', '~'],
+    };
+
+    /**
+     * The key pressed, as a Latin keyboard names it (the desktop's D-221). With an Urdu layout (or Arabic, Persian,
+     * Russian…) a letter's key types that layout's letter, so J, K, X, F and / would never answer: then the key's place
+     * (e.code: KeyJ, Digit1, Slash) stands for it, a letter in lower case. A Latin layout keeps its own letters (AZERTY's
+     * A is A), and a key that names itself (Enter, ArrowDown) or an event with no code stays as it is.
+     */
+    function latinKey(e) {
+        const key = String(e.key || '');
+        const code = e.code;
+        if (! code || [...key].length !== 1 || /^[\x20-\x7e]$/.test(key)) return key;
+        const letter = /^Key([A-Z])$/.exec(code);
+        if (letter) return letter[1].toLowerCase();
+        const digit = /^(?:Digit|Numpad)([0-9])$/.exec(code);
+        if (digit) return digit[1];
+        const place = PLACES[code];
+        return place ? place[e.shiftKey ? 1 : 0] : key;
+    }
+
+    /** A key's name for the decisions below: latinKey, a single character in lower case. */
+    function keyOf(e) {
+        const key = latinKey(e);
+        return key.length === 1 ? key.toLowerCase() : key;
+    }
+
     /** Whether a key or click lands where the person types: a text field, a list, an editable part. */
     const TYPING = ['input', 'textarea', 'select'];
     function isTyping(target) {
@@ -832,19 +862,27 @@
     }
 
     /**
-     * What a key does in the Library. e: {key, ctrlKey, metaKey, altKey, defaultPrevented, target}; s: {modal, items
-     * (rows on screen), at (the current row, -1 for none), checked (rows ticked on screen), selected (what the table
-     * holds selected, across pages too), allChecked}. Returns {do, at?} or null.
+     * What a key does in the Library. e: {key, code, shiftKey, ctrlKey, metaKey, altKey, defaultPrevented, target, onRow
+     * (the focus is on a row's own link), onPage (on the page itself: nothing else has the focus)}; s: {modal, items
+     * (rows on screen), at (the current row, -1 for none), focusAt (the row that has the focus, -1 for none), checked
+     * (rows ticked on screen), selected (what the table holds selected, across pages too), allChecked}. The keys follow
+     * the key's place on a non-Latin layout (latinKey). Returns {do, at?, focus?} or null.
      */
     function keyAction(e, s) {
         if (e.defaultPrevented || e.altKey || isTyping(e.target) || s.modal) return null;
-        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        const key = keyOf(e);
         if ((e.ctrlKey || e.metaKey) && key === 'a') return s.allChecked ? { do: 'none' } : { do: 'select-all' };
         if (e.ctrlKey || e.metaKey) return null;
-        if (key === 'j' || key === 'k') {
+        // J and K move through the list; so do ↓ and ↑ (the desktop's D-220) on a row, or on the page once a row is
+        // the current one, never past the ends. From a focused row the focus goes along.
+        const arrow = (key === 'ArrowDown' || key === 'ArrowUp') && ! e.shiftKey && (e.onRow === true || (e.onPage === true && s.at >= 0));
+        if (key === 'j' || key === 'k' || arrow) {
             if (! s.items) return null;
-            const at = s.at < 0 ? 0 : Math.max(0, Math.min(s.items - 1, s.at + (key === 'j' ? 1 : -1)));
-            return { do: 'move', at };
+            const onRow = e.onRow === true && s.focusAt >= 0;
+            const from = onRow ? s.focusAt : s.at;
+            const down = key === 'j' || key === 'ArrowDown';
+            const at = from < 0 ? 0 : Math.max(0, Math.min(s.items - 1, from + (down ? 1 : -1)));
+            return onRow ? { do: 'move', at, focus: true } : { do: 'move', at };
         }
         if ((key === 'Enter' || key === 'x') && isControl(e.target)) return null;
         if (key === 'Enter' && s.at >= 0) return { do: 'open', at: s.at };
@@ -875,16 +913,20 @@
     /**
      * Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the keys of the filter panel and the search, decided
      * before keyAction. e as keyAction's (with code); s: {modal, panelOpen}. F opens or closes the filters, ⌘F / Ctrl+F
-     * goes to the search (also from another field), and Esc closes the panel before it clears a selection. A single key
+     * goes to the search (also from another field), and Esc closes the panel before it clears a selection. On a
+     * non-Latin layout (latinKey) / goes to the search and ? opens Help, as the console's own / and ? do on a Latin one. A single key
      * with no modifier (F) answers only while the Library has the focus (s.focused), so speech input and stray keys
      * elsewhere never trigger it (WCAG 2.1.4). The numbers are the frame's since docs/PLAN_NAV_3_LEVELS.md (⌘1…⌘6 the
      * rail, Alt+1…9 the panel: resources/js/frame-core.cjs). Returns {do} or null.
      */
     function shellKey(e, s) {
         if (e.defaultPrevented || s.modal) return null;
-        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        const key = keyOf(e);
         if ((e.ctrlKey || e.metaKey) && ! e.altKey && key === 'f') return { do: 'search' };
         if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return key === 'Escape' && s.panelOpen ? { do: 'close-filters' } : null;
+        // / and ? on a non-Latin layout (their key's place, D-221): the console's own / and ? answer the Latin keys.
+        if (key === '/' && e.key !== '/') return { do: 'search' };
+        if (key === '?' && e.key !== '?') return { do: 'help' };
         if (key === 'f') return s.focused ? { do: 'toggle-filters' } : null;
         if (key === 'Escape' && s.panelOpen) return { do: 'close-filters' };
         return null;
@@ -915,7 +957,7 @@
         return s.modal || editor || isField(e.target) ? 'stay' : way;
     }
 
-    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
+    return { latinKey, isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
 });
 
 
@@ -941,14 +983,18 @@
         };
         const wide = () => window.matchMedia('(min-width: 1024px)').matches;
         const modal = () => document.querySelector('.fi-modal-open[aria-modal="true"]') !== null;
+        // A row's own link (what opens it): the focus is on a row there, and the arrows walk the list.
+        const linkOf = (el) => rowOf(el).querySelector('.fi-ta-record-content');
         document.addEventListener('keydown', (e) => {
             const lib = library();
             if (! lib) return;
             const items = Array.from(lib.list.querySelectorAll('[data-recording]'));
             const all = lib.list.querySelector('input.fi-ta-page-checkbox');
             const on = checked(lib);
-            const act = core.keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
-                modal: modal(), items: items.length, at: items.findIndex((el) => rowOf(el).classList.contains('el-kb-row')),
+            const focusAt = e.target instanceof Element ? items.findIndex((el) => linkOf(el) === e.target) : -1;
+            const act = core.keyAction({ key: e.key, code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
+                defaultPrevented: e.defaultPrevented, target: field(e.target), onRow: focusAt >= 0, onPage: e.target === document.body || e.target === document.documentElement }, {
+                modal: modal(), items: items.length, at: items.findIndex((el) => rowOf(el).classList.contains('el-kb-row')), focusAt,
                 checked: on.length, selected: selected(lib), allChecked: !! (all && all.checked),
             });
             if (! act) return;
@@ -960,6 +1006,7 @@
                 items.forEach((el) => rowOf(el).classList.remove('el-kb-row'));
                 rowOf(items[act.at]).classList.add('el-kb-row');
                 rowOf(items[act.at]).scrollIntoView({ block: 'nearest' });
+                if (act.focus) linkOf(items[act.at])?.focus();
             } else if (act.do === 'open') {
                 e.preventDefault();
                 const id = items[act.at].dataset.recording;
@@ -2182,7 +2229,7 @@
             const data = window.Alpine ? window.Alpine.$data(shellEl) : null;
             const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
             // The single key F answers only while the Library has the focus (WCAG 2.1.4): the list, its toolbar or the panel.
-            const act = core.shellKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
+            const act = core.shellKey({ key: e.key, code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
                 modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, panelOpen: !! (data && data.filtersOpen),
                 focused: e.target instanceof Element && shellEl.contains(e.target),
             });
@@ -2197,6 +2244,8 @@
                 data?.toggleFilters();
             } else if (act.do === 'close-filters') {
                 data?.closeFilters();
+            } else if (act.do === 'help') {
+                window.dispatchEvent(new CustomEvent('el-help'));
             }
         }, true);
     })();
@@ -2824,7 +2873,9 @@
 // - A table box that scrolls sideways with nothing to focus in it takes the focus itself, so the keyboard can scroll it
 //   (axe's scrollable-region-focusable, serious); while it has the focus it is a region named by the table's heading.
 // - The rail is one stop of the Tab key: the arrows (and Home, End) move through it (a roving tabindex). The frame's
-//   Blade (filament.v2.frame) writes the same stop before any script runs; this keeps it after each redraw.
+//   Blade (filament.v2.frame) writes the same stop before any script runs; this keeps it after each redraw. The rail's
+//   menus (Record's, Account's) keep their own keys and focus.
+// - A menu with a block that says what it is about (the account menu's header) is described by it.
 // (Esc already closes a tooltip: scripts/a11y.mjs checks it.)
 (function (root, factory) {
     const core = factory();
@@ -2908,9 +2959,29 @@
         return -1;
     }
 
-    /** The rail's stops, in order: its links and buttons that are shown. */
+    /** A rail's menu (Record's, Account's) and what is in it: their own keys and focus, not the rail's stops. */
+    const MENU = '[role="menu"], .fi-dropdown-panel';
+
+    /** The rail's stops, in order: its links and buttons that are shown, outside its menus. */
     function railItems(rail) {
-        return Array.from(rail.querySelectorAll(RAIL_ITEMS)).filter((el) => el.getClientRects().length > 0);
+        return Array.from(rail.querySelectorAll(RAIL_ITEMS)).filter((el) => el.getClientRects().length > 0
+            && ! (typeof el.closest === 'function' && el.closest(MENU)));
+    }
+
+    /**
+     * A menu with a block that says what it is about (data-menu-description: the account menu's header, who it is) is
+     * described by it (aria-describedby on the menu), so a screen reader in the menu hears it. Answers how many changed.
+     */
+    function describeMenus(doc) {
+        let changed = 0;
+        doc.querySelectorAll('[data-menu-description][id]').forEach((block) => {
+            const menu = block.closest('.fi-dropdown-panel');
+            if (menu && menu.getAttribute('aria-describedby') !== block.id) {
+                menu.setAttribute('aria-describedby', block.id);
+                changed++;
+            }
+        });
+        return changed;
     }
 
     /**
@@ -2939,6 +3010,7 @@
             queued = false;
             markGroupHeaders(doc);
             markScrollers(doc);
+            describeMenus(doc);
             const rail = doc.querySelector(RAIL);
             if (rail) last = rove(railItems(rail), last);
         };
@@ -2965,10 +3037,10 @@
         }, true);
         doc.addEventListener('focusin', (e) => {
             const rail = e.target && typeof e.target.closest === 'function' ? e.target.closest(RAIL) : null;
-            if (rail) last = rove(railItems(rail), e.target);
+            if (rail && ! e.target.closest(MENU)) last = rove(railItems(rail), e.target);
         });
         if (typeof win.MutationObserver === 'function') {
-            new win.MutationObserver(later).observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'tabindex'] });
+            new win.MutationObserver(later).observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'tabindex', 'aria-describedby'] });
         }
         win.addEventListener('resize', later);
         doc.addEventListener('alpine:initialized', later);
@@ -2982,7 +3054,7 @@
         return true;
     }
 
-    return { GROUP_HEADERS, SCROLLERS, RAIL, RAIL_ITEMS, TABLE_HEADINGS, markGroupHeaders, markScrollers, headingOf, railStep, railItems, rove, install };
+    return { GROUP_HEADERS, SCROLLERS, RAIL, RAIL_ITEMS, MENU, TABLE_HEADINGS, markGroupHeaders, markScrollers, describeMenus, headingOf, railStep, railItems, rove, install };
 });
 
     window.ElA11yCore.install(document, window);
@@ -3068,6 +3140,7 @@
 </span>
                             <span class="v2-rail-label">Record</span>
                         </a>
+                        
                         <div
     x-data="filamentDropdown({ isMenu: true })"
     class="fi-dropdown" wire:key="KEY"
@@ -3084,7 +3157,7 @@
 
     <!--[if BLOCK]><![endif]-->        <div
             x-cloak
-            x-float.placement.right-start.flip.offset="{ offset: 8,  }"
+            x-float.placement.right-start.flip.teleport.offset="{ offset: 8,  }"
             x-ref="panel"
             x-transition:enter-start="fi-opacity-0"
             x-transition:leave-end="fi-opacity-0"
@@ -3194,13 +3267,14 @@
 <!--[if BLOCK]><![endif]--><span class="v2-rail-dot" aria-hidden="true"></span><!--[if ENDBLOCK]><![endif]--></span>
                             <span class="v2-rail-label" aria-hidden="true">Setup</span>
                         </a>
-                    <!--[if ENDBLOCK]><![endif]-->                    <button type="button" class="v2-rail-item" x-on:click="$dispatch('el-help')" title="Help and shortcuts" data-module="help" tabindex="-1">
-                        <span class="v2-rail-icon"><svg class="v2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                    <!--[if ENDBLOCK]><![endif]-->                    
+                    <!--[if BLOCK]><![endif]-->                        <a href="https://echoledger.test/app/help" class="v2-rail-item" title="Help" data-module="help" tabindex="-1">
+                            <span class="v2-rail-icon"><svg class="v2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><circle cx="12" cy="17" r="1.1" fill="currentColor" stroke="none"/></svg>
 </span>
-                        <span class="v2-rail-label">Help</span>
-                    </button>
-                    <!--[if BLOCK]><![endif]-->                        <!--[if BLOCK]><![endif]-->    <a href="https://echoledger.test/app/settings" class="v2-rail-item"         title="Settings (Ctrl 6)" data-module="settings" data-rail="settings" data-rail-shortcut="6" tabindex="-1"
+                            <span class="v2-rail-label">Help</span>
+                        </a>
+                    <!--[if ENDBLOCK]><![endif]-->                    <!--[if BLOCK]><![endif]-->                        <!--[if BLOCK]><![endif]-->    <a href="https://echoledger.test/app/settings" class="v2-rail-item"         title="Settings (Ctrl 6)" data-module="settings" data-rail="settings" data-rail-shortcut="6" tabindex="-1"
         x-on:click="railClick($event, 'settings')" x-effect="expanded($el, 'settings')">
         <span class="v2-rail-icon"><svg class="v2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -3210,56 +3284,88 @@
 <!--[if ENDBLOCK]><![endif]-->                    <!--[if ENDBLOCK]><![endif]-->                    <div class="v2-rail-avatar">
                         <!--[if BLOCK]><![endif]-->    <div
     x-data="filamentDropdown({ isMenu: true })"
-    class="fi-dropdown fi-user-menu v2-um"
+    class="fi-dropdown fi-user-menu v2-um is-rail"
 >
     <div
         x-on:mousedown="if ($event.button === 0) toggle($event)"
         class="fi-dropdown-trigger"
     >
-        <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="Open the menu for Bilal Qureshi" tabindex="-1">
-                <!--[if BLOCK]><![endif]--><span class="v2-avatar is-coloured" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" aria-hidden="true">BQ</span>
-<!--[if ENDBLOCK]><![endif]-->            </button>
+        <button type="button" class="fi-user-menu-trigger v2-um-trigger is-rail" aria-label="Account, Bilal Qureshi" title="Account, theme and settings" tabindex="-1">
+                <span class="v2-um-hit"><!--[if BLOCK]><![endif]--><span class="v2-avatar is-rail is-coloured is-drawn" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" data-initials="BQ" aria-hidden="true"></span>
+<!--[if ENDBLOCK]><![endif]--></span>
+                <span class="v2-rail-label" aria-hidden="true">Account</span>
+            </button>
     </div>
 
     <!--[if BLOCK]><![endif]-->        <div
             x-cloak
-            x-float.placement.right-end.flip.teleport.offset="{ offset: 8,  }"
+            x-float.placement.top-start.size.flip.teleport.offset="{ offset: 8, size: {&quot;padding&quot;:16} }"
             x-ref="panel"
             x-transition:enter-start="fi-opacity-0"
             x-transition:leave-end="fi-opacity-0"
-                        class="fi-dropdown-panel fi-width-xs"
+                        class="fi-dropdown-panel fi-width-xs fi-scrollable"
             style=""
         >
             <div class="fi-dropdown-list">
-    <a href="https://echoledger.test/app/settings" class="v2-um-head">
+    <div class="v2-um-head" data-account-head id="v2-um-head-rail" data-menu-description>
                 <!--[if BLOCK]><![endif]--><span class="v2-avatar is-large is-coloured" data-avatar-color="1" style="background-color: var(--el-role-avatar-1)" aria-hidden="true">BQ</span>
 <!--[if ENDBLOCK]><![endif]-->                <span class="v2-um-text">
-                    <span class="v2-um-name">Bilal Qureshi</span>
-                    <span class="v2-um-email" dir="ltr">bilal@qureshi-textiles.example</span>
+                    
+                    <span class="v2-um-name"><bdi>Bilal Qureshi</bdi></span>
+                    <span class="v2-um-email"><bdi dir="ltr">bilal@qureshi-textiles.example</bdi></span>
+                    <span class="v2-um-plan">Personal</span>
                 </span>
-                <span class="v2-chip">Personal</span>
-            </a>
+            </div>
 </div>
         <div class="fi-dropdown-list">
-    <!--[if BLOCK]><![endif]-->                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
 <a
-            href="https://echoledger.test/app/settings/plan/upgrade?plan=pro"
-                class="fi-dropdown-list-item" role="menuitem" tabindex="-1"
+            href="https://echoledger.test/app/settings/profile?action=changePhoto"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" data-account-item="photo"
 >
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <span class="fi-dropdown-list-item-label">
-        Upgrade
+        Add photo
     </span>
 
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></a>
 
 
-            <!--[if ENDBLOCK]><![endif]-->            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            
+            <div class="v2-um-theme" x-data="{ theme: localStorage.getItem('filament:theme:mode') || 'system' }" x-on:theme-changed.window="theme = $event.detail">
+                <span id="v2-um-theme-rail">Theme</span>
+                <span class="v2-segmented" role="group" aria-labelledby="v2-um-theme-rail">
+                    <!--[if BLOCK]><![endif]-->                        <button type="button" role="menuitemradio" tabindex="-1" x-bind:aria-checked="theme === 'system' ? 'true' : 'false'"
+                            x-on:click="theme = 'system'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'system' }))">System</button>
+                                            <button type="button" role="menuitemradio" tabindex="-1" x-bind:aria-checked="theme === 'light' ? 'true' : 'false'"
+                            x-on:click="theme = 'light'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'light' }))">Light</button>
+                                            <button type="button" role="menuitemradio" tabindex="-1" x-bind:aria-checked="theme === 'dark' ? 'true' : 'false'"
+                            x-on:click="theme = 'dark'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'dark' }))">Dark</button>
+                    <!--[if ENDBLOCK]><![endif]-->                </span>
+            </div>
+</div>
+        <div class="fi-dropdown-list">
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+<a
+            href="https://echoledger.test/app/settings/plan"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" data-account-item="plan"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <span class="fi-dropdown-list-item-label">
+        Plan &amp; billing
+    </span>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></a>
+
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
 <a
             href="https://echoledger.test/app/settings"
-                class="fi-dropdown-list-item" role="menuitem" tabindex="-1"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" data-account-item="settings"
 >
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
@@ -3271,29 +3377,33 @@
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></a>
 
 
-            <div class="v2-um-theme" x-data="{ theme: localStorage.getItem('filament:theme:mode') || 'system' }" x-on:theme-changed.window="theme = $event.detail">
-                <span id="v2-um-theme">Theme</span>
-                <span class="v2-segmented" role="radiogroup" aria-labelledby="v2-um-theme">
-                    <!--[if BLOCK]><![endif]-->                        <button type="button" role="radio" x-bind:aria-checked="theme === 'system' ? 'true' : 'false'"
-                            x-on:click="theme = 'system'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'system' }))">System</button>
-                                            <button type="button" role="radio" x-bind:aria-checked="theme === 'light' ? 'true' : 'false'"
-                            x-on:click="theme = 'light'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'light' }))">Light</button>
-                                            <button type="button" role="radio" x-bind:aria-checked="theme === 'dark' ? 'true' : 'false'"
-                            x-on:click="theme = 'dark'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: 'dark' }))">Dark</button>
-                    <!--[if ENDBLOCK]><![endif]-->                </span>
-            </div>
             <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
 <button
-                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="$dispatch('el-help')"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="$dispatch('el-help')" data-account-item="shortcuts"
 >
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <span class="fi-dropdown-list-item-label">
-        Help and shortcuts
+        Keyboard shortcuts <kbd class="v2-um-key" aria-hidden="true">?</kbd>
     </span>
 
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></button>
+
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+<a
+            href="https://echoledger.test/app/help"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" data-account-item="help"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <span class="fi-dropdown-list-item-label">
+        Help
+    </span>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></a>
 
 
             <!--[if BLOCK]><![endif]-->                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
@@ -3317,7 +3427,7 @@
     <form action="https://echoledger.test/app/logout" method="post">
                 <input type="hidden" name="_token" value="CSRF" autocomplete="off">                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
 <button
-                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" type="submit" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"
+                class="fi-dropdown-list-item" role="menuitem" tabindex="-1" type="submit" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-account-item="sign-out"
 >
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
     <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
@@ -5263,7 +5373,7 @@ Request link</span>
         <div class="el-help-backdrop" x-on:click.self="open = false">
             <div class="el-help" role="dialog" aria-modal="true" aria-labelledby="el-help-title" x-init="$nextTick(() => $el.querySelector('button')?.focus())">
                 <header class="el-help-head">
-                    <h2 id="el-help-title">Help &amp; shortcuts</h2>
+                    <h2 id="el-help-title">Keyboard shortcuts</h2>
                     <button type="button" class="el-icon-btn" x-on:click="open = false" aria-label="Close"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
 </svg></button>

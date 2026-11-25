@@ -57,8 +57,9 @@ async function consoleLanguage(page, code) {
 
 /**
  * FIX-06's keyboard checks on the Library, at 1440 px: the rail is one Tab stop that the arrows move through; Esc closes
- * a tooltip; and Tab walks the page with a visible focus ring at every stop (an outline of 2 px or more, or a ring drawn
- * as a box shadow). Answers what went wrong.
+ * a tooltip; Tab walks the page with a visible focus ring at every stop (an outline of 2 px or more, or a ring drawn
+ * as a box shadow); ↓ ↑ walk the list and an Urdu layout's J and K move the current row; typing fast into the search
+ * keeps every key. Answers what went wrong.
  */
 async function keyboard(page) {
     const wrong = [];
@@ -123,6 +124,39 @@ async function keyboard(page) {
     }
     if (seen.size < 15) wrong.push(`Tab reached only ${seen.size} stops of the Library`);
     console.log(`keyboard: ${seen.size} stops of the Library checked for their focus ring`);
+    // The list by keys (the desktop's D-220 and D-221): ↓ on a row's link moves the focus to the next row's, ↑ back;
+    // on an Urdu layout J (ج at KeyJ) and K (ک at KeyK) move the current row as the Latin keys do.
+    await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+    await page.waitForTimeout(1500);
+    const rows = page.locator('.v2-library .fi-ta-record .fi-ta-record-content');
+    if ((await rows.count()) >= 3) {
+        await rows.nth(0).focus();
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowUp');
+        const at = await page.evaluate(() => [...document.querySelectorAll('.v2-library .fi-ta-record .fi-ta-record-content')].indexOf(document.activeElement));
+        if (at !== 1) wrong.push(`↓ ↓ ↑ from the first row left the focus on row ${at + 1}, not row 2`);
+        await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+        await page.waitForTimeout(1500);
+        const current = await page.evaluate(() => {
+            const press = (key, code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+            const at = () => [...document.querySelectorAll('.v2-library [data-recording]')].findIndex((el) => (el.closest('.fi-ta-record') || el).classList.contains('el-kb-row'));
+            press('ج', 'KeyJ'); press('ج', 'KeyJ'); press('ج', 'KeyJ'); press('ک', 'KeyK');
+            return at();
+        });
+        // From no current row the first J takes the first row: J J J K ends on the second.
+        if (current !== 1) wrong.push(`an Urdu layout's J J J K left the current row at ${current + 1}, not 2`);
+    } else wrong.push('the Library has fewer than 3 rows to walk');
+    // Typing fast keeps every key (the desktop's D-218): 30 ms a key into the Library's search, the answers coming late.
+    const search = page.locator('.v2-lib-shell .fi-ta-search-field input').first();
+    if (await search.count()) {
+        await search.click();
+        await page.keyboard.type('invoice', { delay: 30 });
+        await page.waitForTimeout(4000);
+        const typed = await search.inputValue();
+        if (typed !== 'invoice') wrong.push(`typed fast, the Library's search reads "${typed}", not "invoice"`);
+        await search.fill('');
+    }
     return wrong;
 }
 

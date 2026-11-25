@@ -1297,6 +1297,11 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
   text-align: match-parent;
   text-align: -webkit-match-parent;
 }
+/* The account card's name (an English name in a right-to-left window) at the window's start edge, as its email. */
+.el-profile__who > .el-title-s {
+  text-align: match-parent;
+  text-align: -webkit-match-parent;
+}
 /* A page's title and the line under it (a project's name, an English subtitle) at the window's start edge too. */
 .el-page__titles > *, .el-page__head > h1 {
   text-align: match-parent;

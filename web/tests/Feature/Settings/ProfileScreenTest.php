@@ -119,7 +119,8 @@ it('draws the rail\'s avatar and its menu in the person\'s colour, or their phot
     $this->user->forceFill(['avatar_color' => 2])->save();
     SettingsContext::forget();
     $html = (string) $this->get('/app/settings')->assertOk()->getContent();
-    expect(substr_count($html, 'class="v2-avatar is-coloured" data-avatar-color="2" style="background-color: var(--el-role-avatar-2)"'))->toBe(1)
+    // UX-18: the rail's Account is 28 px (is-rail), its initials drawn so its words are "Account".
+    expect(substr_count($html, 'class="v2-avatar is-rail is-coloured is-drawn" data-avatar-color="2" style="background-color: var(--el-role-avatar-2)"'))->toBe(1)
         ->and(substr_count($html, 'class="v2-avatar is-large is-coloured" data-avatar-color="2" style="background-color: var(--el-role-avatar-2)"'))->toBe(1);
 
     app(Avatars::class)->store($this->user->fresh(), UploadedFile::fake()->createWithContent('me.png', profileScreenPicture()));
@@ -127,7 +128,7 @@ it('draws the rail\'s avatar and its menu in the person\'s colour, or their phot
     $this->actingAs($this->user->fresh(), 'web');
     SettingsContext::forget();
     $html = (string) $this->get('/app/settings')->assertOk()->getContent();
-    expect($html)->toContain('<img class="v2-avatar is-photo"')->toContain('<img class="v2-avatar is-large is-photo"')
+    expect($html)->toContain('<img class="v2-avatar is-rail is-photo is-drawn"')->toContain('<img class="v2-avatar is-large is-photo"')
         ->not->toContain('class="v2-avatar is-coloured"');
 });
 
