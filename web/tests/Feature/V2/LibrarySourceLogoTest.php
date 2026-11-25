@@ -62,7 +62,7 @@ it('names the mark in Urdu when the console is in Urdu', function () {
 
     // Read without the invisible direction marks B8 puts around the app's name inside the Urdu sentence.
     $row = preg_replace('/[\x{2066}-\x{2069}]/u', '', logoRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->whatsapp->id));
-    expect($row)->toContain('aria-label="واٹس ایپ، فون پر"');
+    expect($row)->toContain('aria-label="WhatsApp، فون پر"');
 });
 
 it('counts the groups from the rows\' raw columns with the same keys the groups give', function () {

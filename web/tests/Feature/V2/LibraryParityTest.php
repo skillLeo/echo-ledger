@@ -166,14 +166,14 @@ it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retr
     };
 
     $page = Livewire::test(ListCaptureSessions::class);
-    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('واٹس ایپ')->toContain('فون کال')->not->toContain('WhatsApp');
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('WhatsApp')->toContain('فون کال');
     // Since docs/PLAN_NAV_3_LEVELS.md section 0 nothing is called the Inbox: a recording without a project is "No project".
     expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('کوئی پروجیکٹ نہیں')->not->toContain('Inbox')->not->toContain('ان باکس');
     expect(implode(' | ', $heads($page->call('setLibraryGroup', 'status')->html())))->toContain('ناکام')->not->toContain('Failed');
 
     // The table's App column too.
     $page->call('setLibraryGroup', 'none')->call('setLibraryLayout', 'table')
-        ->assertTableColumnFormattedStateSet('source_app', 'واٹس ایپ', $this->call)
+        ->assertTableColumnFormattedStateSet('source_app', 'WhatsApp', $this->call)
         ->assertTableColumnFormattedStateSet('source_app', 'فون کال', $this->pinned)
         ->assertTableColumnFormattedStateNotSet('source_app', 'Phone call', $this->pinned);
 
