@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-y (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20, the badge's waiting calls): a call still being recorded is not waiting. `PATCH /api/sessions/{id}` takes `ended_at` (and `duration_ms`) while the session is still `recording`: the call is over and the person's choice is pending. A call is **waiting** when its session is `recording` and has `ended_at`, or started more than 4 hours ago (older apps that never send it). That one rule is used by the `waiting` view, the badge, Needs you and `facets.state`; a `recording` session that is not waiting has the state `waiting_to_upload`. Additions only. (Built on 2.0.0-w, -x and -y, which land just before it.) **Clients** (Mac, Windows and Android ship together): when a call with an open session ends, both apps send `PATCH /api/sessions/{id}` with `ended_at` and `duration_ms` before they show the choice (the after-call card or notification). It goes through their retry queue; `409 not_recording` and `422` drop it. Both read the waiting rule the same way: the desktop's `facets.ts` and the phone's `LibraryFacets.kt` make a `recording` session `waiting` only with `ended_at` or more than 4 hours after `started_at`, and `waiting_to_upload` otherwise, checked against the shared `web/tests/Fixtures/library-facets.json` (recording 41 has `ended_at`).
 2.0.0-y (accepted 2026-11-25 by EL-Lead; bulk Mark as read / unread): `POST /api/sessions/opened` and `DELETE /api/sessions/opened` take up to 200 ids and do for each what `POST` and `DELETE /api/sessions/{id}/opened` do for one, in one call: `200 {"done": [...], "not_found": [...]}`, a recording the person cannot read listed back, never an error for the whole batch. Additions only. (Built on 2.0.0-w and -x, which land just before it.) **Clients** (Mac, Windows and Android ship together): Mark as read and Mark as unread on a selection send one `POST` or `DELETE /api/sessions/opened` per 200 ids instead of one request each. Both apps set `opened` on the rows from `done` and drop the ids in `not_found` from the selection without an error. The phone also gains Mark as read and Mark as unread for one recording (2.0.0-t's `DELETE /api/sessions/{id}/opened`), which it lacks (lead decision 25).
 2.0.0-x (accepted 2026-11-25 by EL-Lead; CC5, docs/PLAN_CALL_CHOICE.md and docs/PLAN_CALL_RULES.md §3, see "Choices that follow the account (since 2.0.0-x)"): the rest of the call choice's state is kept for the account too, behind the same `call_rules` flag: the two privacy switches (`hide_live_words`, `block_screenshots`), the first-time hint, the "Always do this?" streak and whether it was offered, and the contacts and Sources whose "Always …?" offer the person turned down. `preferences` in `GET /api/call-rules` and in `call_rules` of `GET /api/config`, `PATCH /api/call-rules/preferences`, and `POST` / `DELETE /api/call-rules/declined`. Additions only, no migration. **Clients** (Mac, Windows and Android ship together): behind the same flag, both apps read `preferences` from `call_rules` in `GET /api/config` instead of their own copies, apply `hide_live_words` and `block_screenshots` as their system allows, and send each change with `PATCH /api/call-rules/preferences`, one key at a time (the first-time hint, "Always do this?" offered, the streak). An "Always … for Ahmed?" offer turned down or ignored is `POST /api/call-rules/declined`, and undoing it is `DELETE`; neither app offers it again for anything in `declined` of `GET /api/call-rules`.
 2.0.0-w (accepted 2026-11-24 by EL-Lead; B5, docs/PLAN_CALL_RULES.md, see "Call rules (since 2.0.0-w)"): the person's call rules, kept on the server for every device of the account: the "After each call" default (`ask` | `always_transcribe` | `always_audio` | `dont_record`) and "When to ask", the short-call setting, and rules per contact, per contact group and per Source, with one order (contact, then group, then Source, then the default). New routes under `/api/call-rules`, `call_rules` in `GET /api/config`, and the interface flag `call_rules` (off for everyone but the admin's lists at first). Additions only: an app that does not know them keeps its own per-device setting. **Clients** (Mac, Windows and Android ship together): only while `ui_flags.call_rules` is true, both apps read `call_rules` from `GET /api/config` and decide each call by "Which rule wins"; their call rules screens read `GET /api/call-rules` and save with `PUT /api/call-rules/settings` and `POST`, `PATCH` and `DELETE /api/call-rules/{id}`. A `dont_record` for a Source or the default stops capture before it starts on both. For a contact, Android (Full) reads the number at ringing and captures nothing; the desktop and the Play build stop and delete as soon as the contact is known, and say exactly that (lead decision 25). Groups are Android (Full) only, asking for the contacts permission when a group rule is first used; the desktop offers none. With the flag off or the key absent, each app keeps its own per-device setting.
@@ -930,6 +931,7 @@ live-caption token. With captions off nothing reaches the server until the user 
 |---|---|---|
 | Recording starts with captions on | `POST /api/sessions` without `artifacts` (open session) | `recording` |
 | Captions run | `POST /api/stt/token` with `session_id`; `POST /api/usage` per streaming period | `recording` |
+| The call ends (since 2.0.0-z) | `PATCH /api/sessions/{id}` with `ended_at` (and `duration_ms`): from then on the call is waiting for the person's choice | `recording` |
 | User keeps the recording | `POST /api/sessions/{id}/finish` with the artifacts → upload slots | `uploading` |
 | User keeps a recording made with captions off, a voice note, an import, or any v1 client | `POST /api/sessions` with `artifacts` (one-shot) | `uploading` |
 | Upload, assembly, final transcript | chunks → `complete` → poll `GET /api/recordings/{id}` | `uploading` → `processing` → `completed` / `failed` |
@@ -1131,7 +1133,8 @@ recording itself.
 
 Smart views (`view` on `GET /api/library`): `today` and `this_week` (calendar day or Monday-based week of `started_at`
 in `tz`, an IANA zone, default the console's display zone), `waiting` (still `recording`: the phone or computer has
-not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
+not decided Keep or Discard; since 2.0.0-z only once the call is over: `ended_at` set by `PATCH /api/sessions/{id}`,
+or started more than 4 hours ago), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
 Since 2.0.0-p also `needs_you` ("Needs you" as "Library filters" defines it, waiting calls included) and `unread` (the
 asking person has not opened it: `opened` false). `GET /api/library/views` is unchanged; the counts of these two are in
 `GET /api/library/facets` (`library`).
@@ -1279,8 +1282,9 @@ one transcript or screen moment).
 (those are only in Needs you); never a teammate's or another workspace's (Shared with me is its own list).
 
 **"Needs you"**, one recording at most once, the first that holds:
-1. `waiting`: a call waiting for Keep or Discard (session `recording`; on the phone and the desktop also the after-call
-   card still open, and "Choose again").
+1. `waiting`: a call waiting for Keep or Discard (session `recording`, and since 2.0.0-z the call over: `ended_at` set, or
+   started more than 4 hours ago; on the phone and the desktop also the after-call card still open, and "Choose again").
+   A call still being recorded is not in Needs you.
 2. `failed`: Status `failed` (an upload or a transcript that failed, or the recording failed).
 3. `stuck`: Status `processing` for more than 24 hours since the current attempt began: `processing_since` (the start
    of the current upload or transcript attempt, so a retry starts the clock again); only when none is stored, since
@@ -1425,6 +1429,17 @@ Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a c
 client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retention), `important` (boolean, since 2.0.0-i) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
 ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
 `404 session_not_found`; another owner's client is `404 client_not_found`.
+**The call is over (since 2.0.0-z):** while the session is still `recording` (an open session, `POST /api/sessions`
+without `artifacts`), `ended_at` (ISO 8601, not before `started_at` and at most 5 minutes after the server's now) and
+`duration_ms` (optional, whole milliseconds, 0 to 86 400 000) say the call has ended and the person's choice is
+pending; nothing is uploaded and the status stays `recording`. From then on the call is waiting (the `waiting` view,
+the badge, Needs you). The device that opened the session sends it when the call ends, before it shows the choice (the
+after-call card or notification). A failed request is retried by the device's queue. It is idempotent: an `ended_at`
+already stored is never moved by a later one, and `duration_ms` is kept the first time. A session that is no longer
+`recording` (finished, or deleted) answers `409 not_recording`, and nothing changes: the device drops the request, as
+the finish or the delete already said more. An `ended_at` that is not an instant, is before the start or is more than
+5 minutes ahead is `422 validation_failed` (`error_codes.ended_at`: `invalid`), and so is a `duration_ms` out of
+range; nothing changes. A teammate's session is `404 session_not_found`, like any other id that is not the person's.
 
 ### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
 `{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|important|unimportant|delete", "client_id": "01JB…" | null, "label": "Invoice"}`
@@ -2481,7 +2496,7 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 `GET /api/badge` — `library:read`: `200 {"count": 4, "label": "4", "tone": "accent"}`. It is the one number on the
 Activity icon in every app and in the web console.
 - `count`: unread Activity items that need action, plus calls waiting for the person's choice after a call (Transcribe,
-  Save audio only or Delete). Items that need action are
+  Save audio only or Delete; since 2.0.0-z only once the call is over, never during it). Items that need action are
   a failed transcript or upload, the monthly limit reached, a missed recording, and an answer to an upgrade request. A
   merged item counts once, and a resolved one never counts.
 - `label`: `null` at 0, the number up to 99, then `"99+"`.
@@ -2499,19 +2514,21 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
 | `transcribing` | Transcribing… | a small spinner and the text |
 | `waiting_to_upload` | Waiting to upload | grey text |
 | `failed` | Failed · Retry | red text and a retry icon (the only red on rows) |
-| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only |
+| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only. Since 2.0.0-z only once the call is over (see `PATCH /api/sessions/{id}`); a call still being recorded is `waiting_to_upload` and is not in Needs you |
 
 - Every library item's `facets` gains `state`. `transcribed` comes from Status `transcribed`, `audio_only` from
-  `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording`,
-  `waiting_to_upload` while it is `uploading`, and `transcribing` otherwise.
+  `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording` and
+  the call is waiting (since 2.0.0-z: over, or started more than 4 hours ago), `waiting_to_upload` while it is
+  `uploading` or a call still being recorded, and `transcribing` otherwise.
 - `GET /api/library/facets` gains `states`, counted like `kinds`: of the recordings the filters and the search keep,
   how many are in each state. All six keys are always there, and they add up to `total` (a call still waiting is not
   in `total`, so `waiting` is 0 there).
 - "Not transcribed" is not a name any more: the view is **Audio only**. It is Status `not_transcribed`, so its count is
   `library.not_transcribed`. `library.audio_only` and `status=audio_only` keep their 2.0.0-j meaning (recordings saved
   as audio only by choice), which is a part of it. Failed recordings are in **Needs you**.
-- `waiting_to_upload` covers only what reached the server as a session still `uploading`. A recording that has not
-  reached the server at all is the app's own, and the app shows it with the same name.
+- `waiting_to_upload` covers only what reached the server as a session still `uploading`, or (since 2.0.0-z) a call
+  still being recorded (`recording`, not waiting yet). A recording that has not reached the server at all is the app's
+  own, and the app shows it with the same name.
 - The Status filter keeps its four values: no state is a filter value, so saved views stay readable by older apps.
   `processing` is shown as "In progress", and the apps show its parts from `states`, for example "2 transcribing ·
   1 waiting to upload". The parts are `transcribing` and `waiting_to_upload`, and they are given while the Status

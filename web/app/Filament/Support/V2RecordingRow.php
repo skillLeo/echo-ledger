@@ -200,7 +200,8 @@ final class V2RecordingRow
     {
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
         $state = LibraryFilters::state(LibraryFilters::status($session->status->value, LibraryItemResource::uploadFailed($session), $final?->status->value),
-            $session->status->value);
+            $session->status->value, LibraryFilters::isWaiting($session->status->value, $session->ended_at?->getTimestamp(),
+                $session->started_at->getTimestamp(), now()->getTimestamp()));
 
         return match ($state) {
             // A failure with no audio in it says so: Retry would not help.
