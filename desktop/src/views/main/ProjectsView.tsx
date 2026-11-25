@@ -20,8 +20,13 @@ export interface ProjectPageContext {
   project: ClientFolder;
   parent: { id: string; name: string } | null;
   folders: { id: string; name: string; count: number }[];
+  /** Its menu, without Request files: the page has it as a button in its header (UX-09). */
   menu: { label: string; onPick: () => void; danger?: boolean }[];
   onShare: (() => void) | null;
+  /** Send a copy to a teammate (Members). */
+  onSend: (() => void) | null;
+  /** Request files into it (a button in its header, UX-09); null without request links. */
+  onRequest: (() => void) | null;
   rules: boolean;
   /** Every project, for its folders' recordings and the drag targets. */
   projects: ClientFolder[];
@@ -229,13 +234,14 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   );
 
   if (project) {
+    const requestItem = { label: "Request files into it…", onPick: () => (onRequestLink ? onRequestLink(project.id) : setDialog({ kind: "requests", projectId: project.id, focusId: null })) };
     const menu = [
       nested && canAddSubfolder(list, project.id) && { label: "New folder inside", onPick: () => setDialog({ kind: "new", parentId: project.id }) },
       { label: "Rename", onPick: () => setDialog({ kind: "rename", project }) },
       nested && { label: "Move…", onPick: () => setDialog({ kind: "move", project }) },
       nested && { label: "Share link…", onPick: () => setDialog({ kind: "share", project, start: "link" }) },
       nested && { label: "Send to a teammate…", onPick: () => setDialog({ kind: "share", project, start: "send" }) },
-      requests && { label: "Request files into it…", onPick: () => (onRequestLink ? onRequestLink(project.id) : setDialog({ kind: "requests", projectId: project.id, focusId: null })) },
+      requests && requestItem,
       nested && { label: "Delete project…", danger: true, onPick: () => setDialog({ kind: "delete", project }) },
     ];
     const share = nested && (
@@ -251,8 +257,11 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
             project,
             parent: parent ? { id: parent.id, name: parent.name } : null,
             folders: list.filter((p) => p.parent_id === project.id).map((p) => ({ id: p.id, name: p.name, count: nestedCount(p, items, list) })),
-            menu: menu.filter((m): m is { label: string; onPick: () => void; danger?: boolean } => !!m),
+            // Request files is a button in the page's header (UX-09), not in its menu.
+            menu: menu.filter((m): m is { label: string; onPick: () => void; danger?: boolean } => !!m && m !== requestItem),
             onShare: nested ? () => setDialog({ kind: "share", project, start: "link" }) : null,
+            onSend: nested ? () => setDialog({ kind: "share", project, start: "send" }) : null,
+            onRequest: requests ? requestItem.onPick : null,
             rules: nested,
             projects: list,
             aiNotesInPlan,

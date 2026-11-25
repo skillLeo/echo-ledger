@@ -2,13 +2,13 @@
 // name under it, always there; DES-01: 56 px items, the selected one's pill, a tooltip with its shortcut), the place's
 // panel of views and collections (⊟ or ⌘\ hides it; in a small window it opens as a flyout from the rail and closes
 // once something is chosen), and the page. The pieces are here; Shell puts them together with the app's state.
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, Icon, Icons, ResizeEdge, SearchField } from "../components";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button, Icon, Icons, Loading, ResizeEdge, SearchField, Skeleton } from "../components";
 import type { IconType } from "../components/Button";
 import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
-import { recentProjects } from "./recentProjects";
+import { PROJECT_SORTS, projectOrder, useProjectSort } from "./projectSort";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 
 /** UX-03: the panel's width, dragged or set from the keyboard, from 200 to 360 px; let go below 160 px it closes. */
@@ -263,68 +263,150 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
   );
 }
 
-/** A project in the Projects panel: its folder (`parent_id`, null at the top) and whether it is pinned. */
-export type PanelProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean };
-/** From this many projects the Projects panel has a search box. */
+/**
+ * A project in the Projects panel: its folder (`parent_id`, null at the top), whether it is pinned, and whether it is
+ * archived (listed last; no server says so yet, PLAN_V2_1_POLISH UX-09 asks for the place).
+ */
+export type PanelProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean; archived?: boolean };
+/** From this many projects (more than 10) the Projects panel has a search box. */
 export const PROJECT_SEARCH_FROM = 11;
 
+/** How a panel's list of projects is drawn: its name, and the order of its top level (folders keep theirs). */
+export type ProjectList = { label: string; order: (a: PanelProject, b: PanelProject) => number };
+
+/** `roots` at the top of their list (as if in no folder), each with its folders under it (their links kept). */
+export function withFolders(roots: readonly PanelProject[], all: readonly PanelProject[]): PanelProject[] {
+  const out: PanelProject[] = roots.map((p) => ({ ...p, parent_id: null }));
+  const seen = new Set(out.map((p) => p.id));
+  for (let i = 0; i < out.length; i++) {
+    for (const child of all) {
+      if (child.parent_id === out[i].id && !seen.has(child.id)) {
+        seen.add(child.id);
+        out.push(child);
+      }
+    }
+  }
+  return out;
+}
+
 /**
- * The Projects panel: All projects (the page), then which projects the list below shows (every one as a tree,
- * Pinned, or Recent: opened here lately), + New project, and the list, with a search box from 11 projects.
+ * The keys in the Projects panel's lists: ↑ ↓ (Home, End) go from project to project across Pinned, Projects and
+ * Archived; → shows a project's folders, ← folds them (mirrored right to left).
  */
-export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, onNew, onRequest, tree }: {
+function treeKeys(e: React.KeyboardEvent<HTMLElement>) {
+  const target = e.target as HTMLElement;
+  if (!target.classList?.contains("el-nav-tree__name")) return;
+  const rows = [...e.currentTarget.querySelectorAll<HTMLButtonElement>(".el-nav-tree__name")];
+  const at = rows.indexOf(target as HTMLButtonElement);
+  const go = (i: number) => {
+    e.preventDefault();
+    rows[Math.max(0, Math.min(rows.length - 1, i))]?.focus();
+  };
+  if (e.key === "ArrowDown") return go(at + 1);
+  if (e.key === "ArrowUp") return go(at - 1);
+  if (e.key === "Home") return go(0);
+  if (e.key === "End") return go(rows.length - 1);
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const rtl = getComputedStyle(target).direction === "rtl";
+  const open = (e.key === "ArrowRight") !== rtl;
+  const fold = target.closest(".el-nav-tree__row")?.querySelector<HTMLButtonElement>(".el-nav-tree__fold[aria-expanded]");
+  if (!fold || (fold.getAttribute("aria-expanded") === "true") === open) return;
+  e.preventDefault();
+  fold.click();
+}
+
+/**
+ * The Projects panel (UX-09): the project list, as a chat app's channels. Pinned first, then the rest under Projects
+ * (its title opens All projects, the page; its ends sort the list, Name or Recent, and make a New project), then
+ * Archived, folded, at the bottom; a search box from 11 projects (Enter opens the first match, ↓ goes into them). A
+ * project is in one list only. No rows of views: All projects is the page's title. While the projects are read, shapes
+ * of rows; with no project at all the shell shows no panel (the page says how to start).
+ */
+export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, onNew, tree, loading = false, error = null }: {
   projects: readonly PanelProject[]; current: string | null; onAll: () => void; allCurrent: boolean; onOpen: (id: string) => void; onNew?: () => void;
-  /** Request files: a link anyone can use to send voice notes and files (into no project). */
-  onRequest?: () => void;
-  /** The tree as the sidebar drew it (folds kept), the current project marked. */
-  tree: (projects: readonly PanelProject[], current: string | null, onOpen: (id: string) => void) => ReactNode;
+  /** The tree as the sidebar draws it (folds kept), the current project marked. */
+  tree: (projects: readonly PanelProject[], current: string | null, onOpen: (id: string) => void, list: ProjectList) => ReactNode;
+  /** The projects are being read. */
+  loading?: boolean;
+  /** They couldn't be read (offline). */
+  error?: string | null;
 }) {
   const [find, setFind] = useState("");
-  const [which, setWhich] = useState<"all" | "pinned" | "recent">("all");
-  const recent = recentProjects();
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const [sort, setSort] = useProjectSort();
+  // Built once a render that changes it: the sort, or the project opened (Recent moves).
+  const order = useMemo(() => projectOrder(sort), [sort, current]);
+  const box = useRef<HTMLDivElement>(null);
   const q = find.trim().toLowerCase();
-  const picked = which === "pinned" ? projects.filter((p) => p.pinned)
-    : which === "recent" ? recent.map((id) => projects.find((p) => p.id === id)).filter((p): p is PanelProject => !!p) : projects;
-  // Pinned, Recent and a search list their projects flat; All keeps the tree.
-  const flat = which !== "all" || !!q;
-  const shown = (q ? picked.filter((p) => p.name.toLowerCase().includes(q)) : picked).map((p) => (flat ? { ...p, parent_id: null } : p));
-  const view = (key: typeof which, label: string, icon: IconType, count: number) => (
-    <li>
-      <button type="button" className="el-nav-item el-nav-item--row" aria-pressed={which === key} onClick={() => setWhich(key)}>
-        <Icon icon={icon} /><span className="el-nav-item__label">{label}</span>
-        <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{count}</span>
-      </button>
-    </li>
-  );
+  const live = projects.filter((p) => !p.archived);
+  const ids = new Set(live.map((p) => p.id));
+  const top = live.filter((p) => !p.parent_id || !ids.has(p.parent_id));
+  const pinned = live.filter((p) => p.pinned);
+  // A pinned project (a folder too) is under Pinned only, never in the Projects list as well.
+  const rest = top.filter((p) => !p.pinned);
+  const unpinned = live.filter((p) => !p.pinned);
+  const archived = projects.filter((p) => p.archived);
+  const matches = q ? projects.filter((p) => p.name.toLowerCase().includes(q)).map((p) => ({ ...p, parent_id: null })).sort(order) : [];
+  const sortLabel = PROJECT_SORTS.find((s) => s.value === sort)!.label;
+  const head = useId();
+  const searchKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && matches.length) {
+      e.preventDefault();
+      onOpen(matches[0].id);
+    } else if (e.key === "ArrowDown" && matches.length) {
+      e.preventDefault();
+      box.current?.querySelector<HTMLButtonElement>(".el-nav-tree__name")?.focus();
+    }
+  };
   return (
-    <div className="el-panel__group">
-      <ul className="el-nav-list" aria-label="Projects views">
-        <li>
-          <button type="button" className="el-nav-item el-nav-item--row" aria-current={allCurrent ? "page" : undefined} onClick={() => { setWhich("all"); onAll(); }}>
-            <Icon icon={Icons.FolderIcon} /><span className="el-nav-item__label">All projects</span>
-            <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{projects.length}</span>
-          </button>
-        </li>
-        {projects.some((p) => p.pinned) && view("pinned", "Pinned", Icons.PinIcon, projects.filter((p) => p.pinned).length)}
-        {recent.some((id) => projects.some((p) => p.id === id)) && view("recent", "Recent", Icons.ClockIcon, recent.filter((id) => projects.some((p) => p.id === id)).length)}
-        {onNew && (
-          <li>
-            <button type="button" className="el-nav-item el-nav-item--row el-nav-item--add" onClick={onNew}>
-              <Icon icon={Icons.PlusIcon} /><span className="el-nav-item__label">New project</span>
-            </button>
-          </li>
-        )}
-        {onRequest && (
-          <li>
-            <button type="button" className="el-nav-item el-nav-item--row" onClick={onRequest} title="A link anyone can use to send you voice notes and files">
-              <Icon icon={Icons.RequestFilesIcon} /><span className="el-nav-item__label">Request files</span>
-            </button>
-          </li>
-        )}
-      </ul>
-      {projects.length >= PROJECT_SEARCH_FROM && <SearchField label="Search projects" value={find} onChange={setFind} className="el-panel__search" />}
-      {q && shown.length === 0 && <p className="el-caption el-secondary el-panel__none">No project matches</p>}
-      {shown.length > 0 && tree(shown, current, onOpen)}
+    <div className="el-panel__group el-projects-panel" ref={box} onKeyDown={treeKeys}>
+      {projects.length >= PROJECT_SEARCH_FROM && <SearchField label="Search projects" value={find} onChange={setFind} onKeyDown={searchKeys} className="el-panel__search" />}
+      {q ? (
+        matches.length ? tree(matches, current, onOpen, { label: "Matches", order })
+          : <p className="el-caption el-secondary el-panel__none">No project matches</p>
+      ) : (
+        <>
+          {pinned.length > 0 && (
+            <section className="el-nav-section" aria-labelledby={`${head}-pinned`}>
+              <div className="el-nav-section__head"><h3 className="el-nav-section__title el-caption" id={`${head}-pinned`}>Pinned</h3></div>
+              {tree(withFolders(pinned, live), current, onOpen, { label: "Pinned", order })}
+            </section>
+          )}
+          <section className="el-nav-section" aria-labelledby={`${head}-all`}>
+            <div className="el-nav-section__head">
+              <h3 className="el-nav-section__heading" id={`${head}-all`}>
+                <button type="button" className="el-nav-section__link el-caption" aria-current={allCurrent ? "page" : undefined} aria-label="All projects" title="All projects"
+                  onClick={onAll}>Projects</button>
+              </h3>
+              <Menu label="Sort projects" align="start"
+                items={PROJECT_SORTS.map((s) => ({ label: s.label, radio: true, checked: s.value === sort, onPick: () => setSort(s.value) }))}
+                button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, "aria-label": `Sort projects: ${sortLabel}`, title: `Sort projects: ${sortLabel}` }} />
+              {onNew && <Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label="New project" title="New project" onClick={onNew} />}
+            </div>
+            {loading ? (
+              <Loading label="Loading projects" className="el-panel__loading">
+                {[0, 1, 2].map((n) => <span key={n} className="el-panel__skeleton"><Skeleton width={n === 1 ? "medium" : "long"} /></span>)}
+              </Loading>
+            ) : error && projects.length === 0 ? (
+              <p className="el-caption el-secondary el-panel__none" role="status">Couldn't load the projects.</p>
+            ) : rest.length > 0 && tree(withFolders(rest, unpinned), current, onOpen, { label: "Projects", order })}
+          </section>
+          {archived.length > 0 && (
+            <section className="el-nav-section" aria-labelledby={`${head}-archived`}>
+              <div className="el-nav-section__head">
+                <h3 className="el-nav-section__heading" id={`${head}-archived`}>
+                  <button type="button" className="el-nav-section__title el-caption" aria-expanded={archivedOpen} onClick={() => setArchivedOpen((o) => !o)}>
+                    <Icon icon={archivedOpen ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />Archived{" "}
+                    <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{archived.length}</span>
+                  </button>
+                </h3>
+              </div>
+              {archivedOpen && tree(withFolders(archived.filter((p) => !p.parent_id || !archived.some((a) => a.id === p.parent_id)), archived), current, onOpen,
+                { label: "Archived", order })}
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
 import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, placeList, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
+import { readKept, writeKept } from "./kept";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
@@ -29,29 +30,7 @@ export const DOCK_FROM = 1200;
 const PANEL_KEY = "echoledger-nav-panels";
 /** Whether the panel is pinned beside the page in a small window (UX-02). */
 const PIN_KEY = "echoledger-nav-pinned-small";
-/**
- * A layout choice is each account's own on this computer (`account`: the server, the email and the workspace, as for My
- * views). While the account isn't known it is kept in memory only: nothing is read or written. What an earlier version
- * kept for the whole computer (`key` alone) can't be told apart by account, so it is removed, unread, once an account is
- * known: every account starts from the defaults.
- */
-function readKept(key: string, account: string | null | undefined): string | null {
-  if (!account) return null;
-  try {
-    if (localStorage.getItem(key) !== null) localStorage.removeItem(key);
-    return localStorage.getItem(`${key}:${account}`);
-  } catch {
-    return null;
-  }
-}
-function writeKept(key: string, account: string | null | undefined, value: string) {
-  if (!account) return;
-  try {
-    localStorage.setItem(`${key}:${account}`, value);
-  } catch {
-    // Kept for this session only.
-  }
-}
+// A layout choice is each account's own on this computer (kept.ts: readKept, writeKept).
 function loadPinned(account: string | null | undefined): boolean {
   return readKept(PIN_KEY, account) === "1";
 }

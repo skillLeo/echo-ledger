@@ -16,6 +16,7 @@ import { Shell, type ShellWorkspace } from "./shell/Shell";
 import { LibraryV2 } from "./library/LibraryV2";
 import { WorkspaceV2 } from "./workspace/WorkspaceV2";
 import { AskV2 } from "./ask/AskV2";
+import { runAction } from "./actions/registry";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../test/tauri")).eventModule);
@@ -282,7 +283,24 @@ describe("request links", () => {
     expect(sheet.getByRole("textbox", { name: "Title people see" })).toHaveValue("Send me your voice notes");
   });
 
-  it("DT-SHR-006: a project's own Request files into it… opens the new sheet with that project chosen", async () => {
+  it("UX-09: the project menu's Members… and Instructions & memory… open the project on that tab", async () => {
+    app();
+    respond("shares_of", { data: [] });
+    respond("sent_of", { data: [] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    expect(runAction("project.members", { platform: "macos", targets: ["c0"], context: true })).toBe(true);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByRole("tab", { name: "Members", selected: true })).toBeInTheDocument();
+    expect(runAction("project.instructions", { platform: "macos", targets: ["c0"], context: true })).toBe(true);
+    await act(flushAsync);
+    expect(await screen.findByRole("tab", { name: "Memory & instructions", selected: true })).toBeInTheDocument();
+  });
+
+  it("DT-SHR-006: a project's own Request files (a button in its header, UX-09) opens the new sheet with that project chosen", async () => {
     app();
     render(<MainApp />);
     await act(flushAsync);
@@ -293,8 +311,13 @@ describe("request links", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: /^Qureshi Textiles/ }))[0]);
     await act(flushAsync);
     await act(flushAsync);
+    // The rule changed with UX-09: Request files was "Request files into it…" in the project menu; it is the header's
+    // button now, and the menu doesn't repeat it.
     fireEvent.click(await screen.findByRole("button", { name: "Project menu" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Request files into it…" }));
+    expect(screen.queryByRole("menuitem", { name: "Request files into it…" })).toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    const header = document.querySelector<HTMLElement>("[data-v2=workspace] .el-page__head")!;
+    fireEvent.click(within(header).getByRole("button", { name: "Request files" }));
     await act(flushAsync);
     const dialog = screen.getByRole("dialog", { name: "Request files" });
     // The new design's sheet (its own look), never classic's.
