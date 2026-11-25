@@ -418,6 +418,10 @@ it('words the request card and the state row on Plan & usage in Urdu, and keeps 
         ->toContain('<span class="el-plan-card-price">'.upgradeUrduIsolated('Rs 12,499').' ماہانہ</span>')
         ->and($row)->toContain(upgradeUrduIsolated('Pro').' کی درخواست دی گئی۔ آپ کی ادائیگی کا انتظار ہے')
         ->and($en)->toContain('Pro requested</a>')->toContain('<span class="el-tag">Waiting for payment</span>')->not->toContain('ادائیگی کا انتظار');
+    // The card's buttons: shown in Urdu, still told apart by their English names (the search anchor stays on Payment details).
+    expect($ur)->toContain('>ادائیگی کی تفصیل</a>')->toContain('>درخواست منسوخ کریں</button>')->toContain('id="setting-plan.payment_details"')
+        ->not->toContain('>Payment details</a>')
+        ->and($en)->toContain('>Payment details</a>')->toContain('>Cancel request</button>')->toContain('id="setting-plan.payment_details"');
 });
 
 it('words the page of an account being deleted in Urdu, with the date in Urdu kept whole, and English as before', function () {

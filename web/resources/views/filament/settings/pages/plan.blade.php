@@ -52,16 +52,16 @@
                     @if ($request['primary'])
                         <a href="{{ $request['primary']['url'] }}" class="el-btn el-btn-primary"
                             @if ($request['primary']['label'] === 'Payment details') id="setting-plan.payment_details" data-setting="plan.payment_details" @endif
-                            @if ($request['primary']['label'] === 'Add receipt') id="setting-plan.receipt" data-setting="plan.receipt" @endif>{{ $request['primary']['label'] }}</a>
+                            @if ($request['primary']['label'] === 'Add receipt') id="setting-plan.receipt" data-setting="plan.receipt" @endif>{{ __($request['primary']['label']) }}</a>
                     @endif
                     @if ($request['secondary'])
                         @if (isset($request['secondary']['url']))
                             <a href="{{ $request['secondary']['url'] }}" class="el-btn el-btn-text"
-                                @if ($request['secondary']['label'] === 'Payment details') id="setting-plan.payment_details" data-setting="plan.payment_details" @endif>{{ $request['secondary']['label'] }}</a>
+                                @if ($request['secondary']['label'] === 'Payment details') id="setting-plan.payment_details" data-setting="plan.payment_details" @endif>{{ __($request['secondary']['label']) }}</a>
                         @elseif (($request['secondary']['action'] ?? null) === 'cancelRequest')
-                            <button type="button" class="el-btn el-btn-text is-danger" wire:click="mountAction('cancelRequest')">{{ $request['secondary']['label'] }}</button>
+                            <button type="button" class="el-btn el-btn-text is-danger" wire:click="mountAction('cancelRequest')">{{ __($request['secondary']['label']) }}</button>
                         @else
-                            <button type="button" class="el-btn el-btn-text" wire:click="dismissRequest">{{ $request['secondary']['label'] }}</button>
+                            <button type="button" class="el-btn el-btn-text" wire:click="dismissRequest">{{ __($request['secondary']['label']) }}</button>
                         @endif
                     @endif
                 </div>
