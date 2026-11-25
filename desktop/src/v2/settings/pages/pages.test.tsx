@@ -669,7 +669,10 @@ describe("Keyboard shortcuts v2", () => {
 
   it("warns when a shortcut is one browsers use", async () => {
     await show("shortcuts");
-    expect(screen.getByText(/This shortcut also opens the element picker \(DevTools\) in browsers; EchoLedger takes it over\./)).toBeInTheDocument();
+    // EL-UX (D3a review): who else uses it, never what it does there, so the app's name is the only value.
+    // Start or stop saving (Ctrl+Shift+R) and Copy the last 2 minutes (Ctrl+Shift+C), both browsers' keys.
+    const notes = screen.getAllByText("This shortcut is also used by browsers; EchoLedger takes it over.");
+    expect(notes.map((note) => note.closest("[data-setting]")?.getAttribute("data-setting"))).toEqual(["shortcuts.global.toggle_saving", "shortcuts.global.copy_last2_min"]);
   });
 });
 

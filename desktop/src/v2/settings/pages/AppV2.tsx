@@ -7,7 +7,7 @@ import { api, type AppStatus, type Settings, type ShortcutAction } from "../../.
 import { acceleratorFromEvent, prettyShortcut } from "../../../lib/format";
 import { changePreferences, DEFAULT_PREFERENCES, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../../lib/shell";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../../lib/theme";
-import { conflictFor } from "../../../lib/shortcutConflicts";
+import { conflictOwner } from "../../../lib/shortcutConflicts";
 import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
 import { appKeys } from "../../../views/main/AppSettings";
 import { Button, ListRow } from "../../components";
@@ -126,8 +126,12 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
   const noteFor = (a: ShortcutAction): string | null => {
     const error = status.shortcutErrors.find(([x]) => x === a)?.[1];
     if (error) return error;
-    const conflict = conflictFor(settings.shortcuts[a], platform);
-    return conflict ? t("This shortcut also :conflict; EchoLedger takes it over.", { conflict }) : null;
+    // Who else uses it, by name (EL-UX: only the app's name is a value; browsers and many apps have their own lines).
+    const owner = conflictOwner(settings.shortcuts[a], platform);
+    if (!owner) return null;
+    if (owner.kind === "browsers") return t("This shortcut is also used by browsers; EchoLedger takes it over.");
+    if (owner.kind === "many_apps") return t("This shortcut is also used by many apps; EchoLedger takes it over.");
+    return t("This shortcut is also used by :app; EchoLedger takes it over.", { app: owner.name });
   };
   return (
     <>

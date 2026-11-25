@@ -155,7 +155,9 @@ describe("Settings in Urdu", () => {
     expect(screen.getByRole("button", { name: `${iso("Ultra")} پر اپ گریڈ کریں` })).toBeInTheDocument();
     const minutes = screen.getByTestId("meter-monthly_minutes");
     expect(minutes).toHaveTextContent(`آپ اپنے ${iso(85)}% منٹ استعمال کر چکے ہیں۔`);
-    expect(within(minutes).getByRole("button", { name: "اپ گریڈ کریں" }).parentElement?.tagName).toBe("BDI");
+    // The word in the sentence is the noun (اپ گریڈ); the sentence says کریں after it (EL-UX).
+    expect(minutes).toHaveTextContent(`آپ اپنے ${iso(85)}% منٹ استعمال کر چکے ہیں۔ اپ گریڈ کریں یا`);
+    expect(within(minutes).getByRole("button", { name: "اپ گریڈ" }).parentElement?.tagName).toBe("BDI");
     cleanup();
     resetEntitlementsForTests(sampleEntitlements("free"));
     await page("plan", false);

@@ -61,7 +61,7 @@ function MeterRow({ id, label, limitKey, limit, quiet, onUpgrade }: {
   } else if (percent >= 80 && blocks) {
     line = quiet || !onUpgrade
       ? usedLine(limitKey, percent, resets, false)
-      : withParts(usedLine(limitKey, percent, resets, true), { upgrade: <InlineAction onClick={onUpgrade}>{t("Upgrade")}</InlineAction> });
+      : withParts(usedLine(limitKey, percent, resets, true), { upgrade: <InlineAction onClick={onUpgrade}>{t("plan_context.upgrade")}</InlineAction> });
   }
   const value = text.replace(" min", " minutes");
   const spoken = resets && share !== null
@@ -129,10 +129,11 @@ function RequestCardV2({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain
     <section className="el-group" data-testid="upgrade-request" data-stage={stage} id="setting-plan.request" data-setting="plan.request" tabIndex={-1}>
       <Card>
         <div className="el-plan-card" role="status">
-          {/* Named by what it shows, so the spoken name starts with the visible words. */}
-          <button type="button" className="el-plan-card__head el-plan-card__head--link" onClick={onOpen}>
-            <span className="el-title-s">{card.title}</span><span className="el-visually-hidden">,</span>{" "}
-            <Badge tone={card.tone}>{card.tag}</Badge><span className="el-visually-hidden">{t(". Opens the request")}</span>
+          {/* Named by what it shows (the title, then the stage), so the spoken name starts with the visible words. */}
+          <button type="button" className="el-plan-card__head el-plan-card__head--link" onClick={onOpen}
+            aria-label={t(":title, :status. Opens the request", { title: card.title, status: card.tag })}>
+            <span className="el-title-s">{card.title}</span>
+            <Badge tone={card.tone}>{card.tag}</Badge>
           </button>
           <div className="el-plan-card__body el-secondary">{card.body}</div>
           {(card.primary || card.secondary) && (
@@ -211,7 +212,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.id, stage]);
   const plan = e.plan;
-  const name = plan ? planName(plan) : t("Your");
+  const name = plan ? planName(plan) : null;
   const isFree = !plan || plan.key === "free";
   const top = isTopPlan(e);
   const above = plansAbove(e);
@@ -251,7 +252,9 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
           <div className="el-plan-card">
             <div className="el-plan-card__head"><span className="el-title-m" dir="auto">{t(":plan plan", { plan: isFree ? planName({ key: "free", name: "" }) : name })}</span></div>
             <div className="el-plan-card__body el-secondary">
-              {!allowed && workspace && <p dir="auto">{t(":workspace is on :plan. Its owner manages the plan.", { workspace, plan: name })}</p>}
+              {!allowed && workspace && <p dir="auto">{name !== null ? t(":workspace is on :plan. Its owner manages the plan.", { workspace, plan: name })
+                // No plan known: the words the page has always said, as one sentence.
+                : t(":workspace is on Your. Its owner manages the plan.", { workspace })}</p>}
               {isFree && allowed && <p dir="auto">{t("Transcripts use your own free Groq key.")}</p>}
               {!isFree && price && <p dir="auto" className="el-tabular">{price}</p>}
               {!isFree && <p dir="auto">{plan?.expires_at ? t("Paid until :date", { date: rowDateWithYear(plan.expires_at) }) : t("No end date")}</p>}

@@ -5,5 +5,5 @@
 // Organise منظم کریں, layout انداز) are the web's since fix/W-urdu-terms.
 export const DESKTOP_OVERRIDES: Readonly<Record<string, string>> = {
   "You'll be signed out on every phone, computer and browser, including this one.":
-    "Settings › Sign-in & security in the app: \"this one\" is this computer (اس کمپیوٹر سے بھی), where the web's line says this browser.",
+    "This computer, not this browser: in the app \"this one\" is the computer it runs on (اس کمپیوٹر سے بھی), where the web's line says this browser (اس براؤزر سے بھی).",
 };
