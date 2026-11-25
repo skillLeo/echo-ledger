@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
-use App\Filament\Support\RtlIcons;
-use BackedEnum;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Contracts\Support\Htmlable;
 
 enum SourceApp: string implements HasColor, HasIcon, HasLabel
 {
@@ -54,10 +51,9 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
         };
     }
 
-    /** Its icon; W-235: the chat bubbles mirrored while the console reads right to left (RtlIcons::icon). */
-    public function getIcon(): BackedEnum|Htmlable
+    public function getIcon(): Heroicon
     {
-        return RtlIcons::icon(match ($this) {
+        return match ($this) {
             self::WhatsApp => Heroicon::OutlinedChatBubbleLeftRight,
             self::WhatsAppBusiness => Heroicon::OutlinedBuildingStorefront,
             self::WhatsAppWeb => Heroicon::OutlinedGlobeAlt,
@@ -66,7 +62,7 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
             self::PhoneCall => Heroicon::OutlinedPhone,
             self::VoiceNote => Heroicon::OutlinedMicrophone,
             self::Other => Heroicon::OutlinedEllipsisHorizontalCircle,
-        });
+        };
     }
 
     public function getColor(): string

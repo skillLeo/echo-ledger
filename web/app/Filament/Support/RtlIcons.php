@@ -17,15 +17,18 @@ use Illuminate\Contracts\Support\Htmlable;
  * so English and classic draw these icons byte for byte as before. A Blade draws one as
  * `@svg(...RtlIcons::of('heroicon-o-chevron-right', ['aria-hidden' => 'true']))`, the directive's own shape.
  *
- * W-235: an icon Filament draws itself (an action's, a badge's, a notification's) takes no class per call, so it is
- * given as icon(): the same heroicon as markup with the mirror's class, which Filament draws inside its own sized icon
- * (.fi-icon > svg).
+ * W-235: an icon Filament draws itself (an action's, a notification's) takes no class per call, so it is given as
+ * icon(): the same heroicon as markup with the mirror's class, which Filament draws inside its own sized icon
+ * (.fi-icon > svg). Logos, brand marks and a recording's source icon never mirror (D4 §7), so an app's own icon is not
+ * given through here.
  */
 final class RtlIcons
 {
     /** The heroicons mirrored right to left, by name without their style (heroicon-o-, -s-, -m-, -c-). */
     public const MIRRORED = ['chevron-right', 'chevron-left', 'question-mark-circle', 'chat-bubble-left-ellipsis',
-        'chat-bubble-bottom-center-text', 'chat-bubble-left-right', 'phone-x-mark', 'arrow-left-start-on-rectangle'];
+        'chat-bubble-bottom-center-text', 'chat-bubble-left-right', 'phone-x-mark', 'arrow-left-start-on-rectangle',
+        // W-235, as the desktop's D-231 and the phone's P-038: send, sort and an undo-style arrow (Restore).
+        'paper-airplane', 'arrows-up-down', 'arrow-uturn-left'];
 
     /** The class that mirrors an icon right to left. */
     public const CLASS_NAME = 'v2-icon-flip';
@@ -63,10 +66,11 @@ final class RtlIcons
     }
 
     /**
-     * [$icon] for Filament to draw (an action's ->icon(), an enum's getIcon(), a notification's), mirrored right to left:
-     * unchanged unless the console reads right to left and it is one to mirror; then its heroicon as markup with the
-     * mirror's class. Only icons drawn the same at every size (the outlined heroicons, or a name) are given as markup: a
-     * solid Heroicon case changes its drawing with the size Filament picks, so it is left as it is.
+     * [$icon] for Filament to draw (an action's ->icon(), a notification's), mirrored right to left: unchanged unless the
+     * console reads right to left and it is a heroicon to mirror; then its heroicon as markup with the mirror's class.
+     * Only icons drawn the same at every size (the outlined heroicons, or a heroicon's full name) are given as markup: a
+     * solid Heroicon case changes its drawing with the size Filament picks, and a name that is not a heroicon's has no
+     * file to draw, so both are left as they are (an Urdu page never fails where the English one works).
      *
      * @return ($icon is null ? null : ($icon is string ? string|Htmlable : ($icon is BackedEnum ? BackedEnum|Htmlable : Htmlable)))
      */
@@ -77,7 +81,7 @@ final class RtlIcons
             is_string($icon) => $icon,
             default => null,
         };
-        if ($name === null || ! self::mirrored($name) || ! ConsoleV2::rtl()) {
+        if ($name === null || ! str_starts_with($name, 'heroicon-') || ! self::mirrored($name) || ! ConsoleV2::rtl()) {
             return $icon;
         }
 
