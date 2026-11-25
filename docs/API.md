@@ -3,7 +3,9 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-v (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-x (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-x (accepted 2026-11-25 by EL-Lead; CC5, docs/PLAN_CALL_CHOICE.md and docs/PLAN_CALL_RULES.md §3, see "Choices that follow the account (since 2.0.0-x)"): the rest of the call choice's state is kept for the account too, behind the same `call_rules` flag: the two privacy switches (`hide_live_words`, `block_screenshots`), the first-time hint, the "Always do this?" streak and whether it was offered, and the contacts and Sources whose "Always …?" offer the person turned down. `preferences` in `GET /api/call-rules` and in `call_rules` of `GET /api/config`, `PATCH /api/call-rules/preferences`, and `POST` / `DELETE /api/call-rules/declined`. Additions only, no migration. **Clients** (Mac, Windows and Android ship together): behind the same flag, both apps read `preferences` from `call_rules` in `GET /api/config` instead of their own copies, apply `hide_live_words` and `block_screenshots` as their system allows, and send each change with `PATCH /api/call-rules/preferences`, one key at a time (the first-time hint, "Always do this?" offered, the streak). An "Always … for Ahmed?" offer turned down or ignored is `POST /api/call-rules/declined`, and undoing it is `DELETE`; neither app offers it again for anything in `declined` of `GET /api/call-rules`.
+2.0.0-w (accepted 2026-11-24 by EL-Lead; B5, docs/PLAN_CALL_RULES.md, see "Call rules (since 2.0.0-w)"): the person's call rules, kept on the server for every device of the account: the "After each call" default (`ask` | `always_transcribe` | `always_audio` | `dont_record`) and "When to ask", the short-call setting, and rules per contact, per contact group and per Source, with one order (contact, then group, then Source, then the default). New routes under `/api/call-rules`, `call_rules` in `GET /api/config`, and the interface flag `call_rules` (off for everyone but the admin's lists at first). Additions only: an app that does not know them keeps its own per-device setting. **Clients** (Mac, Windows and Android ship together): only while `ui_flags.call_rules` is true, both apps read `call_rules` from `GET /api/config` and decide each call by "Which rule wins"; their call rules screens read `GET /api/call-rules` and save with `PUT /api/call-rules/settings` and `POST`, `PATCH` and `DELETE /api/call-rules/{id}`. A `dont_record` for a Source or the default stops capture before it starts on both. For a contact, Android (Full) reads the number at ringing and captures nothing; the desktop and the Play build stop and delete as soon as the contact is known, and say exactly that (lead decision 25). Groups are Android (Full) only, asking for the contacts permission when a group rule is first used; the desktop offers none. With the flag off or the key absent, each app keeps its own per-device setting.
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
@@ -1889,7 +1891,8 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
 - App rules, the same on every app (not server data): the "After a call" setting is `ask` (default) |
   `always_transcribe` | `always_audio`; v1.5's "Keep automatically" and "Ask me" both migrate to `ask` (the new rule
   is permission first), and a person who wants the old behaviour picks Always transcribe. "Always transcribe calls with
-  this contact" is kept on the phone only and never sent.
+  this contact" is kept on the phone only and never sent. Since 2.0.0-w, when the `call_rules` flag is on for the
+  person, both live on the server instead, for every device: see "Call rules (since 2.0.0-w)".
 
 ### `GET /api/transcripts/{id}/views` — `library:read` (since v1.2)
 "Show as": reading views of a finished transcript, made with the Claude API (text only, no audio) and kept with
@@ -2510,6 +2513,160 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
 - The profile picture is unchanged: `POST` and `DELETE /api/account/avatar` (2.0.0-l). The website is only for billing.
 
 ---
+
+## Call rules (since 2.0.0-w)
+
+docs/PLAN_CALL_RULES.md and docs/PLAN_CALL_CHOICE.md: which calls are recorded, transcribed or kept as audio only,
+decided by the person's rules so that most calls need no question. The server keeps the rules for the person's whole
+account (every device, every workspace) and checks them. The apps apply them (lead decision 25):
+- A `dont_record` for a Source, a contact group or the default is decided on the device before capture starts, so
+  nothing is written for that call.
+- A `dont_record` for a contact: Android (the Full build) reads the number while the phone rings, so nothing is
+  captured either. The desktop and the Play build know the contact only once the call is under way (a name from the
+  call's window, the call log after the call), so they stop capture and delete what was written as soon as the
+  contact is known, and nothing is uploaded. The apps and the console describe such a rule in exactly those words,
+  never as "nothing is recorded".
+
+**Behind the interface flag `call_rules`.** It is like the v2.1 flags: `off` for everyone but the admin's lists at
+first, no `opt_in`. While it is `false` for the person, `ui_flags.call_rules` is `false`, `GET /api/config` has no
+`call_rules`, every `/api/call-rules` route answers `404 not_found` as a route that is not there, and the apps keep
+their per-device "After each call" setting as before. An app that does not know the flag never sees any of it.
+
+### The choices
+The same four words everywhere (the card, the pill menu, Settings, the console, the website):
+
+| Value | Words | What happens to the call |
+|---|---|---|
+| `ask` | Ask me | Recorded; the after-call card asks (Transcribe, Delete; doing nothing saves audio only) |
+| `always_transcribe` | Transcribe every call | Recorded and transcribed, no question (the upload sends `"transcribe": true`) |
+| `always_audio` | Save audio only | Recorded, kept as audio, no question (`"transcribe": false`); it can be transcribed later |
+| `dont_record` | Don't record | Never recorded: capture does not start for that call |
+
+Transcribing still follows the plan: on Free without an own key, and when the month's minutes cannot cover it, the
+recording is kept as audio only and the usual `needs_transcription_key` or `budget_exceeded` answers apply. A rule
+never spends minutes the plan does not have.
+
+### Which rule wins
+For a call, an app takes the first of these that has a rule, and uses its action:
+1. **The contact**: a rule for the other person's number (or, without a number, their name).
+2. **The contact's group**: `favourites`, then `saved_contacts`, then `unknown_numbers` (a number not in the phone's
+   contacts). Only Android (the Full build) knows these: it looks the number up in the contacts and their favourites,
+   and asks for the contacts permission only once a group rule exists. The desktop offers no group rules, and an app
+   that cannot look the number up skips this step.
+3. **The Source**: a rule for the app the call is in (`whatsapp`, `zoom`, `google_meet`, `microsoft_teams`, …: any
+   `source_app` value).
+4. **The default**: the person's `after_call`.
+
+A rule whose action is `ask` means "follow the default" for that step's contact, group or Source and stops the
+search there: the person called is asked about as the default says, even if a later step has a rule, **except that a
+`dont_record` at a later step (the group, the Source, or the default itself) still applies**: privacy first. "Ask me"
+for Ahmed and "Don't record" for Zoom: a Zoom call with Ahmed is not recorded. A rule with any other action at an
+earlier step wins as before: "Transcribe every call" for Ahmed records him even on Zoom.
+After the call, a project with "Always transcribe calls in this project" (`transcribe_calls: "always"`) still turns
+an `ask` or `always_audio` result into a transcript when the call is filed into it, as before; it never undoes a
+`dont_record`, since there is no recording.
+**Short calls**: with `short_calls: "dont_keep"` (the default), a call shorter than `short_call_seconds` (30) and a
+missed call are not kept, whatever the rules say: the app deletes the audio when the call ends, and nothing is
+uploaded. With `"keep"` they follow the rules like any call.
+
+### `GET /api/config`
+Gains, only while the flag is on:
+```json
+"call_rules": {"after_call": "ask", "ask_when": "after_call", "short_calls": "dont_keep", "short_call_seconds": 30,
+               "version": 12}
+```
+`after_call` is `null` when the person never chose on any device (see the first sync below). `version` goes up by one
+with every change to the settings or the rules: an app that holds an older `version` reads `GET /api/call-rules`.
+
+### `GET /api/call-rules` — `config:read`
+```json
+{"after_call": "always_audio", "ask_when": "after_call", "short_calls": "dont_keep", "short_call_seconds": 30,
+ "version": 12, "updated_at": "…",
+ "rules": [{"id": "01JC…", "kind": "contact", "number": "+923001234567", "name": "Ahmed Khan", "action": "always_transcribe",
+            "created_at": "…", "updated_at": "…"},
+           {"id": "01JC…", "kind": "group", "group": "favourites", "action": "dont_record", …},
+           {"id": "01JC…", "kind": "source", "source_app": "zoom", "action": "always_transcribe", …}]}
+```
+Rules come in the order above (contact, group, Source), then by name. The person's own only.
+
+### `PUT /api/call-rules/settings` — `sessions:write`
+`{"after_call": "always_audio", "ask_when": "at_start", "short_calls": "keep"}`, any of them → `200` with the whole
+answer of `GET /api/call-rules`. `ask_when` is `after_call` (default) or `at_start` (a short banner when the call
+connects; see PLAN_CALL_CHOICE). `after_call` cannot be set back to `null`.
+**First sync:** when the flag turns on, an app reads `GET /api/call-rules`. If `after_call` is `null`, it sends its own
+device's choice once with this route, and the account takes it. If it is set, the app takes the account's choice and
+drops its own. After that, a change on any device is a `PUT`, and the last one wins.
+
+### `POST /api/call-rules` — `sessions:write`
+One rule: `{"kind": "contact", "number": "+92 300 1234567", "name": "Ahmed Khan", "action": "always_audio"}`,
+`{"kind": "group", "group": "unknown_numbers", "action": "ask"}` or `{"kind": "source", "source_app": "zoom",
+"action": "always_transcribe"}` → `201` with the rule. There is one rule per contact, group or Source: a second one
+for the same replaces its action (and name) and answers `200`.
+- `number` is stored as the phone sends it, normalised: a leading `00` becomes `+`, a trunk `(0)` right after the
+  country code is dropped ("+44 (0)20 7946 0958" is `+442079460958`), then spaces, dashes, dots and brackets are
+  removed. Matching takes the exact number first; else the one rule with the same last 10 digits when one side has no
+  country code. When two or more rules share those 10 digits (the same local number in two countries), none of them
+  matches and the call goes on to the next step. A contact without a number (a desktop call known by name only) is matched by `name`, ignoring case and extra spaces.
+  A contact rule needs `number` or `name`.
+- `name` is for showing only ("For Ahmed Khan: Transcribe every call"), 1 to 120 characters.
+- `group` is `favourites` | `saved_contacts` | `unknown_numbers`. `source_app` is any Source but `voice_note` and
+  `other`.
+- At most 500 rules a person: the 501st is `409 too_many_rules`. Errors are `422 validation_failed` with `errors` and
+  `error_codes` (as in "Account and security from the apps").
+
+### `PATCH /api/call-rules/{id}` — `sessions:write`
+`{"action": "dont_record"}` and/or `{"name": "…"}` → `200` with the rule. Another person's rule, or one that is gone,
+is `404 rule_not_found`.
+
+### `DELETE /api/call-rules/{id}` — `sessions:write`
+Removes one rule → `204`; the next call follows the next step of the order. `404 rule_not_found` as above.
+
+### Notes
+- Rules are the person's, not a workspace's: the same on every device of the account, whichever workspace the device
+  is in. A teammate never sees them, and an admin sees only counts.
+- Numbers and names in rules are never written to logs. Erasing the account erases its rules, and "Export my data"
+  includes them.
+- Limits: 60 changes a minute per person.
+
+### Choices that follow the account (since 2.0.0-x)
+CC5 (docs/PLAN_CALL_CHOICE.md): the rest of what the after-call card and Settings › Privacy & data remember, kept for
+the account like the rules, so a hint seen or an offer turned down on the phone is not shown again on the Mac. Behind
+the same `call_rules` flag; while it is off, each app keeps these on the device as before.
+
+`GET /api/call-rules` gains, and `call_rules` in `GET /api/config` gains the same object:
+```json
+"preferences": {"hide_live_words": true, "block_screenshots": false, "hint_seen": false,
+                "always_offered": false, "streak": {"choice": "always_audio", "count": 2}}
+```
+
+| Key | Default | What it is |
+|---|---|---|
+| `hide_live_words` | `true` | "Hide EchoLedger's live words from screenshots and screen shares" (captions, Live Assist, Live Translate). Each app hides them in the way its system allows. |
+| `block_screenshots` | `false` | "Block screenshots of EchoLedger" (the app's screens). |
+| `hint_seen` | `false` | The card's first-time line "You can change this in Settings › After each call" has been shown. |
+| `always_offered` | `false` | The card has offered "Always do this?" once; it never offers it again. |
+| `streak` | `null` | The last choice made on the card (`always_transcribe`, `always_audio` or `delete`) and how many times in a row (1 to 99). |
+
+`GET /api/call-rules` also gains `"declined": [{"kind": "contact", "number": "+923001234567", "name": "Ahmed Khan"},
+{"kind": "source", "source_app": "zoom"}]`: the contacts and Sources whose "Always … for Ahmed?" offer (PLAN_CALL_RULES
+§3) the person turned down or ignored, newest first. Apps never offer it again for those. It is not in `/api/config`.
+
+### `PATCH /api/call-rules/preferences` — `sessions:write`
+Any of the keys above, each on its own: `{"hint_seen": true}`, `{"streak": {"choice": "always_audio", "count": 3}}`,
+`{"streak": null}` → `200` with the whole answer of `GET /api/call-rules`. Keys not sent keep their value, so two
+devices that change different keys never undo each other; for one key, the last change wins. `version` goes up by
+one. A key or a value that is not one of the above is `422 validation_failed` with `error_codes`.
+
+### `POST /api/call-rules/declined` — `sessions:write`
+One contact or Source, the same fields as a rule without `action`: `{"kind": "contact", "number": "+92 300 1234567",
+"name": "Ahmed Khan"}` or `{"kind": "source", "source_app": "zoom"}` → `201`, or `200` when it is already there (a
+number with or without its country code, and a name, match as in a rule). At most 500; past that the oldest goes.
+Making a rule for that contact or Source does not remove it.
+
+### `DELETE /api/call-rules/declined` — `sessions:write`
+Forgets every turned-down offer ("Show these offers again" in Settings) → `204`.
+
+Numbers and names in `declined` are kept, logged and erased like those in rules. Limits: as for rules.
 
 ## Activity centre (since v1.1)
 

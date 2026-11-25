@@ -17,7 +17,7 @@ final class FieldErrors
 {
     /** Laravel rule names (as Validator::failed() gives them) and the code each one means. */
     private const CODES = [
-        'Required' => 'required', 'RequiredWithout' => 'required', 'Present' => 'required',
+        'Required' => 'required', 'RequiredWithout' => 'required', 'RequiredIf' => 'required', 'Present' => 'required',
         'Min' => 'too_short', 'Max' => 'too_long', 'Between' => 'too_long',
         'Email' => 'invalid_email', 'Unique' => 'email_taken', 'Different' => 'same_as_now',
         'In' => 'invalid', 'String' => 'invalid', 'Boolean' => 'invalid', 'Array' => 'invalid',
