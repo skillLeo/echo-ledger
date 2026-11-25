@@ -1,7 +1,8 @@
 {{--
-    The v2.0 Library's keys and mouse (parity plan 3), only under ui_v2.library: J / K move through the list, Enter opens,
-    X selects, Esc clears the selection; Ctrl/Cmd+A selects all; Delete (or Backspace) deletes the selection, with Undo
-    in the notice; while something is selected a click on a row adds or takes it away and Shift-click takes the range;
+    The v2.0 Library's keys and mouse (parity plan 3), only under ui_v2.library: J / K move through the list (so do ↓ ↑
+    on a row, or on the page once a row is the current one; from a focused row the focus goes along), Enter opens, X
+    selects, Esc clears the selection; Ctrl/Cmd+A selects all; Delete (or Backspace) deletes the selection, with Undo
+    in the notice; on an Urdu keyboard layout the letters answer by their key's place (ElLibraryKeysCore.latinKey); while something is selected a click on a row adds or takes it away and Shift-click takes the range;
     right-click opens the row's menu, or the selection's when the row is part of it (UX-22, filament.v2.context-menu-script).
 --}}
 <script>
@@ -29,14 +30,18 @@
         };
         const wide = () => window.matchMedia('(min-width: 1024px)').matches;
         const modal = () => document.querySelector('.fi-modal-open[aria-modal="true"]') !== null;
+        // A row's own link (what opens it): the focus is on a row there, and the arrows walk the list.
+        const linkOf = (el) => rowOf(el).querySelector('.fi-ta-record-content');
         document.addEventListener('keydown', (e) => {
             const lib = library();
             if (! lib) return;
             const items = Array.from(lib.list.querySelectorAll('[data-recording]'));
             const all = lib.list.querySelector('input.fi-ta-page-checkbox');
             const on = checked(lib);
-            const act = core.keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
-                modal: modal(), items: items.length, at: items.findIndex((el) => rowOf(el).classList.contains('el-kb-row')),
+            const focusAt = e.target instanceof Element ? items.findIndex((el) => linkOf(el) === e.target) : -1;
+            const act = core.keyAction({ key: e.key, code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
+                defaultPrevented: e.defaultPrevented, target: field(e.target), onRow: focusAt >= 0, onPage: e.target === document.body || e.target === document.documentElement }, {
+                modal: modal(), items: items.length, at: items.findIndex((el) => rowOf(el).classList.contains('el-kb-row')), focusAt,
                 checked: on.length, selected: selected(lib), allChecked: !! (all && all.checked),
             });
             if (! act) return;
@@ -48,6 +53,7 @@
                 items.forEach((el) => rowOf(el).classList.remove('el-kb-row'));
                 rowOf(items[act.at]).classList.add('el-kb-row');
                 rowOf(items[act.at]).scrollIntoView({ block: 'nearest' });
+                if (act.focus) linkOf(items[act.at])?.focus();
             } else if (act.do === 'open') {
                 e.preventDefault();
                 const id = items[act.at].dataset.recording;

@@ -58,12 +58,12 @@ final class UpgradeRequests
         }
     }
 
-    /** A notice in the bell of every member of staff who answers upgrade requests. */
-    public function tellStaff(string $title, string $body): void
+    /** A notice in the bell of every member of staff who answers upgrade requests; [$customer] is who it is about. */
+    public function tellStaff(string $title, string $body, ?User $customer = null): void
     {
         User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
             ->filter(fn (User $staff): bool => StaffAccess::can('upgrades.manage', $staff))
-            ->each(fn (User $staff) => app(ActivityFeed::class)->post($staff, 'upgrade_requested', $title, $body, null, 'heroicon-o-arrow-trending-up'));
+            ->each(fn (User $staff) => app(ActivityFeed::class)->post($staff, 'upgrade_requested', $title, $body, null, 'heroicon-o-arrow-trending-up', actor: $customer));
     }
 
     public function pendingFor(User $user): ?UpgradeRequest

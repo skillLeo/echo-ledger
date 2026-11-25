@@ -179,7 +179,7 @@ it('words the Upgrade page in Urdu, with the plan names and prices kept whole, a
     $en = upgradeUrduPage($this, '/app/settings/plan/upgrade');
 
     upgradeUrduBoth($ur, $en, [
-        '<h1 class="el-set-h1">اپ گریڈ</h1>', 'پلان اور استعمال</a>', 'aria-label="پلان"',
+        '<h1 class="el-set-h1">اپ گریڈ</h1>', 'پلان اور بلنگ</a>', 'aria-label="پلان"',
         upgradeUrduIsolated('Personal').' کا اپ گریڈ', 'آپ '.upgradeUrduIsolated('Personal').' پر ہیں۔',
         // A price in a sentence, and a plan name in a sentence.
         '<span class="el-plan-card-price" style="margin-top:2px">'.upgradeUrduIsolated('Rs 2,999').' ماہانہ</span>',
@@ -191,7 +191,7 @@ it('words the Upgrade page in Urdu, with the plan names and prices kept whole, a
         '<span class="el-copy-label">قابلِ ادائیگی</span>', upgradeUrduIsolated('Pro').' کی درخواست کریں',
         'ہماری بینک تفصیلات اگلی اسکرین پر نظر آئیں گی۔',
     ], [
-        '<h1 class="el-set-h1">Upgrade</h1>', 'Plan & usage</a>', 'aria-label="Plan"', 'Upgrading Personal', "You're on Personal.",
+        '<h1 class="el-set-h1">Upgrade</h1>', 'Plan & billing</a>', 'aria-label="Plan"', 'Upgrading Personal', "You're on Personal.",
         '<span class="el-plan-card-price" style="margin-top:2px">Rs 2,999 a month</span>', 'Everything in Personal, plus:',
         '<span>600 transcription minutes a month</span>', '<span>A team of up to 10 people</span>',
         '<span>More accurate transcription for difficult audio</span>', '<span class="el-set-title">Promo code</span>',
