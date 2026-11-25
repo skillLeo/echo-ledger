@@ -1210,6 +1210,10 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
+
+/** Mark as read / unread for many (contract 2.0.0-y): the recordings marked, and every other id as it was sent. */
+export type OpenedMany = { done: string[]; not_found: string[] };
+
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
@@ -2066,6 +2070,13 @@ export const api = {
   markOpened: (id: string) => invoke<void>("session_opened", { id }),
   /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
   markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
+  /**
+   * Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y), one request per 200 ids; null from an older
+   * server (mark them one by one then).
+   */
+  markOpenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_opened", { ids }),
+  /** Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as markOpenedMany. */
+  markUnopenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_unopened", { ids }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */

@@ -11,6 +11,9 @@ use super::models::*;
 use super::pinning::build_http_client;
 use crate::error::{AppError, AppResult};
 
+/// Ids per `POST` / `DELETE /api/sessions/opened` request (contract 2.0.0-y: 1 to 200).
+pub const OPENED_IDS_PER_REQUEST: usize = 200;
+
 #[derive(Clone)]
 pub struct ApiClient {
     base: String,
@@ -1098,6 +1101,43 @@ impl ApiClient {
     pub async fn session_unopen(&self, id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
         Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/sessions/opened` (since 2.0.0-y): Mark as read for many recordings, one request per
+    /// [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_opened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, true).await
+    }
+
+    /// `DELETE /api/sessions/opened` (since 2.0.0-y): Mark as unread for many recordings, the person's own opens taken
+    /// back, one request per [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_unopened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, false).await
+    }
+
+    /// The ids in chunks of [`OPENED_IDS_PER_REQUEST`], their answers joined. `None` when the first answer is not a `200`
+    /// with a `done` list: an older server (its `POST` answers `405`; its `DELETE` reaches `DELETE /api/sessions/{id}`
+    /// with the id "opened", `404` or `403`, and deletes nothing), so the caller marks them one by one. A later chunk
+    /// that fails ends the run with what was done: its ids are in neither list.
+    async fn opened_many(&self, ids: &[String], opened: bool) -> AppResult<Option<OpenedMany>> {
+        let mut all = OpenedMany::default();
+        for (n, chunk) in ids.chunks(OPENED_IDS_PER_REQUEST).enumerate() {
+            let url = self.url("sessions/opened");
+            let request = if opened { self.http.post(url) } else { self.http.delete(url) };
+            let answer = match self.authed(request)?.json(&json!({ "ids": chunk })).send().await {
+                Ok(resp) if resp.status().as_u16() == 200 => resp.json::<OpenedMany>().await.ok(),
+                _ => None,
+            };
+            match answer {
+                Some(answer) => {
+                    all.done.extend(answer.done);
+                    all.not_found.extend(answer.not_found);
+                }
+                None if n == 0 => return Ok(None),
+                None => break,
+            }
+        }
+        Ok(Some(all))
     }
 
     /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).

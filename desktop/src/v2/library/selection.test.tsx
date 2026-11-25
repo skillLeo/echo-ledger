@@ -214,7 +214,8 @@ describe("selection mode", () => {
     // Transcribe and Export are on the bar, so its ⋮ doesn't repeat them.
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     const menu = screen.getByRole("menu", { name: "More actions" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Pin", "Unpin", "Keep forever"]);
+    // …and Mark as unread, both picked being read (contract 2.0.0-y), with the key it answers.
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Pin", "Unpin", "Keep forever", "Mark as unreadCtrl+Shift+U"]);
     expect(within(menu).getByText("Organise")).toBeInTheDocument();
     fireEvent.click(menuItem("Pin"));
     await act(flushAsync);

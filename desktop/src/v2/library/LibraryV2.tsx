@@ -36,6 +36,7 @@ import {
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
+import { markOpenedMany, type OpenedProgress } from "./opened";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
 import { syncLibrary } from "./syncClock";
@@ -894,16 +895,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
   };
   /**
-   * Mark as unread (contract 2.0.0-t, DELETE /api/sessions/{id}/opened) or, when every one is unread, Mark as read: here
-   * at once (the dot, Unread and its count), then on every device; what the server refuses is put back, and said.
+   * Mark as unread (contract 2.0.0-t) or, when every one is unread, Mark as read: here at once (the dot, Unread and its
+   * count), then on every device, one request per 200 (contract 2.0.0-y; one per recording on an older server); what
+   * the server refuses is put back, and said. One it doesn't find leaves the selection quietly.
    */
   const setUnread = async (ids: readonly string[], unread: boolean) => {
-    const chosen = (items ?? []).filter((i) => ids.includes(i.id));
+    const wanted = new Set(ids);
+    const chosen = (items ?? []).filter((i) => wanted.has(i.id));
     if (!chosen.length) return;
-    if (chosen.length > MAX_BULK) {
-      say(tooManyWords(chosen.length));
-      return;
-    }
     const was = new Map(chosen.map((i) => [i.id, { opened: i.opened, read: readHere.has(i.id) }]));
     const put = (next: (id: string) => { opened: boolean | undefined; read: boolean }) => {
       setItems((list) => list?.map((i) => (was.has(i.id) ? { ...i, opened: next(i.id).opened } : i)) ?? list);
@@ -915,20 +914,26 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     };
     const marked = { opened: !unread, read: !unread };
     put(() => marked);
-    // One at a time; what the server took is kept whatever happens after.
-    const done = new Set<string>();
+    // What the server took is kept whatever happens after.
+    const progress: OpenedProgress = { done: new Set(), notFound: new Set() };
+    const unpick = () => {
+      if (progress.notFound.size) setPicked((now) => new Set([...now].filter((id) => !progress.notFound.has(id))));
+    };
     try {
-      for (const id of was.keys()) {
-        await (unread ? api.markUnopened(id) : api.markOpened(id));
-        done.add(id);
-      }
-      // Once more: a sync answered meanwhile from the copy saved before the marks undid them.
-      put(() => marked);
-      say(unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", was.size) : tc("Marked :count recording as read|Marked :count recordings as read", was.size));
+      await markOpenedMany([...was.keys()], !unread, progress);
+      // Once more: a sync answered meanwhile from the copy saved before the marks undid them. One the server did not
+      // find goes back as it was.
+      put((id) => (progress.notFound.has(id) ? was.get(id)! : marked));
+      unpick();
+      if (!progress.done.size) return;
+      const count = progress.done.size;
+      say(unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", count) : tc("Marked :count recording as read|Marked :count recordings as read", count));
     } catch (e) {
       // Only what was not done goes back; the rest stays marked, and the problem says how many went.
+      const done = progress.done;
       put((id) => (done.has(id) ? marked : was.get(id)!));
-      const of = { done: done.size, total: was.size, error: errorMessage(e) };
+      unpick();
+      const of = { done: done.size, total: was.size - progress.notFound.size, error: errorMessage(e) };
       sayProblem(say, !done.size ? errorMessage(e) : unread ? tc(":done of :total marked as unread · :error", of.done, of) : tc(":done of :total marked as read · :error", of.done, of));
     }
   };
@@ -979,6 +984,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     // Mark as important (UX-22): actions.json's item, the same as a right-click's (the selection bar's ⋮ and the
     // recording page's menu have it too).
     for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: organise });
+    // Mark as read and Mark as unread (contract 2.0.0-y): each while some picked are the other way, both for a mix; the
+    // right-click's item, its shortcut on the one ⇧⌘U runs (Mark as read only when every one is unread).
+    const ctx = recordingContext(ids);
+    const unreadHere = (i: LibraryItem) => i.opened === false && !readHere.has(i.id);
+    const anyRead = chosen.some((i) => !unreadHere(i));
+    if (chosen.some(unreadHere)) {
+      for (const item of menuItems(["recording.unread"], { ...ctx, state: { ...ctx.state, unread: true } })) add("read", { ...item, group: organise, shortcut: anyRead ? undefined : item.shortcut });
+    }
+    if (anyRead) for (const item of menuItems(["recording.unread"], { ...ctx, state: { ...ctx.state, unread: false } })) add("unread", { ...item, group: organise });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
         ? { label: t("Transcribe (:max at a time)", { max: MAX_TRANSCRIBE }), icon: Icons.TranscriptIcon, group: organise, disabled: true }
@@ -1485,12 +1499,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // A built-in view's menu (the sidebar's, UX-22): Unread's Mark all as read, Audio only's Transcribe all… (it asks with
   // the count and the minutes first, as Transcribe does).
   const placeRuns: Record<string, ((ctx: ActionContext) => void) | undefined> = {
+    // Every one unread, read at once, then one request per 200, its answers waited for (contract 2.0.0-y).
     "view.markAllRead": () => {
       const unread = (items ?? []).filter((i) => !i.deleted && i.opened === false && !readHere.has(i.id)).map((i) => i.id);
-      if (!unread.length) return;
-      setReadHere((r) => new Set([...r, ...unread]));
-      for (const id of unread) void api.markOpened(id).catch(() => undefined);
-      say(tc("Marked :count recording as read|Marked :count recordings as read", unread.length));
+      if (unread.length) void setUnread(unread, false);
     },
     "view.transcribeAll": () => {
       const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
@@ -1602,7 +1614,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={say} onOpenProject={onOpenProject}
       onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
-      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
+      menu={(own) => menuFor([open.id], new Set(["open", "select", "read", "unread"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.

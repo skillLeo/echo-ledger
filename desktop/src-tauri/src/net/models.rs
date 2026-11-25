@@ -1736,3 +1736,13 @@ pub struct ScreenMoment {
 pub struct UploadedScreen {
     pub data: ScreenMoment,
 }
+
+/// The answer to `POST` / `DELETE /api/sessions/opened` (contract 2.0.0-y, Mark as read / unread for many): the
+/// recordings marked, and every other id as it was sent (another workspace's, another person's, in the bin, none at
+/// all), which is never an error for the whole batch. Without a `done` list it is not this answer (an older server).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenedMany {
+    pub done: Vec<String>,
+    #[serde(default)]
+    pub not_found: Vec<String>,
+}

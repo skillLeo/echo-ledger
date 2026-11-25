@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use crate::AppState;
 use crate::error::{AppError, AppResult};
 use crate::net::api::ApiClient;
+use crate::net::models::OpenedMany;
 use crate::net::sync::{LibraryCache, paths};
 pub use crate::net::models::BudgetState;
 use crate::net::uploader::{UploadItem, UploadQueue};
@@ -2363,6 +2364,33 @@ pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
         cache.save(&paths::library(&state.data_dir))?;
     }
     Ok(())
+}
+
+/// Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y): one request per 200 ids. The saved Library
+/// follows the server's `done` only. `null` from an older server (anything but a `200` with `done`): the page marks
+/// them one by one.
+#[tauri::command]
+pub async fn sessions_opened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
+    opened_many(&app, ids, true).await
+}
+
+/// Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as [`sessions_opened`].
+#[tauri::command]
+pub async fn sessions_unopened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
+    opened_many(&app, ids, false).await
+}
+
+async fn opened_many(app: &AppHandle, ids: Vec<String>, opened: bool) -> AppResult<Option<OpenedMany>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let api = state.api()?;
+    let answer = if opened { api.sessions_opened(&ids).await? } else { api.sessions_unopened(&ids).await? };
+    let Some(answer) = answer else { return Ok(None) };
+    let mut cache = state.library.lock().await;
+    if cache.mark_opened_many(&answer, opened) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(Some(answer))
 }
 
 /// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps
