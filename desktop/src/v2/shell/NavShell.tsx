@@ -18,6 +18,7 @@ import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 import { RecordSplit } from "./RecordSplit";
 import { useRailKeys } from "./railKeys";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
+import { latinKey } from "../actions/latinKey";
 import type { ShellStatus } from "./status";
 import { WindowButtons } from "./WindowButtons";
 import { BrandMark } from "../../components/BrandMark";
@@ -298,14 +299,16 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       return;
     }
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
+    // With a non-Latin layout on, the Latin key at the same place (D-221: ⌘F, ⌘[ and ⌘1 on an Urdu keyboard).
+    const key = latinKey(e);
+    if (mod && !e.altKey && !e.shiftKey && key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
       e.preventDefault();
       if (title?.search) setFindSeq((n) => n + 1);
       else onSearch?.();
       return;
     }
     // ⌘[ ⌘] (Ctrl+[ ] and Alt+← → on Windows): Back and Forward, never while typing.
-    const way = (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]")) ? (e.key === "[" ? "back" : "forward")
+    const way = (mod && !e.altKey && !e.shiftKey && (key === "[" || key === "]")) ? (key === "[" ? "back" : "forward")
       : (e.altKey && !mod && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) ? (e.key === "ArrowLeft" ? "back" : "forward") : null;
     if (way && !typing(e.target) && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
       e.preventDefault();
@@ -315,17 +318,17 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || typing(e.target)) return;
     if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
     // ⌃⌘S: the Mac's own Show/Hide Sidebar (v21_panel_flyout); ⌘\ (Ctrl+\) as before.
-    if (panelFlyout && e.metaKey && e.ctrlKey && e.key.toLowerCase() === "s") {
+    if (panelFlyout && e.metaKey && e.ctrlKey && key.toLowerCase() === "s") {
       e.preventDefault();
       togglePanel();
       return;
     }
-    if (e.key === "\\") {
+    if (key === "\\") {
       e.preventDefault();
       togglePanel();
       return;
     }
-    const at = /^[1-6]$/.test(e.key) ? Number(e.key) - 1 : -1;
+    const at = /^[1-6]$/.test(key) ? Number(key) - 1 : -1;
     if (at < 0) return;
     e.preventDefault();
     press(RAIL_PLACES[at]);

@@ -5,6 +5,7 @@
 //   (F too) and Sort & display, the list (↓ ↑ and J K from row to row), a recording (Enter) and back to its row (Esc,
 //   then ⌘[ or Alt+←), selection (X, ⌘A or Ctrl+A, the selection bar's actions by Tab, Esc), and every stop with a
 //   visible focus ring; on Windows Tab never lands on Minimize, Maximize or Close (the mouse's; Alt+Space has them).
+//   With an Urdu keyboard layout's keys (D-221), J, K, / and ⌘F or Ctrl+F still answer.
 // Each step says how many presses it took; a step that can't be done with keys is listed as unreachable, and the run
 // fails on any.
 //   npm run check:keyboard            (node scripts/keyboardLibrary.mjs)
@@ -157,6 +158,33 @@ async function walk(lang, platform) {
   const j = await here(page);
   if (!j?.row || j.row === first?.row) unreachable.push(`${tag}: J doesn't move from row to row`);
   await press("k", 200);
+  // With an Urdu keyboard layout on (D-221) a letter's key types its Urdu letter: the key's place stands for J, K, / and
+  // ⌘F / Ctrl+F (the event as such a keyboard sends it: the Urdu letter, the key's code).
+  const urdu = (key, code, mods = {}) => page.evaluate(([key, code, mods]) => {
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+  }, [key, code, mods]);
+  const fromRow = await here(page);
+  await urdu("ج", "KeyJ");
+  await page.waitForTimeout(200);
+  const urduJ = await here(page);
+  say(`J on an Urdu layout (ج): ${urduJ?.row && urduJ.row !== fromRow?.row ? "next row" : "DIDN'T MOVE"}`);
+  if (!urduJ?.row || urduJ.row === fromRow?.row) unreachable.push(`${tag}: J on an Urdu keyboard layout doesn't move from row to row`);
+  await urdu("ک", "KeyK");
+  await page.waitForTimeout(200);
+  await urdu("ظ", "Slash");
+  await page.waitForTimeout(300);
+  const urduSlash = await here(page);
+  say(`/ on an Urdu layout: ${urduSlash?.name}`);
+  if (!/^Search recordings/.test(urduSlash?.name ?? "")) unreachable.push(`${tag}: / on an Urdu keyboard layout doesn't reach the search (${urduSlash?.name})`);
+  await press("Escape", 300);
+  await page.locator("button[data-row-id]").first().focus();
+  await urdu("ف", "KeyF", mod === "Meta" ? { metaKey: true } : { ctrlKey: true });
+  await page.waitForTimeout(300);
+  const urduFind = await here(page);
+  say(`${mod === "Meta" ? "⌘F" : "Ctrl+F"} on an Urdu layout: ${urduFind?.name}`);
+  if (!/^Search recordings/.test(urduFind?.name ?? "")) unreachable.push(`${tag}: ${mod === "Meta" ? "⌘F" : "Ctrl+F"} on an Urdu keyboard layout doesn't reach the search (${urduFind?.name})`);
+  await press("Escape", 300);
+  await page.locator("button[data-row-id]").first().focus();
   // From the list, / and ⌘F go to the search (no Tabs back up).
   await press("/", 300);
   const slash = await here(page);

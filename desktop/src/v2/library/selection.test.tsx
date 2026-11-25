@@ -148,6 +148,31 @@ describe("selection mode", () => {
     expect(search).toHaveFocus();
   });
 
+  it("on an Urdu keyboard layout J, K, X, F, / and ⌘A answer by the key's place (D-221)", async () => {
+    await show();
+    act(() => rows()[0].focus());
+    fireEvent.keyDown(rows()[0], { key: "ج", code: "KeyJ" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "ج", code: "KeyJ" });
+    fireEvent.keyDown(row("Usman Chaudhry"), { key: "ک", code: "KeyK" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "ش", code: "KeyX" });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    fireEvent.keyDown(row("Voice note"), { key: "ا", code: "KeyA", metaKey: true });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("4 selected");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.keyDown(row("Voice note"), { key: "ف", code: "KeyF" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    act(() => row("Voice note").focus());
+    fireEvent.keyDown(row("Voice note"), { key: "ظ", code: "Slash" });
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
+    // Typed into the search, an Urdu letter is a letter.
+    const typed = new KeyboardEvent("keydown", { key: "ج", code: "KeyJ", bubbles: true, cancelable: true });
+    screen.getByRole("searchbox", { name: "Search recordings" }).dispatchEvent(typed);
+    expect(typed.defaultPrevented).toBe(false);
+  });
+
   it("Delete, from the bar or the Delete key, sends the picked ones to Trash at once, and one Undo brings them all back", async () => {
     respondWith("session_restore", () => ({ data: ITEMS[0] }));
     await show();

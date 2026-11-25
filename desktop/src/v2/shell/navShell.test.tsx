@@ -111,6 +111,19 @@ describe("the three levels", () => {
     field.remove();
   });
 
+  it("on an Urdu keyboard layout ⌘1…⌘6 and ⌘ with the backslash key answer by the key's place (D-221)", () => {
+    setWidth(1440);
+    const onPlace = vi.fn();
+    render(<App onPlace={onPlace} />);
+    fireEvent.keyDown(window, { key: "۴", code: "Digit4", metaKey: true });
+    expect(onPlace).toHaveBeenLastCalledWith("ask", false);
+    fireEvent.keyDown(window, { key: "۱", code: "Digit1", ctrlKey: true });
+    expect(onPlace).toHaveBeenLastCalledWith("library", false);
+    expect(panel()).not.toBeNull();
+    fireEvent.keyDown(window, { key: "ژ", code: "Backslash", metaKey: true });
+    expect(panel()).toBeNull();
+  });
+
   it("under 1100 px the panel is a flyout from the rail that closes once something is chosen, or on Esc", async () => {
     // The width is the token's: tokens.css --el-breakpoint-flyout.
     const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
