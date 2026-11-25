@@ -62,4 +62,14 @@ export const CONVERTED: readonly string[] = [
   "lib/languages.ts",
   "lib/progress.ts",
   "lib/pending.ts",
+  // D1b: the Library's leftovers: the filter panel and its pills, the filters' and the facets' names, labels and their
+  // dialogs, My views' messages, the queue at the top of the list (waiting calls, imports, uploads) and the import sheet.
+  "v2/library/FilterPanel.tsx",
+  "v2/library/filters.ts",
+  "v2/library/facets.ts",
+  "v2/library/lists.tsx",
+  "v2/library/myViews.ts",
+  "v2/library/QueueV2.tsx",
+  "v2/library/ImportSheetV2.tsx",
+  "v2/library/fitRow.ts",
 ];

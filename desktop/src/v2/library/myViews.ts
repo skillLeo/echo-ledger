@@ -12,6 +12,7 @@ import type { SortKey } from "../../lib/library";
 import type { GroupKey } from "../../lib/libraryGroups";
 import type { Density } from "../../lib/shell";
 import { cleanSpec, readSpec, type FilterSpec } from "./facets";
+import { t, tc } from "../../i18n";
 
 export const MAX_VIEWS = 30;
 export const VIEW_NAME_MAX = 60;
@@ -27,18 +28,21 @@ export type MyView = {
   saved?: { name: string; spec: ViewSpec };
 };
 
-/** Why a view can't be saved or renamed, in the words the dialog shows. */
+/**
+ * Why a view can't be saved or renamed, in the words the dialog shows: in the window's language when they are read (a
+ * ViewError carries them as they were when it was made). `why` is the server's own message, or `full`.
+ */
 export const VIEW_WORDS = {
-  full: `You can keep up to ${MAX_VIEWS} views. Delete one to save another.`,
-  empty: "Give the view a name.",
-  long: `Use at most ${VIEW_NAME_MAX} characters.`,
-  taken: (name: string) => `You already have a view called ${name}.`,
-  gone: "That view is gone. It may have been deleted on another device.",
-  notReady: "Your views are still loading. Try again in a moment.",
-  notSaved: (name: string, why: string) => `${name} wasn't saved: ${why}`,
-  notChanged: (name: string, why: string) => `Your changes to ${name} weren't saved: ${why}`,
-  notDeleted: (name: string, why: string) => `${name} wasn't deleted: ${why}`,
-} as const;
+  get full() { return tc("You can keep up to :count views. Delete one to save another.", MAX_VIEWS); },
+  get empty() { return t("Give the view a name."); },
+  get long() { return tc("Use at most :count characters.", VIEW_NAME_MAX); },
+  taken: (name: string) => t("You already have a view called :name.", { name }),
+  get gone() { return t("That view is gone. It may have been deleted on another device."); },
+  get notReady() { return t("Your views are still loading. Try again in a moment."); },
+  notSaved: (name: string, why: string) => t(":name wasn't saved: :why", { name, why }),
+  notChanged: (name: string, why: string) => t("Your changes to :name weren't saved: :why", { name, why }),
+  notDeleted: (name: string, why: string) => t(":name wasn't deleted: :why", { name, why }),
+};
 
 export class ViewError extends Error {}
 

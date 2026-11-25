@@ -2,10 +2,12 @@
 // opened by [Filters n] or F, closed by Esc; from the end side, 320 px: from 1440 px it pushes the list, below it slides over it) with its sections, live counts,
 // a search box in long sections, each section's Clear and Save as view at its foot; and the pills row under the
 // toolbar, only while filters are on: one pill per section ("Source: WhatsApp, Zoom ×"), which opens to edit it with
-// "is" or "is not", then Clear all and Save as view.
+// "is" or "is not", then Clear all and Save as view. Every word is in the window's language (desktop Urdu, D1b); a
+// section's and an option's names are facets.ts's, read as they are shown.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Button, Icon, Icons, ResizeEdge, SearchField, Segmented, useFocusTrap } from "../components";
 import { Layer, placeMenu, regionOf } from "../components/Menu";
+import { useT } from "../../i18n";
 import {
   activeSections, clearSection, pillWords, SECTION_NAMES, SECTIONS, sectionOn, setDate, setNot, toggleValue,
   type DatePreset, type FacetOption, type FilterSpec, type Names, type SectionKey,
@@ -52,6 +54,7 @@ function loadFolds(): Set<SectionKey> {
 function SectionBody({ section, spec, onSpec, options, search = true }: {
   section: SectionKey; spec: FilterSpec; onSpec: (spec: FilterSpec) => void; options: readonly FacetOption[]; search?: boolean;
 }) {
+  const { t, rtl } = useT();
   const [find, setFind] = useState("");
   const name = useId();
   if (section === "date") {
@@ -59,7 +62,7 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
     const pick = (preset: DatePreset | null, days: { from?: string; to?: string } = {}) => onSpec(setDate(spec, preset, days));
     return (
       <div className="el-filter__options" role="radiogroup" aria-label={SECTION_NAMES.date}>
-        {[{ value: null, label: "Any time", count: null }, ...options].map((o) => (
+        {[{ value: null, label: t("Any time"), count: null }, ...options].map((o) => (
           <label key={o.value ?? "any"} className={`el-filter__option${o.count === 0 && o.value !== "custom" ? " el-filter__option--none" : ""}`}>
             <input type="radio" name={name} checked={chosen === o.value} onChange={() => pick(o.value as DatePreset | null, { from: spec.date?.from, to: spec.date?.to })} />
             <span className="el-filter__label" dir="auto">{o.label}</span>
@@ -68,11 +71,11 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
         ))}
         {chosen === "custom" && (
           <div className="el-filter__range">
-            <label className="el-filter__day"><span className="el-caption">From</span>
+            <label className="el-filter__day"><span className="el-caption">{t("library_context.date_start")}</span>
               <input type="date" className="el-input el-filter__date" value={spec.date?.from ?? ""} max={spec.date?.to || undefined}
                 onChange={(e) => pick("custom", { from: e.target.value || undefined, to: spec.date?.to })} />
             </label>
-            <label className="el-filter__day"><span className="el-caption">To</span>
+            <label className="el-filter__day"><span className="el-caption">{t("library_context.date_end")}</span>
               <input type="date" className="el-input el-filter__date" value={spec.date?.to ?? ""} min={spec.date?.from || undefined}
                 onChange={(e) => pick("custom", { from: spec.date?.from, to: e.target.value || undefined })} />
             </label>
@@ -87,10 +90,13 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
   return (
     <div className="el-filter__options">
       {search && options.length >= SEARCH_FROM && (
-        <SearchField label={`Search ${SECTION_NAMES[section].toLowerCase()}`} value={find} onChange={setFind} className="el-filter__search" />
+        // Empty, its words read right to left in Urdu (an empty dir="auto" box is left to right, and its words start
+        // with the section's name in an isolate); what is typed takes its own direction.
+        <SearchField label={t("Search :section", { section: SECTION_NAMES[section].toLowerCase() })} value={find} onChange={setFind} className="el-filter__search"
+          clearLabel={t("Clear search")} dir={rtl && !find ? "rtl" : "auto"} />
       )}
-      {options.length === 0 && <p className="el-caption el-secondary">None yet</p>}
-      {q && shown.length === 0 && <p className="el-caption el-secondary">No match</p>}
+      {options.length === 0 && <p className="el-caption el-secondary">{t("None yet")}</p>}
+      {q && shown.length === 0 && <p className="el-caption el-secondary">{t("No match")}</p>}
       {shown.map((o) => (
         // An option at 0 is dimmed, never hidden or disabled: it can still be ticked (for "is not").
         <label key={o.value} className={`el-filter__option${o.count === 0 ? " el-filter__option--none" : ""}`}>
@@ -138,6 +144,7 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
   panel?: RefObject<HTMLElement | null>;
   onTab?: (e: KeyboardEvent<HTMLElement>) => void;
 }) {
+  const { t } = useT();
   const [folded, setFolded] = useState<Set<SectionKey>>(loadFolds);
   const [width, setWidthNow] = useState<number | null>(loadFiltersWidth);
   const setWidth = (w: number | null) => {
@@ -165,12 +172,12 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
   const sections = SECTIONS;
   const on = activeSections(spec).length;
   const body = (
-    <aside ref={panel} className={`el-filter${drawer ? " el-filter--drawer" : ""}`} aria-label="Filters" onKeyDown={keyDown} data-testid="filter-panel"
+    <aside ref={panel} className={`el-filter${drawer ? " el-filter--drawer" : ""}`} aria-label={t("Filters")} onKeyDown={keyDown} data-testid="filter-panel"
       role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined}
       style={width ? { ["--el-filter-width" as string]: `${width}px` } : undefined}>
       <div className="el-filter__head">
-        <h2 className="el-body-strong">Filters{on > 0 && <span className="el-filter__on el-caption"><span className="el-num">{on}</span></span>}</h2>
-        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters"
+        <h2 className="el-body-strong">{t("Filters")}{on > 0 && <span className="el-filter__on el-caption"><span className="el-num">{on}</span></span>}</h2>
+        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Close filters")}
           aria-keyshortcuts={drawer ? "Escape" : "Escape F"} onClick={onClose} data-close="" />
       </div>
       <div className="el-filter__sections">
@@ -183,9 +190,9 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
                 <button type="button" className="el-filter__title" aria-expanded={open} onClick={() => fold(s)}>
                   <Icon icon={open ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />
                   <span>{SECTION_NAMES[s]}</span>
-                  {active && <span className="el-filter__dot" aria-label="on" role="img" />}
+                  {active && <span className="el-filter__dot" aria-label={t("library_context.filter_on")} role="img" />}
                 </button>
-                {active && <Button size="sm" variant="quiet" aria-label={`Clear ${SECTION_NAMES[s]}`} onClick={() => onSpec(clearSection(spec, s))}>Clear</Button>}
+                {active && <Button size="sm" variant="quiet" aria-label={t("Clear :name", { name: SECTION_NAMES[s] })} onClick={() => onSpec(clearSection(spec, s))}>{t("Clear")}</Button>}
               </div>
               {open && <SectionBody section={s} spec={spec} onSpec={onSpec} options={counts[s]} />}
             </section>
@@ -193,10 +200,10 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
         })}
       </div>
       <div className="el-filter__foot">
-        <Button className="el-filter__save" icon={Icons.PlusIcon} disabled={!canSave} onClick={onSaveView}>Save as view</Button>
+        <Button className="el-filter__save" icon={Icons.PlusIcon} disabled={!canSave} onClick={onSaveView}>{t("Save as view")}</Button>
       </div>
       {/* At the page's end, so its edge is the start one; let go below 160 px the filters close. */}
-      <ResizeEdge label="Resize the filters" side="start" cssVar="--el-filter-width" width={width ?? FILTERS_DEFAULT}
+      <ResizeEdge label={t("Resize the filters")} side="start" cssVar="--el-filter-width" width={width ?? FILTERS_DEFAULT}
         min={FILTERS_MIN} max={FILTERS_MAX} closeBelow={FILTERS_CLOSE_BELOW} onWidth={setWidth} onReset={() => setWidth(null)} onClose={onClose} />
     </aside>
   );
@@ -217,27 +224,30 @@ export function FilterPills({ spec, onSpec, counts, names, onClearAll, onSaveVie
   /** A pill of its own before the filters' (the search, a label shown). */
   extra?: ReactNode;
 }) {
+  const { t, rtl } = useT();
   const [editing, setEditing] = useState<SectionKey | null>(null);
   const anchors = useRef(new Map<SectionKey, HTMLElement>());
   const sections = activeSections(spec);
   return (
-    <div className="el-fpills" role="group" aria-label="Filters on">
+    <div className="el-fpills" role="group" aria-label={t("Filters on")}>
       {extra}
       {sections.map((s) => {
         const words = pillWords(spec, s, names);
         return (
           <span key={s} className="el-fpill" ref={(el) => { if (el) anchors.current.set(s, el); else anchors.current.delete(s); }}>
-            <button type="button" className="el-fpill__edit" aria-haspopup="dialog" aria-expanded={editing === s} title={`Edit: ${words}`}
-              onClick={() => setEditing(editing === s ? null : s)}><bdi>{words}</bdi></button>
-            <button type="button" className="el-fpill__remove" aria-label={`Remove ${words}`} onClick={() => onSpec(clearSection(spec, s))}>
+            <button type="button" className="el-fpill__edit" aria-haspopup="dialog" aria-expanded={editing === s} title={t("Edit: :filter", { filter: words })}
+              onClick={() => setEditing(editing === s ? null : s)}>
+              {/* The section and its values, pieces of one line: in Urdu it reads right to left whatever its values' letters. */}
+              <bdi dir={rtl ? "rtl" : undefined}>{words}</bdi></button>
+            <button type="button" className="el-fpill__remove" aria-label={t("Remove :name", { name: words })} onClick={() => onSpec(clearSection(spec, s))}>
               <Icon icon={Icons.CloseIcon} />
             </button>
           </span>
         );
       })}
-      <Button size="sm" variant="quiet" onClick={onClearAll}>Clear all</Button>
-      {onSaveChanges && <Button size="sm" variant="quiet" onClick={onSaveChanges}>Save changes</Button>}
-      <Button size="sm" variant="quiet" icon={Icons.PlusIcon} onClick={onSaveView}>Save as view</Button>
+      <Button size="sm" variant="quiet" onClick={onClearAll}>{t("Clear all")}</Button>
+      {onSaveChanges && <Button size="sm" variant="quiet" onClick={onSaveChanges}>{t("Save changes")}</Button>}
+      <Button size="sm" variant="quiet" icon={Icons.PlusIcon} onClick={onSaveView}>{t("Save as view")}</Button>
       {editing && sectionOn(spec, editing) && (
         <PillEditor section={editing} spec={spec} onSpec={onSpec} options={counts()[editing]} anchor={anchors.current.get(editing) ?? null}
           onClose={(focus) => {
@@ -258,6 +268,7 @@ function PillEditor({ section, spec, onSpec, options, anchor, onClose }: {
   section: SectionKey; spec: FilterSpec; onSpec: (spec: FilterSpec) => void; options: readonly FacetOption[]; anchor: HTMLElement | null;
   onClose: (focus: boolean) => void;
 }) {
+  const { t } = useT();
   const box = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -281,12 +292,12 @@ function PillEditor({ section, spec, onSpec, options, anchor, onClose }: {
   const not = spec[section]?.op === "is_not";
   return (
     <Layer from={anchor}>
-      <div ref={box} className="el-fpill-editor el-menu el-menu--floating" role="dialog" aria-label={`Edit ${SECTION_NAMES[section]}`} style={at ?? { left: 0, top: 0, visibility: "hidden" }}
+      <div ref={box} className="el-fpill-editor el-menu el-menu--floating" role="dialog" aria-label={t("Edit :section", { section: SECTION_NAMES[section] })} style={at ?? { left: 0, top: 0, visibility: "hidden" }}
         onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(true); } }}>
-        <Segmented label={`${SECTION_NAMES[section]} is or is not`} value={not ? "not" : "is"}
-          options={[{ value: "is", label: "is" }, { value: "not", label: "is not" }]} onChange={(v) => onSpec(setNot(spec, section, v === "not"))} />
+        <Segmented label={t(":section is or is not", { section: SECTION_NAMES[section] })} value={not ? "not" : "is"}
+          options={[{ value: "is", label: t("is") }, { value: "not", label: t("is not") }]} onChange={(v) => onSpec(setNot(spec, section, v === "not"))} />
         <SectionBody section={section} spec={spec} onSpec={onSpec} options={options} />
-        <div className="el-fpill-editor__foot"><Button size="sm" onClick={() => onClose(true)}>Done</Button></div>
+        <div className="el-fpill-editor__foot"><Button size="sm" onClick={() => onClose(true)}>{t("Done")}</Button></div>
       </div>
     </Layer>
   );
