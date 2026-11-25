@@ -196,15 +196,15 @@ describe("Shared in Urdu", () => {
     expect(first).toHaveTextContent("فعال");
     expect(row(`پروجیکٹ: ${iso("Acme Ltd")}`)).toHaveTextContent(`صرف ${iso("omar@acme.pk")} · ابھی کسی نے نہیں دیکھا`);
     expect(row("ایک ریکارڈنگ")).toHaveTextContent(`${iso(1)} بار دیکھا گیا`);
-    expect(row("ایک ریکارڈنگ")).toHaveTextContent("منسوخ");
+    expect(row("ایک ریکارڈنگ")).toHaveTextContent("واپس لیا گیا");
 
     const asked = answerConfirm();
     asked.mockReturnValue(true);
-    fireEvent.click(within(menuOf("Acme kickoff")).getByRole("menuitem", { name: "منسوخ کریں" }));
+    fireEvent.click(within(menuOf("Acme kickoff")).getByRole("menuitem", { name: "واپس لیں" }));
     await act(flushAsync);
-    expect(asked).toHaveBeenCalledWith("یہ لنک منسوخ کریں؟ یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔");
+    expect(asked).toHaveBeenCalledWith("یہ لنک واپس لیں؟ یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔");
     expect(callsOf("share_revoke")).toEqual([{ id: "l1" }]);
-    expect(notify).toHaveBeenCalledWith("لنک منسوخ ہو گیا: یہ فوراً کام کرنا بند کر دیتا ہے", false, undefined);
+    expect(notify).toHaveBeenCalledWith("لنک واپس لیا گیا: یہ فوراً کام کرنا بند کر دیتا ہے", false, undefined);
   });
 
   it("Request links: into, received (one and many), the limits, when it stops, and Revoke's question and message", async () => {
@@ -220,10 +220,10 @@ describe("Shared in Urdu", () => {
 
     const asked = answerConfirm();
     asked.mockReturnValue(true);
-    fireEvent.click(within(menuOf("Send me your voice notes")).getByRole("menuitem", { name: "منسوخ کریں" }));
+    fireEvent.click(within(menuOf("Send me your voice notes")).getByRole("menuitem", { name: "واپس لیں" }));
     await act(flushAsync);
-    expect(asked).toHaveBeenCalledWith("یہ درخواست کا لنک منسوخ کریں؟ یہ ہر اس شخص سے فائلیں لینا بند کر دے گا جس کے پاس یہ ہے۔");
-    expect(notify).toHaveBeenCalledWith("درخواست کا لنک منسوخ ہو گیا", false, undefined);
+    expect(asked).toHaveBeenCalledWith("یہ درخواست کا لنک واپس لیں؟ یہ ہر اس شخص سے فائلیں لینا بند کر دے گا جس کے پاس یہ ہے۔");
+    expect(notify).toHaveBeenCalledWith("درخواست کا لنک واپس لیا گیا", false, undefined);
   });
 
   it("follows a change of language while it is on screen, back to the same English", async () => {
@@ -439,7 +439,7 @@ describe("the sharing words (lib/sharing.ts)", () => {
     expect(audienceText({ audience: "password", has_password: true })).toBe("لنک اور پاس ورڈ والا کوئی بھی");
     expect(audienceText({ audience: "people", people: [], has_password: false })).toBe("صرف چنے ہوئے لوگ");
     expect(audienceText({ audience: "people", people: ["ana@example.com", "bo@x.org"], has_password: false })).toBe(`صرف ${iso("ana@example.com, bo@x.org")}`);
-    expect([linkState({ active: true, revoked_at: null }), linkState({ active: false, revoked_at: "x" }), linkState({ active: false, revoked_at: null })]).toEqual(["فعال", "منسوخ", "میعاد ختم"]);
+    expect([linkState({ active: true, revoked_at: null }), linkState({ active: false, revoked_at: "x" }), linkState({ active: false, revoked_at: null })]).toEqual(["فعال", "واپس لیا گیا", "میعاد ختم"]);
     expect(requestState({ revoked_at: null, expires_at: "2026-01-01T00:00:00Z" })).toBe("میعاد ختم");
     expect(downloadText({ allow_download: true, include_audio: false })).toBe("ڈاؤن لوڈ کی اجازت ہے");
     expect(downloadText({ allow_download: false, include_audio: true })).toBe("صرف پڑھیں اور سنیں");
@@ -452,8 +452,8 @@ describe("the sharing words (lib/sharing.ts)", () => {
     expect(filedByRuleText({ title: "Standup", source_app: "whatsapp" }, rules)).toBe("ایک قاعدے سے رکھی گئی");
     expect(expiryChoices().map(([, words]) => words)).toEqual(["کبھی نہیں", "1 گھنٹے میں", "1 دن میں", "7 دن میں", "30 دن میں", "کسی تاریخ پر…"]);
     expect(ruleKinds().map(([, words]) => words)).toEqual(["عنوان میں ہو", "ایپ", "رابطہ نمبر یا ای میل"]);
-    expect(revokeLinkQuestion()).toEqual({ title: "یہ لنک منسوخ کریں؟", body: "یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔", confirm: "منسوخ کریں", tone: "danger" });
-    expect(revokeRequestQuestion().title).toBe("یہ درخواست کا لنک منسوخ کریں؟");
+    expect(revokeLinkQuestion()).toEqual({ title: "یہ لنک واپس لیں؟", body: "یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔", confirm: "واپس لیں", tone: "danger" });
+    expect(revokeRequestQuestion().title).toBe("یہ درخواست کا لنک واپس لیں؟");
     // A window still in English asks for English ("en"): the same words as always, whatever the window's language.
     expect(revokeRequestQuestion("en")).toEqual({ title: "Revoke this request link?", body: "It stops taking files from everyone who has it.", confirm: "Revoke", tone: "danger" });
     // The recording page's expired-link line is read when it is shown, in the language of the moment.

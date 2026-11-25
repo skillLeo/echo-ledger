@@ -51,9 +51,8 @@ try {
       if (!speaks) problems.push(`${label}: ${step} doesn't show “${words}”`);
     };
 
-    // Shared › With me, from the Library panel's Shared (the shell's own words are not in the account's language yet: its
-    // button is found in English).
-    await page.getByRole("button", { name: "Shared", exact: true }).first().click();
+    // Shared › With me, from the Library panel's Shared (in the account's language since D1; in English before it).
+    await page.getByRole("button", { name: /^(شیئر شدہ|Shared)$/ }).first().click();
     await page.locator("[data-v2=shared]").waitFor();
     await page.waitForTimeout(800);
     await shot("shared-with-me", "کی بھیجی ہوئی ریکارڈنگ");
@@ -74,7 +73,8 @@ try {
     await shot("shared-reader", "صرف پڑھنے کے لیے");
 
     // The Request files sheet, from New request link.
-    await page.getByRole("button", { name: "شیئر شدہ" }).first().click();
+    // Back to Shared: the reader's own Back (the Library panel's Shared is also named شیئر شدہ since D1).
+    await page.locator("[data-v2=shared-reader]").getByRole("button", { name: "شیئر شدہ" }).click();
     await page.locator("[data-v2=shared]").waitFor();
     await page.getByRole("button", { name: "نیا درخواست کا لنک" }).click();
     await page.getByRole("dialog", { name: "فائلیں منگوائیں" }).waitFor();

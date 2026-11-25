@@ -122,14 +122,14 @@ describe("the share sheet in Urdu (the recording page's Share)", () => {
     expect(rows[0]).toHaveTextContent(`صرف ${iso("ana@example.com")}`);
     expect(rows[0]).toHaveTextContent(/^.*فعال · .+ کو بنا · .+ کو بند ہو گا · ڈاؤن لوڈ کی اجازت ہے/);
     expect(rows[0]).toHaveTextContent(`${iso(`${iso(3)} بار دیکھا گیا`)} · آخری بار`);
-    expect(rows[1]).toHaveTextContent("منسوخ · ");
+    expect(rows[1]).toHaveTextContent("واپس لیا گیا · ");
     expect(rows[1]).toHaveTextContent("کو بند ہو گیا · صرف پڑھیں اور سنیں");
     // No English word is left in a link's lines.
     expect(rows.map((r) => r.querySelector(".link-main")?.textContent ?? "").join(" ")).not.toMatch(/\b(made|stops|stopped|never|Downloads|views?|Revoked|Active)\b/);
-    fireEvent.click(within(rows[0]).getByRole("button", { name: "منسوخ کریں" }));
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "واپس لیں" }));
     await waitFor(() => expect(callsOf("share_revoke")).toEqual([{ id: "sh1" }]));
-    expect(asked).toHaveBeenCalledWith("یہ لنک منسوخ کریں؟ یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔");
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("لنک منسوخ ہو گیا: یہ فوراً کام کرنا بند کر دیتا ہے", false, undefined));
+    expect(asked).toHaveBeenCalledWith("یہ لنک واپس لیں؟ یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔");
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("لنک واپس لیا گیا: یہ فوراً کام کرنا بند کر دیتا ہے", false, undefined));
     expect(screen.getAllByRole("button", { name: "بند کریں" }).length).toBeGreaterThan(0);
   });
 
