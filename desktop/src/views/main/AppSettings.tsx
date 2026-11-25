@@ -14,6 +14,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { UpdatesPanel } from "./UpdateSettings";
 import { ActionRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, rowAttrs } from "./SettingsControls";
 import { useDesignSwitch } from "../../v2/flags";
+import { t } from "../../i18n";
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 type Patch = (p: SettingsPatch) => Promise<boolean>;
@@ -97,23 +98,23 @@ function DesignRow() {
   );
 }
 
-/** Keys of the main window itself (not global; they work while EchoLedger is in front). */
-const APP_KEYS: readonly [string, string][] = [
-  ["Ctrl+K", "Search recordings, pages, settings and commands"],
-  ["/", "Search this page's list"],
-  ["J / K", "Next or previous recording; Enter opens it, X selects it"],
-  ["N", "Start or stop a voice note"],
-  ["Space", "Play or pause the open recording"],
-  ["Shift+← / →", "Back or forward 10 seconds (← / → 5 seconds)"],
-  ["Ctrl+F", "Find in the open transcript (in the new design, search when no recording is open)"],
-  ["[", "Collapse or expand the sidebar"],
-  ["?", "Help & shortcuts"],
+/** Keys of the main window itself (not global; they work while EchoLedger is in front), said in the window's language. */
+const appKeyRows = (): readonly [string, string][] => [
+  ["Ctrl+K", t("Search recordings, pages, settings and commands")],
+  ["/", t("Search this page's list")],
+  ["J / K", t("Next or previous recording; Enter opens it, X selects it")],
+  ["N", t("Start or stop a voice note")],
+  ["Space", t("Play or pause the open recording")],
+  ["Shift+← / →", t("Back or forward 10 seconds (← / → 5 seconds)")],
+  ["Ctrl+F", t("Find in the open transcript (in the new design, search when no recording is open)")],
+  ["[", t("Collapse or expand the sidebar")],
+  ["?", t("Help & shortcuts")],
 ];
 /** A Mac's own keys (since v1.5): the app menu answers them, and they read as a Mac person expects. */
-const MAC_KEYS: readonly [string, string][] = [
-  ["⌘,", "Open Settings"],
-  ["⌘W", "Close the window; EchoLedger stays in the menu bar"],
-  ["⌘Q", "Quit EchoLedger; a running recording is saved first"],
+const macKeyRows = (): readonly [string, string][] => [
+  ["⌘,", t("Open Settings")],
+  ["⌘W", t("Close the window; EchoLedger stays in the menu bar")],
+  ["⌘Q", t("Quit EchoLedger; a running recording is saved first")],
 ];
 
 /**
@@ -121,9 +122,12 @@ const MAC_KEYS: readonly [string, string][] = [
  * panel · page layout): its keys in place of the sidebar's "[".
  */
 export function appKeys(platform: string, threeLevels = false): readonly [string, string][] {
-  const base = threeLevels ? APP_KEYS.flatMap((row) => (row[0] === "[" ? navKeys(platform) : [row])) : APP_KEYS;
+  const rows = appKeyRows();
+  // The three levels' keys are Help's list's too (English there until Help is converted): said here in the window's language.
+  const nav = (): [string, string][] => navKeys(platform).map(([keys, what]) => [keys, t(what)]);
+  const base = threeLevels ? rows.flatMap((row) => (row[0] === "[" ? nav() : [row])) : rows;
   if (platform !== "macos") return base;
-  return [...base.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...MAC_KEYS];
+  return [...base.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...macKeyRows()];
 }
 
 /** App › Keyboard shortcuts: the global shortcuts (change or clear each) and the keys inside the app. */

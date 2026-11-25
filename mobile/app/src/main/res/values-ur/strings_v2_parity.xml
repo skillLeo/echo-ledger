@@ -30,13 +30,13 @@
     <string name="v2_share_share">شیئر…</string>
     <string name="v2_share_copied">لنک کاپی ہو گیا</string>
     <string name="v2_share_links">لنکس</string>
-    <string name="v2_share_revoke">منسوخ کریں</string>
-    <string name="v2_share_revoke_title">یہ لنک منسوخ کریں؟</string>
+    <string name="v2_share_revoke">واپس لیں</string>
+    <string name="v2_share_revoke_title">یہ لنک واپس لیں؟</string>
     <string name="v2_share_revoke_question">یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔</string>
     <string name="v2_share_aud_password">پاس ورڈ</string>
     <string name="v2_share_aud_people">صرف %1$s</string>
     <string name="v2_share_aud_chosen">صرف چنے ہوئے لوگ</string>
-    <string name="v2_share_revoked">منسوخ</string>
+    <string name="v2_share_revoked">واپس لیا گیا</string>
     <string name="v2_share_downloads_on">ڈاؤن لوڈ آن</string>
     <string name="v2_share_no_downloads">ڈاؤن لوڈ بند</string>
     <string name="v2_share_until">%1$s تک</string>

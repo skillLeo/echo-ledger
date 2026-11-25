@@ -48,4 +48,9 @@ export const CONVERTED: readonly string[] = [
   "v2/settings/pages/VoiceV2.tsx",
   "v2/settings/pages/route.ts",
   "v2/settings/pages/rows.tsx",
+  // D3c: the helpers Settings shows whose words are all through t() and tc().
+  "lib/callChoice.ts",
+  "lib/explainer.ts",
+  "lib/privacy.ts",
+  "lib/zoom.ts",
 ];

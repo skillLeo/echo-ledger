@@ -6,12 +6,13 @@ import { api, errorMessage, listenTo, type AppStatus, type CheckItem, type Check
 import { formatWhen } from "../../lib/format";
 import { CheckIcon } from "../../components/ControlIcons";
 import { CloseIcon } from "../../components/Icons";
+import { t } from "../../i18n";
 
 const STATE_WORD: Record<CheckItem["state"], string> = { ok: "OK", limited: "Limited", off: "Off", failed: "Failed" };
 
 /** The reason Send is greyed out, or none. */
 export function sendBlocked(status: Pick<AppStatus, "paired">): string | null {
-  return status.paired ? null : "Sign in to send this to your admin.";
+  return status.paired ? null : t("Sign in to send this to your admin.");
 }
 
 function CheckRow({ item }: { item: CheckItem }) {

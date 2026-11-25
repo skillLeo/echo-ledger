@@ -6,7 +6,7 @@ import { api, errorMessage, type AppStatus, type Settings } from "../../../lib/i
 import { formatWhen } from "../../../lib/format";
 import { setting } from "../../../lib/settingsRegistry";
 import { hostOf, useVersion } from "../../../views/main/AppSettings";
-import { RECORDING_BLOCKS, updateLine, useUpdateStatus } from "../../../views/main/UpdateSettings";
+import { recordingBlocks, updateLine, useUpdateStatus } from "../../../views/main/UpdateSettings";
 import { Button, Icons, ListRow } from "../../components";
 import { Group, LinkSetting, type Run } from "./rows";
 import { t } from "../../../i18n";
@@ -32,7 +32,7 @@ function UpdatesRow({ appStatus }: { appStatus: AppStatus }) {
       <span className={status.phase === "failed" ? "el-update__line el-update__line--failed" : "el-update__line"} role="status">{updateLine(status)}</span>
       {status.checkedAt && status.phase !== "checking" && <span className="el-update__line">{t("Last checked :when", { when: formatWhen(status.checkedAt) })}</span>}
       {ready && status.notes && <span className="el-update__line">{status.notes}</span>}
-      {ready && appStatus.recording && <span className="el-update__line">{RECORDING_BLOCKS}</span>}
+      {ready && appStatus.recording && <span className="el-update__line">{recordingBlocks()}</span>}
       {error && <span className="el-update__line el-row__error" role="alert">{error}</span>}
     </span>
   );
