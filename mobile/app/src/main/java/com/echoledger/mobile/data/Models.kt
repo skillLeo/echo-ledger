@@ -569,10 +569,17 @@ data class SavedViewDeleted(val id: String? = null, @SerialName("views_version")
 
 /**
  * A library item's `facets` (contract 2.0.0-p): the apps count with these instead of working them out again. [kind] (since
- * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds").
+ * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds"). [state] (since 2.0.0-r): its state in
+ * the glossary's words (`waiting`, `waiting_to_upload`…), which decides whether a call is waiting (2.0.0-z).
  */
 @Serializable
-data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null, val kind: String? = null)
+data class ItemFacetsDto(
+    val source: String? = null,
+    val status: String? = null,
+    val language: String? = null,
+    val kind: String? = null,
+    val state: String? = null
+)
 
 @Serializable
 data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)
