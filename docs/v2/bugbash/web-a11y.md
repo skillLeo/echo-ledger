@@ -38,7 +38,7 @@ Before the fixes:
 Left, all moderate or minor: `region` (the Terms and Privacy links are outside every landmark), Settings' own `<main>`
 inside the page's (`landmark-main-is-top-level`, `landmark-no-duplicate-main`, `landmark-unique`) and Filament's empty
 actions column heading (`empty-table-header`). Both changes touch classic's markup (the Settings page is in
-ClassicGoldenTest), so they are logged for later (W-227, W-228).
+ClassicGoldenTest), so they are logged for later (W-228, W-229).
 
 ## Keyboard
 
@@ -54,14 +54,14 @@ The resize edges of the place's panel and the Library's filters already move by 
 
 | Id | Sev | Where | What | Status |
 |---|---|---|---|---|
-| W-221 | S2 | Library (grouped list) | Day headings were not items of the list | Fixed: the console's help script makes each one an item (`a11y-core.cjs`) |
-| W-222 | S2 | Top bar, recording, Settings | Names did not hold the words the controls show | Fixed under the new design; classic keeps its names |
-| W-223 | S2 | Rail, recording | Record's menu 20 px; Rename partly covered | Fixed: a 24 px target with the same 20 px circle; the title keeps clear |
-| W-224 | S2 | Workspace | Table headings 3.32:1; dark "Owner" badge 1.12:1 | Fixed: whole headings in the secondary colour; dark light shades are the accent's text colour |
-| W-225 | S2 | Recording at 390 px | A table box that scrolls could not be reached by keyboard | Fixed: such a box takes the focus while nothing in it can |
-| W-226 | S2 | Rail | Every rail item was its own Tab stop; the arrows did nothing (FIX-06) | Fixed: one stop, a roving tabindex, the arrows, Home and End |
-| W-227 | S3 | Settings, every page | Settings' `<main>` inside the page's; the footer links outside a landmark | Logged |
-| W-228 | S4 | Workspace (People) | Filament's actions column heading is empty | Logged |
+| W-222 | S2 | Library (grouped list) | Day headings were not items of the list | Fixed: the console's help script makes each one an item (`a11y-core.cjs`) |
+| W-223 | S2 | Top bar, recording, Settings | Names did not hold the words the controls show | Fixed under the new design; classic keeps its names |
+| W-224 | S2 | Rail, recording | Record's menu 20 px; Rename partly covered | Fixed: a 24 px target with the same 20 px circle; the title keeps clear |
+| W-225 | S2 | Workspace | Table headings 3.32:1; dark "Owner" badge 1.12:1 | Fixed: whole headings in the secondary colour; dark light shades are the accent's text colour |
+| W-226 | S2 | Recording at 390 px | A table box that scrolls could not be reached by keyboard | Fixed: such a box takes the focus while nothing in it can |
+| W-227 | S2 | Rail | Every rail item was its own Tab stop; the arrows did nothing (FIX-06) | Fixed: one stop, a roving tabindex, the arrows, Home and End |
+| W-228 | S3 | Settings, every page | Settings' `<main>` inside the page's; the footer links outside a landmark | Logged |
+| W-229 | S4 | Workspace (People) | Filament's actions column heading is empty | Logged |
 
 No S0 or S1. Tests: `tests/js/a11y-core.test.mjs` (the help script), `tests/Feature/V2/ConsoleA11yTest.php` (the names,
 the styles, where the script is installed); ClassicGoldenTest holds classic byte for byte. The parity checks read the
