@@ -260,6 +260,8 @@ struct MenuShape {
     mic_note: bool,
     review: usize,
     auto: bool,
+    /// Greyed: the account's switch while EchoLedger is locked.
+    auto_locked: bool,
     /// Ready, or "⚠ Calls won't record" with Fix… (Phase 1C); none before the first Ready check.
     calls_ready: Option<bool>,
     /// A viewer's computer records nothing (v1.5): the sentence the menu shows instead of the recording lines.
@@ -437,7 +439,7 @@ fn menu_entries_for(shape: &MenuShape, macos: bool) -> Vec<Entry> {
         // The menu bar's command: the core opens the window quietly on Live (what keeps it off still does).
         entries.push(item("action:live.startAssist", w("Start Live Assist…", "Start Live Assist…")));
         entries.push(Entry::Separator);
-        entries.push(Entry::Item { id: "auto", label: w("Auto-record Calls & Meetings", "Auto-record calls & meetings"), enabled: true, checked: Some(shape.auto) });
+        entries.push(Entry::Item { id: "auto", label: w("Auto-record Calls & Meetings", "Auto-record calls & meetings"), enabled: !shape.auto_locked, checked: Some(shape.auto) });
     }
     // Hide from Screen Shares ›: the one set every menu has (native_menu::hide_from_shares); while hidden, what for.
     if let Some(share) = &shape.main_share {
@@ -652,6 +654,8 @@ pub fn show_main(app: &AppHandle) {
 pub struct Switches {
     pub captions: bool,
     pub auto: bool,
+    /// The switch is the account's (call rules, 2.0.0-w) and EchoLedger is locked: greyed, as account actions are.
+    pub auto_locked: bool,
     /// The Ready check (Phase 1C): none before the first check or while signed out.
     pub calls_ready: Option<bool>,
     /// The main window in screen shares (v2.0).
@@ -680,6 +684,7 @@ pub fn update(app: &AppHandle, generation: u64, state: TrayState, paused: bool, 
         mic_note: recording && mic_note,
         review: pending,
         auto: switches.auto,
+        auto_locked: switches.auto_locked,
         calls_ready: switches.calls_ready,
         viewer,
         main_share: switches.main_share,
@@ -838,8 +843,21 @@ mod tests {
     }
 
     #[test]
+    fn the_account_s_auto_record_switch_is_greyed_while_locked() {
+        // Call rules (2.0.0-w): the switch is then the account's, which only someone who unlocked may change.
+        let auto = |shape: &MenuShape| {
+            menu_entries_for(shape, false).into_iter().find_map(|e| match e {
+                Entry::Item { id: "auto", enabled, checked, .. } => Some((enabled, checked)),
+                _ => None,
+            })
+        };
+        assert_eq!(auto(&MenuShape { auto: true, ..MenuShape::default() }), Some((true, Some(true))));
+        assert_eq!(auto(&MenuShape { auto: true, auto_locked: true, ..MenuShape::default() }), Some((false, Some(true))));
+    }
+
+    #[test]
     fn recording_says_its_state_and_time_with_stop_pause_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, mic_note: false, review: 2, auto: false, calls_ready: Some(false), viewer: None, main_share: Some(MainShare::Shown), held_back: None, hidden: None, translate: false };
+        let shape = MenuShape { recording: true, paused: true, mic_note: false, review: 2, auto: false, auto_locked: false, calls_ready: Some(false), viewer: None, main_share: Some(MainShare::Shown), held_back: None, hidden: None, translate: false };
         let labels = labels(&shape);
         assert_eq!(labels[0], "Paused", "its time comes once a second (tick)");
         assert!(!labels.contains(&"Fix…".to_string()), "while recording the first line is the recording's");

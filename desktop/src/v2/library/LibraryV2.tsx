@@ -37,7 +37,7 @@ import {
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
 import { markOpenedMany, openedProgress } from "./opened";
-import { CALL_ACTIONS, actionWords, contactRuleOf, useCallRules } from "../../lib/callRules";
+import { CALL_ACTIONS, actionWords, cleanName, contactRuleOf, useCallRules } from "../../lib/callRules";
 import type { CallAction } from "../../lib/ipc";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
@@ -991,7 +991,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
    * are on; each a pick the system's menu can bring back too. Don't record asks first, in decision 25's words.
    */
   const callerRuleItem = (item: LibraryItem): MenuItem | null => {
-    const name = item.caller?.name?.trim();
+    const name = item.caller?.name ? cleanName(item.caller.name) : "";
     if (!callRules || !name) return null;
     const now = contactRuleOf(callRules, name)?.action;
     return {

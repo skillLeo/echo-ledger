@@ -84,9 +84,15 @@ export function startNotes(rules: CallRules): string[] {
   return notes;
 }
 
-/** The account's rule for a contact by `name`, matched as the server keys names (trim, one space, lower case, 120). */
+/** A contact's name as it is sent and kept: trimmed, each run of spaces one, the first 120 characters (the server's
+ * cleanName; it checks the 120 before cleaning, so a longer name is cut here). */
+export function cleanName(name: string): string {
+  return Array.from(name.trim().split(/\s+/u).join(" ")).slice(0, 120).join("");
+}
+
+/** The account's rule for a contact by `name`, matched as the server and the core key names (cleanName, lower case). */
 export function contactRuleOf(rules: CallRules, name: string): CallRule | undefined {
-  const key = (n: string) => n.trim().split(/\s+/u).join(" ").slice(0, 120).toLocaleLowerCase();
+  const key = (n: string) => cleanName(n).toLowerCase();
   const wanted = key(name);
   return rules.rules.find((r) => r.kind === "contact" && !r.number && r.name != null && key(r.name) === wanted);
 }

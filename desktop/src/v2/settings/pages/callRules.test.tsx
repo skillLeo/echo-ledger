@@ -10,7 +10,7 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondW
 import { makeSettings } from "../../../test/fixtures";
 import { CallRulesPageV2, CallsPageV2 } from "./CallsV2";
 import { CallsPage } from "../../../views/main/CaptureSettings";
-import { accountAfterEachCall, ruleLine, startNotes } from "../../../lib/callRules";
+import { accountAfterEachCall, cleanName, contactRuleOf, ruleLine, startNotes } from "../../../lib/callRules";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../../test/tauri")).eventModule);
@@ -154,6 +154,22 @@ describe("Settings › Calls › Call rules", () => {
     await flush();
     expect(screen.getByRole("alert")).toHaveTextContent("You have 500 call rules");
     expect(within(screen.getByRole("list", { name: "Call rules" })).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("a contact's name is sent and matched as the server keeps it: one space, 120 characters, lower case", () => {
+    expect(cleanName("  Sara \t  Ahmed  ")).toBe("Sara Ahmed");
+    expect(Array.from(cleanName("ع".repeat(130))).length).toBe(120);
+    const rules = { ...ACCOUNT, rules: [rule({ id: "c1", kind: "contact", name: "Ahmed  Khan", action: "always_audio" }),
+      rule({ id: "c2", kind: "contact", name: "Omar", number: "+923001234567", action: "dont_record" })] };
+    expect(contactRuleOf(rules, " ahmed khan")?.id).toBe("c1");
+    expect(contactRuleOf(rules, "Omar"), "a rule with a number never matches by name").toBeUndefined();
+  });
+
+  it("the account's Short calls says automatically recorded calls, at the server's seconds", async () => {
+    respond("call_rules_get", answer({ short_call_seconds: 45 }));
+    render(<CallsPageV2 settings={makeSettings()} patch={vi.fn()} platform="windows" onSites={vi.fn()} onConsent={vi.fn()} onRules={vi.fn()} />);
+    await flush();
+    expect(screen.getByText(/^Automatically recorded calls shorter than 45 seconds, and missed calls, aren't kept\./)).toBeInTheDocument();
   });
 
   it("the words: After each call from the account, never chosen is Ask me; the start notes only with a contact rule", () => {

@@ -135,3 +135,32 @@ fn the_config_brings_call_rules_only_while_the_flag_is_on() {
     assert!(serde_json::from_value::<ServerConfig>(flags).unwrap().ui().is_on("call_rules"), "the flag is one the app knows");
     let _: CallRules = serde_json::from_value(json!({})).unwrap();
 }
+
+#[tokio::test]
+async fn locked_the_tray_s_switch_changes_nothing_on_the_account() {
+    // While EchoLedger is locked, the account's After each call is never changed from the tray: nothing is sent.
+    let server = MockServer::start(Router::new().fixed("PUT", "/api/call-rules/settings", Reply::json(200, sample(json!("ask")))));
+    let api = client(&server);
+    let locked = call_rules::set_records_by_themselves(&api, true, false, None).await;
+    assert_eq!(locked.unwrap_err().to_string(), "EchoLedger is locked.");
+    assert!(call_rules::set_records_by_themselves(&api, true, true, Some("always_transcribe")).await.is_err());
+    assert!(server.requests().is_empty(), "no PUT while locked");
+    // Unlocked: off is Don't record; on again is the account's last choice that records, else Ask me.
+    call_rules::set_records_by_themselves(&api, false, false, Some("always_transcribe")).await.unwrap();
+    call_rules::set_records_by_themselves(&api, false, true, Some("always_transcribe")).await.unwrap();
+    call_rules::set_records_by_themselves(&api, false, true, None).await.unwrap();
+    call_rules::set_records_by_themselves(&api, false, true, Some("dont_record")).await.unwrap();
+    let sent: Vec<Value> = server.requests_to("PUT", "/api/call-rules/settings").iter().map(|r| r.json()).collect();
+    assert_eq!(sent, [json!({"after_call": "dont_record"}), json!({"after_call": "always_transcribe"}), json!({"after_call": "ask"}), json!({"after_call": "ask"})]);
+    // Every way in checks the lock first: the tray's toggle and each command the window and its menus use.
+    let source = include_str!("../src/call_rules.rs");
+    let toggle = &source[source.find("pub async fn toggle_records_by_themselves(").unwrap()..];
+    let toggle = &toggle[..toggle.find("\n}\n").unwrap()];
+    assert!(toggle.find("ensure_unlocked(&state)?").unwrap() < toggle.find("set_records_by_themselves(").unwrap(), "{toggle}");
+    let commands = include_str!("../src/commands.rs");
+    for command in ["pub async fn call_rules_get(", "pub async fn call_rules_settings_set(", "pub async fn call_rule_save(", "pub async fn call_rule_update(", "pub async fn call_rule_delete("] {
+        let body = &commands[commands.find(command).unwrap_or_else(|| panic!("{command}"))..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(body.contains("ensure_unlocked(&state)?"), "{command}");
+    }
+}

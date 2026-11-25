@@ -221,7 +221,8 @@ describe("the Library's right-click menus (UX-22)", () => {
   it("2.0.0-w: a call with a known caller offers Always for <name> while the account's call rules are on; Don't record asks first", async () => {
     const rules = { after_call: "ask", ask_when: "after_call", short_calls: "dont_keep", short_call_seconds: 30, version: 3, updated_at: null, declined: [],
       rules: [{ id: "c1", kind: "contact", name: "Bilal  Qureshi", number: null, action: "always_audio" }] };
-    const withCaller = ITEMS.map((i) => (i.id === "bilal" ? { ...i, caller: { name: "Bilal Qureshi", number: null, source: "window_title" } } : i));
+    // The window title's spaces as they come: the name is sent clean (the server checks 120 characters before cleaning).
+    const withCaller = ITEMS.map((i) => (i.id === "bilal" ? { ...i, caller: { name: "  Bilal   Qureshi ", number: null, source: "window_title" } } : i));
     respond("library_list", withCaller);
     respond("library_refresh", withCaller);
     respond("call_rules_get", rules);

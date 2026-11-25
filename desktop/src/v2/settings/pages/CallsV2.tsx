@@ -12,7 +12,7 @@ import { sourceAppLabel } from "../../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../../lib/sites";
 import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSettings";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
-import { CALL_ACTIONS, RULE_SOURCES, accountAfterCall, accountAfterEachCall, accountAskWhen, actionWords, ruleLine, ruleProblem, ruleSubject, startNotes, useCallRules } from "../../../lib/callRules";
+import { CALL_ACTIONS, RULE_SOURCES, accountAfterCall, cleanName, accountAfterEachCall, accountAskWhen, actionWords, ruleLine, ruleProblem, ruleSubject, startNotes, useCallRules } from "../../../lib/callRules";
 import type { CallAction, CallRule } from "../../../lib/ipc";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
 import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
@@ -77,7 +77,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent, onR
       {account ? (
         // The account's Short calls: kept or not, at the server's fixed 30 seconds; this computer's own choice of
         // seconds doesn't apply meanwhile.
-        <Group footer={<p>{t("Calls shorter than 30 seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.")}</p>}>
+        <Group footer={<p>{t("Automatically recorded calls shorter than :seconds seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.", { seconds: account.short_call_seconds ?? 30 })}</p>}>
           <ListRow compact anchor="calls.short_calls" title={t("Don't keep short calls")}
             control={<Toggle label={t("Don't keep short calls")} hideLabel checked={account.short_calls !== "keep"}
               onChange={() => void saveAccount({ short_calls: account.short_calls === "keep" ? "dont_keep" : "keep" })} />} />
@@ -249,13 +249,13 @@ export function CallRulesPageV2() {
           <Button onClick={() => void run(() => api.callRuleSave({ kind: "source", source_app: app, action: appAction }))}>{t("Add rule")}</Button>
         </div>
       </Group>
-      <Group title={t("For a contact")} footer={<p>{nameAction === "dont_record" && name.trim()
-        ? t("Stops and deletes the recording as soon as :name is known", { name: name.trim() })
+      <Group title={t("For a contact")} footer={<p>{nameAction === "dont_record" && cleanName(name)
+        ? t("Stops and deletes the recording as soon as :name is known", { name: cleanName(name) })
         : t("By the name the call's window shows.")}</p>}>
         <div className="el-call-rule-form">
           <TextField label={t("Name")} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
           <Select label={t("Choice")} value={nameAction} options={actionOptions} onChange={(v) => setNameAction(v as CallAction)} />
-          <Button disabled={!name.trim()} onClick={() => void run(() => api.callRuleSave({ kind: "contact", name: name.trim(), action: nameAction })).then((ok) => { if (ok) setName(""); })}>{t("Add rule")}</Button>
+          <Button disabled={!cleanName(name)} onClick={() => void run(() => api.callRuleSave({ kind: "contact", name: cleanName(name), action: nameAction })).then((ok) => { if (ok) setName(""); })}>{t("Add rule")}</Button>
         </div>
       </Group>
     </>

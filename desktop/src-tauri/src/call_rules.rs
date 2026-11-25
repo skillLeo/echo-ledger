@@ -47,11 +47,14 @@ pub fn path(data_dir: &Path) -> PathBuf {
     data_dir.join("call_rules.json")
 }
 
-/// What is kept: the account's answer, for the sign-in it was read in (another sign-in never reads it).
+/// What is kept: the account's answer, for the sign-in it was read in (another sign-in never reads it), and its last
+/// After each call that records (the tray's switch turned on again goes back to it, not to Ask me).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Kept {
     pub sign_in: String,
     pub rules: CallRules,
+    #[serde(default)]
+    pub last_recording_choice: Option<String>,
 }
 
 /// The one notice when a call rule stopped a recording (decision 25: never "not recorded", as it was, for a moment).
@@ -84,10 +87,21 @@ pub fn load(data_dir: &Path, sign_in: &str) -> Option<CallRules> {
     kept.filter(|k| k.sign_in == sign_in).map(|k| k.rules)
 }
 
+/// The account's last After each call that records (not Don't record) kept for `sign_in`.
+pub fn last_recording_choice(data_dir: &Path, sign_in: &str) -> Option<String> {
+    let kept: Kept = serde_json::from_slice(&std::fs::read(path(data_dir)).ok()?).ok()?;
+    if kept.sign_in != sign_in {
+        return None;
+    }
+    kept.last_recording_choice.or_else(|| kept.rules.after_call.filter(|a| a != DONT_RECORD))
+}
+
 pub fn save(data_dir: &Path, sign_in: &str, rules: &CallRules) -> AppResult<()> {
     let file = path(data_dir);
     let tmp = file.with_extension("json.tmp");
-    let kept = Kept { sign_in: sign_in.to_string(), rules: rules.clone() };
+    let now = rules.after_call.clone().filter(|a| a != DONT_RECORD);
+    let last_recording_choice = now.or_else(|| last_recording_choice(data_dir, sign_in));
+    let kept = Kept { sign_in: sign_in.to_string(), rules: rules.clone(), last_recording_choice };
     std::fs::write(&tmp, serde_json::to_vec_pretty(&kept)?)?;
     std::fs::rename(tmp, &file)?;
     remember(&file, Some(kept));
@@ -180,12 +194,12 @@ impl Policy {
         }
     }
 
-    /// Calls shorter than this many seconds aren't kept (0: all are): the account's Short calls, at the server's fixed
-    /// 30 seconds, or this computer's own choice.
+    /// Calls shorter than this many seconds aren't kept (0: all are): the account's Short calls, at the server's
+    /// `short_call_seconds` (30), or this computer's own choice.
     pub fn short_call_seconds(&self, settings: &Settings) -> u32 {
         match &self.account {
             Some(r) if r.short_calls.as_deref() == Some("keep") => 0,
-            Some(_) => SHORT_CALL_SECONDS,
+            Some(r) => r.short_call_seconds.unwrap_or(SHORT_CALL_SECONDS),
             None => settings.skip_calls_shorter_than_s,
         }
     }
@@ -343,12 +357,15 @@ pub fn records_by_themselves(state: &crate::AppState, settings: &Settings) -> bo
 }
 
 /// The tray's "Record calls automatically" while the account decides: its After each call becomes Don't record, or
-/// Ask me from Don't record; the answer is kept and the status follows.
+/// Ask me from Don't record; the answer is kept and the status follows. Locked, nothing changes (the account's settings
+/// are changed only by someone who unlocked EchoLedger, as every command does), and the tray shows the item greyed.
 pub async fn toggle_records_by_themselves(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
+    crate::commands::ensure_unlocked(&state)?;
     let now = records_by_themselves(&state, &state.settings());
-    let after_call = if now { DONT_RECORD } else { ASK };
-    let answer = state.api()?.put_call_rule_settings(&json!({ "after_call": after_call })).await;
+    // On again: the account's last choice that records (Transcribe every call stays so), else Ask me.
+    let back = state.sign_in_id().and_then(|s| last_recording_choice(&state.data_dir, &s));
+    let answer = set_records_by_themselves(&state.api()?, state.lock.is_locked(), !now, back.as_deref()).await;
     match answer {
         Ok(rules) => {
             keep(app, &rules)?;
@@ -362,6 +379,16 @@ pub async fn toggle_records_by_themselves(app: &AppHandle) -> AppResult<()> {
             Err(change_error(e))
         }
     }
+}
+
+/// The account's After each call for the tray's switch: `back` (its last choice that records, Ask me without one) when
+/// calls are to record by themselves again, Don't record otherwise. Refused while EchoLedger is locked, nothing sent.
+pub async fn set_records_by_themselves(api: &crate::net::api::ApiClient, locked: bool, on: bool, back: Option<&str>) -> AppResult<CallRules> {
+    if locked {
+        return Err(AppError::msg("EchoLedger is locked."));
+    }
+    let back = back.filter(|b| [ASK, ALWAYS_TRANSCRIBE, ALWAYS_AUDIO].contains(b)).unwrap_or(ASK);
+    api.put_call_rule_settings(&json!({ "after_call": if on { back } else { DONT_RECORD } })).await
 }
 
 /// After each config (every 60 s): with the flag off, nothing is kept; with it on, the account's answer is read again
@@ -518,7 +545,9 @@ mod tests {
             ..CallRules::default()
         });
         assert!(account.auto_mode(&mine), "the account decides each call");
-        assert_eq!((account.ask_when(&mine), account.short_call_seconds(&mine)), (AskWhen::After, SHORT_CALL_SECONDS), "the server's 30, fixed");
+        assert_eq!((account.ask_when(&mine), account.short_call_seconds(&mine)), (AskWhen::After, 45), "the server's short_call_seconds");
+        let unsaid = Policy::account(CallRules { short_calls: Some("dont_keep".into()), ..CallRules::default() });
+        assert_eq!(unsaid.short_call_seconds(&mine), SHORT_CALL_SECONDS, "30 when the server doesn't say");
         assert!(account.blocks_at_start("zoom") && !account.blocks_at_start("google_meet"));
         assert_eq!(account.after(&mine, None, "google_meet", true), CallAfter::Choose(AfterCall::AlwaysTranscribe));
         assert_eq!(account.after(&mine, Some("Ahmed Khan"), "google_meet", true), CallAfter::DontRecord);
@@ -537,8 +566,14 @@ mod tests {
         let data = tempfile::tempdir().unwrap();
         let rules = CallRules { after_call: Some(ALWAYS_AUDIO.into()), version: Some(2), ..CallRules::default() };
         save(data.path(), "sign-in-a", &rules).unwrap();
-        assert_eq!(load(data.path(), "sign-in-a"), Some(rules));
+        assert_eq!(load(data.path(), "sign-in-a"), Some(rules.clone()));
         assert_eq!(load(data.path(), "sign-in-b"), None, "another sign-in never reads it");
+        // The last choice that records stays through a Don't record, for the tray's switch turned on again.
+        assert_eq!(last_recording_choice(data.path(), "sign-in-a").as_deref(), Some(ALWAYS_AUDIO));
+        let off = CallRules { after_call: Some(DONT_RECORD.into()), ..rules.clone() };
+        save(data.path(), "sign-in-a", &off).unwrap();
+        assert_eq!(last_recording_choice(data.path(), "sign-in-a").as_deref(), Some(ALWAYS_AUDIO));
+        assert_eq!(last_recording_choice(data.path(), "sign-in-b"), None);
         clear(data.path());
         assert_eq!(load(data.path(), "sign-in-a"), None);
     }

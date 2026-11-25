@@ -114,7 +114,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
       {account ? (
-        <Section footer={<p>Calls shorter than 30 seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.</p>}>
+        <Section footer={<p>Automatically recorded calls shorter than {account.short_call_seconds ?? 30} seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.</p>}>
           <div className="set-row" data-setting="calls.short_calls">
             <label className="set-hit">
               <span className="set-title">Don't keep short calls</span>
