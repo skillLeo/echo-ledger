@@ -19,10 +19,12 @@ pub struct Action {
 }
 
 /// Every action the window may ask for; anything else is refused before a request is made.
-pub const ACTIONS: [Action; 18] = [
+pub const ACTIONS: [Action; 19] = [
     Action { name: "security", method: "GET", path: "account/security" },
     Action { name: "proof_code", method: "POST", path: "account/proof-code" },
     Action { name: "name", method: "PATCH", path: "account" },
+    // The interface language (BE-06): the same PATCH, its own name so the window's refusal words fit.
+    Action { name: "language", method: "PATCH", path: "account" },
     Action { name: "avatar_remove", method: "DELETE", path: "account/avatar" },
     Action { name: "email", method: "POST", path: "account/email" },
     Action { name: "email_confirm", method: "POST", path: "account/email/confirm" },
@@ -49,6 +51,19 @@ pub fn route(name: &str, id: Option<&str>) -> AppResult<(&'static str, String)> 
     }
     let id = id.filter(|id| safe_id(id)).ok_or_else(|| AppError::msg("That is no longer on the server."))?;
     Ok((action.method, action.path.replace("{id}", id)))
+}
+
+/// The fields each `PATCH account` action may send: the same route changes the name and the language, so each action
+/// carries only its own field. Other actions' bodies are as the window writes them.
+const PATCH_FIELDS: [(&str, &[&str]); 2] = [("name", &["name"]), ("language", &["language"])];
+
+/// Whether `body` holds only the fields `action` may send (an action not listed may send any).
+pub fn body_ok(action: &str, body: &serde_json::Value) -> bool {
+    let Some((_, fields)) = PATCH_FIELDS.iter().find(|(name, _)| *name == action) else { return true };
+    match body {
+        serde_json::Value::Object(map) => map.keys().all(|k| fields.contains(&k.as_str())),
+        _ => false,
+    }
 }
 
 /// An id the server gave (ULIDs, opaque browser ids): letters, digits, `-` and `_`, at most 128.
@@ -369,6 +384,14 @@ mod tests {
     #[test]
     fn only_the_listed_actions_reach_the_server_and_ids_stay_in_their_segment() {
         assert_eq!(route("name", None).unwrap(), ("PATCH", "account".to_string()));
+        assert_eq!(route("language", None).unwrap(), ("PATCH", "account".to_string()));
+        // The same PATCH: each action sends only its own field.
+        assert!(body_ok("language", &serde_json::json!({"language": "ur"})));
+        assert!(!body_ok("language", &serde_json::json!({"language": "ur", "name": "X"})));
+        assert!(!body_ok("name", &serde_json::json!({"language": "ur"})));
+        assert!(body_ok("name", &serde_json::json!({"name": "Ayesha"})));
+        assert!(!body_ok("language", &serde_json::Value::Null));
+        assert!(body_ok("password", &serde_json::json!({"current": "a", "new": "b"})));
         assert_eq!(route("two_factor_off", None).unwrap(), ("DELETE", "account/two-factor".to_string()));
         assert_eq!(route("device_sign_out", Some("01m7zddc7v12m6cg01k9mbxa2h")).unwrap(), ("DELETE", "account/devices/01m7zddc7v12m6cg01k9mbxa2h".to_string()));
         assert_eq!(route("passkey_rename", Some("abc_DEF-1")).unwrap().1, "account/passkeys/abc_DEF-1");

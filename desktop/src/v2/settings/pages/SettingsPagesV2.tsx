@@ -29,7 +29,7 @@ import { SharePrivacyPageV2, ShareCheckPageV2 } from "./SharePrivacyV2";
 import { NotificationsPageV2 } from "./NotificationsV2";
 import { ExcludedAppsPageV2, MicrophonePageV2, ScreenMomentsPageV2 } from "./RecordingInputV2";
 import { StoragePageV2 } from "./StorageV2";
-import { AppearancePageV2, ShortcutsPageV2, useThemeChoice } from "./AppV2";
+import { AppearancePageV2, ShortcutsPageV2, useThemeChoice, type LanguageChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
 
 /** Where a section asks the page to go: the setting (highlighted), else in a group's page its section (or its top). */
@@ -45,12 +45,14 @@ const STARTUP_TITLE = "Start-up";
 /** The Mac's menu bar icon, its timer and the Dock's number, under their own title. */
 const ICON_IDS: readonly string[] = ["app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"];
 
-export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false, zoom = false, grouped = false, available = () => true }: {
+export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false, zoom = false, language, grouped = false, available = () => true }: {
   section: { id: string; seq: number };
   /** The rail · panel · page layout (its keys on the shortcuts page). */
   threeLevels?: boolean;
   /** Zoom is on (UX-07, v21_zoom): Appearance has its slider. */
   zoom?: boolean;
+  /** The app speaks Urdu too (v21_urdu): Appearance has the account's Language. */
+  language?: LanguageChoice;
   /** Two levels (UX-11): a top page is drawn in its group's page; a sub-page's way back is to the group's page. */
   grouped?: boolean;
   /** What this computer, account and plan offer: a group's page draws only those pages and switches. */
@@ -116,7 +118,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
-      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} zoom={zoom} />;
+      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} zoom={zoom} language={language} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} threeLevels={threeLevels} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements

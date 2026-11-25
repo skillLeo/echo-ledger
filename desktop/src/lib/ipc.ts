@@ -373,6 +373,8 @@ export interface Account {
   avatar_version?: number | null;
   /** The colour of the initials' circle without a photo, 0–7 (since 2.0.0-r, BE-06); left out, one from the email. */
   avatar_color?: number | null;
+  /** The interface language of the apps and the console, "en" or "ur" (since 2.0.0-r, BE-06): the same everywhere. */
+  language?: string | null;
   /** The account has a password (one made with Google may not); null from a server before 2.0.0-l. */
   has_password?: boolean | null;
   /** An email change waiting for its code, and until when. */
