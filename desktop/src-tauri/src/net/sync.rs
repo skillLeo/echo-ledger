@@ -179,6 +179,11 @@ pub mod paths {
         data_dir.join("discards.json")
     }
 
+    /// Ends of calls waiting for `PATCH /api/sessions/{id}` (contract 2.0.0-z).
+    pub fn ends(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("ends.json")
+    }
+
     /// The account this computer signs in as (v1.5), kept after signing out until the next sign-in.
     pub fn account(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("account.json")

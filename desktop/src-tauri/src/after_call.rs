@@ -256,6 +256,18 @@ pub fn grouped(before: Before, card_as_audio: impl Fn(&str) -> Option<CallDone>,
 /// The rows the grouped card lists before "+N more".
 pub const GROUP_ROWS: usize = 3;
 
+/// The end of a call to tell the server (contract 2.0.0-z), when the recording has an open server session (captions or
+/// Live Assist opened it): its id, when the call ended (ISO 8601, UTC, milliseconds) and how long it lasted. None
+/// without a session: nothing is sent.
+pub fn call_end(finished: &crate::audio::FinishedRecording, session: Option<&str>) -> Option<crate::net::uploader::CallEnd> {
+    let session_id = session.filter(|s| !s.is_empty())?;
+    Some(crate::net::uploader::CallEnd {
+        session_id: session_id.to_string(),
+        ended_at: finished.ended_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        duration_ms: finished.output.duration_ms,
+    })
+}
+
 /// The rows a list of grouped calls shows (pure): every Delete, always, and the newest Transcribe and Save audio only rows
 /// up to [`GROUP_ROWS`] rows in all; the other rows fold into "+N more" (their choices keep the audio, so nothing is lost
 /// while they are folded). Returns the shown rows in order and how many are folded.

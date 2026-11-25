@@ -16,7 +16,7 @@ use crate::net::models::{OpenSessionRequest, UsageReport};
 use crate::pending::{self, Attach, DecisionFiles, DecisionInput, PendingDecision};
 use crate::net::sync::paths;
 use crate::net::uploader::{
-    AfterAttempt, DiscardQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
+    AfterAttempt, CallEnd, DiscardQueue, EndQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
 };
 use crate::overlay::{OVERLAY, set_overlay_visible};
 use crate::shortcuts::Action;
@@ -498,6 +498,7 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     }
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
+        note_call_end(app, &finished, session.as_deref())?;
         decide_finished(app, finished, session, provider, auto, true, None)?;
     }
     clear_captions(app); // after the decision (it reads the buffered turns), so the next session starts empty
@@ -525,6 +526,7 @@ pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let auto = state.auto_started.load(Ordering::SeqCst);
     if let Some((finished, session, provider)) = end_capture(app).await? {
+        note_call_end(app, &finished, session.as_deref())?;
         decide_finished(app, finished, session, provider, auto, false, None)?;
     }
     Ok(())
@@ -1774,6 +1776,31 @@ pub fn queue_usage_report(app: &AppHandle, report: UsageReport) -> AppResult<()>
     Ok(())
 }
 
+/// The end of a call, for every device (contract 2.0.0-z): when a recording that has an open server session (captions
+/// or Live Assist opened it) ends and is kept, its end is queued (`ends.json`) before the card shows, so the server
+/// counts the call as waiting for its choice only once it is over. Without an open session nothing is sent; a recording
+/// stopped and deleted sends its DELETE instead.
+fn note_call_end(app: &AppHandle, finished: &FinishedRecording, session: Option<&str>) -> AppResult<()> {
+    match crate::after_call::call_end(finished, session) {
+        Some(end) => queue_call_end(app, end),
+        None => Ok(()),
+    }
+}
+
+/// Queues the end of a call (`ends.json`); the upload loop sends it before the uploads.
+pub fn queue_call_end(app: &AppHandle, end: CallEnd) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let path = paths::ends(&state.data_dir);
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut queue = EndQueue::load(&path);
+        queue.push(end);
+        queue.save(&path)?;
+    }
+    state.upload_notify.notify_one();
+    Ok(())
+}
+
 /// Queues a server session for deletion (`discards.json`): a discarded recording whose session was opened.
 pub fn queue_discard(app: &AppHandle, session_id: String) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
@@ -2049,7 +2076,7 @@ pub fn spawn_upload_worker(app: AppHandle) {
 async fn run_upload_cycle(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     let data_dir = state.data_dir.clone();
-    let (usage, discards, uploads, waiting) = {
+    let (usage, discards, ends, uploads, waiting) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         let uploads = UploadQueue::load(&paths::uploads(&data_dir));
         // Every recording still deciding, queued or skipped keeps its screens.
@@ -2060,7 +2087,13 @@ async fn run_upload_cycle(app: &AppHandle) {
             .chain(DecisionFiles::in_dir(&data_dir).load().items.into_iter().map(|d| d.id))
             .chain(SkippedFiles::in_dir(&data_dir).load().items.into_iter().map(|c| c.decision.id))
             .collect();
-        (UsageQueue::load(&paths::usage(&data_dir)).items, DiscardQueue::load(&paths::discards(&data_dir)).items, uploads, waiting)
+        (
+            UsageQueue::load(&paths::usage(&data_dir)).items,
+            DiscardQueue::load(&paths::discards(&data_dir)).items,
+            EndQueue::load(&paths::ends(&data_dir)).items,
+            uploads,
+            waiting,
+        )
     };
     crate::screens::sweep(app, waiting);
     // Failed items wait for Retry; v1 servers get no usage reports (kept until the server is upgraded). A recording made
@@ -2073,7 +2106,7 @@ async fn run_upload_cycle(app: &AppHandle) {
     let others_waiting = uploads.held(current.as_ref()) > 0;
     let known_v1 = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().is_some_and(|c| !c.is_v1_1());
     let usage_to_send = !usage.is_empty() && !known_v1;
-    if pending_uploads.is_empty() && discards.is_empty() && !usage_to_send && !crate::screens::due(app) && !(unknown && others_waiting) {
+    if pending_uploads.is_empty() && discards.is_empty() && ends.is_empty() && !usage_to_send && !crate::screens::due(app) && !(unknown && others_waiting) {
         return;
     }
     let Ok(api) = state.api() else { return };
@@ -2135,6 +2168,26 @@ async fn run_upload_cycle(app: &AppHandle) {
             let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
             let mut queue = DiscardQueue::load(&path);
             queue.items.retain(|id| !drain.done.contains(id));
+            let _ = queue.save(&path);
+        }
+        if matches!(drain.stopped, Some(AppError::NotPaired)) {
+            let _ = app.emit("app:error", UNPAIRED);
+            return;
+        }
+        if drain.stopped.as_ref().is_some_and(|e| state.note_hold(e)) {
+            emit_status(app);
+            return;
+        }
+    }
+
+    // The ends of calls (2.0.0-z), before the uploads: a call is waiting on every device as soon as it is over.
+    if !ends.is_empty() {
+        let drain = crate::net::uploader::drain_ends(&api, &ends).await;
+        if !drain.done.is_empty() {
+            let path = paths::ends(&data_dir);
+            let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+            let mut queue = EndQueue::load(&path);
+            queue.items.retain(|e| !drain.done.contains(&e.session_id));
             let _ = queue.save(&path);
         }
         if matches!(drain.stopped, Some(AppError::NotPaired)) {
