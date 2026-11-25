@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
@@ -26,7 +27,9 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use UnitEnum;
 
@@ -45,6 +48,12 @@ class RecentlyDeleted extends Page implements HasTable
     protected static ?int $navigationSort = 5;
 
     protected static ?string $title = 'Recently deleted';
+
+    /** In the console's language (the same English words in classic). */
+    public function getTitle(): string|Htmlable
+    {
+        return __('Recently deleted');
+    }
 
     public function content(Schema $schema): Schema
     {
@@ -102,37 +111,40 @@ class RecentlyDeleted extends Page implements HasTable
             ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->whereNull('media_erased_at')
                 ->where('deleted_at', '>', now()->subHours(CaptureSession::binHours())))
             ->defaultSort('deleted_at', 'desc')
-            ->description('Deleted recordings stay here for '.CaptureSession::binHours().' hours, then their audio and transcripts are erased for good.')
+            ->description(__('Deleted recordings stay here for :hours hours, then their audio and transcripts are erased for good.', ['hours' => CaptureSession::binHours()]))
             ->columns([
-                TextColumn::make('title')->label('Title')->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48)
+                TextColumn::make('title')->label(__('Title'))->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48)
                     // UX-22 3b: the row's right-click menu (Restore | Delete immediately…), under the new design.
                     ->extraAttributes(fn (CaptureSession $r): array => ConsoleV2::any() ? ['data-v2-object' => 'trashItem', 'data-v2-object-id' => (string) $r->getKey()] : []),
-                TextColumn::make('client.name')->label('Project')->placeholder('—'),
-                TextColumn::make('started_at')->label('Recorded')->dateTime('M j, Y · g:i A'),
-                TextColumn::make('deleted_at')->label('Deleted')->since(),
-                TextColumn::make('erase_at')->label('Erased')
+                TextColumn::make('client.name')->label(__('Project'))->placeholder('—'),
+                // The day before the month in Urdu (ConsoleDates); in English as Filament writes it ("Nov 17, 2026 · 9:00 AM").
+                TextColumn::make('started_at')->label(__('library_context.col_recorded'))->dateTime('M j, Y · g:i A')
+                    ->formatStateUsing(fn (TextColumn $column, mixed $state): ?string => blank($state) ? null
+                        : ConsoleDates::dateTime(Carbon::parse($state)->setTimezone($column->getTimezone()), 'g:i A')),
+                TextColumn::make('deleted_at')->label(__('library_context.col_deleted'))->since(),
+                TextColumn::make('erase_at')->label(__('library_context.col_erased'))
                     ->state(fn (CaptureSession $r): string => $r->deleted_at?->copy()->addHours(CaptureSession::binHours())->diffForHumans() ?? ''),
             ])
             ->recordActions([
-                Action::make('restore')->label('Restore')->icon(Heroicon::OutlinedArrowUturnLeft)
+                Action::make('restore')->label(__('Restore'))->icon(Heroicon::OutlinedArrowUturnLeft)
                     ->authorize(fn (CaptureSession $record): bool => Gate::allows('restore', $record))
                     ->action(function (CaptureSession $record): void {
                         try {
                             app(RetentionPolicy::class)->restore($record);
-                            Notification::make()->title('Recording restored')->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
+                            Notification::make()->title(__('Recording restored'))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
                         } catch (ApiError $e) {
                             Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
                         }
                     }),
-                Action::make('eraseNow')->label('Delete now')->icon(Heroicon::OutlinedTrash)->color('danger')
+                Action::make('eraseNow')->label(__('Delete now'))->icon(Heroicon::OutlinedTrash)->color('danger')
                     ->authorize(fn (CaptureSession $record): bool => Gate::allows('forceDelete', $record))
-                    ->requiresConfirmation()->modalDescription('The audio and transcript are erased now. This cannot be undone.')
+                    ->requiresConfirmation()->modalDescription(__('The audio and transcript are erased now. This cannot be undone.'))
                     ->action(function (CaptureSession $record): void {
                         app(RetentionPolicy::class)->deleteNow($record);
-                        Notification::make()->title('Recording erased')->success()->send();
+                        Notification::make()->title(__('Recording erased'))->success()->send();
                     }),
             ])
             ->emptyStateIcon(Heroicon::OutlinedTrash)
-            ->emptyStateHeading('Nothing deleted in the last '.CaptureSession::binHours().' hours');
+            ->emptyStateHeading(__('Nothing deleted in the last :hours hours', ['hours' => CaptureSession::binHours()]));
     }
 }

@@ -26,7 +26,8 @@
         $problem = $context->accountProblem();
         $limits = app(PlanLimits::class);
         $minutes = $limits->limit($context->workspaceId(), 'monthly_minutes', $user->id);
-        $planLine = implode(' · ', array_filter([__($context->plan()->name), $minutes !== null && $minutes > 0
+        // The plan's name stays as written (Urdu package 2), the minutes in the console's language.
+        $planLine = implode(' · ', array_filter([$context->plan()->name, $minutes !== null && $minutes > 0
             ? __(':used of :limit min used this month', ['used' => number_format((int) round($limits->minutesUsed($context->workspaceId()))), 'limit' => number_format((int) $minutes)])
             : null]));
         $label = $problem !== null ? __('Account, :name, a payment needs your attention', ['name' => $name]) : __('Account, :name', ['name' => $name]);
