@@ -1,6 +1,6 @@
 // Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
 // language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
-import { dateLocale, language, numberLocale } from "../i18n";
+import { dateLocale, language, numberLocale } from "../i18n/locale.ts";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */

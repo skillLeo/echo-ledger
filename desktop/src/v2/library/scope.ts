@@ -1,6 +1,7 @@
 // What the Library shows, as the sidebar chooses it (PLAN_LIBRARY_FILTERS): a library view, one of My views, a label,
 // or Trash. The filters, the search and the sort narrow it further in the Library itself.
 import type { SmartFolder } from "../../lib/ipc";
+import { t } from "../../i18n";
 import { LIBRARY_VIEW_NAMES, type FilterSpec, type LibraryViewId } from "./facets";
 import type { SavedView } from "./model";
 
@@ -27,10 +28,12 @@ export const sameScope = (a: LibraryScope, b: LibraryScope) => scopeKey(a) === s
 /** A library view's name, a view's or a label's name (given), or Trash. */
 export function scopeName(scope: LibraryScope, names: { saved?: (id: string) => string | undefined; label?: (key: string) => string | undefined } = {}): string {
   switch (scope.kind) {
-    case "view": return LIBRARY_VIEW_NAMES[scope.view];
-    case "saved": return names.saved?.(scope.id) ?? "View";
-    case "label": return names.label?.(scope.key) ?? "Label";
-    case "trash": return "Trash";
+    // A library view's name is facets.ts's English, said in the window's language here.
+    case "view": return t(LIBRARY_VIEW_NAMES[scope.view]);
+    // A saved view not read yet: "View" in English, ویو in Urdu (the plain "View" is the layout, انداز).
+    case "saved": return names.saved?.(scope.id) ?? t("library_context.saved_view");
+    case "label": return names.label?.(scope.key) ?? t("Label");
+    case "trash": return t("Trash");
   }
 }
 

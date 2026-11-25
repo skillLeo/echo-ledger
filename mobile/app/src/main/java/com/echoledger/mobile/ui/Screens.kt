@@ -168,11 +168,24 @@ fun SessionScreen(
     var pendingSeek by remember { mutableStateOf(startAtMs) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var shownTitle by remember(item.id) { mutableStateOf(item.title) }
+    // U19: whether the title shown is one the person chose, and so theirs to edit in Rename.
+    var shownIsOwn by remember(item.id) { mutableStateOf(ownTitle(item)) }
     var renamingTitle by remember { mutableStateOf(false) }
     if (renamingTitle) {
-        RenameDialog(shownTitle.orEmpty(), onRename = { title ->
+        RenameDialog(shownTitle.orEmpty(), own = shownIsOwn, onRename = { title ->
             renamingTitle = false
-            scope.launch { if (vm.organise(item.id, title = title)) shownTitle = title.ifEmpty { null } }
+            scope.launch {
+                if (vm.organise(item.id, title = title)) {
+                    shownTitle = title.ifEmpty { null }
+                    shownIsOwn = title.isNotEmpty()
+                    // The server's own title after a clear, and where it came from, as the view-ready reading below.
+                    vm.refreshQuietly().join()
+                    vm.library.value.firstOrNull { it.id == item.id }?.let { fresh ->
+                        if (fresh.title != null) shownTitle = fresh.title
+                        shownIsOwn = ownTitle(fresh)
+                    }
+                }
+            }
         }, onDismiss = { renamingTitle = false })
     }
     val clipboard = LocalClipboard.current
@@ -253,8 +266,12 @@ fun SessionScreen(
                 waitedForView = false
                 val before = shownTitle
                 vm.refreshQuietly().join()
-                val now = vm.library.value.firstOrNull { it.id == item.id }?.title
-                if (now != null && shownTitle == before) shownTitle = now
+                val fresh = vm.library.value.firstOrNull { it.id == item.id }
+                val now = fresh?.title
+                if (now != null && shownTitle == before) {
+                    shownTitle = now
+                    shownIsOwn = ownTitle(fresh)
+                }
             }
         }
     }
@@ -349,7 +366,7 @@ fun SessionScreen(
     val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     Column(Modifier.fillMaxSize()) {
         EchoTopBar(
-            if (scrolled) item.title ?: "Untitled" else "",
+            if (scrolled) shownTitle ?: "Untitled" else "",
             large = false,
             navigation = { BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = c.text) },
             actions = {

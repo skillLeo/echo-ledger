@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui.v2
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -288,6 +289,25 @@ class V2NavigationTest : ScreenTest() {
         assertEquals(listOf("plans", "record", "voice", "import", "dictation"), went)
     }
 
+    /** The Record hint's nodes saying [words] (they are tagged: TalkBack never focuses the hint). */
+    private fun hints(words: String) =
+        compose.onAllNodes(SemanticsMatcher.expectValue(com.echoledger.mobile.ui.v2.shell.RecordHintText, words)).fetchSemanticsNodes()
+
+    /** Review of UX-15: with TalkBack on, the hint says TalkBack's gestures (double-tap, double-tap and hold). */
+    @Test
+    fun withTalkBackOnTheRecordHintSaysDoubleTapAndHold() {
+        seed()
+        val a11y = app.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        org.robolectric.Shadows.shadowOf(a11y).setTouchExplorationEnabled(true)
+        vm.updateSettings { it.copy(appOpens = 1) }
+        pumpUntil("stored") { vm.settings.value.appOpens == 1 }
+        shell()
+        pumpUntil("the hint") {
+            hints("Double-tap to record · Double-tap and hold for more").isNotEmpty()
+        }
+        assertTrue(hints("Tap to record · Hold for more").isEmpty())
+    }
+
     /** v2.1 UX-15: from the second opening, "Tap to record · Hold for more", at most three times, never after a long press. */
     @Test
     fun theRecordHintShowsFromTheSecondOpeningAndGoesAfterTheFirstLongPress() {
@@ -300,11 +320,16 @@ class V2NavigationTest : ScreenTest() {
         pumpUntil("stored") { vm.settings.value.appOpens == 1 }
         shell()
         pumpUntil("the second opening") { vm.settings.value.appOpens == 2 }
-        pumpUntil("the hint") { compose.onAllNodesWithText("Tap to record · Hold for more").fetchSemanticsNodes().isNotEmpty() }
+        pumpUntil("the hint") { hints("Tap to record · Hold for more").isNotEmpty() }
+        // Never a place for TalkBack's focus (no words or tap of its own there), so a double tap always records.
+        hints("Tap to record · Hold for more").forEach { node ->
+            assertTrue(!SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick).matches(node))
+            assertTrue(!SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Text).matches(node))
+        }
         pumpUntil("counted") { vm.settings.value.recordHintShows == 1 }
         compose.onNodeWithContentDescription("Record").performTouchInput { longClick() }
         compose.waitForIdle()
-        assertTrue(compose.onAllNodesWithText("Tap to record · Hold for more").fetchSemanticsNodes().isEmpty())
+        assertTrue(hints("Tap to record · Hold for more").isEmpty())
         pumpUntil("never again") { vm.settings.value.recordHintDone }
     }
 
