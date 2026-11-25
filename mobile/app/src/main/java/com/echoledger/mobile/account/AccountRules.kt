@@ -141,6 +141,24 @@ object AccountFormat {
     /** Left-to-right text (an address, a code) kept whole inside a right-to-left sentence. */
     fun ltr(text: String): String = "⁦$text⁩"
 
-    /** People's own words (a name) isolated in either direction. */
-    fun isolate(text: String): String = "⁨$text⁩"
+    /**
+     * People's own words (a name) isolated in either direction (FSI…PDI), as the web's IsolatingTranslator::isolate. A
+     * closing mark (PDI) with no opener of its own inside [text] is dropped, so a typed name can't close this isolate
+     * early and let what follows (an override such as U+202E) flip the sentence; what the name leaves open is closed by
+     * the final PDI. An empty text stays empty.
+     */
+    fun isolate(text: String): String {
+        if (text.isEmpty()) return text
+        var depth = 0
+        val safe = buildString {
+            for (ch in text) {
+                when (ch) {
+                    '\u2066', '\u2067', '\u2068' -> depth++
+                    '\u2069' -> if (depth == 0) continue else depth--
+                }
+                append(ch)
+            }
+        }
+        return "\u2068$safe\u2069"
+    }
 }

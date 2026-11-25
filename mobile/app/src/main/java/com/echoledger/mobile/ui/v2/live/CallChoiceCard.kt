@@ -75,7 +75,7 @@ fun callCardTitle(res: Resources, rec: LocalRecording): String = rec.title?.take
     ?: sourceName(res, rec.sourceApp)
 
 /** [text] isolated (FSI…PDI) inside a line of any direction, as the copy deck asks for names, apps and numbers. */
-internal fun isolated(text: String): String = "\u2068$text\u2069"
+internal fun isolated(text: String): String = com.echoledger.mobile.account.AccountFormat.isolate(text)
 
 /**
  * The after-call card (the call-choice plan, docs/PLAN_CALL_CHOICE.md 3): the app's logo, the name or number,

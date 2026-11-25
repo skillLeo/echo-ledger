@@ -130,4 +130,18 @@ class AccountRulesTest {
             TimeZone.setDefault(zone)
         }
     }
+
+    /**
+     * A typed name holding a closing mark (PDI, U+2069) and an override (RLO, U+202E) could end its isolate early and flip
+     * the rest of the sentence. As the web's IsolatingTranslator::isolate: a PDI with no opener of its own inside the name
+     * is dropped (the final PDI also ends the override), an isolate the name opens and closes is kept, and '' stays ''.
+     */
+    @Test
+    fun `a name can't close its own isolate early`() {
+        assertEquals("\u2068Ali\u202Eevil\u2069", AccountFormat.isolate("Ali\u2069\u202Eevil"))
+        assertEquals("\u2068a\u2066b\u2069c\u2069", AccountFormat.isolate("a\u2066b\u2069c"))
+        assertEquals("", AccountFormat.isolate(""))
+        // The after-call card's caller number, the same way.
+        assertEquals("\u2068+92 300\u202E1\u2069", com.echoledger.mobile.ui.v2.live.isolated("+92 300\u2069\u202E1"))
+    }
 }
