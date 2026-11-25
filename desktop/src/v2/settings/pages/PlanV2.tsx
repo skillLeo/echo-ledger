@@ -23,8 +23,8 @@ const meters = (): readonly (readonly [string, string, string])[] => [
 ];
 
 /**
- * "You've used 85% of your minutes.": what a meter at 80 % says, its words for each limit (minutes, storage, devices;
- * the rest says team members, as it always has). `upgrade`: with the word Upgrade in its place (withParts).
+ * "You've used 85% of your minutes.": what a meter at 80 % says, its words for each limit (minutes, storage, devices,
+ * daily uploads; a team's seats never block, so never warn). `upgrade`: with the word Upgrade in its place (withParts).
  */
 function usedLine(limitKey: string, percent: number, resets: string | null, upgrade: boolean): string {
   const date = resets ? rowDate(resets) : null;
@@ -34,6 +34,8 @@ function usedLine(limitKey: string, percent: number, resets: string | null, upgr
   }
   if (limitKey === "storage_bytes") return upgrade ? t("You've used :percent% of your storage. :upgrade.", { percent }) : t("You've used :percent% of your storage.", { percent });
   if (limitKey === "devices") return upgrade ? t("You've used :percent% of your devices. :upgrade.", { percent }) : t("You've used :percent% of your devices.", { percent });
+  // D-230: the uploads a day are uploads (they were called team members).
+  if (limitKey === "uploads_per_day") return upgrade ? t("You've used :percent% of your daily uploads. :upgrade.", { percent }) : t("You've used :percent% of your daily uploads.", { percent });
   return upgrade ? t("You've used :percent% of your team members. :upgrade.", { percent }) : t("You've used :percent% of your team members.", { percent });
 }
 
@@ -266,8 +268,8 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
             <div className="el-plan-card__head"><span className="el-title-m" dir={lineDir(title)}>{title}</span></div>
             <div className="el-plan-card__body el-secondary">
               {!allowed && workspace && <Line text={name !== null ? t(":workspace is on :plan. Its owner manages the plan.", { workspace, plan: name })
-                // No plan known: the words the page has always said, as one sentence.
-                : t(":workspace is on Your. Its owner manages the plan.", { workspace })} />}
+                // No plan known (D-230): who manages it.
+                : t(":workspace's plan is managed by its owner.", { workspace })} />}
               {isFree && allowed && <Line text={t("Transcripts use your own free Groq key.")} />}
               {!isFree && price && <Line className="el-tabular" text={price} />}
               {!isFree && <Line text={plan?.expires_at ? t("Paid until :date", { date: rowDateWithYear(plan.expires_at) }) : t("No end date")} />}
