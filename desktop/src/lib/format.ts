@@ -1,6 +1,6 @@
 // Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
 // language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
-import { dateLocale, language, numberLocale } from "../i18n";
+import { dateLocale, isolate, language, numberLocale, PDI, RLI, t } from "../i18n";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
@@ -49,17 +49,28 @@ export function clockTime(date: Date): string {
     : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+/**
+ * When something happened: "Today · 2:00 PM", "Yesterday · 2:00 PM", "23 Nov · 2:00 PM". In Urdu the day and the time
+ * are each their own isolated run inside one right-to-left run (آج, کل, "23 نومبر"; "2:00 PM" kept whole, its space
+ * one that doesn't break), so neither a left-to-right box (.el-ltr) nor a sentence around it swaps the month and the
+ * time or puts PM on its own line. English as it always was.
+ */
 export function formatWhen(iso?: string, now: Date = new Date()): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const sameDay = date.toDateString() === now.toDateString();
   const time = clockTime(date);
-  if (sameDay) return `Today · ${time}`;
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
-  return `${date.toLocaleDateString(language() === "ur" ? "ur-PK" : [], { month: "short", day: "numeric" })} · ${time}`;
+  const wasYesterday = date.toDateString() === yesterday.toDateString();
+  if (language() === "ur") {
+    const day = sameDay ? t("Today") : wasYesterday ? t("Yesterday") : date.toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
+    return `${RLI}${isolate(day)} · ${isolate(time.replace(/\s/g, "\u00A0"))}${PDI}`;
+  }
+  if (sameDay) return `Today · ${time}`;
+  if (wasYesterday) return `Yesterday · ${time}`;
+  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
 }
 
 export function timestamp(ms: number): string {
