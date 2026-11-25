@@ -51,6 +51,9 @@ pub struct ActivityItem {
     pub read: bool,
     #[serde(default)]
     pub at: Option<String>,
+    /// The problem is over (2.0.0-r; a server_problem once the server's check passes). Kept off the window's badge.
+    #[serde(default)]
+    pub resolved: bool,
 }
 
 /// `activity_seen.json`: the ids already shown, so a restart never repeats them.
@@ -126,6 +129,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_server_problem_and_its_end_reach_the_window() {
+        // 2.0.0-v: super admins get `server_problem`; once the server's check passes it is `resolved` (2.0.0-r).
+        let fixed: ActivityItem = serde_json::from_value(serde_json::json!({
+            "id": "a9", "kind": "server_problem", "title": "Fixed: uploads work again", "body": "", "session_id": null,
+            "read": false, "at": "2026-11-25T09:00:00Z", "resolved": true,
+        }))
+        .unwrap();
+        assert!(fixed.resolved);
+        assert_eq!(serde_json::to_value(&fixed).unwrap()["resolved"], true, "passed on to the window");
+        let older: ActivityItem = serde_json::from_value(serde_json::json!({ "id": "a1", "kind": "upload_failed" })).unwrap();
+        assert!(!older.resolved, "an older server's item: not resolved");
+    }
+
+    #[test]
     fn notify_me_when_ready_is_answered_once_by_its_transcript() {
         let mut asked = std::collections::HashSet::from(["s1".to_string()]);
         let item = |kind: &str, session: &str| ActivityItem {
@@ -136,6 +153,7 @@ mod tests {
             session_id: Some(session.into()),
             read: false,
             at: None,
+            resolved: false,
         };
         assert!(!asked_for(&mut asked, &item("upload_failed", "s1")), "only the transcript answers it");
         assert!(!asked_for(&mut asked, &item("transcript_ready", "s2")));

@@ -53,6 +53,21 @@ describe("activity page (B18)", () => {
     expect(screen.getByRole("button", { name: "Mark all read" })).toBeInTheDocument();
   });
 
+  it("2.0.0-v: the server's own problem shows the server in the problem's red tile; fixed, it is done and needs nobody", async () => {
+    respond("activity_list", { data: [
+      { id: "s1", kind: "server_problem", title: "Uploads are failing: the server's PHP is missing sodium", body: "sudo apt install php8.3-sodium", session_id: null, read: false, at: "2026-10-28T09:00:00Z" },
+      { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: "2026-10-28T09:05:00Z", resolved: true },
+    ], unread_count: 2 });
+    renderPage();
+    const open = (await screen.findByText("Uploads are failing: the server's PHP is missing sodium")).closest("button")!;
+    const tile = open.querySelector(".activity-tile")!;
+    expect(tile).toHaveClass("failed");
+    expect(tile.querySelector('path[d="M6 6h.01"]'), "the server's icon").not.toBeNull();
+    const fixed = screen.getByText("Fixed: uploads work again").closest("button")!.querySelector(".activity-tile")!;
+    expect(fixed).not.toHaveClass("failed");
+    expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
+  });
+
   it("words the line for each case", () => {
     expect(activitySubtitle(1, 3)).toBe("1 thing needs you. Your other notifications follow, newest first.");
     expect(activitySubtitle(0, 1)).toBe("Nothing needs you. 1 notification you have not read yet.");

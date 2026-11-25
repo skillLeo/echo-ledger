@@ -11,7 +11,7 @@ use desktop_lib::net::api::ApiClient;
 const TOKEN: &str = "7|eld_TOKEN_PLACEHOLDER";
 
 fn item(id: &str, read: bool) -> ActivityItem {
-    ActivityItem { id: id.into(), kind: Some("transcript_ready".into()), title: "Transcript ready".into(), body: format!("Call {id}"), session_id: Some(format!("s-{id}")), read, at: None }
+    ActivityItem { id: id.into(), kind: Some("transcript_ready".into()), title: "Transcript ready".into(), body: format!("Call {id}"), session_id: Some(format!("s-{id}")), read, at: None, resolved: false }
 }
 
 #[test]
