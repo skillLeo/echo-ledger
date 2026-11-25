@@ -105,4 +105,51 @@ class ActorPicturesTest {
         assertEquals("no draft left behind", emptyList<String>(), dir.list()!!.filter { it.endsWith(".tmp") })
         assertEquals(1, dir.list()!!.size)
     }
+
+    // The review of the phone's 2.0.0-aa: a disk that fails, a sign-out during a load, a row coming back into view.
+
+    @Test
+    fun aDiskThatFailsStillDrawsThePictureAndNeverFails() = runBlocking {
+        // A "folder" that is a file: every write to it throws (a full disk, a folder gone at sign-out).
+        val notAFolder = File.createTempFile("not-a-folder", ".bin")
+        val broken = AvatarCache(notAFolder, "https://ledger.test")
+        val pictures = shared()
+        assertEquals("face", pictures.picture(broken, "https://ledger.test", "7", 1, "u1", fetchGiving("face")))
+        // Drawn, so the next rows draw it at once, with no second fetch.
+        assertEquals("face", pictures.picture(broken, "https://ledger.test", "7", 1, "u1", fetchGiving("other")))
+        assertEquals(1, fetches.get())
+    }
+
+    @Test
+    fun picturesThatCantBeDecodedAreNoPictureNeverAnError() = runBlocking {
+        val throwing = SharedPictures(decode = { _: ByteArray -> error("can't decode") }, now = { clock })
+        assertNull(throwing.picture(cache, "https://ledger.test", "7", 1, "u1", fetchGiving("face")))
+    }
+
+    @Test
+    fun aSignOutDuringALoadKeepsNothing() = runBlocking {
+        val pictures = shared()
+        val slow: suspend (String) -> ByteArray? = {
+            delay(300)
+            "face".toByteArray()
+        }
+        val running = async { pictures.picture(cache, "https://ledger.test", "7", 5, "u1", slow) }
+        delay(50)
+        pictures.clear()
+        // The row that asked still draws it, but nothing comes back to the disk or into memory.
+        assertEquals("face", running.await())
+        assertNull(cache.get("7", 5))
+        assertNull(pictures.peek("7", 5))
+    }
+
+    @Test
+    fun aDrawnPictureIsThereAtOnceForTheNextRow() = runBlocking {
+        val pictures = shared()
+        assertNull(pictures.peek("7", 6))
+        assertEquals("face", pictures.picture(cache, "https://ledger.test", "7", 6, "u1", fetchGiving("face")))
+        assertEquals("face", pictures.peek("7", 6))
+        assertNull("another version is another picture", pictures.peek("7", 7))
+        pictures.clear()
+        assertNull(pictures.peek("7", 6))
+    }
 }

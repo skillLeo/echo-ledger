@@ -3,6 +3,7 @@ package com.echoledger.mobile.account
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +16,9 @@ import kotlinx.coroutines.async
  * teammate ask once. The copy on disk is [AvatarCache]'s; bytes it holds that don't decode are forgotten and asked for
  * again. No picture (a 403 or 404, bytes that don't decode, no connection) is remembered too, so scrolling and
  * redrawing never ask again; it is asked again for a new signed address, or [missMs] later. A load runs on its own
- * scope, so a row scrolled away mid-load doesn't cancel it for the others. Cleared with [AvatarCache.clearAll].
+ * scope, so a row scrolled away mid-load doesn't cancel it for the others. A disk that fails (full, or its folder gone
+ * at sign-out) never fails a load: the picture still draws, it is just not kept. Cleared with [AvatarCache.clearAll]:
+ * a load still running then keeps nothing, so no one's picture comes back after a sign-out.
  */
 class SharedPictures<T : Any>(
     private val decode: (ByteArray) -> T?,
@@ -26,6 +29,15 @@ class SharedPictures<T : Any>(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val entries = HashMap<String, Entry<T>>()
+
+    /** The pictures drawn so far, by person and version: what a row shows at once ([peek]), before any load. */
+    private val shown = HashMap<String, T>()
+
+    /** Raised by [clear]: a load started before it keeps nothing. */
+    @Volatile private var generation = 0L
+
+    /** [person]'s picture of [version] if one was drawn already, so a row coming back into view never flashes initials. */
+    fun peek(person: String, version: Long): T? = synchronized(entries) { shown["$person\n$version"] }
 
     /**
      * [person]'s picture of [version] on [cache]'s server ([origin]), or null for their initials. [fetch] downloads it
@@ -45,34 +57,60 @@ class SharedPictures<T : Any>(
             if (known != null && reusable(known, url)) {
                 known.picture
             } else {
-                scope.async { load(cache, person, version, url, fetch) }.also { entries[key] = Entry(url, now(), it) }
+                val started = generation
+                scope.async { load(cache, person, version, url, fetch, started) }.also { entries[key] = Entry(url, now(), it) }
             }
         }
-        return shared.await()
+        // Whatever went wrong, a row shows the initials: never an error into its effect.
+        return try {
+            shared.await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun reusable(entry: Entry<T>, url: String): Boolean {
         if (!entry.picture.isCompleted) return true
+        // A load that failed or was cancelled is no answer: asked again.
         @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-        val done = runCatching { entry.picture.getCompleted() }.getOrNull()
+        val done = runCatching { entry.picture.getCompleted() }.getOrElse { return false }
         return done != null || (entry.url == url && now() - entry.at < missMs)
     }
 
-    private suspend fun load(cache: AvatarCache, person: String, version: Long, url: String, fetch: suspend (String) -> ByteArray?): T? {
-        cache.get(person, version)?.let { kept ->
-            decode(kept)?.let { return it }
+    private suspend fun load(
+        cache: AvatarCache,
+        person: String,
+        version: Long,
+        url: String,
+        fetch: suspend (String) -> ByteArray?,
+        started: Long
+    ): T? {
+        runCatching { cache.get(person, version) }.getOrNull()?.let { kept ->
+            runCatching { decode(kept) }.getOrNull()?.let { return drawn(person, version, it, started) }
             // A copy that doesn't draw (cut short, damaged) is no copy: forgotten and asked for again.
-            cache.forget(person)
+            runCatching { cache.forget(person) }
         }
         val bytes = runCatching { fetch(url) }.getOrNull() ?: return null
-        val picture = decode(bytes) ?: return null
-        cache.put(person, version, bytes)
+        val picture = runCatching { decode(bytes) }.getOrNull() ?: return null
+        // Kept on the disk unless a sign-out came meanwhile; a disk that fails only means it isn't kept.
+        if (started == generation) runCatching { cache.put(person, version, bytes) }
+        return drawn(person, version, picture, started)
+    }
+
+    private fun drawn(person: String, version: Long, picture: T, started: Long): T {
+        synchronized(entries) { if (started == generation) shown["$person\n$version"] = picture }
         return picture
     }
 
-    /** Forgets every picture held in memory (sign-out, another account). */
+    /** Forgets every picture held in memory (sign-out, another account); a load still running keeps nothing. */
     fun clear() {
-        synchronized(entries) { entries.clear() }
+        synchronized(entries) {
+            generation++
+            entries.clear()
+            shown.clear()
+        }
     }
 }
 

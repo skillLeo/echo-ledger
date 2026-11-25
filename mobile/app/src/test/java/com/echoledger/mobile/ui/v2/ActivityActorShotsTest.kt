@@ -188,4 +188,50 @@ class ActivityActorShotsTest : ScreenTest() {
             compose.onRoot().captureRoboImage(File(out, "classic-${if (d) "dark" else "light"}-en.png"))
         }
     }
+
+    @Test
+    fun aPictureIsFoundByItsAddressEvenWithoutAnId() {
+        seed()
+        val origin = runBlocking { app.graph.api()!!.origin }
+        val answer = ActivityResponse(
+            listOf(
+                ActivityItemDto(
+                    "a1",
+                    "shared_with_you",
+                    "Ayesha Khan sent you Payment terms",
+                    "",
+                    "s-a1",
+                    at = "2026-11-21T09:00:00Z",
+                    // An id the phone can't read ("7a" is no number): the address still says who the picture is of.
+                    actor = ActorDto(null, "Ayesha Khan", "$origin/api/avatars/7/1?expires=1&signature=x", 1, 3)
+                )
+            )
+        )
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                    V2ActivityContent(
+                        load = { answer },
+                        markRead = { 0 },
+                        waiting = emptyList(),
+                        failedUploads = emptyList(),
+                        untranscribed = 0,
+                        failedTranscripts = 0,
+                        skipped = emptyList(),
+                        missed = emptyList(),
+                        actions = ActivityActions(onOpenRecording = {}, onFix = {}, onOpenUntranscribed = {}),
+                        onKeep = {},
+                        onSaveAudio = {},
+                        onDiscard = {},
+                        onRetryUploads = {},
+                        onRestore = {},
+                        onMissedRead = {},
+                        onMissedDismiss = {},
+                        today = LocalDate.parse("2026-11-21")
+                    )
+                }
+            }
+        }
+        pumpUntil("the picture") { looks() == listOf(ActorLook(picture = true, initials = null, colour = null)) }
+    }
 }

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -421,14 +423,20 @@ private fun ActivityRow(item: com.echoledger.mobile.data.ActivityItemDto, today:
 
 /** An Activity row's icon and title, as classic has them, the title in the screen's language for the kinds it knows. */
 object ActivityWords {
-    /** Classic's icons: the missed call, a problem, a device, else the check of something done. */
+    /**
+     * The kind's icon: the missed call, a problem, a warning (unusual use: the only sign of what it is, as the web's
+     * triangle), a device, the check of a transcript done, else the neutral bell (as the web and the desktop; never a
+     * check for something that isn't done).
+     */
     fun icon(item: com.echoledger.mobile.data.ActivityItemDto): androidx.compose.ui.graphics.vector.ImageVector {
         val kind = item.kind.orEmpty()
         return when {
             kind == "missed_recording" -> EchoIcons.Missed
             item.isProblem() -> EchoIcons.Error
+            kind == "unusual_usage" -> Icons.Outlined.WarningAmber
             kind.contains("device") -> EchoIcons.Devices
-            else -> EchoIcons.Check
+            kind == "transcript_ready" -> EchoIcons.Check
+            else -> EchoIcons.Bell
         }
     }
 

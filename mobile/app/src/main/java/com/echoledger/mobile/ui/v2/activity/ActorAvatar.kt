@@ -93,13 +93,18 @@ fun ActorAvatar(actor: ActorDto, modifier: Modifier = Modifier, size: Dp = EchoT
     val actions = accountActions()
     val url = actor.avatarUrl
     val version = actor.avatarVersion
-    var picture by remember(url, version, actor.id) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(url, version, actor.id) {
-        val id = actor.id
-        if (url == null || version == null || id == null) return@LaunchedEffect
+    // Who the picture is of: its address says (`/api/avatars/{person}/{version}`), else the actor's id.
+    val person = url?.let { AvatarCache.personOf(it, actor.id?.toString().orEmpty()) }?.takeIf { it.isNotEmpty() }
+    // Kept by person and version, not by the signed address (re-signed every hour), and starting from a picture already
+    // drawn: a row coming back into view, or re-signed, never flashes its initials.
+    var picture by remember(person, version) {
+        mutableStateOf(if (person != null && version != null) ActorPictures.shared.peek(person, version) else null)
+    }
+    LaunchedEffect(person, version, url) {
+        if (url == null || version == null || person == null) return@LaunchedEffect
         val origin = actions.origin() ?: return@LaunchedEffect
-        val person = AvatarCache.personOf(url, id.toString())
-        picture = ActorPictures.shared.picture(AvatarCache.of(context, origin), origin, person, version, url) { actions.avatarImage(it) }
+        ActorPictures.shared.picture(AvatarCache.of(context, origin), origin, person, version, url) { actions.avatarImage(it) }
+            ?.let { picture = it }
     }
     val initials = PersonInitials.of(actor.name)
     val colour = ActivityPeople.colourOf(actor)

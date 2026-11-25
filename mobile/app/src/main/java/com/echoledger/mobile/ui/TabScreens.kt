@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -431,9 +432,17 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
     val kind = item.kind.orEmpty()
     val (icon, tint) = when {
         kind == "missed_recording" -> Icons.AutoMirrored.Rounded.PhoneMissed to c.danger
+
         item.isProblem() -> Icons.Rounded.ErrorOutline to c.danger
+
+        // A warning keeps its own sign (decision 27); the neutral bell, not a check, for what isn't done.
+        kind == "unusual_usage" -> Icons.Rounded.WarningAmber to c.warning
+
         kind.contains("device") -> Icons.Rounded.Devices to c.textMuted
-        else -> Icons.Rounded.CheckCircle to c.accentText
+
+        kind == "transcript_ready" -> Icons.Rounded.CheckCircle to c.accentText
+
+        else -> Icons.Rounded.NotificationsNone to c.textMuted
     }
     RecordingRow(
         title = item.title.ifBlank { "Update" },
