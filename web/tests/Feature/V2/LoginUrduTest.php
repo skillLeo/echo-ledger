@@ -6,6 +6,7 @@ use App\Filament\Auth\Login;
 use App\Mail\EmailCodeMail;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
+use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
@@ -209,3 +210,12 @@ it('words the sign-up step in each language, the Terms one sentence with its two
         'I accept the <a href="https://echoledger.test/terms" target="_blank" class="underline">Terms</a> and the <a href="https://echoledger.test/privacy" target="_blank" class="underline">Privacy Policy</a>',
         'Accept the Terms and the Privacy Policy to make your account.'],
 ]);
+
+it('renders the English sign-up page, with the Google button, and its invitation-only line byte for byte as before', function () {
+    app(CredentialVault::class)->put('google', 'client_id', '1234-test.apps.googleusercontent.com');
+    app(CredentialVault::class)->put('google', 'client_secret', 'secret');
+    app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+    signInGolden('signup-en', normaliseClassic((string) $this->get('/app/register')->assertOk()->getContent(), (string) session()->token()));
+    app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+    signInGolden('signup-en-invited', normaliseClassic((string) $this->get('/app/register')->assertOk()->getContent(), (string) session()->token()));
+});

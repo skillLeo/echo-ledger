@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Http\Middleware\VisitorLanguage;
+use App\Services\Accounts\SignUp;
+use App\Services\CredentialVault;
+use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
+use Illuminate\Support\Js;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures;
 
@@ -115,4 +119,51 @@ it('answers the sign-in form\'s own request in the kept language: a suspended ac
 
     expect($send('ur'))->toContain('یہ اکاؤنٹ معطل ہے')
         ->and($send('en'))->toContain('This account is suspended')->not->toContain('یہ اکاؤنٹ معطل ہے');
+});
+
+it('words the other ways to sign in in the visitor\'s language, with the passkey errors and the 429 line, and English as before', function () {
+    app(CredentialVault::class)->put('google', 'client_id', '1234-test.apps.googleusercontent.com');
+    app(CredentialVault::class)->put('google', 'client_secret', 'secret');
+    $js = fn (string $words): string => (string) Js::from($words);
+
+    expect(visitorPage($this, cookies: [VisitorLanguage::COOKIE => 'ur']))
+        ->toContain('<div class="el-or" role="separator" aria-label="یا"><span>یا</span></div>')
+        ->toContain('<span>گوگل کے ساتھ جاری رکھیں</span>')
+        ->toContain('title="پاس کی سے سائن اِن کریں: آپ کا فنگر پرنٹ، چہرہ یا ڈیوائس کا PIN"')
+        ->toContain('<span>پاس کی</span>')
+        ->toContain($js('اس پاس کی سے سائن اِن نہیں ہو سکا۔'))
+        ->toContain($js('پاس کی سے سائن اِن منسوخ ہو گیا۔'))
+        ->toContain($js('بہت زیادہ کوششیں ہو گئیں۔ ایک منٹ رکیں، پھر دوبارہ کوشش کریں۔'))
+        ->not->toContain('Continue with Google')->not->toContain("'That passkey could not sign you in.'");
+
+    expect(visitorPage($this, cookies: [VisitorLanguage::COOKIE => 'en']))
+        ->toContain('<div class="el-or" role="separator" aria-label="or"><span>or</span></div>')
+        ->toContain('<span>Continue with Google</span>')->toContain('title="Sign in with a passkey: your fingerprint, face or device PIN"')
+        ->toContain('<span>Passkey</span>')->toContain("'That passkey could not sign you in.'")->toContain("'Passkey sign-in was cancelled.'")
+        // A wording change in English too (since v2.1): a 429 says to wait, not Laravel's "Too Many Attempts.".
+        ->toContain("answer.status === 429 ? 'Too many tries. Wait a minute, then try again.'");
+});
+
+it('answers a failed passkey sign-in in the visitor\'s language', function () {
+    // A JSON request carries cookies only withCredentials(), as the page's fetch does with credentials: 'same-origin'.
+    $answer = fn (string $language) => $this->withCredentials()->withCookie(VisitorLanguage::COOKIE, $language)
+        ->postJson('/passkeys/login', ['credential' => ['id' => 'nope', 'rawId' => 'nope', 'type' => 'public-key', 'response' => []]]);
+
+    $answer('ur')->assertStatus(422)->assertExactJson(['message' => 'اس پاس کی سے سائن اِن نہیں ہو سکا۔ دوبارہ کوشش کریں یا اپنا پاس ورڈ استعمال کریں۔']);
+    app()->setLocale('en');
+    $answer('en')->assertStatus(422)->assertExactJson(['message' => 'That passkey could not sign you in. Try again or use your password.']);
+});
+
+it('words the sign-up page in the visitor\'s language, and its invitation-only line', function () {
+    app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+    expect(html_entity_decode(visitorPage($this, '/app/register', cookies: [VisitorLanguage::COOKIE => 'ur']), ENT_QUOTES))
+        ->toContain('اپنا مفت اکاؤنٹ بنائیں')->toContain('اپنی ای میل لکھیں: ہم اس کی تصدیق کے لیے آپ کو ایک کوڈ بھیجتے ہیں۔')
+        ->toMatch('~<title>\s*اپنا اکاؤنٹ بنائیں~u')
+        ->toContain('<span lang="ur" aria-current="true"')
+        ->not->toContain('Create your free account');
+
+    app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+    expect(html_entity_decode(visitorPage($this, '/app/register', cookies: [VisitorLanguage::COOKIE => 'ur']), ENT_QUOTES))
+        ->toContain('اس سرور پر اکاؤنٹ صرف دعوت سے بنتا ہے۔ اسے چلانے والے سے یا کسی ورک اسپیس کے مالک سے دعوت مانگیں، پھر ان کا بھیجا ہوا لنک کھولیں۔')
+        ->not->toContain('Sign-up on this server is by invitation.');
 });

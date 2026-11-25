@@ -973,13 +973,15 @@
         quiet: null,
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': 'CSRF' },
         async options() {
-            return (await fetch('https:\/\/echoledger.test\/passkeys\/login\/options', { method: 'POST', headers: this.headers, credentials: 'same-origin' })).json();
+            const answer = await fetch('https:\/\/echoledger.test\/passkeys\/login\/options', { method: 'POST', headers: this.headers, credentials: 'same-origin' });
+            if (answer.status === 429) throw Object.assign(new Error(), { name: 'TooManyTries' });
+            return answer.json();
         },
         async finish(credential) {
             const answer = await fetch('https:\/\/echoledger.test\/passkeys\/login', { method: 'POST', headers: this.headers, credentials: 'same-origin', body: JSON.stringify({ credential }) });
             const body = await answer.json();
             if (answer.ok && body.redirect) { window.location.assign(body.redirect); return; }
-            this.error = body.message || 'That passkey could not sign you in.';
+            this.error = answer.status === 429 ? 'Too many tries. Wait a minute, then try again.' : (body.message || 'That passkey could not sign you in.');
         },
         async init() {
             if (! (await window.elPasskeys.conditional())) return;
@@ -999,7 +1001,7 @@
             try {
                 await this.finish(await window.elPasskeys.get(await this.options()));
             } catch (e) {
-                this.error = e && e.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled.' : 'That passkey could not sign you in.';
+                this.error = e && e.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled.'                    : (e && e.name === 'TooManyTries' ? 'Too many tries. Wait a minute, then try again.' : 'That passkey could not sign you in.');
             } finally { this.busy = false; }
         },
         destroy() { this.quiet?.abort(); },

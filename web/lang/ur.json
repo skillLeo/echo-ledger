@@ -2013,5 +2013,16 @@
     "Enter the code from your authenticator app.": "اپنی آتھنٹیکیٹر ایپ کا کوڈ لکھیں۔",
     "Last step: your name, and the Terms.": "آخری مرحلہ: آپ کا نام، اور شرائط۔",
     "Enter your email. New here? We will make your free account.": "اپنی ای میل لکھیں۔ یہاں نئے ہیں؟ ہم آپ کا مفت اکاؤنٹ بنا دیں گے۔",
-    "Enter your email to continue.": "جاری رکھنے کے لیے اپنی ای میل لکھیں۔"
+    "Enter your email to continue.": "جاری رکھنے کے لیے اپنی ای میل لکھیں۔",
+    "or": "یا",
+    "Continue with Google": "گوگل کے ساتھ جاری رکھیں",
+    "Sign in with a passkey: your fingerprint, face or device PIN": "پاس کی سے سائن اِن کریں: آپ کا فنگر پرنٹ، چہرہ یا ڈیوائس کا PIN",
+    "Passkey": "پاس کی",
+    "That passkey could not sign you in.": "اس پاس کی سے سائن اِن نہیں ہو سکا۔",
+    "Passkey sign-in was cancelled.": "پاس کی سے سائن اِن منسوخ ہو گیا۔",
+    "Too many tries. Wait a minute, then try again.": "بہت زیادہ کوششیں ہو گئیں۔ ایک منٹ رکیں، پھر دوبارہ کوشش کریں۔",
+    "That passkey could not sign you in. Try again or use your password.": "اس پاس کی سے سائن اِن نہیں ہو سکا۔ دوبارہ کوشش کریں یا اپنا پاس ورڈ استعمال کریں۔",
+    "Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link they send you.": "اس سرور پر اکاؤنٹ صرف دعوت سے بنتا ہے۔ اسے چلانے والے سے یا کسی ورک اسپیس کے مالک سے دعوت مانگیں، پھر ان کا بھیجا ہوا لنک کھولیں۔",
+    "Create your free account": "اپنا مفت اکاؤنٹ بنائیں",
+    "Enter your email: we send you a code to confirm it.": "اپنی ای میل لکھیں: ہم اس کی تصدیق کے لیے آپ کو ایک کوڈ بھیجتے ہیں۔"
 }
