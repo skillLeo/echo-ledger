@@ -9,6 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Filament\Pages\Search;
+use App\Filament\Support\LibraryFilterBar;
 use App\Filament\Support\SettingsContext;
 use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
@@ -465,4 +466,14 @@ it('names a matching screen "Screen n" in each language, the search API keeping 
 it('says the erase window in the future tense in Urdu', function () {
     app()->setLocale('ur');
     expect(__('The audio and transcript are erased now. This cannot be undone.'))->toBe('آڈیو اور ٹرانسکرپٹ ابھی مٹا دیے جائیں گے۔ اسے واپس نہیں لایا جا سکتا۔');
+});
+
+it('names a bookmark-tag filter in the Library by the default tag\'s Urdu, and an admin\'s own tag as typed (validation)', function () {
+    app(SettingsRepository::class)->set('markers.tags', ['Budget', 'validation']);
+    $pill = fn (): string => LibraryFilterBar::pills(['bookmarks' => ['op' => 'any', 'values' => ['budget', 'validation']]], ['sections' => []])[0]['text'];
+
+    app()->setLocale('ur');
+    expect($pill())->toBe('بجٹ, validation');
+    app()->setLocale('en');
+    expect($pill())->toBe('Budget, validation');
 });
