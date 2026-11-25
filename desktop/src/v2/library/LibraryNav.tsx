@@ -17,6 +17,7 @@ import { currentPlatform, popupNative } from "../actions/popup";
 import { useActions } from "../actions/useActions";
 import type { MenuItem } from "../components/Menu";
 import { sayProblem, type Say } from "./organise";
+import { stripIsolates, t, useLanguage } from "../../i18n";
 
 const VIEW_ICONS: Record<LibraryViewId, IconType> = {
   all: Icons.LibraryIcon, needs: Icons.ErrorIcon, unread: Icons.MailIcon, important: Icons.StarIcon, audio_only: Icons.WaveIcon,
@@ -54,7 +55,7 @@ export function SectionHead({ title, folded, onFold, end, onTitle, titleHint }: 
     <div className="el-nav-section__head">
       {onTitle ? (
         <>
-          <button type="button" className="el-nav-section__fold" aria-expanded={!folded} aria-label={folded ? `Show ${title}` : `Fold ${title}`} onClick={onFold}>
+          <button type="button" className="el-nav-section__fold" aria-expanded={!folded} aria-label={folded ? t("Show :title", { title }) : t("Fold :title", { title })} onClick={onFold}>
             <Icon icon={folded ? Icons.ChevronEndIcon : Icons.ChevronDownIcon} directional />
           </button>
           <button type="button" className="el-nav-section__link el-caption" title={titleHint} onClick={onTitle}>{title}</button>
@@ -108,6 +109,8 @@ function Row({ icon, label, count, strong, current, onClick, children, ...rest }
 }
 
 export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNewView, say, onLibraryChanged }: LibraryNavProps) {
+  // Drawn again in the window's language when it changes (desktop Urdu, D1).
+  useLanguage();
   const views = useMyViews();
   // A built-in view's menu (UX-22, 3b): Open; Unread's Mark all as read and Audio only's Transcribe all… (the Library
   // runs those two, for the place it lists).
@@ -153,19 +156,20 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
 
   return (
     <div className="el-library-nav">
-      <section className="el-nav-section" aria-label="Views">
-        <SectionHead title="Views" folded={libraryFolded} onFold={foldLibrary} />
-        {viewMenu && <ContextMenu label={LIBRARY_VIEW_NAMES[viewMenu.view]} at={viewMenu.at} onClose={() => setViewMenu(null)} items={placeMenu(viewMenu.view)} />}
-        {!libraryFolded && <ul className="el-nav-list" aria-label="Library views">
+      <section className="el-nav-section" aria-label={t("Views")}>
+        <SectionHead title={t("Views")} folded={libraryFolded} onFold={foldLibrary} />
+        {viewMenu && <ContextMenu label={t(LIBRARY_VIEW_NAMES[viewMenu.view])} at={viewMenu.at} onClose={() => setViewMenu(null)} items={placeMenu(viewMenu.view)} />}
+        {!libraryFolded && <ul className="el-nav-list" aria-label={t("Library views")}>
           {LIBRARY_VIEWS.map((view) => (
             <li key={view} onContextMenu={(e) => { e.preventDefault(); openViewMenu(view, { x: e.clientX, y: e.clientY }); }}>
-              <Row icon={VIEW_ICONS[view]} label={LIBRARY_VIEW_NAMES[view]} count={counts?.[view]} strong={STRONG.includes(view)}
+              {/* facets.ts's English names, said in the window's language. */}
+              <Row icon={VIEW_ICONS[view]} label={t(LIBRARY_VIEW_NAMES[view])} count={counts?.[view]} strong={STRONG.includes(view)}
                 current={current === `view:${view}`} onClick={() => onScope({ kind: "view", view })} aria-keyshortcuts={shortcut({ kind: "view", view })} />
             </li>
           ))}
           {shared && shared.tabs.length > 0 && (
             <li>
-              <Row icon={Icons.UsersIcon} label="Shared" current={false} aria-expanded={sharedShown} onClick={() => {
+              <Row icon={Icons.UsersIcon} label={t("Shared")} current={false} aria-expanded={sharedShown} onClick={() => {
                 // Closed: it opens on Shared with me. Open: it folds (while one of its places is shown it stays open).
                 if (!sharedShown) {
                   shared.open(shared.tabs[0][0]);
@@ -175,12 +179,13 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
                 <span className="el-nav-item__fold" aria-hidden="true"><Icon icon={sharedShown ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional /></span>
               </Row>
               {sharedShown && (
-                <ul className="el-nav-list el-nav-list--sub" aria-label="Shared">
+                <ul className="el-nav-list el-nav-list--sub" aria-label={t("Shared")}>
                   {shared.tabs.map(([tab, label]) => (
                     <li key={tab}>
                       <button type="button" className="el-nav-item el-nav-item--row el-nav-item--sub" aria-current={shared.current === tab ? "page" : undefined}
                         onClick={() => shared.open(tab)}>
-                        <span className="el-nav-item__label">{label === "With me" ? "Shared with me" : label}</span>
+                        {/* The tabs' English names (Sidebar.tsx SHARED_TABS), said in the window's language. */}
+                        <span className="el-nav-item__label">{tab === "with-me" ? t("Shared with me") : t(label)}</span>
                       </button>
                     </li>
                   ))}
@@ -206,6 +211,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
   views: readonly MyView[]; current: string | null; onOpen: (id: string) => void; onGone: () => void; onNew: () => void;
   say: Say; shortcut: (id: string) => string | undefined;
 }) {
+  useLanguage();
   const [menu, setMenu] = useState<{ view: MyView; at: { x: number; y: number } } | null>(null);
   const [folded, fold] = useFolded("views-folded");
   const [renaming, setRenaming] = useState<MyView | null>(null);
@@ -224,9 +230,10 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
       const v = byId(c);
       if (!v) return;
       const taken = new Set(views.map((x) => x.name.toLocaleLowerCase()));
-      let name = `${v.name} copy`;
-      for (let n = 2; taken.has(name.toLocaleLowerCase()); n++) name = `${v.name} copy ${n}`;
-      void viewsStore.create(name, v.spec).then(() => say(`Duplicated as ${name}`)).catch((e) => sayProblem(say, e instanceof Error ? e.message : String(e)));
+      // The new name goes to the server: in the window's language, without the isolates around its values.
+      let name = stripIsolates(t(":name copy", { name: v.name }));
+      for (let n = 2; taken.has(name.toLocaleLowerCase()); n++) name = stripIsolates(t(":name copy :n", { name: v.name, n }));
+      void viewsStore.create(name, v.spec).then(() => say(t("Duplicated as :name", { name }))).catch((e) => sayProblem(say, e instanceof Error ? e.message : String(e)));
     },
     "view.moveUp": (c) => { const v = byId(c); if (v && at(c) > 0) move(v, at(c) - 1); },
     "view.moveDown": (c) => { const v = byId(c); if (v && at(c) < views.length - 1) move(v, at(c) + 1); },
@@ -247,7 +254,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
     try {
       await viewsStore.remove(view.id);
       if (current === view.id) onGone();
-      say(`${view.name} deleted · its recordings are still in your Library`);
+      say(t(":name deleted · its recordings are still in your Library", { name: view.name }));
     } catch (e) {
       sayProblem(say, e instanceof Error ? e.message : String(e));
     }
@@ -261,22 +268,22 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
     });
   };
   return (
-    <section className="el-nav-section" aria-label="My views">
-      <SectionHead title="My views" folded={folded} onFold={fold}
-        end={<Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label="New view" title="New view" onClick={onNew} />} />
-      {!folded && <ul className="el-nav-list" aria-label="My views">
+    <section className="el-nav-section" aria-label={t("My views")}>
+      <SectionHead title={t("My views")} folded={folded} onFold={fold}
+        end={<Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label={t("New view")} title={t("New view")} onClick={onNew} />} />
+      {!folded && <ul className="el-nav-list" aria-label={t("My views")}>
         {views.map((v, i) => (
           <li key={v.id} className={`el-nav-row${over === i ? " el-nav-row--drop" : ""}`} {...{ [REORDER_ATTRIBUTE]: i }}
             onPointerDown={(e) => press(e, v)}
             onContextMenu={(e) => { e.preventDefault(); openMenu(v, { x: e.clientX, y: e.clientY }); }}>
             <Row icon={Icons.FilterIcon} label={v.name} current={current === v.id} onClick={() => { if (!dragJustEnded()) onOpen(v.id); }} aria-keyshortcuts={shortcut(v.id)} />
-            <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${v.name}`}
+            <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={t("More for :name", { name: v.name })}
               onClick={(e) => openMenu(v, menuPointFor(e.currentTarget))} />
           </li>
         ))}
         <li className={over === views.length ? "el-nav-row--drop" : undefined} {...{ [REORDER_ATTRIBUTE]: views.length }}>
           <button type="button" className="el-nav-item el-nav-item--row el-nav-item--add" onClick={onNew}>
-            <Icon icon={Icons.PlusIcon} /><span className="el-nav-item__label">New view</span>
+            <Icon icon={Icons.PlusIcon} /><span className="el-nav-item__label">{t("New view")}</span>
           </button>
         </li>
       </ul>}
@@ -288,15 +295,15 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
           <ContextMenu label={view.name} at={menu.at} onClose={() => setMenu(null)} items={viewMenu(view)} />
         );
       })()}
-      {renaming && <ViewNameDialog title="Rename view" save="Save" start={renaming.name} except={renaming.id} onClose={() => setRenaming(null)}
+      {renaming && <ViewNameDialog title={t("Rename view")} save={t("Save")} start={renaming.name} except={renaming.id} onClose={() => setRenaming(null)}
         onSave={async (name) => {
           await viewsStore.rename(renaming.id, name);
           setRenaming(null);
-          say(`Renamed to ${name.trim()}`);
+          say(t("Renamed to :name", { name: name.trim() }));
         }} />}
-      <Dialog open={!!deleting} alert title={deleting ? `Delete ${deleting.name}?` : ""} description="Its recordings stay in your Library; only the saved filters go."
+      <Dialog open={!!deleting} alert title={deleting ? t("Delete :name?", { name: deleting.name }) : ""} description={t("Its recordings stay in your Library; only the saved filters go.")}
         onClose={() => setDeleting(null)}
-        actions={<><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" onClick={() => deleting && void remove(deleting)}>Delete</Button></>} />
+        actions={<><Button onClick={() => setDeleting(null)}>{t("Cancel")}</Button><Button variant="danger" onClick={() => deleting && void remove(deleting)}>{t("Delete")}</Button></>} />
     </section>
   );
 }
@@ -305,6 +312,7 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
 export function ViewNameDialog({ title, save, start = "", except, onClose, onSave, note }: {
   title: string; save: string; start?: string; except?: string; onClose: () => void; onSave: (name: string) => Promise<void>; note?: string;
 }) {
+  useLanguage();
   const views = useMyViews();
   const [name, setName] = useState(start);
   const [error, setError] = useState<string | null>(null);
@@ -324,9 +332,9 @@ export function ViewNameDialog({ title, save, start = "", except, onClose, onSav
   };
   return (
     <Dialog open title={title} description={note} onClose={onClose} initialFocus={field}
-      actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" type="submit" form="el-view-name" loading={busy} loadingLabel="Saving…" disabled={!name.trim()}>{save}</Button></>}>
+      actions={<><Button onClick={onClose}>{t("Cancel")}</Button><Button variant="primary" type="submit" form="el-view-name" loading={busy} loadingLabel={t("Saving…")} disabled={!name.trim()}>{save}</Button></>}>
       <form id="el-view-name" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <TextField ref={field} label="View name" value={name} maxLength={VIEW_NAME_MAX} autoComplete="off" spellCheck={false}
+        <TextField ref={field} label={t("View name")} value={name} maxLength={VIEW_NAME_MAX} autoComplete="off" spellCheck={false}
           onChange={(e) => { setName(e.target.value); setError(null); }} error={error ?? problem ?? undefined} />
       </form>
     </Dialog>
@@ -344,7 +352,7 @@ export function LibraryFoot({ trashCurrent, onTrash, onSync }: { trashCurrent: b
   const [said, setSaid] = useState("");
   useEffect(() => {
     if (was.current && !clock.syncing) {
-      if (clock.error) setSaid(`Couldn't sync: ${clock.error}`);
+      if (clock.error) setSaid(t("Couldn't sync: :error", { error: clock.error }));
       else if (pressed.current) setSaid(clock.words);
       pressed.current = false;
     }
@@ -352,9 +360,9 @@ export function LibraryFoot({ trashCurrent, onTrash, onSync }: { trashCurrent: b
   }, [clock.syncing, clock.error, clock.words]);
   return (
     <div className="el-library-foot">
-      <Row icon={Icons.TrashIcon} label="Trash" current={trashCurrent} onClick={onTrash} />
+      <Row icon={Icons.TrashIcon} label={t("Trash")} current={trashCurrent} onClick={onTrash} />
       <button type="button" className="el-nav-item el-nav-item--row el-shell__synced el-caption" onClick={() => { pressed.current = true; setSaid(""); onSync(); }}
-        aria-busy={clock.syncing || undefined} title={clock.error ? `Couldn't sync: ${clock.error}. Press to try again.` : "Sync now"} data-testid="sidebar-synced">
+        aria-busy={clock.syncing || undefined} title={clock.error ? t("Couldn't sync: :error. Press to try again.", { error: clock.error }) : t("Sync now")} data-testid="sidebar-synced">
         <Icon icon={Icons.RefreshIcon} />
         <span className="el-nav-item__label">{clock.words}</span>
       </button>

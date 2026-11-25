@@ -28,6 +28,8 @@ export const NOT_WORD_PROPS = new Set([
   "aria-keyshortcuts", "keyshortcuts",
 ]);
 const notWordProp = (name: string) => NOT_WORD_PROPS.has(name) || name.startsWith("data-") || /Class(Name)?$/.test(name);
+/** Object properties that are never words, beside NOT_WORD_PROPS: a menu item's shortcut ("Del", "X"), its keys. */
+const NOT_WORD_FIELDS = new Set([...NOT_WORD_PROPS, "shortcut", "keys"]);
 /** The calls that translate: t("…"), tc("…|…", n) and a hook's own (useT().t). */
 const TRANSLATE_CALLS = new Set(["t", "tc"]);
 /** Calls whose string arguments are never shown: ids, selectors, events, storage, the core's commands. */
@@ -41,6 +43,13 @@ export function wordy(text: string): boolean {
   if (/^[a-z0-9_.:\-/[\]=]+$/.test(t)) return false; // ids, keys, class names, paths, events
   if (/^[a-z][a-zA-Z0-9]*$/.test(t)) return false; // camelCase keys
   if (/^[A-Z0-9_]+$/.test(t) && t.length > 3) return false; // CONSTANTS
+  // One PascalCase compound with no space (ArrowLeft, PageDown, WhatsApp): a key's or a type's name, or a brand's,
+  // never words to translate.
+  if (/^[A-Z][a-z0-9]+([A-Z][a-z0-9]*)+$/.test(t)) return false;
+  // A key with its namespace ("date:This week", "project:No project"): a group's or a setting's id.
+  if (/^[a-z][a-z0-9_]*:\S/.test(t)) return false;
+  // A key chord or its start (Ctrl+, Alt+:value, Shift+Del): keys keep their Latin names in every language.
+  if (/^(Ctrl|Alt|Shift|Meta|Cmd|Option|Fn)\+/.test(t)) return false;
   if (/[{};]|\bpx\b|var\(--|^\s*[.#][a-z]/.test(t) && !/\s[a-z]+\s/.test(t)) return false; // CSS, selectors
   if (/^(el-|is-|has-|data-|aria-)/.test(t)) return false;
   if (/^[\w-]+(\s+[\w-]+)*$/.test(t) && /(^|\s)el-/.test(t)) return false; // class lists
@@ -58,6 +67,11 @@ export function templateKey(node: ts.TemplateExpression | ts.NoSubstitutionTempl
   }
   return out;
 }
+
+/** A template's key without its values (":done · :value" → " · "). */
+const withoutValues = (key: string) => key.replace(/:[A-Za-z_]\w*/g, "");
+/** Whether a template's key has words: more than one-letter units beside its values, and wordy with each value a word. */
+const hasWords = (key: string) => (withoutValues(key).match(/[A-Za-z]+/g) ?? []).some((w) => w.length > 1) && wordy(key.replace(/:[A-Za-z_]\w*/g, "x"));
 
 const calleeName = (call: ts.CallExpression | ts.NewExpression): string => {
   const callee = call.expression;
@@ -116,7 +130,8 @@ export function textsIn(path: string, code: string): FoundText[] {
         }
         const e = ts.isJsxExpression(init) ? init.expression : undefined;
         if (e && (ts.isTemplateExpression(e) || ts.isNoSubstitutionTemplateLiteral(e))) {
-          add(e, "prop", templateKey(e));
+          // Only values and punctuation (aria-label={`, ${count}`}) has no words to translate.
+          if (/[A-Za-z]/.test(withoutValues(templateKey(e)))) add(e, "prop", templateKey(e));
           return;
         }
       } else if (ts.isStringLiteral(init)) {
@@ -133,12 +148,16 @@ export function textsIn(path: string, code: string): FoundText[] {
         return;
       }
       const parent = node.parent;
-      // Names, not text: an object's key, an index, a case, an equality test, a call that takes ids.
+      // Names, not text: an object's key, an index, a case, an equality test, a call that takes ids, a field that is
+      // never words ({ shortcut: "Del" }).
       if ((ts.isPropertyAssignment(parent) && parent.name === node) || ts.isElementAccessExpression(parent) || ts.isCaseClause(parent)) return;
+      if (ts.isPropertyAssignment(parent) && parent.initializer === node && NOT_WORD_FIELDS.has(parent.name.getText(sf).replace(/^["']|["']$/g, ""))) return;
       if (ts.isBinaryExpression(parent) && [ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.InKeyword].includes(parent.operatorToken.kind)) return;
       if ((ts.isCallExpression(parent) || ts.isNewExpression(parent)) && NOT_SHOWN_CALLS.test(calleeName(parent))) return;
       if (ts.isJsxAttribute(parent) || inNotWordProp(node, sf)) return;
-      if (wordy(text.replace(/:[A-Za-z_]\w*/g, "x"))) add(node, "literal", text);
+      // A template of values and punctuation (`${done} · ${count}`) or of values with one-letter units (`${m}m ${s}s`)
+      // has no words; any other is read with each value as a word ("x back").
+      if (ts.isTemplateExpression(node) ? hasWords(text) : wordy(text)) add(node, "literal", text);
       if (ts.isTemplateExpression(node)) ts.forEachChild(node, visit);
       return;
     }

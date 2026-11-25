@@ -16,7 +16,7 @@ export type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefine
 export type Patch = (p: SettingsPatch) => Promise<boolean>;
 
 /** The registry's options for a setting, as a select or segmented control takes them. */
-export const optionsOf = <T extends string = string>(id: string) => (setting(id).options ?? []).map((o) => ({ value: o.value as T, label: o.label }));
+export const optionsOf = <T extends string = string>(id: string) => (setting(id).options ?? []).map((o) => ({ value: o.value as T, label: o.label, ...(o.lang ? { lang: o.lang } : {}) }));
 
 /** This computer's settings, and a patch that saves through the app's runner (a notice when it fails). */
 export function useSettings(run: Run): { settings: Settings | null; patch: Patch; setSettings: (s: Settings) => void } {
@@ -259,7 +259,7 @@ export function ChoiceSetting<T extends string>({ id, value, options, onChange }
 export function SegmentedSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange }: {
   id: string;
   value: T;
-  options?: { value: T; label: string }[];
+  options?: { value: T; label: string; lang?: string }[];
   onChange: (value: T) => void;
 }) {
   const s = setting(id);

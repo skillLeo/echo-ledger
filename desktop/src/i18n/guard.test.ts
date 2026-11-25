@@ -65,6 +65,21 @@ describe("the raw-text guard", () => {
     expect(found.filter((f) => f.translated).map((f) => f.text)).toEqual(["Clear :name", "Search recordings", ":count recording|:count recordings"]);
   });
 
+  it("key names, chords, namespaced ids, a menu item's shortcut and values with units are not words; a value with words is", () => {
+    const code = `
+      const next = rtl ? "ArrowLeft" : "ArrowRight";
+      const MOD = mac ? "⌘" : "Ctrl+";
+      const chord = \`Alt+\${n}\`;
+      const GROUPS = new Set(["date:This week", "project:No project"]);
+      const item = { label: t("Delete"), shortcut: "Del", keys: "Shift Del" };
+      const length = \`\${m}m \${String(s).padStart(2, "0")}s\`;
+      const joined = \`\${done} · \${count}\`;
+      const back = \`\${n} back\`;
+      const of = \`\${at} of \${total}\`;
+      const home = "Home";`;
+    expect(textsIn("Keys.ts", code).filter((f) => !f.translated).map((f) => f.text)).toEqual([":n back", ":at of :total", "Home"]);
+  });
+
   it("any other string prop that reads as words is text too, except the few that never are", () => {
     const code = `
       import { t as tr } from "../../i18n";
