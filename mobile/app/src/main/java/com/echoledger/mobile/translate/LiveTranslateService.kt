@@ -766,8 +766,15 @@ class LiveTranslateService :
         }
 
         fun createChannel(context: Context) {
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, context.getString(R.string.channel_live_translate), NotificationManager.IMPORTANCE_LOW).apply {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            // Already made (Notifications.createChannels names it in the app's language): never renamed in the phone's.
+            if (manager.getNotificationChannel(CHANNEL) != null) return
+            val name = com.echoledger.mobile.notify.NoticeWords.channel(
+                com.echoledger.mobile.notify.AppWords.resources(context),
+                com.echoledger.mobile.core.NotifyCategory.LIVE_TRANSLATE
+            ).first
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL, name, NotificationManager.IMPORTANCE_LOW).apply {
                     setShowBadge(false)
                     setSound(null, null)
                     enableVibration(false)

@@ -7,6 +7,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -113,6 +115,59 @@ class ActivityCentreTest : ScreenTest() {
         pumpUntil("the recording to open") { opened == listOf("s-n2") }
         assertEquals(listOf(listOf("n2")), marked)
         compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    /** P-043: a row with nowhere to go (a new device: no recording) isn't a button; a recording's row is. */
+    @Test
+    fun `a row with nowhere to go is not a button, a recording's row is`() {
+        show {
+            ActivityScreen(
+                load = {
+                    val device = ActivityItemDto("dev", "device_added", "New device", "Pixel 9 was paired", null)
+                    ActivityResponse(listOf(item("rec"), device), 0)
+                },
+                markRead = { 0 },
+                onOpen = {},
+                onUnread = {}
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Pixel 9 was paired").assertExists() }.isSuccess }
+        compose.onNode(hasText("Pixel 9 was paired") and hasClickAction()).assertDoesNotExist()
+        compose.onNode(hasText("Call rec") and hasClickAction()).assertExists()
+    }
+
+    /**
+     * P-043, as D-066 on the desktop and the web's rows: a problem with nowhere to go (no recording) isn't a button either,
+     * so while unread it ends with a quiet Mark read; seeing it never clears it. An informational one is read once seen.
+     */
+    @Test
+    fun `a problem with nowhere to go has Mark read until it is read, and seeing it never clears it`() {
+        val marked = mutableListOf<List<String>?>()
+        var unread = -1
+        show {
+            ActivityScreen(
+                load = {
+                    val server = ActivityItemDto("srv", "server_problem", "Uploads are failing", "The server needs a fix", null)
+                    val device = ActivityItemDto("dev", "device_added", "New device", "Pixel 9 was paired", null)
+                    ActivityResponse(listOf(server, device), 2)
+                },
+                markRead = {
+                    marked += it
+                    1
+                },
+                onOpen = {},
+                onUnread = { unread = it }
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("The server needs a fix").assertExists() }.isSuccess }
+        pumpUntil("the seen item to be marked read") { marked == listOf(listOf("dev")) }
+        compose.onNode(hasText("The server needs a fix") and hasClickAction()).assertDoesNotExist()
+        compose.onAllNodesWithText("Mark read").assertCountEquals(1)
+        assertEquals(1, unread)
+        compose.onNodeWithText("Mark read").performClick()
+        pumpUntil("the problem to be marked read") { marked == listOf(listOf("dev"), listOf("srv")) }
+        pumpUntil("Mark read to go") { runCatching { compose.onNodeWithText("Mark read").assertDoesNotExist() }.isSuccess }
+        assertEquals(0, unread)
     }
 
     @Test

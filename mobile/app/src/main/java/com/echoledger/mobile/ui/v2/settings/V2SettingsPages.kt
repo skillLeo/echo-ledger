@@ -69,7 +69,9 @@ fun AppearancePage(
     onSwitchToClassic: (Boolean) -> Unit,
     highlight: String?,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Signed in: the language is the account's, so a choice goes to the server (every device), never "as on the phone". */
+    onAccountLanguage: (String) -> Unit = {}
 ) {
     val modes = listOf("system", "light", "dark")
     Column(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
@@ -134,13 +136,16 @@ fun AppearancePage(
             }
             Column(Modifier.highlightedIf(highlight == "appearance.language")) {
                 EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_language))
-                listOf(
-                    "system" to R.string.v2_set_language_system,
+                // Signed in, the account's language (the same on every device): English or Urdu, never the phone's.
+                val signedIn = settings.paired
+                val shown = com.echoledger.mobile.ui.v2.shell.AppLook.choice(settings)
+                listOfNotNull(
+                    ("system" to R.string.v2_set_language_system).takeIf { !signedIn },
                     "en" to R.string.v2_set_language_en,
                     "ur" to R.string.v2_set_language_ur
                 ).forEach { (key, words) ->
-                    EchoRadio(selected = settings.appLanguage == key, onClick = {
-                        update { it.copy(appLanguage = key) }
+                    EchoRadio(selected = shown == key, onClick = {
+                        if (signedIn) onAccountLanguage(key) else update { it.copy(appLanguage = key) }
                     }, label = stringResource(words))
                 }
             }

@@ -47,7 +47,6 @@ import com.echoledger.mobile.ui.v2.components.formatClock
 import com.echoledger.mobile.ui.v2.shell.VmMessages
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
-import com.echoledger.mobile.ui.v2.theme.systemEchoLanguage
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.launch
 
@@ -107,8 +106,9 @@ fun V2AskScreen(
     var selected by rememberSaveable { mutableStateOf(if (fixedProject == null) EVERYWHERE else fixedProject.id) }
     var question by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<AskState>(AskState.Idle) }
-    val phoneLanguage = systemEchoLanguage()
-    var answerIn by rememberSaveable { mutableStateOf(AskLanguage.from(phoneLanguage)) }
+    // The language the app speaks (the account's while signed in), never the phone's own.
+    val appLanguage = if (com.echoledger.mobile.ui.v2.account.appLocale().language == "ur") EchoLanguage.Urdu else EchoLanguage.English
+    var answerIn by rememberSaveable { mutableStateOf(AskLanguage.from(appLanguage)) }
     val scope = rememberCoroutineScope()
     val res = LocalResources.current
     V2AskContent(
@@ -291,8 +291,9 @@ private fun CitationRow(citation: CitationDto, onOpenAt: (String, Long) -> Unit)
 fun V2AskRecording(vm: MainViewModel, sessionId: String, onPlayFrom: (Long) -> Unit, modifier: Modifier = Modifier) {
     var question by rememberSaveable(sessionId) { mutableStateOf("") }
     var state by remember(sessionId) { mutableStateOf<AskState>(AskState.Idle) }
-    val phoneLanguage = systemEchoLanguage()
-    var answerIn by rememberSaveable { mutableStateOf(AskLanguage.from(phoneLanguage)) }
+    // The language the app speaks (the account's while signed in), never the phone's own.
+    val appLanguage = if (com.echoledger.mobile.ui.v2.account.appLocale().language == "ur") EchoLanguage.Urdu else EchoLanguage.English
+    var answerIn by rememberSaveable { mutableStateOf(AskLanguage.from(appLanguage)) }
     val scope = rememberCoroutineScope()
     val res = LocalResources.current
     val c = EchoV2.colors

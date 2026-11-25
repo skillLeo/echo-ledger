@@ -164,8 +164,12 @@ data class AppSettings(
     val phoneFont: Boolean = false,
     /** The new design's text size (since 2.0): `system` (the phone's), `smaller`, `larger` or `largest`, on top of the phone's. */
     val textSize: String = "system",
-    /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. */
+    /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. Signed in, the account's wins. */
     val appLanguage: String = "system",
+    /** The account's language (`en` or `ur`) last read on this phone; spoken while signed in, also while it loads. */
+    val accountLanguage: String? = null,
+    /** The account's avatar colour (0-7) last read on this phone, for the initials circle (DES-08). */
+    val avatarColor: Int? = null,
     /** Library rows swipe (right Pin, left Delete with Undo) in the new design; off, a row only taps and long-presses. */
     val librarySwipes: Boolean = true,
     /** The setup card at the top of the new design's Library was hidden (since 2.0); Setup & health still has it all. */
@@ -343,7 +347,8 @@ class SettingsStore(
         var write = 0L
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
-            val next = it.toSettings().copy(deviceId = null, deviceName = null)
+            // Signed out: the account's language and colour go with it (the next account brings its own).
+            val next = it.toSettings().copy(deviceId = null, deviceName = null, accountLanguage = null, avatarColor = null)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
             cleared = next
             write = nextWrite()

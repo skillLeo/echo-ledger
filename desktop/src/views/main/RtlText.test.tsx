@@ -110,8 +110,8 @@ describe("the account menu's Light / Dark / System switch", () => {
 describe("caption lines", () => {
   it("each preview line takes its own direction, as the overlay draws it", () => {
     const { container } = rtl(<CaptionPreview style={{ size: "medium", opacity: 80, compact: false, clientColor: null, meColor: null } as never} />);
-    const lines = container.querySelectorAll(".caption-sample > div");
-    expect(lines).toHaveLength(2);
+    const lines = container.querySelectorAll(".caption-sample-lines > div");
+    expect(lines).toHaveLength(3);
     lines.forEach((line) => expect(line).toHaveAttribute("dir", "auto"));
   });
 });

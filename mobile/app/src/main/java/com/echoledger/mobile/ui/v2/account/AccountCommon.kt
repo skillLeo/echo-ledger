@@ -133,6 +133,7 @@ fun AccountAvatar(
     if (version != null && shown != null) {
         Image(shown, contentDescription = null, modifier.then(described).size(size).clip(CircleShape), contentScale = ContentScale.Crop)
     } else {
-        EchoPersonAvatar(initialsOf(name), modifier.then(described).size(size))
+        // No picture (yet): the initials on the person's colour (DES-08), never grey.
+        com.echoledger.mobile.ui.v2.shell.PersonAvatar(initialsOf(name), modifier.then(described).size(size))
     }
 }

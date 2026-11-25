@@ -190,7 +190,15 @@ fun V2SettingsScreen(
         is SettingsRoute.Page -> {
             val back = { route = SettingsRoute.Root }
             when (r.id) {
-                "appearance" -> AppearancePage(settings, vm::updateSettings, flags, onSwitchToClassic, r.highlight, back)
+                "appearance" -> AppearancePage(
+                    settings,
+                    vm::updateSettings,
+                    flags,
+                    onSwitchToClassic,
+                    r.highlight,
+                    back,
+                    onAccountLanguage = { vm.setAccountLanguage(it) }
+                )
 
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 

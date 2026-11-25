@@ -110,7 +110,8 @@ const LEFTOVER_ENGLISH = [
         'Failed uploads (1)', 'See why', '="Dismiss"', '="With the selected recordings"', '="recordings"', 'Library - EchoLedger',
         'Drop sound or video files here, or', 'choose files', 'each file becomes its own recording, titled from its name', 'Clear the list',
         'Auto (English / Urdu / Arabic)', 'Urdu (with English words)', 'Portuguese', '="More languages"', '="Files"']],
-    'project-recordings' => [true, ['Nov 15', '9:00 AM', 'Zoom · Galaxy S25', '="Nov 15, 2026 · 5:00 PM"', 'Last call Nov 17',
+    // (A brand name such as Zoom stays Latin in every language: LEAD DECISION 26.)
+    'project-recordings' => [true, ['Nov 15', '9:00 AM', '="Nov 15, 2026 · 5:00 PM"', 'Last call Nov 17',
         '="Projects"', '="New project"']],
     'projects' => [true, ['Name', 'Ascending', 'Descending', 'Automatic', 'Pin to the top', 'Loading...', '1 result', 'Last call Nov 17']],
     'usage' => [true, ['November 2026', 'October 2026', 'Nov 2026']],
@@ -139,7 +140,7 @@ it('shows the classic pages\' last English in Urdu in the new frame, with Urdu m
         ->toContain('فائلیں یہاں چھوڑیں')->not->toMatch('/[٠-٩۰-۹]/u');
     expect(leftoverBare(html_entity_decode($library)))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"');
     $activity = leftoverBare(html_entity_decode(leftoverPage($this, true, 'ur', 'activity')));
-    expect($activity)->toContain('="17 نومبر 2026 · ')->toContain('سب کو پڑھا ہوا کریں')->not->toContain('نشان زد');
+    expect($activity)->toContain('="17 نومبر 2026 · ')->toContain('سب کو پڑھی ہوئی کریں')->not->toContain('نشان زد');
     // Settings' home: its words in Urdu, the minutes in Urdu units and every amount in its own order (<bdi>).
     $settings = leftoverPage($this, true, 'ur', 'settings');
     expect(leftoverWords($settings))->toContain('ترتیبات')->toContain('اپ گریڈ کریں')->toContain('اس مہینے')->toContain('ٹرانسکرپشن')
@@ -234,7 +235,7 @@ it('names the bell with its count, one or more, in Urdu and in English', functio
         ->and($bell(0))->toContain('="اطلاعات"');
     // The bell's panel says it as the Activity page, the phone and v2 do (Filament's own Urdu: نوٹیفکیشنز, نشان لگائیں).
     expect(__('filament-notifications::database.modal.heading'))->toBe('اطلاعات')
-        ->and(__('filament-notifications::database.modal.actions.mark_all_as_read.label'))->toBe(__('Mark all as read'))->toBe('سب کو پڑھا ہوا کریں');
+        ->and(__('filament-notifications::database.modal.actions.mark_all_as_read.label'))->toBe(__('Mark all as read'))->toBe('سب کو پڑھی ہوئی کریں');
 });
 
 // W-213: the languages' names are shown in Urdu; the codes kept are the same.
