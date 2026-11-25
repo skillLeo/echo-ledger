@@ -43,17 +43,27 @@ final class OrganiseController extends Controller
             'labels.*' => ['nullable', 'string', 'max:200'],
             // Since v1.1.2: the recording's language (null / auto = automatic); used by its next final transcript.
             'language' => ['sometimes', 'nullable', 'string', 'max:16'],
-            // Since 2.0.0-z: the call is over, the person's choice pending (only while the session is recording).
-            'ended_at' => ['sometimes', 'required', 'date'],
-            'duration_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:86400000'],
         ]);
-        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
+        $own = fn () => CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id);
+        // Since 2.0.0-z: the call is over, the person's choice pending (only while the session is recording).
+        $ending = $request->has('ended_at') || $request->has('duration_ms');
+        $session = $own()->find($id);
         if (! $session instanceof CaptureSession) {
+            // The call is over, but the person already deleted it (2.0.0-z): the device drops its request.
+            if ($ending && $own()->onlyTrashed()->whereKey($id)->exists()) {
+                throw new ApiError(409, 'not_recording', 'This recording is no longer being recorded.');
+            }
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
-        if (array_key_exists('ended_at', $data) || array_key_exists('duration_ms', $data)) {
-            $this->callEnded($session, $data['ended_at'] ?? null, $data['duration_ms'] ?? null);
-            unset($data['ended_at'], $data['duration_ms']);
+        if ($ending) {
+            // The same instants as POST /api/sessions, not before this one's start and at most 5 minutes ahead (a
+            // device's clock may run fast), with error_codes.
+            $end = FieldErrors::validate($request->only(['ended_at', 'duration_ms']), [
+                'ended_at' => ['sometimes', 'required', ...SessionController::instantRules(),
+                    SessionController::notBefore($session->started_at, 'the start of the recording'), SessionController::notLaterThanSoon()],
+                'duration_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:86400000'],
+            ]);
+            $this->callEnded($session, isset($end['ended_at']) ? (string) $end['ended_at'] : null, isset($end['duration_ms']) ? (int) $end['duration_ms'] : null);
         }
         /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, important?: bool, labels?: list<mixed>, language?: string|null} $data */
         if (array_key_exists('language', $data)) {
@@ -154,7 +164,6 @@ final class OrganiseController extends Controller
         return response()->json(['data' => $this->projects->payload($client)], 201);
     }
 
-    /** PATCH /api/clients/{id}: rename, colour, avatar or pin a project, or move it into another one (since v1.5). */
     /**
      * The call is over (contract 2.0.0-z): an open session still `recording` keeps the end its device sends, so it waits
      * for the person's choice (LibraryFilters::isWaiting) and stops counting as being recorded. Idempotent: an end or a
@@ -163,17 +172,13 @@ final class OrganiseController extends Controller
     private function callEnded(CaptureSession $session, ?string $endedAt, ?int $durationMs): void
     {
         DB::transaction(function () use ($session, $endedAt, $durationMs): void {
-            $locked = CaptureSession::query()->lockForUpdate()->findOrFail($session->id);
-            if ($locked->status !== SessionStatus::Recording) {
+            $locked = CaptureSession::query()->withTrashed()->lockForUpdate()->find($session->id);
+            if (! $locked instanceof CaptureSession || $locked->trashed() || $locked->status !== SessionStatus::Recording) {
                 throw new ApiError(409, 'not_recording', 'This recording is no longer being recorded.');
             }
             $changes = [];
             if ($endedAt !== null && $locked->ended_at === null) {
-                $end = Carbon::parse($endedAt)->utc();
-                if ($end->lt($locked->started_at)) {
-                    throw FieldErrors::fail(['ended_at' => [['invalid', 'The call cannot end before it started.']]]);
-                }
-                $changes['ended_at'] = $end;
+                $changes['ended_at'] = Carbon::parse($endedAt)->utc();
             }
             if ($durationMs !== null && $locked->duration_ms === null) {
                 $changes['duration_ms'] = $durationMs;
@@ -185,6 +190,7 @@ final class OrganiseController extends Controller
         $session->refresh();
     }
 
+    /** PATCH /api/clients/{id}: rename, colour, avatar or pin a project, or move it into another one (since v1.5). */
     public function updateClient(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);

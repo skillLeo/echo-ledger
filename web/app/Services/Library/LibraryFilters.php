@@ -184,7 +184,7 @@ final class LibraryFilters
     {
         return $query->where($query->qualifyColumn('status'), SessionStatus::Recording->value)
             ->where(fn ($q) => $q->whereNotNull($query->qualifyColumn('ended_at'))
-                ->orWhere($query->qualifyColumn('started_at'), '<', now()->subHours(self::WAITING_FALLBACK_HOURS)));
+                ->orWhere($query->qualifyColumn('started_at'), '<', now()->utc()->subHours(self::WAITING_FALLBACK_HOURS)));
     }
 
     /** Since 2.0.0-r: the glossary's states, `facets.state`, in the contract's order (docs/API.md BE-05). */
@@ -197,7 +197,7 @@ final class LibraryFilters
      * or `transcribed` (the row shows its words, no state). The API, the console's rows, its Audio only place and its
      * Status filter all read this, so they agree.
      */
-    public static function state(string $status, string $sessionStatus, bool $waiting = true): string
+    public static function state(string $status, string $sessionStatus, bool $waiting): string
     {
         return match ($status) {
             'failed' => 'failed',

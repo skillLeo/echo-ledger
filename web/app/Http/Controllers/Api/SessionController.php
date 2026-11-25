@@ -240,7 +240,7 @@ final class SessionController extends Controller
      * The instant must not be before $start. Laravel's after_or_equal would parse a numeric start field with a
      * TypeError (a server error), so the comparison only runs when both sides are parsable text or a date.
      */
-    private static function notBefore(mixed $start, string $startLabel): Closure
+    public static function notBefore(mixed $start, string $startLabel): Closure
     {
         return static function (string $attribute, mixed $value, Closure $fail) use ($start, $startLabel): void {
             if (! is_string($value) || (! is_string($start) && ! $start instanceof DateTimeInterface)) {
@@ -252,6 +252,23 @@ final class SessionController extends Controller
                 }
             } catch (Throwable) {
                 // An unparsable start is reported on its own field.
+            }
+        };
+    }
+
+    /**
+     * The instant must not be more than 5 minutes ahead of the server (a device's clock may run that fast). Used by the
+     * end of a call (PATCH /api/sessions/{id}, since 2.0.0-z), which only a call already over can send.
+     */
+    public static function notLaterThanSoon(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            try {
+                if (is_string($value) && Carbon::parse($value)->gt(now()->addMinutes(5))) {
+                    $fail('The :attribute field must not be in the future.');
+                }
+            } catch (Throwable) {
+                // An unparsable instant is reported by instantRules().
             }
         };
     }

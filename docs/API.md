@@ -3,8 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-z (2026-11-26, decided by EL-Lead, lead decision 20)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
-2.0.0-z (decided 2026-11-26 by EL-Lead, lead decision 20; the badge's waiting calls): a call still being recorded is not waiting. `PATCH /api/sessions/{id}` takes `ended_at` (and `duration_ms`) while the session is still `recording`: the call is over and the person's choice is pending. A call is **waiting** when its session is `recording` and has `ended_at`, or started more than 4 hours ago (older apps that never send it). That one rule is used by the `waiting` view, the badge, Needs you and `facets.state`; a `recording` session that is not waiting has the state `waiting_to_upload`. Additions only. (2.0.0-w, -x and -y land separately, before it.)
+**Contract revision: 2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-z (accepted 2026-11-25 by EL-Lead; decision 20, the badge's waiting calls): a call still being recorded is not waiting. `PATCH /api/sessions/{id}` takes `ended_at` (and `duration_ms`) while the session is still `recording`: the call is over and the person's choice is pending. A call is **waiting** when its session is `recording` and has `ended_at`, or started more than 4 hours ago (older apps that never send it). That one rule is used by the `waiting` view, the badge, Needs you and `facets.state`; a `recording` session that is not waiting has the state `waiting_to_upload`. Additions only. (2.0.0-w, -x and -y land separately, before it.)
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
@@ -928,6 +928,7 @@ live-caption token. With captions off nothing reaches the server until the user 
 |---|---|---|
 | Recording starts with captions on | `POST /api/sessions` without `artifacts` (open session) | `recording` |
 | Captions run | `POST /api/stt/token` with `session_id`; `POST /api/usage` per streaming period | `recording` |
+| The call ends (since 2.0.0-z) | `PATCH /api/sessions/{id}` with `ended_at` (and `duration_ms`): from then on the call is waiting for the person's choice | `recording` |
 | User keeps the recording | `POST /api/sessions/{id}/finish` with the artifacts → upload slots | `uploading` |
 | User keeps a recording made with captions off, a voice note, an import, or any v1 client | `POST /api/sessions` with `artifacts` (one-shot) | `uploading` |
 | Upload, assembly, final transcript | chunks → `complete` → poll `GET /api/recordings/{id}` | `uploading` → `processing` → `completed` / `failed` |
@@ -1426,13 +1427,16 @@ client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retent
 ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
 `404 session_not_found`; another owner's client is `404 client_not_found`.
 **The call is over (since 2.0.0-z):** while the session is still `recording` (an open session, `POST /api/sessions`
-without `artifacts`), `ended_at` (ISO 8601, not before `started_at`) and `duration_ms` (optional) say the call has
-ended and the person's choice is pending; nothing is uploaded and the status stays `recording`. From then on the call
-is waiting (the `waiting` view, the badge, Needs you). The device that opened the session sends it when the call ends,
-before it shows the choice (the after-call card or notification). A failed request is retried by the device's queue.
-It is idempotent: an `ended_at` already stored is never moved by a later one, and `duration_ms` is kept the first time.
-A session that is no longer `recording` (finished, or deleted) answers `409 not_recording`, and nothing changes: the
-device drops the request, as the finish or the delete already said more.
+without `artifacts`), `ended_at` (ISO 8601, not before `started_at` and at most 5 minutes after the server's now) and
+`duration_ms` (optional, whole milliseconds, 0 to 86 400 000) say the call has ended and the person's choice is
+pending; nothing is uploaded and the status stays `recording`. From then on the call is waiting (the `waiting` view,
+the badge, Needs you). The device that opened the session sends it when the call ends, before it shows the choice (the
+after-call card or notification). A failed request is retried by the device's queue. It is idempotent: an `ended_at`
+already stored is never moved by a later one, and `duration_ms` is kept the first time. A session that is no longer
+`recording` (finished, or deleted) answers `409 not_recording`, and nothing changes: the device drops the request, as
+the finish or the delete already said more. An `ended_at` that is not an instant, is before the start or is more than
+5 minutes ahead is `422 validation_failed` (`error_codes.ended_at`: `invalid`), and so is a `duration_ms` out of
+range; nothing changes. A teammate's session is `404 session_not_found`, like any other id that is not the person's.
 
 ### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
 `{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|important|unimportant|delete", "client_id": "01JB…" | null, "label": "Invoice"}`
@@ -2489,16 +2493,18 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
 | `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only. Since 2.0.0-z only once the call is over (see `PATCH /api/sessions/{id}`); a call still being recorded is `waiting_to_upload` and is not in Needs you |
 
 - Every library item's `facets` gains `state`. `transcribed` comes from Status `transcribed`, `audio_only` from
-  `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording`,
-  `waiting_to_upload` while it is `uploading`, and `transcribing` otherwise.
+  `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording` and
+  the call is waiting (since 2.0.0-z: over, or started more than 4 hours ago), `waiting_to_upload` while it is
+  `uploading` or a call still being recorded, and `transcribing` otherwise.
 - `GET /api/library/facets` gains `states`, counted like `kinds`: of the recordings the filters and the search keep,
   how many are in each state. All six keys are always there, and they add up to `total` (a call still waiting is not
   in `total`, so `waiting` is 0 there).
 - "Not transcribed" is not a name any more: the view is **Audio only**. It is Status `not_transcribed`, so its count is
   `library.not_transcribed`. `library.audio_only` and `status=audio_only` keep their 2.0.0-j meaning (recordings saved
   as audio only by choice), which is a part of it. Failed recordings are in **Needs you**.
-- `waiting_to_upload` covers only what reached the server as a session still `uploading`. A recording that has not
-  reached the server at all is the app's own, and the app shows it with the same name.
+- `waiting_to_upload` covers only what reached the server as a session still `uploading`, or (since 2.0.0-z) a call
+  still being recorded (`recording`, not waiting yet). A recording that has not reached the server at all is the app's
+  own, and the app shows it with the same name.
 - The Status filter keeps its four values: no state is a filter value, so saved views stay readable by older apps.
   `processing` is shown as "In progress", and the apps show its parts from `states`, for example "2 transcribing ·
   1 waiting to upload". The parts are `transcribing` and `waiting_to_upload`, and they are given while the Status
