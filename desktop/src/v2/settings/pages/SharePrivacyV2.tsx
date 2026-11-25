@@ -19,7 +19,7 @@ import {
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
 import { Group, LinkSetting, SelectSetting, SwitchSetting, type Patch } from "./rows";
-import { t } from "../../../i18n";
+import { t, tc } from "../../../i18n";
 
 /** A status line's fix: the system's settings, or hiding the windows again. */
 function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
@@ -96,7 +96,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
           {status.apps.filter((a) => a.version || a.app === "meet").map((a) => <AppRow key={a.app} row={a} />)}
           {status.zoomInstalled && (
             <>
-              <ListRow compact anchor="share_privacy.zoom" title={setting("share_privacy.zoom").title} value={t("1 setting")} expanded={zoomOpen} chevron onClick={() => setZoomOpen((o) => !o)} />
+              <ListRow compact anchor="share_privacy.zoom" title={setting("share_privacy.zoom").title} value={tc(":count setting|:count settings", 1)} expanded={zoomOpen} chevron onClick={() => setZoomOpen((o) => !o)} />
               {zoomOpen && <li className="el-row el-row--compact el-row--note" data-testid="zoom-steps"><p className="el-secondary">{ZOOM_SETTING}</p></li>}
             </>
           )}
