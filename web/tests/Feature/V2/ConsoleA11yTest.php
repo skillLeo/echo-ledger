@@ -76,7 +76,7 @@ it('names the profile card with the words it shows, in their order, then where i
     $html = (string) $this->get('/app/settings')->assertOk()->getContent();
     preg_match('~class="el-pcard-body" aria-label="([^"]*)"~', $html, $m);
     $name = html_entity_decode($m[1] ?? '', ENT_QUOTES);
-    expect($name)->toStartWith('Saif Hassam, saif@example.com, ')->toEndWith('. Opens plan and usage.');
+    expect($name)->toStartWith('Saif Hassam, saif@example.com, ')->toEndWith('. Opens plan and billing.');
     // Every word the card shows, in the order it shows them.
     preg_match('~<a href="[^"]*" class="el-pcard-body".*?</a>~s', $html, $card);
     $shown = trim((string) preg_replace('/\s+/', ' ', strip_tags($card[0] ?? '')));
@@ -107,7 +107,7 @@ it('ends each line of the profile card\'s name once, never with two full stops',
     $name = html_entity_decode($m[1] ?? '', ENT_QUOTES);
     // The card shows "… is on Pro. Managed by Sara Khan." under the plan.
     expect($html)->toContain('Managed by Sara Khan.</span>')
-        ->and($name)->toStartWith('Bilal, bilal@example.com, Pro, ')->toEndWith('Managed by Sara Khan. Opens plan and usage.')->not->toContain('..');
+        ->and($name)->toStartWith('Bilal, bilal@example.com, Pro, ')->toEndWith('Managed by Sara Khan. Opens plan and billing.')->not->toContain('..');
 });
 
 it('makes the rail one Tab stop before any script runs: the place you are on, else the logo', function () {
@@ -123,7 +123,7 @@ it('makes the rail one Tab stop before any script runs: the place you are on, el
         ->toMatch('~data-module="projects"[^>]*tabindex="-1"~')
         ->toMatch('~data-module="help" tabindex="-1"~')
         ->toMatch('~data-module="settings"[^>]*tabindex="-1"~')
-        ->toMatch('~class="fi-user-menu-trigger v2-um-trigger" aria-label="[^"]*" tabindex="-1">~');
+        ->toMatch('~class="fi-user-menu-trigger v2-um-trigger is-rail" aria-label="[^"]*" title="[^"]*" tabindex="-1">~');
     expect(substr_count($railOf('/app/settings'), 'tabindex="0"'))->toBe(1)
         ->and($railOf('/app/settings'))->toMatch('~aria-current="page"[^>]*data-module="settings"[^>]*tabindex="0"~');
 

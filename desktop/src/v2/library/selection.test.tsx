@@ -463,6 +463,18 @@ describe("the row ⋮ and the right-click menu", () => {
     });
   }
 
+  it("Rename on an automatic title from a server that doesn't say where titles come from starts empty too", async () => {
+    const auto = ITEMS.map((i) => (i.id === "bilal" ? { ...i, title: "Payment terms call", title_auto: true, title_source: undefined } : i));
+    respond("library_list", auto);
+    respond("library_refresh", auto);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Payment terms call" }));
+    fireEvent.click(menuItem("Rename…"));
+    const field = within(screen.getByRole("dialog", { name: "Rename" })).getByRole("textbox", { name: "Title" });
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("placeholder", "Payment terms call");
+  });
+
   it("Rename on the person's own title keeps it in the box; clearing it goes back to the title EchoLedger gives it", async () => {
     const own = ITEMS.map((i) => (i.id === "bilal" ? { ...i, title: "Bilal · March shipment", title_source: "own" as const } : i));
     respond("library_list", own);

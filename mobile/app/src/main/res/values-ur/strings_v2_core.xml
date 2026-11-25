@@ -99,6 +99,9 @@
     <string name="v2_source_other">دیگر</string>
     <string name="v2_vm_design_failed">ڈیزائن نہیں بدلا جا سکا۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_cant_reach">سرور تک رسائی نہیں ہو سکی۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_vm_offline_check">سرور تک رسائی نہیں ہو سکی۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔</string>
+    <string name="v2_vm_server_problem">سرور میں کوئی مسئلہ پیش آیا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_vm_certificate">سرور کا سرٹیفکیٹ وہ نہیں جس کی یہ فون توقع کرتا ہے۔ سرور کا پتہ چیک کریں۔</string>
     <string name="v2_vm_could_not_sign_in">سائن ان نہیں ہو سکا</string>
     <string name="v2_vm_shizuku_start_failed">شیزوکو کے ذریعے کیپچر ہیلپر شروع نہیں ہو سکا۔</string>
     <string name="v2_vm_device_revoked">ڈیوائس ہٹا دی گئی</string>

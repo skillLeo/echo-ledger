@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Accounts;
 
+use App\Filament\Support\ConsoleV2;
+
 /**
  * Every setting of the console's Settings (since v1.7), in the order the pages show them: one entry per row, and one
  * per page the root list opens. The pages render their rows from these entries, and Settings search reads them, so a
@@ -228,6 +230,21 @@ final class SettingsRegistry
     {
         $id = self::PAGES[$page] ?? null;
 
-        return $id !== null ? (string) (self::byId()[$id]['title'] ?? $page) : $page;
+        return $id !== null && isset(self::byId()[$id]) ? self::titleOf(self::byId()[$id]) : $page;
+    }
+
+    /** UX-18: the entries the new console names otherwise (the account menu's words); classic keeps their titles. */
+    public const V2_TITLES = ['plan' => 'Plan & billing'];
+
+    /**
+     * An entry's title as this console shows it: the new console's own name where it has one.
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    public static function titleOf(array $entry): string
+    {
+        $id = (string) ($entry['id'] ?? '');
+
+        return isset(self::V2_TITLES[$id]) && ConsoleV2::any() ? self::V2_TITLES[$id] : (string) $entry['title'];
     }
 }

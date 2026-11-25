@@ -99,6 +99,9 @@
     <string name="v2_source_other">Other</string>
     <string name="v2_vm_design_failed">The design could not be changed. Try again.</string>
     <string name="v2_vm_cant_reach">Can\'t reach the server. Try again.</string>
+    <string name="v2_vm_offline_check">Can\'t reach the server. Check the connection and try again.</string>
+    <string name="v2_vm_server_problem">The server had a problem. Try again in a minute.</string>
+    <string name="v2_vm_certificate">The server\'s certificate is not the one this phone expects. Check the server address.</string>
     <string name="v2_vm_could_not_sign_in">Could not sign in</string>
     <string name="v2_vm_shizuku_start_failed">Could not start the capture helper through Shizuku.</string>
     <string name="v2_vm_device_revoked">Device revoked</string>

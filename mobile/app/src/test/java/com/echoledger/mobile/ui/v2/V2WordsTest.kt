@@ -137,9 +137,17 @@ class V2WordsTest {
         assertTrue("no key and not English-only: $missing", missing.isEmpty())
     }
 
+    /** The sentences of core.Problems, the one mapper from a failure to words, which the view model says through it. */
+    private fun problemsSentences(): Set<String> = com.echoledger.mobile.core.Problems::class.java.declaredFields
+        .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+        .map { field ->
+            field.isAccessible = true
+            field.get(null) as String
+        }.toSet()
+
     @Test
     fun everyMappedSentenceAndTemplateIsOneTheViewModelReallySays() {
-        val sentences = viewModelSentences()
+        val sentences = viewModelSentences() + problemsSentences()
         val gone = VmMessages.known.filterNot { it in sentences } + VmMessages.templates.map { it.source }.filterNot { it in sentences }
         assertTrue("no longer in MainViewModel: $gone", gone.isEmpty())
         // Each template filled in reads back through its own pattern.
@@ -162,5 +170,22 @@ class V2WordsTest {
             VmMessages.localize(ur, "Monthly limit reached — raise it in Settings")
         )
         assertEquals("Restored", VmMessages.localize(V2Testing.resources(EchoLanguage.English), "Restored"))
+    }
+
+    /**
+     * EL-UX's audit: the sentences of core.Problems (can't reach, the server's problem, the certificate, sign in first)
+     * come from that mapper, not from a literal in the view model, so the check above never saw them; they showed in
+     * English on Urdu screens. Each one has a key and reads in Urdu.
+     */
+    @Test
+    fun everySentenceOfProblemsHasAKeyAndReadsInUrdu() {
+        val sentences = problemsSentences()
+        assertTrue("found only ${sentences.size}", sentences.size >= 4)
+        val ur = V2Testing.resources(EchoLanguage.Urdu)
+        for (english in sentences) {
+            assertTrue("no key: $english", english in VmMessages.known)
+            val urdu = VmMessages.localize(ur, english)
+            assertTrue("not in Urdu: $english -> $urdu", urdu != english && urdu.any { it in '\u0600'..'\u06FF' })
+        }
     }
 }
