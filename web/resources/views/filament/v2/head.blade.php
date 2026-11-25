@@ -68,3 +68,5 @@
 {{-- UX-25: the Library keeps your place coming back from a recording, and Back to top on the long lists. --}}
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.keep-place')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library() && ! \App\Services\Workspaces\ConsoleAccess::readOnly(), 'filament.v2.library-swipe')
+{{-- FIX-06: the keyboard and screen-reader help (a grouped list's headings, scrolling boxes, the rail's arrows). --}}
+@includeWhen(($sheet ?? 'console') === 'console', 'filament.v2.a11y-script')

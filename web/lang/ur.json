@@ -1178,5 +1178,8 @@
     "This needs :minutes and no minutes are left this month.": "اس کے لیے :minutes چاہئیں اور اس مہینے کوئی منٹ باقی نہیں۔",
     "This needs :minutes, and 1 minute is left this month.": "اس کے لیے :minutes چاہئیں، اور اس مہینے 1 منٹ باقی ہے۔",
     "This needs :minutes, and :left minutes are left this month.": "اس کے لیے :minutes چاہئیں، اور اس مہینے :left منٹ باقی ہیں۔",
-    "Another transcription is being started. Try again in a moment.": "ایک اور ٹرانسکرپشن شروع کی جا رہی ہے۔ ذرا دیر بعد دوبارہ کوشش کریں۔"
+    "Another transcription is being started. Try again in a moment.": "ایک اور ٹرانسکرپشن شروع کی جا رہی ہے۔ ذرا دیر بعد دوبارہ کوشش کریں۔",
+    "Workspace: :name, :role": "ورک اسپیس: :name، :role",
+    "Project: :name. Change": "پروجیکٹ: :name۔ بدلیں",
+    "Opens plan and usage.": "پلان اور استعمال کھولتا ہے۔"
 }
