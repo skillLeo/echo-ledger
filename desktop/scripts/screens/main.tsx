@@ -332,7 +332,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   }),
   // "&applang=ur" (with v21_urdu in uiflags): the account's language is Urdu, so the app speaks it (src/i18n); the
   // Language setting's PATCH is answered as the server would.
-  account_get: () => ({ ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT), language: accountLanguage }),
+  // `&email=…`: the account's email (D-229: a long one on the profile card).
+  account_get: () => ({
+    ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
+    ...(params.get("email") ? { email: params.get("email") } : {}),
+    language: accountLanguage,
+  }),
   // Only the language is answered; every other account action (the Security page's "security"…) gets nothing, as before.
   account_call: ({ action, body }) => {
     if (action !== "language") return null;

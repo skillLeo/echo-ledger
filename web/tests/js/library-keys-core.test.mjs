@@ -156,3 +156,64 @@ test('⌘[ and ⌘] in a form field, an editor or over a dialog keep the page (t
     assert.equal(core.historyKey(key('a', { metaKey: true, code: 'KeyA', target: { tagName: 'INPUT' } }), mac), null);
     assert.equal(core.historyKey(key('[', { code: 'BracketLeft', target: { tagName: 'INPUT' } }), mac), null);
 });
+
+// The desktop's D-220 and D-221 on the web: ↓ ↑ walk the list as J K do; the keys answer on an Urdu keyboard layout.
+test('↓ and ↑ on a row go from row to row as J and K do, the focus along, never past the ends', () => {
+    const row = { control: true };
+    assert.deepEqual(core.keyAction(key('ArrowDown', { target: row, onRow: true }), list({ focusAt: 1 })), { do: 'move', at: 2, focus: true });
+    assert.deepEqual(core.keyAction(key('ArrowUp', { target: row, onRow: true }), list({ focusAt: 1, at: 4 })), { do: 'move', at: 0, focus: true },
+        'from the row that has the focus, not the one J and K left');
+    assert.deepEqual(core.keyAction(key('ArrowDown', { target: row, onRow: true }), list({ focusAt: 4 })), { do: 'move', at: 4, focus: true });
+    assert.deepEqual(core.keyAction(key('ArrowUp', { target: row, onRow: true }), list({ focusAt: 0 })), { do: 'move', at: 0, focus: true });
+    // J and K from a focused row: from that row, the focus along.
+    assert.deepEqual(core.keyAction(key('j', { target: row, onRow: true }), list({ focusAt: 2 })), { do: 'move', at: 3, focus: true });
+});
+
+test('↓ and ↑ on the page move the current row once there is one; else, and anywhere else, they are the page\'s', () => {
+    assert.deepEqual(core.keyAction(key('ArrowDown', { onPage: true }), list({ at: 2 })), { do: 'move', at: 3 });
+    assert.equal(core.keyAction(key('ArrowDown', { onPage: true }), list()), null, 'no current row: the page scrolls');
+    assert.equal(core.keyAction(key('ArrowDown'), list({ at: 2 })), null, 'on something else that has the focus (a box that scrolls)');
+    assert.equal(core.keyAction(key('ArrowDown', { target: { control: true } }), list({ at: 2 })), null, 'a menu\'s button keeps its arrows');
+    assert.equal(core.keyAction(key('ArrowDown', { target: { tagName: 'INPUT' }, onRow: true }), list({ focusAt: 1 })), null);
+    assert.equal(core.keyAction(key('ArrowDown', { onRow: true, shiftKey: true }), list({ focusAt: 1 })), null, 'Shift: the page\'s own');
+    assert.equal(core.keyAction(key('ArrowDown', { onRow: true, altKey: true }), list({ focusAt: 1 })), null);
+    assert.equal(core.keyAction(key('ArrowDown', { onRow: true }), list({ focusAt: 1, items: 0 })), null);
+});
+
+test('latinKey: an Urdu letter, digit or mark stands for the Latin key at its place; a Latin layout keeps its own', () => {
+    assert.equal(core.latinKey({ key: 'ج', code: 'KeyJ' }), 'j');
+    assert.equal(core.latinKey({ key: 'ک', code: 'KeyK' }), 'k');
+    assert.equal(core.latinKey({ key: 'ف', code: 'KeyF', shiftKey: true }), 'f');
+    assert.equal(core.latinKey({ key: '۱', code: 'Digit1' }), '1');
+    assert.equal(core.latinKey({ key: 'ظ', code: 'Slash' }), '/');
+    assert.equal(core.latinKey({ key: '؟', code: 'Slash', shiftKey: true }), '?');
+    assert.equal(core.latinKey({ key: 'ج', code: 'BracketLeft' }), '[');
+    assert.equal(core.latinKey({ key: 'a', code: 'KeyQ' }), 'a', 'AZERTY\'s A is A');
+    assert.equal(core.latinKey({ key: '/', code: 'Digit7', shiftKey: true }), '/');
+    assert.equal(core.latinKey({ key: 'ArrowDown', code: 'ArrowDown' }), 'ArrowDown');
+    assert.equal(core.latinKey({ key: 'ے', code: 'IntlRo' }), 'ے', 'a place with no Latin key stays as typed');
+    assert.equal(core.latinKey({ key: 'ج' }), 'ج', 'no code (a synthetic event): as typed');
+});
+
+test('on an Urdu keyboard layout J, K, X, Ctrl+A, F and Ctrl+F answer by their key\'s place', () => {
+    const ur = (k, code, more = {}) => key(k, { code, ...more });
+    assert.deepEqual(core.keyAction(ur('ج', 'KeyJ'), list({ at: 1 })), { do: 'move', at: 2 });
+    assert.deepEqual(core.keyAction(ur('ک', 'KeyK'), list({ at: 1 })), { do: 'move', at: 0 });
+    assert.deepEqual(core.keyAction(ur('ش', 'KeyX'), list({ at: 3 })), { do: 'toggle', at: 3 });
+    assert.deepEqual(core.keyAction(ur('ا', 'KeyA', { ctrlKey: true }), list()), { do: 'select-all' });
+    assert.deepEqual(core.shellKey(ur('ف', 'KeyF'), shell()), { do: 'toggle-filters' });
+    assert.deepEqual(core.shellKey(ur('ف', 'KeyF', { metaKey: true }), shell()), { do: 'search' });
+    // ⌥ on a Mac types another character: X with Alt is never the Library's.
+    assert.equal(core.keyAction(ur('≈', 'KeyX', { altKey: true }), list({ at: 3 })), null);
+    // Still nothing while typing: an Urdu word in the search is words, not keys.
+    assert.equal(core.keyAction(ur('ج', 'KeyJ', { target: field }), list({ at: 1 })), null);
+});
+
+test('/ and ? on an Urdu layout reach the search and Help, as / and ? do on a Latin one (left to the console\'s own)', () => {
+    assert.deepEqual(core.shellKey(key('ظ', { code: 'Slash' }), shell()), { do: 'search' });
+    assert.deepEqual(core.shellKey(key('؟', { code: 'Slash', shiftKey: true }), shell()), { do: 'help' });
+    assert.equal(core.shellKey(key('/', { code: 'Slash' }), shell()), null, 'a Latin / is the console\'s (filament.shell.head)');
+    assert.equal(core.shellKey(key('?', { code: 'Slash', shiftKey: true }), shell()), null);
+    assert.equal(core.shellKey(key('ظ', { code: 'Slash', target: field }), shell()), null, 'typed in a field');
+    assert.equal(core.shellKey(key('ظ', { code: 'Slash', ctrlKey: true }), shell()), null);
+});

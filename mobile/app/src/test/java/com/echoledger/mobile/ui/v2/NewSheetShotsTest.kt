@@ -161,7 +161,11 @@ class NewSheetShotsTest : ScreenTest() {
                 runBlocking {
                     app.graph.settings.update { it.copy(appOpens = it.appOpens + 1, recordHintShows = 0, recordHintDone = false) }
                 }
-                compose.waitUntil(5_000) { compose.onAllNodes(hasText(words(R.string.v2_rs_hint))).fetchSemanticsNodes().isNotEmpty() }
+                val hint = androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    com.echoledger.mobile.ui.v2.shell.RecordHintText,
+                    words(R.string.v2_rs_hint)
+                )
+                compose.waitUntil(5_000) { compose.onAllNodes(hint).fetchSemanticsNodes().isNotEmpty() }
             }
         )
     }

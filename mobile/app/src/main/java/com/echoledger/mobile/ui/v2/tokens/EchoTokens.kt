@@ -151,6 +151,7 @@ object EchoTokens {
         val md = 8.dp
         val lg = 12.dp
         val sheet = 16.dp
+        val group = 24.dp
         val full = 999.dp
     }
 
@@ -217,6 +218,7 @@ object EchoTokens {
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500
         val avatarSize = 40.dp
+        val avatarBadge = 16.dp
         val statusDotSize = 8.dp
         val sheetHandleWidth = 32.dp
         val sheetHandleHeight = 4.dp
@@ -237,6 +239,7 @@ object EchoTokens {
         val titleS = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(600))
         val body = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val bodyStrong = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(600))
+        val section = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(500))
         val caption = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight(400))
         val mono = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val urduBody = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))

@@ -1,14 +1,22 @@
 {{--
     Settings › Profile, under the name and email: since BE-06 (contract 2.0.0-r §6; the colours' names since 2.0.0-u) the
-    apps' profile too, the same settings as GET and PATCH /api/account: the photo (Add or Change photo…, Remove photo),
+    apps' profile too, the same settings as GET and PATCH /api/account: the photo (Add or Change photo…, Remove photo;
+    under the new design also the 96 px avatar's camera badge, UX-18),
     the initials' colour when there is no photo (8 swatches, under the new design's colours), and under the new frame
     the language. Then the workspace (team workspaces only).
 --}}
 <x-el.section>
     <div class="el-set-row el-profile-photo" id="setting-profile.photo" tabindex="-1" data-setting="profile.photo">
         @if ($v2)
-            {{-- DES-08: the one avatar component, as in the avatar menu (a photo that fails shows the initials). --}}
-            <x-el.avatar :person="$person" size="xl" />
+            {{-- DES-08: the one avatar component, as in the account menu (a photo that fails shows the initials). UX-18:
+                 96 px, with a camera badge that adds the photo, or changes it. --}}
+            <span class="v2-profile-avatar">
+                <x-el.avatar :person="$person" size="profile" />
+                <button type="button" class="v2-profile-camera" wire:click="mountAction('changePhoto')" data-photo-badge
+                    aria-label="{{ $photo !== null ? __('Change photo') : __('Add photo') }}" title="{{ $photo !== null ? __('Change photo') : __('Add photo') }}">
+                    <x-el.v2.icon name="camera" />
+                </button>
+            </span>
         @elseif ($photo !== null)
             <img class="el-profile-avatar" src="{{ $photo }}" alt="" width="56" height="56">
         @else

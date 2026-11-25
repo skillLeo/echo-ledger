@@ -21,6 +21,7 @@
     <string name="v2_rs_start_assist">Start Live Assist</string>
     <string name="v2_rs_translate_any">Translate a game or video</string>
     <string name="v2_rs_hint">Tap to record · Hold for more</string>
+    <string name="v2_rs_hint_talkback">Double-tap to record · Double-tap and hold for more</string>
     <string name="v2_rs_record_now">Record now</string>
     <string name="v2_rs_record_now_help">A call going on is recorded on both sides, anything else as a voice note. Tap the centre button again to stop.</string>
     <string name="v2_rs_voice">Voice &amp; files</string>
