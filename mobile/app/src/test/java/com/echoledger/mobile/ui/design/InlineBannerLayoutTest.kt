@@ -26,16 +26,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
@@ -67,7 +69,22 @@ class InlineBannerLayoutTest : ScreenTest() {
     )
 
     @Test
-    fun `at a normal size every part of a banner is where the v1_1 row put it`() {
+    fun `at a normal size every part of a banner is where the v1_1 row put it`() = assertSameAsV11()
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-hdpi")
+    fun `on a 360 dp phone at a normal size too`() = assertSameAsV11()
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-hdpi", fontScale = 1.3f)
+    fun `on a small phone with large text the action goes under the text, in line with it`() = assertStacked(LayoutDirection.Ltr)
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-hdpi", fontScale = 1.3f)
+    fun `and right to left it goes under the text at the right edge`() = assertStacked(LayoutDirection.Rtl)
+
+    /** Every banner of [banners] beside its v1.1 Row, left to right and right to left: each part in the same place. */
+    private fun assertSameAsV11() {
         show {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 LayoutDirection.entries.forEach { direction ->
@@ -103,27 +120,34 @@ class InlineBannerLayoutTest : ScreenTest() {
         }
     }
 
-    @Test
-    fun `on a small phone with large text the action goes under the text and no word breaks`() {
+    /** P-114: the action under the text, its label in line with the text, 48 dp targets, × read last, no word broken. */
+    private fun assertStacked(direction: LayoutDirection) {
         val text = "Made with a backup service. Re-transcribe for the best quality?"
         show {
-            val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                Box(Modifier.width(360.dp)) {
-                    InlineBanner(
-                        text,
-                        Modifier.padding(horizontal = 16.dp),
-                        kind = BannerKind.Warning,
-                        action = "Re-transcribe",
-                        onDismiss = {}
-                    )
-                }
+            CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                InlineBanner(
+                    text,
+                    Modifier.padding(horizontal = 16.dp),
+                    kind = BannerKind.Warning,
+                    action = "Re-transcribe",
+                    onDismiss = {}
+                )
             }
         }
 
         val words = bounds(hasText(text))
-        val action = bounds(hasText("Re-transcribe"))
-        assertTrue("the action is under the text: $words, $action", action.top >= words.bottom)
+        val label = bounds(hasText("Re-transcribe"))
+        val button = compose.onNode(hasText("Re-transcribe") and hasClickAction()).fetchSemanticsNode()
+        val closer = compose.onNode(hasContentDescription("Dismiss") and hasClickAction()).fetchSemanticsNode()
+        val target = with(compose.density) { 48.dp.toPx() }
+        assertTrue("$direction: the action is under the text: $words, $label", label.top >= words.bottom)
+        val inLine = if (direction == LayoutDirection.Ltr) label.left - words.left else words.right - label.right
+        assertEquals("$direction: the action's label starts where the text does", 0f, inLine, 1f)
+        listOf(button, closer).forEach { node ->
+            assertTrue("$direction: a 48 dp target: ${node.size}", node.size.width >= target - 1 && node.size.height >= target - 1)
+        }
+        val index = { node: SemanticsNode -> node.config.getOrNull(SemanticsProperties.TraversalIndex) ?: 0f }
+        assertTrue("$direction: × is read after the action", index(closer) > index(button))
         assertEquals(emptyList<String>(), TextCuts.find(compose))
     }
 

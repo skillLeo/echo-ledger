@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -77,9 +79,7 @@ open class ScreenshotsTest : ScreenTest() {
     /** Screens draw on the app's window background (MainActivity); give them the same backdrop here. */
     private fun shoot(content: @Composable () -> Unit) = show {
         EchoLedgerTheme(themeMode = themeMode) {
-            SweepTextSize(sweep) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
-            }
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
         }
     }
 
@@ -750,14 +750,7 @@ open class ScreenshotsTest : ScreenTest() {
             ReadyCheckSheet(vm, ReadinessFixtures.HELPER_STOPPED, onDismiss = {}, onSetup = {}, onRecheck = {})
         }
         compose.waitForIdle()
-        themeMode = "dark"
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-dark.png"))
-        themeMode = "light"
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-light.png"))
+        captureScreenPair("activity-missed-fix", 1_000)
         compose.onNodeWithText("Open Shizuku").assertExists()
     }
 
@@ -850,14 +843,7 @@ open class ScreenshotsTest : ScreenTest() {
         }
         compose.onNodeWithText("2:05").assertExists()
         compose.onNodeWithContentDescription("Play the recording of your call at 09:42").assertExists()
-        themeMode = "dark"
-        compose.mainClock.advanceTimeBy(500)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-dark.png"))
-        themeMode = "light"
-        compose.mainClock.advanceTimeBy(500)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-light.png"))
+        captureScreenPair("settings-phone-app-import", 500)
     }
 
     /** A capture helper that answers players() with [json] (the Audio probe's screenshots). */
@@ -899,14 +885,7 @@ open class ScreenshotsTest : ScreenTest() {
         pumpUntil("the players") { runCatching { compose.onNodeWithText("An app the helper can't name").assertExists() }.isSuccess }
         compose.onNodeWithText("Media · film · allows capture · uid 10133 · started").assertExists()
         compose.onNodeWithText("uid unknown (none) · state unknown (none) · Media").assertExists()
-        themeMode = "dark"
-        compose.mainClock.advanceTimeBy(500)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-dark.png"))
-        themeMode = "light"
-        compose.mainClock.advanceTimeBy(500)
-        compose.waitForIdle()
-        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-light.png"))
+        captureScreenPair("audio-probe", 500)
     }
 
     /** On a phone with no known call folder (a Pixel: Google's Phone app keeps its recordings), one plain line. */
@@ -1038,7 +1017,29 @@ open class ScreenshotsTest : ScreenTest() {
         }
     }
 
+    /**
+     * The whole screen in the dark and then the light theme, [stepMs] apart, as these shots have always been taken; in the
+     * sweep as every window is ([captureWindows]: light only, kept, and its text checked).
+     */
+    private fun captureScreenPair(name: String, stepMs: Long) {
+        if (sweep != null) return captureWindows(name)
+        listOf("dark", "light").forEach { mode ->
+            themeMode = mode
+            compose.mainClock.advanceTimeBy(stepMs)
+            compose.waitForIdle()
+            com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-$name-$mode.png"))
+        }
+    }
+
     private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * Whether the Library shows its uploads; if not yet, the list goes back to its top. On a short screen (split screen) a
+     * list position kept from an earlier screen can leave the uploads above the fold, where they are never drawn.
+     */
+    private fun uploadsShown(): Boolean = exists("Call with Sara").also { shown ->
+        if (!shown) runCatching { compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0) }
+    }
 
     /** Nothing heard: its Delete asks the same question as the ⋮ menu's (P-007). */
     @Test
@@ -1058,7 +1059,7 @@ open class ScreenshotsTest : ScreenTest() {
         app.storeRecording(id = "f1", state = "failed", sourceApp = "phone_call", startedAt = "2026-10-24T10:05:00Z")
         app.graph.recordings.update("f1") { it.copy(title = "Call with Sara") }
         shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
-        pumpUntil("the upload") { exists("Call with Sara") }
+        pumpUntil("the upload") { uploadsShown() }
         capture("library-empty-uploads")
     }
 
@@ -1099,7 +1100,7 @@ open class ScreenshotsTest : ScreenTest() {
     fun libraryUploads() {
         seedUploads()
         shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
-        pumpUntil("the uploads") { exists("Call with Sara") }
+        pumpUntil("the uploads") { uploadsShown() }
         compose.onNodeWithContentDescription("More for Call with Sara").performClick()
         compose.onNodeWithText("Delete recording…").assertExists()
         captureWindows("library-uploads")
@@ -1110,7 +1111,7 @@ open class ScreenshotsTest : ScreenTest() {
     fun libraryUploadDelete() {
         seedUploads()
         shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
-        pumpUntil("the uploads") { exists("Call with Sara") }
+        pumpUntil("the uploads") { uploadsShown() }
         compose.onNodeWithContentDescription("More for Call with Sara").performClick()
         compose.onNodeWithText("Delete recording…").performClick()
         compose.onNodeWithText(DELETE_NOT_UPLOADED).assertExists()
@@ -1138,6 +1139,7 @@ open class ScreenshotsTest : ScreenTest() {
         // that animates on a stopped clock never ends.
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("Delete").performScrollTo()
+        compose.mainClock.autoAdvance = false
         captureWindows("record-failed-upload")
     }
 
