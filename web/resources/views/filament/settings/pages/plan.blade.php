@@ -29,7 +29,7 @@
                     <div class="el-btn-row" style="margin-top:4px;justify-content:center"><a href="#el-plans" class="el-btn el-btn-text">{{ __('Compare plans') }}</a></div>
                 @endif
             @else
-                <p class="el-plan-line" style="margin-top:12px">{{ __("You're on our top plan.") }}</p>
+                <p class="el-plan-line" style="margin-top:12px">{!! htmlspecialchars(__("You're on our top plan."), ENT_NOQUOTES) !!}</p>
             @endif
         @endif
     </div>
@@ -119,7 +119,7 @@
                     <tr class="el-matrix-group"><td colspan="{{ count($matrixPlans) + 1 }}">{{ __('Limits') }}</td></tr>
                     @foreach ([['monthly_minutes', 'Transcription minutes a month'], ['storage_bytes', 'Storage'], ['retention_days', 'Recordings kept'], ['devices', 'Devices'], ['max_file_minutes', 'Longest recording'], ['uploads_per_day', 'Uploads a day'], ['seats', 'Team members']] as [$key, $label])
                         <tr>
-                            <td>{{ __($label) }}</td>
+                            <td>{{ $key === 'retention_days' ? __('settings_context.recordings_kept') : __($label) }}</td>
                             @foreach ($matrixPlans as $column)
                                 @php($v = $column['plan']->limit($key))
                                 <td>{{ match (true) {

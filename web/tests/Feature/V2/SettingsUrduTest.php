@@ -310,3 +310,24 @@ it('shows the context words in place in Urdu, and the same English as before', f
     Livewire::test(EditProfile::class, ['subpage' => 'appearance'])
         ->assertActionExists('resetPage', fn (Action $a): bool => $a->getModalSubmitActionLabel() === 'Reset');
 });
+
+it('keeps an English apostrophe as it was written, never as an entity', function () {
+    settingsUrduAs($this, 'en');
+    SettingsContext::forget();
+    $raw = (string) $this->get('/app/settings/security')->assertOk()->getContent();
+    expect($raw)->toContain("This browser can't make passkeys.")->not->toContain('can&#039;t');
+    // Every wrapped English line with an apostrophe or a quote is written raw (ENT_NOQUOTES), never through {{ }}.
+    foreach (glob(resource_path('views/filament/settings/pages/*.blade.php')) ?: [] as $view) {
+        expect((string) file_get_contents($view))->not->toMatch('/\{\{\s*__\("[^"]*\'[^"]*"\)\s*\}\}/', basename($view));
+    }
+});
+
+it('words the plan compare table\'s retention row and the shortcuts\' range from their Urdu, and finds no row for آن', function () {
+    settingsUrduAs($this, 'ur');
+    expect(settingsUrduHtml($this, '/app/settings/plan'))->toContain('<td>ریکارڈنگز کتنی دیر رہیں</td>')->not->toContain('<td>Recordings kept</td>')
+        ->and(settingsUrduHtml($this, '/app/settings/shortcuts'))->toContain('ایک سلسلہ منتخب کریں')
+        ->and((new SettingsIndex(SettingsRegistry::entries()))->search('آن')['settings'])->toBe([]);
+
+    settingsUrduAs($this, 'en');
+    expect(settingsUrduHtml($this, '/app/settings/plan'))->toContain('<td>Recordings kept</td>');
+});

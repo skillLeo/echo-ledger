@@ -45,7 +45,7 @@
                     </div>
                     <p class="el-error" x-show="error" x-text="error" role="alert"></p>
                 </form>
-                <p class="el-prose is-muted" x-show="! supported" style="padding-bottom:16px">{{ __("This browser can't make passkeys.") }}</p>
+                <p class="el-prose is-muted" x-show="! supported" style="padding-bottom:16px">{!! htmlspecialchars(__("This browser can't make passkeys."), ENT_NOQUOTES) !!}</p>
             </div>
         @endif
     </x-el.section>

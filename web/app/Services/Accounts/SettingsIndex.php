@@ -41,9 +41,9 @@ final class SettingsIndex
 
     private const TIERS = [self::TITLE => 800, self::OPTION => 650, self::DESCRIPTION => 500, self::KEYWORD => 400, self::PATH => 300];
 
-    /** Words never indexed: values ("On", "Off") and the commonest small words of the descriptions, English and Urdu. */
+    /** Words never indexed: values ("On", "Off", آن, آف) and the commonest small words of the descriptions, English and Urdu. */
     private const STOP = ['on', 'off', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'your', 'you', 'is', 'are', 'it', 'with', 'we', 'our', 'at', 'by', 'be', 'from', 'this', 'that', 'when', 'as', 'if', 'its', 'can', 'into', 'each',
-        'کا', 'کی', 'کے', 'کو', 'میں', 'سے', 'پر', 'اور', 'ہے', 'ہیں', 'یا', 'آپ', 'اپنی', 'اپنا', 'اپنے', 'یہ', 'وہ', 'جب', 'بھی', 'تو'];
+        'آن', 'آف', 'کا', 'کی', 'کے', 'کو', 'میں', 'سے', 'پر', 'اور', 'ہے', 'ہیں', 'یا', 'آپ', 'اپنی', 'اپنا', 'اپنے', 'یہ', 'وہ', 'جب', 'بھی', 'تو'];
 
     private const SPELLINGS = ['colour' => 'color', 'colours' => 'colors', 'grey' => 'gray', 'organise' => 'organize', 'cancelled' => 'canceled'];
 
@@ -74,7 +74,7 @@ final class SettingsIndex
             return $empty;
         }
         // Small words ("on", "the") are not indexed, so they are not asked for either; numbers stay ("2 step").
-        $tokens = array_values(array_filter(explode(' ', $normal), fn (string $w): bool => $w !== '' && $w !== '—' && ! in_array($w, self::STOP, true)));
+        $tokens = array_values(array_filter(explode(' ', $normal), fn (string $w): bool => $w !== '' && $w !== '—' && ! isset(self::stops()[$w])));
         if ($tokens === []) {
             return $empty;
         }
@@ -311,6 +311,10 @@ final class SettingsIndex
      */
     private static function shown(array $texts): array
     {
+        // English shows the registry's own words: no lookups (the index is built on every ⌘K keystroke).
+        if (app()->isLocale('en')) {
+            return [];
+        }
         $out = [];
         foreach ($texts as $text) {
             $shown = $text === '' ? '' : __($text);
@@ -441,12 +445,24 @@ final class SettingsIndex
         return implode(' ', array_map(fn (string $w): string => self::SPELLINGS[$w] ?? $w, array_filter($words, fn (string $w): bool => $w !== '')));
     }
 
+    /**
+     * The small words as normalised text compares them (آن is ان once its madda is dropped).
+     *
+     * @return array<string, true>
+     */
+    private static function stops(): array
+    {
+        static $stops = null;
+
+        return $stops ??= array_fill_keys(array_map(self::normalize(...), self::STOP), true);
+    }
+
     /** @return list<string> the indexed words of a normalised text: no small words, values or bare numbers */
     public static function tokens(string $normal): array
     {
         $out = [];
         foreach (explode(' ', $normal) as $word) {
-            if ($word === '' || $word === '—' || in_array($word, self::STOP, true) || ctype_digit($word)) {
+            if ($word === '' || $word === '—' || isset(self::stops()[$word]) || ctype_digit($word)) {
                 continue;
             }
             $out[] = $word;
