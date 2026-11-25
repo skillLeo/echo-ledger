@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -131,7 +132,12 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
                 color = LocalEchoColors.current.textMuted,
                 modifier = Modifier.padding(horizontal = Space.screen)
             )
-            Row(Modifier.padding(horizontal = Space.screen, vertical = Space.s3), horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            // P-110: when both don't fit (a small phone, large text), Delete all goes under Save all, never cut to "Del".
+            FlowRow(
+                Modifier.padding(horizontal = Space.screen, vertical = Space.s3),
+                horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                verticalArrangement = Arrangement.spacedBy(Space.s2)
+            ) {
                 EchoButton(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_save_audio_all), {
                     shown.forEach { vm.decide(it.id, keep = true, title = it.title, transcribe = false) }
                 })

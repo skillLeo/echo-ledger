@@ -89,6 +89,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboard
@@ -97,6 +98,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -470,7 +472,11 @@ fun SessionScreen(
                             style = type.bodyM,
                             color = c.textMuted
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                        // P-115: when both don't fit, Delete goes under Run capture test, never cut.
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                            verticalArrangement = Arrangement.spacedBy(Space.s2)
+                        ) {
                             EchoButton("Run capture test", onCaptureTest)
                             // Since v1.8.1 (bug P-007): the same question as the ⋮ menu's Delete.
                             EchoButton("Delete", { confirmDelete = true }, kind = ButtonKind.Secondary)
@@ -1284,8 +1290,17 @@ private fun CaptureTestCard(vm: MainViewModel, farSide: Boolean = true) {
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { vm.runCaptureTest() }, enabled = !testing) { Text(if (testing) "Testing… $left s" else "Test call capture") }
+        // P-116: when both don't fit, Copy diagnostics goes under Test call capture, never broken inside a word.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { vm.runCaptureTest() }, enabled = !testing) {
+                // As wide as its widest label, so Copy diagnostics never moves when a test starts or ends (P-116).
+                Box(contentAlignment = Alignment.Center) {
+                    listOf("Test call capture", "Testing… ${com.echoledger.mobile.recording.CaptureTest.SECONDS} s").forEach { widest ->
+                        Text(widest, Modifier.alpha(0f).clearAndSetSemantics {})
+                    }
+                    Text(if (testing) "Testing… $left s" else "Test call capture")
+                }
+            }
             TextButton(onClick = {
                 scope.launch { clipboard.setClipEntry(ClipData.newPlainText("diagnostics", vm.captureDiagnostics()).toClipEntry()) }
             }) { Text("Copy diagnostics") }
