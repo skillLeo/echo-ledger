@@ -13,6 +13,8 @@ export interface SettingOption {
   value: string;
   label: string;
   default?: boolean;
+  /** The label's own language when it isn't the window's (a language's name in that language). */
+  lang?: string;
 }
 
 export interface SettingRequires {
@@ -261,7 +263,7 @@ export const SETTINGS: readonly SettingEntry[] = [
     description: "The rail shows its icons without their names. Point at an icon to see its name.",
     keywords: ["rail", "icons only", "hide names", "hide labels", "labels", "compact", "smaller"], ru: ["sirf icons", "naam chhupao"], ur: ["صرف آئیکن"] },
   { id: "appearance.language", title: "Language", page: "appearance", kind: "segmented", requires: { urdu: true, account: true },
-    description: "The same on the web and the phone.", options: opts(["en", "English", true], ["ur", "اردو"]),
+    description: "The same on the web and the phone.", options: opts(["en", "English", true], ["ur", "اردو"]).map((o) => ({ ...o, lang: o.value })),
     keywords: ["language", "urdu", "english", "translate", "right to left"], ru: ["zaban", "urdu", "angrezi"], ur: ["زبان", "اردو", "انگریزی"] },
   { id: "appearance.zoom", title: "Zoom", page: "appearance", kind: "slider", requires: { zoom: true }, resettable: true,
     description: "Zoom in and out, or back to 100%.",

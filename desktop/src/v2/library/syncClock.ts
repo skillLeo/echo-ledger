@@ -2,6 +2,7 @@
 // it took Sync's place in the Library's header). One sync at a time for the window; every caller hears how it went.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, errorMessage, type LibraryItem } from "../../lib/ipc";
+import { t, useLanguage } from "../../i18n";
 
 type Clock = { at: number | null; syncing: boolean; error: string | null };
 let clock: Clock = { at: null, syncing: false, error: null };
@@ -43,17 +44,20 @@ const snapshot = () => clock;
 
 /** The line's words: "Syncing…", "Synced just now", "Synced 5 min ago", "Synced at 9:40", "Not synced". */
 export function syncWords(state: Clock, now: number): string {
-  if (state.syncing) return "Syncing…";
-  if (state.error && state.at === null) return "Not synced";
-  if (state.at === null) return "Not synced yet";
+  if (state.syncing) return t("Syncing…");
+  if (state.error && state.at === null) return t("Not synced");
+  if (state.at === null) return t("Not synced yet");
   const minutes = Math.floor((now - state.at) / 60_000);
-  const when = minutes < 1 ? "just now" : minutes < 60 ? `${minutes} min ago`
-    : `at ${new Date(state.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-  return `${state.error ? "Last synced" : "Synced"} ${when}`;
+  if (minutes < 1) return state.error ? t("Last synced just now") : t("Synced just now");
+  if (minutes < 60) return state.error ? t("Last synced :minutes min ago", { minutes }) : t("Synced :minutes min ago", { minutes });
+  const time = new Date(state.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return state.error ? t("Last synced at :time", { time }) : t("Synced at :time", { time });
 }
 
 /** The sync's state and its words, the minutes kept up to date. */
 export function useSyncClock(): Clock & { words: string } {
+  // Its words follow the window's language.
+  useLanguage();
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

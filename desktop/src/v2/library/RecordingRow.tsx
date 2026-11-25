@@ -11,6 +11,7 @@ import { hasSourceLogo, SourceLogo } from "../../components/SourceLogos";
 import { Badge, Icon, Icons, LabelDot, PickBox } from "../components";
 import type { RowModel } from "./model";
 import { sourceWords } from "./SourceAvatar";
+import { t } from "../../i18n";
 import { ScreensMark } from "./screens";
 
 const AVATAR_ICONS = { mic: Icons.MicIcon, calendar: Icons.CalendarIcon, person: Icons.UserIcon, file: Icons.WaveIcon } as const;
@@ -66,7 +67,7 @@ export type RecordingRowProps = {
 export function RecordingRow({ item, r, compact, choosing, picked, labels, onLabel, recovered, onClick, onPointerDown, onContextMenu, onPick, actions, last = false, unread = false }: RecordingRowProps) {
   const id = useId();
   // Said with the row, though not all shown: pinned (its section says so), every label (up to three dots show), Recovered.
-  const marks = [item.pinned ? "Pinned" : null, ...labels.map((l) => l.name)].filter(Boolean).join(", ");
+  const marks = [item.pinned ? t("Pinned") : null, ...labels.map((l) => l.name)].filter(Boolean).join(", ");
   const described = [unread && `${id}-unread`, `${id}-meta`, marks && `${id}-marks`, recovered && `${id}-recovered`, `${id}-when`, `${id}-length`].filter(Boolean).join(" ");
   const cls = ["el-rec", compact && "el-rec--compact", choosing && "el-rec--picking", picked && "el-rec--selected", last && !picked && "el-rec--last", actions && "el-rec--actions"].filter(Boolean).join(" ");
   return (
@@ -75,17 +76,17 @@ export function RecordingRow({ item, r, compact, choosing, picked, labels, onLab
         aria-pressed={choosing ? picked : undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={item.id}
         onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); onContextMenu(e as unknown as ReactMouseEvent<HTMLElement>); } }} />
       <span className="el-rec__pick">
-        <PickBox checked={picked} label={`Select ${r.title}`} onClick={(e) => onPick(e)} />
+        <PickBox checked={picked} label={t("Select :title", { title: r.title })} onClick={(e) => onPick(e)} />
       </span>
       {/* The mark only says who or what (a label dot still filters; Source is Filters', the kind tabs' and ⌘K's). */}
       <span className="el-rec__mark"><RowAvatar item={item} r={r} /></span>
       <span className="el-rec__main">
         <span className="el-rec__line">
           {/* Not opened yet by this person (the server's `opened`, contract v1.3; Mark as unread brings it back, 2.0.0-t). */}
-          {unread && <span className="el-rec__unread" id={`${id}-unread`} role="img" aria-label="Not opened yet" title="Not opened yet" />}
+          {unread && <span className="el-rec__unread" id={`${id}-unread`} role="img" aria-label={t("Not opened yet")} title={t("Not opened yet")} />}
           <span className="el-rec__title" id={`${id}-title`} dir="auto">{r.title}</span>
           {labels.slice(0, 3).map((l) => (
-            <button key={l.key} type="button" className="el-rec__label" title={`Show only ${l.name}`} aria-label={`Show only label ${l.name}`} onClick={() => onLabel(l.key)}>
+            <button key={l.key} type="button" className="el-rec__label" title={t("Show only :name", { name: l.name })} aria-label={t("Show only label :name", { name: l.name })} onClick={() => onLabel(l.key)}>
               <LabelDot name={l.name} colour={l.colour} decorative />
             </button>
           ))}
