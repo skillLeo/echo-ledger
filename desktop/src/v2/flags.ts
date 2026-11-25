@@ -20,6 +20,8 @@ export const UI_FLAG_NAMES = [
   // UX-20 on Windows: the main window's own title row (contract 2.0.0-s). The core decides the window from it (wintitle.rs)
   // and the page follows the core's answer (lib/titlebar.ts), not this list's.
   "v21_win_titlebar",
+  // UX-07: zoom like Chrome in the main window (contract 2.0.0-r).
+  "v21_zoom",
 ] as const;
 export type UiFlagName = (typeof UI_FLAG_NAMES)[number];
 export type UiFlags = Record<UiFlagName, boolean>;

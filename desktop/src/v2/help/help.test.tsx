@@ -328,4 +328,11 @@ describe("the older Help sheet (? when the new Help can't be reached) follows th
     await act(flushAsync);
     expect(screen.getByText("Collapse or expand the sidebar")).toBeInTheDocument();
   });
+
+  it("UX-07: with zoom on, Help › Keyboard shortcuts lists its keys (Ctrl + the wheel off a Mac); without it, not", async () => {
+    const { windowKeys } = await import("../../views/main/HelpDialog");
+    expect(windowKeys("macos", true, true)).toContainEqual(["⌘+ / ⌘− / ⌘0", "Zoom in, zoom out, or back to 100%"]);
+    expect(windowKeys("windows", true, true)).toContainEqual(["Ctrl++ / Ctrl+− / Ctrl+0", "Zoom in, zoom out, or back to 100% (Ctrl + the mouse wheel too)"]);
+    expect(windowKeys("windows", true).some(([, what]) => what.startsWith("Zoom"))).toBe(false);
+  });
 });

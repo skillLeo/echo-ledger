@@ -1819,6 +1819,16 @@ pub fn retry_upload(app: &AppHandle, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// After Retry all put `n` failed uploads back in the queue: the worker goes now and the window hears it.
+pub fn retried_uploads(app: &AppHandle, n: usize) {
+    if n == 0 {
+        return;
+    }
+    app.state::<crate::AppState>().upload_notify.notify_one();
+    emit_uploads(app);
+    emit_status(app);
+}
+
 /// `upload_discard`: removes the item, deletes its audio, and queues its server session (if any) for deletion.
 pub fn discard_upload(app: &AppHandle, id: &str) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
@@ -2391,6 +2401,8 @@ async fn refresh_config(app: &AppHandle) {
 async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     use crate::notifications::{Category, allowed, local_minutes};
     let state = app.state::<crate::AppState>();
+    // Whose answer this is: a Retry all in it is that account's, never another one signed in meanwhile.
+    let asked_for = state.owner();
     let answer = state.api()?.activity(20).await?;
     let items: Vec<crate::activity::ActivityItem> = serde_json::from_value(answer.get("data").cloned().unwrap_or_default()).unwrap_or_default();
     let path = paths::activity_seen(&state.data_dir);
@@ -2398,6 +2410,20 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let fresh = seen.fresh(&items);
     let _ = seen.save(&path);
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
+    // A Retry all asked from any app (the phone, the web console, this window): this computer retries that account's
+    // failed uploads once (BE-03), and only while the same account is signed in. A null says the account has never asked
+    // (noted, so its first Retry all runs here); an older server without the field says nothing.
+    let asked = match answer.get("retry_requested_at") {
+        Some(serde_json::Value::Null) => Some(None),
+        Some(serde_json::Value::String(at)) => Some(Some(at.as_str())),
+        _ => None,
+    };
+    if let (Some(owner), Some(asked)) = (asked_for.as_ref(), asked)
+        && state.owner().as_ref() == Some(owner)
+        && let Ok(crate::activity::RetryAllStep::Ran(n)) = crate::activity::follow_retry_all(&state.data_dir, &state.queue_lock, owner, asked)
+    {
+        retried_uploads(app, n);
+    }
     let settings = state.settings();
     let minutes = local_minutes();
     // Each item goes through its own category (Phase 1C): its switch, its sound and the quiet hours; a recording the

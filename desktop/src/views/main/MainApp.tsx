@@ -4,7 +4,7 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount, needsAction as needsActionItem } from "../../lib/badge";
+import { needsAction as needsActionItem, railBadge } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
 import { TopBar, workspacesOf } from "./TopBar";
@@ -29,6 +29,8 @@ import { MenuBar } from "../../v2/actions/useMenuBar";
 import { listenToMenuPicks, menuPicksReady, setPickedHandler, useMenuPart } from "../../v2/actions/menuState";
 import { runPicked } from "../../v2/actions/popup";
 import { registerAction } from "../../v2/actions/registry";
+import { ZOOM_DEFAULT, loadZoom, setZoom, useZoom, watchZoomWheel, zoomBy, zoomKey, zoomNow } from "../../lib/zoom";
+import { ZoomBubble, ZoomChip, zoomStepper } from "../../v2/shell/Zoom";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
@@ -57,6 +59,7 @@ import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type Not
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
 import { shellChip } from "../../v2/shell/status";
+import { useActivityBadge } from "../../v2/activity/useBadge";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
@@ -146,6 +149,35 @@ export default function MainApp() {
   // Interface flags: read at start, on each page change and when a recording ends, never while recording; the core's
   // first config answer (ui:flags) applies at once when the window read before it (v2/flags.ts).
   const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  // UX-07 (v21_zoom): zoom like Chrome, in this window only. Off, the window is at 100% (main.tsx may have put a kept
+  // zoom back before the flags were known). On: the kept zoom, the keys (⌘+ ⌘= ⌘− ⌘0, Ctrl elsewhere, the number pad's
+  // too; the menu bar's own on a Mac), Ctrl + the wheel, and the menu bar's View items.
+  const zoomOn = ui.flags.v21_zoom;
+  const zoomLevel = useZoom();
+  const flagsKnown = flagsReadFor !== null;
+  useEffect(() => {
+    if (!flagsKnown) return;
+    if (!zoomOn) {
+      if (zoomNow() !== ZOOM_DEFAULT) setZoom(ZOOM_DEFAULT, false);
+      return;
+    }
+    setZoom(loadZoom(), false);
+    const key = (e: KeyboardEvent) => {
+      const dir = zoomKey(e, menuPlatform.current === "macos");
+      if (dir === null || e.defaultPrevented) return;
+      e.preventDefault();
+      zoomBy(dir);
+    };
+    window.addEventListener("keydown", key);
+    // Ctrl + the wheel off a Mac (a Mac's pinch is the system's own).
+    const stopWheel = menuPlatform.current === "macos" ? () => undefined : watchZoomWheel();
+    const offs = [registerAction("view.zoomIn", () => zoomBy(1)), registerAction("view.zoomOut", () => zoomBy(-1)), registerAction("view.actualSize", () => zoomBy(0))];
+    return () => {
+      window.removeEventListener("keydown", key);
+      stopWheel();
+      offs.forEach((off) => off());
+    };
+  }, [zoomOn, flagsKnown]);
   const threeLevels = useRef(false);
   threeLevels.current = ui.flags["ui_v2.library"];
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
@@ -196,8 +228,14 @@ export default function MainApp() {
   const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
-  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting, so only Activity's part is sent.
-  const activityPart = actionCount(activityItems, 0);
+  // UX-08: the server's one number (GET /api/badge), the same on the phone and the web console; counted here from the list
+  // while it can't be read (offline, an older server).
+  const serverBadge = useActivityBadge(!!status?.paired, status?.signIn ?? null);
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting that only this computer knows, so the
+  // rest is sent (the server's number, or, counted here, the list and the calls the server has sessions for).
+  const waitingAll = status?.pendingDecisions ?? 0;
+  const waitingHere = status?.pendingDecisionsHere ?? waitingAll;
+  const activityPart = Math.max(0, railBadge(serverBadge, activityItems, waitingAll, waitingHere).count - waitingHere);
   useEffect(() => {
     void api.dockActivitySet(activityPart).catch(() => undefined);
   }, [activityPart]);
@@ -804,6 +842,7 @@ export default function MainApp() {
         <AppToastV2 duration={(m) => (m.error ? ERROR_MS : MESSAGE_MS)}
           message={toast ? { id: toast.id, text: toast.text, error: toast.error, onOpen: toast.target ? () => goRef.current?.(toast.target!) : undefined } : null}
           onClose={() => setToast((t) => (t?.id === toast?.id ? null : t))} />
+        {zoomOn && <ZoomBubble />}
       </div>
     </Suspense>
   ) : toast && (
@@ -860,7 +899,9 @@ export default function MainApp() {
     );
   }
 
-  const needsYou = actionCount(activityItems, status.pendingDecisions);
+  // The rail's number: the server's, plus the calls waiting on this computer (only it holds them); red when something failed.
+  const activityBadge = railBadge(serverBadge, activityItems, waitingAll, waitingHere);
+  const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
@@ -1045,7 +1086,7 @@ export default function MainApp() {
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
-  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"] });
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom });
   const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
     .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
   const upgradeOpen = !!openUpgradeRequest(entitlements);
@@ -1196,7 +1237,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} show={activityShow} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
+            <ActivityV2 status={status} show={activityShow} needsYou={needsYou} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -1228,13 +1269,13 @@ export default function MainApp() {
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
                       : { onBack: onHome })} />
                   : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
@@ -1281,7 +1322,7 @@ export default function MainApp() {
           <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
         </Suspense>
       )}
-      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onClose={() => setHelp(false)} onSettings={openAccount} />}
+      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
@@ -1309,7 +1350,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
-            workspace={shellWorkspace} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+            workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
@@ -1328,7 +1369,8 @@ export default function MainApp() {
             nav={{
               panelFlyout: ui.flags.v21_panel_flyout,
               layoutFor: liveViews ?? lastViews,
-              titleEnd: <RestartToUpdate appStatus={status} notify={notify} />,
+              // The status items: Restart to update, then the zoom's chip while it isn't 100% (UX-07).
+              titleEnd: <><RestartToUpdate appStatus={status} notify={notify} />{zoomOn && <ZoomChip />}</>,
               placeRequest,
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
@@ -1341,6 +1383,8 @@ export default function MainApp() {
                 { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
                 { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
                 { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
+                // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme.
+                ...(zoomOn ? [{ label: "Zoom", icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
                 ...(shellWorkspace ? [
                   { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
                   ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),

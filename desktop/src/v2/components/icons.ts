@@ -86,3 +86,5 @@ export {
   RequestFilesIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
+// UX-07: the zoom's − beside PlusIcon (the avatar's row, the chip), and its glyph, a magnifier with +.
+export { LucideMinusIcon as MinusIcon, LucideZoomInIcon as ZoomIcon } from "../../components/Icons";

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { NavShell } from "./NavShell";
 import { MAXIMIZE_ID } from "./WindowButtons";
 import { applyTitlebar, applyWinTitlebar } from "../../lib/titlebar";
+import { setZoom } from "../../lib/zoom";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -111,5 +112,28 @@ describe("Windows' own title row (UX-20, v21_win_titlebar)", () => {
     const tokens = readFileSync(join(here, "..", "..", "tokens.css"), "utf8");
     expect(tokens).toContain("--el-desktop-titlerow-height-windows: 48px;");
     expect(tokens).toContain("--el-desktop-window-button-width: 46px;");
+  });
+
+  it("zoomed (not 100%), Snap Layouts' target leaves Maximize (the plugin places it in unzoomed pixels); back at 100% it returns", async () => {
+    // The plugin's script (tauri-plugin-snap-layout) sends the button's place in CSS pixels and its native side scales
+    // them by the screen's DPI only, so at 150% or 200% its window would sit across the title row: it is taken away.
+    const snap = { attach: vi.fn(), detach: vi.fn(async () => undefined) };
+    (window as unknown as { snapLayout?: typeof snap }).snapLayout = snap;
+    const apply = async () => undefined;
+    try {
+      applyWinTitlebar(true);
+      render(<Shell />);
+      await act(flush);
+      expect(snap.detach).not.toHaveBeenCalled();
+      act(() => { setZoom(150, false, apply); });
+      expect(snap.detach).toHaveBeenCalledTimes(1);
+      act(() => { setZoom(200, false, apply); });
+      expect(snap.attach).not.toHaveBeenCalled();
+      act(() => { setZoom(100, false, apply); });
+      expect(snap.attach).toHaveBeenCalledTimes(1);
+    } finally {
+      setZoom(100, false, apply);
+      delete (window as unknown as { snapLayout?: typeof snap }).snapLayout;
+    }
   });
 });

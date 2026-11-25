@@ -11,6 +11,8 @@
 <style>
     @font-face { font-family: "Noto Nastaliq Urdu"; src: url("{{ asset('fonts/noto-nastaliq-urdu-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
 </style>
+{{-- DES-08: a person's photo that does not load becomes their initials on their colour. --}}
+@includeWhen(($sheet ?? 'console') === 'console', 'filament.v2.avatar-script')
 <script>
     (() => {
         const root = document.documentElement;

@@ -471,6 +471,12 @@ impl PendingStore {
         self.items.iter().filter(|d| d.waits()).count()
     }
 
+    /// Those of them the server doesn't know (UX-08): no session was opened for them (captions open one). The server's
+    /// badge already counts a waiting call it has a session for, so the rail and the Dock add only these.
+    pub fn waiting_here(&self) -> usize {
+        self.items.iter().filter(|d| d.waits() && d.server_session_id.is_none()).count()
+    }
+
     /// The earliest moment a chip keeps its recording.
     pub fn next_keep_at(&self) -> Option<DateTime<Utc>> {
         self.items.iter().filter_map(|d| d.keep_at).min()

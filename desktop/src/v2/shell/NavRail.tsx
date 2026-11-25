@@ -9,6 +9,7 @@ import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
+import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 
 /** UX-03: the panel's width, dragged or set from the keyboard, from 200 to 360 px; let go below 160 px it closes. */
 export const PANEL_MIN = 200;
@@ -37,8 +38,10 @@ const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} 
  * badge (Activity's, the only one) or a dot (Live's red while recording, Setup's when something needs doing). Its
  * tooltip, after 500 ms or on keyboard focus, gives the name and the shortcut ("Library ⌘1").
  */
-export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, dotKind, shortcut, keys, expanded, place }: {
+export function RailItem({ icon, label, current, onClick, count, countTone, dot, dotLabel, dotKind, shortcut, keys, expanded, place }: {
   icon: IconType; label: string; current: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; count?: number; dot?: boolean; dotLabel?: string;
+  /** The number's colour: red only when something failed (UX-08); the accent otherwise. */
+  countTone?: "accent" | "danger";
   /** Live's dot is red (a call is recorded); the others are the accent. */
   dotKind?: "live";
   /** Its flyout is open (a narrow window); left out where there is none. */
@@ -47,15 +50,17 @@ export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, 
   /** For the tooltip and assistive tools: "⌘1" and "Meta+1 Control+1". */
   shortcut?: string; keys?: string;
 }) {
-  const name = count ? `${label}, ${count}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
-  const [tipProps, tip] = useTip(shortcut ? `${label} ${shortcut}` : label);
+  // Red says something failed: so do the name and the tooltip (UX-08), as colour alone can't.
+  const failed = !!count && countTone === "danger";
+  const name = count ? `${label}, ${count}${failed ? `, ${FAILED_WORDS}` : ""}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
+  const [tipProps, tip] = useTip(`${shortcut ? `${label} ${shortcut}` : label}${failed ? `, ${FAILED_WORDS}` : ""}`);
   return (
     <>
       <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}
         data-place={place} aria-keyshortcuts={keys} onClick={onClick} {...tipProps}>
         <span className="el-rail__icon">
           <Icon icon={icon} size="md" />
-          {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+          {count ? <span className={`el-rail__count el-num${countTone === "danger" ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(count)}</span>
             : dot ? <span className={`el-rail__dot${dotKind ? ` el-rail__dot--${dotKind}` : ""}`} aria-hidden="true" /> : null}
         </span>
         <span className="el-rail__label" aria-hidden="true">{label}</span>
@@ -67,6 +72,70 @@ export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, 
 
 export function railItemProps(place: Place) {
   return { label: PLACE_NAMES[place], shortcut: placeKey(place), keys: placeShortcut(place) };
+}
+
+/**
+ * How the rail shows `total` places in `room` px of `each` px items (a high zoom, UX-07): all of them when they fit;
+ * else one fewer than fit, the last slot being "⋯ More" (`more`); and when not even More fits whole (200% in the least
+ * window, sooner under Windows' own title row), none, the places then going into the avatar's menu as Help and Setup do.
+ * Nothing measured yet (or no layout): all.
+ */
+export function railFit(total: number, room: number, each: number): { keep: number; more: boolean } {
+  if (!(room > 0) || !(each > 0)) return { keep: total, more: false };
+  const fit = Math.floor((room + 0.5) / each);
+  if (fit >= total) return { keep: total, more: false };
+  return fit < 1 ? { keep: 0, more: false } : { keep: fit - 1, more: true };
+}
+
+/** The places' names as one phrase ("Library, Projects and Activity"). */
+export function placeList(places: readonly Place[]): string {
+  const names = places.map((p) => PLACE_NAMES[p]);
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** The avatar's tooltip: the account, and the places it holds when not even More fits (UX-07). */
+export function accountTip(held: readonly Place[]): string {
+  return held.length ? `${placeList(held)}; account, theme and settings` : "Account, theme and settings";
+}
+
+/** The places as menu items (More's, or the avatar's when not even More fits), each with its icon, ⌘ key and Activity's
+ * count; the page among them is ticked (no tick column otherwise). */
+export function placeMenuItems(places: readonly Place[], current: Place | null, icons: Record<Place, IconType>, activityCount: number | undefined,
+  onPick: (place: Place) => void): MenuItem[] {
+  const here = !!current && places.includes(current);
+  return places.map((p) => ({
+    label: PLACE_NAMES[p], icon: icons[p], shortcut: placeKey(p), count: p === "activity" ? activityCount || undefined : undefined,
+    ...(here ? { checked: current === p, radio: true } : {}), onPick: () => onPick(p),
+  }));
+}
+
+/**
+ * "⋯ More" (UX-07): the places that don't fit whole in the rail (a high zoom), as a menu of them, each with its icon,
+ * shortcut and Activity's count. It carries Activity's badge and Live's dot when they are in it, and is the selected
+ * item (its menu ticking the page) while the page is one of its places.
+ */
+export function RailMore({ places, current, icons, activityCount, liveDot, liveDotWords, onPick }: {
+  places: readonly Place[]; current: Place | null; icons: Record<Place, IconType>; activityCount?: number;
+  liveDot?: boolean; liveDotWords?: string; onPick: (place: Place) => void;
+}) {
+  const count = places.includes("activity") && activityCount ? activityCount : undefined;
+  const dot = !count && places.includes("live") && !!liveDot;
+  const here = !!current && places.includes(current);
+  const [tipProps, tip] = useTip("More");
+  const spoken = ["More", count ? `${PLACE_NAMES.activity} ${count}` : null, places.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null]
+    .filter(Boolean).join(", ");
+  const items = placeMenuItems(places, current, icons, activityCount, onPick);
+  return (
+    <div className="el-rail__more" data-testid="rail-more">
+      <Menu label="More places" items={items} align="start"
+        button={{ variant: "quiet", className: "el-rail__item", "aria-label": spoken, "aria-current": here ? "page" : undefined, ...tipProps,
+          text: <><span className="el-rail__icon"><Icon icon={Icons.MoreIcon} size="md" />
+            {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+              : dot ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" /> : null}</span>
+            <span className="el-rail__label" aria-hidden="true">More</span></> }} />
+      {tip}
+    </div>
+  );
 }
 
 /**

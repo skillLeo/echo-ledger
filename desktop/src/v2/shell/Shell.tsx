@@ -69,6 +69,8 @@ export type ShellProps = {
   banners?: ReactNode;
   /** How many things need the person (Activity's badge); none or 0 shows no badge. */
   activity?: number;
+  /** The badge's colour: red only when something failed (UX-08). */
+  activityTone?: "accent" | "danger";
   /** A recording is under way: Record says so and stops it. */
   recording?: boolean;
   /** Record now (or stop); without it (a viewer) Record opens the Record page. Its promise ends when the core answered. */
@@ -326,7 +328,7 @@ export function Shell(props: ShellProps) {
 }
 
 /** The three levels: Live and Ask are the shell's own pages, as in the sidebar; the rest are MainApp's tabs. */
-function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
+function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, activityTone, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
   searchKeys, onHelp, projectTree, projectId = null, onProject, uploading, library, footStart, nav, children }: ShellProps) {
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   const [lastTab, setLastTab] = useState(tab);
@@ -371,7 +373,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
   return (
     <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
-      libraryCount={nav?.libraryCount} activityCount={activity} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
+      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
       recording={recording} onRecord={onRecord} onUpload={onUpload} onVoiceNote={onVoiceNote} callRecording={nav?.callRecording}
       onSearch={onSearch} searchKeys={searchKeys} me={me} account={nav?.account} uploading={uploading} notices={notices} banners={banners}>

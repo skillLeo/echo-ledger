@@ -15,7 +15,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
-import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
@@ -23,6 +23,7 @@ import { applyTitlebar, applyWinTitlebar, titlebarMode, watchTitlebar } from "..
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
+const grouped = params.get("grouped") === "1";
 const theme = params.get("theme") === "dark" ? "dark" : "light";
 localStorage.setItem("echoledger-theme", theme);
 document.documentElement.dataset.theme = theme;
@@ -60,13 +61,17 @@ if (platform === "windows" && params.get("wintitle") === "1") applyWinTitlebar(t
  */
 function drawTrafficLights(inactive: boolean) {
   const { x, y } = conf.app.windows[0].trafficLightPosition;
+  // "&zoom=<percent>" (UX-07): the page zoomed as the web view does it (scripts/zoom.mjs draws it that much bigger); the
+  // system's buttons keep their size and place, so they are drawn that much smaller in the page's pixels.
+  const z = Number(params.get("zoom") ?? 100) / 100;
+  document.documentElement.style.setProperty("--el-zoom", String(z));
   const strip = document.createElement("div");
   strip.dataset.trafficLights = "";
   strip.setAttribute("aria-hidden", "true");
-  strip.style.cssText = `position: fixed; left: ${x + 1}px; top: ${y - 4}px; width: 54px; height: 12px; z-index: 2147483647; pointer-events: none; display: flex; gap: 8px; direction: ltr;`;
+  strip.style.cssText = `position: fixed; left: ${(x + 1) / z}px; top: ${(y - 4) / z}px; width: ${54 / z}px; height: ${12 / z}px; z-index: 2147483647; pointer-events: none; display: flex; gap: ${8 / z}px; direction: ltr;`;
   for (const colour of inactive ? ["#cfcfcf", "#cfcfcf", "#cfcfcf"] : ["#ff5f57", "#febc2e", "#28c840"]) {
     const light = document.createElement("span");
-    light.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
+    light.style.cssText = `width: ${12 / z}px; height: ${12 / z}px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
     strip.append(light);
   }
   document.body.append(strip);
@@ -382,7 +387,16 @@ const commands: Record<string, (args: Args) => unknown> = {
   recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   // `&uploads=1`: a file being imported, one upload that failed, two waiting for another account and one being checked.
   upload_list: () => (params.get("uploads") === "1" ? UPLOADS : []),
-  activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
+  // `&grouped=1` (UX-08): uploads that didn't finish as the server groups them, and its one Activity number (3 of them
+  // and the failed transcript: 4, red).
+  activity_list: () => {
+    const data = grouped ? ACTIVITY_GROUPED : ACTIVITY;
+    return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
+  },
+  activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),
+  activity_group_list: () => ({ data: grouped ? UPLOADS_FAILED : [] }),
+  activity_retry_all: () => ({ retry_requested_at: new Date().toISOString(), count: 3, here: 1 }),
+  badge_get: () => (grouped ? { count: 4, label: "4", tone: "danger" } : null),
   // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
   search_library: ({ query }) => {
     const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();

@@ -11,7 +11,7 @@ import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
 import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
-import { PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, panelDefault, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
+import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, placeList, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
@@ -118,6 +118,8 @@ export type NavShellProps = {
   /** The Library's Needs you: no longer a badge in the rail (DES-01: only Activity has a number), kept for the callers. */
   libraryCount?: number;
   activityCount?: number;
+  /** Activity's badge in red: something failed (UX-08); the accent otherwise. */
+  activityTone?: "accent" | "danger";
   /** Live's red dot: a call is recorded, or call recording is on and listening. */
   liveDot?: boolean;
   liveDotWords?: string;
@@ -151,7 +153,7 @@ export type NavShellProps = {
   children: ReactNode;
 };
 
-export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, liveDot, liveDotWords, setupAttention, onSetupHealth,
+export function NavShell({ place, onPlace, onHome, status, panels, feet, activityCount, activityTone, liveDot, liveDotWords, setupAttention, onSetupHealth,
   onHelp, recording, onRecord, onUpload, onVoiceNote, callRecording, onSearch, searchKeys, me, account, uploading, notices, banners, panelFlyout = false, layoutFor = null, titleEnd, children }: NavShellProps) {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [height, setHeight] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
@@ -257,7 +259,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const press = (p: Place) => {
     const again = p === place;
     if (narrow) {
-      opener.current = document.querySelector<HTMLElement>(`.el-rail [data-place="${p}"]`);
+      // Its rail item, or ⋯ More (or the avatar) when it is in there (a high zoom).
+      opener.current = document.querySelector<HTMLElement>(`.el-rail [data-place="${p}"]`) ?? document.querySelector<HTMLElement>(".el-rail__more .el-rail__item")
+        ?? document.querySelector<HTMLElement>(".el-rail__me .el-rail__item");
       setFlyout(!!panels[p]);
     }
     onPlace(p, again);
@@ -494,17 +498,56 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const icons: Record<Place, Parameters<typeof RailItem>[0]["icon"]> = {
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
   };
+  // A high zoom (UX-07): the places that don't fit whole above Settings and Account go into "⋯ More" (a menu of them),
+  // or, when not even More fits whole, into the avatar's menu; none is ever cut. Their room is measured (the places' box
+  // takes what the rail has left; an item is as tall as Settings), and again as it changes.
+  const placesBox = useRef<HTMLDivElement>(null);
+  const [space, setSpace] = useState<{ room: number; each: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = placesBox.current;
+    if (!el) return;
+    const measure = () => {
+      const item = el.closest(".el-rail")?.querySelector<HTMLElement>('.el-rail__foot [data-place="settings"]') ?? el.querySelector<HTMLElement>(".el-rail__item");
+      const next = { room: el.getBoundingClientRect().height, each: item?.getBoundingClientRect().height ?? 0 };
+      setSpace((was) => (was && was.room === next.room && was.each === next.each ? was : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [compactRail, short]);
+  const places: Place[] = RAIL_PLACES.filter((p) => p !== "settings");
+  const fit = space ? railFit(places.length, space.room, space.each) : { keep: places.length, more: false };
+  const moved = places.slice(fit.keep);
+  // Not even More fits whole: the places go into the avatar's menu; before the account is read (no avatar yet) they wait
+  // for it, never a cut More (⌘1…⌘5 still reach them).
+  const toAccount = !fit.more && moved.length > 0;
+  const inMore = toAccount ? [] : moved;
+  const inAccount = toAccount && me && account ? moved : [];
+  const keeps = fit.keep;
   const railPlace = (p: Place) => (
-    <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
+    <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} countTone={p === "activity" ? activityTone : undefined} onClick={() => press(p)}
       expanded={narrow && panels[p] ? flyout && place === p : undefined}
       dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} dotKind={p === "live" ? "live" : undefined} />
   );
-  // The avatar's menu (DES-08): in a short window Setup and Help come first in it.
-  const accountItems: MenuItem[] = [
+  // The avatar's menu (DES-08): in a short window Setup and Help come first in it; when not even More fits (UX-07), the
+  // places before them, set apart by a hairline.
+  const rest: MenuItem[] = [
     ...(short ? [{ label: "Setup & health", icon: Icons.ReadyIcon, onPick: onSetupHealth }, ...(onHelp ? [{ label: "Help", icon: Icons.HelpIcon, onPick: onHelp }] : [])] : []),
     ...(account ?? []),
   ];
-  const [meTip, meTipShown] = useTip("Account, theme and settings");
+  const accountItems: MenuItem[] = inAccount.length
+    ? [...placeMenuItems(inAccount, place, icons, activityCount, press), ...rest.map((item, i) => (i === 0 ? { ...item, separator: true } : item))]
+    : rest;
+  // Activity's badge and Live's dot go with them onto the avatar, and it is the selected item while the page is one of them.
+  const meCount = inAccount.includes("activity") && activityCount ? activityCount : undefined;
+  const meLive = !meCount && inAccount.includes("live") && !!liveDot;
+  const meHere = !!place && inAccount.includes(place);
+  const meName = [`Account, ${me?.name ?? ""}`, inAccount.length ? `with ${placeList(inAccount)}` : null, meCount ? `${PLACE_NAMES.activity} ${meCount}` : null,
+    inAccount.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null, short && setupAttention ? "needs setup" : null]
+    .filter(Boolean).join(", ");
+  const [meTip, meTipShown] = useTip(accountTip(inAccount));
   // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
   const scrim = shown && narrow && panelFlyout;
   return (
@@ -520,7 +563,12 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
           {winRow && <BrandMark size={20} className="el-rail__mark" />}
         </div>
         <RecordSplit stops={stops} time={status.kind === "recording" ? status.time : undefined} busy={!!pressing} onPress={pressRecord} menu={recordMenu} ctx={recordCtx} />
-        <div className="el-rail__places">{RAIL_PLACES.filter((p) => p !== "settings").map(railPlace)}</div>
+        <div ref={placesBox} className="el-rail__places">
+          {places.slice(0, keeps).map(railPlace)}
+          {inMore.length > 0 && (
+            <RailMore places={inMore} current={place} icons={icons} activityCount={activityCount} liveDot={liveDot} liveDotWords={liveDotWords} onPick={press} />
+          )}
+        </div>
         <div className="el-rail__foot">
           {!short && <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />}
           {!short && onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}
@@ -539,9 +587,11 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                     </div>
                   </div>
                 )}
-                button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": `Account, ${me.name}${short && setupAttention ? ", needs setup" : ""}`, ...meTip,
+                button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": meName, "aria-current": meHere ? "page" : undefined, ...meTip,
                   text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
-                    {short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
+                    {meCount ? <span className="el-rail__count el-num" aria-hidden="true">{meCount > 99 ? "99+" : meCount}</span>
+                      : meLive ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" />
+                        : short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
                     <span className="el-rail__label" aria-hidden="true">Account</span></> }} />
               {meTipShown}
             </div>

@@ -32,6 +32,8 @@ export const PINS: Readonly<Record<string, readonly string[]>> = {
   "2fa": ["security.two_step"], otp: ["security.two_step"],
   lock: ["lock"],
   colour: ["appearance.wallpaper", "appearance.theme"], rang: ["appearance.wallpaper", "appearance.theme"],
+  // UX-07: where zoom is on (v21_zoom) it comes first; without it the meeting app Zoom's settings do.
+  zoom: ["appearance.zoom"],
 };
 
 const MAX_SETTINGS = 30;
