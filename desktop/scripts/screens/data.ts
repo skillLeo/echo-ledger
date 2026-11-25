@@ -181,6 +181,22 @@ export const ACTIVITY: ActivityItem[] = [
 ];
 
 /**
+ * `&actors=1` (contract 2.0.0-aa, lead decision 27): items about a person. The kinds that show a face: a teammate with a
+ * picture (PERSON_PHOTO) who sent a recording, and one without who asks to upgrade, in their colour; a receipt asked
+ * for keeps its tile, whoever it is about.
+ */
+export const ACTIVITY_PEOPLE: ActivityItem[] = [
+  { id: "p1", kind: "shared_with_you", title: "Ayesha Khan sent you Budget review with Acme", body: "Please check the numbers before Monday", session_id: "r10", read: false, at: at(0, 11, 5),
+    actor: { id: 12, name: "Ayesha Khan", avatar_url: "https://ledger.example.com/api/avatars/12/1763700000?signature=fixture", avatar_version: 1763700000, avatar_color: 1 } },
+  { id: "p2", kind: "upgrade_requested", title: "Bilal Qureshi asked to upgrade to Pro", body: "A workspace member's request", session_id: null, read: false, at: at(0, 10, 50),
+    actor: { id: 7, name: "Bilal Qureshi", avatar_url: null, avatar_version: null, avatar_color: 4 } },
+  { id: "p3", kind: "upgrade_receipt_requested", title: "Sara Ahmed asked for your receipt", body: "Send it from Plan to finish the upgrade", session_id: null, read: false, at: at(0, 10, 40),
+    actor: { id: 9, name: "Sara Ahmed", avatar_url: null, avatar_version: null, avatar_color: 2 } },
+];
+/** The teammate's picture in the fixture: a drawn portrait, as the core hands the window a data: URL. */
+export const PERSON_PHOTO = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#c7a17a"/><circle cx="32" cy="26" r="12" fill="#f1d3b5"/><path d="M12 64c2-14 10-20 20-20s18 6 20 20z" fill="#3b5b7a"/><path d="M19 24c0-10 6-15 13-15s13 5 13 15c-3-5-8-7-13-7s-10 2-13 7z" fill="#2b1d14"/></svg>')}`;
+
+/**
  * `&grouped=1` (UX-08, contract 2.0.0-r): three uploads that didn't finish (one of them twice), one that went up after all
  * ("Uploaded", resolved), the group the server makes of them and its one Activity number.
  */

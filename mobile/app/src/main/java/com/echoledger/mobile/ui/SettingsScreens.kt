@@ -25,6 +25,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.FiberManualRecord
-import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardVoice
@@ -133,7 +133,7 @@ private fun pageIcon(id: String): ImageVector = when (id) {
     "account" -> Icons.Outlined.Shield
     "devices" -> Icons.Outlined.Devices
     "privacy" -> Icons.Outlined.PrivacyTip
-    "help" -> Icons.Outlined.HelpOutline
+    "help" -> Icons.AutoMirrored.Outlined.HelpOutline
     else -> Icons.Outlined.Info
 }
 
