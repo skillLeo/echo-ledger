@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Assist\InternalAssistController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BadgeController;
 use App\Http\Controllers\Api\BinController;
+use App\Http\Controllers\Api\CallRulesController;
 use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
@@ -51,6 +52,7 @@ use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Controllers\Api\WorkspaceInvitesController;
+use App\Http\Middleware\EnsureCallRules;
 use App\Http\Middleware\EnsureCanRecord;
 use App\Http\Middleware\EnsureLiveAssist;
 use App\Http\Middleware\EnsureNotSuspended;
@@ -116,6 +118,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
         // Since 2.0.0-g: the design switch, read on its own.
         Route::get('account/ui', [AccountController::class, 'showUi'])->middleware('abilities:config:read')->name('api.account.ui.show');
+        // Since 2.0.0-w (B5, docs/API.md "Call rules"): the person's call rules, only while the call_rules flag is on.
+        Route::get('call-rules', [CallRulesController::class, 'index'])->middleware(['abilities:config:read', EnsureCallRules::class])->name('api.call-rules');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Since v1.8 P6.3 (docs/API.md 2.0.0-d): inviting people, for owners and admins.
@@ -213,6 +217,17 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
                 Route::post('upgrade-requests/{id}/cancel', [UpgradeRequestController::class, 'cancel'])->name('api.upgrade-requests.cancel');
             });
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
+            // Since 2.0.0-w (B5): changing the call rules, only while the call_rules flag is on; 60 a minute per person.
+            Route::middleware([EnsureCallRules::class, 'throttle:call-rules'])->group(function (): void {
+                Route::put('call-rules/settings', [CallRulesController::class, 'settings'])->name('api.call-rules.settings');
+                // Since 2.0.0-x (CC5): before call-rules/{id}, which only takes a rule's ULID.
+                Route::patch('call-rules/preferences', [CallRulesController::class, 'preferences'])->name('api.call-rules.preferences');
+                Route::post('call-rules/declined', [CallRulesController::class, 'decline'])->name('api.call-rules.declined');
+                Route::delete('call-rules/declined', [CallRulesController::class, 'forgetDeclined'])->name('api.call-rules.declined.forget');
+                Route::post('call-rules', [CallRulesController::class, 'store'])->name('api.call-rules.store');
+                Route::patch('call-rules/{id}', [CallRulesController::class, 'update'])->whereUlid('id')->name('api.call-rules.update');
+                Route::delete('call-rules/{id}', [CallRulesController::class, 'destroy'])->whereUlid('id')->name('api.call-rules.destroy');
+            });
             // Since 2.0.0-l (docs/API.md "Account and security from the apps"): the person's own account only.
             Route::post('account/proof-code', [AccountProfileController::class, 'proofCode'])->middleware('throttle:account-proof-code')->name('api.account.proof-code');
             Route::patch('account', [AccountProfileController::class, 'update'])->middleware('throttle:account-name')->name('api.account.update');
