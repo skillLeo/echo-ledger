@@ -71,6 +71,11 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
   return (
     <Sheet open title={t("Request files")} description={requestIntro()} onClose={onClose}
       actions={<>
+        {/* D-234: in the footer, so it is in view at any window height (the body scrolls under the head): a line of its
+            own at the start edge, the buttons together under it. */}
+        <span className="el-dialog__aside">
+          <Button variant="quiet" size="sm" icon={Icons.RequestFilesIcon} onClick={() => { onClose(); onShowLinks(); }}>{t("See your request links")}</Button>
+        </span>
         <Button disabled={busy} onClick={onClose}>{t("Close")}</Button>
         <Button variant="primary" disabled={!valid} loading={busy} loadingLabel={t("Making the link…")} onClick={() => void make()}>{t("Make link")}</Button>
       </>}>
@@ -95,7 +100,6 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
             <Button icon={Icons.CopyIcon} onClick={() => void copy()}>{t("Copy link")}</Button>
           </div>
         )}
-        <Button variant="quiet" size="sm" icon={Icons.RequestFilesIcon} onClick={() => { onClose(); onShowLinks(); }}>{t("See your request links")}</Button>
       </div>
     </Sheet>
   );

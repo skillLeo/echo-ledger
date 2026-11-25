@@ -6,10 +6,11 @@ import { api, type ScreensStatus, type ScreenTarget, type Settings, type Setting
 import { setting } from "../../lib/settingsRegistry";
 import { useLockedTag, useLocked } from "./Upgrade";
 import { EntityRow, InfoRow, LinkRow, ResetRow, Section, SelectRow, SwitchRow } from "./SettingsControls";
+import { t } from "../../i18n";
 
 export const TARGET_HINT: Record<ScreenTarget, string> = {
-  meeting_window: "Only the meeting app's window: nothing else on your screen is kept.",
-  whole_screen: "The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.",
+  get meeting_window() { return t("Only the meeting app's window: nothing else on your screen is kept."); },
+  get whole_screen() { return t("The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it."); },
 };
 /** macOS 15's monthly question, in plain words. */
 export const MONTHLY_NOTE = "From macOS 15, macOS asks again about once a month whether EchoLedger may still see your screen. That is normal: choose Allow. If you miss it, screen moments pause and the recording goes on.";
@@ -23,9 +24,9 @@ export function comparableApp(name: string): string {
 
 /** What the page says about this computer, the plan and the server; null when nothing stops screen moments. */
 export function screensBlocked(status: ScreensStatus): string | null {
-  if (!status.onServer) return "Your server doesn't have screen moments yet. Nothing is kept until it's updated.";
-  if (!status.inPlan) return "Screen moments aren't in your workspace's plan, so nothing is captured or kept.";
-  if (!status.supported) return "This computer can't capture the screen: screen moments need Windows 10 (version 1903) or later, or macOS 14.4 or later.";
+  if (!status.onServer) return t("Your server doesn't have screen moments yet. Nothing is kept until it's updated.");
+  if (!status.inPlan) return t("Screen moments aren't in your workspace's plan, so nothing is captured or kept.");
+  if (!status.supported) return t("This computer can't capture the screen: screen moments need Windows 10 (version 1903) or later, or macOS 14.4 or later.");
   return null;
 }
 

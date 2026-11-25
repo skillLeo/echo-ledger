@@ -27,6 +27,13 @@ import { NO_TARGET, type Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
 import { CALL_WORDS } from "../../lib/callChoice";
 
+/** The closed language chip's words (D-038): the language's short name, "Auto" when none is chosen. */
+function shortLanguage(value: LanguageChoice | undefined): string {
+  // In English, as the rest of this classic list (the options' own labels follow the window's language since D4).
+  const found = [...MAIN_LANGUAGES, ...MORE_LANGUAGES].find((o) => o.value === (value ?? null));
+  return found ? languageLabel(found.value, "en") : "Auto";
+}
+
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
   id: string;
@@ -455,13 +462,18 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       </select>
                     )}
                     <div className="queue-actions">
-                      <select className={`chip queue-language ${item.language ? "active" : ""}`} aria-label="Language" title="Language of the transcript" disabled={isBusy}
-                        value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                        {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
-                        <optgroup label="More languages">
-                          {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{languageLabel(o.value, "en")}</option>)}
-                        </optgroup>
-                      </select>
+                      {/* D-038: the closed chip says the short name ("Auto", not "Auto (English / Urdu / Ara…"). The native select
+                          lies transparent over it, keeping its name, its whole choice for a screen reader and its own list. */}
+                      <span className={`chip queue-language ${item.language ? "active" : ""}`} title="Language of the transcript">
+                        <span className="queue-language-label" aria-hidden="true">{shortLanguage(item.language)}</span>
+                        <select aria-label="Language" title="Language of the transcript" disabled={isBusy}
+                          value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
+                          <optgroup label="More languages">
+                            {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{languageLabel(o.value, "en")}</option>)}
+                          </optgroup>
+                        </select>
+                      </span>
                       <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Choose project</button>
                       <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
                     </div>

@@ -11,14 +11,15 @@ import { Sheet } from "./ProjectDialogs";
 import { ActionRow, EntityRow, InfoRow, ResetRow, Section, SelectRow, SwitchRow, rowAttrs } from "./SettingsControls";
 import { SYSTEM_LABEL } from "./LockScreen";
 import { confirmAction } from "../../lib/confirm";
+import { t } from "../../i18n";
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
 /** "Signed in · Pixel 9" style line for one audit entry. */
 export function eventLine(e: Pick<SecurityEvent, "summary" | "actor" | "device">): string {
-  const who = e.actor === "device" ? e.device ?? "A device" : e.actor === "web" ? "Console" : "EchoLedger";
-  return `${e.summary}, ${who}`;
+  const who = e.actor === "device" ? e.device ?? t("A device") : e.actor === "web" ? t("Console") : "EchoLedger";
+  return t(":summary, :who", { summary: e.summary, who });
 }
 
 /** The PIN dialog: 4–12 digits, twice. */
@@ -146,7 +147,7 @@ export function NotificationsPage({ settings, patch, run }: { settings: Settings
 /** "Storage" in rows: "120 MB of 1 GB", or what is used when there is no limit. */
 export function storageValue(used: number | null | undefined, limit: number | null | undefined): string {
   if (used === null || used === undefined) return "";
-  return limit ? `${fileSize(used)} of ${fileSize(limit)}` : fileSize(used);
+  return limit ? t(":used of :limit", { used: fileSize(used), limit: fileSize(limit) }) : fileSize(used);
 }
 
 /** App › Storage: what the account stores here, how long recordings are kept, and the Bin. */

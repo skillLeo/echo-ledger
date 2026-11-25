@@ -62,4 +62,9 @@ export const CONVERTED: readonly string[] = [
   "lib/languages.ts",
   "lib/progress.ts",
   "lib/pending.ts",
+  // D3c: the helpers Settings shows whose words are all through t() and tc().
+  "lib/callChoice.ts",
+  "lib/explainer.ts",
+  "lib/privacy.ts",
+  "lib/zoom.ts",
 ];

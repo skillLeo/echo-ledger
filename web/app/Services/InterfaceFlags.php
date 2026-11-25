@@ -34,7 +34,7 @@ final class InterfaceFlags
      * they are not the design: off (the admin's lists only) or everyone, never opt-in, and the person's design choice
      * does not change them.
      */
-    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar'];
+    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar', 'v21_urdu'];
 
     /** Since 2.0.0-w (B5): the person's call rules on the server. Off (the admin's lists) or everyone, like V21. */
     public const CALL_RULES = 'call_rules';
@@ -72,6 +72,8 @@ final class InterfaceFlags
         'v21_preview_pane' => 'v2.1 desktop and web: the Library\'s preview pane',
         // Since 2.0.0-s.
         'v21_win_titlebar' => 'v2.1 desktop on Windows: the custom title row',
+        // Since 2.0.0-v (an addition, no new letter).
+        'v21_urdu' => 'v2.1 desktop: the app in the account\'s language (Urdu)',
         // Since 2.0.0-w.
         'call_rules' => 'Call rules: After each call and the rules per contact and app, kept for the whole account',
     ];
