@@ -35,8 +35,8 @@ class RecordingNoticeShotsTest : AppTest() {
     }
 
     /** The expanded recording view as the shade lays it out, the width of a phone's notification. */
-    private fun drawn(): View {
-        val n = Notifications.recording(app, "Recording call with Omar", "Both sides · auto · 2 bookmarks", discarding = true)
+    private fun drawn(title: String = "Recording call with Omar"): View {
+        val n = Notifications.recording(app, title, "Both sides · auto · 2 bookmarks", discarding = true)
         val activity = buildActivity(androidx.activity.ComponentActivity::class.java).setup().get()
         val parent = FrameLayout(activity)
         val view = n.bigContentView.apply(activity, parent)
@@ -91,6 +91,28 @@ class RecordingNoticeShotsTest : AppTest() {
             val row = view.findViewById<TextView>(R.id.rec_discard).parent as View
             assertTrue(row.height >= (48 * app.resources.displayMetrics.density).toInt())
             view.captureRoboImage(File(out, "phone-notification-recording-ur-largest-${if (dark) "dark" else "light"}.png"))
+        }
+    }
+
+    /**
+     * P-104: a long title takes a second line instead of an ellipsis (the shade and this shot drew it differently), and
+     * the expanded view stays within the 252 dp Android gives a custom notification's content, nothing clipped.
+     */
+    @Test
+    fun aLongTitleTakesTwoLinesUncutAndTheViewStaysWithinTheShadesLimit() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        largestUrdu()
+        val density = app.resources.displayMetrics.density
+        for (dark in listOf(false, true)) {
+            RuntimeEnvironment.setQualifiers(if (dark) "+night" else "+notnight")
+            val view = drawn("Recording call with Muhammad Abdullah Siddiqui Qureshi")
+            val title = view.findViewById<TextView>(R.id.rec_title).layout
+            assertEquals("the title's lines", 2, title.lineCount)
+            assertEquals("the title is cut", 0, title.getEllipsisCount(title.lineCount - 1))
+            assertNothingClipped(view)
+            val content = view.findViewById<View>(R.id.rec_root).height / density
+            assertTrue("the view is $content dp", content <= 252f)
+            view.captureRoboImage(File(out, "phone-notification-recording-ur-largest-long-title-${if (dark) "dark" else "light"}.png"))
         }
     }
 
