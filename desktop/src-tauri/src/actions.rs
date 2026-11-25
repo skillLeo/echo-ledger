@@ -1819,32 +1819,14 @@ pub fn retry_upload(app: &AppHandle, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Retry all (BE-03) on this computer: every failed upload of this account goes back to the queue at once. Returns how
-/// many; with none nothing changes.
-pub fn retry_failed_uploads(app: &AppHandle) -> AppResult<usize> {
-    let state = app.state::<crate::AppState>();
-    let path = paths::uploads(&state.data_dir);
-    let n = {
-        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        let mut queue = UploadQueue::load(&path);
-        let n = queue.retry_failed(state.owner().as_ref());
-        if n > 0 {
-            queue.save(&path)?;
-        }
-        n
-    };
-    if n > 0 {
-        state.upload_notify.notify_one();
-        emit_uploads(app);
-        emit_status(app);
+/// After Retry all put `n` failed uploads back in the queue: the worker goes now and the window hears it.
+pub fn retried_uploads(app: &AppHandle, n: usize) {
+    if n == 0 {
+        return;
     }
-    Ok(n)
-}
-
-/// Records that this computer ran the Retry all asked at `at` (`retry_requested_at`), so it runs here only once.
-pub fn note_retry_all_ran(app: &AppHandle, at: &str) {
-    let state = app.state::<crate::AppState>();
-    let _ = crate::activity::RetryAllRan { at: Some(at.to_string()) }.save(&paths::retry_all_ran(&state.data_dir));
+    app.state::<crate::AppState>().upload_notify.notify_one();
+    emit_uploads(app);
+    emit_status(app);
 }
 
 /// `upload_discard`: removes the item, deletes its audio, and queues its server session (if any) for deletion.
@@ -2419,6 +2401,8 @@ async fn refresh_config(app: &AppHandle) {
 async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     use crate::notifications::{Category, allowed, local_minutes};
     let state = app.state::<crate::AppState>();
+    // Whose answer this is: a Retry all in it is that account's, never another one signed in meanwhile.
+    let asked_for = state.owner();
     let answer = state.api()?.activity(20).await?;
     let items: Vec<crate::activity::ActivityItem> = serde_json::from_value(answer.get("data").cloned().unwrap_or_default()).unwrap_or_default();
     let path = paths::activity_seen(&state.data_dir);
@@ -2426,13 +2410,13 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let fresh = seen.fresh(&items);
     let _ = seen.save(&path);
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
-    // A Retry all asked from any app (the phone, the web console, this window): this computer retries the failed uploads
-    // it holds once (BE-03), whether or not it has any.
-    if let Some(asked) = answer.get("retry_requested_at").and_then(serde_json::Value::as_str)
-        && crate::activity::RetryAllRan::load(&paths::retry_all_ran(&state.data_dir)).due(Some(asked))
+    // A Retry all asked from any app (the phone, the web console, this window): this computer retries that account's
+    // failed uploads once (BE-03), and only while the same account is signed in.
+    if let (Some(owner), Some(asked)) = (asked_for.as_ref(), answer.get("retry_requested_at").and_then(serde_json::Value::as_str))
+        && state.owner().as_ref() == Some(owner)
+        && let Ok(crate::activity::RetryAllStep::Ran(n)) = crate::activity::follow_retry_all(&state.data_dir, &state.queue_lock, owner, Some(asked))
     {
-        let _ = retry_failed_uploads(app);
-        note_retry_all_ran(app, asked);
+        retried_uploads(app, n);
     }
     let settings = state.settings();
     let minutes = local_minutes();

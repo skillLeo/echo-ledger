@@ -6,7 +6,7 @@
 // finish are one line, "3 recordings didn't finish uploading · Retry all", which opens to show each one.
 import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, listenTo, type ActivityGroup, type ActivityItem, type AppStatus, type PendingItem, type RetryAllAnswer, type SkippedItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ActivityGroup, type ActivityItem, type AppStatus, type PendingItem, type RetryAllAnswer, type SkippedItem, type UploadItem } from "../../lib/ipc";
 import { dayGroup } from "../../lib/library";
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { actionCount, isProblem, needsAction as asksForAction, repeatWords, SERVER_PROBLEM, uploadGroupTitle } from "../../lib/badge";
@@ -32,11 +32,18 @@ const retries = (i: Pick<ActivityItem, "kind" | "resolved">) => i.kind === "uplo
 /** The only group (2.0.0-r): uploads that didn't finish. */
 const UPLOADS = "upload_failed";
 
-/** What Retry all says it did: here and on the person's other devices, or only here while offline. */
-export function retryAllWords(answer: Pick<RetryAllAnswer, "retry_requested_at" | "here">): string {
-  if (!answer.retry_requested_at) return "Trying again on this computer. You're offline, so your other devices weren't asked.";
+/** What Retry all says it did: here and on the person's other devices; or only here, offline (a network error) or with
+ * the server not answering as it should. */
+export function retryAllWords(answer: Pick<RetryAllAnswer, "retry_requested_at" | "here" | "others">): string {
+  if (!answer.retry_requested_at) {
+    return answer.others === "offline" ? "Trying again on this computer. You're offline, so your other devices weren't asked."
+      : "Trying again on this computer. Couldn't reach your other devices. Try again.";
+  }
   return answer.here > 0 ? "Trying again. Your other devices try theirs too." : "Asked your other devices to try again.";
 }
+
+/** This computer's line for its own failed uploads (Open: where each can be retried or discarded). */
+const localWords = (n: number) => (n === 1 ? "1 recording did not finish uploading" : `${n} recordings did not finish uploading`);
 
 /** An item's icon: a problem that is over is done; the server's own (server_problem) is a server; other problems the error. */
 const iconOf = (i: Pick<ActivityItem, "kind" | "resolved">): IconType =>
@@ -81,8 +88,17 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
   const readGroup = () =>
     api.activityGroupItems(UPLOADS).then((r) => setGroupItems(Array.isArray(r?.data) ? r.data : []), () => setGroupItems(null));
 
+  // This computer's failed uploads (its own, not another account's): Open leads to where each is retried or discarded.
+  const [localFailed, setLocalFailed] = useState<UploadItem[]>([]);
+  const readUploads = () =>
+    api.uploadList().then((u) => setLocalFailed((Array.isArray(u) ? u : []).filter((i) => i.state === "failed" && !i.heldFor)), () => undefined);
+  const needsHeading = useRef<HTMLHeadingElement>(null);
+  const pageTitle = useRef<HTMLHeadingElement>(null);
+  const retried = useRef(false);
+
   const load = () => {
     api.activityGroups().then((r) => setServerGroups(Array.isArray(r?.data) ? r.data : []), () => setServerGroups(null));
+    void readUploads();
     if (groupOpenRef.current) void readGroup();
     return api.activity().then((r) => {
       setItems(r.data ?? []);
@@ -96,6 +112,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : [])).catch(() => undefined);
     const subs = [
       listenTo("activity:updated", () => void load()),
+      listenTo("uploads:changed", () => void readUploads()),
       listenTo("pending:changed", (p) => setPending(Array.isArray(p) ? p : [])),
       listenTo("skipped:changed", (s) => setSkipped(Array.isArray(s) ? s : [])),
     ];
@@ -147,13 +164,26 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     setGroupOpen(!groupOpen);
   };
   useEffect(() => {
-    if (!uploads) setGroupOpen(false);
+    const afterRetry = retried.current;
+    retried.current = false;
+    if (uploads) return;
+    setGroupOpen(false);
+    // Retry all emptied the group: its line (and the button that had focus) went, so focus goes to what heads the
+    // section, or the page's title when the whole section went with it.
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (afterRetry && lost) (needsHeading.current ?? pageTitle.current)?.focus();
   }, [uploads]);
+  // This computer's own failed uploads: in the group when the server lists their recordings there (the line inside it
+  // leads to them), else on their own line as before.
+  const localInGroup = uploads ? localFailed.filter((u) => !!u.sessionId && uploads.session_ids.includes(u.sessionId)).length : 0;
+  const localOutside = uploads ? localFailed.length - localInGroup : status.failedUploads;
   const retryAll = async () => {
     if (retrying) return;
     setRetrying(true);
     try {
       say?.(retryAllWords(await api.activityRetryAll(UPLOADS)));
+      // The groups read next are the ones after it (see the effect above).
+      retried.current = true;
       void load();
     } catch (e) {
       say?.(errorMessage(e), true);
@@ -215,15 +245,15 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
       <header className="el-page__head">
         <PanelToggle />
         <div className="el-page__titles">
-          <h1 className="el-title-l">Activity</h1>
+          <h1 className="el-title-l" ref={pageTitle} tabIndex={-1}>Activity</h1>
           <p className="el-secondary" aria-live="polite">{activitySubtitle(needsYou, unread)}</p>
         </div>
         {unread > 0 && <div className="el-page__actions"><Button variant="quiet" icon={Icons.CheckIcon} onClick={() => void readAll()}>Mark all read</Button></div>}
       </header>
 
-      {show !== "done" && (waiting || !!uploads || status.failedUploads > 0 || needsAction.length > 0) && (
+      {show !== "done" && (waiting || !!uploads || localOutside > 0 || needsAction.length > 0) && (
         <section className="el-group" aria-labelledby="activity-needs">
-          <h2 id="activity-needs" className="el-caption el-body-strong el-group__title">Needs action</h2>
+          <h2 id="activity-needs" className="el-caption el-body-strong el-group__title" ref={needsHeading} tabIndex={-1}>Needs action</h2>
           <Card>
             <List label="Needs action" className="el-group__rows">
               {waiting && (
@@ -242,13 +272,17 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
                     <li className="el-activity__group" data-testid="upload-group">
                       <List label={uploadGroupTitle(uploads.count)}>
                         {shownItems.map(row)}
+                        {localInGroup > 0 && (
+                          <ListRow icon={Icons.LaptopIcon} title={localInGroup === 1 ? "1 is on this computer" : `${localInGroup} are on this computer`}
+                            meta="Open them to retry or discard each one" control={<Button size="sm" onClick={onFailed}>Open</Button>} />
+                        )}
                       </List>
                     </li>
                   )}
                 </>
-              ) : status.failedUploads > 0 && (
-                <ListRow icon={Icons.ErrorIcon} title="Uploads that need you"
-                  meta={status.failedUploads === 1 ? "1 recording did not finish uploading" : `${status.failedUploads} recordings did not finish uploading`}
+              ) : null}
+              {localOutside > 0 && (
+                <ListRow icon={Icons.ErrorIcon} title="Uploads that need you" meta={localWords(localOutside)}
                   control={<Button size="sm" onClick={onFailed}>Open</Button>} />
               )}
               {needsAction.map(row)}
@@ -309,7 +343,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
         <EmptyState icon={Icons.BellIcon} title="All caught up" body="Nothing yet. Finished transcripts, failed uploads and new devices show up here." />
       )}
 
-      {show === "needs" && !(waiting || !!uploads || status.failedUploads > 0 || needsAction.length > 0) && items && (
+      {show === "needs" && !(waiting || !!uploads || localOutside > 0 || needsAction.length > 0) && items && (
         <EmptyState icon={Icons.ReadyIcon} title="Nothing needs you" body="Calls to decide, uploads that failed and anything else that needs you shows up here." />
       )}
       {show !== "needs" && groups.map((g) => (

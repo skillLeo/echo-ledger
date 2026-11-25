@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makePendingItem, makeSkippedItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeSkippedItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { Shell } from "../shell/Shell";
 import { ActivityV2, retryAllWords } from "./ActivityV2";
 
@@ -222,12 +222,17 @@ describe("the v2 Activity page", () => {
 
   it("UX-08: one upload that didn't finish says Retry; offline Retry all says only this computer tried; with nothing to retry, the error", async () => {
     respond("activity_groups", { data: [{ group: "upload_failed", count: 1, unread: 1, session_ids: ["s-u1"], at: null }] });
-    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1 });
+    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1, others: "offline" });
     const { say } = await show();
     const line = row("1 recording didn't finish uploading");
     fireEvent.click(within(line).getByRole("button", { name: "Retry" }));
     await act(flushAsync);
     expect(say).toHaveBeenCalledWith("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    // The server answered, but not as it should (a 500, an older server): not called offline.
+    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1, others: "failed" });
+    fireEvent.click(within(row("1 recording didn't finish uploading")).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenLastCalledWith("Trying again on this computer. Couldn't reach your other devices. Try again.");
     // Nothing here and the server can't be reached: the error, in red.
     fail("activity_retry_all", "The server is unreachable.");
     fireEvent.click(within(row("1 recording didn't finish uploading")).getByRole("button", { name: "Retry" }));
@@ -235,10 +240,53 @@ describe("the v2 Activity page", () => {
     expect(say).toHaveBeenLastCalledWith("The server is unreachable.", true);
   });
 
-  it("retryAllWords: here and elsewhere, only elsewhere, or only here while offline", () => {
+  it("retryAllWords: here and elsewhere, only elsewhere, or only here (offline only for a network error)", () => {
     expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 2 })).toBe("Trying again. Your other devices try theirs too.");
     expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 0 })).toBe("Asked your other devices to try again.");
-    expect(retryAllWords({ retry_requested_at: null, here: 1 })).toBe("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1, others: "offline" })).toBe("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1, others: "failed" })).toBe("Trying again on this computer. Couldn't reach your other devices. Try again.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1 })).toBe("Trying again on this computer. Couldn't reach your other devices. Try again.");
+  });
+
+  it("UX-08: this computer's own failed uploads stay one Open away: inside the group when the server lists them, else on their own line", async () => {
+    respond("activity_list", { data: [ITEMS[0]], unread_count: 1 });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 2, unread: 2, session_ids: ["s-a", "s-b"], at: null }] });
+    respond("activity_group_list", { data: [] });
+    // Three failed here: one the server lists in the group, one it doesn't know (its audio is gone, no session), and one
+    // of another account (not this one's to open).
+    respond("upload_list", [
+      makeUploadItem("u1", { state: "failed", sessionId: "s-a" }),
+      makeUploadItem("u2", { state: "failed", sessionId: null }),
+      makeUploadItem("u3", { state: "failed", heldFor: "sara@example.test" }),
+      makeUploadItem("u4", { state: "queued" }),
+    ]);
+    const { onFailed } = await show(makeStatus({ failedUploads: 3 }));
+    const outside = row("Uploads that need you");
+    expect(outside).toHaveTextContent("1 recording did not finish uploading");
+    fireEvent.click(within(outside).getByRole("button", { name: "Open" }));
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(row("2 recordings didn't finish uploading")).getByRole("button", { name: "2 recordings didn't finish uploading" }));
+    await act(flushAsync);
+    const inside = within(screen.getByTestId("upload-group"));
+    const here = inside.getByText("1 is on this computer").closest("li") as HTMLElement;
+    expect(here).toHaveTextContent("Open them to retry or discard each one");
+    fireEvent.click(within(here).getByRole("button", { name: "Open" }));
+    expect(onFailed).toHaveBeenCalledTimes(2);
+  });
+
+  it("UX-08: when Retry all empties the group, focus goes to the Needs action heading, not the page's body", async () => {
+    respond("activity_list", { data: [ITEMS[0]], unread_count: 1 });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 2, unread: 0, session_ids: ["s-a", "s-b"], at: null }] });
+    respond("activity_retry_all", { retry_requested_at: NOW.toISOString(), count: 2, here: 2 });
+    await show();
+    const button = within(row("2 recordings didn't finish uploading")).getByRole("button", { name: "Retry all" });
+    button.focus();
+    // The uploads went up while Retry all was answered: the server has no group any more.
+    respond("activity_groups", { data: [] });
+    fireEvent.click(button);
+    await act(flushAsync);
+    expect(screen.queryByText("2 recordings didn't finish uploading")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Needs action" })).toHaveFocus();
   });
 
   it("the page's line says the rail's number when it has it (the server's, UX-08)", async () => {

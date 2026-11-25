@@ -1,7 +1,8 @@
 // UX-08, Activity and its badge (contract 2.0.0-r): the Activity page with three uploads that didn't finish (one of them
 // twice), one that went up after all, and the server's one Activity number (4, red: a failure is among them). The short
-// set: 1024 and 1280 light, 1280 dark and 1280 Urdu, plus 1280 light with the group opened. Saved under
-// docs/design/screens/desktop/ux-08/<after|before>/: <width>-<theme>-<lang>.png and 1280-light-en-open.png.
+// set: 1024 and 1280 light, 1280 dark and 1280 Urdu, plus 1280 light with the group opened, in English and Urdu (its
+// chevron turned the other way). Saved under docs/design/screens/desktop/ux-08/<after|before>/: <width>-<theme>-<lang>.png
+// and 1280-light-<lang>-open.png.
 // Measured (not with --before): one line "3 recordings didn't finish uploading" with Retry all, none of its items on
 // their own until it is opened (then all three, the repeated one saying "2 times"), "Uploaded" among the day's items,
 // and the rail's Activity badge saying 6 in red (the server's 4 and the 2 calls waiting here). The run fails on any of that.
@@ -63,11 +64,11 @@ try {
       if (!m.uploaded) problems.push(`${name}: "Uploaded" is missing`);
       // The server's 4, and the fixture's 2 calls waiting on this computer for Transcribe or Delete.
       if (m.badge !== "6 red") problems.push(`${name}: the rail's badge says ${m.badge}, not 6 in red`);
-      if (width === 1280 && theme === "light" && lang === "en") {
+      if (width === 1280 && theme === "light") {
         await page.getByRole("button", { name: GROUP }).click();
         await page.getByTestId("upload-group").waitFor();
         await page.waitForTimeout(200);
-        await page.screenshot({ path: join(out, "1280-light-en-open.png") });
+        await page.screenshot({ path: join(out, `1280-light-${lang}-open.png`) });
         const inside = await page.getByTestId("upload-group").locator(".el-row").allTextContents();
         console.log(`opened: ${inside.length} items; ${inside.filter((t) => t.includes("2 times")).length} says "2 times"`);
         if (inside.length !== 3) problems.push(`opened: ${inside.length} items, not 3`);

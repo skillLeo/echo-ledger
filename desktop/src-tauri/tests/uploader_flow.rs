@@ -1880,6 +1880,17 @@ fn queue_entries_from_before_v1_1_load_as_queued() {
 }
 
 #[test]
+fn an_upload_row_names_its_recording_on_the_server_once_there_is_one() {
+    // UX-08: Activity's group of uploads that didn't finish lists recordings; the row says which one it is.
+    let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
+    assert!(serde_json::to_value(UploadItem::from(&item)).unwrap().get("sessionId").is_none(), "none yet: left out");
+    item.created_session_id = Some("01JBSESSION".into());
+    assert_eq!(serde_json::to_value(UploadItem::from(&item)).unwrap()["sessionId"], "01JBSESSION");
+    item.server_session_id = Some("01JBLIVE".into());
+    assert_eq!(UploadItem::from(&item).session_id.as_deref(), Some("01JBLIVE"), "the captions' session it finishes");
+}
+
+#[test]
 fn upload_items_for_the_ui_use_camel_case_and_a_stable_id() {
     let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
     item.title = Some("Standup".into());

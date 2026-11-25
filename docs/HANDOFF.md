@@ -1262,3 +1262,11 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   check-php.sh then PASS for CLI and web. The 5-minute `recordings:recover` job takes the stuck ones; the apps'
   upload retries resend the rest. Root cause outside the code: the hosting's PHP selector drops user extensions
   (twice in two days). Follow-up: an alert to the owner when the scheduled PHP check fails (EL-Backend).
+
+## 2026-11-25 — UX-08 desktop: how uploads retry (lead decision)
+- The desktop keeps its own upload queue's retry. A temporary failure stays queued and is sent again on the worker's
+  30-second turn (which also covers a network change) and at app start. Only permanent failures become "failed": a 4xx,
+  the audio file gone, or a file the server couldn't verify twice. Those wait for Retry, Retry all, or a Retry all from
+  another app (`retry_requested_at`, run once per account on this computer).
+- So the desktop doesn't read `GET /api/config` `upload_retry` (1, 5 and 30 minutes). The phone and the web console
+  follow it.

@@ -9,7 +9,7 @@ import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
-import { railBadgeLabel } from "../../lib/badge";
+import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 
 /** Sent by a page to show its place's panel (Settings' home: Show groups): the panel, or in a narrow window its flyout. */
 export const SHOW_PANEL_EVENT = "echoledger:show-panel";
@@ -43,8 +43,10 @@ export function RailItem({ icon, label, current, onClick, count, countTone, dot,
   /** For the tooltip and assistive tools: "⌘1" and "Meta+1 Control+1". */
   shortcut?: string; keys?: string;
 }) {
-  const name = count ? `${label}, ${count}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
-  const [tipProps, tip] = useTip(shortcut ? `${label} ${shortcut}` : label);
+  // Red says something failed: so do the name and the tooltip (UX-08), as colour alone can't.
+  const failed = !!count && countTone === "danger";
+  const name = count ? `${label}, ${count}${failed ? `, ${FAILED_WORDS}` : ""}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
+  const [tipProps, tip] = useTip(`${shortcut ? `${label} ${shortcut}` : label}${failed ? `, ${FAILED_WORDS}` : ""}`);
   return (
     <>
       <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}

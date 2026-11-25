@@ -59,11 +59,42 @@ pub struct ActivityItem {
 /// The only Activity group (2.0.0-r): uploads that didn't finish, shown as one line with Retry all.
 pub const UPLOAD_FAILED_GROUP: &str = "upload_failed";
 
-/// `retry_all_ran.json`: the last Retry all (its `retry_requested_at`) this computer ran (BE-03).
+/// `retry_all_ran.json` (BE-03): for each account on this computer (its [`account_key`]), the last Retry all
+/// (`retry_requested_at`, a server time) this computer has run or learned, so each one runs here once.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetryAllRan {
     #[serde(default)]
-    pub at: Option<String>,
+    pub by: std::collections::BTreeMap<String, String>,
+}
+
+/// What the person's latest Retry all means here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RetryAllDue {
+    /// Nothing asked, an unreadable time, or one this computer has already run (or an older one).
+    No,
+    /// The first one this account sees here (a fresh sign-in, or the first poll since this version): learned, not run.
+    First,
+    /// Newer than the last one run here: run it now.
+    Run,
+}
+
+/// What the poll did with a Retry all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RetryAllStep {
+    Nothing,
+    /// Learned without running (the first one this account sees here).
+    Learned,
+    /// Ran: how many failed uploads went back to the queue.
+    Ran(usize),
+}
+
+/// The account a Retry all belongs to: its server and email.
+pub fn account_key(owner: &crate::owner::Owner) -> String {
+    format!("{}|{}", owner.server.to_lowercase(), owner.email.as_deref().unwrap_or_default())
+}
+
+fn server_time(v: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    chrono::DateTime::parse_from_rfc3339(v).ok()
 }
 
 impl RetryAllRan {
@@ -71,18 +102,114 @@ impl RetryAllRan {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
+    /// Written whole through a temporary file of its own (never another writer's), then renamed into place.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let tmp = path.with_extension("json.tmp");
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = path.with_extension(format!("json.{}-{n}.tmp", std::process::id()));
         std::fs::write(&tmp, serde_json::to_vec(self)?)?;
-        std::fs::rename(tmp, path)
+        std::fs::rename(&tmp, path).inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+        })
     }
 
-    /// Whether the person's latest Retry all (`requested`, from any app) is newer than the one this computer ran, so it
-    /// runs here now: once per Retry all and device. An unreadable time is never a reason to run.
-    pub fn due(&self, requested: Option<&str>) -> bool {
-        let parse = |v: &str| chrono::DateTime::parse_from_rfc3339(v).ok();
-        let Some(asked) = requested.and_then(parse) else { return false };
-        self.at.as_deref().and_then(parse).is_none_or(|ran| asked > ran)
+    /// Whether `account`'s latest Retry all (`requested`, from any app) runs here now: once per Retry all and device.
+    pub fn due(&self, account: &str, requested: Option<&str>) -> RetryAllDue {
+        let Some(asked) = requested.and_then(server_time) else { return RetryAllDue::No };
+        match self.by.get(account) {
+            None => RetryAllDue::First,
+            Some(ran) => match server_time(ran) {
+                Some(ran) if asked <= ran => RetryAllDue::No,
+                _ => RetryAllDue::Run,
+            },
+        }
+    }
+
+    /// Records `at` for `account`, keeping the later of it and what is there (an older answer never undoes a newer one).
+    pub fn note(&mut self, account: &str, at: &str) {
+        let Some(new) = server_time(at) else { return };
+        let keep = self.by.get(account).and_then(|old| server_time(old)).is_none_or(|old| new > old);
+        if keep {
+            self.by.insert(account.to_string(), at.to_string());
+        }
+    }
+}
+
+/// Retry all on this computer (BE-03): every failed upload `owner` may send goes back to the queue at once, under the
+/// queue's lock. Returns how many.
+pub fn retry_failed_here(data_dir: &Path, lock: &std::sync::Mutex<()>, owner: Option<&crate::owner::Owner>) -> crate::error::AppResult<usize> {
+    use crate::net::uploader::UploadQueue;
+    let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let path = crate::net::sync::paths::uploads(data_dir);
+    let mut queue = UploadQueue::load(&path);
+    let n = queue.retry_failed(owner);
+    if n > 0 {
+        queue.save(&path)?;
+    }
+    Ok(n)
+}
+
+/// Records, under the queue's lock, that this computer ran `owner`'s Retry all asked at `at` (keeping the later time).
+pub fn note_retry_all(data_dir: &Path, lock: &std::sync::Mutex<()>, owner: &crate::owner::Owner, at: &str) -> std::io::Result<()> {
+    let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let path = crate::net::sync::paths::retry_all_ran(data_dir);
+    let mut ran = RetryAllRan::load(&path);
+    ran.note(&account_key(owner), at);
+    ran.save(&path)
+}
+
+/// The poll's half of Retry all (BE-03): `asked` is `retry_requested_at` from `GET /api/activity`, read for `owner`. A
+/// newer one than this computer ran retries `owner`'s failed uploads and is recorded only once that worked; the first
+/// one an account sees here is only learned (a fresh sign-in never runs an old request). All under the queue's lock.
+pub fn follow_retry_all(data_dir: &Path, lock: &std::sync::Mutex<()>, owner: &crate::owner::Owner, asked: Option<&str>) -> crate::error::AppResult<RetryAllStep> {
+    use crate::net::uploader::UploadQueue;
+    let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let path = crate::net::sync::paths::retry_all_ran(data_dir);
+    let mut ran = RetryAllRan::load(&path);
+    let key = account_key(owner);
+    let step = match ran.due(&key, asked) {
+        RetryAllDue::No => return Ok(RetryAllStep::Nothing),
+        RetryAllDue::First => RetryAllStep::Learned,
+        RetryAllDue::Run => {
+            let uploads = crate::net::sync::paths::uploads(data_dir);
+            let mut queue = UploadQueue::load(&uploads);
+            let n = queue.retry_failed(Some(owner));
+            if n > 0 {
+                queue.save(&uploads)?;
+            }
+            RetryAllStep::Ran(n)
+        }
+    };
+    ran.note(&key, asked.unwrap_or_default());
+    ran.save(&path)?;
+    Ok(step)
+}
+
+/// Retry all from this computer (BE-03): its own failed uploads go back to the queue at once, then the server asks the
+/// person's other devices (`POST /api/activity/retry-all`), and the time it answers is recorded so the poll doesn't run
+/// it again here. The answer gains `here` (how many were retried here). When the server can't be asked but something
+/// was retried here, `retry_requested_at` is null and `others` says why: `offline` (a network error) or `failed`.
+/// With nothing here either, the server's error.
+pub async fn retry_all(api: crate::error::AppResult<crate::net::api::ApiClient>, data_dir: &Path, lock: &std::sync::Mutex<()>,
+    owner: Option<&crate::owner::Owner>, group: &str) -> crate::error::AppResult<serde_json::Value> {
+    let here = retry_failed_here(data_dir, lock, owner)?;
+    let asked = match api {
+        Ok(api) => api.activity_retry_all(group).await,
+        Err(e) => Err(e),
+    };
+    match asked {
+        Ok(mut answer) => {
+            if let (Some(owner), Some(at)) = (owner, answer.get("retry_requested_at").and_then(serde_json::Value::as_str)) {
+                note_retry_all(data_dir, lock, owner, at)?;
+            }
+            answer["here"] = serde_json::json!(here);
+            Ok(answer)
+        }
+        Err(e) if here > 0 => {
+            let others = if matches!(e, crate::error::AppError::Network(_)) { "offline" } else { "failed" };
+            Ok(serde_json::json!({ "retry_requested_at": null, "count": here, "here": here, "others": others }))
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -173,23 +300,29 @@ mod tests {
     }
 
     #[test]
-    fn a_retry_all_runs_once_on_this_computer_and_only_when_newer() {
-        let never = RetryAllRan::default();
-        assert!(never.due(Some("2026-11-25T09:00:00Z")), "never ran here: the latest one runs");
-        assert!(!never.due(None), "nobody asked");
-        assert!(!never.due(Some("not a time")), "an unreadable time runs nothing");
-        let ran = RetryAllRan { at: Some("2026-11-25T09:00:00Z".into()) };
-        assert!(!ran.due(Some("2026-11-25T09:00:00Z")), "the same one: not again");
-        assert!(!ran.due(Some("2026-11-25T14:00:00+05:00")), "the same moment in another zone: not again");
-        assert!(!ran.due(Some("2026-11-25T08:59:00Z")), "an older one: no");
-        assert!(ran.due(Some("2026-11-25T09:00:01Z")), "a newer one: yes");
+    fn a_retry_all_runs_once_per_account_on_this_computer_and_only_when_newer() {
+        let mut ran = RetryAllRan::default();
+        assert_eq!(ran.due("a", None), RetryAllDue::No, "nobody asked");
+        assert_eq!(ran.due("a", Some("not a time")), RetryAllDue::No, "an unreadable time runs nothing");
+        assert_eq!(ran.due("a", Some("2026-11-25T09:00:00Z")), RetryAllDue::First, "the first one seen here: learned, not run");
+        ran.note("a", "2026-11-25T09:00:00Z");
+        assert_eq!(ran.due("a", Some("2026-11-25T09:00:00Z")), RetryAllDue::No, "the same one: not again");
+        assert_eq!(ran.due("a", Some("2026-11-25T14:00:00+05:00")), RetryAllDue::No, "the same moment in another zone: not again");
+        assert_eq!(ran.due("a", Some("2026-11-25T08:59:00Z")), RetryAllDue::No, "an older one: no");
+        assert_eq!(ran.due("a", Some("2026-11-25T09:00:01Z")), RetryAllDue::Run, "a newer one: yes");
+        assert_eq!(ran.due("b", Some("2026-11-25T08:00:00Z")), RetryAllDue::First, "another account keeps its own");
+        // An older answer finishing late never undoes a newer one.
+        ran.note("a", "2026-11-25T10:00:00Z");
+        ran.note("a", "2026-11-25T09:30:00Z");
+        assert_eq!(ran.by["a"], "2026-11-25T10:00:00Z");
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("retry_all_ran.json");
-        assert_eq!(RetryAllRan::load(&path), never, "no file: never ran");
+        assert_eq!(RetryAllRan::load(&path), RetryAllRan::default(), "no file: never ran");
         ran.save(&path).unwrap();
         assert_eq!(RetryAllRan::load(&path), ran);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no temporary file left behind");
         std::fs::write(&path, b"{oops").unwrap();
-        assert_eq!(RetryAllRan::load(&path), never, "a damaged file: as if never ran");
+        assert_eq!(RetryAllRan::load(&path), RetryAllRan::default(), "a damaged file: as if never ran");
     }
 
     #[test]

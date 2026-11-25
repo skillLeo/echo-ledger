@@ -77,6 +77,9 @@ export interface AppStatus {
   elapsedMs: number;
   pillHidden: boolean;
   pendingDecisions: number;
+  /** Those the server doesn't know (no session was opened for them): the rail and the Dock add only these to the server's
+   * badge (UX-08). */
+  pendingDecisionsHere?: number;
   failedUploads: number;
   /** The core's id for this sign-in, made at each sign-in (none while signed out; from a core before 2.0.0-p, none). */
   signIn?: string | null;
@@ -538,11 +541,13 @@ export interface ActivityGroup {
   at: string | null;
 }
 
-/** Retry all's answer: when it was asked, how many the server knows of, and how many were retried on this computer. */
+/** Retry all's answer: when it was asked, how many the server knows of, and how many were retried on this computer.
+ * When the server couldn't be asked (`retry_requested_at` null), why: offline (a network error), or another failure. */
 export interface RetryAllAnswer {
   retry_requested_at: string | null;
   count: number;
   here: number;
+  others?: "offline" | "failed";
 }
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
@@ -1468,6 +1473,8 @@ export interface UploadItem {
   attempts: number;
   /** A file brought in with Import or a drop: listed while it uploads; cancelling it loses nothing. */
   imported: boolean;
+  /** Its recording on the server once one was made (UX-08: an upload that didn't finish is then in Activity's group). */
+  sessionId?: string | null;
   /** Percent sent while `uploading`. */
   progress: number | null;
   /** The account it waits for: it was made while another account was signed in here (since v1.5). */
@@ -2295,8 +2302,8 @@ export const api = {
   activityGroups: () => invoke<{ data: ActivityGroup[] }>("activity_groups"),
   /** Retry all (BE-03): this computer's failed uploads at once, and the person's other devices through the server. */
   activityRetryAll: (group: string) => invoke<RetryAllAnswer>("activity_retry_all", { group }),
-  /** The one Activity number (2.0.0-r); the window counts its own when it fails. */
-  badge: () => invoke<ActivityBadge>("badge_get"),
+  /** The one Activity number (2.0.0-r); null from a server older than it. */
+  badge: () => invoke<ActivityBadge | null>("badge_get"),
   exportSettings: () => invoke<string>("settings_export"),
   importSettings: (text: string) => invoke<Settings>("settings_import", { text }),
   markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),

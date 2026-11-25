@@ -9,6 +9,8 @@ export const BADGE_READ_LIMIT = 50;
 
 /** Answers to an upgrade request (docs/API.md "Upgrade requests"). */
 const UPGRADE_REPLIES = new Set(["upgrade_approved", "upgrade_declined"]);
+/** A call an app saw but didn't record (docs/API.md "Missed recordings"): it needs action, as the server counts it. */
+const MISSED_RECORDING = "missed_recording";
 
 /** The server lacks what uploads need (2.0.0-v, super admins only): a problem, drawn as the server's. */
 export const SERVER_PROBLEM = "server_problem";
@@ -19,10 +21,11 @@ export function isProblem(kind: string | null | undefined): boolean {
   return k.includes("fail") || k.includes("error") || k.includes("problem") || k === "budget_reached";
 }
 
-/** An unread notification that asks something of the person; a problem that is over (resolved) no longer does. */
+/** An unread notification that asks something of the person (the server's badge rule: problems, upgrade answers and
+ * missed recordings); a problem that is over (resolved) no longer does. */
 export function needsAction(item: Pick<ActivityItem, "kind" | "read" | "resolved">): boolean {
   if (item.read || item.resolved) return false;
-  return isProblem(item.kind) || UPGRADE_REPLIES.has(item.kind ?? "");
+  return isProblem(item.kind) || UPGRADE_REPLIES.has(item.kind ?? "") || item.kind === MISSED_RECORDING;
 }
 
 /** The badge's number: unread problems and upgrade replies, plus calls waiting for a decision. */
@@ -42,10 +45,10 @@ export function badgeSpoken(count: number): string {
   return count === 1 ? "1 needs you" : `${count} need you`;
 }
 
-/** A failure among what the badge counts: a failed transcript or upload, or the server's own problem (its red). */
+/** A failure among what the badge counts (its red), as the server decides it: a kind with "fail" or "error" in it. */
 export function isFailure(kind: string | null | undefined): boolean {
   const k = (kind ?? "").toLowerCase();
-  return k.includes("fail") || k.includes("error") || k.includes("problem");
+  return k.includes("fail") || k.includes("error");
 }
 
 /** The rail's Activity number and colour (UX-08). */
@@ -59,17 +62,22 @@ export interface RailBadge {
 
 /**
  * The rail's Activity badge (UX-08, BE-04): the server's one number (`GET /api/badge`, the same on the phone and the web
- * console; a merged item counts once, a resolved one never), plus the calls waiting on this computer for Transcribe or
- * Delete, which only it holds. Offline or from an older server (no answer): counted here from the list, as before.
+ * console; a merged item counts once, a resolved one never; it counts the waiting calls it has a session for), plus the
+ * calls waiting on this computer that the server doesn't know (`waitingHere`). Without the server's number (an older
+ * server, or never read yet): counted here from the list by the server's rules, with every call waiting (`waiting`).
  */
-export function railBadge(server: ActivityBadge | null | undefined, items: readonly Pick<ActivityItem, "kind" | "read" | "resolved">[] | null | undefined, waitingCalls = 0): RailBadge {
-  const waiting = Math.max(0, Math.floor(waitingCalls || 0));
+export function railBadge(server: ActivityBadge | null | undefined, items: readonly Pick<ActivityItem, "kind" | "read" | "resolved">[] | null | undefined,
+  waiting = 0, waitingHere = waiting): RailBadge {
+  const whole = (n: number) => Math.max(0, Math.floor(n || 0));
   if (server && Number.isFinite(server.count)) {
-    return { count: Math.max(0, Math.floor(server.count)) + waiting, tone: server.tone === "danger" ? "danger" : "accent", shared: true };
+    return { count: whole(server.count) + whole(waitingHere), tone: server.tone === "danger" ? "danger" : "accent", shared: true };
   }
   const counted = (items ?? []).filter(needsAction);
-  return { count: counted.length + waiting, tone: counted.some((i) => isFailure(i.kind)) ? "danger" : "accent", shared: false };
+  return { count: counted.length + whole(waiting), tone: counted.some((i) => isFailure(i.kind)) ? "danger" : "accent", shared: false };
 }
+
+/** What the rail and the Dock say about its colour, for a screen reader and the tooltip: "something failed" in red. */
+export const FAILED_WORDS = "something failed";
 
 /** What the rail's badge says: nothing at 0, the number up to 99, then "99+" (as the server's `label`). */
 export function railBadgeLabel(count: number): string | null {

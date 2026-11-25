@@ -200,8 +200,11 @@ export default function MainApp() {
   // UX-08: the server's one number (GET /api/badge), the same on the phone and the web console; counted here from the list
   // while it can't be read (offline, an older server).
   const serverBadge = useActivityBadge(!!status?.paired);
-  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting, so only Activity's part is sent.
-  const activityPart = railBadge(serverBadge, activityItems, 0).count;
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting that only this computer knows, so the
+  // rest is sent (the server's number, or, counted here, the list and the calls the server has sessions for).
+  const waitingAll = status?.pendingDecisions ?? 0;
+  const waitingHere = status?.pendingDecisionsHere ?? waitingAll;
+  const activityPart = Math.max(0, railBadge(serverBadge, activityItems, waitingAll, waitingHere).count - waitingHere);
   useEffect(() => {
     void api.dockActivitySet(activityPart).catch(() => undefined);
   }, [activityPart]);
@@ -865,7 +868,7 @@ export default function MainApp() {
   }
 
   // The rail's number: the server's, plus the calls waiting on this computer (only it holds them); red when something failed.
-  const activityBadge = railBadge(serverBadge, activityItems, status.pendingDecisions);
+  const activityBadge = railBadge(serverBadge, activityItems, waitingAll, waitingHere);
   const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
   /** The Library on a smart folder (null: every recording). */

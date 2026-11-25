@@ -1,7 +1,7 @@
 // The rail's Activity number from the server (UX-08, BE-04: `GET /api/badge`), the one number the phone and the web
 // console show too. Read when the window opens or comes back, and whenever the core says Activity changed (its poll, an
-// item marked read, Retry all). null when it can't be read (offline, locked, an older server): the window then counts
-// its own (lib/badge.ts `railBadge`).
+// item marked read, Retry all). A failed read (offline, locked, the server busy) keeps the last number; null only before
+// the first read and from a server older than the badge, when the window counts its own (lib/badge.ts `railBadge`).
 import { useEffect, useState } from "react";
 import { api, listenTo, type ActivityBadge } from "../../lib/ipc";
 import { useWindowShown } from "../../lib/visibility";
@@ -19,7 +19,7 @@ export function useActivityBadge(signedIn: boolean): ActivityBadge | null {
     }
     if (!shown) return;
     let alive = true;
-    const read = () => api.badge().then((b) => alive && setBadge(valid(b) ? b : null), () => alive && setBadge(null));
+    const read = () => api.badge().then((b) => alive && setBadge(valid(b) ? b : null), () => undefined);
     void read();
     const un = listenTo("activity:updated", () => void read());
     return () => {

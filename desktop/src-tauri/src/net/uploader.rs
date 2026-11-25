@@ -224,6 +224,9 @@ pub struct UploadItem {
     pub progress: Option<u8>,
     /// The account it waits for, when it was made while another account was signed in here (v1.5).
     pub held_for: Option<String>,
+    /// Its recording on the server, once one was made (UX-08: Activity's group of uploads that didn't finish lists it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 impl From<&PendingUpload> for UploadItem {
@@ -240,6 +243,7 @@ impl From<&PendingUpload> for UploadItem {
             imported: p.imported,
             progress: p.progress,
             held_for: None,
+            session_id: p.server_session(),
         }
     }
 }

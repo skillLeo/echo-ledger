@@ -22,8 +22,8 @@ const LIST = [
   { id: "n2", kind: "budget_reached", title: "Minutes used up", body: "", session_id: null, read: false, at: null },
 ];
 
-function app(pendingDecisions = 0) {
-  respond("app_status", makeStatus({ pendingDecisions }));
+function app(pendingDecisions = 0, pendingDecisionsHere = pendingDecisions) {
+  respond("app_status", makeStatus({ pendingDecisions, pendingDecisionsHere }));
   respond("get_settings", makeSettings());
   respond("lock_status", unlocked);
   respond("library_list", [makeItem("a")]);
@@ -48,9 +48,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("the rail's Activity number (UX-08)", () => {
-  it("is the server's number plus the calls waiting here, in the server's colour; the Dock gets the server's part", async () => {
+  it("is the server's number plus the calls waiting that only this computer knows, in the server's colour; the Dock gets the server's part", async () => {
     respond("badge_get", { count: 5, label: "5", tone: "accent" });
-    app(1);
+    // Two calls wait here; the server has a session for one of them (captions opened one), so its 5 counts that one
+    // already: the rail adds only the other (the rule changed in review: it used to add both).
+    app(2, 1);
     await settle();
     await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
     await settle();
@@ -58,7 +60,17 @@ describe("the rail's Activity number (UX-08)", () => {
     const count = activity().querySelector(".el-rail__count")!;
     expect(count).toHaveTextContent("6");
     expect(count).not.toHaveClass("el-rail__count--danger");
-    // The core adds the calls waiting to the Dock's number itself.
+    // The core adds the calls waiting that only this computer knows to the Dock's number itself.
+    expect(callsOf("dock_activity_set").at(-1)).toEqual({ count: 5 });
+  });
+
+  it("a waiting call the server has a session for is counted once: in the server's number, not again here", async () => {
+    respond("badge_get", { count: 5, label: "5", tone: "accent" });
+    app(1, 0);
+    await settle();
+    await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 5");
     expect(callsOf("dock_activity_set").at(-1)).toEqual({ count: 5 });
   });
 
@@ -69,6 +81,13 @@ describe("the rail's Activity number (UX-08)", () => {
     await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
     await settle();
     expect(activity().querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+    // Red is not the only sign: the name says it too.
+    expect(activity()).toHaveAccessibleName("Activity, 2, something failed");
+    // A read that fails for a moment (offline, the server busy) keeps the last number; it doesn't jump to a count here.
+    fail("badge_get", "Network error: the server did not answer");
+    await act(() => emitEvent("activity:updated", 0));
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 2, something failed");
     // Resolved on the server (an upload that went up after all): gone from the badge.
     respond("badge_get", { count: 0, label: null, tone: "accent" });
     await act(() => emitEvent("activity:updated", 0));
@@ -77,13 +96,24 @@ describe("the rail's Activity number (UX-08)", () => {
     expect(activity().querySelector(".el-rail__count")).toBeNull();
   });
 
-  it("offline (or an older server): counted here from the list, red for the failed transcript", async () => {
+  it("never read (offline from the start): counted here from the list, red for the failed transcript", async () => {
     fail("badge_get", "The server is unreachable.");
     app();
     await settle();
     await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
     await settle();
-    expect(activity()).toHaveAccessibleName("Activity, 2");
+    expect(activity()).toHaveAccessibleName("Activity, 2, something failed");
     expect(activity().querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+  });
+
+  it("from a server older than the badge (null): counted here, every call waiting counting", async () => {
+    respond("badge_get", null);
+    app(1, 0);
+    await settle();
+    await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
+    await settle();
+    // The two unread problems of the list and the call waiting (no server number has it).
+    expect(activity()).toHaveAccessibleName("Activity, 3, something failed");
+    expect(callsOf("dock_activity_set").at(-1)).toEqual({ count: 3 });
   });
 });
