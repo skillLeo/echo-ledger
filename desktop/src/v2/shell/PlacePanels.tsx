@@ -7,6 +7,7 @@ import type { IconType } from "../components/Button";
 import { GOAL_GROUPS, entryOf, groupOf, sectionFor } from "../settings/groups";
 import { searchSettings } from "../../lib/settingsIndex";
 import { SETTINGS, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
+import { t } from "../../i18n";
 
 function Row({ icon, label, current, onClick, end, strong }: { icon?: IconType; label: string; current?: boolean; onClick: () => void; end?: ReactNode; strong?: boolean }) {
   return (
@@ -92,15 +93,16 @@ export function SettingsPanel({ current, onOpen, available }: { current: string 
   const groups = GOAL_GROUPS.filter((g) => g.ids.some((id) => id !== "setup_health" && SETTINGS.some((e) => e.id === id && available(e))));
   return (
     <>
-      <SearchField label="Search settings" value={find} onChange={setFind} className="el-panel__search" />
+      <SearchField label={t("Search settings")} value={find} onChange={setFind} className="el-panel__search" />
       {answer ? (
-        <Group title="Matches">
+        <Group title={t("Matches")}>
           {answer.settings.slice(0, 12).map((r) => <Row key={r.entry.id} label={titleV2(r.entry)} onClick={() => onOpen(sectionFor(r.entry))} />)}
-          {answer.settings.length === 0 && <li className="el-caption el-secondary el-panel__none">No setting matches</li>}
+          {answer.settings.length === 0 && <li className="el-caption el-secondary el-panel__none">{t("No setting matches")}</li>}
         </Group>
       ) : (
         <Group>
-          {groups.map((g) => <Row key={g.title} icon={g.icon} label={g.title} current={here?.title === g.title} onClick={() => onOpen(entryOf(g))} />)}
+          {/* A group's English title is its id; its words are said in the window's language (desktop Urdu, D3). */}
+          {groups.map((g) => <Row key={g.title} icon={g.icon} label={t(g.title)} current={here?.title === g.title} onClick={() => onOpen(entryOf(g))} />)}
         </Group>
       )}
     </>

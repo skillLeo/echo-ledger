@@ -12,7 +12,7 @@
 //
 // The plain part (the language now, t, tc, the isolates, the locales) is locale.ts, with no React, so plain Node can
 // import lib/format.ts; this file loads the catalogues, sets <html lang dir>, gives React its hooks and re-exports it.
-import { useSyncExternalStore } from "react";
+import { createElement, Fragment, useSyncExternalStore, type ReactNode } from "react";
 import { announceLanguage, applyLanguage, isRtl, language, subscribeLanguage, t, tc, type Lang } from "./locale";
 
 export * from "./locale";
@@ -61,4 +61,28 @@ export function useLanguage(): Lang {
 export function useT(): { t: typeof t; tc: typeof tc; lang: Lang; rtl: boolean } {
   const lang = useLanguage();
   return { t, tc, lang, rtl: isRtl(lang) };
+}
+
+const pattern = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * A line with elements in it (a word in bold, a button inside a sentence): t()'s line, given no values so its
+ * placeholders stay, split at them, each placeholder's element in its place: withParts(t("Open :site and sign in."),
+ * { site: <strong>console.groq.com</strong> }). In English the elements are as they were written beside the words; in a
+ * right-to-left language each one sits in its own isolate (<bdi>), as t() isolates a value. Text that leaves the window
+ * is never built this way.
+ */
+export function withParts(line: string, parts: Readonly<Record<string, ReactNode>>): ReactNode[] {
+  const names = Object.keys(parts).sort((a, b) => b.length - a.length).map(pattern);
+  if (names.length === 0) return [line];
+  const out: ReactNode[] = [];
+  const found = new RegExp(`:(${names.join("|")})`, "g");
+  let at = 0;
+  for (const hit of line.matchAll(found)) {
+    if (hit.index > at) out.push(line.slice(at, hit.index));
+    out.push(createElement(isRtl() ? "bdi" : Fragment, { key: out.length }, parts[hit[1]]));
+    at = hit.index + hit[0].length;
+  }
+  if (at < line.length) out.push(line.slice(at));
+  return out;
 }

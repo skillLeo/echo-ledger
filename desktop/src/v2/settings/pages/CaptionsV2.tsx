@@ -7,16 +7,17 @@ import { setting } from "../../../lib/settingsRegistry";
 import { COLOUR_PRESETS, CaptionPreview, CAPTIONS_SHARE_LINE } from "../../../views/main/CaptureSettings";
 import { ListRow } from "../../components";
 import { Group, LinkSetting, ResetDefaults, SegmentedSetting, SelectSetting, SliderSetting, SwitchSetting, type Patch } from "./rows";
+import { t } from "../../../i18n";
 
 export function CaptionsPageV2({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Group footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Group footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>{t("You can also right-click the captions while recording to change their style.")}</p></>}>
         <SwitchSetting id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkSetting id="captions.style" onOpen={onStyle} />
       </Group>
-      <ResetDefaults page="Captions" onReset={() => void patch({ captionsOnRecord: true })} />
+      <ResetDefaults page={t("Captions")} onReset={() => void patch({ captionsOnRecord: true })} />
     </>
   );
 }
@@ -31,7 +32,7 @@ function ColourSetting({ id, value, onChange }: { id: string; value: string | nu
     <ListRow compact anchor={id} title={<span id={labelId}>{title}</span>}
       control={
         <span className="el-swatches" role="radiogroup" aria-labelledby={labelId}>
-          <button type="button" role="radio" aria-checked={value === null} className="el-swatch el-swatch--auto" onClick={() => onChange(null)}>Automatic</button>
+          <button type="button" role="radio" aria-checked={value === null} className="el-swatch el-swatch--auto" onClick={() => onChange(null)}>{t("Automatic")}</button>
           {presets.map((c) => (
             <button key={c} type="button" role="radio" aria-checked={value?.toLowerCase() === c} aria-label={c} className="el-swatch"
               style={{ background: c }} onClick={() => onChange(c)} />
@@ -58,7 +59,7 @@ export function CaptionStylePageV2({ settings, patch }: { settings: Settings; pa
         <ColourSetting id="captions.me_colour" value={style.meColor} onChange={(meColor) => save({ meColor })} />
         <ColourSetting id="captions.client_colour" value={style.clientColor} onChange={(clientColor) => save({ clientColor })} />
       </Group>
-      <ResetDefaults page="Style" onReset={() => void patch({
+      <ResetDefaults page={t("Style")} onReset={() => void patch({
         captionLines: 3, overlayCorner: "bottom_right",
         captionStyle: { ...style, size: "medium", width: "normal", opacity: 85, autoHideSeconds: 0, compact: false, meColor: null, clientColor: null },
       })} />

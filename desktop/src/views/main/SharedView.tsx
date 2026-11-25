@@ -3,7 +3,7 @@
 // revoked here; a new request link opens the Request files sheet.
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
-import { audienceText, linkState, limitsText, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
+import { audienceText, limitsText, linkStatus, receivedText, requestStatus, revokeLinkQuestion, revokeRequestQuestion, statusText, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
 import { recordingName } from "../../lib/library";
 import { LinkIcon, PlusIcon, RequestFilesIcon, UsersIcon } from "../../components/Icons";
@@ -55,7 +55,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : "The Inbox");
 
   const revokeLink = async (link: ShareLink) => {
-    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
+    if (!(await confirmAction(revokeLinkQuestion("en")))) return;
     try {
       await api.revokeShare(link.id);
       notify("Link revoked: it stops working at once", false, NO_TARGET);
@@ -65,7 +65,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
     }
   };
   const revokeRequest = async (link: RequestLink) => {
-    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
+    if (!(await confirmAction(revokeRequestQuestion("en")))) return;
     try {
       await api.revokeRequestLink(link.id);
       notify("Request link revoked", false, NO_TARGET);
@@ -77,8 +77,8 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
 
   const counts: Record<SharedTab, number | null> = {
     "with-me": data.withMe?.length ?? null,
-    links: data.links ? data.links.filter((l) => linkState(l) === "Active").length : null,
-    requests: data.requests ? data.requests.filter((l) => requestState(l) === "Active").length : null,
+    links: data.links ? data.links.filter((l) => linkStatus(l) === "active").length : null,
+    requests: data.requests ? data.requests.filter((l) => requestStatus(l) === "active").length : null,
   };
   const loading = (list: unknown[] | null) => list === null && !error && <div className="empty" aria-busy="true">Loading…</div>;
   return (
@@ -123,18 +123,19 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
             {data.links && data.links.length > 0 && (
               <ul className="data-list card">
                 {data.links.map((link) => {
-                  const state = linkState(link);
+                  // Its state as an id; the page is in English (classic) whatever the window's language.
+                  const state = linkStatus(link);
                   return (
-                    <li key={link.id} className={`data-row ${state === "Active" ? "" : "off"}`}>
+                    <li key={link.id} className={`data-row ${state === "active" ? "" : "off"}`}>
                       <div className="data-main">
                         <span className="data-title" dir="auto">{titleOf(link)}</span>
-                        <span className="small muted">{audienceText(link)} · {viewsText(link)}{link.expires_at ? ` · until ${formatWhen(link.expires_at)}` : ""}</span>
+                        <span className="small muted">{audienceText(link, "en")} · {viewsText(link, "en")}{link.expires_at ? ` · until ${formatWhen(link.expires_at)}` : ""}</span>
                       </div>
-                      <span className={`badge state-${state.toLowerCase()}`}>{state}</span>
+                      <span className={`badge state-${state}`}>{statusText(state, "en")}</span>
                       <div className="row-actions">
                         {link.session_id && <button type="button" className="btn ghost compact" onClick={() => onOpenRecording(link.session_id!)}>Open</button>}
                         {link.client_id && <button type="button" className="btn ghost compact" onClick={() => onOpenProject(link.client_id!)}>Open</button>}
-                        {state === "Active" && <button type="button" className="btn ghost compact danger" onClick={() => void revokeLink(link)}>Revoke</button>}
+                        {state === "active" && <button type="button" className="btn ghost compact danger" onClick={() => void revokeLink(link)}>Revoke</button>}
                       </div>
                     </li>
                   );
@@ -150,16 +151,16 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
             {data.requests && data.requests.length > 0 && (
               <ul className="data-list card">
                 {data.requests.map((link) => {
-                  const state = requestState(link);
+                  const state = requestStatus(link);
                   return (
-                    <li key={link.id} className={`data-row ${state === "Active" ? "" : "off"}`}>
+                    <li key={link.id} className={`data-row ${state === "active" ? "" : "off"}`}>
                       <div className="data-main">
                         <span className="data-title" dir="auto">{link.title ?? "Request link"}</span>
-                        <span className="small muted">Into {projectName(link.client_id)} · {receivedText(link.received)} · {limitsText(link)}</span>
+                        <span className="small muted">Into {projectName(link.client_id)} · {receivedText(link.received, "en")} · {limitsText(link, "en")}</span>
                       </div>
-                      <span className={`badge state-${state.toLowerCase()}`}>{state}</span>
+                      <span className={`badge state-${state}`}>{statusText(state, "en")}</span>
                       <div className="row-actions">
-                        {state === "Active" && <button type="button" className="btn ghost compact danger" onClick={() => void revokeRequest(link)}>Revoke</button>}
+                        {state === "active" && <button type="button" className="btn ghost compact danger" onClick={() => void revokeRequest(link)}>Revoke</button>}
                       </div>
                     </li>
                   );
