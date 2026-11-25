@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { FLYOUT_BELOW, NavShell, RAIL_FULL_FROM } from "./NavShell";
-import { railKeeps, type Place } from "./NavRail";
+import { accountTip, railFit, type Place } from "./NavRail";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -18,14 +18,18 @@ const setWidth = (width: number) => {
   window.dispatchEvent(new Event("resize"));
 };
 
-function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn() }: { onPlace?: ReturnType<typeof vi.fn>; onHome?: ReturnType<typeof vi.fn>; toggleCalls?: ReturnType<typeof vi.fn> }) {
+function App({ onPlace = vi.fn(), onHome = vi.fn(), toggleCalls = vi.fn(), avatar = true, tone }: { onPlace?: ReturnType<typeof vi.fn>; onHome?: ReturnType<typeof vi.fn>; toggleCalls?: ReturnType<typeof vi.fn>;
+  /** Without it, the account isn't read yet (no avatar). */
+  avatar?: boolean;
+  /** Activity's badge colour (UX-08): red when something failed. */
+  tone?: "accent" | "danger"; }) {
   const [place, setPlace] = useState<Place | null>("library");
   const panel = (name: string) => <ul aria-label={`${name} views`}><li><button type="button">First {name} view</button></li><li><button type="button" aria-expanded={false}>A group</button></li></ul>;
   return (
     <NavShell place={place} onPlace={(p, again) => { onPlace(p, again); setPlace(p); }} onHome={() => { onHome(); setPlace(null); }}
-      status={{ kind: "ready", text: "Ready to record" }} libraryCount={4} activityCount={2} liveDot liveDotWords="recording" setupAttention onSetupHealth={() => undefined}
+      status={{ kind: "ready", text: "Ready to record" }} libraryCount={4} activityCount={2} activityTone={tone} liveDot liveDotWords="recording" setupAttention onSetupHealth={() => undefined}
       onHelp={() => undefined} onRecord={() => undefined} onUpload={() => undefined} callRecording={{ on: true, toggle: toggleCalls }} onSearch={() => undefined} searchKeys="⌘K"
-      me={{ name: "Ayesha Khan", email: "ayesha@example.test", plan: null }} account={[{ label: "Sign out", onPick: () => undefined }]}
+      me={avatar ? { name: "Ayesha Khan", email: "ayesha@example.test", plan: null } : null} account={avatar ? [{ label: "Sign out", onPick: () => undefined }] : undefined}
       panels={{ library: panel("Library"), projects: panel("Projects"), live: panel("Live"), ask: panel("Ask"), activity: panel("Activity"), settings: panel("Settings") }}
       feet={{ library: <p>Synced just now</p> }} layoutFor="ledger.example.test|ayesha@example.test|w1">
       <p>The page</p>
@@ -218,12 +222,14 @@ describe("the three levels", () => {
   });
 
   it("a high zoom (UX-07): only whole places in the rail, the rest in ⋯ More with Activity's badge and Live's dot; Settings and Account stay", () => {
-    expect(railKeeps(5, 0, 56)).toBe(5);
-    expect(railKeeps(5, 280, 56)).toBe(5);
-    expect(railKeeps(5, 279.6, 56)).toBe(5);
-    expect(railKeeps(5, 279, 56)).toBe(3);
-    expect(railKeeps(5, 150, 56)).toBe(1);
-    expect(railKeeps(5, 40, 56)).toBe(0);
+    expect(railFit(5, 0, 56)).toEqual({ keep: 5, more: false });
+    expect(railFit(5, 280, 56)).toEqual({ keep: 5, more: false });
+    expect(railFit(5, 279.6, 56)).toEqual({ keep: 5, more: false });
+    expect(railFit(5, 279, 56)).toEqual({ keep: 3, more: true });
+    expect(railFit(5, 150, 56)).toEqual({ keep: 1, more: true });
+    expect(railFit(5, 56, 56)).toEqual({ keep: 0, more: true });
+    // Not even More fits whole: no More (never a cut one); the places go into the avatar's menu.
+    expect(railFit(5, 40, 56)).toEqual({ keep: 0, more: false });
     setWidth(1440);
     Object.defineProperty(window, "innerHeight", { value: 370, configurable: true, writable: true });
     window.dispatchEvent(new Event("resize"));
@@ -250,6 +256,106 @@ describe("the three levels", () => {
       expect(rail().getByRole("button", { name: /^More, / })).toHaveAttribute("aria-current", "page");
       fireEvent.click(rail().getByRole("button", { name: /^More, / }));
       expect(within(screen.getByRole("menu", { name: "More places" })).getByRole("menuitemradio", { name: /^Activity/ })).toHaveAttribute("aria-checked", "true");
+    } finally {
+      box.mockRestore();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+    }
+  });
+
+  it("a high zoom in the least window (UX-07): when not even More fits whole, the places go into the avatar's menu with Activity's badge on the avatar", () => {
+    setWidth(1440);
+    Object.defineProperty(window, "innerHeight", { value: 280, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    // 40 px left above the foot; an item is 56 px: not one place, not More.
+    const box = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const height = this.classList.contains("el-rail__places") ? 40 : this.classList.contains("el-rail__item") ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 72, bottom: height, width: 72, height, toJSON: () => ({}) } as DOMRect;
+    });
+    const onPlace = vi.fn();
+    try {
+      render(<App onPlace={onPlace} />);
+      const names = rail().getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
+      // Its name says the places it holds (changed in review: it used to name only the account).
+      expect(names).toEqual(["Record", "More ways to record", "Settings",
+        "Account, Ayesha Khan, with Library, Projects, Live, Ask and Activity, Activity 2, Live recording, needs setup"]);
+      expect(screen.queryByTestId("rail-more")).toBeNull();
+      const me = rail().getByRole("button", { name: /^Account, / });
+      // And so does its tooltip.
+      expect(accountTip(["library", "projects", "live", "ask", "activity"])).toBe("Library, Projects, Live, Ask and Activity; account, theme and settings");
+      expect(accountTip([])).toBe("Account, theme and settings");
+      expect(me.querySelector(".el-rail__count")!.textContent).toBe("2");
+      // The page (the Library) is one of them: the avatar is the selected item.
+      expect(me).toHaveAttribute("aria-current", "page");
+      fireEvent.click(me);
+      const menu = screen.getByRole("menu", { name: "Account, Ayesha Khan" });
+      // The places first, then (a hairline) Setup & health and Help (a short window), then the account's own.
+      expect([...menu.querySelectorAll('[role^="menuitem"] .el-menu__label')].map((m) => m.textContent))
+        .toEqual(["Library", "Projects", "Live", "Ask", "Activity", "Setup & health", "Help", "Sign out"]);
+      expect(within(menu).getByRole("menuitemradio", { name: /^Library/ })).toHaveAttribute("aria-checked", "true");
+      fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Activity/ }));
+      expect(onPlace).toHaveBeenLastCalledWith("activity", false);
+    } finally {
+      box.mockRestore();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+    }
+  });
+
+  it("Activity's red goes with its badge into More and onto the avatar: the red tone, and \"something failed\" in its name", () => {
+    setWidth(1440);
+    const rects = (places: number) => vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const height = this.classList.contains("el-rail__places") ? places : this.classList.contains("el-rail__item") ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 72, bottom: height, width: 72, height, toJSON: () => ({}) } as DOMRect;
+    });
+    // More holds Activity (one place whole, then More).
+    Object.defineProperty(window, "innerHeight", { value: 370, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    let box = rects(150);
+    try {
+      const { unmount } = render(<App tone="danger" />);
+      const more = rail().getByRole("button", { name: /^More, / });
+      expect(more).toHaveAccessibleName("More, Activity 2, something failed, Live recording");
+      expect(more.querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+      unmount();
+      // Not red when nothing failed.
+      const { unmount: again } = render(<App tone="accent" />);
+      expect(rail().getByRole("button", { name: /^More, / })).toHaveAccessibleName("More, Activity 2, Live recording");
+      expect(rail().getByRole("button", { name: /^More, / }).querySelector(".el-rail__count")).not.toHaveClass("el-rail__count--danger");
+      again();
+    } finally {
+      box.mockRestore();
+    }
+    // Not even More fits: the avatar holds Activity.
+    Object.defineProperty(window, "innerHeight", { value: 280, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    box = rects(40);
+    try {
+      render(<App tone="danger" />);
+      const me = rail().getByRole("button", { name: /^Account, / });
+      expect(me).toHaveAccessibleName("Account, Ayesha Khan, with Library, Projects, Live, Ask and Activity, Activity 2, something failed, Live recording, needs setup");
+      expect(me.querySelector(".el-rail__count")).toHaveClass("el-rail__count--danger");
+      expect(accountTip(["activity"], true)).toBe("Activity; account, theme and settings, something failed");
+    } finally {
+      box.mockRestore();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+    }
+  });
+
+  it("a high zoom in the least window before the account is read (no avatar yet): no cut More; the places wait for the avatar", () => {
+    setWidth(1440);
+    Object.defineProperty(window, "innerHeight", { value: 280, configurable: true, writable: true });
+    window.dispatchEvent(new Event("resize"));
+    const box = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const height = this.classList.contains("el-rail__places") ? 40 : this.classList.contains("el-rail__item") ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 72, bottom: height, width: 72, height, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      render(<App avatar={false} />);
+      expect(screen.queryByTestId("rail-more")).toBeNull();
+      const names = rail().getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
+      expect(names).toEqual(["Record", "More ways to record", "Settings"]);
     } finally {
       box.mockRestore();
       Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });

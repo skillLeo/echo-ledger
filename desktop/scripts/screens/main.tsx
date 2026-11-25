@@ -15,7 +15,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
-import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
@@ -23,6 +23,7 @@ import { applyTitlebar, applyWinTitlebar, titlebarMode, watchTitlebar } from "..
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
+const grouped = params.get("grouped") === "1";
 const theme = params.get("theme") === "dark" ? "dark" : "light";
 localStorage.setItem("echoledger-theme", theme);
 document.documentElement.dataset.theme = theme;
@@ -350,7 +351,13 @@ const commands: Record<string, (args: Args) => unknown> = {
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : LISTED),
   library_refresh: () => (empty ? [] : LISTED),
-  list_clients: () => ({ data: CLIENTS }),
+  // `&noprojects=1`: an account with no project yet (UX-09: no Projects panel, one empty state on the page).
+  // `&manyprojects=1`: 13 projects (the panel's search shows from 11); `&archived=1`: one of them archived (UX-09).
+  list_clients: () => ({ data: params.get("noprojects") === "1" ? [] : [
+    ...CLIENTS.map((c) => (params.get("archived") === "1" && c.id === "c-zed" ? { ...c, archived: true } : c)),
+    ...(params.get("manyprojects") === "1" ? ["Bilal Traders", "Crescent Mills", "Dawood Exports", "Faisal Apparel", "Gulf Logistics", "Hamid & Sons", "Indus Cotton"]
+      .map((name, i) => ({ id: `c-more-${i}`, name, session_count: 0, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 0 })) : []),
+  ] }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   // The person's labels (lists, contract 2.0.0-m): the Library filters redesign shows them in the sidebar.
   lists_get: () => (empty ? [] : [
@@ -386,7 +393,16 @@ const commands: Record<string, (args: Args) => unknown> = {
   recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   // `&uploads=1`: a file being imported, one upload that failed, two waiting for another account and one being checked.
   upload_list: () => (params.get("uploads") === "1" ? UPLOADS : []),
-  activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
+  // `&grouped=1` (UX-08): uploads that didn't finish as the server groups them, and its one Activity number (3 of them
+  // and the failed transcript: 4, red).
+  activity_list: () => {
+    const data = grouped ? ACTIVITY_GROUPED : ACTIVITY;
+    return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
+  },
+  activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),
+  activity_group_list: () => ({ data: grouped ? UPLOADS_FAILED : [] }),
+  activity_retry_all: () => ({ retry_requested_at: new Date().toISOString(), count: 3, here: 1 }),
+  badge_get: () => (grouped ? { count: 4, label: "4", tone: "danger" } : null),
   // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
   search_library: ({ query }) => {
     const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();

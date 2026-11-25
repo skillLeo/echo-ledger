@@ -5,7 +5,7 @@
 <div class="el-download" x-data="{ view: @js($default) }">
     @if ($audio !== null)
         <section class="el-download-part">
-            <h3 class="el-download-heading">Audio</h3>
+            <h3 class="el-download-heading">{{ __('Audio') }}</h3>
             <div class="el-download-formats">
                 <x-filament::button tag="a" :href="$audio['url']" color="gray" size="sm" icon="heroicon-o-musical-note">
                     {{ $audio['label'] }}
@@ -16,10 +16,10 @@
 
     @if ($links !== [])
         <section class="el-download-part">
-            <h3 class="el-download-heading">Transcript</h3>
+            <h3 class="el-download-heading">{{ __('Transcript') }}</h3>
             @if (count($views) > 1)
                 <fieldset class="el-download-views">
-                    <legend>Show as</legend>
+                    <legend>{{ __('Show as') }}</legend>
                     @foreach ($views as $key => $label)
                         <label class="el-download-view">
                             <input type="radio" name="el-download-view" value="{{ $key }}" x-model="view">
@@ -40,17 +40,17 @@
             @endforeach
             <p class="el-download-hint">
                 @if ($unsure)
-                    Words the engine was unsure of keep their mark, as in the transcript.
+                    {{ __('Words the engine was unsure of keep their mark, as in the transcript.') }}
                 @endif
-                PDF (print) opens a page to save as PDF from the browser's print dialog.
+                {{ __("PDF (print) opens a page to save as PDF from the browser's print dialog.") }}
             </p>
         </section>
     @endif
 
     @if ($pack !== [])
         {{-- Since v1.5: the transcript in the view above with each screen at its moment, for people and for AI. --}}
-        <section class="el-download-part" aria-label="Meeting pack">
-            <h3 class="el-download-heading">Meeting pack</h3>
+        <section class="el-download-part" aria-label="{{ __('Meeting pack') }}">
+            <h3 class="el-download-heading">{{ __('Meeting pack') }}</h3>
             @foreach ($pack as $view => $formats)
                 <div class="el-download-formats" data-pack-view="{{ $view }}" x-show="view === @js($view)" @if ($view !== $default) style="display: none" @endif>
                     @foreach ($formats as $format)
@@ -62,8 +62,8 @@
                 </div>
             @endforeach
             <p class="el-download-hint">
-                The transcript with {{ $screens === 1 ? 'its screen' : ($screens > 1 ? "its {$screens} screens" : 'its screens') }} placed at their moments, labelled “[Screen 7 at 14:32]” with what each shows.
-                The print page opens in a new tab with a Print button; the ZIP holds transcript.md and the pictures.
+                {{ $screens > 0 ? trans_choice('The transcript with its screen placed at their moments, labelled “[Screen 7 at 14:32]” with what each shows.|The transcript with its :count screens placed at their moments, labelled “[Screen 7 at 14:32]” with what each shows.', $screens, ['count' => $screens]) : __('The transcript with its screens placed at their moments, labelled “[Screen 7 at 14:32]” with what each shows.') }}
+                {{ __('The print page opens in a new tab with a Print button; the ZIP holds transcript.md and the pictures.') }}
             </p>
         </section>
     @endif

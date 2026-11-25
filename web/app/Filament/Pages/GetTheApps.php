@@ -22,9 +22,14 @@ class GetTheApps extends Page
 
     protected static bool $shouldRegisterNavigation = false;
 
+    public function getTitle(): string
+    {
+        return __('Get the apps');
+    }
+
     public function getSubheading(): ?string
     {
-        return 'Your account is ready. Record calls on your phone and meetings on your computer: sign in there with the same email.';
+        return __('Your account is ready. Record calls on your phone and meetings on your computer: sign in there with the same email.');
     }
 
     public function content(Schema $schema): Schema

@@ -6,9 +6,7 @@ import { resetTauriMock, respond } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 import { ActivityPanel, AskPanel, LivePanel, SettingsPanel } from "./PlacePanels";
 import { SettingsV2 } from "../settings/SettingsV2";
-import { ProjectsPanel, SHOW_PANEL_EVENT } from "./NavRail";
-import { ProjectsListV2 } from "../workspace/ProjectsListV2";
-import type { ClientFolder } from "../../lib/ipc";
+import { SHOW_PANEL_EVENT } from "./NavRail";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -78,53 +76,34 @@ describe("the places' panels", () => {
     window.removeEventListener(SHOW_PANEL_EVENT, asked);
   });
 
-  it("DT-NAV-005: Projects' panel: All projects, Pinned and Recent list their projects; New project and Request files are there only", () => {
-    localStorage.setItem("echoledger-recent-projects", JSON.stringify(["p3", "p1"]));
-    const onOpen = vi.fn();
-    const onNew = vi.fn();
-    const onRequest = vi.fn();
-    const projects = [{ id: "p1", name: "Acme", pinned: true }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Zed" }];
-    render(<ProjectsPanel projects={projects} current={null} allCurrent onAll={() => undefined} onOpen={onOpen} onNew={onNew} onRequest={onRequest}
-      tree={(list) => <ul aria-label="Projects">{list.map((p) => <li key={p.id}><button type="button" onClick={() => onOpen(p.id)}>{p.name}</button></li>)}</ul>} />);
-    const names = () => within(screen.getByRole("list", { name: "Projects" })).getAllByRole("button").map((b) => b.textContent);
-    expect(names()).toEqual(["Acme", "Contracts", "Zed"]);
-    fireEvent.click(screen.getByRole("button", { name: /^Pinned/ }));
-    expect(names()).toEqual(["Acme"]);
-    fireEvent.click(screen.getByRole("button", { name: /^Recent/ }));
-    expect(names()).toEqual(["Zed", "Acme"]);
-    fireEvent.click(screen.getByRole("button", { name: "New project" }));
-    fireEvent.click(screen.getByRole("button", { name: "Request files" }));
-    expect([onNew, onRequest].every((f) => f.mock.calls.length === 1)).toBe(true);
-    localStorage.clear();
-  });
+  // The Projects panel and All projects: projectsPanel.test.tsx (UX-09).
 
-  it("All projects with three levels: an overview of cards (recordings, last call, folders, pinned), never the tree or New project", () => {
-    const projects = [
-      { id: "p1", name: "Acme", pinned: true, parent_id: null }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Zed", parent_id: null },
-    ] as unknown as ClientFolder[];
-    const onOpen = vi.fn();
-    render(<ProjectsListV2 projects={projects} error={null} onRetry={() => undefined} items={[]} expanded={new Set()} onToggle={() => undefined}
-      onOpen={onOpen} onNew={() => undefined} onRequest={() => undefined} overview />);
-    const cards = within(screen.getByRole("list", { name: "Projects" })).getAllByRole("button");
-    expect(cards.map((c) => c.textContent)).toEqual([expect.stringMatching(/^AAcme, pinned.*1 folder/), expect.stringMatching(/^ZZed/)]);
-    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Request files" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /folders in/ })).toBeNull();
-    fireEvent.click(cards[1]);
-    expect(onOpen).toHaveBeenCalledWith("p3");
-  });
-
-  it("Settings' page in three levels: the home has no groups (they are the panel's); a page has its group's sections beside it", () => {
+  it("Settings' page in two levels (UX-11): the home has no groups (they are the panel's); a page is drawn whole, with no inner list", () => {
+    // The rule changed with UX-11: a page used to have its group's sections in an inner list beside it (a third level).
     const renderPage = vi.fn((section: { id: string }) => <p>Page {section.id}</p>);
     const { rerender } = render(<SettingsV2 available={everything} renderPage={renderPage} inPanel />);
     expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
     expect(screen.queryByRole("searchbox")).toBeNull();
     rerender(<SettingsV2 available={everything} renderPage={renderPage} inPanel section={{ id: "calls", seq: 1 }} />);
-    const inner = within(screen.getByRole("navigation", { name: "Recording sections" }));
-    expect(inner.getAllByRole("button").map((b) => b.textContent)).toHaveLength(4);
-    expect(inner.getAllByRole("button").find((b) => b.getAttribute("aria-current") === "page")).toBeDefined();
+    expect(screen.queryByRole("navigation", { name: "Recording sections" })).toBeNull();
+    expect(document.querySelector(".el-settings-split__list")).toBeNull();
     expect(screen.getByText("Page calls")).toBeInTheDocument();
-    fireEvent.click(inner.getAllByRole("button")[1]);
-    expect(screen.getByText("Page mic")).toBeInTheDocument();
+  });
+
+  it("Settings' panel: a group opens its page from the top (About & help at About, never straight into Help)", () => {
+    const onOpen = vi.fn();
+    render(<SettingsPanel current="help" onOpen={onOpen} available={everything} />);
+    // Help is in About & help: the group is the current one.
+    expect(screen.getByRole("button", { name: "About & help" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "About & help" }));
+    expect(onOpen).toHaveBeenLastCalledWith("about");
+    fireEvent.click(screen.getByRole("button", { name: "Shortcuts & start-up" }));
+    expect(onOpen).toHaveBeenLastCalledWith("shortcuts");
+    fireEvent.click(screen.getByRole("button", { name: "Recording" }));
+    expect(onOpen).toHaveBeenLastCalledWith("calls");
+    // A search result opens its group's page scrolled to it: the start-up switch has no page of its own.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "start when I sign in" } });
+    fireEvent.click(within(screen.getByRole("list", { name: "Matches" })).getByRole("button", { name: "Start when I sign in" }));
+    expect(onOpen).toHaveBeenLastCalledWith("app.autostart#app.autostart");
   });
 });

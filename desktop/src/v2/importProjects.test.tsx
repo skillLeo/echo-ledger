@@ -214,9 +214,12 @@ describe("the Projects page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(p.onRetry).toHaveBeenCalled();
     rerender(<ProjectsListV2 projects={[]} {...p} onRequest={null} />);
-    expect(screen.getByText("No projects yet")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Request files" })).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "New project" })[1]);
+    // UX-09 changed its words: one empty state saying what a project is for, with the ways to start (no second New
+    // project in the header, and Request files from a client only where the server has request links).
+    expect(screen.getByRole("region", { name: "Keep each client's calls, files and notes together" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Request files/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "New project" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
     expect(p.onNew).toHaveBeenCalled();
   });
 });
