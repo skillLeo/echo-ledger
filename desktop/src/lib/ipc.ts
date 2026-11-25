@@ -521,6 +521,30 @@ export interface ActivityItem {
   repeat_count?: number;
   /** `upload_failed` for an upload that didn't finish (2.0.0-r), else null. */
   group?: string | null;
+  /** The person it is about (contract 2.0.0-aa): their picture or initials take the kind's icon's place. Null, or no
+   * key from an older server, for every other item. */
+  actor?: ActivityActor | null;
+}
+
+/** A person the API shows beside something (since 2.0.0-l): Shared with me's `from`, an Activity item's `actor`. */
+export interface Person {
+  name?: string | null;
+  email?: string | null;
+  /** Their picture: a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The colour of the initials' circle without a photo, 0–7 (2.0.0-r); left out, one from the name. */
+  avatar_color?: number | null;
+}
+
+/** The person an Activity item is about (contract 2.0.0-aa): a recording's sender, the staff member who asked for a
+ * receipt, unusual use's person. */
+export interface ActivityActor extends Person {
+  id: number | string;
+  name: string | null;
+  avatar_url: string | null;
+  avatar_version: number | null;
+  avatar_color: number | null;
 }
 
 /** The one Activity number (2.0.0-r, `GET /api/badge`), the same on the phone and the web console. */
@@ -1063,7 +1087,7 @@ export interface ShareOptions {
 export interface SharedItem {
   id: string;
   kind: "session" | "project";
-  from: { name?: string | null; email?: string | null } | null;
+  from: Person | null;
   note: string | null;
   title: string | null;
   sent_at: string | null;

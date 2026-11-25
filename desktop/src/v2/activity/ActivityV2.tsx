@@ -13,6 +13,7 @@ import { actionCount, isProblem, needsAction as asksForAction, repeatWords, SERV
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { activitySubtitle, shortWhen, useInProgress } from "../../views/main/ActivityCentre";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, type IconType } from "../components";
+import { ActorAvatar } from "./ActorAvatar";
 import { ContextMenu, menuPointFor, type MenuItem } from "../components/Menu";
 import { contextItems } from "../actions/contextMenus";
 import { currentPlatform, popupNative } from "../actions/popup";
@@ -239,8 +240,9 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
   // D-233 (classic's D-066): only a notification about a recording opens something, so only it is a button. One with
   // nowhere to go (a new device, the server's own problem, a failure with no recording) is a plain row, out of the Tab
   // order; while unread it ends with a quiet Mark read, so a problem can be cleared on its own, never just by being seen.
+  // An item about a person (contract 2.0.0-aa) shows them in the icon's place.
   const row = (i: ActivityItem) => (
-    <ListRow key={i.id} icon={iconOf(i)} title={i.title ?? ""} strong={!i.read}
+    <ListRow key={i.id} icon={iconOf(i)} leading={i.actor ? <ActorAvatar actor={i.actor} /> : undefined} title={i.title ?? ""} strong={!i.read}
       meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body, repeatWords(i.repeat_count)].filter(Boolean).join(" · ")}
       badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
       endTop={i.at ? shortWhen(i.at) : undefined} onClick={i.session_id ? () => void choose(i) : undefined}
