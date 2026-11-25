@@ -3,7 +3,7 @@
     <nav class="el-crumbs" aria-label="Breadcrumbs">
         @foreach ($crumbs as $url => $label)
             @if (! $loop->first)
-                @svg('heroicon-m-chevron-right', ['class' => 'el-crumbs-sep', 'aria-hidden' => 'true'])
+                @svg(...\App\Filament\Support\RtlIcons::of('heroicon-m-chevron-right', ['class' => 'el-crumbs-sep', 'aria-hidden' => 'true']))
             @endif
             @if (is_string($url))
                 <a href="{{ $url }}" class="el-crumbs-link">{{ $label }}</a>

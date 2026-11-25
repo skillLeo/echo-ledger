@@ -3,7 +3,7 @@
     @foreach ($items as $item)
         <li class="el-row-item">
             <button type="button" class="el-row el-row-btn" wire:click="open('{{ $item['id'] }}')" wire:key="activity-{{ $item['id'] }}"{!! \App\Filament\Support\ConsoleV2::any() ? ' data-v2-object="activity" data-v2-object-id="'.e($item['id']).'" data-v2-object-not="'.e($item['not'] ?? '').'"' : '' !!}>
-                <span class="el-tile el-tile-{{ $item['tone'] }}">@svg($item['icon'], ['aria-hidden' => 'true'])</span>
+                <span class="el-tile el-tile-{{ $item['tone'] }}">@svg(...\App\Filament\Support\RtlIcons::of($item['icon'], ['aria-hidden' => 'true']))</span>
                 <span class="el-row-main">
                     <span class="el-row-top">
                         <span @class(['el-row-title', 'el-unread' => ! $item['read']])>

@@ -88,7 +88,7 @@
     <details class="el-set-group" id="setting-plan.compare" tabindex="-1" data-setting="plan.compare">
         <summary class="el-set-row">
             <span class="el-set-text"><span class="el-set-title">{{ __('See every feature') }}</span></span>
-            @svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true'])
+            @svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true']))
         </summary>
         <div class="el-matrix-wrap">
             <table class="el-matrix">

@@ -43,7 +43,7 @@
                     <x-el.section :title="__($section['title'])">
                         @foreach ($section['rows'] as $row)
                             <a href="{{ $row['url'] }}" @class(['el-set-row', 'has-icon', 'el-set-nav-row']) @if ($row['current']) aria-current="page" @endif data-nav="{{ $row['page'] }}">
-                                @svg($row['icon'], ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
+                                @svg(...\App\Filament\Support\RtlIcons::of($row['icon'], ['class' => 'el-set-icon', 'aria-hidden' => 'true']))
                                 <span class="el-set-text"><span class="el-set-title">{{ __($row['title']) }}</span></span>
                                 @if ($searching && $row['count'] > 0)
                                     <span class="el-set-count" aria-label="{{ $row['count'] === 1 ? '1 result' : $row['count'].' results' }}">{{ $row['count'] }}</span>
@@ -52,7 +52,7 @@
                                 @elseif (filled($row['value']))
                                     <span class="el-set-value">{{ $row['value'] }}</span>
                                 @endif
-                                @svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true'])
+                                @svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true']))
                             </a>
                         @endforeach
                     </x-el.section>
@@ -78,7 +78,7 @@
                     @include('filament.settings.state-row')
                     @include('filament.settings.this-month')
                 @else
-                    <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Settings') }}</a>
+                    <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-left', ['aria-hidden' => 'true'])) {{ __('Settings') }}</a>
                     <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>{!! $setupTabs !!}
                     {{ $this->content }}
                 @endif

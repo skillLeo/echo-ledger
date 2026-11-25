@@ -55,7 +55,7 @@
             <p class="el-whatsapp-hint" data-whatsapp-no-text>{{ __('There is no transcript yet: only the link can be sent.') }}</p>
         @else
             <a href="{{ $url }}" target="_blank" rel="noopener noreferrer" class="el-whatsapp-option el-whatsapp-primary" data-whatsapp="text" x-on:click="sendText(false)">
-                @svg('heroicon-o-chat-bubble-bottom-center-text', ['aria-hidden' => 'true']) <span>{{ __('Text only') }}</span>
+                @svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chat-bubble-bottom-center-text', ['aria-hidden' => 'true'])) <span>{{ __('Text only') }}</span>
             </a>
             <span class="el-whatsapp-hint">{{ __('The text of the view you are reading.') }}</span>
             @if ($audio !== null)
