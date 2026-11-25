@@ -101,6 +101,8 @@ trait ManagesAccountPages
             'workspace' => $workspace !== null ? $workspace->name.($context->role() !== null ? ', '.$context->role()->label() : '') : null,
             // BE-06 (contract 2.0.0-r §6): the photo, the initials' colour and the language, as the apps' profile has them.
             'photo' => Avatars::of($user)['avatar_url'],
+            // DES-08: the new console draws it with the one avatar component (x-el.avatar) from the person.
+            'person' => $user,
             'initials' => InitialsAvatarProvider::initials($name),
             'color' => $user->avatarColor(),
             'colors' => self::AVATAR_COLOR_NAMES,

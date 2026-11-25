@@ -60,13 +60,17 @@ if (platform === "windows" && params.get("wintitle") === "1") applyWinTitlebar(t
  */
 function drawTrafficLights(inactive: boolean) {
   const { x, y } = conf.app.windows[0].trafficLightPosition;
+  // "&zoom=<percent>" (UX-07): the page zoomed as the web view does it (scripts/zoom.mjs draws it that much bigger); the
+  // system's buttons keep their size and place, so they are drawn that much smaller in the page's pixels.
+  const z = Number(params.get("zoom") ?? 100) / 100;
+  document.documentElement.style.setProperty("--el-zoom", String(z));
   const strip = document.createElement("div");
   strip.dataset.trafficLights = "";
   strip.setAttribute("aria-hidden", "true");
-  strip.style.cssText = `position: fixed; left: ${x + 1}px; top: ${y - 4}px; width: 54px; height: 12px; z-index: 2147483647; pointer-events: none; display: flex; gap: 8px; direction: ltr;`;
+  strip.style.cssText = `position: fixed; left: ${(x + 1) / z}px; top: ${(y - 4) / z}px; width: ${54 / z}px; height: ${12 / z}px; z-index: 2147483647; pointer-events: none; display: flex; gap: ${8 / z}px; direction: ltr;`;
   for (const colour of inactive ? ["#cfcfcf", "#cfcfcf", "#cfcfcf"] : ["#ff5f57", "#febc2e", "#28c840"]) {
     const light = document.createElement("span");
-    light.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
+    light.style.cssText = `width: ${12 / z}px; height: ${12 / z}px; border-radius: 50%; background: ${colour}; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);`;
     strip.append(light);
   }
   document.body.append(strip);

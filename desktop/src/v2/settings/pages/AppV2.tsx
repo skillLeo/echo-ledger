@@ -11,7 +11,8 @@ import { conflictFor } from "../../../lib/shortcutConflicts";
 import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
 import { appKeys } from "../../../views/main/AppSettings";
 import { Button, ListRow } from "../../components";
-import { Group, ResetDefaults, SegmentedSetting, SwitchSetting, type Run } from "./rows";
+import { Group, ResetDefaults, SegmentedSetting, SliderSetting, SwitchSetting, type Run } from "./rows";
+import { setZoom, useZoom, zoomHint, ZOOM_DEFAULT, ZOOM_STEPS } from "../../../lib/zoom";
 import { useDesignSwitch } from "../../flags";
 
 /** The theme: the app's own when it hands it down (the top bar's toggle follows), else this page's. */
@@ -26,11 +27,14 @@ export function useThemeChoice(theme?: ThemeChoice, onTheme?: (t: ThemeChoice) =
   return [theme ?? own, choose];
 }
 
-export function AppearancePageV2({ theme, onTheme, rail = false }: {
+export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false }: {
   theme: ThemeChoice; onTheme: (t: ThemeChoice) => void;
   /** The window has the rail (the rail · panel · page layout): its compact form can be chosen here. */
   rail?: boolean;
+  /** Zoom is on (UX-07, v21_zoom): a stepped slider with Reset. */
+  zoom?: boolean;
 }) {
+  const level = useZoom();
   // What is saved, followed as it changes anywhere (View › Theme › Compact rail, the Library's density); a change is
   // made on the saved choices, never on this page's copy of them.
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
@@ -49,8 +53,18 @@ export function AppearancePageV2({ theme, onTheme, rail = false }: {
         {rail && <SwitchSetting id="appearance.compact_rail" on={prefs.compactRail} onChange={(on) => setPref({ compactRail: on })} />}
         <SegmentedSetting id="appearance.clock" value={prefs.clock} onChange={(v) => setPref({ clock: v })} />
       </Group>
+      {zoom && (
+        <Group footer={<>
+          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} Kept on this computer.</p>
+          {level !== ZOOM_DEFAULT && <Button size="sm" onClick={() => setZoom(ZOOM_DEFAULT)}>Reset to 100%</Button>}
+        </>}>
+          {/* The steps, as Chrome's: the slider moves from one to the next. */}
+          <SliderSetting id="appearance.zoom" value={ZOOM_STEPS.indexOf(level as (typeof ZOOM_STEPS)[number])} min={0} max={ZOOM_STEPS.length - 1} step={1}
+            format={(i) => `${ZOOM_STEPS[i]}%`} onChange={(i) => setZoom(ZOOM_STEPS[i])} onRelease />
+        </Group>
+      )}
       <DesignRowV2 />
-      <ResetDefaults page="Appearance" onReset={() => { onTheme("system"); setPref({ ...DEFAULT_PREFERENCES }); }} />
+      <ResetDefaults page="Appearance" onReset={() => { onTheme("system"); setPref({ ...DEFAULT_PREFERENCES }); if (zoom) setZoom(ZOOM_DEFAULT); }} />
     </>
   );
 }

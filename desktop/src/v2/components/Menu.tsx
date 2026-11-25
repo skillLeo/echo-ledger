@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
-import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, ChevronEndIcon, MinusIcon, PlusIcon } from "./icons";
 
 /**
  * One action in a menu. `group` puts a small header above the first item of each group (Organise, Export, Danger);
@@ -30,6 +30,11 @@ export type MenuItem = {
   /** One of its sub-menu's choices (a label, a project, a format, a sort order): its words are the choice's own, and its
    * `action` is the sub-menu's (UX-22). */
   choice?: string;
+  /**
+   * A row that steps a value (UX-07: "Zoom  [−] 100% [+]", as in Chrome's menu): its two buttons and the value between
+   * them. The menu stays open. From the keyboard, on the row: − and + (or ← and →, mirrored right to left) step it.
+   */
+  stepper?: { value: string; down: { label: string; onPick: () => void; disabled?: boolean }; up: { label: string; onPick: () => void; disabled?: boolean } };
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
@@ -131,6 +136,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const headerId = useId();
+  // A stepping row's description for assistive tools (its − and + buttons are the pointer's).
+  const stepHintId = useId();
   const own = useRef<HTMLUListElement | null>(null);
   const setRef = (el: HTMLUListElement | null) => {
     own.current = el;
@@ -211,7 +218,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   };
   const choose = (i: number) => {
     const item = items[i];
-    if (!item || item.disabled) return;
+    if (!item || item.disabled || item.stepper) return;
     if (item.items?.length) openSub(i);
     else if (item.keepOpen) item.onPick?.();
     else onPick(item);
@@ -222,6 +229,16 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
     const last = items.length - 1;
     const forward = rtl(own.current) ? "ArrowLeft" : "ArrowRight";
     const backward = rtl(own.current) ? "ArrowRight" : "ArrowLeft";
+    // A stepping row: − and + (and ← →) step its value; the menu stays open.
+    const stepper = items[active]?.stepper;
+    if (stepper && sub === null) {
+      const step = e.key === "+" || e.key === "=" || e.key === forward ? stepper.up : e.key === "-" || e.key === "−" || e.key === backward ? stepper.down : null;
+      if (step) {
+        e.preventDefault();
+        if (!step.disabled) step.onPick();
+        return;
+      }
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (a >= last ? 0 : a + 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (a <= 0 ? last : a - 1)); }
     else if (e.key === "Home") { e.preventDefault(); setActive(0); }
@@ -247,6 +264,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
       {item.separator && i > 0 && <li role="separator" className="el-menu__separator" />}
       <li role="none" className="el-menu__item">
         <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+          aria-label={item.stepper ? `${item.label}, ${item.stepper.value}` : undefined} aria-describedby={item.stepper ? stepHintId : undefined}
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
@@ -260,6 +278,20 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           {/* An item's words keep their own order in a right-to-left window ("3 recordings…", not "…recordings 3"), set
               apart in a <bdi>; the label itself follows the menu's side, so they sit by their icon. */}
           <span className="el-menu__label"><bdi>{item.label}</bdi></span>
+          {item.stepper && (
+            <span className="el-menu__stepper">
+              {/* The row says its name and value ("Zoom, 110%") and how to change it; these two are for the pointer. */}
+              <span className="el-visually-hidden" id={stepHintId}>Press + or − to change</span>
+              {([["down", MinusIcon], ["up", PlusIcon]] as const).map(([which, glyph], k) => {
+                const step = item.stepper![which];
+                const button = (
+                  <button key={which} type="button" className="el-menu__step" tabIndex={-1} aria-hidden="true" title={step.label} disabled={step.disabled}
+                    onClick={(e) => { e.stopPropagation(); step.onPick(); }}><Icon icon={glyph} /></button>
+                );
+                return k === 0 ? [button, <span key="value" className="el-menu__step-value el-num" aria-hidden="true">{item.stepper!.value}</span>] : button;
+              })}
+            </span>
+          )}
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
           {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
           {item.items && <Icon icon={ChevronEndIcon} directional />}
