@@ -204,9 +204,10 @@ class V2LibraryFilterChipsParityTest : ScreenTest() {
     }
 
     @Test
-    fun aRowsSourceMarkCarriesTheDeviceBadgeForAComputerOrTheWeb() {
+    fun aRowsSourceMarkIsNamedWithTheDeviceForAComputerOrTheWeb() {
         seed(item("01JA", "Rec A"), item("01JB", "Rec B", device = "desktop"), item("01JC", "Rec C", device = "web"))
-        // A phone's recording is just its app; a computer's or the web's names where it was made, as classic's badge.
+        // A phone's recording is just its app; a computer's or the web's names where it was made (the badge left the
+        // row in v2.1 UX-16; TalkBack still hears it).
         compose.onAllNodes(hasContentDescription("WhatsApp"), useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodes(hasContentDescription("WhatsApp, Desktop"), useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodes(hasContentDescription("WhatsApp, Web"), useUnmergedTree = true).assertCountEquals(1)

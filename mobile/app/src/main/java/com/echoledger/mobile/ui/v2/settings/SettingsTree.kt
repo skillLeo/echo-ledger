@@ -68,7 +68,8 @@ object SettingsTree {
     val pageIcons: Map<String, ImageVector> = mapOf(
         "calls" to EchoIcons.PhoneCall,
         "mic" to EchoIcons.Mic,
-        "voice" to EchoIcons.VoiceNote,
+        // Its own mic (the keyboard's): no two rows share one (v2.1 UX-16).
+        "voice" to EchoIcons.Dictation,
         "language" to EchoIcons.Language,
         "words" to EchoIcons.Words,
         "key" to EchoIcons.Key,

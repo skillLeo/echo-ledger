@@ -421,9 +421,9 @@ class VisualReviewTest {
             com.echoledger.mobile.ui.v2.settings.pageValue(res, page, s)
         assertEquals("Automatic", v("mic"))
         assertEquals("Raw microphone", v("mic", base.copy(micSource = "mic")))
-        assertEquals("Tap to start", v("voice"))
-        // The value the voice keyboard and classic's page store (it was "hold" here, a value the app never stores).
-        assertEquals("Hold to talk", v("voice", base.copy(dictationMode = "push_to_talk")))
+        // v2.1 UX-16: the real setting (the voice keyboard), never an instruction, whatever the microphone's mode.
+        assertEquals("Keyboard off", v("voice"))
+        assertEquals("Keyboard off", v("voice", base.copy(dictationMode = "push_to_talk")))
         assertEquals("Not added", v("key"))
         val withKey = base.copy(plan = base.plan.copy(transcriptionKey = com.echoledger.mobile.data.TranscriptionKeyDto(set = true)))
         assertEquals("Added", v("key", withKey))
@@ -440,7 +440,7 @@ class VisualReviewTest {
         assertEquals("Starter", v("plan", base.copy(plan = base.plan.copy(name = "Starter"))))
         // The same words in Urdu.
         assertEquals("خودکار", v("mic", res = ur))
-        assertEquals("شروع کرنے کے لیے ٹیپ کریں", v("voice", res = ur))
+        assertEquals("کی بورڈ آف", v("voice", res = ur))
         // Rows classic shows no value for show none here either.
         for (page in listOf("calls", "words", "privacy", "storage", "account", "devices", "help")) assertEquals(page, null, v(page))
     }
@@ -460,7 +460,7 @@ class VisualReviewTest {
             )
         }
         compose.onNode(hasText("Microphone & audio", substring = true) and hasText("Automatic", substring = true)).assertExists()
-        compose.onNode(hasText("Voice notes & dictation", substring = true) and hasText("Tap to start", substring = true)).assertExists()
+        compose.onNode(hasText("Voice notes & dictation", substring = true) and hasText("Keyboard off", substring = true)).assertExists()
     }
 
     // The Record sheet scrolls, so its last rows are reachable on a narrow phone at large text.
