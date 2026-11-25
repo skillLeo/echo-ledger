@@ -5,6 +5,7 @@ If implementation and this file disagree, fix one of them in the same change —
 
 **Contract revision: 2.0.0-v (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
+2.0.0-v, an addition (accepted 2026-11-25 by EL-Lead; no new letter): a seventh v2.1 interface flag, `v21_urdu` (the desktop: the app's words in the account's language, Urdu), the same as the other six (`off` or `everyone`, no `opt_in`); see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An app that does not know it ignores it; it is `false` on an older server. **Clients** (Mac, Windows and Android ship together): the desktop shows its words in Urdu while the flag is on and the account's `language` is Urdu; the phone ignores the flag.
 2.0.0-u (accepted 2026-11-24 by EL-Lead; v2.1 BE-06 "The profile inside the apps"): the names of the 8 `avatar_color` colours follow the design tokens (DES-08): 2 is cyan and 3 is olive, not indigo and purple (the design bans purple, indigo and violet). Names only: the numbers 0 to 7, their order and every field stay as they are, so older apps keep working (they read and send the same indexes).
 2.0.0-t (accepted 2026-11-24 by EL-Lead; v2.1 UX-22 "Mark as unread"): `DELETE /api/sessions/{id}/opened` takes back the asking person's open of a recording, so it reads as unread again (`opened: false`, in Unread and its count) on every device. Idempotent, the person's own read state only, nothing else of the recording changes. Additions only: older apps never send it.
 2.0.0-s (accepted 2026-11-24 by EL-Lead): a sixth v2.1 interface flag, `v21_win_titlebar` (the desktop on Windows: the custom title row), the same as the other five; see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)". An addition only.
@@ -700,7 +701,7 @@ No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
   index the landing and downloads pages (off until the public launch).
 
 ### `GET /api/config` — `config:read`
-Since 2.0.0-r the answer also carries `upload_retry`, and `ui_flags` the `v21_*` flags (six since 2.0.0-s): see "v2.1: flags, Activity,
+Since 2.0.0-r the answer also carries `upload_retry`, and `ui_flags` the `v21_*` flags (six since 2.0.0-s, seven since 2.0.0-v's `v21_urdu`): see "v2.1: flags, Activity,
 upload retries, the badge, states and the profile (since 2.0.0-r)".
 ```json
 {"api_version": "1.1",
@@ -2401,7 +2402,7 @@ docs/PLAN_V2_1_POLISH.md, BE-02 to BE-06, and its five feature flags. Additions 
 and an app that does not know a new field ignores it.
 
 ### 1. The v2.1 interface flags
-`ui_flags` (`GET /api/config`, `GET /api/account/ui`) gains five flags, and since 2.0.0-s a sixth, each `false` on an
+`ui_flags` (`GET /api/config`, `GET /api/account/ui`) gains five flags, since 2.0.0-s a sixth and since 2.0.0-v a seventh, each `false` on an
 older server:
 
 | Flag | What it turns on |
@@ -2412,10 +2413,11 @@ older server:
 | `v21_zoom` | desktop and web: zoom in Settings › Appearance |
 | `v21_preview_pane` | desktop and web: the Library's preview pane |
 | `v21_win_titlebar` (since 2.0.0-s) | desktop on Windows: the custom title row |
+| `v21_urdu` (since 2.0.0-v, an addition) | desktop: the app's words in the account's language, Urdu (`language` of `GET /api/account`) |
 
 They work like `live_assist`: the admin sets each to `off` (only the admin's lists: people, workspaces, a share of
 accounts) or `everyone`. There is no `opt_in`, and the person's design choice (`design`, `ui_classic`) does not change
-them; an app applies a v21 flag only on the screens of the design it is showing. All six start `off` with empty
+them; an app applies a v21 flag only on the screens of the design it is showing. All seven start `off` with empty
 lists, so they answer `false` for everyone until the admin adds someone to a list.
 
 ### 2. Activity: one item per recording and event (BE-02)

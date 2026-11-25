@@ -34,7 +34,7 @@ final class InterfaceFlags
      * they are not the design: off (the admin's lists only) or everyone, never opt-in, and the person's design choice
      * does not change them.
      */
-    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar'];
+    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane', 'v21_win_titlebar', 'v21_urdu'];
 
     /** The nine console flags: "the new design" a person can try, and what `ui_design.current` reads. */
     public const CONSOLE = [
@@ -69,6 +69,8 @@ final class InterfaceFlags
         'v21_preview_pane' => 'v2.1 desktop and web: the Library\'s preview pane',
         // Since 2.0.0-s.
         'v21_win_titlebar' => 'v2.1 desktop on Windows: the custom title row',
+        // Since 2.0.0-v (an addition, no new letter).
+        'v21_urdu' => 'v2.1 desktop: the app in the account\'s language (Urdu)',
     ];
 
     /** @var array<string, InterfaceFlag>|null */

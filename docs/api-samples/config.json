@@ -253,7 +253,8 @@
         "v21_panel_flyout": false,
         "v21_zoom": false,
         "v21_preview_pane": false,
-        "v21_win_titlebar": false
+        "v21_win_titlebar": false,
+        "v21_urdu": false
     },
     "ui_classic": false,
     "ui_design": {

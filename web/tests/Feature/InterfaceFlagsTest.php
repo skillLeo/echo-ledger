@@ -44,6 +44,8 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
         'v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane',
         // Since 2.0.0-s.
         'v21_win_titlebar',
+        // Since 2.0.0-v (an addition).
+        'v21_urdu',
     ])->and($classic)->toBeFalse();
 });
 
@@ -69,6 +71,20 @@ describe('the v2.1 flags (contract 2.0.0-r)', function () {
             ->and(uiFlagsOf($other)[0])->toBe(flagsWith());
         app(InterfaceFlags::class)->set('v21_zoom', true, 0, [], []);
         expect(uiFlagsOf($other)[0])->toBe(flagsWith(['v21_zoom']));
+    });
+
+    it('has v21_urdu, the desktop\'s Urdu: off or everyone like the others, never opt-in (2.0.0-v, an addition)', function () {
+        expect(InterfaceFlags::V21)->toContain('v21_urdu')
+            ->and(InterfaceFlags::LABELS['v21_urdu'])->toBe('v2.1 desktop: the app in the account\'s language (Urdu)')
+            ->and(InterfaceFlags::hasOptIn('v21_urdu'))->toBeFalse()
+            ->and(array_slice(InterfaceFlags::V21, -1))->toBe(['v21_urdu']);
+
+        [$admin, $other] = [Fx::user(), Fx::user()];
+        expect(uiFlagsOf($admin)[0]['v21_urdu'])->toBeFalse();
+        app(InterfaceFlags::class)->set('v21_urdu', false, 0, [], [$admin->id]);
+        expect(uiFlagsOf($admin)[0])->toBe(flagsWith(['v21_urdu']))->and(uiFlagsOf($other)[0])->toBe(flagsWith());
+        app(InterfaceFlags::class)->set('v21_urdu', true, 0, [], []);
+        expect(uiFlagsOf($other)[0])->toBe(flagsWith(['v21_urdu']));
     });
 
     it('has no opt-in, and the person\'s design choice neither turns one on nor off', function () {
