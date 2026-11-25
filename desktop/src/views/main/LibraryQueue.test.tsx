@@ -1,6 +1,9 @@
 // The Library's waiting line ("2 calls waiting · Review", v1.5) with its list, and "Uploads that need you" (contract
 // 5.3 item 1), driven through the Library screen with the same commands and events the Rust core uses.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
@@ -435,6 +438,30 @@ describe("Waiting recordings: assign client", () => {
     expect(within(row("p1")).getByRole("combobox", { name: "Language" })).toHaveValue("ur");
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]));
+  });
+
+  it("D-038: the closed language chip says the short name, a screen reader hears the full choice, and focus shows on the chip", async () => {
+    await renderLibrary([makePendingItem("p1"), makePendingItem("p2", { language: "ur" })]);
+    const select = within(row("p1")).getByRole("combobox", { name: "Language" }) as HTMLSelectElement;
+    const chip = select.closest(".queue-language") as HTMLElement;
+    // The chip around the select shows "Auto", not "Auto (English / Urdu / Arabic)" cut to "Auto (English / Urdu / Ara…".
+    expect(chip).not.toBe(select);
+    const shown = chip.querySelector(".queue-language-label");
+    expect(shown).toHaveTextContent(/^Auto$/);
+    expect(shown).toHaveAttribute("aria-hidden", "true");
+    // The select keeps its own name and value: a screen reader hears the whole choice, and its list is unchanged.
+    expect(select.selectedOptions[0].text).toBe("Auto (English / Urdu / Arabic)");
+    expect(select).toHaveAttribute("title", "Language of the transcript");
+    const urdu = within(row("p2")).getByRole("combobox", { name: "Language" }) as HTMLSelectElement;
+    expect(urdu.selectedOptions[0].text).toBe("Urdu (with English words)");
+    expect(urdu.closest(".queue-language")?.querySelector(".queue-language-label")).toHaveTextContent(/^Urdu$/);
+    // The select lies transparent over the chip, and keyboard focus draws its ring on the chip.
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    expect(css).toMatch(/\.queue-language > select\s*\{[^}]*position: absolute;[^}]*opacity: 0/);
+    expect(css).toMatch(/\.queue-language:has\(> select:focus-visible\)\s*\{[^}]*outline: 2px solid var\(--focus\)/);
+    // Its list keeps the list's own colours (not an active chip's accent), and the arrow sits at the end in right to left.
+    expect(css).toMatch(/\.queue-language > select option\s*\{[^}]*color: var\(--text\);[^}]*background: var\(--surface\)/);
+    expect(css).toMatch(/\[dir="rtl"\] \.chip\.queue-language\s*\{[^}]*background-position: 10px 50%, 15px 50%/);
   });
 
   it("sends an explicit null for No project", async () => {
