@@ -442,6 +442,9 @@
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--el-space-8);
   padding: var(--el-space-16) var(--el-space-24) var(--el-space-24);
 }
+/* A quiet way elsewhere in the footer (D-234: "See your request links"): a line of its own at the start edge, the
+   buttons together at the end under it, at any width and in any language. */
+.el-dialog__actions > .el-dialog__aside { flex-basis: 100%; display: flex; justify-content: flex-start; }
 
 /* ---- Banner ---------------------------------------------------------------------------------------------- */
 .el-banner {
