@@ -218,6 +218,51 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(callsOf("sessions_transcribe_estimate").at(-1)).toMatchObject({ ids: many.slice(0, 50).map((i) => i.id) });
   });
 
+  it("2.0.0-w: a call with a known caller offers Always for <name> while the account's call rules are on; Don't record asks first", async () => {
+    const rules = { after_call: "ask", ask_when: "after_call", short_calls: "dont_keep", short_call_seconds: 30, version: 3, updated_at: null, declined: [],
+      rules: [{ id: "c1", kind: "contact", name: "Bilal  Qureshi", number: null, action: "always_audio" }] };
+    const withCaller = ITEMS.map((i) => (i.id === "bilal" ? { ...i, caller: { name: "Bilal Qureshi", number: null, source: "window_title" } } : i));
+    respond("library_list", withCaller);
+    respond("library_refresh", withCaller);
+    respond("call_rules_get", rules);
+    respondWith("call_rule_save", (args) => ({ ...rules, rules: [{ id: "c1", kind: "contact", number: null, ...(args as { rule: object }).rule }] }));
+    await show();
+    fireEvent.click(within(row("Bilal Qureshi").closest("li")!).getByRole("button", { name: /^More for / }));
+    const menu = screen.getByRole("menu");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Always for Bilal Qureshi/ }));
+    const sub = screen.getAllByRole("menu").at(-1)!;
+    // Its rule now (matched as the server keys names): Save audio only.
+    expect(within(sub).getByRole("menuitemradio", { name: "Save audio only" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(sub).getByRole("menuitemradio", { name: "Transcribe every call" }));
+    await act(flushAsync);
+    expect(callsOf("call_rule_save")).toEqual([{ rule: { kind: "contact", name: "Bilal Qureshi", action: "always_transcribe" } }]);
+    // Don't record: asked first, in the honest words (decision 25); No sends nothing.
+    answerConfirmForTests((q) => {
+      expect(q.body).toBe("On this computer the recording stops and is deleted as soon as Bilal Qureshi is known, on every call from now on.");
+      return false;
+    });
+    fireEvent.click(within(row("Bilal Qureshi").closest("li")!).getByRole("button", { name: /^More for / }));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Always for Bilal Qureshi/ }));
+    fireEvent.click(within(screen.getAllByRole("menu").at(-1)!).getByRole("menuitemradio", { name: "Don't record" }));
+    await act(flushAsync);
+    expect(callsOf("call_rule_save")).toHaveLength(1);
+    answerConfirmForTests(null);
+    // Another recording without a caller has no such item.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(within(row("Usman Chaudhry").closest("li")!).getByRole("button", { name: /^More for / }));
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /Always for/ })).toBeNull();
+  });
+
+  it("2.0.0-w: with the account's call rules off, no Always for <name>", async () => {
+    const withCaller = ITEMS.map((i) => (i.id === "bilal" ? { ...i, caller: { name: "Bilal Qureshi" } } : i));
+    respond("library_list", withCaller);
+    respond("library_refresh", withCaller);
+    respond("call_rules_get", null);
+    await show();
+    fireEvent.click(within(row("Bilal Qureshi").closest("li")!).getByRole("button", { name: /^More for / }));
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /Always for/ })).toBeNull();
+  });
+
   it("Mark as important is in the selection bar's ⋮ and the recording page's menu too, not only a right-click", async () => {
     respond("session_detail", { playback_url: null });
     respond("transcript_detail", { id: "t1", kind: "final", provider: "x", status: "completed", language: "en", text: null, segments: [] });

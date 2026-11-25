@@ -1151,7 +1151,7 @@ export default function MainApp() {
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
-  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu, callRules: ui.flags.call_rules });
   const findSettings = (query: string) => paletteSettings(query, settingsAvailable, openAccount);
   const upgradeOpen = !!openUpgradeRequest(entitlements);
   // Every page, place, project and Settings page by name, for the window's search (the palette).

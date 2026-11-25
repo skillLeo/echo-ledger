@@ -15,7 +15,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
-import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, ACTIVITY_PEOPLE, PERSON_PHOTO, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ACTIVITY_GROUPED, CALL_RULES, ACTIVITY_PEOPLE, PERSON_PHOTO, ACTIVITY_GROUPS, UPLOADS_FAILED, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
@@ -421,6 +421,10 @@ const commands: Record<string, (args: Args) => unknown> = {
     return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
   },
   activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),
+  // `&callrules=1` (contract 2.0.0-w): the account's call rules are on, with a rule for a contact, one the phone set for
+  // a group, and two for apps (Zoom's Don't record noted before the caller is known).
+  call_rules_get: () => (params.get("callrules") === "1" ? CALL_RULES : null),
+  call_rules_settings_set: (args: Args) => ({ ...CALL_RULES, ...(args.settings as object) }),
   // `&actors=1` (2.0.0-aa): the teammate's picture, as the core's kept copy.
   account_avatar_image: (args: Args) => (args.version === 1763700000 ? PERSON_PHOTO : null),
   activity_group_list: () => ({ data: grouped ? UPLOADS_FAILED : [] }),

@@ -173,6 +173,18 @@ export const PENDING: PendingItem[] = [
   { id: "p2", sourceApp: "zoom", auto: true, mode: "call", title: "Design check-in", clientId: "c-acme", clientName: "Acme Holdings", startedAt: at(1, 18, 30), endedAt: at(1, 18, 31), durationMs: 36_000, firstLine: null, deadlineAt: null, language: "en" },
 ];
 
+/** `&callrules=1` (contract 2.0.0-w): the account's call settings and rules, in the contract's order. */
+export const CALL_RULES = {
+  after_call: "always_audio", ask_when: "after_call", short_calls: "dont_keep", short_call_seconds: 30, version: 12, updated_at: null, declined: [],
+  rules: [
+    { id: "c1", kind: "contact", name: "Bilal Qureshi", number: null, group: null, source_app: null, action: "always_transcribe" },
+    { id: "c2", kind: "contact", name: "Omar Khan", number: null, group: null, source_app: null, action: "dont_record" },
+    { id: "g1", kind: "group", name: null, number: null, group: "favourites", source_app: null, action: "always_transcribe" },
+    { id: "s1", kind: "source", name: null, number: null, group: null, source_app: "zoom", action: "dont_record" },
+    { id: "s2", kind: "source", name: null, number: null, group: null, source_app: "google_meet", action: "ask" },
+  ],
+} as const;
+
 export const ACTIVITY: ActivityItem[] = [
   { id: "a1", kind: "transcript_failed", title: "Transcription failed", body: "Call with +92 300 1234567 · open it to retry", session_id: "r4", read: false, at: at(0, 6, 2) },
   { id: "a2", kind: "transcript_ready", title: "Transcript ready", body: "Weekly sync with Northwind", session_id: "r1", read: false, at: at(0, 9, 40) },

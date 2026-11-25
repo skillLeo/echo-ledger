@@ -36,6 +36,8 @@ export interface SettingRequires {
   zoom?: boolean;
   /** Only where the app speaks Urdu too (v21_urdu). */
   urdu?: boolean;
+  /** Only while the account's call rules are on (contract 2.0.0-w, the call_rules flag). */
+  callRules?: boolean;
 }
 
 export interface SettingEntry {
@@ -148,6 +150,8 @@ export const SETTINGS: readonly SettingEntry[] = [
     options: opts(["0", "Never"], ["5", "5 seconds"], ["10", "10 seconds", true], ["20", "20 seconds"], ["30", "30 seconds"]),
     keywords: ["short calls", "skip", "minimum length"], ru: ["chhoti call"], ur: ["مختصر کال"] },
   { id: "calls.sites", title: "Call sites", page: "calls", section: "Websites", kind: "page", keywords: ["never record", "website rules", "browser"] },
+  { id: "calls.rules", title: "Call rules", page: "calls", section: "Call rules", kind: "page", requires: { callRules: true },
+    keywords: ["rule", "contact", "per app", "don't record", "always transcribe"], ru: ["call ke qawaid"], ur: ["کال کے قواعد"] },
 
   { id: "mic", title: "Microphone & audio", page: null, root: "Recording", kind: "page",
     keywords: ["microphone", "mic", "audio", "sound", "input"], ru: ["awaz", "aawaz", "mike", "mic"], ur: ["آواز", "مائیک"] },

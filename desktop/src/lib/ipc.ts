@@ -957,6 +957,8 @@ export interface LibraryItem {
   /** Where `title` came from (since 2.0.0-k): a person's own rename, the person called ("Call with …"), the automatic
    * title, or the app's name for an untitled recording. Missing on older servers. */
   title_source?: "own" | "person" | "auto" | "app";
+  /** Who the call was with, when known (since v1.2): a call app's window title, the phone's contacts… */
+  caller?: { name?: string | null; number?: string | null; source?: string | null } | null;
   started_at?: string;
   duration_ms?: number | null;
   status?: string;

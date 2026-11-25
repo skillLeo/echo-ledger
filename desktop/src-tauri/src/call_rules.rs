@@ -333,6 +333,37 @@ pub fn forget(app: &AppHandle) {
     }
 }
 
+/// Whether calls record by themselves now: the account's After each call isn't Don't record (flag on), else this
+/// computer's own switch.
+pub fn records_by_themselves(state: &crate::AppState, settings: &Settings) -> bool {
+    match kept(state) {
+        Some(rules) => rules.after_call.as_deref() != Some(DONT_RECORD),
+        None => settings.auto_mode,
+    }
+}
+
+/// The tray's "Record calls automatically" while the account decides: its After each call becomes Don't record, or
+/// Ask me from Don't record; the answer is kept and the status follows.
+pub async fn toggle_records_by_themselves(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let now = records_by_themselves(&state, &state.settings());
+    let after_call = if now { DONT_RECORD } else { ASK };
+    let answer = state.api()?.put_call_rule_settings(&json!({ "after_call": after_call })).await;
+    match answer {
+        Ok(rules) => {
+            keep(app, &rules)?;
+            crate::actions::emit_status(app);
+            Ok(())
+        }
+        Err(e) => {
+            if flag_is_off(&e) {
+                forget(app);
+            }
+            Err(change_error(e))
+        }
+    }
+}
+
 /// After each config (every 60 s): with the flag off, nothing is kept; with it on, the account's answer is read again
 /// when its `version` is newer than the one kept, or none is kept yet. The first sync sends this computer's choice only
 /// when the answer just read still has none.

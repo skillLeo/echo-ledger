@@ -12,7 +12,7 @@ import { entryOf, groupOf, type GoalGroup } from "../groups";
 import { STARTUP_IDS, StartupRowV2 } from "./StartupV2";
 import { HistoryPageV2, ReplacementsPageV2, SnippetsPageV2, VoicePageV2 } from "./VoiceV2";
 import { CaptionStylePageV2, CaptionsPageV2 } from "./CaptionsV2";
-import { CallSitesPageV2, CallsPageV2 } from "./CallsV2";
+import { CallRulesPageV2, CallSitesPageV2, CallsPageV2 } from "./CallsV2";
 import { KeyPageV2, LanguagePageV2, WordsPageV2 } from "./TranscriptionV2";
 import { useEntitlements } from "../../../lib/entitlements";
 import type { AppStatus, Settings } from "../../../lib/ipc";
@@ -101,7 +101,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "voice.history": return <HistoryPageV2 />;
       case "captions": return <CaptionsPageV2 settings={settings} patch={patch} onStyle={() => open("captions.style")} />;
       case "captions.style": return <CaptionStylePageV2 settings={settings} patch={patch} />;
-      case "calls": return <CallsPageV2 settings={settings} patch={patch} platform={platform} onSites={() => open("calls.sites")} onConsent={() => open("privacy.consent")} />;
+      case "calls": return <CallsPageV2 settings={settings} patch={patch} platform={platform} onSites={() => open("calls.sites")} onConsent={() => open("privacy.consent")} onRules={() => open("calls.rules")} />;
       case "transcription.language": return <LanguagePageV2 settings={settings} patch={patch} />;
       case "words": return <WordsPageV2 settings={settings} patch={patch} />;
       case "key": return entitlements === undefined ? <PageLoading /> : entitlements ? <KeyPageV2 e={entitlements} /> : <NoPlans />;
@@ -129,6 +129,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       // On a Mac only, as today (the registry asks for macOS).
       case "help.mac_check": return platform === "macos" ? <MacCheckPageV2 status={status} /> : null;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
+      case "calls.rules": return <CallRulesPageV2 />;
       default: return null;
     }
   })();

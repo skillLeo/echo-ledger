@@ -7,7 +7,7 @@ import { entryOf, groupOf } from "../groups";
 export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "voice", "voice.replacements", "voice.snippets", "voice.history",
   "captions", "captions.style",
-  "calls", "calls.sites",
+  "calls", "calls.sites", "calls.rules",
   "transcription.language", "words", "key",
   "privacy", "privacy.consent",
   "lock", "security", "security.activity",

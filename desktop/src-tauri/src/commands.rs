@@ -96,7 +96,9 @@ pub fn status(app: &AppHandle) -> AppStatus {
     });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
     let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
+    // While the account's call rules decide (2.0.0-w), calls record by themselves unless its After each call is Don't record.
+    let auto_mode = crate::call_rules::records_by_themselves(&state, &settings);
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, generation, tray_state, paused, mic_note, pending_decisions, switches.clone(), state.viewer_refusal());
@@ -114,7 +116,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         recording,
         captions_live: state.live.is_live(),
         dictation_active: crate::dictation::is_active(app),
-        auto_mode: settings.auto_mode,
+        auto_mode,
         pending_uploads: active,
         upload_errors: queue.items.iter().filter(|i| !i.is_failed()).filter_map(|i| i.last_error.clone()).collect(),
         shortcut_errors: state.shortcut_errors.lock().unwrap().clone(),

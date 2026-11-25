@@ -28,6 +28,7 @@ import { skipShorterThan } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
 import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
+import { accountAfterCall, accountAfterEachCall, accountAskWhen, ruleProblem, useCallRules } from "../../lib/callRules";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
 import { t } from "../../i18n";
 
@@ -53,47 +54,81 @@ const options = (id: string) => (setting(id).options ?? []).map((o) => [o.value,
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
 /** Recording › Calls & meetings. */
-export function CallsPage({ settings, patch, platform, onSites, consentRead, onConsent }: {
+export function CallsPage({ settings, patch, platform, onSites, consentRead, onConsent, onRules }: {
   settings: Settings;
   patch: Patch;
   platform: string;
   onSites: () => void;
   consentRead: boolean;
   onConsent: () => void;
+  /** Call rules (contract 2.0.0-w), while the person's flag is on. */
+  onRules?: () => void;
 }) {
   const sites = settings.siteRules.filter((r) => !isNeverRule(r)).length;
+  // While the person's call_rules flag is on, After each call, When to ask and Short calls are the account's.
+  const { rules: account, set: setAccount } = useCallRules();
+  const [problem, setProblem] = useState<string | null>(null);
+  const saveAccount = async (change: Parameters<typeof api.callRulesSettingsSet>[0]) => {
+    setProblem(null);
+    try {
+      setAccount(await api.callRulesSettingsSet(change));
+    } catch (e) {
+      setProblem(ruleProblem(e));
+    }
+  };
+  const after = account ? accountAfterEachCall(account) : afterEachCallOf(settings);
+  const auto = after !== "off";
   return (
     <>
-      <Section title={CALL_WORDS.setting_title}>
-        <ChoiceListRow id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      <Section title={CALL_WORDS.setting_title} footer={problem ? <p role="alert">{problem}</p> : undefined}>
+        <ChoiceListRow id="calls.after" value={after} options={AFTER_EACH_CALL_OPTIONS}
+          onChange={(v) => void (account ? saveAccount({ after_call: accountAfterCall(v) }) : patch(afterEachCallPatch(v)))} />
       </Section>
-      {afterEachCallOf(settings) === "ask" && (
+      {after === "ask" && (
         <Section title={CALL_WORDS.when_title}>
-          <ChoiceListRow id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+          <ChoiceListRow id="calls.ask_when" value={account ? accountAskWhen(account) : settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS}
+            onChange={(v) => void (account ? saveAccount({ ask_when: v === "start" ? "at_start" : "after_call" }) : patch({ askWhen: v }))} />
+        </Section>
+      )}
+      {account && onRules && (
+        <Section title="Call rules" footer={<p>For a contact or an app, on every device of your account.</p>}>
+          <LinkRow id="calls.rules" value={account.rules.length === 1 ? "1 rule" : `${account.rules.length} rules`} onOpen={onRules} chevron />
         </Section>
       )}
       {/* One setting: Don't record calls is the only switch for recording calls by themselves; the apps wait under it. */}
       <Section title="Record automatically" footer={<>
-        {!settings.autoMode && <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p>}
+        {!auto && <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p>}
         <p>{setting("calls.ask_unknown").description}</p>
       </>}>
         {CALL_APPS.map(([app, name]) => (
-          <div key={app} className={`set-row ${settings.autoMode ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
+          <div key={app} className={`set-row ${auto ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
             <label className="set-hit">
               <span className="set-icon app-glyph" aria-hidden="true"><SourceAppIcon app={app} size={18} /></span>
               <span className="set-title">{name}</span>
               <button type="button" className={`switch ${appRecords(settings.autoRecordApps, app) ? "on" : ""}`} role="switch" aria-checked={appRecords(settings.autoRecordApps, app)}
-                aria-label={`Auto-record ${name}`} disabled={!settings.autoMode} onClick={() => void patch({ autoRecordApps: { [app]: !appRecords(settings.autoRecordApps, app) } })} />
+                aria-label={`Auto-record ${name}`} disabled={!auto} onClick={() => void patch({ autoRecordApps: { [app]: !appRecords(settings.autoRecordApps, app) } })} />
             </label>
           </div>
         ))}
         <SwitchRow id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
-      <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
-        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan("en").map(([s, label]) => [String(s), label] as const)}
-          onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
-      </Section>
+      {account ? (
+        <Section footer={<p>Calls shorter than 30 seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.</p>}>
+          <div className="set-row" data-setting="calls.short_calls">
+            <label className="set-hit">
+              <span className="set-title">Don't keep short calls</span>
+              <button type="button" className={`switch ${account.short_calls !== "keep" ? "on" : ""}`} role="switch" aria-checked={account.short_calls !== "keep"}
+                aria-label="Don't keep short calls" onClick={() => void saveAccount({ short_calls: account.short_calls === "keep" ? "dont_keep" : "keep" })} />
+            </label>
+          </div>
+        </Section>
+      ) : (
+        <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
+          <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan("en").map(([s, label]) => [String(s), label] as const)}
+            onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
+        </Section>
+      )}
       <Section title="Websites">
         <LinkRow id="calls.sites" value={sites === 1 ? "1 rule" : `${sites} rules`} onOpen={onSites} chevron />
       </Section>

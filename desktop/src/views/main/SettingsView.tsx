@@ -4,6 +4,7 @@
 // a list and then the page below that. The search box finds every single setting (lib/settingsIndex.ts), opens its
 // page and briefly highlights it.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CallRulesPageV2 } from "../../v2/settings/pages/CallsV2";
 import { api, listenTo, type Account, type AppStatus, type Entitlements, type InputDevice, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
@@ -51,6 +52,8 @@ export interface SettingsContext {
   zoom?: boolean;
   /** The app speaks Urdu too (v21_urdu): Appearance has Language. */
   urdu?: boolean;
+  /** The account's call rules are on (contract 2.0.0-w, the call_rules flag). */
+  callRules?: boolean;
 }
 
 /** Whether an entry is offered here and now (Settings' search, the list and the window's search use the same). */
@@ -66,6 +69,7 @@ export function settingsAvailability(ctx: SettingsContext): (entry: SettingEntry
     if (r?.rail && !ctx.rail) return false;
     if (r?.zoom && !ctx.zoom) return false;
     if (r?.urdu && !ctx.urdu) return false;
+    if (r?.callRules && !ctx.callRules) return false;
     switch (entry.id) {
       case "key":
       case "key.saved":
@@ -441,8 +445,10 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     </div></div>
   ) : null;
   const pages: Record<string, () => ReactNode> = {
-    calls: () => needSettings((s) => <CallsPage settings={s} patch={patch} platform={status.platform} onSites={() => open("calls.sites")} consentRead={s.consentAcknowledged} onConsent={() => open("privacy.consent")} />),
+    calls: () => needSettings((s) => <CallsPage settings={s} patch={patch} platform={status.platform} onSites={() => open("calls.sites")} consentRead={s.consentAcknowledged} onConsent={() => open("privacy.consent")} onRules={() => open("calls.rules")} />),
     "calls.sites": () => needSettings((s) => <CallSitesPage rules={s.siteRules} onSave={(siteRules) => patch({ siteRules })} />),
+    // Call rules (2.0.0-w): the same page as the new look's, in English here.
+    "calls.rules": () => <CallRulesPageV2 />,
     mic: () => needSettings((s) => <MicrophonePage settings={s} patch={patch} disabled={!!status.recording || status.dictationActive} systemAudioNote={status.systemAudioNote} />),
     captions: () => needSettings((s) => <CaptionsPage settings={s} patch={patch} onStyle={() => open("captions.style")} />),
     "captions.style": () => needSettings((s) => <CaptionStylePage settings={s} patch={patch} />),

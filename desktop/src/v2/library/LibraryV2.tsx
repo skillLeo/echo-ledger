@@ -37,6 +37,8 @@ import {
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
 import { markOpenedMany, openedProgress } from "./opened";
+import { CALL_ACTIONS, actionWords, contactRuleOf, useCallRules } from "../../lib/callRules";
+import type { CallAction } from "../../lib/ipc";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
 import { syncLibrary } from "./syncClock";
@@ -176,6 +178,14 @@ function emptyView(view: LibraryViewId): { title: string; body: string } | undef
 }
 
 /** More picked than the core takes at once: what the menu and the bar say. */
+/** A right-click's items with the caller's rule after the Organise group (before its first item set apart after it). */
+function withCallerRule(rule: MenuItem | null, items: MenuItem[]): MenuItem[] {
+  if (!rule) return items;
+  const at = items.findIndex((item) => item.action === "recording.moveToProject");
+  if (at < 0) return [...items, { ...rule, separator: true }];
+  return [...items.slice(0, at + 1), rule, ...items.slice(at + 1)];
+}
+
 const tooManyWords = (picked: number) => t("Up to :max at a time: unselect :extra", { max: MAX_BULK, extra: picked - MAX_BULK });
 /** Over the limit, where Mark as read and unread are still offered (contract 2.0.0-y): the bar's line and the menus'. */
 const overWords = (picked: number) => t("Over :max: only Mark as read or unread. Unselect :extra for the rest", { max: MAX_BULK, extra: picked - MAX_BULK });
@@ -974,6 +984,38 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
   };
 
+  /** The account's call rules while its flag is on (contract 2.0.0-w), for "Always for <name>". */
+  const { rules: callRules, set: setCallRules } = useCallRules();
+  /**
+   * "Always for Ahmed ›" with the four choices, for a recording whose caller is known, while the account's call rules
+   * are on; each a pick the system's menu can bring back too. Don't record asks first, in decision 25's words.
+   */
+  const callerRuleItem = (item: LibraryItem): MenuItem | null => {
+    const name = item.caller?.name?.trim();
+    if (!callRules || !name) return null;
+    const now = contactRuleOf(callRules, name)?.action;
+    return {
+      label: t("Always for :name", { name }), icon: Icons.UserIcon, action: "recording.callRule",
+      items: CALL_ACTIONS.map((action) => ({ label: actionWords(action), action: "recording.callRule", choice: action, radio: true, checked: now === action,
+        onPick: () => void saveContactRule(name, action) })),
+    };
+  };
+  const saveContactRule = async (name: string, action: CallAction) => {
+    if (action === "dont_record") {
+      const ok = await confirmAction({
+        title: t("Don't record calls with :name?", { name }),
+        body: t("On this computer the recording stops and is deleted as soon as :name is known, on every call from now on.", { name }),
+        confirm: actionWords("dont_record"), tone: "danger",
+      });
+      if (!ok) return;
+    }
+    try {
+      setCallRules(await api.callRuleSave({ kind: "contact", name, action }));
+      say(t("For :name: :choice", { name, choice: actionWords(action) }));
+    } catch (e) {
+      sayProblem(say, errorMessage(e));
+    }
+  };
   /**
    * Mark as read and Mark as unread (contract 2.0.0-y), the right-click's item: each while some picked are the other
    * way, both for a mix; the key on the one ⇧⌘U runs (Mark as read only when every one is unread). Any number picked:
@@ -1032,6 +1074,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: organise });
     // Mark as read and Mark as unread (contract 2.0.0-y).
     for (const { key, item } of readItems(ids)) add(key, { ...item, group: organise });
+    // A rule for the person called (contract 2.0.0-w, while the account's call rules are on).
+    const ruleItem = one ? callerRuleItem(one) : null;
+    if (ruleItem) add("rule", { ...ruleItem, group: organise });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
         ? { label: t("Transcribe (:max at a time)", { max: MAX_TRANSCRIBE }), icon: Icons.TranscriptIcon, group: organise, disabled: true }
@@ -1398,9 +1443,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const list = one ? RECORDING_ONE.filter((id) => id !== "recording.transcribe" || rowState(one)?.key === "audio_only") : RECORDING_MANY;
     const inList = (key: string) => chosen.length > 0 && chosen.every((i) => (i.labels ?? []).some((l) => listKey(l) === key));
     const where = one ? one.client?.id ?? "none" : null;
+    // A rule for the person called (contract 2.0.0-w): after Move to project's group, before Rename.
+    const rule = one ? callerRuleItem(one) : null;
     return {
       title: manyTitle(ids.length),
-      items: contextItems(list, ctx, {
+      items: withCallerRule(rule, contextItems(list, ctx, {
         "recording.labels": [
           ...(lists ? choiceItems("recording.labels", lists.map((l) => ({ value: l.key, label: l.name, checked: inList(l.key) })), ctx) : []),
           ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
@@ -1410,7 +1457,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
         ], ctx).map(oneOf),
         "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: appWords(t(f.label), ctx.platform) })), ctx),
-      }, LIBRARY_KEYS),
+      }, LIBRARY_KEYS)),
     };
   };
   /** A recording in Trash: Restore | Delete immediately…; Trash itself (its empty space): Empty trash…. */
