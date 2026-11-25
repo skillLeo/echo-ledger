@@ -9,7 +9,7 @@ import { LANGUAGES } from "../../../views/main/AppSettings";
 import { GROQ_KEYS } from "../../../views/main/Upgrade";
 import { Button, Card, Icons, ListRow, TextField } from "../../components";
 import { Group, ResetDefaults, SectionTitle, SelectSetting, type Patch } from "./rows";
-import { t } from "../../../i18n";
+import { t, withParts } from "../../../i18n";
 
 export function LanguagePageV2({ settings, patch }: { settings: Settings; patch: Patch }) {
   return (
@@ -85,7 +85,7 @@ export function KeyPageV2({ e }: { e: Entitlements }) {
     <div className="el-settings-v2" data-testid="transcription-key">
       {key?.set ? (
         <Group footer={paid ? <p>{t("Your plan transcribes for you. Your own key is used only if you choose it on a recording.")}</p> : undefined}>
-          <ListRow compact anchor="key.saved" icon={Icons.LockIcon} iconStyle="plain" title={t("Saved key")} value={`Ending in ${key.last4 ?? "…"}`}
+          <ListRow compact anchor="key.saved" icon={Icons.LockIcon} iconStyle="plain" title={t("Saved key")} value={t("Ending in :digits", { digits: key.last4 ?? "…" })}
             control={<Button size="sm" variant="danger" disabled={busy} onClick={() => void remove()}>{t("Remove key")}</Button>} />
         </Group>
       ) : <p className="el-secondary">{t("Transcripts on Free use your own free Groq key. It takes about 2 minutes.")}</p>}
@@ -94,11 +94,11 @@ export function KeyPageV2({ e }: { e: Entitlements }) {
           <SectionTitle className="el-body-strong">{key?.set ? t("Replace the key") : t("Add your key")}</SectionTitle>
           <ol className="el-steps-list" aria-label={t("Steps")}>
             <li className="el-steps-list__item">
-              <span>Open <strong>{GROQ_KEYS}</strong> and sign in. It's free.</span>
-              <Button size="sm" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>Open {GROQ_KEYS}</Button>
+              <span>{withParts(t("Open :site and sign in. It's free."), { site: <strong>{GROQ_KEYS}</strong> })}</span>
+              <Button size="sm" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>{t("Open :site", { site: GROQ_KEYS })}</Button>
             </li>
-            <li className="el-steps-list__item"><span>Choose <strong>{t("API Keys")}</strong>, then <strong>{t("Create API key")}</strong>, and copy it.</span></li>
-            <li className="el-steps-list__item"><span>Paste it here and choose <strong>{t("Save")}</strong>.</span></li>
+            <li className="el-steps-list__item"><span>{withParts(t("Choose :keys, then :create, and copy it."), { keys: <strong>{t("API Keys")}</strong>, create: <strong>{t("Create API key")}</strong> })}</span></li>
+            <li className="el-steps-list__item"><span>{withParts(t("Paste it here and choose :save."), { save: <strong>{t("Save")}</strong> })}</span></li>
           </ol>
           <form className="el-key-paste" onSubmit={(ev) => void save(ev)}>
             <TextField label={t("Groq key")} type="password" autoComplete="off" spellCheck={false} placeholder={t("gsk_…")} dir="ltr" value={value} onChange={(ev) => setValue(ev.target.value)} />

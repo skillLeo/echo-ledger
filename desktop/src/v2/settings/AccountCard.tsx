@@ -123,7 +123,7 @@ export function StorageCard() {
               )}
               {storage && (
                 <ListRow compact icon={Icons.ClockIcon} iconStyle="plain" title={t("Recordings are kept")}
-                  value={storage.retention_days > 0 ? t(":days days", { days: storage.retention_days }) : t("Until you delete them")} />
+                  value={storage.retention_days > 0 ? tc(":days days", storage.retention_days, { days: storage.retention_days }) : t("Until you delete them")} />
               )}
             </List>
           </Card>

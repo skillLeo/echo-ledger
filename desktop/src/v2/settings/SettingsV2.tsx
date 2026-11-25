@@ -143,13 +143,14 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
             const rows = g.ids.map(row).filter(Boolean);
             if (rows.length === 0) return null;
             return (
-              <section key={g.title} className="el-group" aria-label={g.title} aria-describedby={`group-${slug(g.title)}`}>
+              // The group's English title is its id (the key, the description's id); its words are said in the window's language.
+              <section key={g.title} className="el-group" aria-label={t(g.title)} aria-describedby={`group-${slug(g.title)}`}>
                 <div className="el-group__label">
                   <Icon icon={g.icon} />
-                  <h2 className="el-caption el-body-strong el-group__title">{g.title}</h2>
+                  <h2 className="el-caption el-body-strong el-group__title">{t(g.title)}</h2>
                 </div>
-                <p className="el-caption el-secondary el-group__desc" id={`group-${slug(g.title)}`}>{g.description}</p>
-                <Card><List label={g.title} className="el-group__rows">{rows}</List></Card>
+                <p className="el-caption el-secondary el-group__desc" id={`group-${slug(g.title)}`}>{t(g.description)}</p>
+                <Card><List label={t(g.title)} className="el-group__rows">{rows}</List></Card>
               </section>
             );
           })}

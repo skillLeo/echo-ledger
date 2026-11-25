@@ -7,7 +7,7 @@ import { confirmAction } from "../../../lib/confirm";
 import { withEntry } from "../../../views/main/DictationSettings";
 import { Button, Card, EmptyState, Icons, List, ListRow, TextArea, TextField } from "../../components";
 import { Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
-import { t } from "../../../i18n";
+import { isRtl, t } from "../../../i18n";
 
 export type VoiceSub = "voice.replacements" | "voice.snippets" | "voice.history";
 
@@ -48,8 +48,8 @@ export function ReplacementsPageV2({ settings, patch }: { settings: Settings; pa
         ) : (
           <List label={t("Replacements")} className="el-group__rows">
             {list.map((r) => (
-              <ListRow key={r.from} compact title={<><span dir="auto">{r.from}</span> → <span dir="auto">{r.to || "(nothing)"}</span></>}
-                control={<Button size="sm" variant="quiet" aria-label={`Remove ${r.from}`} onClick={() => void patch({ dictationReplacements: list.filter((x) => x !== r) })}>{t("Remove")}</Button>} />
+              <ListRow key={r.from} compact title={<><span dir="auto">{r.from}</span> {isRtl() ? "←" : "→"} <span dir="auto">{r.to || t("(nothing)")}</span></>}
+                control={<Button size="sm" variant="quiet" aria-label={t("Remove :name", { name: r.from })} onClick={() => void patch({ dictationReplacements: list.filter((x) => x !== r) })}>{t("Remove")}</Button>} />
             ))}
           </List>
         )}
@@ -90,7 +90,7 @@ export function SnippetsPageV2({ settings, patch }: { settings: Settings; patch:
           <List label={t("Snippets")} className="el-group__rows">
             {list.map((s) => (
               <ListRow key={s.trigger} compact title={s.trigger} meta={s.text}
-                control={<Button size="sm" variant="quiet" aria-label={`Remove ${s.trigger}`} onClick={() => void patch({ dictationSnippets: list.filter((x) => x !== s) })}>{t("Remove")}</Button>} />
+                control={<Button size="sm" variant="quiet" aria-label={t("Remove :name", { name: s.trigger })} onClick={() => void patch({ dictationSnippets: list.filter((x) => x !== s) })}>{t("Remove")}</Button>} />
             ))}
           </List>
         )}
@@ -140,7 +140,7 @@ export function HistoryPageV2() {
           <List label={t("Recent dictations")} className="el-group__rows">
             {(entries ?? []).map((e, i) => (
               <ListRow key={`${e.at}-${i}`} compact title={e.text} meta={formatWhen(e.at)}
-                control={<Button size="sm" variant="quiet" aria-label={copied === i ? t("Copied") : `Copy “${e.text.slice(0, 40)}”`} onClick={() => void copy(i)}>{copied === i ? t("Copied") : t("Copy")}</Button>} />
+                control={<Button size="sm" variant="quiet" aria-label={copied === i ? t("Copied") : t("Copy “:text”", { text: e.text.slice(0, 40) })} onClick={() => void copy(i)}>{copied === i ? t("Copied") : t("Copy")}</Button>} />
             ))}
           </List>
         )}

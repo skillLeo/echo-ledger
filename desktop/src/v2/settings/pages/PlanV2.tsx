@@ -13,13 +13,29 @@ import { setting } from "../../../lib/settingsRegistry";
 import { canUpgrade, dismissRequest, limitText, percentOf, planHighlights, requestShown, usageText } from "../../../views/main/Upgrade";
 import { Badge, Button, Card, Dialog, Icons, ListRow } from "../../components";
 import { Group, SectionTitle } from "./rows";
-import { t } from "../../../i18n";
+import { t, tc, withParts } from "../../../i18n";
 
-const METERS: readonly (readonly [string, string, string])[] = [
-  ["storage_bytes", "Storage", "plan.usage.storage"],
-  ["devices", "Devices", "plan.usage.devices"],
-  ["seats", "Team members", "plan.usage.members"],
+/** The meters under Transcription: the limit, its name in the window's language, the row's id. */
+const meters = (): readonly (readonly [string, string, string])[] => [
+  ["storage_bytes", t("Storage"), "plan.usage.storage"],
+  ["devices", t("Devices"), "plan.usage.devices"],
+  ["seats", t("Team members"), "plan.usage.members"],
 ];
+
+/**
+ * "You've used 85% of your minutes.": what a meter at 80 % says, its words for each limit (minutes, storage, devices;
+ * the rest says team members, as it always has). `upgrade`: with the word Upgrade in its place (withParts).
+ */
+function usedLine(limitKey: string, percent: number, resets: string | null, upgrade: boolean): string {
+  const date = resets ? rowDate(resets) : null;
+  if (limitKey === "monthly_minutes") {
+    if (upgrade) return date ? t("You've used :percent% of your minutes. :upgrade or wait until :date.", { percent, date }) : t("You've used :percent% of your minutes. :upgrade.", { percent });
+    return date ? t("You've used :percent% of your minutes. They reset on :date.", { percent, date }) : t("You've used :percent% of your minutes.", { percent });
+  }
+  if (limitKey === "storage_bytes") return upgrade ? t("You've used :percent% of your storage. :upgrade.", { percent }) : t("You've used :percent% of your storage.", { percent });
+  if (limitKey === "devices") return upgrade ? t("You've used :percent% of your devices. :upgrade.", { percent }) : t("You've used :percent% of your devices.", { percent });
+  return upgrade ? t("You've used :percent% of your team members. :upgrade.", { percent }) : t("You've used :percent% of your team members.", { percent });
+}
 
 /** A word inside a sentence that acts ("upgrade"). */
 function InlineAction({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
@@ -36,18 +52,21 @@ function MeterRow({ id, label, limitKey, limit, quiet, onUpgrade }: {
   const tone = percent >= 100 && blocks ? "full" : percent >= 80 ? "warn" : "";
   const text = usageText(limitKey, limit);
   const resets = limitKey === "monthly_minutes" && limit.resets_at ? limit.resets_at : null;
-  const words = limitKey === "monthly_minutes" ? "minutes" : limitKey === "storage_bytes" ? "storage" : limitKey === "devices" ? "devices" : t("team members");
-  let line: ReactNode = share === null ? (limitKey === "monthly_minutes" ? t("No monthly limit") : null) : resets ? `Resets ${rowDate(resets)}` : null;
+  let line: ReactNode = share === null ? (limitKey === "monthly_minutes" ? t("No monthly limit") : null) : resets ? t("Resets :date", { date: rowDate(resets) }) : null;
   if (percent >= 100 && blocks) {
-    line = limitKey === "monthly_minutes" ? `Transcription is paused${resets ? ` until ${rowDate(resets)}` : ""}.`
-      : limitKey === "storage_bytes" ? (quiet ? t("New recordings can't upload until you free up space.") : <>New recordings can't upload until you free up space or <InlineAction onClick={onUpgrade}>{t("upgrade")}</InlineAction>.</>)
+    line = limitKey === "monthly_minutes" ? (resets ? t("Transcription is paused until :date.", { date: rowDate(resets) }) : t("Transcription is paused."))
+      : limitKey === "storage_bytes" ? (quiet ? t("New recordings can't upload until you free up space.")
+        : withParts(t("New recordings can't upload until you free up space or :upgrade."), { upgrade: <InlineAction onClick={onUpgrade}>{t("upgrade")}</InlineAction> }))
         : limitKey === "devices" ? t("Sign out a device to add another.") : null;
   } else if (percent >= 80 && blocks) {
     line = quiet || !onUpgrade
-      ? `You've used ${percent}% of your ${words}.${resets ? ` They reset on ${rowDate(resets)}.` : ""}`
-      : <>You've used {percent}% of your {words}. <InlineAction onClick={onUpgrade}>{t("Upgrade")}</InlineAction>{resets ? ` or wait until ${rowDate(resets)}.` : "."}</>;
+      ? usedLine(limitKey, percent, resets, false)
+      : withParts(usedLine(limitKey, percent, resets, true), { upgrade: <InlineAction onClick={onUpgrade}>{t("Upgrade")}</InlineAction> });
   }
-  const spoken = `${label}, ${text.replace(" min", " minutes")} used${resets && share !== null ? `, resets ${sentenceDate(resets).replace(/ \d{4}$/, "")}` : ""}.`;
+  const value = text.replace(" min", " minutes");
+  const spoken = resets && share !== null
+    ? t(":label, :value used, resets :date.", { label, value, date: sentenceDate(resets).replace(/ \d{4}$/, "") })
+    : t(":label, :value used.", { label, value });
   return (
     <li className="el-row el-row--compact el-meter-row" id={`setting-${id}`} data-setting={id} tabIndex={-1} data-testid={`meter-${limitKey}`}>
       <span className="el-meter-row__line">
@@ -76,13 +95,16 @@ function RequestCardV2({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain
   type Shape = { title: string; tag: string; tone?: "warning" | "success"; body: ReactNode; primary?: [string, () => void]; secondary?: [string, () => void, boolean?] };
   const cards: Record<string, Shape> = {
     awaiting_payment: {
-      title: `${name} requested`, tag: t("Waiting for payment"),
-      body: <p dir="auto">Send {amount ?? t("the amount")} to our bank account, then add a screenshot of the receipt.{request.reference_code ? <> Reference <span className="el-mono" dir="ltr">{request.reference_code}</span>.</> : ""}</p>,
+      title: t(":plan requested", { plan: name }), tag: t("Waiting for payment"),
+      body: <p dir="auto">{request.reference_code
+        ? withParts(t("Send :amount to our bank account, then add a screenshot of the receipt. Reference :reference.", { amount: amount ?? t("the amount") }),
+          { reference: <span className="el-mono" dir="ltr">{request.reference_code}</span> })
+        : t("Send :amount to our bank account, then add a screenshot of the receipt.", { amount: amount ?? t("the amount") })}</p>,
       primary: [t("Payment details"), onPay], secondary: [t("Cancel request"), onCancel, true],
     },
     in_review: {
       title: t("Checking your payment"), tag: t("In review"),
-      body: <p dir="auto">{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt))}. ` : ""}{request.payment?.review_hours ?? t("We check receipts every day.")}</p>,
+      body: <p dir="auto">{paidAt ? `${t("We got your receipt on :date at :time.", { date: rowDate(paidAt), time: formatTime(new Date(paidAt)) })} ` : ""}{request.payment?.review_hours ?? t("We check receipts every day.")}</p>,
       primary: [t("View request"), onOpen],
     },
     needs_receipt: {
@@ -96,8 +118,8 @@ function RequestCardV2({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain
       primary: onAgain ? [t("Request again"), onAgain] : undefined, secondary: [t("Dismiss"), onDismiss],
     },
     approved: {
-      title: `You're on ${name}`, tag: t("Approved"), tone: "success",
-      body: <p dir="auto">Thank you. {name} is on{until ? ` until ${sentenceDate(until)}` : ""}.</p>,
+      title: t("You're on :plan", { plan: name }), tag: t("Approved"), tone: "success",
+      body: <p dir="auto">{until ? t("Thank you. :plan is on until :date.", { plan: name, date: sentenceDate(until) }) : t("Thank you. :plan is on.", { plan: name })}</p>,
       secondary: [t("Dismiss"), onDismiss],
     },
   };
@@ -127,7 +149,8 @@ function RequestCardV2({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain
 
 /** Every feature: Free | Pro | Ultra, a tick where a plan has one, limits as values. */
 function FeatureTable({ e }: { e: Entitlements }) {
-  const freeName = e.plan?.key === "free" ? planName(e.plan) : t("Free");
+  // Plan names are names (LEAD 23): Free as written, in every language.
+  const freeName = planName(e.plan?.key === "free" ? e.plan : { key: "free", name: "" });
   const columns: { key: string; name: string; has: (f: string) => boolean; limits: Record<string, number | null | undefined> }[] = [
     { key: "free", name: freeName, has: (f) => e.features[f]?.cost !== "paid", limits: e.plan?.key === "free" ? Object.fromEntries(Object.entries(e.limits).map(([k, v]) => [k, v.limit])) : {} },
     ...e.plans.filter((p) => p.key !== "free").map((p) => ({ key: p.key, name: planName(p), has: (f: string) => p.features.includes(f) || e.features[f]?.cost !== "paid", limits: p.limits })),
@@ -167,12 +190,12 @@ function historyLine(request: UpgradeRequest): string {
   const decided = rowDateWithYear(request.decided_at);
   const since = rowDate(request.payment?.paid_at ?? request.created_at);
   switch (stage) {
-    case "approved": return decided ? `Approved on ${decided}` : t("Approved");
-    case "declined": return decided ? `Not approved on ${decided}` : t("Not approved");
+    case "approved": return decided ? t("Approved on :date", { date: decided }) : t("Approved");
+    case "declined": return decided ? t("Not approved on :date", { date: decided }) : t("Not approved");
     case "cancelled": return t("Cancelled by you");
-    case "in_review": return since ? `In review since ${since}` : t("In review");
+    case "in_review": return since ? t("In review since :date", { date: since }) : t("In review");
     case "needs_receipt": return t("New receipt asked for");
-    default: return since ? `Waiting for payment since ${since}` : t("Waiting for payment");
+    default: return since ? t("Waiting for payment since :date", { date: since }) : t("Waiting for payment");
   }
 }
 
@@ -226,24 +249,24 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
       <section className="el-group" id="setting-plan.current" data-setting="plan.current" tabIndex={-1}>
         <Card>
           <div className="el-plan-card">
-            <div className="el-plan-card__head"><span className="el-title-m" dir="auto">{isFree ? t("Free plan") : `${name} plan`}</span></div>
+            <div className="el-plan-card__head"><span className="el-title-m" dir="auto">{t(":plan plan", { plan: isFree ? planName({ key: "free", name: "" }) : name })}</span></div>
             <div className="el-plan-card__body el-secondary">
-              {!allowed && workspace && <p dir="auto">{workspace} is on {name}. Its owner manages the plan.</p>}
+              {!allowed && workspace && <p dir="auto">{t(":workspace is on :plan. Its owner manages the plan.", { workspace, plan: name })}</p>}
               {isFree && allowed && <p dir="auto">{t("Transcripts use your own free Groq key.")}</p>}
               {!isFree && price && <p dir="auto" className="el-tabular">{price}</p>}
-              {!isFree && <p dir="auto">{plan?.expires_at ? `Paid until ${rowDateWithYear(plan.expires_at)}` : t("No end date")}</p>}
-              {plan?.trial_minutes_left ? <p dir="auto">{count(plan.trial_minutes_left)} trial minutes left</p> : null}
+              {!isFree && <p dir="auto">{plan?.expires_at ? t("Paid until :date", { date: rowDateWithYear(plan.expires_at) }) : t("No end date")}</p>}
+              {plan?.trial_minutes_left ? <p dir="auto">{tc(":minutes trial minutes left", plan.trial_minutes_left, { minutes: count(plan.trial_minutes_left) })}</p> : null}
               {allowed && !open && top && <p dir="auto">{t("You're on our top plan.")}</p>}
             </div>
             {allowed && !open && next && (
               <div className="el-plan-card__actions" id="setting-plan.upgrade" data-setting="plan.upgrade" tabIndex={-1}>
-                <Button variant="primary" onClick={() => flow(next.key)}>{isFree ? t("Upgrade") : `Upgrade to ${planName(next)}`}</Button>
+                <Button variant="primary" onClick={() => flow(next.key)}>{isFree ? t("Upgrade") : t("Upgrade to :plan", { plan: planName(next) })}</Button>
                 {isFree && above.length > 0 && <Button variant="quiet" onClick={scrollToPlans}>{t("Compare plans")}</Button>}
               </div>
             )}
           </div>
         </Card>
-        {!isFree && plan?.expires_at && <div className="el-group__note el-caption el-secondary"><p dir="auto">Your plan stops on {sentenceDate(plan.expires_at)}. There is nothing to cancel.</p></div>}
+        {!isFree && plan?.expires_at && <div className="el-group__note el-caption el-secondary"><p dir="auto">{t("Your plan stops on :date. There is nothing to cancel.", { date: sentenceDate(plan.expires_at) })}</p></div>}
       </section>
       {request && requestShown(request) && (
         <RequestCardV2 e={e} request={request} onOpen={() => status("status")} onPay={() => status("pay")} onReceipt={() => status("receipt")} onCancel={() => setCancelling("ask")}
@@ -256,7 +279,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
             meta={e.transcription_key?.set ? t("Key added") : t("Not added")}
             control={e.transcription_key?.set ? undefined : <Button size="sm" onClick={onKey}>{t("Add key")}</Button>} />
         ) : <MeterRow id="plan.usage.minutes" label={t("Transcription")} limitKey="monthly_minutes" limit={minutes} quiet={quiet} onUpgrade={onUpgrade} />}
-        {METERS.map(([key, label, id]) => {
+        {meters().map(([key, label, id]) => {
           const limit = e.limits[key];
           if (!limit || limit.limit === null || limit.limit === undefined) return null;
           if (key === "seats" && (limit.limit ?? 0) <= 1) return null;
@@ -283,10 +306,10 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
                 <div className="el-plan-card" data-testid={`plan-${p.key}`}>
                   <div className="el-plan-card__head"><span className="el-title-s">{planName(p)}</span>{priceText(p) && <span className="el-secondary el-tabular">{priceText(p)}</span>}</div>
                   <div className="el-plan-card__body">
-                    {i > 0 && <p dir="auto" className="el-secondary">Everything in {planName(above[i - 1])}, plus:</p>}
+                    {i > 0 && <p dir="auto" className="el-secondary">{t("Everything in :plan, plus:", { plan: planName(above[i - 1]) })}</p>}
                     <ul className="el-plan-card__lines">{planHighlights(e, p, below).map((l) => <li key={l}>{l}</li>)}</ul>
                   </div>
-                  {!open && <div className="el-plan-card__actions"><Button onClick={() => flow(p.key)}>Choose {planName(p)}</Button></div>}
+                  {!open && <div className="el-plan-card__actions"><Button onClick={() => flow(p.key)}>{t("Choose :plan", { plan: planName(p) })}</Button></div>}
                 </div>
               </Card>
             );
@@ -305,7 +328,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
       {allowed && (request || above.length > 0) && (
         <Group title={t("Payments")} footer={<p dir="auto">{t("Payments are by bank transfer. We switch your plan on after we see the money in our account.")}</p>}>
           {request && stage !== null && (
-            <ListRow compact anchor="plan.history" title={`${planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" })}, 1 month`}
+            <ListRow compact anchor="plan.history" title={t(":plan, 1 month", { plan: planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" }) })}
               meta={historyLine(request)} value={request.amount_due_pkr ? rupees(request.amount_due_pkr) : request.amount_due ?? undefined} chevron onClick={() => status("status")} />
           )}
           {!open && above.length > 0 && (
