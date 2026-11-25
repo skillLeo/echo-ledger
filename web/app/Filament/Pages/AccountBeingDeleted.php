@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\Notice as Notification;
 use App\Models\User;
 use App\Services\Accounts\AccountDeletion;
@@ -29,29 +30,34 @@ class AccountBeingDeleted extends Page
 
     protected static bool $shouldRegisterNavigation = false;
 
+    public function getTitle(): string
+    {
+        return __('Your account is being deleted');
+    }
+
     public function content(Schema $schema): Schema
     {
         if (! $this->account()->isBeingDeleted()) {
             return $schema->components([
                 Section::make()->schema([
-                    Text::make('Your account is not being deleted.'),
-                    Actions::make([Action::make('openDashboard')->label('Open the dashboard')->url(Dashboard::getUrl())]),
+                    Text::make(__('Your account is not being deleted.')),
+                    Actions::make([Action::make('openDashboard')->label(__('Open the dashboard'))->url(Dashboard::getUrl())]),
                 ]),
             ]);
         }
 
         return $schema->components([
             Section::make()->schema([
-                Text::make(fn (): string => 'You asked to delete this account. It is erased on '.$this->date().', with its recordings, transcripts, screens, files, projects and devices.'),
-                Text::make('Keep it, and everything stays as it was: sign your phone and computer in again afterwards.'),
+                Text::make(fn (): string => __('You asked to delete this account. It is erased on :date, with its recordings, transcripts, screens, files, projects and devices.', ['date' => $this->date()])),
+                Text::make(__('Keep it, and everything stays as it was: sign your phone and computer in again afterwards.')),
                 Actions::make([
-                    Action::make('keepAccount')->label('Keep my account')->icon(Heroicon::OutlinedCheckCircle)
+                    Action::make('keepAccount')->label(__('Keep my account'))->icon(Heroicon::OutlinedCheckCircle)
                         ->action(function (): void {
                             app(AccountDeletion::class)->cancel($this->account());
-                            Notification::make()->title('Your account stays')->success()->send();
+                            Notification::make()->title(__('Your account stays'))->success()->send();
                             $this->redirect(Dashboard::getUrl());
                         }),
-                    Action::make('signOut')->label('Sign out')->color('gray')
+                    Action::make('signOut')->label(__('Sign out'))->color('gray')
                         ->action(function (): void {
                             Filament::auth()->logout();
                             session()->invalidate();
@@ -63,9 +69,12 @@ class AccountBeingDeleted extends Page
         ]);
     }
 
+    /** "November 24, 2026" · "24 نومبر 2026". */
     private function date(): string
     {
-        return $this->account()->deletes_at?->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('F j, Y') ?? '';
+        $at = $this->account()->deletes_at?->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone());
+
+        return $at !== null ? ConsoleDates::format($at, 'F j, Y', 'j F Y') : '';
     }
 
     private function account(): User

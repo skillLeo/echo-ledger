@@ -55,6 +55,12 @@ class ChoosePlan extends Page
         return 'upgrade';
     }
 
+    public function getTitle(): string
+    {
+        // "Upgrade" as the page's name (the noun); lang/ur.json's "Upgrade" is the button's verb.
+        return __('upgrade_context.page_title');
+    }
+
     public static function canAccess(): bool
     {
         $context = SettingsContext::current();
@@ -126,7 +132,7 @@ class ChoosePlan extends Page
         $this->promoApplied = null;
         $code = strtoupper(trim($this->promo));
         if (mb_strlen($code) < 6 || mb_strlen($code) > 24 || preg_match('/^[A-Z0-9-]+$/', $code) !== 1) {
-            $this->promoError = "We don't know this code. Check the spelling.";
+            $this->promoError = __("We don't know this code. Check the spelling.");
 
             return;
         }
@@ -155,7 +161,7 @@ class ChoosePlan extends Page
         $context = $this->context();
         $plan = $this->selected();
         if ($plan === null) {
-            $this->error = "This plan isn't available right now. Please choose another.";
+            $this->error = __("This plan isn't available right now. Please choose another.");
 
             return;
         }
@@ -171,15 +177,17 @@ class ChoosePlan extends Page
             }
             $this->error = match ($e->apiCode()) {
                 'request_pending' => $e->getMessage(),
-                'not_allowed' => 'Only the owner of '.($context->workspace()->name ?? 'this workspace').' can upgrade it. Ask them to upgrade.',
-                'rate_limited' => 'Too many tries today. Please try again later.',
+                'not_allowed' => ($workspace = $context->workspace()->name ?? null) !== null
+                    ? __('Only the owner of :workspace can upgrade it. Ask them to upgrade.', ['workspace' => $workspace])
+                    : __('Only the owner of this workspace can upgrade it. Ask them to upgrade.'),
+                'rate_limited' => __('Too many tries today. Please try again later.'),
                 'promo_other_plan', 'invalid_promo_code' => EditProfile::promoError($e),
-                default => "This plan isn't available right now. Please choose another.",
+                default => __("This plan isn't available right now. Please choose another."),
             };
 
             return;
         } catch (ValidationException) {
-            $this->error = "This plan isn't available right now. Please choose another.";
+            $this->error = __("This plan isn't available right now. Please choose another.");
 
             return;
         }
@@ -203,27 +211,35 @@ class ChoosePlan extends Page
             $below = $plan;
         }
         $months = $this->promoApplied['months'] ?? 1;
+        $current = $context->plan()->name;
+        $lowest = $this->feature !== null ? (app(Entitlements::class)->lowestPlan($this->feature)->name ?? null) : null;
+        $workspace = $context->workspace()->name ?? null;
 
         return [
             'context' => $context,
             'current' => $context->plan(),
             'cards' => $cards,
             'selected' => $selected,
-            'featureLine' => $this->feature !== null
-                ? Features::name($this->feature).' is in '.(app(Entitlements::class)->lowestPlan($this->feature)->name ?? 'a bigger plan').". You're on {$context->plan()->name}."
-                : "You're on {$context->plan()->name}.",
-            'workspaceLine' => $context->user->workspaces()->count() > 1 ? 'Upgrading '.($context->workspace()->name ?? 'this workspace') : null,
+            'featureLine' => match (true) {
+                $this->feature === null => __("You're on :plan.", ['plan' => $current]),
+                $lowest !== null => __(":feature is in :plan. You're on :current.", ['feature' => __(Features::name($this->feature)), 'plan' => $lowest, 'current' => $current]),
+                default => __(":feature is in a bigger plan. You're on :current.", ['feature' => __(Features::name($this->feature)), 'current' => $current]),
+            },
+            'workspaceLine' => $context->user->workspaces()->count() > 1
+                ? ($workspace !== null ? __('Upgrading :workspace', ['workspace' => $workspace]) : __('Upgrading this workspace'))
+                : null,
             'price' => $selected !== null ? UpgradeFlow::price($selected) : null,
             'toPay' => $selected !== null ? UpgradeFlow::price($selected, $percent) : null,
             'percent' => $percent,
             'free' => $percent >= 100,
             'promoLine' => $this->promoApplied !== null
                 ? ($this->promoApplied['plan'] === $this->plan
-                    ? "{$this->promoApplied['code']}: {$this->promoApplied['percent']}% off {$this->promoApplied['plan_name']} for ".($months === 1 ? '1 month' : "{$months} months")
-                    : "This code is for {$this->promoApplied['plan_name']}.")
+                    ? trans_choice(':code: :percent% off :plan for 1 month|:code: :percent% off :plan for :count months', $months,
+                        ['code' => $this->promoApplied['code'], 'percent' => (string) $this->promoApplied['percent'], 'plan' => $this->promoApplied['plan_name']])
+                    : __('This code is for :plan.', ['plan' => $this->promoApplied['plan_name']]))
                 : null,
             'promoOk' => $this->promoApplied !== null && $this->promoApplied['plan'] === $this->plan,
-            'firstMonths' => $months === 1 ? 'for the first month' : "for the first {$months} months",
+            'firstMonths' => trans_choice('for the first month|for the first :count months', $months),
             'backUrl' => EditProfile::settingsUrl('plan'),
         ];
     }
