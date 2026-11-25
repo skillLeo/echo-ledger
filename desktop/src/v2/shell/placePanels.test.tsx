@@ -6,9 +6,7 @@ import { resetTauriMock, respond } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 import { ActivityPanel, AskPanel, LivePanel, SettingsPanel } from "./PlacePanels";
 import { SettingsV2 } from "../settings/SettingsV2";
-import { ProjectsPanel, SHOW_PANEL_EVENT } from "./NavRail";
-import { ProjectsListV2 } from "../workspace/ProjectsListV2";
-import type { ClientFolder } from "../../lib/ipc";
+import { SHOW_PANEL_EVENT } from "./NavRail";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -78,41 +76,7 @@ describe("the places' panels", () => {
     window.removeEventListener(SHOW_PANEL_EVENT, asked);
   });
 
-  it("DT-NAV-005: Projects' panel: All projects, Pinned and Recent list their projects; New project and Request files are there only", () => {
-    localStorage.setItem("echoledger-recent-projects", JSON.stringify(["p3", "p1"]));
-    const onOpen = vi.fn();
-    const onNew = vi.fn();
-    const onRequest = vi.fn();
-    const projects = [{ id: "p1", name: "Acme", pinned: true }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Zed" }];
-    render(<ProjectsPanel projects={projects} current={null} allCurrent onAll={() => undefined} onOpen={onOpen} onNew={onNew} onRequest={onRequest}
-      tree={(list) => <ul aria-label="Projects">{list.map((p) => <li key={p.id}><button type="button" onClick={() => onOpen(p.id)}>{p.name}</button></li>)}</ul>} />);
-    const names = () => within(screen.getByRole("list", { name: "Projects" })).getAllByRole("button").map((b) => b.textContent);
-    expect(names()).toEqual(["Acme", "Contracts", "Zed"]);
-    fireEvent.click(screen.getByRole("button", { name: /^Pinned/ }));
-    expect(names()).toEqual(["Acme"]);
-    fireEvent.click(screen.getByRole("button", { name: /^Recent/ }));
-    expect(names()).toEqual(["Zed", "Acme"]);
-    fireEvent.click(screen.getByRole("button", { name: "New project" }));
-    fireEvent.click(screen.getByRole("button", { name: "Request files" }));
-    expect([onNew, onRequest].every((f) => f.mock.calls.length === 1)).toBe(true);
-    localStorage.clear();
-  });
-
-  it("All projects with three levels: an overview of cards (recordings, last call, folders, pinned), never the tree or New project", () => {
-    const projects = [
-      { id: "p1", name: "Acme", pinned: true, parent_id: null }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Zed", parent_id: null },
-    ] as unknown as ClientFolder[];
-    const onOpen = vi.fn();
-    render(<ProjectsListV2 projects={projects} error={null} onRetry={() => undefined} items={[]} expanded={new Set()} onToggle={() => undefined}
-      onOpen={onOpen} onNew={() => undefined} onRequest={() => undefined} overview />);
-    const cards = within(screen.getByRole("list", { name: "Projects" })).getAllByRole("button");
-    expect(cards.map((c) => c.textContent)).toEqual([expect.stringMatching(/^AAcme, pinned.*1 folder/), expect.stringMatching(/^ZZed/)]);
-    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Request files" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /folders in/ })).toBeNull();
-    fireEvent.click(cards[1]);
-    expect(onOpen).toHaveBeenCalledWith("p3");
-  });
+  // The Projects panel and All projects: projectsPanel.test.tsx (UX-09).
 
   it("Settings' page in two levels (UX-11): the home has no groups (they are the panel's); a page is drawn whole, with no inner list", () => {
     // The rule changed with UX-11: a page used to have its group's sections in an inner list beside it (a third level).
