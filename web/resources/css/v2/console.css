@@ -2996,6 +2996,16 @@ button.v2-row-tile:focus-visible,
     position: relative;
 }
 
+/* FIX-06: its focus ring goes round the 20 px circle you see, not the 24 px target, so it is centred on the circle. */
+.v2-rail-rec-more:focus-visible {
+    outline: none;
+}
+
+.v2-rail-rec-more:focus-visible::before {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
 .v2-rail-rec-more .v2-icon {
     width: var(--el-icon-sm);
     height: var(--el-icon-sm);
@@ -3840,9 +3850,10 @@ html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crum
     content: attr(data-initials);
 }
 
-/* FIX-06: the console's plain tables (the Workspace page's invitations and invite links, Usage) set their headings at
-   70 % opacity, under 4.5 to 1: in the new design they are whole, in the secondary text colour (WCAG 1.4.3). */
-.fi-main table > thead > tr[style*='opacity'] {
+/* FIX-06: the console's plain tables (the Workspace page's invitations and invite links, Usage's By person) set their
+   headings at 70 % opacity, under 4.5 to 1: in the new design their heading rows are marked (v2-plain-thead) and drawn
+   whole, in the secondary text colour (WCAG 1.4.3). The inline opacity is classic's, so it needs the !important. */
+.v2-plain-thead {
     opacity: 1 !important;
     color: var(--el-role-text-secondary);
 }

@@ -1,6 +1,6 @@
 // The console's accessibility check (FIX-06, web): axe-core on the new console's main pages (Library, a recording,
-// Activity, Settings, Workspace) in English and Urdu, light and dark, wide and narrow, as the account signed in; then the
-// keyboard checks (keyboard(), below; KEYS=off skips them).
+// Activity, Settings, Workspace, Usage) in English and Urdu, light and dark, wide and narrow, as the account signed in;
+// then the keyboard checks (keyboard(), below; KEYS=off skips them).
 //
 //   php artisan db:seed && php artisan db:seed --class=ConsoleTourSeeder   (APP_ENV=local, a local SQLite file)
 //   php artisan serve --port=8765            (a local or test database, never production)
@@ -43,6 +43,7 @@ const pages = {
     settings: '/app/settings',
     'settings-profile': '/app/settings/profile',
     workspace: '/app/workspace',
+    usage: '/app/usage',
 };
 
 /** The console's language for the account signed in (Settings › Appearance), as a person sets it. */
@@ -109,8 +110,10 @@ async function keyboard(page) {
             const el = document.activeElement;
             if (!el || el === document.body) return null;
             const ring = (s) => (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 2) || (s.boxShadow && s.boxShadow !== 'none');
-            // The focus may show on the element or on the box drawn around a field (Filament's input wrapper).
-            const shows = ring(getComputedStyle(el)) || (el.closest('.fi-input-wrp') && ring(getComputedStyle(el.closest('.fi-input-wrp'))));
+            // The focus may show on the element, on a shape it draws (Record's menu: its circle, ::before) or on the box
+            // drawn around a field (Filament's input wrapper).
+            const shows = ring(getComputedStyle(el)) || ring(getComputedStyle(el, '::before'))
+                || (el.closest('.fi-input-wrp') && ring(getComputedStyle(el.closest('.fi-input-wrp'))));
             const name = (el.getAttribute('aria-label') || el.textContent || el.getAttribute('placeholder') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40);
             return { key: el.tagName + '|' + name, name, shows };
         });

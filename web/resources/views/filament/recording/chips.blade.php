@@ -26,7 +26,7 @@
     @else
         <div class="el-chips" role="group" aria-label="{{ __('Organise') }}">
             <button type="button" @class(['el-chip', 'el-on' => $session->client !== null]) wire:click="mountAction('fileUnder')"
-                aria-label="{{ $session->client !== null ? __('Project: :name. Change', ['name' => $session->client->name]) : (\App\Filament\Support\ConsoleV2::any() ? __('Project: :name. Change', ['name' => __('No project')]) : __('Project: none. Change')) }}">
+                aria-label="{{ \App\Filament\Support\ConsoleV2::any() ? __(':name. Change project', ['name' => $session->client?->name ?? __('No project')]) : ($session->client !== null ? __('Project: :name. Change', ['name' => $session->client->name]) : __('Project: none. Change')) }}">
                 @svg($session->client !== null ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? __('No project') }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
             </button>
             @if ($canRetranscribe)

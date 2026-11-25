@@ -1,4 +1,6 @@
-{{-- Minutes, tokens and cost per person (since v1.5): numbers only, never what they recorded. --}}
+{{-- Minutes, tokens and cost per person (since v1.5): numbers only, never what they recorded. FIX-06: in the new console
+     ($v2, from the console's Usage page; never the admin panel's) the heading row is marked (v2-plain-thead) for its
+     contrast; plain PHP writes it, so Livewire adds no block markers and classic keeps its markup byte for byte. --}}
 @php
     $head = 'padding:.5rem .75rem;text-align:right';
     $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);';
@@ -10,7 +12,7 @@
     @else
         <div style="overflow-x:auto">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
-                <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">{{ __('Person') }}</th><th style="{{ $head }}">{{ __('Minutes') }}</th><th style="{{ $head }}">{{ __('Tokens read') }}</th><th style="{{ $head }}">{{ __('Tokens written') }}</th><th style="{{ $head }}">{{ __('Cost') }}</th><th style="{{ $head }}">{{ __('% of plan minutes') }}</th></tr></thead>
+                <thead><tr style="text-align:left;opacity:.7"<?php if ($v2 ?? false): ?> class="v2-plain-thead"<?php endif; ?>><th style="padding:.5rem .75rem">{{ __('Person') }}</th><th style="{{ $head }}">{{ __('Minutes') }}</th><th style="{{ $head }}">{{ __('Tokens read') }}</th><th style="{{ $head }}">{{ __('Tokens written') }}</th><th style="{{ $head }}">{{ __('Cost') }}</th><th style="{{ $head }}">{{ __('% of plan minutes') }}</th></tr></thead>
                 <tbody>
                     @foreach ($people as $person)
                         <tr>
