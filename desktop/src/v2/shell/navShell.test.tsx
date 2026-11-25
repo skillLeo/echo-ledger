@@ -320,6 +320,40 @@ describe("the three levels", () => {
     }
   });
 
+  it("FIX-06: the rail is one Tab stop (the page's own item); ↑ ↓ Home End go through it, and never open a menu there", () => {
+    setWidth(1440);
+    render(<App />);
+    const buttons = () => rail().getAllByRole("button");
+    const stops = () => buttons().filter((b) => b.tabIndex === 0).map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    // One stop: the page's own (the Library).
+    expect(stops()).toEqual(["Library"]);
+    const library = rail().getByRole("button", { name: "Library" });
+    library.focus();
+    fireEvent.keyDown(library, { key: "ArrowDown" });
+    expect(rail().getByRole("button", { name: "Projects" })).toHaveFocus();
+    expect(stops()).toEqual(["Projects"]);
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(rail().getByRole("button", { name: /^Account, / })).toHaveFocus();
+    // Past the end: it stays.
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(rail().getByRole("button", { name: /^Account, / })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(rail().getByRole("button", { name: "Record" })).toHaveFocus();
+    // Record's menu button: ↓ goes on to the Library, its menu stays shut (Enter or Space opens it).
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    const more = rail().getByRole("button", { name: "More ways to record" });
+    expect(more).toHaveFocus();
+    fireEvent.keyDown(more, { key: "ArrowDown" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(rail().getByRole("button", { name: "Library" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(more).toHaveFocus();
+    expect(stops()).toEqual(["More ways to record"]);
+    // A key with a modifier is the window's (⌘↓ and the like), not the rail's.
+    fireEvent.keyDown(more, { key: "ArrowDown", metaKey: true });
+    expect(more).toHaveFocus();
+  });
+
   it("Record's menu (DES-02): New recording, Import audio files, the Auto-record tick on or off, the Record page", () => {
     setWidth(1440);
     const toggleCalls = vi.fn();
