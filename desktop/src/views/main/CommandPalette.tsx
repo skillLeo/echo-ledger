@@ -111,6 +111,8 @@ export interface PaletteSetting {
   title: string;
   breadcrumb: string;
   open: () => void;
+  /** The name it is ranked by when `title` is in the window's language (its English title). */
+  name?: string;
 }
 
 /** The commands that make sense right now (recording or not, captions on or off). */
@@ -266,11 +268,12 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const actions = ranked(commands, (c) => paletteScore(query, c));
   const matching = actions.map((a) => a.row);
   // Pages by name (a project, a folder, Devices…) that no command above already opens.
-  const pageRows = ranked(pages.filter((p) => !matching.some((c) => c.label === `Go to ${p.label}`)),
-    (p) => (query.trim() ? paletteScore(query, { label: p.label, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
+  const pageRows = ranked(pages.filter((p) => !matching.some((c) => c.label === `Go to ${p.name ?? p.label}`)),
+    (p) => (query.trim() ? paletteScore(query, { label: p.name ?? p.label, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
   const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
-  const settingHits: (PaletteCommand & { crumb: string })[] = query.trim().length >= 2 && settings
-    ? settings(query).map((x) => ({ id: `setting-${x.id}`, label: x.title, crumb: x.breadcrumb, run: x.open })) : [];
+  // Shown in the window's language, ranked by the name they answer to (the English title what was typed matches).
+  const settingHits: (PaletteCommand & { crumb: string; rank: string })[] = query.trim().length >= 2 && settings
+    ? settings(query).map((x) => ({ id: `setting-${x.id}`, label: x.title, crumb: x.breadcrumb, rank: x.name ?? x.title, run: x.open })) : [];
   const recordings: PaletteCommand[] = found.map((r) => {
     const hit = r.hits[0];
     const ms = hit?.start_ms ?? 0;
@@ -305,13 +308,13 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       ["Recordings", [...recordings, ...showAll], [...recordings.map((r) => nameScore(r.label)), ...showAll.map(() => 0)]],
       ["Projects", projectRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: p.label, run: p.open })), projectRows.map((p) => p.score)],
       ["Ask", ask, ask.map(() => 1)],
-      ["Settings", settingHits, settingHits.map((s) => nameScore(s.label))],
+      ["Settings", settingHits, settingHits.map((s) => nameScore(s.rank))],
       ["Commands", [...matching, ...otherHits, ...registry.map((r) => r.row)], [...actions.map((a) => a.score), ...otherPages.map((p) => p.score), ...registry.map((r) => r.score)]],
     ];
   };
   const scored: [string, PaletteCommand[], number[]][] = inRow ? rowGroups() : [
     ["Actions", matching, actions.map((a) => a.score)],
-    ["Settings", settingHits, settingHits.map((s) => nameScore(s.label))],
+    ["Settings", settingHits, settingHits.map((s) => nameScore(s.rank))],
     ["Pages", pageHits, pageRows.map((p) => p.score)],
     ["Recordings", recordings, recordings.map((r) => nameScore(r.label))],
   ];

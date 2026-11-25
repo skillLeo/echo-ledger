@@ -144,6 +144,8 @@ export interface PageEntry {
   /** The group it is in, shown after the name. */
   group?: string;
   keywords?: string;
+  /** The name it is ranked by when `label` is in the window's language (a Settings page's English title). */
+  name?: string;
 }
 
 /** What a key does in a list (J/K move, Enter opens, X selects, Esc closes), or null when it is not one of them. */

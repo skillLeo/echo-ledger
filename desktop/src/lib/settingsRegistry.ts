@@ -402,7 +402,8 @@ const NAMED = new Set(CALL_APPS.map(([app]) => `calls.app.${app}`));
 
 /** An entry's title in the window's language: a name as it is, a title read in its place by its context key. */
 export function shownTitle(entry: SettingEntry): string {
-  return NAMED.has(entry.id) ? entry.title : t(TITLE_KEYS[entry.id] ?? entry.title);
+  const own = BY_ID.get(entry.id) ?? entry;
+  return NAMED.has(own.id) ? own.title : t(TITLE_KEYS[own.id] ?? own.title);
 }
 
 /**
@@ -430,7 +431,9 @@ export function setting(id: string): SettingEntry {
 
 /** The title the new look shows, in the window's language: its own when it has one ("Trash"), else the title. */
 export function titleV2(entry: SettingEntry): string {
-  return entry.titleV2 ? t(entry.titleV2) : shownTitle(entry);
+  // From the registry's own entry (a copy setting() gave is already in the window's language).
+  const own = BY_ID.get(entry.id) ?? entry;
+  return own.titleV2 ? t(own.titleV2) : shownTitle(own);
 }
 
 /** The entry, or none for an id that is not in the registry. */
@@ -455,7 +458,8 @@ export function rootOf(entry: SettingEntry): RootSection {
  * `[root header, page title, sub-page title]`: where the entry lives, in the window's language; a page's own path ends
  * with its title.
  */
-export function pathOf(entry: SettingEntry, say: (words: string) => string = t): string[] {
+export function pathOf(given: SettingEntry, say: (words: string) => string = t): string[] {
+  const entry = BY_ID.get(given.id) ?? given;
   const chain: string[] = [];
   let current: SettingEntry | undefined = entry.kind === "page" ? entry : entry.page ? BY_ID.get(entry.page) : undefined;
   while (current) {
@@ -482,10 +486,12 @@ export function depthOf(entry: SettingEntry): number {
  * The breadcrumb a search result shows: the path without its last segment when that is the title ("App › Appearance"),
  * in the window's language (`say`: the English, for the search index).
  */
-export function breadcrumbOf(entry: SettingEntry, say: (words: string) => string = t): string {
-  const path = pathOf(entry, say);
-  if (path[path.length - 1] === say(entry.title)) path.pop();
-  return path.join(" › ");
+export function breadcrumbOf(given: SettingEntry, say: (words: string) => string = t): string {
+  // Which segment goes is decided on the English path and title, then the rest is said in the window's language.
+  const entry = BY_ID.get(given.id) ?? given;
+  const path = pathOf(entry, (english) => english);
+  if (path[path.length - 1] === entry.title) path.pop();
+  return path.map(say).join(" › ");
 }
 
 /** The page a result opens: the entry's own page for a page, else the page it sits on (null: the root). */

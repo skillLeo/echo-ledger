@@ -52,7 +52,8 @@ export function normalise(text: string): string {
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[\u064A\u0649\u0643\u0647\u0629]/g, (c) => URDU_FOLD[c] ?? c)
-    .replace(/[\u0640\u200C\u200D]/g, "")
+    // Tatweel, joiners, and the direction marks and isolates a line in Urdu may carry (U+200E, U+200F, U+2066–2069).
+    .replace(/[\u0640\u200C-\u200F\u2066-\u2069]/g, "")
     .replace(/[&,.·›/()\-'"“”‘’!?:;]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -110,6 +111,7 @@ function indexEntry(entry: SettingEntry, say: ((english: string) => string) | nu
   // An option named in its own language ("English", "اردو") is shown as it is.
   const labelsShown = plus(labels, labels, (entry.options ?? []).filter((o) => !o.lang).map((o) => o.label));
   const words = (list: readonly string[] | undefined) => (list ?? []).flatMap(tokens).filter(indexable);
+  const englishPath = breadcrumbOf(entry, (english) => english).split(" › ");
   const withOptions = entry.kind === "choice" || entry.kind === "segmented";
   const keywordList = [...(entry.keywords ?? []), ...(entry.ru ?? []), ...(entry.ur ?? [])];
   const fields: Record<Field, string[]> = {
@@ -117,8 +119,8 @@ function indexEntry(entry: SettingEntry, say: ((english: string) => string) | nu
     option: withOptions ? words(labelsShown) : [],
     description: words(entry.kind === "help" ? [entry.answer ?? ""] : entry.description ? plus([entry.description], [entry.description]) : []),
     keyword: words(keywordList),
-    // The English path, whatever the window's language (the breadcrumb shown is breadcrumbOf's, in it).
-    path: words(breadcrumbOf(entry, (english) => english).split(" › ")),
+    // The English path, whatever the window's language, and in another language the path as shown too.
+    path: words(plus(englishPath, englishPath)),
   };
   return {
     entry,
