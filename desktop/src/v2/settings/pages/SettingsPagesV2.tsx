@@ -70,6 +70,8 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
   const [page, setPage] = useState(start?.page ?? "voice");
   const [target, setTarget] = useState<PageTarget | null>(start ? targetOf(start, section.seq, grouped) : null);
   const backs = useRef(section.seq * 1000);
+  /** The group whose page was drawn last (kept while one of its sub-pages shows). */
+  const shownGroup = useRef<string | null>(null);
   const { settings, patch, setSettings } = useSettings(run);
   const [themeChoice, chooseTheme] = useThemeChoice(theme, onTheme);
   const entitlements = useEntitlements();
@@ -130,26 +132,31 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
     }
   })();
 
-  if (grouped) {
-    const group = groupOf(page);
-    if (!parent && group) {
-      return (
-        <SettingsPage key={group.title} kind="group" title={group.title} target={target}>
-          <GroupParts group={group} available={available} body={bodyFor} settings={settings} onSettings={setSettings}
-            onHelp={onSection ? () => onSection("help") : undefined} />
-        </SettingsPage>
-      );
-    }
-    if (parent) {
-      // A sub-page: back to its group's page, at the row that opened it (or to the page it sits on elsewhere: Help).
-      const home = V2_SETTINGS_PAGES.has(parent) ? groupOf(parent) : null;
-      const back = () => {
-        if (!home) return onSection ? onSection(parent) : onHome();
-        setPage(parent);
-        setTarget({ id: page, seq: ++backs.current, how: "row" });
-      };
-      return <SettingsPage key={page} title={setting(page).title} back={home ? home.title : setting(parent).title} target={target} onBack={back}>{bodyFor(page)}</SettingsPage>;
-    }
+  if (grouped && (parent || groupOf(page))) {
+    // A sub-page goes back to its group's page, at the row that opened it (or to the page it sits on elsewhere: Help).
+    const home = parent ? (V2_SETTINGS_PAGES.has(parent) ? groupOf(parent) : null) : groupOf(page);
+    if (!parent && home) shownGroup.current = home.title;
+    // The group's page stays (hidden) while a sub-page opened from it shows: back is at once, nothing read again.
+    const kept = home && (!parent || shownGroup.current === home.title) ? home : null;
+    const back = () => {
+      if (!parent) return;
+      if (!home) return onSection ? onSection(parent) : onHome();
+      setPage(parent);
+      setTarget({ id: page, seq: ++backs.current, how: "row" });
+    };
+    return (
+      <>
+        <div className="el-settings-kept" hidden={!!parent}>
+          {kept && (
+            <SettingsPage key={kept.title} kind="group" title={kept.title} target={parent ? null : target}>
+              <GroupParts group={kept} available={available} body={bodyFor} settings={settings} onSettings={setSettings}
+                onHelp={onSection ? () => onSection("help") : undefined} />
+            </SettingsPage>
+          )}
+        </div>
+        {parent && <SettingsPage key={page} title={setting(page).title} back={home ? home.title : setting(parent).title} target={target} onBack={back}>{bodyFor(page)}</SettingsPage>}
+      </>
+    );
   }
   return (
     <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : "Settings"} target={target}
@@ -159,7 +166,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
   );
 }
 
-type Part = { key: string; title: string; body: ReactNode };
+type Part = { key: string; title: string; body: ReactNode; untitled?: boolean };
 
 /**
  * A group's page (UX-11, DES-05): each of its pages this computer, account and plan offer, in the group's order, as a
@@ -185,9 +192,8 @@ function GroupParts({ group, available, body, settings, onSettings, onHelp }: {
     if (id === "setup_health") continue;
     if (id === "help") {
       if (onHelp && offered(id)) {
-        parts.push({ key: id, title: setting(id).title, body: (
-          <Group><LinkSetting id="help" meta="Guides, keyboard shortcuts, what's new and contact support" onOpen={onHelp} /></Group>
-        ) });
+        // One row named Help: no title over it.
+        parts.push({ key: id, title: setting(id).title, untitled: true, body: <Group><LinkSetting id="help" onOpen={onHelp} /></Group> });
       }
       continue;
     }
@@ -212,10 +218,10 @@ function GroupParts({ group, available, body, settings, onSettings, onHelp }: {
   return (
     <>
       {parts.map((p) => {
-        const shown = titled && p.title !== group.title;
+        const shown = titled && !p.untitled && p.title !== group.title;
         return (
           <section key={p.key} className="el-settings-part" id={partId(p.key)} aria-labelledby={shown ? `${partId(p.key)}-title` : undefined}>
-            {shown && <h2 className="el-title-s el-settings-part__title" id={`${partId(p.key)}-title`}>{p.title}</h2>}
+            {shown && <h2 className="el-title-s el-settings-part__title" id={`${partId(p.key)}-title`} tabIndex={-1}>{p.title}</h2>}
             <SectionLevel value={shown ? 3 : 2}>{p.body}</SectionLevel>
           </section>
         );

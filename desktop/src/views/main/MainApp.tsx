@@ -109,12 +109,12 @@ type Tab = MainTab;
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
 /** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
 export const WIZARD_FLAGS_WAIT_MS = 1500;
-/** The pages in words, for a Back link that returns to one ("Library"). */
 /** Help's group in two levels (UX-11): its way back goes to that group's page. */
 const HELP_GROUP = (() => {
   const group = groupOf("help")!;
   return { title: group.title, entry: entryOf(group) };
 })();
+/** The pages in words, for a Back link that returns to one ("Library"). */
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;

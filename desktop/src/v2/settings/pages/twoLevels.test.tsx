@@ -84,10 +84,69 @@ describe("a group's page (UX-11)", () => {
     expect(document.querySelector(".is-highlighted")).toBeNull();
   });
 
-  it("a setting asked for (a search result) opens its group's page, scrolled to it and highlighted", async () => {
+  it("a setting asked for (a search result) opens its group's page, scrolled to it, highlighted and with the keyboard on it", async () => {
     await show("calls#calls.skip_short");
     expect(headings(1)).toEqual(["Recording"]);
     await waitFor(() => expect(document.querySelector(".is-highlighted")?.id).toBe("setting-calls.skip_short"));
+    expect(document.getElementById("setting-calls.skip_short")).toHaveFocus();
+  });
+
+  it("a page asked for that isn't the group's first (Microphone & audio): its section, the keyboard on its title", async () => {
+    await show("mic");
+    expect(headings(1)).toEqual(["Recording"]);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 2, name: "Microphone & audio" })).toHaveFocus());
+    // Not a setting: nothing highlighted.
+    expect(document.querySelector(".is-highlighted")).toBeNull();
+  });
+
+  it("a sub-page answers Esc and ⌘[ with its way back; the group's page stays while it shows, so nothing is read again", async () => {
+    await show("calls");
+    const reads = callsOf("input_devices").length;
+    expect(reads).toBeGreaterThan(0);
+    const open = async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Call sites/ }));
+      await act(flushAsync);
+      expect(headings(1)).toEqual(["Call sites"]);
+    };
+    await open();
+    const back = document.querySelector<HTMLButtonElement>(".el-page__back")!;
+    expect(back).toHaveAttribute("aria-keyshortcuts", expect.stringMatching(/^Escape /));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await act(flushAsync);
+    expect(headings(1)).toEqual(["Recording"]);
+    await open();
+    // Esc while typing in a field stays in the field.
+    const field = screen.getByRole("textbox", { name: "Address or title contains" });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(headings(1)).toEqual(["Call sites"]);
+    fireEvent.keyDown(window, { key: "[", ctrlKey: true });
+    await act(flushAsync);
+    expect(headings(1)).toEqual(["Recording"]);
+    expect(callsOf("input_devices")).toHaveLength(reads);
+  });
+
+  it("a sub-page of another group (Calls' consent notice): the app opens it, and its way back is its own group's page", async () => {
+    const { onSection } = await show("calls");
+    fireEvent.click(screen.getByRole("button", { name: "Read the recording consent notice" }));
+    expect(onSection).toHaveBeenCalledWith("privacy.consent");
+    cleanup();
+    await show("privacy.consent");
+    const back = document.querySelector<HTMLButtonElement>(".el-page__back")!;
+    expect(back).toHaveTextContent("Privacy & data");
+    fireEvent.click(back);
+    await act(flushAsync);
+    expect(headings(1)).toEqual(["Privacy & data"]);
+    await waitFor(() => expect(document.getElementById("setting-privacy.consent")).toHaveFocus());
+  });
+
+  it("each page's Reset names its page on a group's page; a group of one page keeps Reset to defaults", async () => {
+    await show("calls");
+    expect(screen.getByRole("button", { name: "Reset Calls & meetings to defaults" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset Microphone & audio to defaults" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset to defaults" })).toBeNull();
+    cleanup();
+    await show("notifications");
+    expect(screen.getByRole("button", { name: "Reset to defaults" })).toBeInTheDocument();
   });
 
   it("Shortcuts & start-up: the keys, then Start-up with its switches, and the Mac's Menu bar & Dock; a start-up switch found opens here", async () => {
@@ -112,11 +171,13 @@ describe("a group's page (UX-11)", () => {
     expect(screen.queryByRole("switch", { name: "Show EchoLedger in the menu bar" })).toBeNull();
   });
 
-  it("About & help: Help is a row that opens its own page; About's rows are on the page", async () => {
+  it("About & help: Help is one row (no title over it, its words from the settings list) that opens its own page", async () => {
     const { onSection } = await show("about");
     expect(headings(1)).toEqual(["About & help"]);
-    expect(headings(2)).toEqual(["Help", "About"]);
-    fireEvent.click(screen.getByRole("button", { name: /^Help/ }));
+    expect(headings(2)).toEqual(["About"]);
+    const help = screen.getByRole("button", { name: /^Help/ });
+    expect(help).toHaveAccessibleDescription(setting("help").description!);
+    fireEvent.click(help);
     expect(onSection).toHaveBeenCalledWith("help");
   });
 
@@ -202,6 +263,13 @@ describe("the app in two levels (ui_v2.library)", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Recording" })).toBeInTheDocument();
     expect(panel().getByRole("button", { name: "Recording" })).toHaveAttribute("aria-current", "page");
     expect(document.querySelector(".el-page__back")).toBeNull();
+    // A sub-page: the title row's ← (and ⌘[ with it) is its way back.
+    fireEvent.click(screen.getByRole("button", { name: /^Call sites/ }));
+    for (let i = 0; i < 2; i++) await act(flushAsync);
+    expect(await screen.findByRole("heading", { level: 1, name: "Call sites" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId("title-row")).getByRole("button", { name: "Back" }));
+    for (let i = 0; i < 2; i++) await act(flushAsync);
+    expect(await screen.findByRole("heading", { level: 1, name: "Recording" })).toBeInTheDocument();
     fireEvent.click(panel().getByRole("button", { name: "About & help" }));
     for (let i = 0; i < 3; i++) await act(flushAsync);
     expect(await screen.findByRole("heading", { level: 1, name: "About & help" })).toBeInTheDocument();

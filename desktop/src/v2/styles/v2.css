@@ -1157,7 +1157,11 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-settings-v2 .el-group:has(> .el-group__title) { margin-block-start: var(--el-space-8); }
 /* A group's page (UX-11): each of its pages a part under its title (title.s), the parts well apart. */
 .el-settings-part { display: flex; flex-direction: column; gap: var(--el-space-16); min-inline-size: 0; scroll-margin-block-start: var(--el-space-24); }
-.el-settings-part + .el-settings-part { margin-block-start: var(--el-space-24); }
+/* Each part closed by a hairline above the next, so its own Reset sits inside it and never reads as the next one's. */
+.el-settings-part + .el-settings-part { margin-block-start: var(--el-space-8); padding-block-start: var(--el-space-24); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-settings-part__title:focus { outline: none; }
+.el-settings-part__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-settings-kept[hidden] { display: none; }
 .el-settings-part__title { color: var(--el-role-text-primary); padding-inline: var(--el-space-4); }
 .el-setting__select { min-inline-size: calc(var(--el-space-64) * 3.5); max-inline-size: calc(var(--el-space-64) * 5); }
 .el-range { inline-size: calc(var(--el-space-64) * 2.5); accent-color: var(--el-role-accent-default); cursor: pointer; margin: 0; }
@@ -2303,7 +2307,6 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-panel-drops__title { margin: 0 var(--el-space-8); }
 .el-panel-drops .el-nav-drop { display: flex; }
 
-/* Settings with the three levels: the group's sections in an inner list beside the page. */
 /* ---- macOS: the title-bar strip in a normal window (D-214, lib/titlebar.ts) ---------------------------------------------
    The window's own close, minimize and zoom sit in an empty strip across the top, as tall as their native row, in the
    chrome's colour: nothing of ours under or beside them. It drags the window and zooms it on a double click
