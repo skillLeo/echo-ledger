@@ -2201,7 +2201,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
    grey, empty space (it drags the window), the search field at the row's end (28 px, 180–260 px wide, 22 % of the
    window between, the place in its placeholder, ⌘K at its end), then the status items. Right to left it is mirrored:
    the field at the left end. As the window narrows the empty space goes first, then the field shrinks to 180 px, then it
-   becomes a ⌕ button; the title's words are never given to the field. No line under it until the page has scrolled. */
+   becomes a ⌕ button; the title's words are never given to the field, and never cut (no ellipsis at any width): beside
+   the ⌕ button the title wraps, or takes a line of its own. No line under it until the page has scrolled. */
 .el-titlerow {
   flex: none; display: flex; align-items: center; gap: var(--el-space-8);
   block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
@@ -2209,15 +2210,13 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 .el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
 .el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
-/* The title's group keeps its whole width beside the field; only beside the ⌕ button (a window under the least width)
-   may it give some, its words cut last. */
+/* The title's group keeps its whole width beside the field (TitleRow measures it on one line before showing the field). */
 .el-titlerow__start { flex: none; }
-.el-titlerow--compact .el-titlerow__start { flex: 0 1 auto; }
 .el-titlerow__end { flex: none; justify-content: flex-end; }
 .el-titlerow__history { display: inline-flex; flex: none; }
 .el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
 .el-titlerow__name {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-role-text-primary);
+  white-space: nowrap; color: var(--el-role-text-primary);
   font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
 }
 .el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
@@ -2227,16 +2226,15 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   flex: 0 1 clamp(var(--el-desktop-search-min-width), var(--el-desktop-search-preferred-width), var(--el-desktop-search-max-width));
   min-inline-size: var(--el-desktop-search-min-width);
 }
-/* No room for the field: a ⌕ button at the row's end. */
-.el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; }
-/* Lead decision 18's narrow case: under the least width (720 CSS px, zoomed in a small window) the search is a ⌕ button
-   and the title keeps every word, wrapping to a second line when it must (the row grows for it); never an ellipsis.
-   The ⌕ button opens the field across the row, the title stepping aside only while it is open. */
-.el-root .el-titlerow.el-titlerow--narrow { block-size: auto; min-block-size: var(--el-desktop-search-height); }
-.el-titlerow--narrow .el-titlerow__start { flex: 1 1 auto; }
-.el-titlerow--narrow .el-titlerow__title { flex: 1 1 auto; align-items: center; }
-.el-titlerow--narrow .el-titlerow__name { white-space: normal; overflow: visible; text-overflow: clip; min-inline-size: min-content; }
-.el-titlerow--narrow .el-titlerow__middle { flex: none; min-inline-size: auto; margin-inline-start: 0; }
+/* No room for the field beside the whole title (and lead decision 18's narrow case: under the least width, 720 CSS px,
+   zoomed in a small window): a ⌕ button at the row's end, and the title keeps every word, wrapping to a second line when
+   it must (the row grows for it); never an ellipsis. The ⌕ button opens the field across the row, the title stepping
+   aside only while it is open. */
+.el-root .el-titlerow.el-titlerow--narrow, .el-root .el-titlerow.el-titlerow--compact { block-size: auto; min-block-size: var(--el-desktop-search-height); }
+.el-titlerow--narrow .el-titlerow__start, .el-titlerow--compact .el-titlerow__start { flex: 1 1 auto; }
+.el-titlerow--narrow .el-titlerow__title, .el-titlerow--compact .el-titlerow__title { flex: 1 1 auto; align-items: center; }
+.el-titlerow--narrow .el-titlerow__name, .el-titlerow--compact .el-titlerow__name { white-space: normal; min-inline-size: min-content; }
+.el-titlerow--narrow .el-titlerow__middle, .el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; margin-inline-start: 0; }
 .el-titlerow--searching .el-titlerow__title { display: none; }
 .el-titlerow--searching .el-titlerow__start { flex: none; }
 .el-titlerow--searching .el-titlerow__middle { flex: 1 1 0; min-inline-size: 0; }
@@ -2260,6 +2258,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-titlerow__search--button { text-align: start; }
 .el-titlerow__placeholder { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-titlerow__field { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-text-primary); outline: none; }
+/* One focus ring, the box's: the field inside it draws none of its own (.el-root :focus-visible would). */
+.el-root .el-titlerow__field:focus-visible { outline: none; }
 .el-titlerow__keys { flex: none; font: inherit; font-size: var(--el-desktop-text-small-size); color: var(--el-role-text-secondary); }
 .el-titlerow__scope {
   display: inline-flex; align-items: center; gap: var(--el-space-2); flex: none; max-inline-size: 50%;

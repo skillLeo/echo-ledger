@@ -114,9 +114,10 @@ describe("the title row (UX-20)", () => {
     expect(searchFits(inner(1280), 450, 0)).toBe(true);
   });
 
-  it("with no room the field becomes a ⌕ button at the row's end that opens the same search; a cut title says itself", () => {
-    // A narrow row: 400 px, the title's group 300 px wide with its long name cut by 120 px (a window under the least
-    // width): the field can't fit beside the whole title, so it is the ⌕ button, and the name's tooltip says it all.
+  it("with no room the field becomes a ⌕ button at the row's end that opens the same search; the title is never cut", () => {
+    // A narrow row: 400 px, the title's group 300 px wide on one line: the field can't fit beside the whole title, so it
+    // is the ⌕ button, and the title keeps every word (it wraps, or takes a line of its own; no ellipsis, so no
+    // tooltip to say a cut title: the rule changed in review, the title used to be cut with its words in a tooltip).
     const observers: (() => void)[] = [];
     const Real = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class { constructor(cb: () => void) { observers.push(cb); } observe() {} disconnect() {} } as unknown as typeof ResizeObserver;
@@ -135,7 +136,8 @@ describe("the title row (UX-20)", () => {
       const long = "A project with a very long name";
       render(<TitleRow {...base} place="projects" title={{ title: long, count: 12 }} onEverything={onEverything} />);
       expect(row()).toHaveClass("el-titlerow--compact");
-      expect(row().querySelector(".el-titlerow__name")).toHaveAttribute("title", long);
+      expect(row().querySelector(".el-titlerow__name")).toHaveTextContent(long);
+      expect(row().querySelector(".el-titlerow__name")).not.toHaveAttribute("title");
       expect(row().querySelector(".el-titlerow__count")).toHaveTextContent("12");
       const button = within(row()).getByRole("button", { name: "Search projects" });
       expect(button).toHaveClass("el-button");
@@ -243,6 +245,74 @@ describe("the title row (UX-20)", () => {
       act(() => { window.dispatchEvent(new Event("resize")); });
       expect(row()).not.toHaveClass("el-titlerow--narrow");
       expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: wide, configurable: true, writable: true });
+    }
+  });
+
+  it("no room beside the whole title at 720 px or wider, with the page's search: ⌕ opens the field across the row (Ctrl+F); Esc closes it back", () => {
+    // The row is 400 px and the title's group 300 px on one line: no room for the field, so the ⌕ button, the title whole
+    // beside it. The field then opens across the row as in the narrow case, never beside a squeezed title.
+    const Real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { observe() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    const rect = Element.prototype.getBoundingClientRect;
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return this.classList?.contains("el-titlerow") ? 400 : 0; } });
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      return { width: this.classList.contains("el-titlerow__start") ? 300 : 0 } as DOMRect;
+    };
+    try {
+      function Page() {
+        const [query, setQuery] = useState("");
+        return <TitleRow {...base} place="library" title={{ title: "Follow up with Qureshi Textiles about the March shipment", count: 12, search: { placeholder: "Search recordings", scope: "All recordings", query, setQuery } }} />;
+      }
+      render(<Page />);
+      expect(row()).toHaveClass("el-titlerow--compact");
+      expect(row()).not.toHaveClass("el-titlerow--narrow");
+      expect(row().querySelector(".el-titlerow__name")).not.toHaveAttribute("title");
+      const button = within(row()).getByRole("button", { name: "Search recordings" });
+      expect(button).toHaveAttribute("title", "Search recordings (Ctrl+F)");
+      expect(button).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F");
+      fireEvent.click(button);
+      const field = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      expect(field).toHaveFocus();
+      expect(row()).toHaveClass("el-titlerow--searching");
+      // Esc with words clears them and keeps it open; Esc again closes it back to the button.
+      fireEvent.change(field, { target: { value: "invoice" } });
+      fireEvent.keyDown(field, { key: "Escape" });
+      expect(within(row()).getByRole("searchbox")).toHaveValue("");
+      fireEvent.keyDown(within(row()).getByRole("searchbox"), { key: "Escape" });
+      expect(within(row()).queryByRole("searchbox")).toBeNull();
+      expect(row()).not.toHaveClass("el-titlerow--searching");
+      expect(within(row()).getByRole("button", { name: "Search recordings" })).toHaveFocus();
+    } finally {
+      globalThis.ResizeObserver = Real;
+      Element.prototype.getBoundingClientRect = rect;
+      if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    }
+  });
+
+  it("words typed stay in sight: the field stays when the window narrows while it has them", () => {
+    const wide = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true, writable: true });
+    try {
+      function Page() {
+        const [query, setQuery] = useState("");
+        return <TitleRow {...base} title={{ title: "All recordings", count: 11, search: { placeholder: "Search recordings", scope: "All recordings", query, setQuery } }} />;
+      }
+      render(<Page />);
+      fireEvent.change(within(row()).getByRole("searchbox", { name: "Search recordings" }), { target: { value: "invoice" } });
+      fireEvent.blur(within(row()).getByRole("searchbox"));
+      // Zoomed in: the window is now under the least width, and the list is still filtered by "invoice".
+      Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+      expect(row()).toHaveClass("el-titlerow--narrow");
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveValue("invoice");
+      // Emptied and left: back to Search.
+      fireEvent.change(within(row()).getByRole("searchbox"), { target: { value: "" } });
+      fireEvent.blur(within(row()).getByRole("searchbox"));
+      expect(within(row()).queryByRole("searchbox")).toBeNull();
+      expect(within(row()).getByRole("button", { name: "Search" })).toBeInTheDocument();
     } finally {
       Object.defineProperty(window, "innerWidth", { value: wide, configurable: true, writable: true });
     }

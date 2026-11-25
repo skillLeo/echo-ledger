@@ -5,15 +5,17 @@
 // docs/design/screens/desktop/zoom/: <width>-<zoom>-<lang>.png, 720x560-<zoom>-en.png, win-<window>-<zoom>-en.png, and
 // the zoom's own parts in light and dark at 1280 and 125%: ui-avatar-row-<theme>.png (the avatar's Zoom row),
 // ui-chip-menu-<theme>.png (the chip and its menu), ui-bubble-<theme>.png, ui-settings-<theme>.png (Settings ›
-// Appearance › Zoom), ui-more-<theme>.png (⋯ More's menu at 1280 and 200%) and 720x560-200-en-search.png (the narrow
-// row's search open across it). Measured on each: nothing wider than the window (no sideways scroll), the title row's
-// title whole at every width (never cut, never under another part; in the least window it may wrap or take a line of its
-// own, lead decision 18's narrow case), the title row no wider than its room and on screen, every rail item to its last
+// Appearance › Zoom), ui-more-<theme>.png (⋯ More's menu at 1280 and 200%), 720x560-200-en-dark.png and
+// 720x560-200-en-search[-dark].png (the narrow row, and its search open across it, light and dark), and
+// long-<window>-<zoom>-en.png (a view with a long name: the fixture's long label, at 1024 and 1280 and in the least
+// window). Measured on each: nothing wider than the window (no sideways scroll), the title row's title whole at every
+// width (never cut, never an ellipsis, never under another part; beside the ⌕ button it may wrap or take a line of its
+// own), the title row no wider than its room and on screen, every rail item to its last
 // (Account) inside the window, Settings and Account shown, no item only partly shown (the places that don't fit whole
 // are in ⋯ More, or in the avatar's menu when not even More fits; read from the menu), Activity's badge on Activity, More
 // or the avatar, the chip in the row unless at 100%, nothing of the page under the window's buttons. In the narrow row,
-// Search opens the field across it (the title stepping aside) and Esc closes it back to Search. The run fails on any of
-// that.
+// Search opens the field across it (the title stepping aside) with one focus ring, and Esc closes it back to Search. The
+// run fails on any of that.
 //   node scripts/zoom.mjs [67,100,150,200]
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -38,8 +40,13 @@ for (const width of WIDTHS) for (const zoom of ZOOMS) for (const lang of ["en", 
   RUNS.push({ width, height: HEIGHT, zoom, lang, platform: "macos", name: `${width}-${zoom}-${lang}` });
 }
 for (const zoom of [175, 200].filter((z) => ZOOMS.includes(z))) RUNS.push({ width: 720, height: 560, zoom, lang: "en", platform: "macos", name: `720x560-${zoom}-en` });
-// The narrow row mirrored (Urdu, right to left).
+// The narrow row mirrored (Urdu, right to left), and dark.
 if (ZOOMS.includes(200)) RUNS.push({ width: 720, height: 560, zoom: 200, lang: "ur", platform: "macos", name: "720x560-200-ur" });
+if (ZOOMS.includes(200)) RUNS.push({ width: 720, height: 560, zoom: 200, lang: "en", theme: "dark", platform: "macos", name: "720x560-200-en-dark" });
+// A view with a long name (the review's case: 720 to 1000 CSS px wide, where it used to end in "…").
+for (const [width, height, zoom] of [[1024, HEIGHT, 150], [1024, HEIGHT, 200], [1280, HEIGHT, 200], [720, 560, 200]].filter(([, , z]) => ZOOMS.includes(z))) {
+  RUNS.push({ width, height, zoom, lang: "en", platform: "macos", long: true, name: `long-${height === HEIGHT ? width : `${width}x${height}`}-${zoom}-en` });
+}
 for (const [width, height, zoom] of [[1280, 740, 150], [1280, 740, 200], [720, 560, 150], [720, 560, 200]].filter(([, , z]) => ZOOMS.includes(z))) {
   RUNS.push({ width, height, zoom, lang: "en", platform: "windows", name: `win-${height === HEIGHT ? width : `${width}x${height}`}-${zoom}-en` });
 }
@@ -52,13 +59,13 @@ await mkdir(out, { recursive: true });
 
 /** The Library at that window and zoom, with v21_zoom on and the zoom kept, as the app opens (on a Mac with its window
  * buttons, or with Windows' own title row). */
-async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "macos" } = {}) {
+async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "macos", long = false } = {}) {
   const scale = zoom / 100;
   const page = await browser.newPage({ viewport: { width: Math.round(width / scale), height: Math.round(height / scale) }, deviceScaleFactor: scale, colorScheme: theme, reducedMotion: "reduce" });
   page.setDefaultTimeout(120_000);
   await page.addInitScript((kept) => { try { localStorage.setItem("echoledger-zoom", String(kept)); } catch { /* none */ } }, zoom);
   const where = platform === "windows" ? "&platform=windows&wintitle=1" : "&platform=macos&lights=1";
-  await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${FLAGS}${platform === "windows" ? ",v21_win_titlebar" : ""}${where}&zoom=${zoom}${lang === "ur" ? "&lang=ur" : ""}`);
+  await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${FLAGS}${platform === "windows" ? ",v21_win_titlebar" : ""}${where}&zoom=${zoom}${lang === "ur" ? "&lang=ur" : ""}${long ? "&longtitle=1" : ""}`);
   await page.getByRole("navigation", { name: "Main" }).waitFor();
   // The Library from the rail when it is there (in the least window at 200% it may be in the avatar's menu).
   // (The fixture opens a recording: pressing the Library, already the page, starts it over on its list.)
@@ -75,6 +82,21 @@ async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "mac
     }
     await rows.waitFor();
   }
+  if (long) {
+    // The long view from the Library's panel (a flyout below 1100 CSS px, opened by the Library's own item, or by the
+    // Library in More or the avatar's menu).
+    const view = page.getByRole("button", { name: /Follow up with Qureshi/ }).first();
+    if (!(await view.isVisible().catch(() => false))) {
+      if (await library.count()) await library.click();
+      else {
+        const more = page.getByTestId("rail-more").getByRole("button");
+        await ((await more.count()) ? more : page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Account/ })).click();
+        await page.getByRole("menu").locator('[role^="menuitem"]', { hasText: "Library" }).first().click();
+      }
+    }
+    await view.click();
+    await page.waitForTimeout(400);
+  }
   if (await page.getByTestId("nav-panel").count() && await page.evaluate(() => innerWidth < 1100)) await page.keyboard.press("Escape");
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);
@@ -85,8 +107,8 @@ const problems = [];
 try {
   // A first load lets Vite settle its dependencies (it may reload the page once) before anything is measured.
   await (await open(1280, 100, "en", "light")).close();
-  for (const { width, height, zoom, lang, platform, name } of RUNS) {
-    const page = await open(width, zoom, lang, "light", { height, platform });
+  for (const { width, height, zoom, lang, platform, name, theme = "light", long = false } of RUNS) {
+    const page = await open(width, zoom, lang, theme, { height, platform, long });
     const m = await page.evaluate(() => {
       const doc = document.scrollingElement;
       const row = document.querySelector('[data-testid="title-row"]')?.getBoundingClientRect();
@@ -126,7 +148,8 @@ try {
       return {
         css: innerWidth,
         sideways: doc.scrollWidth > doc.clientWidth + 1,
-        cut: name ? name.scrollWidth > name.clientWidth + 0.5 || name.scrollHeight > name.clientHeight + 0.5 || getComputedStyle(name).textOverflow === "ellipsis" && name.scrollWidth > name.clientWidth || covered : true,
+        cut: name ? name.scrollWidth > name.clientWidth + 0.5 || name.scrollHeight > name.clientHeight + 0.5 || getComputedStyle(name).textOverflow === "ellipsis" || covered : true,
+        title: name?.textContent ?? null,
         overflow: !!titleRow && titleRow.scrollWidth > titleRow.clientWidth + 1,
         row: row ? row.right <= innerWidth + 1 && row.left >= -1 : false,
         rail: !!last && last.bottom <= innerHeight + 1 && named.includes("Settings") && named.some((n) => n.startsWith("Account")),
@@ -153,7 +176,8 @@ try {
       reach = missing.length === 0;
       where = `${moved} in ${m.more ? "More" : "the avatar's menu"}${missing.length ? ` (MISSING: ${missing.join(", ")})` : ""}`;
     }
-    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${m.cut ? "CUT" : "whole"}${m.overflow ? " ROW OVERFLOWS" : ""}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${where}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
+    if (long && !/Follow up with Qureshi/.test(m.title ?? "")) problems.push(`${name}: the long view isn't the page ("${m.title}")`);
+    console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${long ? `"${m.title}" ` : ""}${m.cut ? "CUT" : "whole"}${m.overflow ? " ROW OVERFLOWS" : ""}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${where}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
     if (m.sideways) problems.push(`${name}: wider than the window`);
     // The title never loses a word, at any width (lead decision 18; its narrow case wraps it instead).
     if (m.cut) problems.push(`${name}: the title is cut`);
@@ -169,8 +193,9 @@ try {
     await page.close();
   }
   // The narrow row's search (lead decision 18's narrow case): Search opens the field across the row, Esc closes it.
-  {
-    const page = await open(720, 200, "en", "light", { height: 560 });
+  for (const theme of ["light", "dark"]) {
+    const shot = `720x560-200-en-search${theme === "dark" ? "-dark" : ""}`;
+    const page = await open(720, 200, "en", theme, { height: 560 });
     const titleRow = page.getByTestId("title-row");
     const button = titleRow.getByRole("button", { name: "Search", exact: true });
     const tip = await button.getAttribute("title");
@@ -192,19 +217,25 @@ try {
       const endPart = row.querySelector(".el-titlerow__end").getBoundingClientRect();
       const near = (a, b) => Math.min(Math.abs(a.left - b.right), Math.abs(b.left - a.right)) <= 16;
       const across = near(box, history) && near(box, endPart);
+      // One focus ring: the box's, never the field's own as well.
+      const rings = [row.querySelector(".el-titlerow__search"), input].filter((el) => {
+        const style = getComputedStyle(el);
+        return (style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0) || (style.boxShadow && style.boxShadow !== "none");
+      }).length;
       return { focused: document.activeElement === input, width: box.width, across, titleShown: !!title && title.getBoundingClientRect().width > 0,
-        overflow: row.scrollWidth > row.clientWidth + 1, kept };
+        overflow: row.scrollWidth > row.clientWidth + 1, kept, rings };
     });
-    await page.screenshot({ path: join(out, "720x560-200-en-search.png") });
+    await page.screenshot({ path: join(out, `${shot}.png`) });
     await page.keyboard.press("Escape");
     const back = await button.evaluate((el) => document.activeElement === el).catch(() => false);
     const titleBack = await titleRow.locator(".el-titlerow__name").isVisible();
-    console.log(`720x560-200-en-search: tooltip "${tip}"; field ${Math.round(m.width)} CSS px${m.across ? " across the row" : " NOT ACROSS"}${m.focused ? ", focused" : ""}; title ${m.titleShown ? "SHOWN" : "aside"}; the row's other parts ${m.kept && !m.overflow ? "whole" : "PUSHED OUT"}; Esc: ${back ? "back to Search" : "FOCUS LOST"}, title ${titleBack ? "back" : "MISSING"}`);
-    if (!/^Search \((⌘F|Ctrl\+F)\)$/.test(tip ?? "")) problems.push(`720x560-200-en-search: the tooltip says "${tip}"`);
-    if (!m.focused || !m.across) problems.push("720x560-200-en-search: the field didn't open across the row");
-    if (m.titleShown) problems.push("720x560-200-en-search: the title stays beside the open field");
-    if (m.overflow || !m.kept) problems.push("720x560-200-en-search: the open field pushes the row's other parts out");
-    if (!back || !titleBack) problems.push("720x560-200-en-search: Esc didn't close it back to Search");
+    console.log(`${shot}: tooltip "${tip}"; field ${Math.round(m.width)} CSS px${m.across ? " across the row" : " NOT ACROSS"}${m.focused ? ", focused" : ""}; ${m.rings} focus ring${m.rings === 1 ? "" : "s"}; title ${m.titleShown ? "SHOWN" : "aside"}; the row's other parts ${m.kept && !m.overflow ? "whole" : "PUSHED OUT"}; Esc: ${back ? "back to Search" : "FOCUS LOST"}, title ${titleBack ? "back" : "MISSING"}`);
+    if (!/^Search \((⌘F|Ctrl\+F)\)$/.test(tip ?? "")) problems.push(`${shot}: the tooltip says "${tip}"`);
+    if (!m.focused || !m.across) problems.push(`${shot}: the field didn't open across the row`);
+    if (m.rings !== 1) problems.push(`${shot}: ${m.rings} focus rings`);
+    if (m.titleShown) problems.push(`${shot}: the title stays beside the open field`);
+    if (m.overflow || !m.kept) problems.push(`${shot}: the open field pushes the row's other parts out`);
+    if (!back || !titleBack) problems.push(`${shot}: Esc didn't close it back to Search`);
     await page.close();
   }
   // The zoom's own parts, light and dark, at 1280 and 125%.

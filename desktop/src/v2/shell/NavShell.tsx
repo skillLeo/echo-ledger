@@ -11,7 +11,7 @@ import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
 import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
-import { PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
+import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, placeList, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
 import { RecordSplit } from "./RecordSplit";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
@@ -518,10 +518,11 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const places: Place[] = RAIL_PLACES.filter((p) => p !== "settings");
   const fit = space ? railFit(places.length, space.room, space.each) : { keep: places.length, more: false };
   const moved = places.slice(fit.keep);
-  // Not even More fits whole: the places go into the avatar's menu (only without an avatar, More, cut).
-  const toAccount = !fit.more && moved.length > 0 && !!(me && account);
+  // Not even More fits whole: the places go into the avatar's menu; before the account is read (no avatar yet) they wait
+  // for it, never a cut More (⌘1…⌘5 still reach them).
+  const toAccount = !fit.more && moved.length > 0;
   const inMore = toAccount ? [] : moved;
-  const inAccount = toAccount ? moved : [];
+  const inAccount = toAccount && me && account ? moved : [];
   const keeps = fit.keep;
   const railPlace = (p: Place) => (
     <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
@@ -541,10 +542,10 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const meCount = inAccount.includes("activity") && activityCount ? activityCount : undefined;
   const meLive = !meCount && inAccount.includes("live") && !!liveDot;
   const meHere = !!place && inAccount.includes(place);
-  const meName = [`Account, ${me?.name ?? ""}`, meCount ? `${PLACE_NAMES.activity} ${meCount}` : null,
+  const meName = [`Account, ${me?.name ?? ""}`, inAccount.length ? `with ${placeList(inAccount)}` : null, meCount ? `${PLACE_NAMES.activity} ${meCount}` : null,
     inAccount.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null, short && setupAttention ? "needs setup" : null]
     .filter(Boolean).join(", ");
-  const [meTip, meTipShown] = useTip("Account, theme and settings");
+  const [meTip, meTipShown] = useTip(accountTip(inAccount));
   // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
   const scrim = shown && narrow && panelFlyout;
   return (

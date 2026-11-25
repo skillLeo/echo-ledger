@@ -82,6 +82,17 @@ export function railFit(total: number, room: number, each: number): { keep: numb
   return fit < 1 ? { keep: 0, more: false } : { keep: fit - 1, more: true };
 }
 
+/** The places' names as one phrase ("Library, Projects and Activity"). */
+export function placeList(places: readonly Place[]): string {
+  const names = places.map((p) => PLACE_NAMES[p]);
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** The avatar's tooltip: the account, and the places it holds when not even More fits (UX-07). */
+export function accountTip(held: readonly Place[]): string {
+  return held.length ? `${placeList(held)}; account, theme and settings` : "Account, theme and settings";
+}
+
 /** The places as menu items (More's, or the avatar's when not even More fits), each with its icon, ⌘ key and Activity's
  * count; the page among them is ticked (no tick column otherwise). */
 export function placeMenuItems(places: readonly Place[], current: Place | null, icons: Record<Place, IconType>, activityCount: number | undefined,

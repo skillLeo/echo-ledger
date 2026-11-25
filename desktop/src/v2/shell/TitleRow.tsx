@@ -2,10 +2,11 @@
 // column, start to end: ⊟ while the panel is off the screen (right after the window's buttons), ← →, the page's title
 // with its count, empty space, and the search field at the row's end (the owner's request for 2.0.15, as Mail, Notes and
 // Finder have it), then the status items. The title never gives its words to the search: as the window narrows the
-// empty space goes first, then the field shrinks to its least width, then it becomes a ⌕ button at the end. Under the
-// app's least width (720 CSS px: zoomed in a small window, lead decision 18's narrow case) the ⌕ button ("Search", ⌘F)
-// opens the field across the row, the title stepping aside only while it is open, and the title wraps to two lines
-// rather than lose a word: it is never cut. The count always shows. Every empty part of the row, and the title, moves the window
+// empty space goes first, then the field shrinks to its least width, then it becomes a ⌕ button at the end, which opens
+// the field across the row (the title stepping aside only while it is open). Beside the ⌕ button the title wraps to two
+// lines, or takes a line of its own under the controls, rather than lose a word: it is never cut, at any width. Under
+// the app's least width (720 CSS px: zoomed in a small window, lead decision 18's narrow case) the button says "Search"
+// (⌘F). The count always shows. Every empty part of the row, and the title, moves the window
 // (data-tauri-drag-region="deep": anything in it that can't be clicked); a double click does what the Mac's setting says
 // (lib/titleClick.ts). Buttons and the field never drag. A hairline shows under it only once the page has scrolled. The
 // page's part (title, count, search) comes from pageTitle.tsx.
@@ -33,8 +34,8 @@ const narrowNow = () => typeof window !== "undefined" && window.innerWidth < NAR
 const NARROW_GAPS = 36;
 
 /**
- * Narrow: whether the title takes the line under the controls (measured, never in a test without layout): beside them
- * it needs its longest word, and its words on at most two lines. The other parts' widths don't change with it.
+ * Beside the ⌕ button: whether the title takes the line under the controls (measured, never in a test without layout):
+ * beside them it needs its longest word, and its words on at most two lines. The other parts' widths don't change with it.
  */
 function titleBelow(row: HTMLElement, name: HTMLElement, inner: number): boolean {
   const width = (selector: string) => (row.querySelector(selector) as HTMLElement | null)?.getBoundingClientRect().width ?? 0;
@@ -50,6 +51,25 @@ function titleBelow(row: HTMLElement, name: HTMLElement, inner: number): boolean
   name.style.cssText = kept;
   if (!(whole > 0)) return false;
   return room < longest || whole > room * 2;
+}
+
+/**
+ * The width ⊟, ← → and the title with its count take on one line, its words whole, whatever the row draws now (the title
+ * wrapped, on a line of its own, or aside while the field is open across the row): laid out so for a moment.
+ */
+function oneLine(start: HTMLElement): number {
+  const title = start.querySelector<HTMLElement>(".el-titlerow__title");
+  const name = start.querySelector<HTMLElement>(".el-titlerow__name");
+  const parts = [start, title, name].filter((el): el is HTMLElement => !!el);
+  const kept = parts.map((el) => el.style.cssText);
+  Object.assign(start.style, { display: "flex", flex: "none", inlineSize: "max-content" });
+  if (title) Object.assign(title.style, { display: "flex", flex: "none", inlineSize: "max-content", order: "0" });
+  if (name) Object.assign(name.style, { whiteSpace: "nowrap", flex: "none", inlineSize: "max-content" });
+  const width = start.getBoundingClientRect().width;
+  parts.forEach((el, i) => {
+    el.style.cssText = kept[i];
+  });
+  return width;
 }
 
 /** The field's least width and the least drag room left between the title and the field (tokens desktop.search.*). */
@@ -91,37 +111,31 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
   const tail = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const [fits, setFits] = useState(true);
-  // The title's words cut (only in a window under the least width, next to the ⌕ button): its tooltip says them.
-  const [cut, setCut] = useState(false);
   // A narrow field says "Search" (its full words stay its name and tooltip).
   const [short, setShort] = useState(false);
-  // Narrow (under the least width): the field opens across the row from its ⌕ button, and closes back to it.
+  // Narrow (under the least width): the ⌕ button says "Search".
   const [narrow, setNarrow] = useState(narrowNow);
+  // Beside the ⌕ button (no room for the field beside the whole title, or narrow), the field opens across the row from
+  // it, and closes back to it.
   const [open, setOpen] = useState(false);
   const findButton = useRef<HTMLButtonElement>(null);
   const backToButton = useRef(false);
-  // Narrow, and the title's words don't fit beside the controls even on two lines: it takes the line under them.
+  // Beside the ⌕ button, and the title's words don't fit beside the controls even on two lines: it takes the line under them.
   const [below, setBelow] = useState(false);
   // The field becomes a button when the row has no room for it beside the whole title (measured; in a test there is
-  // no layout). The title's group is measured at its full width, its words uncut.
+  // no layout). The title's group is measured on one line, its words whole, however it is drawn now.
   useLayoutEffect(() => {
     const el = row.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      // A group's width with the title's words whole (what a cut title hides added back).
-      const whole = (box: HTMLElement | null) => {
-        if (!box) return 0;
-        const name = box.querySelector(".el-titlerow__name") as HTMLElement | null;
-        return box.getBoundingClientRect().width + (name ? Math.max(0, name.scrollWidth - name.clientWidth) : 0);
-      };
       const style = getComputedStyle(el);
       const inner = el.clientWidth - (parseFloat(style.paddingInlineStart) || 0) - (parseFloat(style.paddingInlineEnd) || 0);
-      setFits(searchFits(inner, whole(start.current), whole(tail.current)));
+      const roomy = searchFits(inner, start.current ? oneLine(start.current) : 0, tail.current?.getBoundingClientRect().width ?? 0);
+      setFits(roomy);
       const name = el.querySelector(".el-titlerow__name") as HTMLElement | null;
-      setCut(!!name && name.scrollWidth > name.clientWidth + 0.5);
       const middle = el.querySelector(".el-titlerow__middle") as HTMLElement | null;
       setShort(!!middle && middle.clientWidth > 0 && middle.clientWidth < SHORT_FIELD);
-      setBelow(narrowNow() && !!name && titleBelow(el, name, inner));
+      setBelow((narrowNow() || !roomy) && !!name && titleBelow(el, name, inner));
     };
     const watch = new ResizeObserver(measure);
     watch.observe(el);
@@ -137,21 +151,24 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
     window.addEventListener("resize", follow);
     return () => window.removeEventListener("resize", follow);
   }, []);
+  // Beside the ⌕ button (the title on its own line or wrapped, never cut), and the field open across the row.
+  const tight = narrow || !fits;
   useEffect(() => {
-    if (!narrow) setOpen(false);
-  }, [narrow]);
+    if (!tight) setOpen(false);
+  }, [tight]);
   useLayoutEffect(() => {
     if (open) return field.current?.focus();
     if (!backToButton.current) return;
     backToButton.current = false;
     findButton.current?.focus();
   }, [open]);
-  const fieldShown = !narrow || (open && !!search);
+  // Words typed stay in sight: the field stays while it has them, even when the window narrows meanwhile.
+  const fieldShown = !tight || (!!search && (open || !!search.query));
   useEffect(() => {
     if (!findSeq) return;
     if (search) {
       setScoped(true);
-      if (narrow) setOpen(true);
+      if (tight) setOpen(true);
       field.current?.focus();
       field.current?.select();
     } else onEverything("");
@@ -166,7 +183,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
     onEverything(typed);
   };
   return (
-    <header ref={row} className={`el-titlerow${scrolled ? " el-titlerow--scrolled" : ""}${narrow ? " el-titlerow--narrow" : fits ? "" : " el-titlerow--compact"}${narrow && fieldShown ? " el-titlerow--searching" : ""}${narrow && below ? " el-titlerow--below" : ""}`}
+    <header ref={row} className={`el-titlerow${scrolled ? " el-titlerow--scrolled" : ""}${narrow ? " el-titlerow--narrow" : fits ? "" : " el-titlerow--compact"}${tight && fieldShown ? " el-titlerow--searching" : ""}${tight && below ? " el-titlerow--below" : ""}`}
       data-tauri-drag-region="deep" data-testid="title-row">
       <div ref={start} className="el-titlerow__start">
         {toggle && (
@@ -182,19 +199,20 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
         </span>
         {title && (
           <h1 className="el-titlerow__title">
-            <span className="el-titlerow__name" dir="auto" title={cut && !narrow ? title.title : undefined}>{title.title}</span>
+            <span className="el-titlerow__name" dir="auto">{title.title}</span>
             {title.count !== null && <span className="el-titlerow__count el-num">{title.count}</span>}
           </h1>
         )}
       </div>
       <div className="el-titlerow__middle">
-        {!fieldShown ? (
+        {!fieldShown && narrow ? (
           // Narrow: "Search" (⌘F) opens the field across the row; without a search of the page's own, everything's (⌘K).
           <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={SHORT_WORDS} title={`${SHORT_WORDS} (${FIND_KEYS})`}
             aria-keyshortcuts="Meta+F Control+F" onClick={() => (search ? setOpen(true) : everything(""))} />
-        ) : !fits && !narrow ? (
-          <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={words} title={`${words} (${everyKeys})`}
-            aria-keyshortcuts="Meta+K Control+K" onClick={() => (search ? (setScoped(true), setFits(true)) : everything(""))} />
+        ) : !fieldShown ? (
+          // No room beside the whole title: the ⌕ button opens the page's search across the row (⌘F), else everything's (⌘K).
+          <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={words} title={`${words} (${search ? FIND_KEYS : everyKeys})`}
+            aria-keyshortcuts={search ? "Meta+F Control+F" : "Meta+K Control+K"} onClick={() => (search ? setOpen(true) : everything(""))} />
         ) : search ? (
           <div className="el-titlerow__search" role="search" data-tauri-drag-region="false">
             <Icon icon={Icons.SearchIcon} />
@@ -208,18 +226,30 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
               </span>
             )}
             <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={search.query} dir="auto"
-              aria-keyshortcuts="Meta+F Control+F" onChange={(e) => search.setQuery(e.target.value)} onFocus={() => setScoped(true)}
+              aria-keyshortcuts="Meta+F Control+F"
+              onChange={(e) => {
+                search.setQuery(e.target.value);
+                // Shown beside the ⌕ button for its words: being typed in, it stays open when they are deleted.
+                if (tight) setOpen(true);
+              }}
+              onFocus={() => {
+                setScoped(true);
+                if (tight) setOpen(true);
+              }}
               onBlur={() => {
                 setScoped(false);
-                // Narrow, left empty: the field closes back to its button (focus stays where it went).
-                if (narrow && !search.query) setOpen(false);
+                // Opened from the ⌕ button and left empty: the field closes back to it (focus stays where it went).
+                if (tight && !search.query) setOpen(false);
               }}
               onKeyDown={(e) => {
                 if (e.key !== "Escape") return;
                 e.preventDefault();
                 e.stopPropagation();
-                if (search.query) search.setQuery("");
-                else if (narrow) {
+                if (search.query) {
+                  search.setQuery("");
+                  // Opened across the row: it stays open, empty, for the next Esc.
+                  if (tight) setOpen(true);
+                } else if (tight) {
                   backToButton.current = true;
                   setOpen(false);
                 } else field.current?.blur();
