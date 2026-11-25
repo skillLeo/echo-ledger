@@ -95,7 +95,7 @@ describe("D3a's words, in English as before and in Urdu", () => {
     const phone = { id: "d2", name: "Ali's phone", platform: "android", current: false, last_seen_at: at } as SecurityDevice;
     expect(deviceLine(phone)).toBe(`Android phone, active ${formatWhen(at).toLowerCase()}`);
     await urdu();
-    expect(deviceLine(phone)).toBe(`${iso("اینڈرائیڈ فون")}، آخری بار فعال ${iso(formatWhen(at).toLowerCase())}`);
+    expect(deviceLine(phone)).toBe(`${iso("Android فون")}، آخری بار فعال ${iso(formatWhen(at).toLowerCase())}`);
     expect(deviceLine({ ...phone, platform: "macos" })).toBe(`${iso("Mac")}، آخری بار فعال ${iso(formatWhen(at).toLowerCase())}`);
     expect(deviceLine({ ...phone, current: true })).toBe("یہ کمپیوٹر");
   });

@@ -128,7 +128,7 @@ it('words the other ways to sign in in the visitor\'s language, with the passkey
 
     expect(visitorPage($this, cookies: [VisitorLanguage::COOKIE => 'ur']))
         ->toContain('<div class="el-or" role="separator" aria-label="یا"><span>یا</span></div>')
-        ->toContain('<span>گوگل کے ساتھ جاری رکھیں</span>')
+        ->toContain('<span>Google کے ساتھ جاری رکھیں</span>')
         ->toContain('title="پاس کی سے سائن اِن کریں: آپ کا فنگر پرنٹ، چہرہ یا ڈیوائس کا PIN"')
         ->toContain('<span>پاس کی</span>')
         ->toContain($js('اس پاس کی سے سائن اِن نہیں ہو سکا۔'))
