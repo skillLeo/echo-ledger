@@ -364,7 +364,8 @@ fun RecordingRow(
     time: String,
     meta: String,
     tile: @Composable () -> Unit,
-    onClick: () -> Unit,
+    /** Null for a row with nowhere to go (P-043): it isn't a button then, and is still read as one line. */
+    onClick: (() -> Unit)?,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     onTileClick: () -> Unit = onLongClick,
@@ -392,11 +393,17 @@ fun RecordingRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (compact) 56.dp else 72.dp)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onLongClick()
+                .then(
+                    if (onClick != null) {
+                        Modifier.combinedClickable(
+                            onClick = onClick,
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLongClick()
+                            }
+                        )
+                    } else {
+                        Modifier.semantics(mergeDescendants = true) {}
                     }
                 )
                 .semantics {
@@ -415,7 +422,7 @@ fun RecordingRow(
                     } else {
                         Modifier
                     }
-                ).combinedClickable(onClick = onTileClick, role = Role.Checkbox)
+                ).then(if (onClick != null) Modifier.combinedClickable(onClick = onTileClick, role = Role.Checkbox) else Modifier)
             ) {
                 AnimatedContent(
                     targetState = selecting && selected,
