@@ -1,0 +1,1019 @@
+<div wire:id="WIREID" wire:name="App\Filament\Pages\Search"
+    class="fi-page"
+>
+    
+
+    <div class="fi-page-header-main-ctn">
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            
+            <!--[if BLOCK]><![endif]-->                <header
+    class="fi-header"
+>
+    
+                    
+
+    
+    <!--[if BLOCK]><![endif]-->        <div>        
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <nav class="v2-crumbs" aria-label="Breadcrumbs">
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->            <a href="https://echoledger.test/app/sessions" class="v2-crumbs-link">Library</a>
+        <!--[if ENDBLOCK]><![endif]-->            <!--[if BLOCK]><![endif]-->            <svg class="v2-icon v2-icon-flip v2-crumbs-sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg>
+        <!--[if ENDBLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->            <span class="v2-crumbs-here" aria-current="page">Search</span>
+        <!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]--></nav>
+
+
+        <!--[if BLOCK]><![endif]-->            <h1 class="fi-header-heading">
+                Search
+            </h1>
+        <!--[if ENDBLOCK]><![endif]-->
+        
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    
+            </div>
+    <!--[if ENDBLOCK]><![endif]-->
+    
+    
+                    
+
+    
+    <!--[if BLOCK]><![endif]-->                
+        
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        
+    
+            
+    <!--[if ENDBLOCK]><![endif]--></header>
+            <!--[if ENDBLOCK]><![endif]-->        <!--[if ENDBLOCK]><![endif]-->
+        <div class="fi-page-main">
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            <div class="fi-page-content">
+                
+
+                
+
+                
+
+                <div x-data="filamentSchema({ livewireId: 'WIREID', schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid  fi-sc  fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">
+                                                
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div x-data="filamentSchema({ livewireId: 'WIREID', schemaKey: 'form' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid  fi-sc  fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">
+                                                
+        <div                                        wire:partial="schema-component::form.q"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.q',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-field">
+            
+                            <label                                            for="form.q"
+                                        class="fi-fo-field-label fi-sr-only"
+                >
+                    Q                </label>
+            
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('input')?.focus()" class="fi-fo-text-input fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+        <input autofocus="autofocus" id="form.q" maxlength="200" placeholder="Search titles and transcripts — &quot;quoted words&quot; stay together" type="text" wire:model.live.debounce.400="filters.q" class="fi-input" />
+
+        
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: 'filters',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div >
+            
+        <div class="fi-grid fi-grid-cols lg:fi-grid-cols fi-sc  fi-sc-has-gap" style="--cols-default: repeat(2, minmax(0, 1fr)); --cols-lg: repeat(4, minmax(0, 1fr));">
+                                                
+        <div                                        wire:partial="schema-component::form.client_id"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.client_id',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.client_id"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Project                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        id="form.client_id" wire:key="KEY" wire:model.live="filters.client_id" class="fi-select-input"                    >
+                                                    <option value="">
+                                Any project                            </option>
+                        
+                                                                                    <option
+                                                                        value="ULID"
+                                >
+                                    Qureshi Textiles                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.source_app"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.source_app',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.source_app"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        App                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        id="form.source_app" wire:model.live="filters.source_app" class="fi-select-input"                    >
+                                                    <option value="">
+                                Any app                            </option>
+                        
+                                                                                    <option
+                                                                        value="whatsapp"
+                                >
+                                    WhatsApp                                </option>
+                                                                                                                <option
+                                                                        value="whatsapp_business"
+                                >
+                                    WhatsApp Business                                </option>
+                                                                                                                <option
+                                                                        value="whatsapp_web"
+                                >
+                                    WhatsApp Web                                </option>
+                                                                                                                <option
+                                                                        value="google_meet"
+                                >
+                                    Google Meet                                </option>
+                                                                                                                <option
+                                                                        value="zoom"
+                                >
+                                    Zoom                                </option>
+                                                                                                                <option
+                                                                        value="microsoft_teams"
+                                >
+                                    Microsoft Teams                                </option>
+                                                                                                                <option
+                                                                        value="telegram"
+                                >
+                                    Telegram                                </option>
+                                                                                                                <option
+                                                                        value="signal"
+                                >
+                                    Signal                                </option>
+                                                                                                                <option
+                                                                        value="messenger"
+                                >
+                                    Messenger                                </option>
+                                                                                                                <option
+                                                                        value="instagram"
+                                >
+                                    Instagram                                </option>
+                                                                                                                <option
+                                                                        value="skype"
+                                >
+                                    Skype                                </option>
+                                                                                                                <option
+                                                                        value="slack"
+                                >
+                                    Slack                                </option>
+                                                                                                                <option
+                                                                        value="discord"
+                                >
+                                    Discord                                </option>
+                                                                                                                <option
+                                                                        value="phone_call"
+                                >
+                                    Phone call                                </option>
+                                                                                                                <option
+                                                                        value="voice_note"
+                                >
+                                    Voice note                                </option>
+                                                                                                                <option
+                                                                        value="other"
+                                >
+                                    Other                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.source_device"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.source_device',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.source_device"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Device                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        id="form.source_device" wire:model.live="filters.source_device" class="fi-select-input"                    >
+                                                    <option value="">
+                                Any device                            </option>
+                        
+                                                                                    <option
+                                                                        value="phone"
+                                >
+                                    Phone                                </option>
+                                                                                                                <option
+                                                                        value="desktop"
+                                >
+                                    Desktop                                </option>
+                                                                                                                <option
+                                                                        value="web"
+                                >
+                                    Web                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.status"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.status',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.status"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Status                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        id="form.status" wire:model.live="filters.status" class="fi-select-input"                    >
+                                                    <option value="">
+                                Any status                            </option>
+                        
+                                                                                    <option
+                                                                        value="recording"
+                                >
+                                    Recording                                </option>
+                                                                                                                <option
+                                                                        value="uploading"
+                                >
+                                    Uploading                                </option>
+                                                                                                                <option
+                                                                        value="processing"
+                                >
+                                    Processing                                </option>
+                                                                                                                <option
+                                                                        value="completed"
+                                >
+                                    Completed                                </option>
+                                                                                                                <option
+                                                                        value="failed"
+                                >
+                                    Failed                                </option>
+                                                                                                                <option
+                                                                        value="audio_only"
+                                >
+                                    Audio only                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.from"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.from',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.from"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        From                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('input:not([type=hidden])')?.focus()" class="fi-fo-date-time-picker fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    <div hidden data-field-accessibility ></div>
+                    <div
+                        x-load
+                        x-load-src="https://echoledger.test/js/filament/forms/components/date-time-picker.js?v=5.10.3.0"
+                        x-data="dateTimePickerFormComponent({
+                                    defaultFocusedDate: null,
+                                    displayFormat: 'MMM D, YYYY',
+                                    firstDayOfWeek: 1,
+                                    hasDate: true,
+                                    isAutofocused: false,
+                                    locale: 'en',
+                                    shouldCloseOnDateSelection: false,
+                                    state: $wire.$entangle('filters.from', true),
+                                })"
+                        wire:ignore
+                        wire:key="KEY"
+                                                    x-on:dropdown-escape="if (isOpen()) { closePanel(true); $event.preventDefault() }"
+                            x-on:focusout="handleFocusOut($event)"
+                            x-on:keydown.escape="if (isOpen()) { $event.preventDefault(); $event.stopPropagation(); closePanel(true) }"
+                            x-on:click.outside="isOpen() && closePanel()"
+                            x-on:livewire:navigating.window="closePanel()"
+                                                                    >
+                        <input x-ref="maxDate" type="hidden" value="" />
+                        <input x-ref="minDate" type="hidden" value="" />
+                        <input x-ref="disabledDates" type="hidden" value="[]" />
+
+                        <input
+                            x-ref="button"
+                                                                                        x-on:click="togglePanelVisibility()"
+                                                                    x-on:keydown="handleTriggerKeydown($event)"
+                                    x-bind:aria-expanded="isPanelOpen.toString()"
+                                                                x-on:keydown.backspace.prevent.stop="clearState()"
+                                x-on:keydown.clear.prevent.stop="clearState()"
+                                x-on:keydown.delete.prevent.stop="clearState()"
+                                                        readonly
+                            wire:key="KEY"
+                            x-model="displayText"
+                            aria-controls="form.from-panel" aria-expanded="false" aria-haspopup="dialog" id="form.from" role="combobox" type="text" class="fi-fo-date-time-picker-trigger fi-fo-date-time-picker-display-text-input"                        />
+
+                        <div
+                            x-ref="panel"
+                            id="form.from-panel"
+                            role="dialog"
+                            aria-label="From"
+                            x-cloak
+                                                            x-show="isPanelOpen"
+                                                        wire:ignore
+                            wire:key="KEY"
+                            class="fi-fo-date-time-picker-panel"
+                        >
+                                                            <div class="fi-fo-date-time-picker-panel-header">
+                                    <select aria-label="Month" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select">
+                                        <template x-for="(month, index) in months">
+                                            <option x-bind:value="index" x-text="month"></option>
+                                        </template>
+                                    </select>
+                                    <input type="number" inputmode="numeric" aria-label="Year" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" />
+                                </div>
+
+                                <div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div>
+
+                                <div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar">
+                                    <div role="row" class="fi-fo-date-time-picker-calendar-header">
+                                        <template x-for="(day, index) in dayLabels" x-bind:key="index">
+                                            <div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div>
+                                        </template>
+                                    </div>
+                                    <template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex">
+                                        <div role="row" class="fi-fo-date-time-picker-calendar-week">
+                                            <template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)">
+                                                <div
+                                                    role="gridcell"
+                                                    x-text="day"
+                                                    x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null"
+                                                    x-bind:aria-label="day ? getDayLabel(day) : null"
+                                                    x-bind:aria-selected="day && dayIsSelected(day) ? 'true' : 'false'"
+                                                    x-bind:aria-current="day && dayIsToday(day) ? 'date' : null"
+                                                    x-bind:aria-disabled="day && dayIsDisabled(day) ? 'true' : 'false'"
+                                                    x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null"
+                                                    x-on:focus="day && setFocusedDay(day)"
+                                                    x-on:click="if (day) { $el.focus(); selectDate(day) }"
+                                                    x-bind:class="{
+                                                        'fi-fo-date-time-picker-calendar-day': day,
+                                                        'fi-fo-date-time-picker-calendar-day-today': day && dayIsToday(day),
+                                                        'fi-focused': day && focusedDate.date() === day,
+                                                        'fi-selected': day && dayIsSelected(day),
+                                                        'fi-disabled': day && dayIsDisabled(day),
+                                                    }"
+                                                ></div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            
+                                                    </div>
+                    </div>
+                
+        
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.to"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.to',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.to"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        To                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('input:not([type=hidden])')?.focus()" class="fi-fo-date-time-picker fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    <div hidden data-field-accessibility ></div>
+                    <div
+                        x-load
+                        x-load-src="https://echoledger.test/js/filament/forms/components/date-time-picker.js?v=5.10.3.0"
+                        x-data="dateTimePickerFormComponent({
+                                    defaultFocusedDate: null,
+                                    displayFormat: 'MMM D, YYYY',
+                                    firstDayOfWeek: 1,
+                                    hasDate: true,
+                                    isAutofocused: false,
+                                    locale: 'en',
+                                    shouldCloseOnDateSelection: false,
+                                    state: $wire.$entangle('filters.to', true),
+                                })"
+                        wire:ignore
+                        wire:key="KEY"
+                                                    x-on:dropdown-escape="if (isOpen()) { closePanel(true); $event.preventDefault() }"
+                            x-on:focusout="handleFocusOut($event)"
+                            x-on:keydown.escape="if (isOpen()) { $event.preventDefault(); $event.stopPropagation(); closePanel(true) }"
+                            x-on:click.outside="isOpen() && closePanel()"
+                            x-on:livewire:navigating.window="closePanel()"
+                                                                    >
+                        <input x-ref="maxDate" type="hidden" value="" />
+                        <input x-ref="minDate" type="hidden" value="" />
+                        <input x-ref="disabledDates" type="hidden" value="[]" />
+
+                        <input
+                            x-ref="button"
+                                                                                        x-on:click="togglePanelVisibility()"
+                                                                    x-on:keydown="handleTriggerKeydown($event)"
+                                    x-bind:aria-expanded="isPanelOpen.toString()"
+                                                                x-on:keydown.backspace.prevent.stop="clearState()"
+                                x-on:keydown.clear.prevent.stop="clearState()"
+                                x-on:keydown.delete.prevent.stop="clearState()"
+                                                        readonly
+                            wire:key="KEY"
+                            x-model="displayText"
+                            aria-controls="form.to-panel" aria-expanded="false" aria-haspopup="dialog" id="form.to" role="combobox" type="text" class="fi-fo-date-time-picker-trigger fi-fo-date-time-picker-display-text-input"                        />
+
+                        <div
+                            x-ref="panel"
+                            id="form.to-panel"
+                            role="dialog"
+                            aria-label="To"
+                            x-cloak
+                                                            x-show="isPanelOpen"
+                                                        wire:ignore
+                            wire:key="KEY"
+                            class="fi-fo-date-time-picker-panel"
+                        >
+                                                            <div class="fi-fo-date-time-picker-panel-header">
+                                    <select aria-label="Month" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select">
+                                        <template x-for="(month, index) in months">
+                                            <option x-bind:value="index" x-text="month"></option>
+                                        </template>
+                                    </select>
+                                    <input type="number" inputmode="numeric" aria-label="Year" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" />
+                                </div>
+
+                                <div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div>
+
+                                <div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar">
+                                    <div role="row" class="fi-fo-date-time-picker-calendar-header">
+                                        <template x-for="(day, index) in dayLabels" x-bind:key="index">
+                                            <div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div>
+                                        </template>
+                                    </div>
+                                    <template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex">
+                                        <div role="row" class="fi-fo-date-time-picker-calendar-week">
+                                            <template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)">
+                                                <div
+                                                    role="gridcell"
+                                                    x-text="day"
+                                                    x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null"
+                                                    x-bind:aria-label="day ? getDayLabel(day) : null"
+                                                    x-bind:aria-selected="day && dayIsSelected(day) ? 'true' : 'false'"
+                                                    x-bind:aria-current="day && dayIsToday(day) ? 'date' : null"
+                                                    x-bind:aria-disabled="day && dayIsDisabled(day) ? 'true' : 'false'"
+                                                    x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null"
+                                                    x-on:focus="day && setFocusedDay(day)"
+                                                    x-on:click="if (day) { $el.focus(); selectDate(day) }"
+                                                    x-bind:class="{
+                                                        'fi-fo-date-time-picker-calendar-day': day,
+                                                        'fi-fo-date-time-picker-calendar-day-today': day && dayIsToday(day),
+                                                        'fi-focused': day && focusedDate.date() === day,
+                                                        'fi-selected': day && dayIsSelected(day),
+                                                        'fi-disabled': day && dayIsDisabled(day),
+                                                    }"
+                                                ></div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            
+                                                    </div>
+                    </div>
+                
+        
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.tag"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.tag',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.tag"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Bookmark tag                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        id="form.tag" wire:key="KEY" wire:model.live="filters.tag" class="fi-select-input"                    >
+                                                    <option value="">
+                                Any tag                            </option>
+                        
+                                                                                    <option
+                                                                        value="Requirement"
+                                >
+                                    Requirement                                </option>
+                                                                                                                <option
+                                                                        value="Budget"
+                                >
+                                    Budget                                </option>
+                                                                                                                <option
+                                                                        value="Deadline"
+                                >
+                                    Deadline                                </option>
+                                                                                                                <option
+                                                                        value="Decision"
+                                >
+                                    Decision                                </option>
+                                                                                                                <option
+                                                                        value="Follow-up"
+                                >
+                                    Follow-up                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.bookmarked"
+                                        x-data="filamentSchemaComponent({
+                    path: 'filters.bookmarked',
+                    containerPath: 'filters',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.bookmarked"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Bookmarked only                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <button
+            x-data="{ state: $wire.$entangle('filters.bookmarked', true) }"
+            x-bind:aria-checked="state ? 'true' : 'false'"
+            x-on:click="state = ! state"
+            x-bind:class="state ? 'fi-toggle-on fi-color fi-color-primary fi-bg-color-600 fi-text-color-600 dark:fi-bg-color-600' : 'fi-toggle-off'"
+                        role="switch"
+            type="button"
+            aria-checked="false" id="form.bookmarked" wire:target="filters.bookmarked" class="fi-fo-toggle fi-toggle"        >
+            <div>
+                <div aria-hidden="true"></div>
+                <div aria-hidden="true"></div>
+            </div>
+        </button>
+
+        
+                            
+                    
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+                </div>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    <div class="el-search">
+    <style>
+        .el-search { display: grid; gap: .75rem; font-size: .875rem; }
+        .el-search .el-muted { color: #475569; } .dark .el-search .el-muted { color: #CBD5E1; }
+        .el-search .el-card { border: 1px solid rgba(15,23,42,.12); border-radius: .9rem; padding: .85rem 1rem; background: rgba(255,255,255,.6); }
+        .dark .el-search .el-card { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.03); }
+        .el-search .el-title { font-weight: 600; font-size: .95rem; text-decoration: none; color: inherit; overflow-wrap: anywhere; }
+        .el-search .el-title:hover { text-decoration: underline; }
+        .el-search .el-hits { display: grid; gap: .35rem; margin-top: .5rem; }
+        .el-search .el-hit { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: .5rem; text-decoration: none; color: inherit; padding: .3rem .4rem; border-radius: .5rem; }
+        .el-search .el-hit:hover { background: rgba(139,92,246,.1); }
+        .el-search .el-hit .el-t { font-variant-numeric: tabular-nums; }
+        .el-search .el-snip { overflow-wrap: anywhere; unicode-bidi: plaintext; }
+        .el-search mark { background: rgba(250,204,21,.45); color: inherit; border-radius: 3px; padding: 0 .1rem; }
+        .el-search .el-pager { display: flex; gap: .5rem; justify-content: flex-end; }
+        .el-search button { font: inherit; padding: .35rem .8rem; border-radius: .5rem; border: 1px solid rgba(15,23,42,.18); background: transparent; color: inherit; cursor: pointer; }
+        .dark .el-search button { border-color: rgba(255,255,255,.2); }
+    </style>
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->                        <div class="el-card">
+                <a class="el-title" href="https://echoledger.test/app/sessions/ULID" dir="auto">Freight quote 21</a>
+                <div class="el-muted">
+                    Nov 9, 2026 · 11:00 AM · Phone call
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                    <!--[if BLOCK]><![endif]--> · 5 matches <!--[if ENDBLOCK]><![endif]-->                </div>
+                <!--[if BLOCK]><![endif]-->                    <div class="el-hits">
+                        <!--[if BLOCK]><![endif]-->                            <a class="el-hit" href="https://echoledger.test/app/sessions/ULID?t=0" aria-label="Play Freight quote 21 from 0:00">
+                                <span class="el-t el-muted">0:00</span>
+                                <span class="el-snip" dir="auto"><strong>Me:</strong> The <mark>freight</mark> for load 1</span>
+                            </a>
+                                                    <a class="el-hit" href="https://echoledger.test/app/sessions/ULID?t=1000" aria-label="Play Freight quote 21 from 0:01">
+                                <span class="el-t el-muted">0:01</span>
+                                <span class="el-snip" dir="auto"><strong>Me:</strong> The <mark>freight</mark> for load 2</span>
+                            </a>
+                                                    <a class="el-hit" href="https://echoledger.test/app/sessions/ULID?t=2000" aria-label="Play Freight quote 21 from 0:02">
+                                <span class="el-t el-muted">0:02</span>
+                                <span class="el-snip" dir="auto"><strong>Me:</strong> The <mark>freight</mark> for load 3</span>
+                            </a>
+                        <!--[if ENDBLOCK]><![endif]-->                    </div>
+                <!--[if ENDBLOCK]><![endif]-->            </div>
+        <!--[if ENDBLOCK]><![endif]-->        <div class="el-pager">
+            <!--[if BLOCK]><![endif]--><button type="button" wire:click="previousPage">Newer</button><!--[if ENDBLOCK]><![endif]-->            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        </div>
+    <!--[if ENDBLOCK]><![endif]--></div>
+                </div>
+                    </div>
+
+                                            </div>
+
+                
+
+                
+
+                
+            </div>
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: 'WIREID',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]-->
+    
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->                <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>

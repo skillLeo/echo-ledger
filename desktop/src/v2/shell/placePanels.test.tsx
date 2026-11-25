@@ -20,11 +20,11 @@ describe("the places' panels", () => {
     respond("storage_info", null);
   });
 
-  it("Live: call recording Ready or Off, then each part of the Live page", () => {
+  it("Live: call recording On or Off (as the Live page's switch), then each part of the Live page", () => {
     const onPart = vi.fn();
     const onCalls = vi.fn();
     const { rerender } = render(<LivePanel callRecording onCalls={onCalls} onPart={onPart} />);
-    expect(screen.getByRole("button", { name: /Call recording/ })).toHaveTextContent("Ready");
+    expect(screen.getByRole("button", { name: /Call recording/ })).toHaveTextContent(/^Call recording ?On$/);
     fireEvent.click(screen.getByRole("button", { name: /Call recording/ }));
     expect(onCalls).toHaveBeenCalled();
     for (const [name, part] of [["Live Assist", "assist"], ["Live Translate", "translate"], ["Dictation", "dictation"], ["Captions", "captions"]] as const) {
@@ -32,7 +32,7 @@ describe("the places' panels", () => {
       expect(onPart).toHaveBeenLastCalledWith(part);
     }
     rerender(<LivePanel callRecording={false} onCalls={onCalls} onPart={onPart} />);
-    expect(screen.getByRole("button", { name: /Call recording/ })).toHaveTextContent("Off");
+    expect(screen.getByRole("button", { name: /Call recording/ })).toHaveTextContent(/^Call recording ?Off$/);
   });
 
   it("Ask: a new question, or one about a project", () => {

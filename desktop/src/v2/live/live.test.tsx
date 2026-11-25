@@ -238,6 +238,30 @@ describe("the Live tab", () => {
     expect(p.onSettings).toHaveBeenCalledWith("captions");
   });
 
+  it("Auto-record calls is a switch on the Live tab, as on the phone (UX-15), with how calls stand; Calls & meetings opens its settings", async () => {
+    const p = props();
+    const onAutoRecord = vi.fn();
+    const { rerender } = render(<LiveV2 status={makeStatus({ autoMode: true, callsReady: true })} assistOn={false} projects={[]} {...p} onAutoRecord={onAutoRecord} />);
+    await act(flushAsync);
+    const recording = screen.getByRole("list", { name: "Recording" });
+    const sw = within(recording).getByRole("switch", { name: "Auto-record calls" });
+    expect(sw).toBeChecked();
+    expect(within(recording).getByText("Calls: auto-record on")).toBeInTheDocument();
+    fireEvent.click(sw);
+    expect(onAutoRecord).toHaveBeenCalledTimes(1);
+    rerender(<LiveV2 status={makeStatus({ autoMode: false, callsReady: true })} assistOn={false} projects={[]} {...p} onAutoRecord={onAutoRecord} />);
+    expect(within(recording).getByRole("switch", { name: "Auto-record calls" })).not.toBeChecked();
+    expect(within(recording).getByText("Calls: ready")).toBeInTheDocument();
+    // The Ready check found a problem: set up first (the switch still says what it is).
+    rerender(<LiveV2 status={makeStatus({ autoMode: true, callsReady: false })} assistOn={false} projects={[]} {...p} onAutoRecord={onAutoRecord} />);
+    expect(within(recording).getByText("Calls: set up first")).toBeInTheDocument();
+    fireEvent.click(within(recording).getByRole("button", { name: "Calls & meetings" }));
+    expect(p.onSettings).toHaveBeenCalledWith("calls");
+    // A role that can't record: the switch shows the setting, greyed.
+    rerender(<LiveV2 status={makeStatus({ autoMode: true, callsReady: true })} assistOn={false} projects={[]} {...p} onAutoRecord={undefined} />);
+    expect(within(recording).getByRole("switch", { name: "Auto-record calls" })).toBeDisabled();
+  });
+
   it("without live_assist there is no Live Assist; while recording, captions turn on in place", async () => {
     const p = props();
     render(<LiveV2 status={makeStatus({ recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" }, captionsLive: false })} assistOn={false} projects={[]} {...p} />);
@@ -300,5 +324,24 @@ describe("the app with ui_v2.live", () => {
     await act(flushAsync);
     expect(await screen.findByRole("heading", { level: 1, name: "Live" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Live Assist" })).toBeNull();
+  });
+
+  it("the Live tab's Auto-record calls turns call recording off and on, as Record's menu does (UX-15)", async () => {
+    respond("app_status", makeStatus({ autoMode: true }));
+    respond("library_list", [makeItem("a")]);
+    respond("library_refresh", [makeItem("a")]);
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respondWith("update_settings", (args) => ({ ...makeSettings(), ...(args as { patch: object }).patch }));
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.live": true } });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "Live" }));
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("switch", { name: "Auto-record calls" }));
+    await act(flushAsync);
+    expect(callsOf("update_settings").at(-1)).toMatchObject({ patch: { autoMode: false } });
+    expect(await screen.findByText("Call recording is off")).toBeInTheDocument();
   });
 });
