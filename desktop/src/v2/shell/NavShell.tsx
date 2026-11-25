@@ -16,7 +16,9 @@ import { TitleRow } from "./TitleRow";
 import { readKept, writeKept } from "./kept";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 import { RecordSplit } from "./RecordSplit";
+import { useRailKeys } from "./railKeys";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
+import { latinKey } from "../actions/latinKey";
 import type { ShellStatus } from "./status";
 import { WindowButtons } from "./WindowButtons";
 import { BrandMark } from "../../components/BrandMark";
@@ -297,14 +299,16 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
       return;
     }
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
+    // With a non-Latin layout on, the Latin key at the same place (D-221: ⌘F, ⌘[ and ⌘1 on an Urdu keyboard).
+    const key = latinKey(e);
+    if (mod && !e.altKey && !e.shiftKey && key.toLowerCase() === "f" && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
       e.preventDefault();
       if (title?.search) setFindSeq((n) => n + 1);
       else onSearch?.();
       return;
     }
     // ⌘[ ⌘] (Ctrl+[ ] and Alt+← → on Windows): Back and Forward, never while typing.
-    const way = (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]")) ? (e.key === "[" ? "back" : "forward")
+    const way = (mod && !e.altKey && !e.shiftKey && (key === "[" || key === "]")) ? (key === "[" ? "back" : "forward")
       : (e.altKey && !mod && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) ? (e.key === "ArrowLeft" ? "back" : "forward") : null;
     if (way && !typing(e.target) && !document.querySelector('[role="alertdialog"], [aria-modal="true"]')) {
       e.preventDefault();
@@ -314,17 +318,17 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || typing(e.target)) return;
     if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
     // ⌃⌘S: the Mac's own Show/Hide Sidebar (v21_panel_flyout); ⌘\ (Ctrl+\) as before.
-    if (panelFlyout && e.metaKey && e.ctrlKey && e.key.toLowerCase() === "s") {
+    if (panelFlyout && e.metaKey && e.ctrlKey && key.toLowerCase() === "s") {
       e.preventDefault();
       togglePanel();
       return;
     }
-    if (e.key === "\\") {
+    if (key === "\\") {
       e.preventDefault();
       togglePanel();
       return;
     }
-    const at = /^[1-6]$/.test(e.key) ? Number(e.key) - 1 : -1;
+    const at = /^[1-6]$/.test(key) ? Number(key) - 1 : -1;
     if (at < 0) return;
     e.preventDefault();
     press(RAIL_PLACES[at]);
@@ -531,11 +535,14 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
     inAccount.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null, short && setupAttention ? "needs setup" : null]
     .filter(Boolean).join(", ");
   const [meTip, meTipShown] = useTip(accountTip(inAccount, meFailed));
+  // FIX-06: the rail is one Tab stop, ↑ ↓ Home End go through it.
+  const railRef = useRef<HTMLElement>(null);
+  const railKeys = useRailKeys(railRef, place);
   // The flyout over its scrim (v21_panel_flyout): the page behind it can't be reached; the rail can.
   const scrim = shown && narrow && panelFlyout;
   return (
     <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
-      <nav className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main">
+      <nav ref={railRef} className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main" onFocus={railKeys.onFocus} onKeyDownCapture={railKeys.onKeyDownCapture}>
         {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
             it moves the window. 8 px in full screen; none on Windows under its system title bar, and with Windows' own
             title row (v21_win_titlebar) 48 px with the app's mark. */}
@@ -571,8 +578,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                   </div>
                 )}
                 button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": meName, "aria-current": meHere ? "page" : undefined, ...meTip,
-                  text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
-                    {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(meCount)}</span>
+                  text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} drawn />
+                    {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(meCount) ?? undefined} aria-hidden="true" />
                       : meLive ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" />
                         : short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
                     <span className="el-rail__label" aria-hidden="true">Account</span></> }} />

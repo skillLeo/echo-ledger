@@ -5,6 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import { NavShell, RAIL_FULL_FROM, RAIL_FULL_FROM_COMPACT } from "./NavShell";
+import { readFileSync as readV2 } from "node:fs";
+import { dirname as dirOf, join as joinPath } from "node:path";
+import { fileURLToPath as fileOf } from "node:url";
+
+/** The new design's stylesheet, for the rules that draw text from attributes (FIX-06). */
+const V2_CSS = readV2(joinPath(dirOf(fileOf(import.meta.url)), "../styles/v2.css"), "utf8");
 import { changePreferences, loadPreferences } from "../../lib/shell";
 import { runAction } from "../actions/registry";
 import { menuSnapshot } from "../actions/menuState";
@@ -261,7 +267,9 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
       "Setup, needs setup", "Help", "Settings", "Account, Ayesha Khan",
     ]);
     const activity = rail().getByRole("button", { name: "Activity, 12" });
-    expect(activity.querySelector(".el-rail__count")!.textContent).toBe("12");
+    expect(activity.querySelector(".el-rail__count")).toHaveAttribute("data-count", "12");
+    // Drawn from data-count (FIX-06, label in name): the rule that writes it.
+    expect(V2_CSS).toContain(".el-rail__count::before { content: attr(data-count); }");
     expect(rail().getByRole("button", { name: "Library" }).querySelector(".el-rail__count, .el-rail__dot")).toBeNull();
     // Dots: Live's (red, recording) and Setup's (something to do).
     expect(rail().getByRole("button", { name: "Live, recording" }).querySelector(".el-rail__dot--live")).not.toBeNull();
@@ -296,7 +304,10 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     const me = rail().getByRole("button", { name: "Account, Ayesha Khan" });
     expect(me.querySelector(".el-avatar")).toHaveClass("el-avatar--rail");
     expect(me.querySelector(".el-avatar")).toHaveAttribute("data-colour", "4");
-    expect(me.querySelector(".el-avatar")!.textContent).toBe("AK");
+    // The initials are drawn (FIX-06, label in name: the item is named Account).
+    expect(me.querySelector(".el-avatar")).toHaveAttribute("data-initials", "AK");
+    // And drawn: the rule that writes them (without it the circle would be blank).
+    expect(V2_CSS).toContain(".el-avatar[data-initials]::before { content: attr(data-initials); }");
     expect(me.closest(".el-rail__me")!.querySelector(".el-rail__label")!.textContent).toBe("Account");
     fireEvent.click(me);
     const menu = screen.getByRole("menu", { name: "Account, Ayesha Khan" });

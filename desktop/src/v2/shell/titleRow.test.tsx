@@ -1,6 +1,9 @@
 // UX-20: the title row's parts (TitleRow); the shell around it is in shellTitleRow.test.tsx.
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import { EVERYTHING, SHORT_FIELD, TitleRow, searchFits, type TitleRowProps } from "./TitleRow";
 
@@ -53,7 +56,9 @@ describe("the title row (UX-20)", () => {
     const { rerender } = render(<TitleRow {...base} place="projects" onEverything={onEverything} />);
     const field = within(row()).getByRole("button", { name: /Search projects/ });
     expect(field).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K");
-    expect(field.textContent).toMatch(/K$/);
+    // The keys' hint is drawn (FIX-06, label in name); they are the field's aria-keyshortcuts.
+    expect(field.querySelector(".el-titlerow__keys")).toHaveAttribute("data-keys", expect.stringMatching(/K$/));
+    expect(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles/v2.css"), "utf8")).toContain(".el-titlerow__keys::before { content: attr(data-keys); }");
     fireEvent.click(field);
     expect(onEverything).toHaveBeenCalledWith("");
     rerender(<TitleRow {...base} place="activity" onEverything={onEverything} />);
@@ -315,6 +320,50 @@ describe("the title row (UX-20)", () => {
       expect(within(row()).getByRole("button", { name: "Search" })).toBeInTheDocument();
     } finally {
       Object.defineProperty(window, "innerWidth", { value: wide, configurable: true, writable: true });
+    }
+  });
+
+  it("typed fast, every key stays: the page's query comes back late (through the title slot) and never undoes one", async () => {
+    vi.useFakeTimers();
+    try {
+      // The page answers a moment later, as the shell's title slot does (a publish, then a render); each view keeps its
+      // own words (Needs you has "invo"), and the page can clear them itself (the no-match state's Clear search).
+      function Page({ view }: { view: string }) {
+        const [queries, setQueries] = useState<Record<string, string>>({ "Needs you": "invo" });
+        const late = (q: string) => window.setTimeout(() => setQueries((all) => ({ ...all, [view]: q })), 30);
+        return (
+          <>
+            <TitleRow {...base} title={{ title: view, count: 11, search: { placeholder: "Search recordings", scope: view, query: queries[view] ?? "", setQuery: late } }} />
+            <button type="button" onClick={() => setQueries((all) => ({ ...all, [view]: "" }))}>Clear search</button>
+          </>
+        );
+      }
+      const { rerender } = render(<Page view="All recordings" />);
+      const field = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      let typed = "";
+      for (const letter of "invoice") {
+        typed += letter;
+        fireEvent.change(field, { target: { value: typed } });
+        // The page answers with an older word while the next key is pressed.
+        act(() => { vi.advanceTimersByTime(10); });
+      }
+      expect(field).toHaveValue("invoice");
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(field).toHaveValue("invoice");
+      // A change from the page itself is taken at once: Clear search, and another view with its own words (even words
+      // the field sent a moment ago, "invo").
+      fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+      expect(field).toHaveValue("");
+      fireEvent.change(field, { target: { value: "invoice" } });
+      act(() => { vi.advanceTimersByTime(200); });
+      rerender(<Page view="Needs you" />);
+      expect(within(row()).getByRole("searchbox", { name: "Search recordings" })).toHaveValue("invo");
+      // Esc empties it.
+      fireEvent.keyDown(within(row()).getByRole("searchbox"), { key: "Escape" });
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(within(row()).getByRole("searchbox")).toHaveValue("");
+    } finally {
+      vi.useRealTimers();
     }
   });
 

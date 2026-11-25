@@ -122,6 +122,57 @@ describe("selection mode", () => {
     expect(row("Voice note")).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("↓ and ↑ on a row move between rows as J and K do (FIX-06), and stop at the ends; off a row they are left alone", async () => {
+    await show();
+    act(() => rows()[0].focus());
+    fireEvent.keyDown(rows()[0], { key: "ArrowDown" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "ArrowDown" });
+    expect(row("Usman Chaudhry")).toHaveFocus();
+    fireEvent.keyDown(row("Usman Chaudhry"), { key: "ArrowUp" });
+    expect(row("Voice note")).toHaveFocus();
+    act(() => rows()[3].focus());
+    fireEvent.keyDown(rows()[3], { key: "ArrowDown" });
+    expect(row("Habib & Co.")).toHaveFocus();
+    act(() => rows()[0].focus());
+    fireEvent.keyDown(rows()[0], { key: "ArrowUp" });
+    expect(row("Bilal Qureshi")).toHaveFocus();
+    // Shift+↓ isn't a step; in the search field ↓ stays the field's.
+    const shifted = new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true, cancelable: true });
+    rows()[0].dispatchEvent(shifted);
+    expect(row("Bilal Qureshi")).toHaveFocus();
+    expect(shifted.defaultPrevented).toBe(false);
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    act(() => search.focus());
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(search).toHaveFocus();
+  });
+
+  it("on an Urdu keyboard layout J, K, X, F, / and ⌘A answer by the key's place (D-221)", async () => {
+    await show();
+    act(() => rows()[0].focus());
+    fireEvent.keyDown(rows()[0], { key: "ج", code: "KeyJ" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "ج", code: "KeyJ" });
+    fireEvent.keyDown(row("Usman Chaudhry"), { key: "ک", code: "KeyK" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "ش", code: "KeyX" });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    fireEvent.keyDown(row("Voice note"), { key: "ا", code: "KeyA", metaKey: true });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("4 selected");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.keyDown(row("Voice note"), { key: "ف", code: "KeyF" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    act(() => row("Voice note").focus());
+    fireEvent.keyDown(row("Voice note"), { key: "ظ", code: "Slash" });
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
+    // Typed into the search, an Urdu letter is a letter.
+    const typed = new KeyboardEvent("keydown", { key: "ج", code: "KeyJ", bubbles: true, cancelable: true });
+    screen.getByRole("searchbox", { name: "Search recordings" }).dispatchEvent(typed);
+    expect(typed.defaultPrevented).toBe(false);
+  });
+
   it("Delete, from the bar or the Delete key, sends the picked ones to Trash at once, and one Undo brings them all back", async () => {
     respondWith("session_restore", () => ({ data: ITEMS[0] }));
     await show();

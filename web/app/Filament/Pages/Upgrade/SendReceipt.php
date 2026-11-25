@@ -60,7 +60,7 @@ class SendReceipt extends RequestPage
 
     public function getTitle(): string
     {
-        return 'Send receipt';
+        return __('Send receipt');
     }
 
     /** Each file chosen or dropped: checked here, then handed to PaymentProofs; the temporary copy is always deleted. */
@@ -74,12 +74,12 @@ class SendReceipt extends RequestPage
             $name = mb_substr($file->getClientOriginalName(), 0, 80);
             try {
                 if ($file->getSize() > self::MAX_KB * 1024) {
-                    $this->failed[] = ['name' => $name, 'message' => 'This file is over 5 MB. Try a screenshot instead.'];
+                    $this->failed[] = ['name' => $name, 'message' => __('This file is over 5 MB. Try a screenshot instead.')];
 
                     continue;
                 }
                 if (! in_array($file->getMimeType(), self::ACCEPTS, true)) {
-                    $this->failed[] = ['name' => $name, 'message' => 'Send a screenshot or photo (JPEG, PNG or WebP) or a PDF.'];
+                    $this->failed[] = ['name' => $name, 'message' => __('Send a screenshot or photo (JPEG, PNG or WebP) or a PDF.')];
 
                     continue;
                 }
@@ -88,7 +88,7 @@ class SendReceipt extends RequestPage
                 $this->failed[] = ['name' => $name, 'message' => self::errorCopy($e)];
             } catch (Throwable $e) {
                 report($e);
-                $this->failed[] = ['name' => $name, 'message' => "Couldn't upload. Try again."];
+                $this->failed[] = ['name' => $name, 'message' => __("Couldn't upload. Try again.")];
             } finally {
                 try {
                     $file->delete();
@@ -128,12 +128,12 @@ class SendReceipt extends RequestPage
         $reference = trim($this->transactionId);
         $payer = trim($this->payerName);
         if ($reference !== '' && preg_match('/^[A-Za-z0-9 ._\/#-]{4,64}$/', $reference) !== 1) {
-            $this->error = 'The transaction ID is 4 to 64 letters, numbers, spaces or . _ / # -.';
+            $this->error = self::referenceRule();
 
             return;
         }
         if (mb_strlen($payer) > 120) {
-            $this->error = 'Write the name in 120 characters or fewer.';
+            $this->error = __('Write the name in 120 characters or fewer.');
 
             return;
         }
@@ -156,22 +156,28 @@ class SendReceipt extends RequestPage
         $reason = $extra['reason'] ?? ($extra['errors']['reason'] ?? null);
 
         return match ($e->apiCode()) {
-            'too_large' => 'This file is over 5 MB. Try a screenshot instead.',
+            'too_large' => __('This file is over 5 MB. Try a screenshot instead.'),
             'validation_failed' => match ($reason) {
-                'pdf_password' => 'This PDF has a password. Please add a screenshot of the receipt instead.',
-                'pdf_active' => "We can't accept this PDF. Please add a screenshot of the receipt instead.",
-                'unreadable', 'too_many_pixels' => "We couldn't read this picture. Please try another screenshot.",
-                default => isset($extra['errors']['payment_reference']) ? 'The transaction ID is 4 to 64 letters, numbers, spaces or . _ / # -.' : 'Send a screenshot or photo (JPEG, PNG or WebP) or a PDF.',
+                'pdf_password' => __('This PDF has a password. Please add a screenshot of the receipt instead.'),
+                'pdf_active' => __("We can't accept this PDF. Please add a screenshot of the receipt instead."),
+                'unreadable', 'too_many_pixels' => __("We couldn't read this picture. Please try another screenshot."),
+                default => isset($extra['errors']['payment_reference']) ? self::referenceRule() : __('Send a screenshot or photo (JPEG, PNG or WebP) or a PDF.'),
             },
             'too_many_proofs' => ($extra['scope'] ?? 'round') === 'request'
-                ? "We can't take more files on this request. Reply to our email if you need to send more."
-                : 'You can add up to 3 files at a time. Remove one to add another.',
-            'proof_locked' => "This receipt has been sent, so it can't be removed.",
-            'proof_required' => 'Add a screenshot, or type the transaction ID.',
-            'request_decided' => 'This request has already been decided.',
-            'rate_limited' => 'Too many tries today. Please try again later.',
-            default => "Couldn't reach ".Brand::name().'. Try again.',
+                ? __("We can't take more files on this request. Reply to our email if you need to send more.")
+                : __('You can add up to 3 files at a time. Remove one to add another.'),
+            'proof_locked' => __("This receipt has been sent, so it can't be removed."),
+            'proof_required' => __('Add a screenshot, or type the transaction ID.'),
+            'request_decided' => __('This request has already been decided.'),
+            'rate_limited' => __('Too many tries today. Please try again later.'),
+            default => __("Couldn't reach :brand. Try again.", ['brand' => Brand::name()]),
         };
+    }
+
+    /** What a transaction ID may be; the characters are one isolated run, so a right-to-left line keeps their order. */
+    private static function referenceRule(): string
+    {
+        return __('The transaction ID is 4 to 64 letters, numbers, spaces or :chars.', ['chars' => '. _ / # -']);
     }
 
     /** @return array<string, mixed> */

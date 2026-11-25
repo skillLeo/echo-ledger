@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html
+    lang="en"
+    dir="ltr"
+    class="fi"
+>
+    <head>
+        
+
+        <meta charset="utf-8" />
+        <meta name="csrf-token" content="CSRF" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+                    <link rel="icon" href="https://echoledger.test/favicon.svg" />
+        
+        
+        <title>
+            Create your account
+             - 
+            EchoLedger
+        </title>
+
+        
+
+        <style>
+            [x-cloak=''],
+            [x-cloak='x-cloak'],
+            [x-cloak='1'] {
+                display: none !important;
+            }
+
+            [x-cloak='inline-flex'] {
+                display: inline-flex !important;
+            }
+
+            @media (max-width: 1023px) {
+                [x-cloak='-lg'] {
+                    display: none !important;
+                }
+            }
+
+            @media (min-width: 1024px) {
+                [x-cloak='lg'] {
+                    display: none !important;
+                }
+            }
+        </style>
+
+        <link
+            href="https://echoledger.test/fonts/filament/filament/inter/index.css?v=5.10.3.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+    
+<style>
+    :root {
+         --danger-50:oklch(0.955 0.021 13.857);  --danger-100:oklch(0.922 0.04 16.004);  --danger-200:oklch(0.857 0.074 17.676);  --danger-300:oklch(0.807 0.089 18.32);  --danger-400:oklch(0.78 0.128 22.14);  --danger-500:oklch(0.557 0.197 25.168);  --danger-600:oklch(0.557 0.197 25.168);  --danger-700:oklch(0.506 0.179 24.904);  --danger-800:oklch(0.421 0.146 24.554);  --danger-900:oklch(0.316 0.105 23.527);  --danger-950:oklch(0.251 0.065 12.692);  --gray-50:oklch(0.983 0.003 286.351);  --gray-100:oklch(0.956 0.004 286.324);  --gray-200:oklch(0.932 0.005 286.295);  --gray-300:oklch(0.887 0.01 286.204);  --gray-400:oklch(0.769 0.01 258.342);  --gray-500:oklch(0.553 0.014 271.151);  --gray-600:oklch(0.502 0.014 264.445);  --gray-700:oklch(0.347 0.01 253.971);  --gray-800:oklch(0.283 0.007 248.075);  --gray-900:oklch(0.213 0.004 264.479);  --gray-950:oklch(0.179 0.004 285.981);  --info-50:oklch(0.96 0.026 181.865);  --info-100:oklch(0.934 0.042 179.803);  --info-200:oklch(0.9 0.053 181.47);  --info-300:oklch(0.856 0.064 181.173);  --info-400:oklch(0.789 0.147 175.727);  --info-500:oklch(0.649 0.114 181.963);  --info-600:oklch(0.552 0.101 178.794);  --info-700:oklch(0.521 0.092 179.956);  --info-800:oklch(0.434 0.074 180.801);  --info-900:oklch(0.327 0.051 184.991);  --info-950:oklch(0.273 0.038 186.756);  --primary-50:oklch(0.961 0.017 267.791);  --primary-100:oklch(0.935 0.031 269.819);  --primary-200:oklch(0.902 0.047 269.616);  --primary-300:oklch(0.806 0.088 271.413);  --primary-400:oklch(0.776 0.114 273.019);  --primary-500:oklch(0.544 0.191 267.005);  --primary-600:oklch(0.544 0.191 267.005);  --primary-700:oklch(0.511 0.195 266.578);  --primary-800:oklch(0.509 0.172 267.166);  --primary-900:oklch(0.313 0.086 268.596);  --primary-950:oklch(0.272 0.071 267.98);  --success-50:oklch(0.96 0.022 145.401);  --success-100:oklch(0.935 0.038 146.466);  --success-200:oklch(0.9 0.052 145.993);  --success-300:oklch(0.856 0.071 146.771);  --success-400:oklch(0.779 0.165 157.286);  --success-500:oklch(0.641 0.133 157.68);  --success-600:oklch(0.543 0.112 159.497);  --success-700:oklch(0.48 0.097 159.892);  --success-800:oklch(0.411 0.082 159.995);  --success-900:oklch(0.322 0.062 161.122);  --success-950:oklch(0.272 0.04 162.171);  --warning-50:oklch(0.986 0.024 99.096);  --warning-100:oklch(0.97 0.068 100.388);  --warning-200:oklch(0.945 0.103 97.909);  --warning-300:oklch(0.918 0.133 98.231);  --warning-400:oklch(0.862 0.173 89.018);  --warning-500:oklch(0.854 0.157 84.13);  --warning-600:oklch(0.571 0.129 63.938);  --warning-700:oklch(0.501 0.113 64.155);  --warning-800:oklch(0.418 0.093 65.666);  --warning-900:oklch(0.321 0.07 68.226);  --warning-950:oklch(0.258 0.044 74.478);     }
+
+    </style>
+
+        <link
+            href="https://echoledger.test/css/filament/filament/app.css?v=5.10.3.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+        
+        
+        
+        
+        
+        
+
+        <style>
+            :root {
+                --font-family: 'Inter';
+                --mono-font-family: 'ui-monospace';
+                --serif-font-family: 'ui-serif';
+                --sidebar-width: 240px;
+                --collapsed-sidebar-width: 64px;
+                --default-theme-mode: system;
+            }
+
+            html.fi {
+                --livewire-progress-bar-color: var(--primary-500);
+            }
+        </style>
+
+        
+        
+
+                    <script >
+                const loadDarkMode = () => {
+                    window.theme =
+                        localStorage.getItem('filament:theme:mode') ?? 'system'
+                    if (
+                        window.theme === 'dark' ||
+                        (window.theme === 'system' &&
+                            window.matchMedia('(prefers-color-scheme: dark)')
+                                .matches)
+                    ) {
+                        document.documentElement.classList.add('dark')
+                    }
+                }
+
+                loadDarkMode()
+
+                document.addEventListener('livewire:navigated', loadDarkMode)
+            </script>
+        
+        <script>
+    // The rule every in-app notice follows (docs/DESIGN_SYSTEM.md "Notices", since v1.6.1), as plain functions with no
+// browser in them, so a test runs them under Node (tests/js/notice-core.test.mjs). The console's toasts and banners
+// (resources/views/filament/shell/notices.blade.php) use them through window.ElNoticeCore.
+(function (root, factory) {
+    const core = factory();
+    if (typeof module === 'object' && module.exports) {
+        module.exports = core;
+    } else {
+        root.ElNoticeCore = core;
+    }
+})(typeof self !== 'undefined' ? self : this, function () {
+    /** A message hides by itself after 6 s, an error after 10 s; Undo keeps its own 5 s. */
+    const MESSAGE_MS = 6000;
+    const ERROR_MS = 10000;
+    const UNDO_MS = 5000;
+
+    /** Below this many pixels a press is still a click; past it, sideways, it is a drag. */
+    const DRAG_START_PX = 8;
+
+    /** Past a third of its width it leaves; a flick this fast (px/ms) leaves whatever the distance. */
+    const LEAVE_SHARE = 1 / 3;
+    const FLICK_PX_PER_MS = 0.5;
+
+    return {
+        MESSAGE_MS,
+        ERROR_MS,
+        UNDO_MS,
+        DRAG_START_PX,
+        LEAVE_SHARE,
+        FLICK_PX_PER_MS,
+
+        /**
+         * How long a notice shows, in ms, or null when it has no timer (it is about something still true, or the
+         * server marked it persistent). [status] is Filament's (danger, warning, success, info); [duration] what the
+         * server asked for: a number, 'persistent', or nothing for the default.
+         */
+        durationFor(status, duration, stillTrue) {
+            if (stillTrue === true || duration === 'persistent') return null;
+            if (duration === 'undo') return UNDO_MS;
+            const asked = typeof duration === 'number' && duration > 0 ? duration : null;
+            if (status === 'danger' && (asked === null || asked === MESSAGE_MS)) return ERROR_MS;
+            return asked ?? MESSAGE_MS;
+        },
+
+        /** Whether the pointer has moved far enough, and more sideways than up or down, to be a swipe. */
+        isDrag(dx, dy) {
+            return Math.abs(dx) > DRAG_START_PX && Math.abs(dx) > Math.abs(dy);
+        },
+
+        /**
+         * What a let-go does: 'left' or 'right' (it leaves that way) or 'back' (it springs back). [velocity] in px/ms,
+         * signed like [dx].
+         */
+        outcome(dx, width, velocity) {
+            const far = width > 0 && Math.abs(dx) >= width * LEAVE_SHARE;
+            const flick = Math.abs(velocity) >= FLICK_PX_PER_MS && Math.sign(velocity) === Math.sign(dx) && dx !== 0;
+            if (!far && !flick) return 'back';
+            return dx < 0 ? 'left' : 'right';
+        },
+
+        /** The notice fades as it is dragged: fully there at rest, half gone at its full width. */
+        opacityFor(dx, width) {
+            if (width <= 0) return 1;
+            return Math.max(0.2, 1 - Math.min(1, Math.abs(dx) / width) * 0.5);
+        },
+
+        /** A trackpad's two-finger swipe arrives as wheel events: this many px of deltaX moves the notice that far. */
+        wheelStep(deltaX, deltaY) {
+            return Math.abs(deltaX) > Math.abs(deltaY) ? -deltaX : 0;
+        },
+
+        /**
+         * Where a closed banner is remembered: per visit and per state ("until the state changes or the next visit"),
+         * or, for the announcement, per text for good.
+         */
+        storageKey(id, state) {
+            return 'el-notice:' + String(id) + ':' + String(state ?? '');
+        },
+
+        /** A short, stable name for a text (the announcement is remembered closed per text). */
+        hash(text) {
+            let h = 2166136261;
+            const s = String(text ?? '');
+            for (let i = 0; i < s.length; i++) {
+                h ^= s.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return (h >>> 0).toString(36);
+        },
+
+        /** The newest of the shown toasts, by the time each was shown: the one Esc closes. */
+        newest(items) {
+            let best = null;
+            for (const item of items) {
+                if (item && (best === null || item.at > best.at)) best = item;
+            }
+            return best;
+        },
+    };
+});
+
+
+    (() => {
+        if (window.elToast) return;
+        const core = window.ElNoticeCore;
+        const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const typing = (target) => target instanceof Element && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+        /**
+         * A swipe on [el]: follows the pointer (or a trackpad's wheel) sideways, then leaves or springs back. [hooks]:
+         * start() and end() around a drag, leave(direction) once it has gone. Returns a function that unhooks it.
+         */
+        const swipe = (el, hooks) => {
+            let start = null;
+            let dx = 0;
+            let dragging = false;
+            let samples = [];
+            let wheelTimer = null;
+            const width = () => el.getBoundingClientRect().width || 1;
+            const paint = () => {
+                el.style.transform = dx === 0 ? '' : 'translateX(' + dx + 'px)';
+                el.style.opacity = dx === 0 ? '' : String(core.opacityFor(dx, width()));
+            };
+            const velocity = () => {
+                const now = performance.now();
+                const recent = samples.filter((s) => now - s.t < 120);
+                if (recent.length < 2) return 0;
+                const first = recent[0];
+                const last = recent[recent.length - 1];
+                return last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+            };
+            const finish = () => {
+                const result = core.outcome(dx, width(), velocity());
+                samples = [];
+                if (result === 'back') {
+                    if (!reduced()) {
+                        el.style.transition = 'transform 200ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms';
+                        setTimeout(() => (el.style.transition = ''), 220);
+                    }
+                    dx = 0;
+                    paint();
+                    hooks.end(false);
+                    return;
+                }
+                const direction = result === 'left' ? -1 : 1;
+                if (reduced()) {
+                    el.style.opacity = '0';
+                    hooks.end(true);
+                    hooks.leave(direction);
+                    return;
+                }
+                el.style.transition = 'transform 160ms cubic-bezier(0, 0, 0, 1), opacity 160ms';
+                el.style.transform = 'translateX(' + direction * width() * 1.1 + 'px)';
+                el.style.opacity = '0';
+                hooks.end(true);
+                setTimeout(() => hooks.leave(direction), 160);
+            };
+            const down = (e) => {
+                if (e.button !== 0 && e.pointerType === 'mouse') return;
+                if (e.target instanceof Element && e.target.closest('button, input, textarea, select, [data-no-swipe]')) return;
+                start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+                dx = 0;
+                dragging = false;
+                samples = [{ x: 0, t: performance.now() }];
+                hooks.press?.(e);
+            };
+            const move = (e) => {
+                if (start === null || e.pointerId !== start.id) return;
+                const mx = e.clientX - start.x;
+                const my = e.clientY - start.y;
+                if (!dragging) {
+                    if (!core.isDrag(mx, my)) return;
+                    dragging = true;
+                    el.setPointerCapture?.(e.pointerId);
+                    el.classList.add('el-dragging');
+                    hooks.start();
+                }
+                e.preventDefault();
+                dx = mx;
+                samples.push({ x: dx, t: performance.now() });
+                paint();
+            };
+            const up = (e) => {
+                if (start === null || e.pointerId !== start.id) return;
+                start = null;
+                hooks.release?.(e);
+                if (!dragging) return;
+                dragging = false;
+                el.classList.remove('el-dragging');
+                finish();
+            };
+            const wheel = (e) => {
+                const step = core.wheelStep(e.deltaX, e.deltaY);
+                if (step === 0) return;
+                e.preventDefault();
+                if (wheelTimer === null) {
+                    hooks.start();
+                    el.classList.add('el-dragging');
+                    samples = [{ x: 0, t: performance.now() }];
+                }
+                dx += step;
+                samples.push({ x: dx, t: performance.now() });
+                paint();
+                clearTimeout(wheelTimer);
+                wheelTimer = setTimeout(() => {
+                    wheelTimer = null;
+                    el.classList.remove('el-dragging');
+                    finish();
+                }, 140);
+            };
+            el.addEventListener('pointerdown', down);
+            el.addEventListener('pointermove', move);
+            el.addEventListener('pointerup', up);
+            el.addEventListener('pointercancel', up);
+            el.addEventListener('wheel', wheel, { passive: false });
+            return () => {
+                el.removeEventListener('pointerdown', down);
+                el.removeEventListener('pointermove', move);
+                el.removeEventListener('pointerup', up);
+                el.removeEventListener('pointercancel', up);
+                el.removeEventListener('wheel', wheel);
+            };
+        };
+        window.elSwipe = swipe;
+
+        /** A toast (or a card in the bell's list): Filament's notificationComponent with the notice rule over it. */
+        window.elToast = (base, options) => {
+            const baseInit = base.init;
+            const baseDestroy = base.destroy;
+            return Object.assign(base, {
+                dragging: false,
+                touching: false,
+                dragged: false,
+                unhook: null,
+                init() {
+                    baseInit.call(this);
+                    const el = this.$el;
+                    el.dataset.elAt = String(performance.now());
+                    // A drag is never a click: the click that ends a drag goes nowhere.
+                    el.addEventListener('click', (e) => {
+                        if (this.dragged) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.dragged = false;
+                        }
+                    }, true);
+                    this.unhook = swipe(el, {
+                        press: (e) => {
+                            if (e.pointerType !== 'mouse' && !options.inline) {
+                                this.touching = true;
+                                this.pauseDuration('hover');
+                            }
+                        },
+                        release: (e) => {
+                            if (e.pointerType !== 'mouse' && !options.inline) {
+                                this.touching = false;
+                                this.resumeDuration('hover');
+                            }
+                        },
+                        start: () => {
+                            this.dragging = true;
+                            this.dragged = true;
+                            if (!options.inline) this.pauseDuration('hover');
+                        },
+                        end: (gone) => {
+                            this.dragging = false;
+                            setTimeout(() => (this.dragged = false), 0);
+                            if (!gone && !options.inline && !el.matches(':hover')) this.resumeDuration('hover');
+                        },
+                        leave: () => this.close(true),
+                    });
+                },
+                /** The card's link was followed: the notice closes as it goes. */
+                opened(event) {
+                    if (this.dragged) return;
+                    if (options.inline) return;
+                    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return;
+                    this.close(true);
+                },
+                destroy() {
+                    this.unhook?.();
+                    baseDestroy?.call(this);
+                },
+            });
+        };
+
+        /**
+         * An inline banner about something still true. [options]: id, state (what it is about now), remember ('visit'
+         * or 'text'), text (the announcement's).
+         */
+        window.elBanner = (options) => {
+            const store = () => {
+                try {
+                    return options.remember === 'text' ? window.localStorage : window.sessionStorage;
+                } catch (e) {
+                    return null;
+                }
+            };
+            const key = core.storageKey(options.id, options.remember === 'text' ? core.hash(options.text) : options.state);
+            return {
+                open: true,
+                dragged: false,
+                unhook: null,
+                init() {
+                    try {
+                        this.open = store()?.getItem(key) !== '1';
+                    } catch (e) {
+                        this.open = true;
+                    }
+                    const el = this.$el;
+                    el.addEventListener('click', (e) => {
+                        if (this.dragged) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.dragged = false;
+                        }
+                    }, true);
+                    this.unhook = swipe(el, {
+                        start: () => (this.dragged = true),
+                        end: () => setTimeout(() => (this.dragged = false), 0),
+                        leave: () => this.dismiss(),
+                    });
+                },
+                dismiss() {
+                    this.open = false;
+                    try {
+                        store()?.setItem(key, '1');
+                    } catch (e) {
+                        // Storage off: closed for this page only.
+                    }
+                },
+                destroy() {
+                    this.unhook?.();
+                },
+            };
+        };
+
+        // Esc closes the newest toast.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || typing(e.target)) return;
+            if (document.querySelector('.fi-modal-open[aria-modal="true"], .el-help')) return;
+            const shown = Array.from(document.querySelectorAll('[data-el-toast="toast"]'))
+                .filter((el) => el.offsetParent !== null && el.style.visibility !== 'hidden')
+                .map((el) => ({ el, at: Number(el.dataset.elAt || 0) }));
+            const newest = core.newest(shown);
+            if (newest === null || !window.Alpine) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            window.Alpine.$data(newest.el).dismiss();
+        }, true);
+    })();
+</script>
+<script>
+    // The console's three levels of navigation (docs/PLAN_NAV_3_LEVELS.md) as plain decisions with no browser in them, so a
+// test runs them under Node (tests/js/frame-core.test.mjs). resources/views/filament/v2/frame-script.blade.php reads
+// the page, asks these what to do and does it, through window.ElFrameCore.
+(function (root, factory) {
+    const core = factory();
+    if (typeof module === 'object' && module.exports) {
+        module.exports = core;
+    } else {
+        root.ElFrameCore = core;
+    }
+})(typeof self !== 'undefined' ? self : this, function () {
+    const FIELDS = ['input', 'textarea', 'select'];
+    function isField(target) {
+        return !! target && (FIELDS.includes(String(target.tagName || '').toLowerCase()) || target.field === true || target.editable === true || target.isContentEditable === true);
+    }
+
+    /**
+     * Where a click on a rail icon goes (section 6, "remember per place"; section 0, "clicking the selected rail icon
+     * resets that place"). s: {key (the place clicked), current (the place you are in, null on Home), home (its own
+     * page), last (where you left that place, from this browser's memory), origin (this console's)}. On the place you
+     * are in: its own page, and the memory goes ({go, reset: true}). On another: where you left it, when that is a page
+     * of this console, else its own page ({go}).
+     */
+    function railTarget(s) {
+        if (s.key === s.current) return { go: s.home, reset: true };
+        return { go: sameConsole(s.last, s.origin) ? s.last : s.home, reset: false };
+    }
+
+    /** Whether a remembered address is a page of this console (never another site, never a script). */
+    function sameConsole(address, origin) {
+        if (typeof address !== 'string' || address === '' || address[0] !== '/' || address.startsWith('//')) return false;
+        try {
+            return new URL(address, origin).origin === origin;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * What the rail does with a click when the panel is folded away (under the flyout width, or on a phone's drawer):
+     * another place with a panel opens its panel as a flyout (the same one again closes it), the place you are in starts
+     * over as on a computer and its flyout opens or closes too ('restart'), a place without one is followed.
+     * s: {narrow, hasPanel, flyout (the place whose panel is open), key, current (the place you are in)}. Returns
+     * 'open', 'close', 'restart' or 'go'.
+     */
+    function railFlyout(s) {
+        if (! s.narrow || ! s.hasPanel) return 'go';
+        if (s.key === s.current) return 'restart';
+        return s.flyout === s.key ? 'close' : 'open';
+    }
+
+    /**
+     * Whether focus goes back to what opened the flyout when it closes: after Esc and ⊟ (or ⌘\) always; after a click
+     * outside it only when that click left focus nowhere a person works with (the body, the page's main, or the flyout
+     * now hidden), never taking it from a field or button the click went to; after choosing something in it, never (the
+     * page changes). how: 'escape' | 'toggle' | 'outside' | 'chosen'; lost: whether focus is on nothing a person works
+     * with, or still in the flyout.
+     */
+    function flyoutFocusBack(how, lost) {
+        if (how === 'escape' || how === 'toggle') return true;
+        return how === 'outside' && lost === true;
+    }
+
+    /**
+     * Whether focus was left nowhere after a click outside the flyout (so it may go back to the flyout's opener): on
+     * nothing (null), on the page's body, on its main (a click there focuses the skip link's target), or still in the
+     * flyout now hidden. Anything else the click focused keeps it: a field or a button, audio or video controls, a
+     * frame, an element a script made focusable (tabindex -1). active, body, panel: the elements (panel may be null).
+     */
+    function focusLost(active, body, panel) {
+        if (active === null || active === undefined || active === body) return true;
+        if (typeof active.matches === 'function' && active.matches('main')) return true;
+        return !! panel && typeof panel.contains === 'function' && panel.contains(active);
+    }
+
+    /** The dialogs a flyout leaves open behind it: Filament's, and any other dialog or alert dialog. */
+    const DIALOGS = '.fi-modal, [role="dialog"], [role="alertdialog"]';
+
+    /** Whether an event's target is in a dialog (a key, a click or the focus there never closes the flyout). */
+    function inDialog(target) {
+        return !! target && typeof target.closest === 'function' && target.closest(DIALOGS) !== null;
+    }
+
+    /**
+     * This browser's memory of each place (where you left it, whether its panel was folded) belongs to one person in one
+     * workspace: scope is an opaque name of both (person.workspace, from the server), so it never carries over to
+     * someone else signing in here, and the login page forgets it all (signing out). what: 'last' | 'panel'.
+     */
+    function memoryKey(scope, what, place) {
+        return 'el-nav:' + scope + ':' + what + ':' + place;
+    }
+
+    /**
+     * The remembered keys to forget when scope signs in here: anyone else's (another person; the same person's other
+     * workspaces stay) and the unscoped ones kept before memory had a scope. keys: this browser's storage keys.
+     */
+    function staleMemory(keys, scope) {
+        const person = String(scope).split('.')[0];
+        return keys.filter((k) => {
+            if (typeof k !== 'string') return false;
+            if (k.startsWith('el-nav-last:') || k.startsWith('el-nav-panel:')) return true;
+            if (! k.startsWith('el-nav:')) return false;
+            return k.slice('el-nav:'.length).split(':')[0].split('.')[0] !== person;
+        });
+    }
+
+    /** Every key of the places' memory, to forget on the login page (after signing out). */
+    function allMemory(keys) {
+        return keys.filter((k) => typeof k === 'string' && (k.startsWith('el-nav:') || k.startsWith('el-nav-last:') || k.startsWith('el-nav-panel:')));
+    }
+
+    /**
+     * Whether the panel shows beside the page for a place, from this browser's memory of it ('open', 'closed' or
+     * nothing): open unless that place was folded. Home and a place without a panel: never.
+     */
+    function panelOpen(memory, hasPanel) {
+        return hasPanel && memory !== 'closed';
+    }
+
+    /**
+     * The frame's keys (section 6), on every page. e: {key, code, ctrlKey, metaKey, altKey, shiftKey, defaultPrevented,
+     * target}; s: {mac, modal, rail (how many places the rail has, at most 6), items (how many of the panel's first
+     * nine answer a number)}. ⌘1…⌘6 (Ctrl off a Mac) open the rail's places, Alt+1…9 the panel's first nine (saved views
+     * keep these, so the two never clash), ⌘\ hides or shows the panel. Not over a dialog. No number while a field or
+     * an editor has the focus (⌘1 would leave the page and lose what was typed; Alt types letters there on a Mac); ⌘\
+     * works from a field too. Returns {do: 'rail' | 'item' | 'panel', at?} or null.
+     */
+    function frameKey(e, s) {
+        if (e.defaultPrevented || s.modal || e.shiftKey) return null;
+        const mod = s.mac ? e.metaKey && ! e.ctrlKey : e.ctrlKey && ! e.metaKey;
+        const digit = /^Digit([1-9])$/.exec(e.code || '') || /^Numpad([1-9])$/.exec(e.code || '');
+        if (mod && ! e.altKey) {
+            if (e.code === 'Backslash' || e.key === '\\') return { do: 'panel' };
+            if (digit && ! isField(e.target)) {
+                const at = Number(digit[1]) - 1;
+                return at < Math.min(6, s.rail) ? { do: 'rail', at } : null;
+            }
+            return null;
+        }
+        if (e.altKey && ! e.metaKey && ! e.ctrlKey && digit && ! isField(e.target)) {
+            const at = Number(digit[1]) - 1;
+            return at < Math.min(9, s.items) ? { do: 'item', at } : null;
+        }
+        return null;
+    }
+
+    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, focusLost, inDialog, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
+});
+
+</script>
+<script data-forget-places>
+    (() => {
+        try {
+            window.ElFrameCore.allMemory(Object.keys(localStorage)).forEach((k) => localStorage.removeItem(k));
+            // UX-25: where the Library was left in this tab, and the recording last opened.
+            Object.keys(sessionStorage).filter((k) => k.startsWith('el-place:')).forEach((k) => sessionStorage.removeItem(k));
+        } catch (e) { /* a private window keeps nothing */ }
+    })();
+</script>
+
+    </head>
+
+    <body
+        class="fi-body fi-panel-app"
+    >
+        
+
+        <div class="fi-simple-layout">
+        
+        
+
+        
+        <div class="fi-simple-main-ctn">
+            <main
+                id="fi-main-content"
+                tabindex="-1"
+                class="fi-simple-main fi-width-lg"
+            >
+                <div wire:snapshot="SNAPSHOT" wire:effects="{&quot;partials&quot;:[],&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionComponent&quot;:{&quot;as&quot;:&quot;actionComponent&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}},&quot;listeners&quot;:[&quot;refresh-page&quot;]}" wire:id="WIREID" wire:name="App\Filament\Auth\Register" class="fi-simple-page">
+    
+
+    <div class="fi-simple-page-content">
+        <!--[if BLOCK]><![endif]-->            <header class="fi-simple-header">
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->        <div
+            style="height: 1.5rem;" class="fi-logo"
+        >
+            <span style="display: inline-flex; align-items: center; gap: 7px; height: 24px; color: var(--text);">
+    <img src="https://echoledger.test/mark.svg" alt="" width="24" height="24" style="height: 24px; width: 24px;">
+    <span class="el-brand-name" style="font-weight: 600; font-size: 18px; line-height: 24px; letter-spacing: -0.4px;">EchoLedger</span>
+</span>
+
+        </div>
+    <!--[if ENDBLOCK]><![endif]-->
+            
+
+<!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->        <h1 class="fi-simple-header-heading">
+            Create your free account
+        </h1>
+    <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->        <p class="fi-simple-header-subheading">
+            Enter your email: we send you a code to confirm it.
+        </p>
+    <!--[if ENDBLOCK]><![endif]--></header>
+        <!--[if ENDBLOCK]><![endif]-->
+        <div x-data="filamentSchema({ livewireId: 'WIREID', schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid  fi-sc  fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">
+                                                
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <span
+                                    class="fi-sc-text"        >
+            Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link they send you.        </span>
+
+                        </div>
+                    </div>
+
+                                            </div>
+    </div>
+
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: 'WIREID',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]-->
+    
+</div>
+            </main>
+        </div>
+
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;padding:1rem;font-size:.8rem;opacity:.75">
+    <a href="https://echoledger.test/terms" style="text-decoration:underline">Terms</a>
+    <a href="https://echoledger.test/privacy" style="text-decoration:underline">Privacy</a>
+</div>
+
+
+        <nav aria-label="Language" data-visitor-language
+    style="display:flex;justify-content:center;gap:16px;padding:16px 0 24px;font-size:.875rem;color:var(--text-muted)">
+                        <span lang="en" aria-current="true" style="font-weight:600;color:var(--text)">English</span>
+                                <a href="https://echoledger.test/app/register?lang=ur" lang="ur" hreflang="ur" style="text-decoration:underline">اردو</a>
+            </nav>
+
+    </div>
+
+        <div wire:key="KEY" wire:snapshot="SNAPSHOT" wire:effects="{&quot;partials&quot;:[],&quot;listeners&quot;:[&quot;notificationsSent&quot;,&quot;notificationSent&quot;,&quot;notificationClosed&quot;]}" wire:id="WIREID" wire:name="Filament\Livewire\Notifications" x-data="notificationsComponent()">
+    <div
+        class="fi-no fi-align-right fi-vertical-align-start"
+        role="status"
+        aria-atomic="false"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+
+        
+
+        <script >
+        window.filamentData = []    </script>
+
+            
+            <script
+                src="https://echoledger.test/js/filament/actions/actions.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/notifications/notifications.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/schemas/schemas.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/support/support.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/tables/tables.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/filament/echo.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://echoledger.test/js/filament/filament/app.js?v=5.10.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+    
+<style>
+    :root {
+            }
+
+    </style>
+
+        
+                    <script >
+                loadDarkMode()
+            </script>
+        
+        
+        
+
+        <div wire:offline class="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit">
+    <div x-data="{ open: true, unhook: null, init() { this.unhook = window.elSwipe?.(this.$el, { start() {}, end() {}, leave: () => (this.open = false) }) }, destroy() { this.unhook?.() } }"
+        x-show="open" x-on:online.window="open = true; $el.style.transform = ''; $el.style.opacity = ''"
+        class="el-notice el-notice-box flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm text-white shadow-lg dark:bg-white dark:text-gray-950" style="margin: 0" role="status" data-notice="offline">
+        <span class="el-notice-text">You're offline. Changes are saved once the connection is back.</span>
+        <button type="button" class="el-notice-close" x-on:click="open = false" aria-label="Dismiss" title="Dismiss"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/>
+</svg></button>
+    </div>
+</div>
+
+    </body>
+</html>

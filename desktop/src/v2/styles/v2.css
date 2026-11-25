@@ -596,6 +596,8 @@
   font-weight: var(--el-text-title-s-weight);
   user-select: none;
 }
+/* Initials drawn, not written, where the holder is named otherwise (the rail's Account: FIX-06, label in name). */
+.el-avatar[data-initials]::before { content: attr(data-initials); }
 .el-avatar > img { inline-size: 100%; block-size: 100%; object-fit: cover; }
 /* DES-08, in the three levels and the account menu: initials on one of 8 solid colours (role.avatar.*, the server's
    avatar_color) and a 1 px inner ring over the colour or the photo, so neither melts into the background. */
@@ -1995,7 +1997,12 @@ span.el-projects__fold { cursor: default; }
 .el-rec__unread { flex: none; inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); }
 .el-rec__meta { flex: 1; min-inline-size: 0; overflow: hidden; display: flex; align-items: center; gap: var(--el-space-8); }
 .el-rec__end { flex: none; margin-inline-start: auto; color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); font-variant-numeric: tabular-nums; }
-.el-rec__label { position: relative; flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; cursor: pointer; }
+/* A label's dot filters by it: an 8 px dot in a 24 px target (FIX-06, WCAG 2.2 target size), the line's height kept. */
+.el-rec__label {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); margin: calc(var(--el-space-8) * -1) calc(var(--el-space-4) * -1);
+  border: 0; padding: 0; background: transparent; cursor: pointer;
+}
 /* The hover actions take when and how long's place; the row keeps its height. */
 .el-rec__actions { position: absolute; inset-block: 0; inset-inline-end: var(--el-space-12); display: none; align-items: center; gap: var(--el-space-2); }
 .el-rec--actions:hover .el-rec__actions, .el-rec--actions:focus-within .el-rec__actions, .el-rec__actions:has([aria-expanded="true"]) { display: flex; }
@@ -2187,6 +2194,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 /* Red only when something failed (UX-08, the server's tone): the same ring; its text on red is 4.5:1 or more in both themes. */
 .el-rail__count--danger { background: var(--el-role-danger-default); }
+/* FIX-06 (label in name): the number is drawn, not written; the item's name says it ("Activity, 3"). */
+.el-rail__count::before { content: attr(data-count); }
 .el-rail__dot {
   position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
   inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
@@ -2277,6 +2286,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font: inherit; font-size: var(--el-desktop-text-secondary-size); cursor: text;
 }
 .el-titlerow__search:hover { border-color: var(--el-role-border-strong); }
+/* The keys' hint is drawn, not written (FIX-06, label in name): the field's name is its words; its keys are aria-keyshortcuts. */
+.el-titlerow__keys::before { content: attr(data-keys); }
 .el-titlerow__search:focus-within { border-color: var(--el-role-accent-default); box-shadow: 0 0 0 var(--el-focus-width) var(--el-role-accent-focus); background: var(--el-role-bg-surface); }
 .el-titlerow__search--button { text-align: start; }
 .el-titlerow__placeholder { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
