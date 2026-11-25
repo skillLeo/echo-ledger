@@ -21,12 +21,12 @@
             </button>
         </x-slot>
         <x-filament::dropdown.list>
-            <a href="{{ EditProfile::settingsUrl() }}" class="el-um-head" aria-label="{{ __(':name, :email, :plan plan. Opens Settings.', ['name' => $name, 'email' => $user->email, 'plan' => __($context->plan()->name)]) }}">
+            <a href="{{ EditProfile::settingsUrl() }}" class="el-um-head" aria-label="{{ __(':name, :email, :plan plan. Opens Settings.', ['name' => $name, 'email' => $user->email, 'plan' => $context->plan()->name]) }}">
                 <img src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
                 <span class="el-pcard-text">
                     <span class="el-pcard-name">{{ $name }}</span>
                     <span class="el-pcard-email">{{ $user->email }}</span>
-                    <span class="el-pcard-meta" style="margin-top:4px"><span class="el-tag">{{ __($context->plan()->name) }}</span></span>
+                    <span class="el-pcard-meta" style="margin-top:4px"><span class="el-tag">{{ $context->plan()->name }}</span></span>
                 </span>
             </a>
         </x-filament::dropdown.list>

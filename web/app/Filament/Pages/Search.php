@@ -9,9 +9,11 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleDates;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibrarySearch;
+use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
@@ -84,10 +86,13 @@ class Search extends Page
                 Select::make('source_device')->label(__('Device'))->live()->placeholder(__('Any device'))->options(self::choices(SourceDevice::class))->enum(SourceDevice::class),
                 Select::make('status')->label(__('Status'))->live()->placeholder(__('Any status'))->options(self::choices(SessionStatus::class))->enum(SessionStatus::class),
                 // The dates' range: "From" in lang/ur.json is the general one (a source), so these are the search's own.
-                DatePicker::make('from')->label(__('library_context.search_from'))->live()->native(false),
-                DatePicker::make('to')->label(__('library_context.search_to'))->live()->native(false),
+                // In Urdu the chosen day reads with its Urdu month (as ConsoleDates writes dates); English keeps Filament's own.
+                DatePicker::make('from')->label(__('library_context.search_from'))->live()->native(false)
+                    ->displayFormat(fn (): ?string => ConsoleDates::urdu() ? 'j F Y' : null),
+                DatePicker::make('to')->label(__('library_context.search_to'))->live()->native(false)
+                    ->displayFormat(fn (): ?string => ConsoleDates::urdu() ? 'j F Y' : null),
                 Select::make('tag')->label(__('Bookmark tag'))->live()->placeholder(__('Any tag'))
-                    ->options(fn () => array_combine($tags = app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => __($tag), $tags))),
+                    ->options(fn () => array_combine($tags = app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => in_array($tag, SessionMarkers::DEFAULT_TAGS, true) ? __($tag) : $tag, $tags))),
                 Toggle::make('bookmarked')->label(__('Bookmarked only'))->live()->inline(false),
             ]),
         ]);

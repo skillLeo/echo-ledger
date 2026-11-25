@@ -14,7 +14,9 @@ use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
 use App\Models\CaptureSession;
 use App\Models\Plan;
+use App\Models\Screen;
 use App\Models\Workspace;
+use App\Services\SettingsRepository;
 use Filament\Actions\Action;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Carbon;
@@ -295,7 +297,7 @@ it('words the restore and delete-now actions, the window and their notices in Ur
         expect(CaptureSession::onlyTrashed()->whereKey($record->getKey())->whereNull('media_erased_at')->exists())->toBeFalse();
     };
 
-    $check('ur', ['ابھی حذف کریں', 'ابھی حذف کریں', 'آڈیو اور ٹرانسکرپٹ ابھی مٹا دیے جاتے ہیں۔ اسے واپس نہیں لایا جا سکتا۔'], 'ریکارڈنگ واپس آ گئی', 'ریکارڈنگ مٹا دی گئی');
+    $check('ur', ['ابھی حذف کریں', 'ابھی حذف کریں', 'آڈیو اور ٹرانسکرپٹ ابھی مٹا دیے جائیں گے۔ اسے واپس نہیں لایا جا سکتا۔'], 'ریکارڈنگ واپس آ گئی', 'ریکارڈنگ مٹا دی گئی');
 
     // Another recording in the bin (the first one is erased now), in English.
     CaptureSession::query()->where('title', 'Rate for 12 mm rebar')->firstOrFail()->delete();
@@ -316,7 +318,7 @@ it('words the new frame\'s avatar menu in Urdu, and keeps its English', function
     };
 
     $ur = $menu('ur');
-    foreach (['>اپ گریڈ کریں<', '>ترتیبات<', '>تھیم<', '>سسٹم<', '>لائٹ<', '>ڈارک<', '>ایڈمن پینل<', '>سائن آؤٹ<', '>ذاتی<'] as $words) {
+    foreach (['>اپ گریڈ کریں<', '>ترتیبات<', '>تھیم<', '>سسٹم<', '>لائٹ<', '>ڈارک<', '>ایڈمن پینل<', '>سائن آؤٹ<', '<span class="v2-chip">Personal</span>'] as $words) {
         expect($ur)->toContain($words);
     }
     expect($ur)->not->toContain('>Upgrade<')->not->toContain('>Admin panel<')->not->toContain('>Sign out<');
@@ -378,7 +380,7 @@ it('words classic\'s top bar and avatar menu in Urdu with the locale set, and ke
 
     $ur = $topbar('ur');
     foreach (['aria-label="اوپر کی پٹی"', 'aria-label="مینو کھولیں"', 'aria-label="Bilal Qureshi کا مینو کھولیں"',
-        'aria-label="Bilal Qureshi، bilal@qureshi-textiles.example، ذاتی پلان۔ ترتیبات کھولتا ہے۔"', '<span class="el-tag">ذاتی</span>',
+        'aria-label="Bilal Qureshi، bilal@qureshi-textiles.example، Personal پلان۔ ترتیبات کھولتا ہے۔"', '<span class="el-tag">Personal</span>',
         '>اپ گریڈ کریں<', '>ترتیبات<', '>ظاہری شکل<', '>سسٹم<', '>لائٹ<', '>ڈارک<', '>ایڈمن پینل<', '>سائن آؤٹ<'] as $words) {
         expect($ur)->toContain($words);
     }
@@ -416,4 +418,51 @@ it('reads the short context words from lang/*/library_context.php, the general o
     expect(array_map(fn (string $k): string => __('library_context.'.$k), $keys))
         ->toBe(['تلاش', 'تاریخ سے', 'تاریخ تک', 'نئے نتائج', 'پرانے نتائج', 'ریکارڈ ہوئی', 'حذف ہوئی', 'مٹ جائے گی'])
         ->and(__('From'))->toBe('ماخذ')->and(__('Search'))->toBe('تلاش کریں');
+});
+
+it('shows an admin\'s own bookmark tags as typed and only the default ones in Urdu, so no tag can break the page', function () {
+    // "validation" and "library_context" are lang group names: through __() they would come back as arrays.
+    app(SettingsRepository::class)->set('markers.tags', ['Budget', 'validation', 'library_context', 'Site visit']);
+
+    librarySideAs($this, 'ur');
+    expect(librarySidePage($this, '/app/search'))->toContain('بجٹ')->toContain('validation')->toContain('library_context')->toContain('Site visit');
+    librarySidePage($this, '/app/sessions');
+    librarySideAs($this, 'ur', v2: false);
+    librarySidePage($this, '/app/sessions');
+
+    librarySideAs($this, 'en');
+    expect(librarySidePage($this, '/app/search'))->toContain('Budget')->toContain('validation')->not->toContain('بجٹ');
+});
+
+it('shows the search\'s chosen days with the Urdu month in Urdu, and Filament\'s own format in English', function () {
+    $format = function (string $language): array {
+        librarySideAs($this, $language);
+        $form = Livewire::test(Search::class)->instance()->form;
+
+        return array_map(fn (string $name): string => collect($form->getFlatComponents())
+            ->first(fn ($c): bool => method_exists($c, 'getName') && $c->getName() === $name)->getDisplayFormat(), ['from', 'to']);
+    };
+
+    expect($format('ur'))->toBe(['j F Y', 'j F Y'])
+        ->and($format('en'))->each->not->toBe('j F Y');
+});
+
+it('names a matching screen "Screen n" in each language, the search API keeping its English', function () {
+    $session = CaptureSession::query()->where('user_id', $this->owner->id)->orderBy('started_at')->firstOrFail();
+    foreach ([1000, 2000] as $at) {
+        Screen::query()->create(['workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => $at, 'width' => 1, 'height' => 1,
+            'trigger' => 'manual', 'sha256' => hash('sha256', (string) $at), 'mime' => 'image/png', 'bytes' => 1, 'image_path' => "screens/{$at}.png", 'thumb_path' => "screens/{$at}-thumb.png",
+            'ocr_text' => 'Quarterly kestrel invoice', 'search_text' => 'quarterly kestrel invoice']);
+    }
+
+    librarySideAs($this, 'ur');
+    expect(librarySideTight(librarySidePage($this, '/app/search?q=kestrel')))->toContain('<strong>اسکرین 1:</strong>')->toContain('<strong>اسکرین 2:</strong>')
+        ->not->toContain('<strong>Screen 1:</strong>');
+    librarySideAs($this, 'en');
+    expect(librarySidePage($this, '/app/search?q=kestrel'))->toContain('<strong>Screen 1:</strong>')->toContain('<strong>Screen 2:</strong>');
+});
+
+it('says the erase window in the future tense in Urdu', function () {
+    app()->setLocale('ur');
+    expect(__('The audio and transcript are erased now. This cannot be undone.'))->toBe('آڈیو اور ٹرانسکرپٹ ابھی مٹا دیے جائیں گے۔ اسے واپس نہیں لایا جا سکتا۔');
 });

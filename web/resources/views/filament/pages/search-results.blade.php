@@ -47,7 +47,7 @@
                         @foreach ($found['hits'] as $hit)
                             <a class="el-hit" href="{{ $urlFor($session, $hit['start_ms']) }}" aria-label="{{ __('Play :title from :clock', ['title' => $session->displayTitle(), 'clock' => \App\Services\TranscriptExporter::clock($hit['start_ms'])]) }}">
                                 <span class="el-t el-muted">{{ \App\Services\TranscriptExporter::clock($hit['start_ms']) }}</span>
-                                <span class="el-snip" dir="auto"><strong>{{ $hit['speaker'] }}:</strong> {!! $mark($hit['snippet'], $hit['highlights']) !!}</span>
+                                <span class="el-snip" dir="auto"><strong>{{ ($hit['kind'] ?? null) === 'screen' ? __('Screen :n', ['n' => abs((int) $hit['segment_index'])]) : $hit['speaker'] }}:</strong> {!! $mark($hit['snippet'], $hit['highlights']) !!}</span>
                             </a>
                         @endforeach
                     </div>

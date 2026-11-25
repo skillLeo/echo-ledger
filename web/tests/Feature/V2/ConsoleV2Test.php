@@ -266,7 +266,9 @@ it('shows the workspace and its role in Urdu under the new frame', function () {
 
     $html = (string) $this->actingAs($this->admin->fresh(), 'web')->get('/app')->assertOk()->getContent();
 
-    expect($html)->toContain('ذاتی')->toContain('مالک')->not->toContain('>Personal<');
+    // The workspace called Personal reads ذاتی; the plan keeps its name (plan names are never translated).
+    expect($html)->toContain('<span class="el-tb-workspace-name">ذاتی</span>')->toContain('مالک')
+        ->not->toContain('<span class="el-tb-workspace-name">Personal</span>');
 });
 
 it('counts the console\'s questions in the API\'s per-person ask limit, both ways', function () {
