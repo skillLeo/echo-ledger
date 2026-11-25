@@ -11,6 +11,8 @@ use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
+use App\Models\CallDeclinedOffer;
+use App\Models\CallRule;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
@@ -118,6 +120,11 @@ final class AccountEraser
         LabelColor::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
         // Since 2.0.0-m: their lists.
         LabelList::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
+        // Since 2.0.0-w: their call rules, with the numbers and names of the people in them (the account's own column
+        // goes with the row).
+        CallRule::query()->where('user_id', $user->id)->delete();
+        // Since 2.0.0-x: the offers they turned down, with the numbers and names in them.
+        CallDeclinedOffer::query()->where('user_id', $user->id)->delete();
 
         // Since v1.8 P6.3: the invitations they sent and nobody used (their invite links too), and those waiting for
         // their address: nobody joins on the word of an account that is gone.

@@ -38,6 +38,7 @@ use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use App\Stt\SttManager;
 use App\Stt\TranscriptNormalizer;
+use App\Support\Api\FieldErrors;
 use Closure;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -332,6 +333,75 @@ final class SessionController extends Controller
         SessionOpen::unmark($this->readableSession($request, $id)->id, $device->user_id);
 
         return response()->noContent();
+    }
+
+    /**
+     * Mark as read for many (contract 2.0.0-y): `{"ids": [...]}`, 1 to 200, each as opened() does it for one, in one
+     * upsert. The ids the person cannot read are listed back in `not_found`, never an error for the batch.
+     */
+    public function openedMany(Request $request): JsonResponse
+    {
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
+            $now = now();
+            SessionOpen::query()->upsert(
+                array_map(fn (string $id): array => ['capture_session_id' => $id, 'user_id' => $person, 'opened_at' => $now], $stored),
+                ['capture_session_id', 'user_id'], ['opened_at'],
+            );
+        }
+
+        return response()->json(['done' => $done, 'not_found' => $missing]);
+    }
+
+    /**
+     * Mark as unread for many (contract 2.0.0-y): each as unopened() does it for one, in one delete; only the asking
+     * person's own opens, idempotently. Never a recording to the bin (that is DELETE sessions/{id}).
+     */
+    public function unopenedMany(Request $request): JsonResponse
+    {
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
+            SessionOpen::query()->where('user_id', $person)->whereIn('capture_session_id', $stored)->delete();
+        }
+
+        return response()->json(['done' => $done, 'not_found' => $missing]);
+    }
+
+    /**
+     * The ids of a bulk request (1 to 200, an id sent twice counts once) split into those the person can read, as
+     * readableSession() decides for one (their own in this workspace, or one sent to them), and the rest, both in the
+     * order they were sent. An id is a ULID, kept in lower case and the same in any case (a database compares it with
+     * or without regard to case): the answer gives each id back as it was sent, the writes use the stored one.
+     *
+     * @return array{0: int, 1: list<string>, 2: list<string>, 3: list<string>} person, done and not found as sent, the stored ids of done
+     */
+    private function readableMany(Request $request): array
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        $data = FieldErrors::validate($request->only('ids'), [
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['required', 'string', 'max:64'],
+        ]);
+        // The ids as sent, once each whatever their case (the first form is kept), by the lower case the database keeps.
+        $sent = [];
+        foreach (array_map('strval', $data['ids']) as $id) {
+            $sent[mb_strtolower($id)] ??= $id;
+        }
+        $keys = array_keys($sent);
+        $readable = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)
+            ->whereIn('id', $keys)->pluck('id')->map(fn ($id): string => mb_strtolower((string) $id))->all();
+        $left = array_values(array_diff($keys, $readable));
+        if ($left !== []) {
+            $readable = [...$readable, ...app(Teammates::class)->sharedSessions($device->user)->whereIn('id', $left)->pluck('id')
+                ->map(fn ($id): string => mb_strtolower((string) $id))->all()];
+        }
+        $found = array_flip($readable);
+        $stored = array_values(array_filter($keys, fn (string $key): bool => isset($found[$key])));
+        $done = array_map(fn (string $key): string => $sent[$key], $stored);
+        $missing = array_values(array_map(fn (string $key): string => $sent[$key], array_filter($keys, fn (string $key): bool => ! isset($found[$key]))));
+
+        return [(int) $device->user_id, $done, $missing, $stored];
     }
 
     public function show(Request $request, string $id): JsonResponse
