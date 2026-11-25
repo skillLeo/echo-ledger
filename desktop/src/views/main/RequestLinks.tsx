@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { api, errorMessage, type ClientFolder, type RequestLink } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
-import { EXPIRY_CHOICES, expiryTime, limitsText, receivedText, requestState, type ExpiryChoice, REVOKE_REQUEST_QUESTION } from "../../lib/sharing";
+import { expiryChoices, expiryTime, limitsText, receivedText, requestStatus, revokeRequestQuestion, statusText, type ExpiryChoice } from "../../lib/sharing";
 import { CopyIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { NO_TARGET, type Notify } from "../../lib/notice";
@@ -73,7 +73,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
     }
   };
   const revoke = async (link: RequestLink) => {
-    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
+    if (!(await confirmAction(revokeRequestQuestion("en")))) return;
     try {
       await api.revokeRequestLink(link.id);
       await load();
@@ -102,7 +102,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
         <div className="row organise-field">
           <label htmlFor={ids.expiry} className="small muted">Stops working</label>
           <select id={ids.expiry} className="select" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}>
-            {EXPIRY_CHOICES.map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
+            {expiryChoices("en").map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
           </select>
           {expiry === "date" && (
             <>
@@ -136,15 +136,16 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
         {links === null ? <p className="small muted">Loading…</p> : links.length === 0 ? <p className="small muted">No request links yet.</p> : (
           <ul className="links-list" aria-label="Request links">
             {links.map((link) => {
-              const state = requestState(link);
+              // Its state as an id: the sheet is in English (classic) whatever the window's language.
+              const state = requestStatus(link);
               return (
                 <li key={link.id} className={`link-row ${link.id === focusId ? "focused" : ""}`} data-request={link.id}>
                   <div className="link-main">
                     <span className="link-who" dir="auto">{link.title || "Request link"}</span>
-                    <span className="small muted">{[placeName(link.client_id), receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}</span>
-                    <span className="small muted">{[state, link.expires_at ? `${state === "Active" ? "stops" : "stopped"} ${formatWhen(link.expires_at)}` : "never stops"].join(" · ")}</span>
+                    <span className="small muted">{[placeName(link.client_id), receivedText(link.received, "en"), limitsText(link, "en") || null].filter(Boolean).join(" · ")}</span>
+                    <span className="small muted">{[statusText(state, "en"), link.expires_at ? `${state === "active" ? "stops" : "stopped"} ${formatWhen(link.expires_at)}` : "never stops"].join(" · ")}</span>
                   </div>
-                  {state === "Active" && <button type="button" className="btn ghost danger compact" onClick={() => void revoke(link)}>Revoke</button>}
+                  {state === "active" && <button type="button" className="btn ghost danger compact" onClick={() => void revoke(link)}>Revoke</button>}
                 </li>
               );
             })}
