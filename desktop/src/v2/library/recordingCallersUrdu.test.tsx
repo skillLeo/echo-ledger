@@ -1,7 +1,7 @@
 // Desktop Urdu, D4: the lib words the recording page shows have classic callers too. With Urdu on, the windows still in
 // English (the classic Library's waiting list and uploads, the import sheet, the recording's steps and converting bar,
 // the Export menu, Activity's In progress, the transcription language list, the pill's chip) and the new design's
-// lines that are still English (Home's recording line, the shell's status, the last app not recorded) ask for them in
+// lines that are still English (Home's recording line, the shell's status) ask for them in
 // English: exactly the English they had, with no Urdu piece and no isolate. English is their own tests', unchanged.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -17,7 +17,6 @@ import { inProgressRows } from "../../views/main/ActivityCentre";
 import { LANGUAGES } from "../../views/main/AppSettings";
 import { NEEDS_KEY_TEXT, needsKeyText } from "../../views/main/Upgrade";
 import { recordingLine } from "../home/RecordSection";
-import { micUserName } from "../../lib/explainer";
 import { DISCARD_QUESTION, NO_AUDIO_HINT, noAudioHint } from "../../lib/pending";
 import { PLAYER_HINT, playerHint } from "../../lib/player";
 import { NEEDS_TRANSCRIPTION_KEY_TEXT, needsTranscriptionKeyText } from "./organise";
@@ -106,7 +105,7 @@ describe("classic windows in an Urdu window keep their English", () => {
     expect(document.body.textContent).not.toMatch(URDU_OR_ISOLATE);
   });
 
-  it("Activity's In progress, the transcription languages, Home's recording line, the last app not recorded", () => {
+  it("Activity's In progress, the transcription languages and Home's recording line", () => {
     const rows = inProgressRows(
       [makeUploadItem("u", { state: "uploading", progress: 42, sourceApp: "phone_call" })],
       [makeItem("b", { title: "Board", status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 1, total: 3, eta_seconds: 40 } } })],
@@ -114,7 +113,6 @@ describe("classic windows in an Urdu window keep their English", () => {
     expect(rows.map((r) => [r.title, r.line])).toEqual([["Phone call call", "Uploading… 42%"], ["Board", "Transcribing… part 2 of 3 · about 40 s left"]]);
     expect(LANGUAGES.map(([, label]) => label)).toEqual(expect.arrayContaining(["Auto (English / Urdu / Arabic)", "English only", "French"]));
     expect(recordingLine({ recording: { mode: "call", sourceApp: "other" } as never, paused: false })).toBe("Recording · Other");
-    expect(micUserName({ app: "phone_call", site: null, name: "x.exe" })).toBe("Phone call");
     for (const text of [...rows.flat().map(String), ...LANGUAGES.map(([, label]) => label)]) expect(text).not.toMatch(URDU_OR_ISOLATE);
   });
 
