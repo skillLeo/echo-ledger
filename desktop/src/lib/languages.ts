@@ -1,5 +1,5 @@
 import type { TranscriptionLanguage } from "./ipc";
-import { numberLocale } from "../i18n";
+import { numberLocale } from "../i18n/locale.ts";
 
 /** A language choice: a code, or null for Auto (the client's or the console default). */
 export type LanguageChoice = TranscriptionLanguage | null;

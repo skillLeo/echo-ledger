@@ -5,7 +5,7 @@
 --}}
 <x-filament-panels::page class="el-settings-page">
     <div class="el-flow" data-flow="status" data-stage="{{ $stage }}">
-        <a href="{{ $backUrl }}" class="el-set-back">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Plan & usage') }}</a>
+        <a href="{{ $backUrl }}" class="el-set-back">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-left', ['aria-hidden' => 'true'])) {{ \App\Filament\Support\ConsoleV2::any() ? __('Plan & billing') : __('Plan & usage') }}</a>
         @if ($announce)<p class="sr-only" role="status" aria-live="polite">{{ $announce }}</p>@endif
 
         @if ($stage === 'approved')

@@ -67,7 +67,7 @@
             </section>
         @else
             <div class="el-empty" style="padding-block: var(--space-6)">
-                <span class="el-empty-icon">@svg('heroicon-o-chat-bubble-left-ellipsis', ['aria-hidden' => 'true'])</span>
+                <span class="el-empty-icon">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chat-bubble-left-ellipsis', ['aria-hidden' => 'true']))</span>
                 <p class="el-empty-title">{{ __('Ask anything about :project', ['project' => $client->name]) }}</p>
                 <p class="el-empty-text">{{ __('Answers come from the brief, the memory, the files and the transcripts, with the moment or page they are from.') }}</p>
             </div>

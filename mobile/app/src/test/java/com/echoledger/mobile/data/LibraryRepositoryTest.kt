@@ -424,6 +424,28 @@ class LibraryRepositoryTest : AppTest() {
         assertEquals("2026-11-23T10:00:00+00:00", libraryRequests().last().url.queryParameter("since"))
     }
 
+    /**
+     * Rename's U19 on the phone: items carry title_source (where a title came from), which a cache kept before (format 2)
+     * has none of, so Rename would take every title in it for the person's own. Its next sync reads the whole library.
+     */
+    @Test
+    fun `a cache from before title_source is read whole once and replaced`() = runBlocking {
+        val old = """{"since":"2026-10-24T09:05:00+00:00","format":2,"items":[${item("a")}]}"""
+        cacheFile.writeBytes(app.graph.secretCipher.encrypt(old.toByteArray(), "echoledger.library".toByteArray()))
+        val repo = repository()
+        assertEquals(listOf("a"), repo.items.value.map { it.id })
+        assertNull(repo.items.value.single().titleSource)
+        val fresh = item("a").replace("\"updated_at\"", "\"title_source\":\"person\",\"updated_at\"")
+        server.on("GET", "/api/library", page(fresh, time = "2026-11-25T10:00:00+00:00"))
+        repo.refresh()
+        assertNull("the whole library again", libraryRequests().last().url.queryParameter("since"))
+        assertEquals("person", repo.items.value.single().titleSource)
+        val reopened = repository()
+        server.on("GET", "/api/library", page(time = "2026-11-25T10:05:00+00:00"))
+        reopened.refresh()
+        assertEquals("2026-11-25T10:00:00+00:00", libraryRequests().last().url.queryParameter("since"))
+    }
+
     @Test
     fun `the cache keeps up with later syncs`() = runBlocking {
         val repo = repository()

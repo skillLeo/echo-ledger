@@ -80,7 +80,7 @@ class RetentionTest : ScreenTest() {
         val restored = mutableListOf<String>()
         val erased = mutableListOf<String>()
         show {
-            BinSection(load = { items.toList() }, restore = {
+            BinSection(load = { Result.success(items.toList()) }, restore = {
                 restored += it
                 items.removeAll { b -> b.id == it }
                 true

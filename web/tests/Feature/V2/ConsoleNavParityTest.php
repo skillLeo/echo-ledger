@@ -141,13 +141,18 @@ it('offers Sidebar style (Light, Dark, Soft grey) for the rail and its panels, s
     expect(navPage($this, $this->owner, $this->pages['library']))->toContain('data-style="soft"');
 });
 
-it('keeps Help and shortcuts in reach, as classic\'s top bar ? does: Help at the rail\'s foot, in the avatar menu, and its dialog on the page', function () {
+it('keeps Help and the shortcuts in reach, one name each: Help the Help page (the rail\'s foot, the account menu), Keyboard shortcuts the dialog (the menu, ?)', function () {
     $html = navPage($this, $this->owner, $this->pages['library']);
     $rail = navRail($html);
     $foot = substr($rail, (int) strpos($rail, 'class="v2-rail-foot"'));
-    expect($foot)->toContain("x-on:click=\"\$dispatch('el-help')\"")->toContain('title="Help and shortcuts"')
-        ->and(collect(array_keys(webParityControls($html, 'usermenu')))->filter(fn (string $k): bool => str_starts_with($k, 'menuitem|') && str_ends_with($k, '› help and shortcuts'))->count())->toBe(1)
-        ->and($html)->toContain('x-on:el-help.window="open = true"');
+    // UX-18: one name, one place. Help opens the Help page from the rail and from the account menu; the shortcuts'
+    // dialog is Keyboard shortcuts (the menu's item, the ? key), titled so.
+    $items = collect(array_keys(webParityControls($html, 'usermenu')))->filter(fn (string $k): bool => str_starts_with($k, 'menuitem|'));
+    expect($foot)->toMatch('~<a href="https://echoledger.test/app/help" class="v2-rail-item" title="Help" data-module="help"~')
+        ->and(substr_count($foot, "\$dispatch('el-help')"))->toBe(1, 'only the account menu\'s Keyboard shortcuts opens the dialog')
+        ->and($items->filter(fn (string $k): bool => str_ends_with($k, '› keyboard shortcuts ?'))->count())->toBe(1)
+        ->and($items->filter(fn (string $k): bool => str_ends_with($k, '› help'))->count())->toBe(1)
+        ->and($html)->toContain('x-on:el-help.window="open = true"')->toContain('<h2 id="el-help-title">Keyboard shortcuts</h2>');
 });
 
 it('has + in the top bar with Upload recording, New project and Request link', function () {
@@ -177,7 +182,7 @@ it('reads Settings › Appearance and the Settings menu in Urdu', function () {
     $html = navPage($this, $this->owner, $this->pages['settings-appearance']);
 
     foreach (['تھیم', 'سسٹم', 'لائٹ', 'ڈارک', 'سائیڈ بار کا انداز', 'ہلکا سرمئی', 'کثافت', 'کھلا', 'گھنا', 'وقت', '12 گھنٹے', '24 گھنٹے', 'لائبریری کا انداز', 'فہرست', 'جدول',
-        'ظاہری شکل', 'اطلاعات', 'کی بورڈ شارٹ کٹس', 'پروفائل', 'پلان اور استعمال', 'سائن اِن اور سکیورٹی', 'پرائیویسی اور ڈیٹا', 'ترتیبات میں تلاش', 'سائن آؤٹ'] as $words) {
+        'ظاہری شکل', 'اطلاعات', 'کی بورڈ شارٹ کٹس', 'پروفائل', 'پلان اور بلنگ', 'سائن اِن اور سکیورٹی', 'پرائیویسی اور ڈیٹا', 'ترتیبات میں تلاش', 'سائن آؤٹ'] as $words) {
         expect($html)->toContain($words);
     }
     foreach (['>Theme<', '>System<', '>Sidebar style<', '>Density<', '>Times<', '>12-hour<', '>Library view<', '>Appearance<', '>Notifications<', 'placeholder="Search settings"', '>Sign out<'] as $english) {

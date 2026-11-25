@@ -2,6 +2,7 @@ import { useId, type KeyboardEvent, type MouseEvent, type PointerEvent, type Rea
 import { Icon, type IconType } from "./Button";
 import { PickBox } from "./choices";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
+import { lineDir } from "../../i18n";
 
 /** A list of rows with an accessible name. */
 export function List({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -130,23 +131,24 @@ export function ListRow({
         </span>
       ))}
       <span className="el-row__main">
-        <span className={`el-row__title${strong || (icon && iconStyle === "avatar") ? " el-row__title--strong" : ""}`} id={`${id}-title`} dir="auto">{title}</span>
+        <span className={`el-row__title${strong || (icon && iconStyle === "avatar") ? " el-row__title--strong" : ""}`} id={`${id}-title`} dir={lineDir(title)}>{title}</span>
         {(meta || badge || mark) && (
           <span className="el-row__meta el-caption">
             {badge && <span id={`${id}-badge`}>{badge}</span>}
             {mark && <span className="el-row__mark" id={`${id}-mark`}>{mark}</span>}
-            {meta && <span className="el-row__meta-text" id={`${id}-meta`} dir="auto">{meta}</span>}
+            {meta && <span className="el-row__meta-text" id={`${id}-meta`} dir={lineDir(meta)}>{meta}</span>}
           </span>
         )}
       </span>
       {(endTop || endBottom) && (
         <span className="el-row__end el-caption" id={`${id}-end`}>
-          {/* A time ("9:00 am") or a length keeps its own order inside a right-to-left row. */}
-          {endTop && <span dir="auto">{endTop}</span>}
-          {endBottom && <span dir="auto">{endBottom}</span>}
+          {/* A time ("9:00 am") or a length keeps its own order inside a right-to-left row. In Urdu each line by its own
+              words, not by a Latin name or a date isolated in it (lineDir); in English dir="auto" as always. */}
+          {endTop && <span dir={lineDir(endTop)}>{endTop}</span>}
+          {endBottom && <span dir={lineDir(endBottom)}>{endBottom}</span>}
         </span>
       )}
-      {value && <span className="el-row__value" id={`${id}-value`}><span className="el-row__value-text" dir="auto">{value}</span></span>}
+      {value && <span className="el-row__value" id={`${id}-value`}><span className="el-row__value-text" dir={lineDir(value)}>{value}</span></span>}
       {control && <span className="el-row__control">{control}</span>}
       {actions && <span className="el-row__actions">{actions}</span>}
       {chevron && <span className="el-row__chevron"><Icon icon={ChevronEndIcon} directional /></span>}

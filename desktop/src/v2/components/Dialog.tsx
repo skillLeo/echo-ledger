@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "./Button";
 import { CloseIcon } from "./icons";
+import { lineDir } from "../../i18n";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -92,7 +93,7 @@ function Panel({ kind, title, description, onClose, closeLabel, actions, childre
         <div className="el-dialog__head">
           <div className="el-dialog__titles">
             <h2 className="el-title-s" id={`${id}-title`}>{title}</h2>
-            {description && <p className="el-secondary" id={`${id}-desc`} dir="auto">{description}</p>}
+            {description && <p className="el-secondary" id={`${id}-desc`} dir={lineDir(description)}>{description}</p>}
           </div>
           <Button variant="quiet" icon={CloseIcon} aria-label={closeLabel} data-close="true" onClick={onClose} />
         </div>

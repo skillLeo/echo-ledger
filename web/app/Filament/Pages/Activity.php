@@ -12,6 +12,7 @@ use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\ObjectMenus;
 use App\Filament\Support\Shell;
+use App\Models\SentItem;
 use App\Models\User;
 use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
@@ -25,6 +26,7 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Activity (plan B18), as the phone shows it: what needs the person first (calls waiting for Keep or Discard, failed
@@ -121,6 +123,18 @@ class Activity extends Page
         }
     }
 
+    /**
+     * P-043: the quiet Mark as read on a row with nowhere to go (it isn't a button, so a problem is cleared on its own,
+     * never just by being seen). Only the person's own notifications.
+     */
+    public function markRead(string $id): void
+    {
+        $notification = $this->user()?->notifications()->find($id);
+        if ($notification instanceof DatabaseNotification) {
+            $notification->markAsRead();
+        }
+    }
+
     /** UX-22 3b: an Activity item's right-click menu: Open · Mark as read | Retry (an upload that failed). */
     public const OBJECT_ACTIONS = ['activity' => ['place.open', 'activity.markRead', 'activity.retry']];
 
@@ -156,20 +170,26 @@ class Activity extends Page
         $today = Carbon::now($zone)->startOfDay();
         $groups = ['needs' => [], 'today' => [], 'earlier' => []];
         $notifications = $this->user()?->notifications()->latest()->limit(self::LIMIT)->get() ?? collect();
+        $people = ConsoleV2::any() ? $this->peopleOf($notifications) : [];
         foreach ($notifications as $notification) {
             // In the reader's language (W-218); notifications made before keep their stored words.
             $item = [...ActivityFeed::payload($notification), ...ActivityFeed::localized($notification)];
             $at = $notification->created_at?->copy()->setTimezone($zone);
+            $target = $this->user() instanceof User ? NoticeTargets::forNotification($notification, $this->user()) : null;
             // In the console's language (W-213: "17 نومبر 2026 · 11:42 صبح"; English reads exactly as before).
             $item += [
                 'time' => $at === null ? '' : ($at->gte($today) ? ConsoleDates::time($at, Shell::timeFormat()) : ConsoleDates::day($at)),
                 'full_time' => $at !== null ? ConsoleDates::dateTime($at, Shell::timeFormat()) : '',
                 'tone' => self::tone($item['kind']),
+                // UX-18: the person it is about, whose avatar takes the tile's place (the new console only).
+                'person' => $people[$notification->id] ?? null,
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
+                // P-043: only an item that opens something is a button; one with nowhere to go is a plain row.
+                'opens' => $target !== null,
                 // UX-22 3b: what its menu leaves out (Open with nothing to open, Mark as read once read, Retry but for a
                 // failed upload).
                 'not' => implode(' ', array_keys(array_filter([
-                    'place.open' => $this->user() instanceof User && NoticeTargets::forNotification($notification, $this->user()) === null,
+                    'place.open' => $this->user() instanceof User && $target === null,
                     'activity.markRead' => (bool) $item['read'],
                     'activity.retry' => $item['kind'] !== 'upload_failed',
                 ]))),
@@ -190,6 +210,54 @@ class Activity extends Page
             // Since 2.0.0-p the new Library keeps the waiting calls in Needs you.
             'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => ConsoleV2::library() ? 'needs_you' : 'waiting']),
         ];
+    }
+
+    /**
+     * UX-18: the kinds whose item shows the person it is about (their face in the tile's place): neutral ones only. A
+     * warning or a failure keeps its tile, the only sign of what it is.
+     */
+    public const PERSON_KINDS = ['shared_with_you', 'upgrade_requested'];
+
+    /**
+     * UX-18: the person each item is about, by the item's id: its actor_id (since UX-18), else for a share from before
+     * it the latest sender, as Sent to keeps them. Only neutral kinds (PERSON_KINDS), and only people who are still there.
+     *
+     * @param  Collection<int, DatabaseNotification>  $notifications
+     * @return array<string, User>
+     */
+    private function peopleOf(Collection $notifications): array
+    {
+        $user = $this->user();
+        $ids = [];
+        $shares = [];
+        foreach ($notifications as $notification) {
+            if (! in_array(ActivityFeed::kindOf($notification), self::PERSON_KINDS, true)) {
+                continue;
+            }
+            $actor = $notification->data['viewData']['actor_id'] ?? null;
+            $session = $notification->data['viewData']['session_id'] ?? null;
+            if (is_int($actor) || (is_string($actor) && ctype_digit($actor))) {
+                $ids[$notification->id] = (int) $actor;
+            } elseif (ActivityFeed::kindOf($notification) === 'shared_with_you' && is_string($session)) {
+                $shares[$notification->id] = $session;
+            }
+        }
+        if ($shares !== [] && $user instanceof User) {
+            // The latest sender wins (the item says the latest one's name): oldest first, each later one replaces it.
+            $senders = SentItem::query()->where('to_user_id', $user->id)->whereIn('capture_session_id', array_values($shares))
+                ->orderBy('sent_at')->orderBy('id')->pluck('from_user_id', 'capture_session_id');
+            foreach ($shares as $id => $session) {
+                if (isset($senders[$session])) {
+                    $ids[$id] = (int) $senders[$session];
+                }
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+        $found = User::query()->whereIn('id', array_values(array_unique($ids)))->get()->keyBy('id');
+
+        return array_filter(array_map(fn (int $id): ?User => $found->get($id), $ids));
     }
 
     private static function tone(?string $kind): string

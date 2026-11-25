@@ -7,7 +7,7 @@
 @endphp
 <x-filament-panels::page class="el-settings-page">
     <div class="el-flow" data-flow="pay">
-        <a href="{{ $statusUrl }}" class="el-set-back">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __(':plan request', ['plan' => $plan]) }}</a>
+        <a href="{{ $statusUrl }}" class="el-set-back">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-left', ['aria-hidden' => 'true'])) {{ __(':plan request', ['plan' => $plan]) }}</a>
         <h1 class="el-set-h1">{{ __('Pay for :plan', ['plan' => $plan]) }}</h1>
 
         <section class="el-set-section">

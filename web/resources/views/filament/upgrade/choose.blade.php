@@ -4,7 +4,7 @@
 --}}
 <x-filament-panels::page class="el-settings-page">
     <div class="el-flow" data-flow="choose">
-        <a href="{{ $backUrl }}" class="el-set-back">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Plan & usage') }}</a>
+        <a href="{{ $backUrl }}" class="el-set-back">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-left', ['aria-hidden' => 'true'])) {{ \App\Filament\Support\ConsoleV2::any() ? __('Plan & billing') : __('Plan & usage') }}</a>
         <h1 class="el-set-h1">{{ __('upgrade_context.page_title') }}</h1>
         @if ($workspaceLine)<p class="el-prose" style="padding:0;margin:0 0 4px">{{ $workspaceLine }}</p>@endif
         <p class="el-prose is-muted" style="padding:0;margin:0 0 16px">{{ $featureLine }}</p>

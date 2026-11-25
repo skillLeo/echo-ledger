@@ -119,6 +119,27 @@ class LibraryScreenTest : ScreenTest() {
         assertEquals("f1", opened?.id)
     }
 
+    /** EL-UX's audit: Recently deleted that the server could not give says so, not "Nothing deleted", and Try again asks again. */
+    @Test
+    fun `Recently deleted that could not be loaded says so, and Try again loads it`() {
+        seed(item("a1"))
+        server.on("GET", "/api/bin", FakeServer.json(500, """{"message":"Server Error"}"""))
+        showLibrary()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Recently deleted").performClick()
+
+        pumpUntil("the error") {
+            compose.onAllNodesWithText("Couldn't load Recently deleted. Check the internet connection.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText("Nothing deleted in the last 48 hours.").assertCountEquals(0)
+
+        server.on("GET", "/api/bin", FakeServer.json(200, """{"data":[]}"""))
+        compose.onNodeWithText("Try again").performClick()
+        pumpUntil("an empty bin, now that it loaded") {
+            compose.onAllNodesWithText("Nothing deleted in the last 48 hours.").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     // ---- empty and loading ---------------------------------------------------------------------------------------------
 
     @Test

@@ -6,7 +6,8 @@
     It is decorative: the person's name is always written beside it or in its button's label.
 
     person: the account (App\Filament\Support\PersonAvatar); name and email stand in for it when there is none yet.
-    size: none (36 px, the avatar menu's button), list (32 px), large (40 px, the menu's head), xl (56 px, Profile).
+    size: none (36 px, the avatar menu's button in the top bar), rail (28 px, the rail's Account, UX-18), list (32 px),
+    large (40 px, the menu's head), xl (56 px, the profile card), profile (96 px, Settings › Profile, UX-18).
     drawn: the initials drawn by CSS (data-initials) rather than written, inside a link whose text must stay the
     person's name and email (the profile card, as BE-06 drew it).
 --}}
@@ -14,9 +15,11 @@
 @php
     $look = \App\Filament\Support\PersonAvatar::of($person, $name, $email);
     $class = 'v2-avatar'.match ($size) {
+        'rail' => ' is-rail',
         'list' => ' is-list',
         'large' => ' is-large',
         'xl' => ' is-xl',
+        'profile' => ' is-profile',
         default => '',
     };
     $drawn = $drawn ? ' is-drawn' : '';

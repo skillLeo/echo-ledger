@@ -158,10 +158,12 @@ it('draws the avatar menu, Settings › Profile and the profile card with the on
     preg_match('~<div class="el-pcard" data-profile-card>.*?</a>~s', $settings, $card);
     // The card's link reads as the person's name and email: its initials are drawn, not written.
     expect($card[0] ?? '')->toContain('<span class="v2-avatar is-xl is-coloured is-drawn" data-avatar-color="0" style="background-color: var(--el-role-avatar-0)" data-initials="SH" aria-hidden="true"></span>');
-    expect($settings)->toContain(avatarInitials('SH', 0, ''))->toContain(avatarInitials('SH', 0, ' is-large'));
+    // UX-18: the rail's Account draws its initials (its words are "Account"); the menu's header writes them.
+    expect($settings)->toContain('<span class="v2-avatar is-rail is-coloured is-drawn" data-avatar-color="0" style="background-color: var(--el-role-avatar-0)" data-initials="SH" aria-hidden="true"></span>')
+        ->toContain(avatarInitials('SH', 0, ' is-large'));
     $profile = (string) $this->get('/app/settings/profile')->assertOk()->getContent();
     preg_match('~data-setting="profile.photo">.*?<span class="el-set-text">~s', $profile, $row);
-    expect($row[0] ?? '')->toContain(avatarInitials('SH', 0, ' is-xl'));
+    expect($row[0] ?? '')->toContain(avatarInitials('SH', 0, ' is-profile'));
 });
 
 it('turns a photo that fails into the initials in the new console only', function () {

@@ -129,7 +129,8 @@ it('isolates a name on an Urdu console page', function () {
 
     $html = (string) $this->get('/app')->assertOk()->getContent();
 
-    expect($html)->toContain('aria-label="'.FSI.'Ahmed Khan'.PDI.' کا مینو کھولیں"');
+    // UX-18: the rail's Account is named "Account, <name>" ("اکاؤنٹ، <name>"), the name in its own isolate.
+    expect($html)->toContain('aria-label="اکاؤنٹ، '.FSI.'Ahmed Khan'.PDI.'"');
 });
 
 it('isolates enums and stringable objects by their value', function () {
