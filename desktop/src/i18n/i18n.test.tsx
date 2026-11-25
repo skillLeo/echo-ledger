@@ -102,9 +102,25 @@ describe("t and tc (English text is the key, as the web's __())", () => {
     // override (U+202E) flip the rest of the sentence.
     expect(isolate("\u2069\u202Eevil")).toBe("\u2068\u202Eevil\u2069");
     expect(isolate("a\u2069b\u2069")).toBe("\u2068ab\u2069");
-    // One the value opened itself stays; what it leaves open is closed by the final PDI.
+    // One the value opened and closed itself stays as it is.
     expect(isolate("\u2067x\u2069y")).toBe("\u2068\u2067x\u2069y\u2069");
-    expect(isolate("\u2066open")).toBe("\u2068\u2066open\u2069");
+    // D-224: every isolate the value leaves open is closed before the final PDI, so the rest of the sentence is outside.
+    expect(isolate("\u2066open")).toBe("\u2068\u2066open\u2069\u2069");
+    expect(isolate("Ali\u2068evil")).toBe("\u2068Ali\u2068evil\u2069\u2069");
+    expect(isolate("\u2068\u2067\u2066x")).toBe("\u2068\u2068\u2067\u2066x\u2069\u2069\u2069\u2069");
+    // An override the value opens (U+202E) is closed with this isolate by its final PDI; an isolate after it is closed first.
+    expect(isolate("Ali\u202E\u2066x")).toBe("\u2068Ali\u202E\u2066x\u2069\u2069");
+    expect(fill("Call with :name today", { name: "Ali\u2068evil" }, true)).toBe("Call with \u2068Ali\u2068evil\u2069\u2069 today");
+    // Each value's marks balance: as many PDIs as openers, every PDI after its opener.
+    for (const value of ["Ali\u2068evil", "Ali\u202E\u2066x", "\u2069\u2066a\u2069\u2067b", "\u2066\u2066\u2069"]) {
+      let open = 0;
+      for (const char of isolate(value)) {
+        if (char === "\u2066" || char === "\u2067" || char === "\u2068") open++;
+        if (char === "\u2069") open--;
+        expect(open).toBeGreaterThanOrEqual(0);
+      }
+      expect(open).toBe(0);
+    }
     expect(fill("Hi :name", { name: "\u2069\u202Eevil" }, true)).toBe("Hi \u2068\u202Eevil\u2069");
     // Taken out again for text that leaves the window: the four isolate marks only.
     expect(stripIsolates("\u2066a\u2067b\u2068c\u2069\u202Ed")).toBe("abc\u202Ed");
