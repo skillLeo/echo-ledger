@@ -11,6 +11,7 @@ use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
 use App\Models\SessionLabel;
+use App\Services\Library\LibraryFilters;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
@@ -80,7 +81,11 @@ final class RecordingRow
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
 
         return match (true) {
-            $session->status === SessionStatus::Recording => ['label' => 'Waiting', 'tone' => 'brand', 'icon' => 'heroicon-o-clock', 'spin' => false],
+            // Since 2.0.0-z: waiting only once the call is over (LibraryFilters::isWaiting); a call still being recorded is
+            // not uploaded yet, as the v2 rows and every app say.
+            $session->status === SessionStatus::Recording && LibraryFilters::isWaiting($session->status->value, $session->ended_at?->getTimestamp(),
+                $session->started_at->getTimestamp(), now()->getTimestamp()) => ['label' => 'Waiting', 'tone' => 'brand', 'icon' => 'heroicon-o-clock', 'spin' => false],
+            $session->status === SessionStatus::Recording => ['label' => 'Waiting to upload', 'tone' => 'neutral', 'icon' => 'heroicon-o-arrow-up-tray', 'spin' => false],
             // Since v1.8 (contract 1.8.0-e): kept as audio, transcribed when the person asks.
             $session->status === SessionStatus::AudioOnly => ['label' => 'Audio only', 'tone' => 'neutral', 'icon' => 'heroicon-o-speaker-wave', 'spin' => false],
             $session->status === SessionStatus::Uploading => ['label' => 'Uploading', 'tone' => 'brand', 'icon' => 'heroicon-o-arrow-path', 'spin' => CaptureSessionsTable::isPending($session)],

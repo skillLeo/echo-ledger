@@ -16,6 +16,7 @@ use App\Models\LabelList;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Services\Callers\CallerMatcher;
+use App\Services\Library\LibraryFilters;
 use App\Services\Lists\LabelLists;
 use App\Services\Titles\AutoTitles;
 use App\Services\Views\TranscriptViews;
@@ -99,7 +100,8 @@ final class LibraryOrganiser
             'today' => $query->where($column, '>=', $now->copy()->startOfDay()->utc())->where($column, '<', $now->copy()->startOfDay()->addDay()->utc()),
             'this_week' => $query->where($column, '>=', $now->copy()->startOfWeek(Carbon::MONDAY)->utc())
                 ->where($column, '<', $now->copy()->startOfWeek(Carbon::MONDAY)->addWeek()->utc()),
-            'waiting' => $query->where($query->qualifyColumn('status'), SessionStatus::Recording->value),
+            // Since 2.0.0-z: once the call is over (LibraryFilters::isWaiting), never while it is being recorded.
+            'waiting' => LibraryFilters::whereWaiting($query),
             'bookmarked' => $query->whereHas('markers'),
             'failed' => $query->where(fn (Builder $q) => $q->where($q->qualifyColumn('status'), SessionStatus::Failed->value)
                 ->orWhereHas('recordings', fn (Builder $r) => $r->where('upload_status', UploadStatus::Failed->value))),

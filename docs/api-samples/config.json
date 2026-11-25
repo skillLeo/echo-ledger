@@ -254,7 +254,8 @@
         "v21_zoom": false,
         "v21_preview_pane": false,
         "v21_win_titlebar": false,
-        "v21_urdu": false
+        "v21_urdu": false,
+        "call_rules": false
     },
     "ui_classic": false,
     "ui_design": {

@@ -46,6 +46,8 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
         'v21_win_titlebar',
         // Since 2.0.0-v (an addition).
         'v21_urdu',
+        // Since 2.0.0-w.
+        'call_rules',
     ])->and($classic)->toBeFalse();
 });
 
@@ -159,7 +161,7 @@ it('turns a flag on for a share of accounts, the same accounts every time', func
     expect($people->contains(fn (User $p): bool => $flags->active('ui_v2.ask', $p)))->toBeFalse();
 });
 
-it('turns every ui_v2 flag off with Switch back to classic, but not live_assist or the v2.1 flags, and back on', function () {
+it('turns every ui_v2 flag off with Switch back to classic, but not live_assist, the v2.1 flags or call_rules, and back on', function () {
     $user = Fx::user();
     $flags = app(InterfaceFlags::class);
     foreach (InterfaceFlags::names() as $name) {
@@ -168,11 +170,12 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist 
     $api = $this->api(Fx::token(Fx::device($user, ['workspace_id' => $user->current_workspace_id])));
 
     $api->putJson('/api/account/ui', ['classic' => true])->assertOk()
-        // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them.
-        ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21]), 'ui_classic' => true,
+        // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them (since
+        // 2.0.0-w call_rules too).
+        ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21, InterfaceFlags::CALL_RULES]), 'ui_classic' => true,
             // A person who went back to classic can try the new design again.
             'ui_design' => ['choice' => 'classic', 'current' => 'classic', 'can_try' => true, 'can_switch_back' => false]]);
-    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist', ...InterfaceFlags::V21]))
+    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist', ...InterfaceFlags::V21, InterfaceFlags::CALL_RULES]))
         ->and($user->fresh()->ui_classic)->toBeTrue();
 
     $api->putJson('/api/account/ui', ['classic' => false])->assertOk()->assertJsonPath('ui_classic', false);
