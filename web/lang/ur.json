@@ -1173,5 +1173,10 @@
     "They saved a copy, which stays theirs": "انہوں نے ایک کاپی محفوظ کی، جو انہی کی رہے گی",
     "Stop sharing": "شیئر کرنا بند کریں",
     "They will no longer be able to open it.": "وہ اسے مزید نہیں کھول سکیں گے۔",
-    "Not sent to anyone. Use Send to a teammate.": "ابھی کسی کو نہیں بھیجا۔ ساتھی کو بھیجیں استعمال کریں۔"
+    "Not sent to anyone. Use Send to a teammate.": "ابھی کسی کو نہیں بھیجا۔ ساتھی کو بھیجیں استعمال کریں۔",
+    "This plan transcribes with your own Groq key. Add it in Settings › Transcription key.": "یہ پلان آپ کی اپنی Groq کلید سے ٹرانسکرائب کرتا ہے۔ اسے ترتیبات › ٹرانسکرپشن کی کلید میں شامل کریں۔",
+    "This needs :minutes and no minutes are left this month.": "اس کے لیے :minutes چاہئیں اور اس مہینے کوئی منٹ باقی نہیں۔",
+    "This needs :minutes, and 1 minute is left this month.": "اس کے لیے :minutes چاہئیں، اور اس مہینے 1 منٹ باقی ہے۔",
+    "This needs :minutes, and :left minutes are left this month.": "اس کے لیے :minutes چاہئیں، اور اس مہینے :left منٹ باقی ہیں۔",
+    "Another transcription is being started. Try again in a moment.": "ایک اور ٹرانسکرپشن شروع کی جا رہی ہے۔ ذرا دیر بعد دوبارہ کوشش کریں۔"
 }

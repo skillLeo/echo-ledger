@@ -3,13 +3,20 @@
 // panel of views and collections (⊟ or ⌘\ hides it; in a small window it opens as a flyout from the rail and closes
 // once something is chosen), and the page. The pieces are here; Shell puts them together with the app's state.
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, Icon, Icons, SearchField } from "../components";
+import { Button, Icon, Icons, ResizeEdge, SearchField } from "../components";
 import type { IconType } from "../components/Button";
 import { Menu, type MenuItem } from "../components/Menu";
 import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
+
+/** UX-03: the panel's width, dragged or set from the keyboard, from 200 to 360 px; let go below 160 px it closes. */
+export const PANEL_MIN = 200;
+export const PANEL_MAX = 360;
+export const PANEL_CLOSE_BELOW = 160;
+/** The usual width (the CSS's when none is set): 240 px with v21_panel_flyout, 260 px before it. */
+export const panelDefault = (flyouts: boolean) => (flyouts ? 240 : 260);
 
 /** Sent by a page to show its place's panel (Settings' home: Show groups): the panel, or in a narrow window its flyout. */
 export const SHOW_PANEL_EVENT = "echoledger:show-panel";
@@ -116,10 +123,14 @@ export function PanelToggle() {
   );
 }
 
-export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foot, pin }: {
+export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foot, pin, width = null, resize }: {
   place: Place; menu?: MenuItem[]; onHide: () => void; flyout: boolean; onClose: (why: FlyoutClose) => void; children: ReactNode; foot?: ReactNode;
   /** A small window (UX-02): the pin that docks the panel there, or takes it back to a flyout. */
   pin?: { pinned: boolean; onPin: () => void };
+  /** UX-03: the width kept for this place (the CSS's usual width when null). */
+  width?: number | null;
+  /** UX-03: its edge, which sets the width; let go below 160 px the panel closes. */
+  resize?: { width: number; onWidth: (w: number) => void; onReset: () => void; onClose: () => void };
 }) {
   const box = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -156,6 +167,7 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
   };
   return (
     <aside ref={box} className={`el-panel${flyout ? " el-panel--flyout" : ""}`} aria-label={`${PLACE_NAMES[place]} panel`} onClickCapture={chose}
+      style={width ? { ["--el-panel-width" as string]: `${width}px` } : undefined}
       onKeyDown={(e) => {
         if (!flyout || e.key !== "Escape" || e.defaultPrevented) return;
         e.preventDefault();
@@ -174,6 +186,10 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
       </div>
       <div className="el-panel__body">{children}</div>
       {foot && <div className="el-panel__foot">{foot}</div>}
+      {resize && (
+        <ResizeEdge label={`Resize the ${PLACE_NAMES[place]} panel`} side="end" cssVar="--el-panel-width" width={resize.width}
+          min={PANEL_MIN} max={PANEL_MAX} closeBelow={PANEL_CLOSE_BELOW} onWidth={resize.onWidth} onReset={resize.onReset} onClose={resize.onClose} />
+      )}
     </aside>
   );
 }
