@@ -170,6 +170,36 @@ describe("LibraryView list", () => {
     expect(within(heading).getByRole("button", { name: "Recording" })).toHaveAttribute("title", "Click to rename");
   });
 
+  it("starts Rename empty over a title the person didn't choose, with it as the placeholder; empty saves nothing (U19)", async () => {
+    await renderLibrary([...ITEMS, makeItem("p", { title: "Call with Omar", title_source: "person" })]);
+    await selectItem("Call with Omar");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Call with Omar" }));
+    const box = within(detail()).getByRole("textbox", { name: "Title" });
+    expect(box).toHaveValue("");
+    expect(box).toHaveAttribute("placeholder", "Call with Omar");
+    expect(box).toHaveAccessibleDescription("Type a title of your own, or leave it empty to keep this one.");
+
+    fireEvent.keyDown(box, { key: "Enter" });
+    await flushAsync();
+    expect(callsOf("session_organise")).toHaveLength(0);
+    expect(within(list()).getByText("Call with Omar")).toBeInTheDocument();
+  });
+
+  it("keeps a title the person chose in the Rename box, and saves the change (U19)", async () => {
+    respondWith("session_organise", ({ id, patch }) => ({ data: { ...makeItem(id as string), ...(patch as object), title_source: "own" } }));
+    await renderLibrary([...ITEMS, makeItem("o", { title: "Acme renewal", title_source: "own" })]);
+    await selectItem("Acme renewal");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Acme renewal" }));
+    const box = within(detail()).getByRole("textbox", { name: "Title" });
+    expect(box).toHaveValue("Acme renewal");
+    expect(box).toHaveAccessibleDescription("Leave it empty for the title EchoLedger gives it.");
+
+    fireEvent.change(box, { target: { value: "Acme renewal call" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await flushAsync();
+    expect(callsOf("session_organise").map((c) => c.patch)).toEqual([{ title: "Acme renewal call" }]);
+  });
+
   it("says 'recording' for exactly one", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();

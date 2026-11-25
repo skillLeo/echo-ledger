@@ -81,10 +81,15 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
   );
 }
 
-/** A title renamed in place: Enter or leaving the field saves (once), Escape cancels; empty clears the title. */
-export function TitleEditor({ initial, className = "", onSave, onCancel }: {
+/**
+ * A title renamed in place: Enter or leaving the field saves (once), Escape cancels; empty clears the title. [hint] is
+ * what the box is for (its tooltip and description); [placeholder], what shows while it is empty.
+ */
+export function TitleEditor({ initial, className = "", placeholder = "Empty: an automatic title from what was said", hint, onSave, onCancel }: {
   initial: string;
   className?: string;
+  placeholder?: string;
+  hint?: string;
   onSave: (title: string) => void;
   onCancel: () => void;
 }) {
@@ -98,7 +103,7 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
   };
   return (
     <input className={`input ${className}`.trim()} aria-label="Title" autoFocus maxLength={MAX_TITLE_CHARS} value={text} dir="auto"
-      placeholder="Empty: an automatic title from what was said"
+      placeholder={placeholder} title={hint}
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {

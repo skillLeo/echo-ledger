@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -35,6 +37,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.robolectric.annotation.Config
 
 /** The transcript view for one recording: states, copy actions, navigation and deletion. */
 class SessionScreenTest : ScreenTest() {
@@ -105,6 +108,32 @@ class SessionScreenTest : ScreenTest() {
     }
 
     // ---- header and transcript ---------------------------------------------------------------------------------------------
+
+    /**
+     * P-046: the bar that takes over the title once the page head scrolls away shows the title the head shows. Here the
+     * title changes as the server's Roman Urdu title arrives with its view; a rename changes it the same way.
+     */
+    @Test
+    @Config(qualifiers = "w393dp-h640dp-mdpi") // short enough for the page head to scroll away
+    fun `the collapsed top bar shows the title the page head shows, after it changed`() {
+        romanView("making", viewsMaking, viewsReady)
+        val renamed = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Hisaab ki baat")
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(renamed))))
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "making", default = "roman"))))
+        awaitText("Converting to Roman Urdu")
+        pumpUntil("the new title", timeoutMs = 45_000) {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.onAllNodesWithText("Hisaab ki baat").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // The page head scrolls away; the bar is now the only place with the title.
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(2)
+        compose.waitForIdle()
+
+        compose.onAllNodesWithText("Call with Acme").assertCountEquals(0)
+        compose.onNodeWithText("Hisaab ki baat").assertExists()
+    }
 
     @Test
     fun `call notes are offered on a project's recording only when the plan has AI notes`() {
