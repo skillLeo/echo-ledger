@@ -1644,7 +1644,12 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-meters .set-meter-pair { gap: var(--space-2); max-width: 70%; }
 .set-meters .meter { width: 96px; }
 .set-preview { display: grid; place-items: center; margin-bottom: var(--space-4); padding: var(--space-5); border-radius: var(--radius-md); background: #1c2024; }
-.caption-sample { display: grid; gap: 4px; padding: 10px 14px; border-radius: var(--radius-field); color: #edeef0; max-width: 420px; line-height: 1.4; }
+.caption-sample { padding: 10px 14px; border-radius: var(--radius-field); color: #edeef0; max-width: 420px; line-height: 1.4; }
+/* D-242: the newest lines, as the overlay shows them (lines x the line height, the newest at the bottom; the older ones
+   go out of view at the top, inside the card's padding). In Urdu the card sits on the right, as the overlay's. */
+.caption-sample-lines { display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(var(--caption-lines, 3) * 1.4em); overflow: hidden; }
+.caption-sample-lines > div { flex: none; }
+[dir="rtl"] .caption-sample { justify-self: right; }
 .caption-sample span { font-weight: 600; white-space: pre; }
 .set-swatches { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-left: auto; }
 .swatch { width: 24px; height: 24px; padding: 0; border-radius: var(--radius-full); border: 1px solid var(--border-strong); cursor: pointer; }

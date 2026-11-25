@@ -1,7 +1,7 @@
 // Settings › Recording (v1.7): Calls & meetings (what records by itself, after a call, call sites), Microphone & audio
 // (the device, a 10-second test with its meters, the silent caller warning, the permissions) and Captions with its
 // Style sub-page. Every row comes from the settings registry.
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import {
   api,
   errorMessage,
@@ -332,14 +332,27 @@ export const DEFAULT_CLIENT_COLOR = "#0bd8b6";
 /** The swatches after Automatic, the phone's six. */
 export const COLOUR_PRESETS = ["#a78bfa", "#22d3ee", "#34d399", "#fbbf24", "#fb7185", "#ffffff"] as const;
 
-/** The caption as the overlay draws it, with the chosen colours and size. */
-export function CaptionPreview({ style }: { style: CaptionStyle }) {
+/** The overlay's visible lines for the "Caption lines" setting (its visibleLines): 2, 3 or 5; anything else shows 3. */
+export function previewLines(value: unknown): 2 | 3 | 5 {
+  return value === 2 || value === 3 || value === 5 ? value : 3;
+}
+
+/**
+ * The caption as the overlay draws it, with the chosen colours and size, and (D-242) only its newest [lines] lines: the
+ * overlay keeps that many lines' height and shows the newest at the bottom, so at 2 the first turn is out of view.
+ */
+export function CaptionPreview({ style, lines }: { style: CaptionStyle; lines?: number }) {
   const size = style.size === "small" ? 13 : style.size === "large" ? 19 : 15;
+  const sample = { fontSize: size, background: `rgba(24, 25, 27, ${style.opacity / 100})`, "--caption-lines": previewLines(lines) } as CSSProperties;
+  const client = <span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>;
   return (
     <div className="set-preview" aria-hidden="true">
-      <div className="caption-sample" style={{ fontSize: size, background: `rgba(24, 25, 27, ${style.opacity / 100})` }}>
-        <div dir="auto"><span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>Can you send the estimate by Monday?</div>
-        <div dir="auto"><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
+      <div className="caption-sample" style={sample}>
+        <div className="caption-sample-lines">
+          <div dir="auto">{client}Can you send the estimate by Monday?</div>
+          <div dir="auto"><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
+          <div dir="auto">{client}Great, thanks.</div>
+        </div>
       </div>
     </div>
   );
@@ -352,7 +365,7 @@ export const CAPTIONS_SHARE_LINE = "Captions are hidden from screen shares unles
 export function CaptionsPage({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
-      <CaptionPreview style={settings.captionStyle} />
+      <CaptionPreview style={settings.captionStyle} lines={settings.captionLines} />
       <Section footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchRow id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkRow id="captions.style" onOpen={onStyle} chevron />
@@ -387,7 +400,7 @@ export function CaptionStylePage({ settings, patch }: { settings: Settings; patc
   const save = (next: Partial<CaptionStyle>) => void patch({ captionStyle: { ...style, ...next } });
   return (
     <>
-      <CaptionPreview style={style} />
+      <CaptionPreview style={style} lines={settings.captionLines} />
       <Section footer={<p>{setting("captions.compact").description}</p>}>
         <SegmentedRow id="captions.size" value={style.size} options={options("captions.size") as readonly (readonly [CaptionStyle["size"], string])[]} onChange={(size) => save({ size })} />
         <SegmentedRow id="captions.lines" value={String(settings.captionLines)} options={options("captions.lines")} onChange={(v) => void patch({ captionLines: Number(v) })} />

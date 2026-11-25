@@ -1,7 +1,11 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, CAPTIONS_SHARE_LINE, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, CAPTIONS_SHARE_LINE, previewLines, testVerdict } from "./CaptureSettings";
+import { visibleLines } from "../overlay/OverlayApp";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeMicUser, makeSettings } from "../../test/fixtures";
 import { answerConfirm, confirmAsked } from "../../test/confirm";
@@ -108,6 +112,29 @@ describe("Calls & meetings", () => {
 
 describe("Captions › Style", () => {
   const style = makeSettings().captionStyle;
+
+  it("D-242: the preview keeps the overlay's lines (2, 3 or 5), newest at the bottom, as the setting says", () => {
+    for (const lines of [2, 3, 5]) {
+      const { container, unmount } = render(<CaptionStylePage settings={makeSettings({ captionLines: lines })} patch={vi.fn(async () => true)} />);
+      const sample = container.querySelector(".caption-sample") as HTMLElement;
+      expect(sample.style.getPropertyValue("--caption-lines")).toBe(String(lines));
+      // The newest turn is the last one, at the bottom.
+      const turns = [...container.querySelectorAll(".caption-sample-lines > div")].map((d) => d.textContent);
+      expect(turns.at(-1)).toMatch(/Great, thanks\.$/);
+      unmount();
+    }
+    // The overlay's own rule for the setting, so the preview and the overlay never differ.
+    for (const value of [1, 2, 3, 4, 5, 6, "2", null, undefined]) expect(previewLines(value)).toBe(visibleLines(value));
+    // The box is that many lines high and shows its newest ones: lines x the line height, bottom-aligned, the rest hidden.
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    const rule = css.match(/\.caption-sample-lines\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/max-height: calc\(var\(--caption-lines, 3\) \* 1\.4em\)/);
+    expect(rule).toMatch(/justify-content: flex-end/);
+    expect(rule).toMatch(/overflow: hidden/);
+    expect(css).toMatch(/\.caption-sample-lines > div\s*\{[^}]*flex: none/);
+    // In Urdu the card sits on the right, as the overlay's.
+    expect(css).toMatch(/\[dir="rtl"\] \.caption-sample\s*\{[^}]*justify-self: right/);
+  });
 
   it("saves the whole style with the changed value, from segments, selects, the slider and a switch", () => {
     const patch = vi.fn(async () => true);
