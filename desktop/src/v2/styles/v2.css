@@ -1293,7 +1293,12 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
    right one) still lines up with the column it sits in, at the window's start edge. */
 /* Chromium (WebView2) and WebKit read only the prefixed value; others read the standard one. */
 .el-row__title, .el-row__meta-text, .el-row__value-text, .el-group__note, .el-plan-card__body p, .el-health__title,
-.el-screens-strip__title, .el-nav-item__label, .el-profile__who > .el-title-s {
+.el-screens-strip__title, .el-nav-item__label {
+  text-align: match-parent;
+  text-align: -webkit-match-parent;
+}
+/* The account card's name (an English name in a right-to-left window) at the window's start edge, as its email. */
+.el-profile__who > .el-title-s {
   text-align: match-parent;
   text-align: -webkit-match-parent;
 }
