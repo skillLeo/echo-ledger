@@ -4,10 +4,11 @@
     a 28 px avatar in a 40 px target with "Account" under it, the tooltip "Account, theme and settings", an 8% tint on
     hover, a 2 px accent ring while the menu is open and an 8 px dot only for an account problem (SettingsContext::
     accountProblem: a payment that failed); it is one of the rail's stops, which the arrows reach (FIX-06), and its menu
-    opens upward. Plain PHP writes what differs in the rail, so Livewire adds no block markers inside the tag.
+    opens upward, as tall as the window lets it (it scrolls in a short one). Plain PHP writes what differs in the rail,
+    so Livewire adds no block markers inside the tag.
     The menu: a header (a 40 px avatar, the name, the email and the plan with the month's minutes), then Add photo (only
-    without one) or Edit profile, Theme, the Zoom row (v21_zoom), Plan & billing, Settings, Keyboard shortcuts, Help,
-    the admin panel for staff, and Sign out last, apart from the rest.
+    without one) or Edit profile, Theme, the Zoom row (v21_zoom: the browser's keys), Plan & billing, Settings, Keyboard
+    shortcuts, Help, the admin panel for staff, and Sign out last, apart from the rest.
 --}}
 @php
     use App\Filament\Auth\EditProfile;
@@ -20,6 +21,7 @@
     $user = $context?->user;
     $name = $user !== null ? (filled($user->name) ? $user->name : \Illuminate\Support\Str::before((string) $user->email, '@')) : '';
     $rail = (bool) ($inRail ?? false);
+    $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
     if ($context !== null) {
         $problem = $context->accountProblem();
         $limits = app(PlanLimits::class);
@@ -33,7 +35,7 @@
     }
 @endphp
 @if ($context !== null)
-    <x-filament::dropdown :placement="$rail ? 'top-start' : ($placement ?? 'bottom-end')" teleport width="xs" :class="'fi-user-menu v2-um'.($rail ? ' is-rail' : '')">
+    <x-filament::dropdown :placement="$rail ? 'top-start' : ($placement ?? 'bottom-end')" teleport size width="xs" :class="'fi-user-menu v2-um'.($rail ? ' is-rail' : '')">
         <x-slot name="trigger">
             <button type="button" class="fi-user-menu-trigger v2-um-trigger<?php if ($rail): ?> is-rail<?php endif; ?>" aria-label="{{ $label }}"<?php if ($rail): ?> title="{{ __('Account, theme and settings') }}" tabindex="-1"<?php endif; ?>>
 <?php if ($rail): ?>
@@ -73,15 +75,11 @@
                 </span>
             </div>
 <?php if (ConsoleV2::zoom()): ?>
-            {{-- UX-07: "Zoom [−] 100% [+]", as Chrome's menu has it, next to Theme (filament.v2.zoom-script). --}}
-            <div class="v2-um-zoom" data-account-item="zoom" x-data="{ level: window.ElZoom ? window.ElZoom.now() : 100, steps: window.ElZoom ? window.ElZoom.steps : [100] }"
-                x-on:el-zoom.window="level = $event.detail">
-                <span id="v2-um-zoom">{{ __('Zoom') }}</span>
-                <span class="v2-um-stepper" role="group" aria-labelledby="v2-um-zoom">
-                    <button type="button" class="v2-um-step" aria-label="{{ __('Zoom out') }}" x-bind:disabled="level <= steps[0]" x-on:click="window.ElZoom?.by(-1)">−</button>
-                    <output class="v2-um-level" aria-live="polite" x-text="level + '%'">100%</output>
-                    <button type="button" class="v2-um-step" aria-label="{{ __('Zoom in') }}" x-bind:disabled="level >= steps[steps.length - 1]" x-on:click="window.ElZoom?.by(1)">+</button>
-                </span>
+            {{-- UX-07 on the web: the browser's zoom, by its own keys (it moves the menus and the layout with it; a page
+                 can't set it, so no − and + here). --}}
+            <div class="v2-um-zoom" data-account-item="zoom">
+                <span>{{ __('Zoom') }}</span>
+                <span class="v2-um-key" dir="ltr"><kbd>{{ $mac ? '⌘' : 'Ctrl' }} +</kbd> <kbd>{{ $mac ? '⌘' : 'Ctrl' }} −</kbd></span>
             </div>
 <?php endif; ?>
         </x-filament::dropdown.list>

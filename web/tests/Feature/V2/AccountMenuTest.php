@@ -10,7 +10,6 @@ use App\Models\UpgradeRequest;
 use App\Services\ActivityFeed;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
-use Illuminate\Support\Facades\Process;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -19,8 +18,9 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
  * 40 px target, its name under it, the tooltip "Account, theme and settings", named "Account, <name>", a dot only for
  * an account problem (on the web: a payment that failed), one of the rail's stops. Its menu opens upward: a header
  * (avatar, name, email, plan and the month's minutes), then Add photo (no photo) or Edit profile, Theme, Zoom
- * (v21_zoom), Plan & billing, Settings, Keyboard shortcuts, Help, Sign out. Settings › Profile has a 96 px avatar with a
- * camera badge; Activity shows the avatar of the person an item is about. Classic keeps every byte (the goldens).
+ * (v21_zoom: the browser's keys), Plan & billing, Settings, Keyboard shortcuts, Help, Sign out. Settings › Profile has a
+ * 96 px avatar with a camera badge; Activity shows the avatar of the person an item is about. Classic keeps every byte
+ * (the goldens).
  */
 
 beforeEach(function () {
@@ -128,21 +128,17 @@ it('says the plan and the month\'s minutes in the header', function () {
     expect($line)->toStartWith((string) $plan?->name)->toMatch('~^[^·]+( · \d[\d,]* of \d[\d,]* min used this month)?$~u');
 });
 
-it('adds the Zoom row and the page\'s zoom only where v21_zoom is on', function () {
+it('adds the Zoom row only where v21_zoom is on: the browser\'s own keys, as a page can\'t set its zoom', function () {
     accountConsole(true, zoom: true);
-    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
-    expect(accountItems(accountMenuOf($html)))->toBe(['photo', 'zoom', 'plan', 'settings', 'shortcuts', 'help', 'sign-out'])
-        ->and($html)->toContain('window.ElZoom = window.ElZoomCore.install(document, window);')
-        ->toContain('aria-label="Zoom out"')->toContain('aria-label="Zoom in"')->toContain('x-text="level + \'%\'">100%</output>');
+    $menu = accountMenuOf((string) $this->get('/app/sessions')->assertOk()->getContent());
+    expect(accountItems($menu))->toBe(['photo', 'zoom', 'plan', 'settings', 'shortcuts', 'help', 'sign-out'])
+        ->and($menu)->toContain('<span class="v2-um-key" dir="ltr"><kbd>Ctrl +</kbd> <kbd>Ctrl −</kbd></span>');
+    $mac = (string) $this->withHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36')->get('/app/sessions')->getContent();
+    expect(accountMenuOf($mac))->toContain('<kbd>⌘ +</kbd> <kbd>⌘ −</kbd>');
 
     accountConsole(true);
-    expect((string) $this->get('/app/sessions')->getContent())->not->toContain('ElZoomCore')->not->toContain('data-account-item="zoom"');
+    expect((string) $this->get('/app/sessions')->getContent())->not->toContain('data-account-item="zoom"');
 });
-
-it('keeps the page\'s zoom as its Node test says (Chrome\'s steps, kept in this browser, before the first paint)', function () {
-    $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/zoom-core.test.mjs']);
-    expect($result->exitCode())->toBe(0, $result->output().$result->errorOutput());
-})->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');
 
 it('draws Settings › Profile with a 96 px avatar and a camera badge that adds the photo, or changes it', function () {
     accountConsole(true);

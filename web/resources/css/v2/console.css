@@ -233,10 +233,10 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     height: var(--el-icon-sm);
 }
 
-/* UX-18: on Activity, the avatar of the person an item is about takes its kind's 52 px tile's place, centred in it, so
-   every row's words start in line. */
+/* UX-18: on Activity, the avatar of the person an item is about takes its kind's 52 px tile's place, centred in it
+   (10 px each side of the 32 px avatar), so every row's words start in line. */
 .el-row-btn > .v2-avatar.is-list {
-    margin-inline: calc((52px - var(--el-desktop-avatar-list)) / 2);
+    margin-inline: calc(var(--el-space-8) + var(--el-space-2));
 }
 
 /* UX-18: Settings › Profile, 96 px. */
@@ -695,43 +695,7 @@ body.el-resizing {
     font-size: var(--el-text-body-size);
 }
 
-/* UX-07: "Zoom [−] 100% [+]", as Chrome's menu has it. */
-.v2-um-stepper {
-    display: inline-flex;
-    align-items: center;
-    padding: var(--el-space-2);
-    border-radius: var(--el-radius-md);
-    background-color: var(--el-role-bg-subtle);
-}
-
-.v2-um-step {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--el-space-32);
-    min-height: var(--el-component-chip-height);
-    border-radius: var(--el-radius-sm);
-    color: var(--el-role-text-primary);
-    font-size: var(--el-text-title-s-size);
-    line-height: 1;
-}
-
-.v2-um-step:hover:not(:disabled) {
-    background-color: var(--el-role-bg-surface);
-}
-
-.v2-um-step:disabled {
-    color: var(--el-role-text-disabled);
-    cursor: not-allowed;
-}
-
-.v2-um-level {
-    min-width: calc(var(--el-space-8) * 6);
-    font-variant-numeric: tabular-nums;
-    text-align: center;
-}
-
-/* An item's key ("Keyboard shortcuts  ?"), at its end. */
+/* An item's key ("Keyboard shortcuts  ?"), and the Zoom row's, at its end. */
 .v2-um .fi-dropdown-list-item-label:has(> .v2-um-key) {
     display: flex;
     align-items: center;
@@ -739,9 +703,13 @@ body.el-resizing {
     gap: var(--el-space-12);
 }
 
+.v2-um-key kbd {
+    font: inherit;
+}
+
 .v2-um-key {
     color: var(--el-role-text-secondary);
-    font-family: inherit;
+    font-variant-numeric: tabular-nums;
     font-size: var(--el-text-caption-size);
     white-space: nowrap;
 }
@@ -3228,17 +3196,17 @@ button.v2-row-tile:focus-visible,
     translate: none;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
     :root .fi-body.fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar.v2-frame:not(.fi-sidebar-open) {
         translate: none;
     }
 }
 
-/* UX-18: the account menu is 20 rem wide (Filament sized a sidebar's user menu by the sidebar, the box it was placed
+/* UX-18: the account menu is 320 px wide (Filament sized a sidebar's user menu by the sidebar, the box it was placed
    in before W-230). */
 :root .fi-sidebar .fi-user-menu.v2-um .fi-dropdown-panel {
-    width: 20rem;
-    max-width: calc(100vw - var(--el-space-24)) !important;
+    width: calc(var(--el-space-40) * 8);
+    max-width: calc(100% - var(--el-space-24)) !important;
 }
 
 /* UX-18: the rail's Account, a rail item: a 28 px avatar in a 40 px target, "Account" under it; an 8% tint behind the
@@ -3276,18 +3244,20 @@ button.v2-row-tile:focus-visible,
 }
 
 .v2-um-trigger.is-rail[aria-expanded='true'] .v2-avatar {
-    box-shadow: 0 0 0 var(--el-space-2) var(--el-role-accent-default);
+    outline: var(--el-focus-width) solid var(--el-role-accent-default);
+    outline-offset: 0;
 }
 
 .v2-um-dot {
     position: absolute;
     inset-block-start: var(--el-space-4);
     inset-inline-end: var(--el-space-4);
+    box-sizing: content-box;
     width: var(--el-space-8);
     height: var(--el-space-8);
+    border: var(--el-space-2) solid var(--el-role-bg-subtle);
     border-radius: var(--el-radius-full);
     background-color: var(--el-role-danger-default);
-    box-shadow: 0 0 0 var(--el-space-2) var(--el-role-bg-subtle);
 }
 
 /* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
@@ -4031,44 +4001,3 @@ html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crum
     opacity: 1 !important;
     color: var(--el-role-text-secondary);
 }
-
-/* UX-07 and UX-18 (v21_zoom): at a zoom other than 100% (resources/js/zoom-core.cjs) the root's zoom scales the
-   viewport's units too, so a box one screen tall (the page, the frame, a slide-over, the Library's filters, the detail
-   column) is 100dvh over the zoom, and stays one screen tall. */
-html[data-el-zoom].fi,
-html[data-el-zoom] .fi-body,
-html[data-el-zoom] .fi-simple-layout,
-html[data-el-zoom] .fi-body:not(.fi-body-has-topbar) .fi-main-ctn {
-    min-height: calc(100dvh / var(--el-zoom));
-}
-
-html[data-el-zoom] :is(.fi-body.fi-body-has-sidebar-collapsible-on-desktop, .fi-body.fi-body-has-sidebar-fully-collapsible-on-desktop, .fi-body.fi-body-has-top-navigation, .fi-body:not(.fi-body-has-navigation)) .fi-main-ctn {
-    min-height: calc(100dvh / var(--el-zoom) - var(--topbar-height));
-}
-
-html[data-el-zoom] .fi-sidebar,
-html[data-el-zoom] :is(.fi-modal.fi-modal-slide-over, .fi-modal.fi-width-screen) > .fi-modal-window-ctn > .fi-modal-window,
-html[data-el-zoom] .fi-fo-file-upload .fi-fo-file-upload-editor {
-    height: calc(100dvh / var(--el-zoom));
-}
-
-html[data-el-zoom] .fi-body-has-topbar .fi-sidebar {
-    height: calc(100dvh / var(--el-zoom) - var(--topbar-height));
-}
-
-html[data-el-zoom] .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen):is(.fi-modal-has-sticky-header, .fi-modal-has-sticky-footer) > .fi-modal-window-ctn > .fi-modal-window {
-    max-height: calc(100dvh / var(--el-zoom) - 2rem);
-}
-
-html[data-el-zoom] .v2-lib-panel {
-    max-block-size: calc(100dvh / var(--el-zoom) - var(--el-space-64) - var(--el-space-32));
-}
-
-html[data-el-zoom] .el-library-detail {
-    max-height: calc(100dvh / var(--el-zoom) - var(--topbar-height, 4rem) - var(--space-6));
-}
-
-html[data-el-zoom] .el-col {
-    max-height: calc(100dvh / var(--el-zoom) - 56px - var(--space-6));
-}
-

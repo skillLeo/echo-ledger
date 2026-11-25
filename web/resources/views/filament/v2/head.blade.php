@@ -13,8 +13,6 @@
 </style>
 {{-- DES-08: a person's photo that does not load becomes their initials on their colour. --}}
 @includeWhen(($sheet ?? 'console') === 'console', 'filament.v2.avatar-script')
-{{-- UX-07 and UX-18: the page's zoom (v21_zoom), before the first paint. --}}
-@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::zoom(), 'filament.v2.zoom-script')
 <script>
     (() => {
         const root = document.documentElement;

@@ -49,8 +49,8 @@ final class ConsoleV2
     }
 
     /**
-     * UX-07 and UX-18 (v21_zoom): the page's zoom, like Chrome's, from the avatar menu's Zoom row; kept in this browser
-     * (filament.v2.zoom-script). Under the new frame only.
+     * UX-07 and UX-18 (v21_zoom): the account menu's Zoom row. On the web the browser zooms the page (its own keys, which
+     * move every menu and the layout's breakpoints with it); a page can't set that zoom, so the row gives the keys.
      */
     public static function zoom(): bool
     {
