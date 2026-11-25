@@ -16,6 +16,7 @@ import { Shell, type ShellWorkspace } from "./shell/Shell";
 import { LibraryV2 } from "./library/LibraryV2";
 import { WorkspaceV2 } from "./workspace/WorkspaceV2";
 import { AskV2 } from "./ask/AskV2";
+import { runAction } from "./actions/registry";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../test/tauri")).eventModule);
@@ -280,6 +281,23 @@ describe("request links", () => {
     const sheet = within(dialog);
     expect(sheet.getByRole("combobox", { name: /^Files go to/ })).toHaveTextContent("No project");
     expect(sheet.getByRole("textbox", { name: "Title people see" })).toHaveValue("Send me your voice notes");
+  });
+
+  it("UX-09: the project menu's Members… and Instructions & memory… open the project on that tab", async () => {
+    app();
+    respond("shares_of", { data: [] });
+    respond("sent_of", { data: [] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    expect(runAction("project.members", { platform: "macos", targets: ["c0"], context: true })).toBe(true);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByRole("tab", { name: "Members", selected: true })).toBeInTheDocument();
+    expect(runAction("project.instructions", { platform: "macos", targets: ["c0"], context: true })).toBe(true);
+    await act(flushAsync);
+    expect(await screen.findByRole("tab", { name: "Memory & instructions", selected: true })).toBeInTheDocument();
   });
 
   it("DT-SHR-006: a project's own Request files (a button in its header, UX-09) opens the new sheet with that project chosen", async () => {

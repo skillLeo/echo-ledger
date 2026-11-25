@@ -52,7 +52,12 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
   const [sort, setSort] = useProjectSort();
   const none = !!projects && projects.length === 0;
   const sortLabel = PROJECT_SORTS.find((o) => o.value === sort)!.label;
-  const cards = useMemo(() => (projects ? projectTree(projects).sort((a, b) => projectOrder(sort)(a.project, b.project)) : []), [projects, sort]);
+  const cards = useMemo(() => {
+    if (!projects) return [];
+    // The comparator is made once (it reads the Recent list), not for every comparison.
+    const order = projectOrder(sort);
+    return projectTree(projects).sort((a, b) => order(a.project, b.project));
+  }, [projects, sort]);
   // All projects is the title row's title (UX-09), with how many cards it shows (folders are inside theirs); the page
   // then has no title of its own.
   const inTitleRow = usePageTitle(overview ? { title: "All projects", count: cards.length > 0 ? cards.length : null } : null);

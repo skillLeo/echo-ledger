@@ -2377,7 +2377,13 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-page__head--bar { min-block-size: var(--el-space-32); }
 /* The Projects panel (UX-09): a group's title that opens All projects, its sort and + at the end. */
 .el-nav-section__heading { display: flex; flex: 1; min-inline-size: 0; margin: 0; font: inherit; }
-.el-nav-section__heading > .el-nav-section__link { flex: 1; text-align: start; }
+.el-nav-section__heading > .el-nav-section__link, .el-nav-section__heading > .el-nav-section__title { flex: 1; text-align: start; }
+.el-nav-section__heading > .el-nav-section__title .el-nav-item__count { margin-inline-start: auto; }
+/* While the projects are read: shapes of rows where they will be. */
+.el-panel__loading { display: flex; flex-direction: column; gap: var(--el-space-12); padding: var(--el-space-8) var(--el-space-12); }
+.el-panel__skeleton { display: block; }
+/* A project's tab with a second part under its own (Files › Screens, Memory & instructions › Call notes): set apart. */
+.el-workspace-part { margin-block-start: var(--el-space-24); }
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {
   display: flex; flex-direction: column; gap: var(--el-space-8); inline-size: 100%; padding: var(--el-space-16); text-align: start; font: inherit; cursor: pointer;

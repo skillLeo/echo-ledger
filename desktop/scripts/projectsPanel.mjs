@@ -8,6 +8,11 @@
 //   <prefix>-project-1280-en-<theme>.png      a project's page (Acme Holdings) with its tabs
 //   after-members-1280-en-<theme>.png         its Members tab
 //   after-sort-1280-en-<theme>.png            the panel's sort menu open
+//   <prefix>-project-1280-ur-<theme>.png      the project's page in Urdu (right to left); after-members-1280-ur-<theme>.png
+//   after-files-screens-1280-en-<theme>.png   Files, scrolled to its Screens section (before-screens-…: the old tab)
+//   after-memory-notes-1280-en-<theme>.png    Memory & instructions, scrolled to Call notes (before-callnotes-…: the old tab)
+//   after-archived-1280-en-<theme>.png        the panel's Archived, opened (&archived=1)
+//   <prefix>-search-1280-en-<theme>.png       the panel's search among 13 projects (&manyprojects=1)
 // PROJECTS_EXTRAS_ONLY=1 leaves the All projects set out.
 // After the change the run fails when the panel has an "All projects", "Pinned" or "Recent" row, a project isn't in the
 // panel, the page's title isn't "All projects", there is a panel with no project, the empty state isn't the one asked
@@ -36,6 +41,9 @@ const browser = await chromium.launch();
 await mkdir(out, { recursive: true });
 
 const open = async (width, lang, theme, extra = "") => {
+  return openAt(width, lang, theme, extra);
+};
+const openAt = async (width, lang, theme, extra = "") => {
   const page = await browser.newPage({ viewport: { width, height: HEIGHT }, colorScheme: theme, reducedMotion: "reduce" });
   // A busy machine serves the fixture slowly; the waits are for it to load, not a measure of anything.
   page.setDefaultTimeout(120_000);
@@ -124,6 +132,95 @@ try {
       console.log(`after-members-1280-en-${theme}: ${members.slice(0, 160)}`);
       if (!/\(you\)|You/.test(members)) problems.push("after-members: the owner isn't listed");
     }
+    await page.close();
+  }
+  {
+    // The project's page right to left (Urdu): its tabs, and Members.
+    const name = `${prefix}-project-1280-ur-${theme}`;
+    const page = await open(1280, "ur", theme);
+    await page.getByTestId("nav-panel").getByRole("button", { name: "Acme Holdings", exact: true }).click();
+    await page.locator("[data-v2=workspace]").waitFor();
+    await rest(page);
+    await page.screenshot({ path: join(out, `${name}.png`) });
+    console.log(`${name}: ${(await page.getByRole("tab").allTextContents()).join(" | ")}`);
+    if (after) {
+      await page.getByRole("tab", { name: /^Members/ }).click();
+      await page.waitForTimeout(800);
+      await rest(page);
+      await page.screenshot({ path: join(out, `after-members-1280-ur-${theme}.png`) });
+      const dir = await page.evaluate(() => getComputedStyle(document.querySelector("[data-v2=workspace]")).direction);
+      if (dir !== "rtl") problems.push(`after-members-1280-ur-${theme}: drawn ${dir}`);
+    }
+    await page.close();
+  }
+  {
+    // Screens: a section of Files now (the old Screens tab before).
+    const name = after ? `after-files-screens-1280-en-${theme}` : `before-screens-1280-en-${theme}`;
+    const page = await open(1280, "en", theme);
+    await page.getByTestId("nav-panel").getByRole("button", { name: "Acme Holdings", exact: true }).click();
+    await page.locator("[data-v2=workspace]").waitFor();
+    if (after) {
+      await page.getByRole("tab", { name: /^Files/ }).click();
+      await page.getByRole("region", { name: /^Screens/ }).waitFor();
+      await page.waitForTimeout(800);
+      await page.getByRole("region", { name: /^Screens/ }).evaluate((el) => el.scrollIntoView({ block: "start" }));
+    } else {
+      await page.getByRole("tab", { name: /^Screens/ }).click();
+      await page.waitForTimeout(1200);
+    }
+    await rest(page);
+    await page.screenshot({ path: join(out, `${name}.png`) });
+    console.log(`${name}: shown`);
+    await page.close();
+  }
+  {
+    // Call notes: a section of Memory & instructions now (the old Call notes tab before).
+    const name = after ? `after-memory-notes-1280-en-${theme}` : `before-callnotes-1280-en-${theme}`;
+    const page = await open(1280, "en", theme);
+    await page.getByTestId("nav-panel").getByRole("button", { name: "Acme Holdings", exact: true }).click();
+    await page.locator("[data-v2=workspace]").waitFor();
+    if (after) {
+      await page.getByRole("tab", { name: "Memory & instructions" }).click();
+      const notes = page.getByRole("region", { name: "Call notes" });
+      await notes.waitFor();
+      await page.waitForTimeout(600);
+      await notes.evaluate((el) => el.scrollIntoView({ block: "start" }));
+    } else {
+      await page.getByRole("tab", { name: "Call notes" }).click();
+      await page.waitForTimeout(1000);
+    }
+    await rest(page);
+    await page.screenshot({ path: join(out, `${name}.png`) });
+    console.log(`${name}: shown`);
+    await page.close();
+  }
+  {
+    // The panel's search among 13 projects.
+    const name = `${prefix}-search-1280-en-${theme}`;
+    const page = await open(1280, "en", theme, "&manyprojects=1");
+    const field = page.getByTestId("nav-panel").getByRole("searchbox", { name: "Search projects" });
+    await field.fill("co");
+    await page.waitForTimeout(400);
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: join(out, `${name}.png`) });
+    const found = await page.getByTestId("nav-panel").locator(".el-nav-tree__name").allTextContents();
+    console.log(`${name}: ${found.join(" | ")}`);
+    if (after && found.join() !== "Contracts,Indus Cotton") problems.push(`${name}: found ${found.join(", ")}`);
+    await page.close();
+  }
+  if (after) {
+    // Archived, opened at the panel's bottom (no server marks one yet: the fixture's &archived=1).
+    const name = `after-archived-1280-en-${theme}`;
+    const page = await open(1280, "en", theme, "&archived=1");
+    const panel = page.getByTestId("nav-panel");
+    await panel.getByRole("button", { name: /^Archived/ }).click();
+    await page.waitForTimeout(300);
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: join(out, `${name}.png`) });
+    const archived = await panel.getByRole("list", { name: "Archived" }).locator(".el-nav-tree__name").allTextContents();
+    const others = await panel.getByRole("list", { name: "Projects" }).locator(".el-nav-tree__name").allTextContents();
+    console.log(`${name}: Archived ${archived.join(" | ")}; Projects ${others.join(" | ")}`);
+    if (archived.join() !== "Zed Logistics" || others.includes("Zed Logistics")) problems.push(`${name}: Archived has ${archived.join(", ")}`);
     await page.close();
   }
   if (after) {

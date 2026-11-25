@@ -12,6 +12,7 @@ import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../lib/shell";
 import { NavShell } from "./NavShell";
 import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
+import { setProjectsAccount } from "./kept";
 import { keyboardPoint, useProjectMenu } from "./ProjectMenu";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
@@ -145,6 +146,9 @@ export type ShellProps = {
     feet?: Partial<Record<Place, ReactNode>>;
     /** The projects are read and there are none (UX-09): Projects has no panel. */
     noProjects?: boolean;
+    /** The projects are being read (the panel shows shapes of rows), or couldn't be (offline). */
+    projectsLoading?: boolean;
+    projectsError?: string | null;
     onPlace?: (place: Place, again: boolean) => void;
     libraryCount?: number;
     liveDot?: boolean;
@@ -263,6 +267,27 @@ function saveFolds(folds: ReadonlySet<string>) {
     // Kept for this session only.
   }
 }
+/** Sent when a project's folders fold or show, so every tree of them (Pinned, Projects, the drag targets) follows. */
+const FOLDS_EVENT = "echoledger:project-folds";
+/** One store of folds for every tree: a change starts from what is saved, never from one tree's own copy. */
+function useFolds(): [ReadonlySet<string>, (id: string) => void] {
+  const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  useEffect(() => {
+    const follow = (e: Event) => setFolds(new Set((e as CustomEvent<string[]>).detail));
+    window.addEventListener(FOLDS_EVENT, follow);
+    return () => window.removeEventListener(FOLDS_EVENT, follow);
+  }, []);
+  const fold = (id: string) => {
+    const saved = loadFolds();
+    // What is saved (another tree's change included), or this tree's own when nothing can be read.
+    const next = new Set(saved.size || folds.size === 0 ? saved : folds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    saveFolds(next);
+    window.dispatchEvent(new CustomEvent(FOLDS_EVENT, { detail: [...next] }));
+  };
+  return [folds, fold];
+}
 
 /**
  * The projects as a tree: pinned first, then by name (or the list's own order at its top level), each project's
@@ -277,19 +302,12 @@ function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Proj
   /** The top level's order (the Projects panel's sort); folders are pinned first, then by name. */
   order?: (a: SidebarProject, b: SidebarProject) => number;
 }) {
-  const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  const [folds, fold] = useFolds();
   const menu = useProjectMenu();
   const ids = new Set(projects.map((p) => p.id));
   const children = (parent: string | null) => projects
     .filter((p) => (p.parent_id && ids.has(p.parent_id) ? p.parent_id : null) === parent)
     .sort(parent === null && order ? order : (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
-  const fold = (id: string) => setFolds((now) => {
-    const next = new Set(now);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    saveFolds(next);
-    return next;
-  });
   const branch = (parent: string | null, depth: number): ReactNode => {
     const rows = children(parent);
     if (!rows.length) return null;
@@ -374,10 +392,13 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
       {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} menus={false} />}
     </div>
   );
+  // The projects' sort and Recent are this account's (kept.ts).
+  useEffect(() => setProjectsAccount(nav?.layoutFor), [nav?.layoutFor]);
   // UX-09: no Projects panel while there is no project (the page has one empty state saying how to start).
   const projectsPanel = onProject && !nav?.noProjects && (
     <ProjectsPanel projects={projectTree ?? []} current={tab === "projects" ? projectId : null} allCurrent={tab === "projects" && !projectId}
       onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject}
+      loading={!!nav?.projectsLoading} error={nav?.projectsError ?? null}
       tree={(list, current, open, how) => <ProjectTreeNav projects={list} current={current} onOpen={open} label={how.label} order={how.order} />} />
   );
   return (

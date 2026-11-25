@@ -82,6 +82,8 @@ export type WorkspaceV2Props = {
   onSend?: () => void;
   /** Request files into it: a button in its header (UX-09); none without request links. */
   onRequest?: () => void;
+  /** Open on a tab (the project menu's Instructions & memory… and Members…); each request has a new seq. */
+  startTab?: { tab: "memory" | "members"; seq: number } | null;
   /** Filing rules are shown (a server with projects in folders). */
   rules?: boolean;
   /** The plan has call notes, memory writing and Ask (`ai_notes`); without it they wait for an upgrade, as today. */
@@ -101,10 +103,13 @@ export type WorkspaceV2Props = {
 };
 
 export function WorkspaceV2({
-  project, projects = [], parent = null, folders = [], menu = [], onShare, onSend, onRequest, rules = false, aiNotesInPlan = true, onMoveRecordings, onProjectChanged,
+  project, projects = [], parent = null, folders = [], menu = [], onShare, onSend, onRequest, startTab = null, rules = false, aiNotesInPlan = true, onMoveRecordings, onProjectChanged,
   notify = () => undefined, onBack, onProjects, onOpenProject, onOpenRecording, onLibrary,
 }: WorkspaceV2Props) {
-  const [tab, setTab] = useState<Tab>("recordings");
+  const [tab, setTab] = useState<Tab>(startTab?.tab ?? "recordings");
+  useEffect(() => {
+    if (startTab) setTab(startTab.tab);
+  }, [startTab?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [itemsFailed, setItemsFailed] = useState(false);
   const [ws, setWs] = useState<ClientWorkspace | null>(null);
@@ -192,7 +197,7 @@ export function WorkspaceV2({
             { label: project.name },
           ]} />}
           <h1 className="el-title-l" dir="auto">{project.name}</h1>
-          {ownCount !== null && <p className="el-secondary" data-testid="project-summary">{ownCount === 0 ? "0 recordings" : clientSummary(ownCount, lastCall)}</p>}
+          {ownCount !== null && <p className="el-secondary" data-testid="project-summary" dir="auto">{ownCount === 0 ? "0 recordings" : clientSummary(ownCount, lastCall)}</p>}
         </div>
         <div className="el-page__actions">
           {onRequest && <Button icon={Icons.RequestFilesIcon} title="A link anyone can use to send you voice notes and files, filed into this project" onClick={onRequest}>Request files</Button>}
@@ -238,7 +243,7 @@ export function WorkspaceV2({
             )}
           </>
         ))}
-        {tab === "members" && <MembersTab projectId={project.id} projectName={project.name} onShare={onShare} onSend={onSend} />}
+        {tab === "members" && <MembersTab projectId={project.id} projectName={project.name} within={ancestors(all, project.id)} onShare={onShare} onSend={onSend} />}
       </Tabs>
       <ToastRegion>
         {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error} onClose={() => setMessage(null)} />}

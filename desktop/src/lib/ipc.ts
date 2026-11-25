@@ -1016,6 +1016,12 @@ export interface ClientFolder {
   nested_session_count?: number;
   /** Screen moments are kept for its meetings (since v1.5, default on); missing on a server without them. */
   screens?: boolean;
+  /**
+   * Archived (UX-09: listed last in the Projects panel). No server sends it yet; the server piece is to come, as either
+   * of these.
+   */
+  archived?: boolean;
+  archived_at?: string | null;
 }
 
 /** The smart folders of the Library (since v1.5): views the server computes, never copies. */

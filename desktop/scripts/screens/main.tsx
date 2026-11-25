@@ -352,7 +352,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   library_list: () => (empty ? [] : LISTED),
   library_refresh: () => (empty ? [] : LISTED),
   // `&noprojects=1`: an account with no project yet (UX-09: no Projects panel, one empty state on the page).
-  list_clients: () => ({ data: params.get("noprojects") === "1" ? [] : CLIENTS }),
+  // `&manyprojects=1`: 13 projects (the panel's search shows from 11); `&archived=1`: one of them archived (UX-09).
+  list_clients: () => ({ data: params.get("noprojects") === "1" ? [] : [
+    ...CLIENTS.map((c) => (params.get("archived") === "1" && c.id === "c-zed" ? { ...c, archived: true } : c)),
+    ...(params.get("manyprojects") === "1" ? ["Bilal Traders", "Crescent Mills", "Dawood Exports", "Faisal Apparel", "Gulf Logistics", "Hamid & Sons", "Indus Cotton"]
+      .map((name, i) => ({ id: `c-more-${i}`, name, session_count: 0, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 0 })) : []),
+  ] }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   // The person's labels (lists, contract 2.0.0-m): the Library filters redesign shows them in the sidebar.
   lists_get: () => (empty ? [] : [

@@ -547,33 +547,70 @@ describe("a project's page in UX-09", () => {
     expect(onRequest).toHaveBeenCalled();
   });
 
-  it("Members: you, and whoever its open share links let in; Share and Send a copy; a project shared with nobody says so", async () => {
-    const link = (over: Record<string, unknown>) => ({ id: "l1", session_id: null, has_password: false, include_audio: true, expires_at: null, revoked_at: null, active: true,
-      view_count: 2, last_viewed_at: null, created_by: null, created_at: "2026-11-20T08:00:00Z", kind: "project", client_id: "c1", ...over });
+  const link = (over: Record<string, unknown>) => ({ id: "l1", session_id: null, has_password: false, include_audio: true, expires_at: null, revoked_at: null, active: true,
+    view_count: 2, last_viewed_at: null, created_by: null, created_at: "2026-11-20T08:00:00Z", kind: "project", client_id: "c1", ...over });
+  const sentTo = (id: string, name: string | null, email: string) => ({ id, kind: "project", to: { name, email }, title: "Qureshi Textiles", note: null, sent_at: "2026-11-21T08:00:00Z", saved_at: null });
+  const memberRows = () => within(screen.getByRole("list", { name: "Members" })).getAllByRole("listitem")
+    .map((r) => [r.querySelector(".el-row__title")?.textContent, r.querySelector(".el-row__meta")?.textContent]);
+
+  it("Members: you, the teammates it was sent to, whoever its links let in; the links with their views; Share and Send to a teammate…", async () => {
     respond("shares_of", { data: [
-      link({ id: "l1", audience: "people", people: ["sara@acme.pk", "bilal@qureshitextiles.pk"] }),
+      link({ id: "l1", audience: "people", people: ["sara@acme.pk", "bilal@qureshitextiles.pk"], view_count: 3 }),
       link({ id: "l2", audience: "public" }),
       link({ id: "l3", audience: "public", active: false, revoked_at: "2026-11-21T08:00:00Z" }),
     ] });
+    respond("sent_of", { data: [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk"), sentTo("s2", null, "sara@acme.pk")] });
     const onShare = vi.fn();
     const onSend = vi.fn();
     await show({ onShare, onSend });
     await openTab("Members");
     expect(callsOf("shares_of")).toContainEqual({ sessionId: null, clientId: "c1" });
-    const members = within(screen.getByRole("list", { name: "Members" }));
-    expect(members.getAllByRole("listitem").map((r) => r.querySelector(".el-row__title")?.textContent)).toEqual([
-      "Ayesha Siddiqui (you)", "sara@acme.pk", "bilal@qureshitextiles.pk", "Anyone with the link",
+    expect(callsOf("sent_of")).toEqual([{ sessionId: null, clientId: "c1" }]);
+    expect(memberRows()).toEqual([
+      ["Ayesha Siddiqui (you)", "Created by you"],
+      ["Ana Siddiqui", "ana@qureshitextiles.pk · Sent to them · can open it until you stop sharing"],
+      // Sent and in a link: one row, both ways.
+      ["sara@acme.pk", "Sent to them · can open it until you stop sharing; Through a share link"],
+      ["bilal@qureshitextiles.pk", "Through a share link"],
+      ["Anyone with the link", "Through a share link"],
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Share…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send a copy to a teammate…" }));
+    // The views are the links', never a person's.
+    const links = within(screen.getByRole("list", { name: "Share links" })).getAllByRole("listitem").map((r) => r.querySelector(".el-row__meta")?.textContent);
+    expect(links).toEqual(["3 views", "2 views"]);
+    expect(screen.getByText(/^Only you and these can open Qureshi Textiles/)).toBeInTheDocument();
+    // One name per action, as the header and the project menu say them.
+    fireEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Share" }));
+    const send = within(screen.getByRole("tabpanel")).getByRole("button", { name: "Send to a teammate…" });
+    expect(send).toHaveAttribute("title", "They can open it, read-only and kept current, until you stop sharing");
+    fireEvent.click(send);
     expect([onShare, onSend].every((f) => f.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("Members of a project only sent to a teammate: they can open it, so it isn't called private", async () => {
+    respond("shares_of", { data: [] });
+    respond("sent_of", { data: [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk")] });
+    await show();
+    await openTab("Members");
+    expect(memberRows()).toHaveLength(2);
+    expect(screen.queryByText(/private/)).toBeNull();
+    expect(screen.getByText(/^Only you and these can open/)).toBeInTheDocument();
+  });
+
+  it("Members of a folder: the teammates the project it sits in was sent to can open it too", async () => {
+    respond("shares_of", { data: [] });
+    respondWith("sent_of", ({ clientId }) => ({ data: clientId === "c1" ? [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk")] : [] }));
+    await show({ project: { id: "c1a", name: "March order", ai_notes: true }, parent: { id: "c1", name: "Qureshi Textiles" } });
+    await openTab("Members");
+    expect(callsOf("sent_of")).toEqual([{ sessionId: null, clientId: "c1a" }, { sessionId: null, clientId: "c1" }]);
+    expect(memberRows()[1]).toEqual(["Ana Siddiqui", "ana@qureshitextiles.pk · Sent with Qureshi Textiles · can open it until you stop sharing"]);
   });
 
   it("Members of a project shared with nobody: only you, and why", async () => {
     respond("shares_of", { data: [] });
+    respond("sent_of", { data: [] });
     await show();
     await openTab("Members");
-    expect(within(screen.getByRole("list", { name: "Members" })).getAllByRole("listitem")).toHaveLength(1);
+    expect(memberRows()).toEqual([["Ayesha Siddiqui (you)", "Created by you"]]);
     expect(screen.getByText(/a project is private until you share it/)).toBeInTheDocument();
   });
 
