@@ -17,10 +17,10 @@ use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
- * Urdu package 5: the sign-in page's words come through the translator. A signed-out visitor has no console language
- * (ConsoleV2::language() is English without a signed-in person in the new frame), so the page reads English to everyone;
- * these checks set the locale by hand to show the words are ready. English is compared with the HTML saved in
- * tests/Feature/V2/golden/ before the words were wrapped. UPDATE_GOLDEN=1 saves them again on purpose.
+ * Urdu package 5: the sign-in page's words come through the translator, in the visitor's language (VisitorLanguage:
+ * the browser's, or the one picked on the page; VisitorLanguageTest). These checks set the locale by hand for each step.
+ * English is compared with the HTML saved in tests/Feature/V2/golden/ before the words were wrapped (the full page also
+ * has the language picker since v2.1). UPDATE_GOLDEN=1 saves them again on purpose.
  */
 
 require_once __DIR__.'/Support/golden.php';
@@ -127,10 +127,12 @@ function signInNotices(): array
     return $notices->notifications->map(fn ($n): string => trim($n->getTitle().' · '.$n->getBody(), ' ·'))->values()->all();
 }
 
-it('has no console language before sign-in: the sign-in page reads English to everyone', function () {
-    expect(app()->getLocale())->toBe('en');
-    $html = (string) $this->withCookie('locale', 'ur')->withHeaders(['Accept-Language' => 'ur-PK,ur;q=0.9'])->get('/app/login')->assertOk()->getContent();
-    expect($html)->toContain('Sign in or create an account')->not->toContain('سائن اِن');
+it('reads the sign-in page in the visitor\'s browser language, and English to an English browser', function () {
+    expect((string) $this->withHeaders(['Accept-Language' => 'ur-PK,ur;q=0.9'])->get('/app/login')->assertOk()->getContent())
+        ->toContain('سائن اِن کریں یا اکاؤنٹ بنائیں')->not->toContain('Sign in or create an account');
+    app()->setLocale('en');
+    expect((string) $this->withHeaders(['Accept-Language' => 'en-GB,en;q=0.9'])->get('/app/login')->assertOk()->getContent())
+        ->toContain('Sign in or create an account')->not->toContain('سائن اِن کریں');
 });
 
 it('words the sign-in steps in Urdu once the console is in Urdu, with the address kept whole, and English as before', function () {
