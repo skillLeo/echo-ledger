@@ -170,6 +170,8 @@ class CallLinesTest : ScreenTest() {
         asked("call-1")
         DecisionPopup.transcribe(app)
         asked("call-2")
+        // The delete's time is the choice's plus its wait: measured from the choice, never from a slower machine's now.
+        val chosenAt = System.currentTimeMillis()
         DecisionPopup.delete(app)
         compose.mainClock.advanceTimeByFrame()
         assertTrue("the first choice's line", shown("Transcribing…"))
@@ -184,6 +186,6 @@ class CallLinesTest : ScreenTest() {
         // The second line waited, so its file waits for its whole time too.
         pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
         val due = java.time.Instant.parse(app.peekRecording("call-2")!!.discardAt).toEpochMilli()
-        assertTrue("its delete waits for both lines", due - System.currentTimeMillis() >= 2 * CallLines.LONG_MS)
+        assertTrue("its delete waits for both lines", due - chosenAt >= 2 * CallLines.LONG_MS)
     }
 }

@@ -6,7 +6,7 @@ import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type Li
 import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
 import { stepOf, uploadLine } from "../../lib/progress";
 import { useWindowShown } from "../../lib/visibility";
-import { formatWhen } from "../../lib/format";
+import { whenPart, whenParts } from "../../lib/format";
 import { dayGroup, recordingName } from "../../lib/library";
 import { skippedLine, skippedMeta, uploadTitle, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon, LucideServerIcon } from "../../components/Icons";
@@ -98,11 +98,11 @@ export function activitySubtitle(needsYou: number, unread: number): string {
   return "Nothing needs you. Finished transcripts, problems, devices and shares show up here.";
 }
 
-/** Today's notifications show the time, older ones the day. */
+/** Today's notifications show the time, older ones the day (whenParts: in Urdu too, each in its own isolate). */
 export function shortWhen(iso: string | null): string {
-  if (!iso) return "";
-  const text = formatWhen(iso);
-  return text.startsWith("Today · ") ? text.slice("Today · ".length) : text.split(" · ")[0];
+  const parts = whenParts(iso);
+  if (!parts) return "";
+  return whenPart(parts.today ? parts.time : parts.day);
 }
 
 export function ActivityView({ status, notify, onOpenRecording, onReview, onItems }: {

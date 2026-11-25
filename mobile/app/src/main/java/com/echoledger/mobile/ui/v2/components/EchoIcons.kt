@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
@@ -187,6 +188,9 @@ object EchoIcons {
     val Devices: ImageVector get() = Icons.Outlined.Devices
     val Storage: ImageVector get() = Icons.Outlined.Storage
     val Plan: ImageVector get() = Icons.Outlined.WorkspacePremium
+
+    /** This month's minutes (the usage meter, v2.1 UX-16). */
+    val Usage: ImageVector get() = Icons.Outlined.DataUsage
     val Words: ImageVector get() = Icons.Outlined.Spellcheck
     val Key: ImageVector get() = Icons.Outlined.Key
     val Games: ImageVector get() = Icons.Outlined.SportsEsports

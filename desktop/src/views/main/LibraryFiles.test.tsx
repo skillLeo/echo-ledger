@@ -106,7 +106,7 @@ describe("Rename", () => {
     await flushAsync();
     expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: null } }]);
     expect(within(detail()).getByRole("heading", { name: "Zoom call" })).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("The automatic title will be used", false, anyTarget);
+    expect(notify).toHaveBeenCalledWith("Back to the title EchoLedger gives it", false, anyTarget);
   });
 
   it("marks an automatic title, and a title the person types replaces the mark (E4)", async () => {

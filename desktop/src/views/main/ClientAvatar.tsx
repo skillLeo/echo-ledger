@@ -2,7 +2,7 @@
 // and the workspace header.
 import type { ClientFolder } from "../../lib/ipc";
 import { folderBadge } from "../../lib/organise";
-import { formatWhen } from "../../lib/format";
+import { whenPart, whenParts } from "../../lib/format";
 
 /** The tile colours of client avatars, picked from the name so a client keeps its colour (the phone does the same). */
 const AVATAR_TILES = ["var(--tile-video)", "var(--tile-chat)", "var(--tile-voice)", "var(--accent)", "var(--client)"];
@@ -21,6 +21,8 @@ export function ClientAvatar({ client, large = false }: { client: Pick<ClientFol
 /** "2 recordings · Last call Oct 24" or "No recordings yet". */
 export function clientSummary(count: number, lastCall: string | undefined): string {
   if (count === 0) return "No recordings yet";
-  const when = lastCall ? formatWhen(lastCall).split(" · ")[0] : "";
+  // The day alone, closed in its own isolate in Urdu, so what follows ("· 3 folders") stays after it.
+  const day = whenParts(lastCall)?.day;
+  const when = day ? whenPart(day) : "";
   return `${count} recording${count === 1 ? "" : "s"}${when ? ` · Last call ${when}` : ""}`;
 }

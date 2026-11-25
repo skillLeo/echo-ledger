@@ -29,6 +29,7 @@ import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -101,8 +102,9 @@ class V2AppearanceTest : ScreenTest() {
         assertEquals(EchoLanguage.English, AppLook.language("en", EchoLanguage.Urdu))
     }
 
+    /** v2.1 UX-16: each group's title as text only (its one line under it is gone); Account has this month's minutes. */
     @Test
-    fun everyGroupHasItsLineAndAccountHasThisMonthsMinutes() {
+    fun everyGroupHasItsTitleAndAccountHasThisMonthsMinutes() {
         var opened: Pair<String, String?>? = null
         val settings = AppSettings(plan = PlanState(usedMinutes = 120, monthlyMinutes = 300))
         show {
@@ -112,10 +114,11 @@ class V2AppearanceTest : ScreenTest() {
         }
         val res = V2Testing.resources(EchoLanguage.English)
         for (goal in SettingsGoal.entries) {
-            val line = res.getString(goal.description)
-            val node = compose.onAllNodesWithText(line)
+            val title = res.getString(goal.title)
+            val node = compose.onAllNodes(androidx.compose.ui.test.hasText(title) and androidx.compose.ui.test.isHeading())
             runCatching { node[0].performScrollTo() }
-            assertEquals(line, 1, node.fetchSemanticsNodes().size)
+            assertEquals(title, 1, node.fetchSemanticsNodes().size)
+            assertTrue("no line under $title", compose.onAllNodesWithText(res.getString(goal.description)).fetchSemanticsNodes().isEmpty())
         }
         tap("This month")
         assertEquals("plan" to "plan.usage", opened)

@@ -25,6 +25,7 @@
   --el-radius-md: 8px;
   --el-radius-lg: 12px;
   --el-radius-sheet: 16px;
+  --el-radius-group: 24px;
   --el-radius-full: 999px;
   --el-border-hairline: 1px;
   --el-border-strong: 2px;
@@ -87,6 +88,10 @@
   --el-text-body-strong-size: 14px;
   --el-text-body-strong-line: 20px;
   --el-text-body-strong-weight: 600;
+  --el-text-section-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-text-section-size: 14px;
+  --el-text-section-line: 20px;
+  --el-text-section-weight: 500;
   --el-text-caption-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-text-caption-size: 12px;
   --el-text-caption-line: 16px;
@@ -179,6 +184,7 @@
   --el-component-toast-duration: 6000ms;
   --el-component-recording-dot-pulse: 1500ms;
   --el-component-avatar-size: 40px;
+  --el-component-avatar-badge: 16px;
   --el-component-status-dot-size: 8px;
   --el-component-sheet-handle-width: 32px;
   --el-component-sheet-handle-height: 4px;
@@ -512,5 +518,6 @@
   --radius-el-md: var(--el-radius-md);
   --radius-el-lg: var(--el-radius-lg);
   --radius-el-sheet: var(--el-radius-sheet);
+  --radius-el-group: var(--el-radius-group);
   --radius-el-full: var(--el-radius-full);
 }

@@ -490,6 +490,11 @@ data class LibraryItem(
     val title: String? = null,
     /** The server wrote this title from what was said (since v1.5); a title a person set is false and never replaced. */
     @SerialName("title_auto") val titleAuto: Boolean = false,
+    /**
+     * Where [title] came from (2.0.0-k): "own" (the person's rename), "person" ("Call with …"), "auto" (from what was
+     * said) or "app" (the app's name for an untitled recording); null from an older server.
+     */
+    @SerialName("title_source") val titleSource: String? = null,
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("duration_ms") val durationMs: Long? = null,
     val status: String? = null,
