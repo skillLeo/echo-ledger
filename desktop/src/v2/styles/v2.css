@@ -527,7 +527,7 @@
 .el-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--el-space-8); padding: var(--el-space-48) var(--el-space-24); }
 .el-empty__icon { color: var(--el-role-text-secondary); margin-block-end: var(--el-space-8); }
 .el-empty__body { max-inline-size: calc(var(--el-space-64) * 6); color: var(--el-role-text-secondary); text-wrap: pretty; }
-.el-empty__action { margin-block-start: var(--el-space-8); }
+.el-empty__action { margin-block-start: var(--el-space-8); display: flex; flex-wrap: wrap; justify-content: center; gap: var(--el-space-8); }
 
 /* ---- Tabs and Segmented ------------------------------------------------------------------------------------- */
 /* Tabs wrap rather than scroll: at large text in a narrow window every tab stays in sight. */
@@ -1783,7 +1783,7 @@ span.el-projects__fold { cursor: default; }
   color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight);
   text-transform: uppercase;
 }
-span.el-nav-section__title { cursor: default; }
+:is(span, h3).el-nav-section__title { cursor: default; }
 .el-nav-section__head > .el-nav-section__title:first-child, .el-nav-section__link { flex: 1; text-align: start; }
 .el-nav-section__fold { display: inline-flex; flex: none; border: 0; padding: 0; background: transparent; color: var(--el-role-text-secondary); cursor: pointer; }
 .el-nav-section__fold + .el-nav-section__link { margin-inline-start: var(--el-space-4); }
@@ -2337,7 +2337,12 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
 .el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
 .el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
-/* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
+/* All projects with the three levels: the top-level projects as cards (the tree is the panel's). Its title is the title
+   row's (UX-09): the page's head is then a bar, Sort at its start and Request files, New project at its end. */
+.el-page__head--bar { min-block-size: var(--el-space-32); }
+/* The Projects panel (UX-09): a group's title that opens All projects, its sort and + at the end. */
+.el-nav-section__heading { display: flex; flex: 1; min-inline-size: 0; margin: 0; font: inherit; }
+.el-nav-section__heading > .el-nav-section__link { flex: 1; text-align: start; }
 .el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
 .el-project-card {
   display: flex; flex-direction: column; gap: var(--el-space-8); inline-size: 100%; padding: var(--el-space-16); text-align: start; font: inherit; cursor: pointer;

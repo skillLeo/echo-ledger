@@ -1185,7 +1185,8 @@ export default function MainApp() {
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
-                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} onSend={ctx.onSend ?? undefined} onRequest={ctx.onRequest ?? undefined}
+                  rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
                   onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
                   onBack={() => openProject(ctx.parent?.id ?? null)} onProjects={() => openProject(null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
@@ -1359,6 +1360,7 @@ export default function MainApp() {
             libraryAttention={(libraryCounts?.needs ?? 0) > 0}
             nav={{
               panelFlyout: ui.flags.v21_panel_flyout,
+              noProjects: projects !== null && projects.length === 0,
               layoutFor: liveViews ?? lastViews,
               // The status items: Restart to update, then the zoom's chip while it isn't 100% (UX-07).
               titleEnd: <><RestartToUpdate appStatus={status} notify={notify} />{zoomOn && <ZoomChip />}</>,

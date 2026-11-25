@@ -350,7 +350,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : LISTED),
   library_refresh: () => (empty ? [] : LISTED),
-  list_clients: () => ({ data: CLIENTS }),
+  // `&noprojects=1`: an account with no project yet (UX-09: no Projects panel, one empty state on the page).
+  list_clients: () => ({ data: params.get("noprojects") === "1" ? [] : CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   // The person's labels (lists, contract 2.0.0-m): the Library filters redesign shows them in the sidebar.
   lists_get: () => (empty ? [] : [

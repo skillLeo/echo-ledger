@@ -141,6 +141,8 @@ export type ShellProps = {
     placeRequest?: { place: Place; seq: number } | null;
     panels?: Partial<Record<Place, ReactNode>>;
     feet?: Partial<Record<Place, ReactNode>>;
+    /** The projects are read and there are none (UX-09): Projects has no panel. */
+    noProjects?: boolean;
     onPlace?: (place: Place, again: boolean) => void;
     libraryCount?: number;
     liveDot?: boolean;
@@ -240,7 +242,7 @@ function ResizeEdge({ width, onWidth }: { width: number; onWidth: (width: number
 }
 
 /** A project in the sidebar's tree: its folder (`parent_id`, null at the top) and whether it is pinned. */
-export type SidebarProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean };
+export type SidebarProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean; archived?: boolean };
 
 /** Which projects' subfolders are folded in the sidebar, kept on this computer (classic's: a group stays as left). */
 export const FOLDS_KEY = "echoledger-v2-sidebar-folds";
@@ -260,18 +262,25 @@ function saveFolds(folds: ReadonlySet<string>) {
   }
 }
 
-/** The projects as a tree: pinned first, then by name, each project's subfolders under it (foldable, remembered). */
-function ProjectTreeNav({ projects, current, onOpen, menus = true }: {
+/**
+ * The projects as a tree: pinned first, then by name (or the list's own order at its top level), each project's
+ * subfolders under it (foldable, remembered).
+ */
+function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Projects", order }: {
   projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void;
   /** Each project's menu (right-click, Shift+F10, the menu key); off where the tree only takes dropped recordings. */
   menus?: boolean;
+  /** The list's name (the Projects panel has Pinned, Projects and Archived). */
+  label?: string;
+  /** The top level's order (the Projects panel's sort); folders are pinned first, then by name. */
+  order?: (a: SidebarProject, b: SidebarProject) => number;
 }) {
   const [folds, setFolds] = useState<Set<string>>(loadFolds);
   const menu = useProjectMenu();
   const ids = new Set(projects.map((p) => p.id));
   const children = (parent: string | null) => projects
     .filter((p) => (p.parent_id && ids.has(p.parent_id) ? p.parent_id : null) === parent)
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
+    .sort(parent === null && order ? order : (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
   const fold = (id: string) => setFolds((now) => {
     const next = new Set(now);
     if (next.has(id)) next.delete(id);
@@ -283,7 +292,7 @@ function ProjectTreeNav({ projects, current, onOpen, menus = true }: {
     const rows = children(parent);
     if (!rows.length) return null;
     return (
-      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? "Projects" : undefined} role={parent === null ? undefined : "group"}>
+      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label : undefined} role={parent === null ? undefined : "group"}>
         {rows.map((p) => {
           const kids = children(p.id).length > 0;
           const open = kids && !folds.has(p.id);
@@ -326,7 +335,7 @@ export function Shell(props: ShellProps) {
 }
 
 /** The three levels: Live and Ask are the shell's own pages, as in the sidebar; the rest are MainApp's tabs. */
-function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
+function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onSearch,
   searchKeys, onHelp, projectTree, projectId = null, onProject, uploading, library, footStart, nav, children }: ShellProps) {
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   const [lastTab, setLastTab] = useState(tab);
@@ -363,10 +372,11 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
       {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} menus={false} />}
     </div>
   );
-  const projectsPanel = onProject && (
+  // UX-09: no Projects panel while there is no project (the page has one empty state saying how to start).
+  const projectsPanel = onProject && !nav?.noProjects && (
     <ProjectsPanel projects={projectTree ?? []} current={tab === "projects" ? projectId : null} allCurrent={tab === "projects" && !projectId}
-      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject} onRequest={onRequestLink}
-      tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
+      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject}
+      tree={(list, current, open, how) => <ProjectTreeNav projects={list} current={current} onOpen={open} label={how.label} order={how.order} />} />
   );
   return (
     <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
