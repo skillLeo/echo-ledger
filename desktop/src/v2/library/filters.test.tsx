@@ -499,6 +499,13 @@ describe("Find in the Library", () => {
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
   });
 
+  it("D-244: right to left on a Mac the drawer's head keeps the window buttons' 80 points clear (its × beside them); full screen and Windows don't", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toContain('[data-platform="macos"][data-titlebar][dir="rtl"] .el-filter--drawer .el-filter__head {\n  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));\n}');
+    // The same room a Sheet keeps (D-227).
+    expect(css).toContain('[data-platform="macos"][data-titlebar][dir="rtl"] .el-sheet .el-dialog__head {\n  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));');
+  });
+
   it("under 1440 px (the wide breakpoint token) the filters slide over the list from the end side and start closed; the scrim and Esc close it", async () => {
     // The width is the token's: tokens.css --el-breakpoint-wide.
     const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
