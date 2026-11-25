@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::api::ApiClient;
-use super::models::LibraryItem;
+use super::models::{LibraryItem, OpenedMany};
 use crate::error::AppResult;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -62,6 +62,16 @@ impl LibraryCache {
             }
             _ => false,
         }
+    }
+
+    /// Mark as read or unread for many (contract 2.0.0-y): the saved copy follows the server's `done` only, never the
+    /// ids it did not find. True when anything changed.
+    pub fn mark_opened_many(&mut self, answer: &OpenedMany, opened: bool) -> bool {
+        let mut changed = false;
+        for id in &answer.done {
+            changed |= if opened { self.mark_opened(id) } else { self.mark_unopened(id) };
+        }
+        changed
     }
 
     pub fn load(path: &Path) -> Self {

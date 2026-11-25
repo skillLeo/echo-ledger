@@ -819,6 +819,8 @@ pub fn run() {
             commands::client_create,
             commands::session_opened,
             commands::session_unopen,
+            commands::sessions_opened,
+            commands::sessions_unopened,
             commands::lists_get,
             commands::list_create,
             commands::list_update,

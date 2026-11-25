@@ -1566,5 +1566,7 @@
   "yesterday": "کل",
   "yesterday at :time": "کل :time پر",
   "· original words": "· اصل الفاظ",
-  "“:note”": "“:note”"
+  "“:note”": "“:note”",
+  "Over :max: only Mark as read or unread. Unselect :extra for the rest": ":max سے زیادہ پر صرف پڑھی ہوئی یا نہ پڑھی گئی کا نشان لگ سکتا ہے۔ باقی کاموں کے لیے :extra کا انتخاب ختم کریں",
+  ":count recording is no longer in your Library|:count recordings are no longer in your Library": ":count ریکارڈنگ اب آپ کی لائبریری میں نہیں ہے|:count ریکارڈنگز اب آپ کی لائبریری میں نہیں ہیں"
 }

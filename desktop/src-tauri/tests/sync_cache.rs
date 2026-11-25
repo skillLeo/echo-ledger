@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use common::{Action, MockServer, Reply, Router, fixture, query_value};
 use desktop_lib::error::AppError;
 use desktop_lib::net::api::ApiClient;
-use desktop_lib::net::models::LibraryItem;
+use desktop_lib::net::models::{LibraryItem, OpenedMany};
 use desktop_lib::net::sync::{LibraryCache, merge, paths};
 
 fn item(id: &str, updated_at: &str, started_at: &str, title: &str) -> LibraryItem {
@@ -775,6 +775,26 @@ async fn marking_a_recording_unread_tells_the_server_and_the_saved_copy_is_unrea
     assert!(!cache.mark_unopened("gone"), "not in the Library: nothing to save");
     // And opening it again reads it.
     assert!(cache.mark_opened("a"));
+}
+
+#[test]
+fn marking_many_read_or_unread_the_saved_copy_follows_done_only() {
+    // Contract 2.0.0-y: the ids the server did not find (another workspace's, in the bin) stay as they were.
+    let mut cache = LibraryCache::default();
+    for id in ["a", "b", "c"] {
+        let mut unread = item(id, "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", id);
+        unread.rest.insert("opened".into(), Value::Bool(false));
+        cache.items.push(unread);
+    }
+    let opened = |cache: &LibraryCache| cache.items.iter().map(|i| i.rest.get("opened").cloned()).collect::<Vec<_>>();
+    let answer = OpenedMany { done: vec!["a".into(), "b".into(), "gone".into()], not_found: vec!["c".into()] };
+    assert!(cache.mark_opened_many(&answer, true), "a and b read");
+    assert_eq!(opened(&cache), vec![Some(Value::Bool(true)), Some(Value::Bool(true)), Some(Value::Bool(false))]);
+    assert!(!cache.mark_opened_many(&answer, true), "already read: nothing to save");
+    let back = OpenedMany { done: vec!["b".into()], not_found: vec!["a".into(), "c".into()] };
+    assert!(cache.mark_opened_many(&back, false), "b unread again");
+    assert_eq!(opened(&cache), vec![Some(Value::Bool(true)), Some(Value::Bool(false)), Some(Value::Bool(false))]);
+    assert!(!cache.mark_opened_many(&OpenedMany::default(), true), "nothing done: nothing to save");
 }
 
 #[tokio::test]
