@@ -82,10 +82,13 @@ it('mirrors a missed call on Activity in Urdu only', function () {
 it('mirrors the rail\'s Help "?" and Ask\'s chat bubble in Urdu, and draws them as before in English', function () {
     rtlIconsConsole('ur');
     $ur = (string) $this->get('/app/sessions')->assertOk()->getContent();
-    expect($ur)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon v2-icon-flip"~');
+    expect($ur)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon v2-icon-flip"~')
+        ->toMatch('~data-module="ask"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon v2-icon-flip"~');
     rtlIconsConsole('en');
     $en = (string) $this->get('/app/sessions')->assertOk()->getContent();
-    expect($en)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon"~');
+    expect($en)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon"~')
+        ->toMatch('~data-module="ask"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon"~')
+        ->not->toMatch('~data-module="ask"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon v2-icon-flip"~');
 });
 
 /** Whether [$icon] is given as markup with the mirror's class (RtlIcons::icon), which Filament draws in its own icon. */
@@ -160,11 +163,27 @@ it('draws a recording\'s Send and WhatsApp mirrored inside Filament\'s own icon 
 });
 
 it('mirrors the right-click menu\'s Send to WhatsApp… (an action) in Urdu, but never a row\'s app mark (W-235)', function () {
+    // Telegram has its own mark; Signal has none, so its row draws the chat glyph as the fallback (source-logo).
+    $device = Fx::device($this->owner);
+    $telegram = Fx::session($this->owner, $device, ['title' => 'Telegram call', 'source_app' => 'telegram']);
+    $signal = Fx::session($this->owner, $device, ['title' => 'Signal call', 'source_app' => 'signal']);
     $send = '<template data-icon="SendIcon"><svg class="v2-icon v2-icon-flip"';
+    /** The source mark of [$call]'s Library row, from its data-recording to the end of its tile's button. */
+    $mark = fn (string $html, $call): string => preg_match('~data-recording="'.$call->id.'"(?:(?!</button>).)*</button>~s', $html, $m) === 1 ? $m[0] : '';
+
     rtlIconsConsole('ur');
-    expect((string) $this->get('/app/sessions')->assertOk()->getContent())->toContain($send);
+    $ur = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($ur)->toContain($send)
+        ->and($mark($ur, $signal))->toContain('<span class="v2-source-fallback"><svg class="v2-icon" viewBox')->not->toContain('v2-icon-flip')
+        ->and($mark($ur, $telegram))->toContain('<svg class="v2-source-mark"')->not->toContain('v2-icon-flip');
+    // Telegram's recording page: its meta line draws the chat glyph (V2RecordingRow::glyph), never mirrored.
+    expect((string) $this->get(CaptureSessionResource::getUrl('view', ['record' => $telegram]))->assertOk()->getContent())
+        ->toMatch('~<span class="v2-rec-meta">\s*<svg class="v2-icon" viewBox~');
+
     rtlIconsConsole('en');
-    expect((string) $this->get('/app/sessions')->assertOk()->getContent())->toContain('<template data-icon="SendIcon"><svg class="v2-icon"')->not->toContain($send);
+    $en = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($en)->toContain('<template data-icon="SendIcon"><svg class="v2-icon"')->not->toContain($send)
+        ->and($mark($en, $signal))->toContain('<span class="v2-source-fallback"><svg class="v2-icon" viewBox');
 });
 
 it('points the Library toolbar\'s sort icon the reading way in Urdu (W-235, D-231)', function () {
