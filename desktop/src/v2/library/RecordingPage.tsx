@@ -834,7 +834,11 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           <span className="el-visually-hidden" id="el-recording-rename-hint">Press the title to rename the recording</span>
           <h1 className="el-title-l" dir="auto">
             <button type="button" ref={titleButton} className="el-recording__title" title="Rename" aria-describedby="el-recording-rename-hint" aria-haspopup="dialog"
-              onClick={() => setRenaming(true)}>
+              onClick={(e) => {
+                // A Mac doesn't focus a button on a click: the dialog gives the keyboard back to what had it when it opened.
+                e.currentTarget.focus();
+                setRenaming(true);
+              }}>
               {item.title?.trim() || "Recording"}
             </button>
           </h1>

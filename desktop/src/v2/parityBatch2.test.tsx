@@ -96,6 +96,25 @@ describe("the recording page (parity batch 2)", () => {
     expect(title()).toHaveFocus();
   });
 
+  it("DT-REC-004: a mouse click on the title when something else had the keyboard (Back): closing Rename gives it to the title", async () => {
+    respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false, title_source: "own" } }));
+    await openRecording(item({ title_source: "own" }));
+    const title = (name: string) => within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name });
+    // A Mac doesn't focus a button it clicks: the keyboard stays where it was, here on Back.
+    screen.getByRole("button", { name: "Library" }).focus();
+    fireEvent.click(title("Bilal Qureshi"));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Rename" })).getByRole("button", { name: "Cancel" }));
+    await act(flushAsync);
+    expect(title("Bilal Qureshi")).toHaveFocus();
+    screen.getByRole("button", { name: "Library" }).focus();
+    fireEvent.click(title("Bilal Qureshi"));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Title" }), { target: { value: "Bilal · March shipment" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(title("Bilal · March shipment")).toHaveFocus();
+  });
+
   it("DT-REC-004: a title that isn't the person's own (Call with …) opens an empty box with it as the hint; Save with nothing changes nothing", async () => {
     respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false, title_source: "own" } }));
     await openRecording(item({ title: "Call with Bilal Qureshi", title_source: "person" }));
