@@ -416,6 +416,13 @@ pub struct AccountDto {
     /// The server takes phone passkeys (the desktop adds them on the website either way).
     #[serde(default)]
     pub passkeys_available: Option<bool>,
+    /// The colour of the initials' circle without a photo, 0–7 (since 2.0.0-r, BE-06), picked once by the server so it
+    /// is the same on every device; `None` (an older server, or anything else) lets the app derive one from the email.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub avatar_color: Option<u8>,
+    /// The apps' and the console's interface language, "en" or "ur" (since 2.0.0-r, BE-06): the same setting everywhere.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// One of the person's workspaces in `account.workspaces` (v1.6 shell).

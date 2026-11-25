@@ -14,6 +14,10 @@ import { Button, ListRow } from "../../components";
 import { Group, ResetDefaults, SegmentedSetting, SliderSetting, SwitchSetting, type Run } from "./rows";
 import { setZoom, useZoom, zoomHint, ZOOM_DEFAULT, ZOOM_STEPS } from "../../../lib/zoom";
 import { useDesignSwitch } from "../../flags";
+import type { Lang } from "../../../i18n";
+
+/** The account's language (v21_urdu): the one it speaks, how to change it on the server, and a refusal to say. */
+export type LanguageChoice = { value: Lang; onChange: (lang: Lang) => void; error?: string | null };
 
 /** The theme: the app's own when it hands it down (the top bar's toggle follows), else this page's. */
 export function useThemeChoice(theme?: ThemeChoice, onTheme?: (t: ThemeChoice) => void): [ThemeChoice, (t: ThemeChoice) => void] {
@@ -27,12 +31,14 @@ export function useThemeChoice(theme?: ThemeChoice, onTheme?: (t: ThemeChoice) =
   return [theme ?? own, choose];
 }
 
-export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false }: {
+export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false, language }: {
   theme: ThemeChoice; onTheme: (t: ThemeChoice) => void;
   /** The window has the rail (the rail · panel · page layout): its compact form can be chosen here. */
   rail?: boolean;
   /** Zoom is on (UX-07, v21_zoom): a stepped slider with Reset. */
   zoom?: boolean;
+  /** The app speaks Urdu too (v21_urdu): the account's language, kept on the server for the web and the phone too. */
+  language?: LanguageChoice;
 }) {
   const level = useZoom();
   // What is saved, followed as it changes anywhere (View › Theme › Compact rail, the Library's density); a change is
@@ -46,6 +52,11 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false }:
   const setPref = (change: Partial<Preferences>) => setPrefs(changePreferences(change));
   return (
     <>
+      {language && (
+        <Group footer={<>{language.error && <p className="el-field__error" role="alert">{language.error}</p>}<p>{setting("appearance.language").description}</p></>}>
+          <SegmentedSetting id="appearance.language" value={language.value} onChange={language.onChange} />
+        </Group>
+      )}
       <Group footer={<p>Kept on this computer. Times follow your choice everywhere in the app.</p>}>
         <SegmentedSetting id="appearance.theme" value={theme} onChange={onTheme} />
         <SegmentedSetting id="appearance.sidebar" value={prefs.sidebarStyle} onChange={(v) => setPref({ sidebarStyle: v })} />

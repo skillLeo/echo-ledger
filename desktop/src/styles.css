@@ -11,6 +11,8 @@
 @font-face { font-family: "Noto Naskh Arabic"; src: url("./assets/fonts/noto-naskh-arabic-arabic.woff2") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
 .segments[lang="ur"] .seg-text, .segments[lang="ur"] .seg-edit { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 19px; line-height: 2; }
 .segments[lang="ar"] .seg-text, .segments[lang="ar"] .seg-edit { font-family: "Noto Naskh Arabic", var(--font-sans); font-size: 18px; line-height: 1.7; }
+/* The window in Urdu (src/i18n, v21_urdu): Urdu words in Nastaliq, the rest in Inter (the face's range is Arabic only). */
+:root:lang(ur) { font-family: "Noto Nastaliq Urdu", var(--font-sans); }
 
 :root {
   /* colour: Radix slate + indigo, dark */

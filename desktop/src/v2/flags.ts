@@ -22,6 +22,8 @@ export const UI_FLAG_NAMES = [
   "v21_win_titlebar",
   // UX-07: zoom like Chrome in the main window (contract 2.0.0-r).
   "v21_zoom",
+  // Desktop Urdu: the account's language (src/i18n). Off, the app is in English, as before.
+  "v21_urdu",
 ] as const;
 export type UiFlagName = (typeof UI_FLAG_NAMES)[number];
 export type UiFlags = Record<UiFlagName, boolean>;
