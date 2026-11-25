@@ -6,6 +6,7 @@ use App\Enums\SessionStatus;
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
+use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -539,5 +541,50 @@ describe('the review of 5f74e162', function () {
         Livewire::test(ViewCaptureSession::class, ['record' => $id])->callAction('retranscribe_as', data: ['language' => 'ur'])->assertNotified();
         $session = CaptureSession::query()->findOrFail($id);
         expect($session->status)->toBe(SessionStatus::Processing)->and($session->language)->toBe('ur');
+    });
+});
+
+describe('bulk Transcribe on the queue (EL-UX\'s finding)', function () {
+    beforeEach(function () {
+        minutesLimit($this->owner, null);
+        // 50 short recordings (30 s each): each one alone would take the fast path.
+        $this->short = CaptureSession::factory()->count(50)->create(['user_id' => $this->owner->id, 'workspace_id' => $this->device->workspace_id,
+            'status' => SessionStatus::AudioOnly, 'transcribe' => false, 'duration_ms' => 30_000])->pluck('id')->all();
+    });
+
+    // The one test that tells the queue from the fast path: in tests the fast path queues too (FastPath::dispatch), and a
+    // faked queue also records a job run at once, so only the bus, as a server runs it, shows the difference.
+    it('never takes the fast path for many, as a server would run it, while one start still does', function () {
+        Bus::fake([TranscribeFinalJob::class]);
+        $later = app(TranscribeLater::class);
+        $workspace = (int) $this->device->workspace_id;
+        $env = app()['env'];
+        // As on a server: the fast path runs a short recording's job right away (after the response, or in the
+        // console now), never through the queue; and a cache that keeps locks between requests, as a server needs.
+        config(['cache.default' => 'file']);
+        app()['env'] = 'production';
+        try {
+            $many = $later->startManyFor($this->owner, $workspace, array_slice($this->short, 0, 49));
+            Bus::assertNotDispatchedSync(TranscribeFinalJob::class);
+            Bus::assertNotDispatchedAfterResponse(TranscribeFinalJob::class);
+            Bus::assertDispatched(TranscribeFinalJob::class, 49);
+
+            // One start of a short recording keeps the fast path.
+            $later->startFor($this->owner, $workspace, $this->short[49]);
+            Bus::assertDispatchedSync(TranscribeFinalJob::class, 1);
+        } finally {
+            app()['env'] = $env;
+        }
+        expect($many['started'])->toHaveCount(49);
+    });
+
+    it('keeps the claim, the budget and the key as they were for a bulk start', function () {
+        Queue::fake();
+        minutesLimit($this->owner, 10);
+
+        $this->postJson('/api/sessions/transcribe', ['ids' => $this->short])->assertForbidden()->assertJson(['code' => 'budget_exceeded']);
+
+        Queue::assertNothingPushed();
+        expect(CaptureSession::query()->whereIn('id', $this->short)->pluck('status')->unique()->all())->toBe([SessionStatus::AudioOnly]);
     });
 });
