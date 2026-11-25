@@ -64,6 +64,23 @@ describe("Needs you", () => {
     expect(needsReason(ITEMS[6], NOW.getTime())).toBe("stuck");
     expect(needsReason(ITEMS[7], NOW.getTime())).toBeNull();
   });
+  it("contract 2.0.0-z: a call is waiting only once it is over (ended_at) or started more than 4 hours ago", () => {
+    const now = NOW.getTime();
+    const ago = (ms: number) => new Date(now - ms).toISOString();
+    const call = (extra: Partial<LibraryItem>) => makeItem("live", { source_app: "zoom", status: "recording", transcript: none, ...extra });
+    // A call still being recorded (no end, started 3 minutes ago) needs nothing yet, and Needs you doesn't count it.
+    const live = call({ started_at: ago(3 * 60_000) });
+    expect(needsReason(live, now)).toBeNull();
+    expect(needsYouCount([live], { waiting: 0, failedUploads: 0 }, now)).toBe(0);
+    // Once its end is sent, it is.
+    expect(needsReason(call({ started_at: ago(3 * 60_000), ended_at: ago(60_000) }), now)).toBe("waiting");
+    // Without an end: exactly 4 hours is not yet, 4 hours and a second is.
+    expect(needsReason(call({ started_at: ago(4 * 3_600_000) }), now)).toBeNull();
+    expect(needsReason(call({ started_at: ago(4 * 3_600_000 + 1000) }), now)).toBe("waiting");
+    // The server's facets.state, when it sent one, decides.
+    expect(needsReason(call({ started_at: ago(5 * 3_600_000), facets: { state: "waiting_to_upload" } }), now)).toBeNull();
+    expect(needsReason(call({ started_at: ago(60_000), facets: { state: "waiting" } }), now)).toBe("waiting");
+  });
   it("counts the calls waiting and the uploads that failed on this computer on top", () => {
     expect(needsYouCount(ITEMS, { waiting: 2, failedUploads: 1 }, NOW.getTime())).toBe(5);
   });

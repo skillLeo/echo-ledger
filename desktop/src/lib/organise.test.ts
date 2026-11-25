@@ -6,6 +6,21 @@ import { makeItem } from "../test/fixtures";
 const NOW = new Date(2026, 9, 28, 15, 0, 0);
 const at = (y: number, m: number, d: number, h = 9) => new Date(y, m, d, h).toISOString();
 
+describe("the classic Waiting view (contract 2.0.0-z)", () => {
+  const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+  const call = (id: string, extra: Parameters<typeof makeItem>[1]) => makeItem(id, { status: "recording", ...extra });
+  it("has a call once it is over (ended_at) or started more than 4 hours ago, never one still being recorded", () => {
+    const items = [
+      call("live", { started_at: ago(3 * 60_000) }),
+      call("over", { started_at: ago(3 * 60_000), ended_at: ago(60_000) }),
+      call("four", { started_at: ago(4 * 3_600_000) }),
+      call("older", { started_at: ago(4 * 3_600_000 + 1000) }),
+    ];
+    expect(items.filter((i) => inSmartView(i, "waiting", NOW)).map((i) => i.id)).toEqual(["over", "older"]);
+    expect(smartViewCounts(items, NOW).waiting).toBe(2);
+  });
+});
+
 describe("smart views (B15)", () => {
   const today = makeItem("today", { started_at: at(2026, 9, 28) });
   const monday = makeItem("monday", { started_at: at(2026, 9, 26), pinned: true });

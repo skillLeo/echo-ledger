@@ -3,7 +3,7 @@
 import type { BinItem, LibraryItem, ViewsSummary } from "../../lib/ipc";
 import { rowViewsLine } from "../../lib/progress";
 import { TRASH_KEEP_HOURS_FALLBACK } from "../../lib/trash";
-import { inSmartView } from "../../lib/organise";
+import { inSmartView, isWaiting } from "../../lib/organise";
 import { dayGroup, itemState, recordingName, searchItems, sortItems } from "../../lib/library";
 import { formatTime, rowDate } from "../../lib/format";
 import { partsText } from "../../lib/languages";
@@ -84,21 +84,25 @@ export const STATE_WORDS: Record<RowStateKey, string> = {
 };
 const SERVER_STATES = new Set(["audio_only", "transcribing", "failed", "waiting_to_upload", "waiting"]);
 
-/** A recording's state (null: transcribed): the server's `facets.state` when it sent one, else from its one Status. */
-export function rowState(item: LibraryItem): RowState | null {
+/**
+ * A recording's state (null: transcribed) at [now]: the server's `facets.state` when it sent one, else from its one
+ * Status.
+ */
+export function rowState(item: LibraryItem, now: number = Date.now()): RowState | null {
   const state = (key: RowStateKey): RowState => ({ key, text: STATE_WORDS[key], tone: key === "failed" ? "danger" : "quiet" });
   if (item.transcript?.final_error_code === "no_audio") return state("no_audio");
   const sent = facetsOf(item)?.state;
   if (sent === "transcribed") return null;
   if (sent && SERVER_STATES.has(sent)) return state(sent as RowStateKey);
-  // A call still waiting for the person's choice (the session is `recording`): the contract's Status is processing, so
-  // its state is Waiting, whatever Status this computer works out (it counts the call in no Status).
-  if (item.status === "recording") return state("waiting");
+  // A call over and waiting for the person's choice (the session is `recording`, isWaiting): the contract's Status is
+  // processing, so its state is Waiting, whatever Status this computer works out (it counts the call in no Status). A
+  // call still being recorded is Waiting to upload (contract 2.0.0-z).
+  if (item.status === "recording") return state(isWaiting(item, now) ? "waiting" : "waiting_to_upload");
   switch (statusOf(item)) {
     case "failed": return state("failed");
     case "transcribed": return null;
     case "not_transcribed": return state("audio_only");
-    default: return state(item.status === "recording" ? "waiting" : item.status === "uploading" ? "waiting_to_upload" : "transcribing");
+    default: return state(item.status === "uploading" ? "waiting_to_upload" : "transcribing");
   }
 }
 
@@ -190,7 +194,7 @@ export type RowModel = {
 export function rowModel(item: LibraryItem, now: Date = new Date(), views: ViewsSummary | null | undefined = item.transcript?.views, timeOnly = false): RowModel {
   const app = item.source_app ?? (item.source_device === "phone" ? "phone_call" : "other");
   const kind = kindOfItem(item, sourceOf(item).value);
-  const state = rowState(item);
+  const state = rowState(item, now.getTime());
   const preview = item.transcript?.preview?.trim() || null;
   // A ready transcript whose default view is still written says "Converting to Roman Urdu… 60%" in place of its first
   // words (they come in Urdu script until then); one that could not be written says so before them.

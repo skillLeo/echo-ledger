@@ -25,6 +25,23 @@ export function startOfWeek(now: Date): Date {
   return day;
 }
 
+/** Without an end, a call counts as over this long after it started (contract 2.0.0-z: older apps never send one). */
+export const WAITING_AFTER_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * Whether a recording waits for the person's choice after a call (contract 2.0.0-z, the server's isWaiting): its session
+ * is still `recording` and the call is over, `ended_at` set or started more than 4 hours before [now] (exactly 4 hours is
+ * not yet). A call still being recorded is not waiting. The server's `facets.state`, when it sent one, decides.
+ */
+export function isWaiting(item: LibraryItem, now: number): boolean {
+  if (item.status !== "recording") return false;
+  const sent = item.facets?.state;
+  if (sent) return sent === "waiting";
+  if (item.ended_at) return true;
+  const started = item.started_at ? Date.parse(item.started_at) : NaN;
+  return Number.isFinite(started) && now - started > WAITING_AFTER_MS;
+}
+
 /** Same rules as the server: calendar day and Monday-based week in local time, recordings still waiting, and so on. */
 export function inSmartView(item: LibraryItem, view: SmartView, now: Date = new Date()): boolean {
   if (item.deleted) return false;
@@ -41,7 +58,7 @@ export function inSmartView(item: LibraryItem, view: SmartView, now: Date = new 
       return started >= from.getTime() && started < to.getTime();
     }
     case "waiting":
-      return item.status === "recording";
+      return isWaiting(item, now.getTime());
     case "bookmarked":
       return (item.marker_count ?? 0) > 0;
     case "failed":

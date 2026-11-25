@@ -988,8 +988,9 @@ export interface LibraryItem {
   ended_at?: string | null;
   /** When its current upload or transcript attempt began (since 2.0.0-p): Needs you's 24 hours are counted from it. */
   processing_since?: string | null;
-  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p). */
-  facets?: { source?: string; status?: string; language?: string } | null;
+  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p), and
+   * its state in the glossary's words (`state`, since 2.0.0-r). */
+  facets?: { source?: string; status?: string; language?: string; kind?: string; state?: string } | null;
 }
 
 /**

@@ -164,6 +164,21 @@ describe("the Library's places", () => {
     expect(rows()).toEqual(["call"]);
   });
 
+  it("in the app, a call still being recorded is not in Needs you or its count (contract 2.0.0-z); once over, it is", async () => {
+    const live = makeItem("live", { title: "Zoom call", source_app: "zoom", started_at: new Date(Date.now() - 3 * 60_000).toISOString(), status: "recording", transcript: none });
+    const over = makeItem("over", { title: "Phone call with Bilal", source_app: "phone_call", started_at: new Date(Date.now() - 5 * 60_000).toISOString(), ended_at: new Date(Date.now() - 60_000).toISOString(), status: "recording", transcript: none });
+    respond("pending_list", []);
+    respond("upload_list", []);
+    inTheApp([...ITEMS, live, over], { failedUploads: 0, pendingDecisions: 0 });
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    // The failed one and the call that is over; not the one still being recorded.
+    expect(within(list).getByRole("button", { name: /^Needs you, / })).toHaveAccessibleName("Needs you, 2");
+    fireEvent.click(within(list).getByRole("button", { name: "Needs you, 2" }));
+    await settle();
+    expect(rows()).toEqual(["over", "bad"]);
+  });
+
   it("in the app, each place comes back as it was left; the Library's rail icon pressed again starts it over (PLAN_NAV_3_LEVELS §6)", async () => {
     respond("projects_list", { data: [] });
     inTheApp();
