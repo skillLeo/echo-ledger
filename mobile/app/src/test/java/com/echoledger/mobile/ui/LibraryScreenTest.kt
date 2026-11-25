@@ -108,6 +108,17 @@ class LibraryScreenTest : ScreenTest() {
         client
     )
 
+    /** P-043: a failed transcription's row says what a tap does (it opens the recording, which says why and offers Retry). */
+    @Test
+    fun `a failed transcription's row says a tap shows why`() {
+        seed(item("f1", title = "Call f1", finalStatus = "failed"))
+        showLibrary()
+        compose.onNodeWithText("Transcription failed · Tap to see why", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Transcription failed · Tap to retry", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("Call f1").performClick()
+        assertEquals("f1", opened?.id)
+    }
+
     // ---- empty and loading ---------------------------------------------------------------------------------------------
 
     @Test

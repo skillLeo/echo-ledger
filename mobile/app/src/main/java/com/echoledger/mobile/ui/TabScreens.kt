@@ -440,7 +440,8 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
         time = rowTime(item.at, today),
         meta = item.body,
         tile = { IconTile(icon, tint) },
-        onClick = onClick,
+        // P-043: only an item with a recording opens something; one with nowhere to go (a new device) isn't a button.
+        onClick = onClick.takeIf { item.sessionId != null },
         onLongClick = onClick,
         unopened = !item.read,
         divider = divider

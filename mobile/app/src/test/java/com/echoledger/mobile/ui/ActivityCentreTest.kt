@@ -7,6 +7,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -112,6 +114,25 @@ class ActivityCentreTest : ScreenTest() {
         pumpUntil("the recording to open") { opened == listOf("s-n2") }
         assertEquals(listOf(listOf("n2")), marked)
         compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    /** P-043: a row with nowhere to go (a new device: no recording) isn't a button; a recording's row is. */
+    @Test
+    fun `a row with nowhere to go is not a button, a recording's row is`() {
+        show {
+            ActivityScreen(
+                load = {
+                    val device = ActivityItemDto("dev", "device_added", "New device", "Pixel 9 was paired", null)
+                    ActivityResponse(listOf(item("rec"), device), 0)
+                },
+                markRead = { 0 },
+                onOpen = {},
+                onUnread = {}
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Pixel 9 was paired").assertExists() }.isSuccess }
+        compose.onNode(hasText("Pixel 9 was paired") and hasClickAction()).assertDoesNotExist()
+        compose.onNode(hasText("Call rec") and hasClickAction()).assertExists()
     }
 
     @Test
