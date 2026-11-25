@@ -1,15 +1,26 @@
 // Sharing and filing rules (docs/API.md "Share links", "Sending to a teammate", "Request links", "Filing rules", since
 // v1.5): emails as typed, expiry choices, and the words a link, a request or a rule is shown with. Pure; unit-tested.
+// The words are in the account's language (src/i18n), read when they are asked for: a screen in t() calls the functions
+// below. The constants in capitals are the same words read once, as the app loads (in English): for the windows that
+// aren't in the account's language yet (classic's, Settings › Workspace's rules), until they call the functions too.
 import type { FilingRule, LibraryItem, RequestLink, RuleKind, ShareLink } from "./ipc";
+import type { ConfirmQuestion } from "./confirm";
 import { formatWhen, SOURCE_APP_LABELS } from "./format";
+import { t, tc } from "../i18n";
 
 /** The most people one link or one send may name. */
 export const MAX_PEOPLE = 20;
 
 /** Revoke asks first (D-072): a link stops working for everyone who has it, and it can't be turned back on. */
-export const REVOKE_LINK_QUESTION = { title: "Revoke this link?", body: "It stops working for everyone who has it.", confirm: "Revoke", tone: "danger" } as const;
+export function revokeLinkQuestion(): ConfirmQuestion {
+  return { title: t("Revoke this link?"), body: t("It stops working for everyone who has it."), confirm: t("Revoke"), tone: "danger" };
+}
 /** The same for a request link. */
-export const REVOKE_REQUEST_QUESTION = { title: "Revoke this request link?", body: "It stops taking files from everyone who has it.", confirm: "Revoke", tone: "danger" } as const;
+export function revokeRequestQuestion(): ConfirmQuestion {
+  return { title: t("Revoke this request link?"), body: t("It stops taking files from everyone who has it."), confirm: t("Revoke"), tone: "danger" };
+}
+export const REVOKE_LINK_QUESTION = revokeLinkQuestion();
+export const REVOKE_REQUEST_QUESTION = revokeRequestQuestion();
 
 /** An email address the way the core checks it: one `@`, a dotted domain, no spaces. */
 export function looksLikeEmail(text: string): boolean {
@@ -31,14 +42,18 @@ export function parseEmails(text: string): { emails: string[]; invalid: string[]
 }
 
 export type ExpiryChoice = "never" | "hour" | "day" | "week" | "month" | "date";
-export const EXPIRY_CHOICES: readonly (readonly [ExpiryChoice, string])[] = [
-  ["never", "Never"],
-  ["hour", "In 1 hour"],
-  ["day", "In 1 day"],
-  ["week", "In 7 days"],
-  ["month", "In 30 days"],
-  ["date", "On a date…"],
-];
+/** When a new link stops working, each choice with its words. */
+export function expiryChoices(): readonly (readonly [ExpiryChoice, string])[] {
+  return [
+    ["never", t("Never")],
+    ["hour", t("In 1 hour")],
+    ["day", t("In 1 day")],
+    ["week", t("In 7 days")],
+    ["month", t("In 30 days")],
+    ["date", t("On a date…")],
+  ];
+}
+export const EXPIRY_CHOICES = expiryChoices();
 const EXPIRY_MS: Partial<Record<ExpiryChoice, number>> = { hour: 3_600_000, day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000 };
 
 /** When a choice stops a link: an RFC 3339 time, the end of the picked local day for "date", null for never (or no day yet). */
@@ -53,29 +68,46 @@ export function expiryTime(choice: ExpiryChoice, now: Date, day = ""): string | 
 
 /** Who may open a link, in words. */
 export function audienceText(link: Pick<ShareLink, "audience" | "people" | "has_password">): string {
-  if (link.audience === "people") return link.people && link.people.length > 0 ? `Only ${link.people.join(", ")}` : "Only the people chosen";
-  if (link.audience === "password" || (!link.audience && link.has_password)) return "Anyone with the link and the password";
-  return "Anyone with the link";
+  if (link.audience === "people") return link.people && link.people.length > 0 ? t("Only :people", { people: link.people.join(", ") }) : t("Only the people chosen");
+  if (link.audience === "password" || (!link.audience && link.has_password)) return t("Anyone with the link and the password");
+  return t("Anyone with the link");
 }
 
-export function linkState(link: Pick<ShareLink, "active" | "revoked_at">): "Active" | "Revoked" | "Expired" {
-  return link.active ? "Active" : link.revoked_at ? "Revoked" : "Expired";
+/** A link's or a request link's state (never shown as it is): working, revoked, or past its time. */
+export type LinkStatus = "active" | "revoked" | "expired";
+
+export function linkStatus(link: Pick<ShareLink, "active" | "revoked_at">): LinkStatus {
+  return link.active ? "active" : link.revoked_at ? "revoked" : "expired";
+}
+
+/** A state in words: Active, Revoked, Expired. */
+export function statusText(status: LinkStatus): string {
+  return status === "active" ? t("Active") : status === "revoked" ? t("Revoked") : t("Expired");
+}
+
+/** A link's state in words. */
+export function linkState(link: Pick<ShareLink, "active" | "revoked_at">): string {
+  return statusText(linkStatus(link));
 }
 
 /** "3 views · last viewed Oct 30 · 4:05 pm", "Not viewed yet". */
 export function viewsText(link: Pick<ShareLink, "view_count" | "last_viewed_at">): string {
-  if (!link.view_count) return "Not viewed yet";
-  const views = `${link.view_count} view${link.view_count === 1 ? "" : "s"}`;
-  return link.last_viewed_at ? `${views} · last viewed ${formatWhen(link.last_viewed_at)}` : views;
+  if (!link.view_count) return t("Not viewed yet");
+  const views = tc(":count view|:count views", link.view_count);
+  return link.last_viewed_at ? t(":views · last viewed :when", { views, when: formatWhen(link.last_viewed_at) }) : views;
 }
 
 /** What a link lets people do besides reading: download, or (an older server's link) listen. */
 export function downloadText(link: Pick<ShareLink, "allow_download" | "include_audio">): string {
   const download = link.allow_download ?? link.include_audio;
-  return download ? "Downloads allowed" : "Read and listen only";
+  return download ? t("Downloads allowed") : t("Read and listen only");
 }
 
-export const RULE_KINDS: readonly (readonly [RuleKind, string])[] = [["title", "Title contains"], ["app", "App"], ["contact", "Contact number or email"]];
+/** The kinds of filing rule, each with its words. */
+export function ruleKinds(): readonly (readonly [RuleKind, string])[] {
+  return [["title", t("Title contains")], ["app", t("App")], ["contact", t("Contact number or email")]];
+}
+export const RULE_KINDS = ruleKinds();
 
 /** The apps an app rule can name, by their labels (the `source_app` wire values). */
 export const RULE_APPS: readonly string[] = [
@@ -85,9 +117,9 @@ export const RULE_APPS: readonly string[] = [
 
 /** A filing rule in words: "Title contains “Acme”", "From Zoom", "Contact +92 300 1234567". */
 export function ruleText(rule: Pick<FilingRule, "kind" | "value">): string {
-  if (rule.kind === "app") return `From ${SOURCE_APP_LABELS[rule.value] ?? rule.value}`;
-  if (rule.kind === "contact") return `Contact ${rule.value}`;
-  return `Title contains “${rule.value}”`;
+  if (rule.kind === "app") return t("From :app", { app: SOURCE_APP_LABELS[rule.value] ?? rule.value });
+  if (rule.kind === "contact") return t("Contact :contact", { contact: rule.value });
+  return t("Title contains “:text”", { text: rule.value });
 }
 
 /**
@@ -98,28 +130,33 @@ export function ruleText(rule: Pick<FilingRule, "kind" | "value">): string {
 export function filedByRuleText(item: Pick<LibraryItem, "title" | "source_app">, rules: readonly FilingRule[] | null): string {
   const title = (item.title ?? "").toLowerCase();
   const byTitle = rules?.find((r) => r.kind === "title" && r.value.trim() !== "" && title.includes(r.value.trim().toLowerCase()));
-  if (byTitle) return `Filed by rule: title contains ${byTitle.value.trim()}`;
+  if (byTitle) return t("Filed by rule: title contains :text", { text: byTitle.value.trim() });
   const byApp = rules?.find((r) => r.kind === "app" && r.value === item.source_app);
-  if (byApp) return `Filed by rule: from ${SOURCE_APP_LABELS[byApp.value] ?? byApp.value}`;
-  return "Filed by a rule";
+  if (byApp) return t("Filed by rule: from :app", { app: SOURCE_APP_LABELS[byApp.value] ?? byApp.value });
+  return t("Filed by a rule");
 }
 
-export function requestState(link: Pick<RequestLink, "revoked_at" | "expires_at">, now: number = Date.now()): "Active" | "Revoked" | "Expired" {
-  if (link.revoked_at) return "Revoked";
-  if (link.expires_at && Date.parse(link.expires_at) <= now) return "Expired";
-  return "Active";
+export function requestStatus(link: Pick<RequestLink, "revoked_at" | "expires_at">, now: number = Date.now()): LinkStatus {
+  if (link.revoked_at) return "revoked";
+  if (link.expires_at && Date.parse(link.expires_at) <= now) return "expired";
+  return "active";
+}
+
+/** A request link's state in words. */
+export function requestState(link: Pick<RequestLink, "revoked_at" | "expires_at">, now: number = Date.now()): string {
+  return statusText(requestStatus(link, now));
 }
 
 /** "4 files received", "Nothing received yet". */
 export function receivedText(count: number): string {
-  if (!count) return "Nothing received yet";
-  return `${count} file${count === 1 ? "" : "s"} received`;
+  if (!count) return t("Nothing received yet");
+  return tc(":count file received|:count files received", count);
 }
 
 /** "Up to 20 files of 100 MB" from a request link's limits; empty when it has none. */
 export function limitsText(link: Pick<RequestLink, "max_files" | "max_mb">): string {
-  const files = link.max_files ? `up to ${link.max_files} file${link.max_files === 1 ? "" : "s"}` : "";
-  const size = link.max_mb ? `${files ? "of" : "files of up to"} ${link.max_mb} MB` : "";
-  const text = [files, size].filter(Boolean).join(" ");
-  return text ? text[0].toUpperCase() + text.slice(1) : "";
+  if (link.max_files && link.max_mb) return tc("Up to :count file of :mb MB|Up to :count files of :mb MB", link.max_files, { mb: link.max_mb });
+  if (link.max_files) return tc("Up to :count file|Up to :count files", link.max_files);
+  if (link.max_mb) return t("Files of up to :mb MB", { mb: link.max_mb });
+  return "";
 }
