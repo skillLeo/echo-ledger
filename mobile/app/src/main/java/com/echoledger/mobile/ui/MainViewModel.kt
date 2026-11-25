@@ -172,6 +172,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Another account from now on (a sign-out, or a sign-in's start): its projects and lists go. Main thread only. */
     private fun newAccount() {
         graph.accountEpoch.incrementAndGet()
+        confirmedLanguage = null
         _clients.value = emptyList()
         _lists.value = emptyList()
     }
@@ -291,6 +292,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 deviceId = response.device.id,
                 deviceName = response.device.name,
                 serverApiVersion = response.config.apiVersion,
+                // The last account's language and colour go: this one's are read below (no flash of the old one).
+                accountLanguage = null,
+                avatarColor = null,
                 markerTags = response.config.markers?.tags.orEmpty(),
                 unsureStyle = response.config.unsure?.style ?: "brackets",
                 unsureThreshold = response.config.unsure?.threshold ?: 0.5,
@@ -304,7 +308,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.settings.update { it.copy(signIns = it.signIns + 1) }
         // Since v1.5: whose account this is (the typed email, else the server's answer; an older server has none), and
         // recordings made under another account wait for it instead of uploading into this one.
-        val known = email ?: withContext(Dispatchers.IO) { runCatching { graph.api()?.account()?.email }.getOrNull() }
+        val turn = languageTurn.get()
+        val epoch = graph.accountEpoch.get()
+        val read = withContext(Dispatchers.IO) { runCatching { graph.api()?.account() }.getOrNull() }
+        // Its language and colour at once (BE-06): the first screens speak the account's language.
+        read?.let { keepAccount(it, turn, epoch) }
+        val known = email ?: read?.email
         val next = Owner.of(serverUrl, known)
         withContext(Dispatchers.IO) {
             Owner.stamp(graph.recordings.all(), previous, next).forEach { graph.recordings.save(it) }
@@ -552,42 +561,82 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    suspend fun account(): com.echoledger.mobile.data.AccountDto? =
-        workspaceCall("The account could not be loaded.") { it.account() }?.also { keepAccount(it) }
-
-    /**
-     * What the phone keeps of the account it read (BE-06): its language, spoken while signed in (also while the account
-     * next loads or can't be read), and its avatar colour. A language the app doesn't speak keeps the last one known.
-     */
-    suspend fun keepAccount(account: com.echoledger.mobile.data.AccountDto) {
-        graph.settings.update {
-            it.copy(
-                accountLanguage = account.language?.takeIf { l -> l == "en" || l == "ur" } ?: it.accountLanguage,
-                avatarColor = account.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor
-            )
-        }
+    suspend fun account(): com.echoledger.mobile.data.AccountDto? {
+        val turn = languageTurn.get()
+        val epoch = graph.accountEpoch.get()
+        return workspaceCall("The account could not be loaded.") { it.account() }?.also { keepAccount(it, turn, epoch) }
     }
 
     /**
+     * What the phone keeps of the account it read (BE-06): its avatar colour, and its language, spoken while signed in.
+     * A read made while a language change is on its way, or begun before the last one ended ([turn] is not the latest),
+     * keeps no language: the server may have answered before the change. A read begun for another account ([epoch])
+     * keeps nothing. A language the app doesn't speak keeps the last one known.
+     */
+    suspend fun keepAccount(account: com.echoledger.mobile.data.AccountDto, turn: Long, epoch: Int) {
+        if (!stillAccount(epoch)) return
+        val settled = languagePatches.get() == 0 && turn == languageTurn.get()
+        val language = account.language?.takeIf { it in SPOKEN && settled }
+        graph.settings.update {
+            if (!stillAccount(epoch)) return@update it
+            it.copy(
+                accountLanguage = language ?: it.accountLanguage,
+                avatarColor = account.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor
+            )
+        }
+        if (language != null) confirmedLanguage = language
+    }
+
+    /** Changes of the account's language: the latest call's number, those on their way, and a turn that moves with each. */
+    private val languageCall = java.util.concurrent.atomic.AtomicLong()
+    private val languagePatches = java.util.concurrent.atomic.AtomicInteger()
+    private val languageTurn = java.util.concurrent.atomic.AtomicLong()
+
+    /** The languages the app speaks. */
+    private val SPOKEN = setOf("en", "ur")
+
+    /** The account's language as the server last said it (put back when a change is refused). */
+    @Volatile private var confirmedLanguage: String? = null
+
+    /**
      * Settings › Appearance › App language while signed in: the account's language (`PATCH /api/account`), so it
-     * changes on every device. Shown at once; put back, with a message, when the server says no.
+     * changes on every device. Shown at once. Only the latest choice applies its answer; when the server refuses it,
+     * the language the server last said comes back, with a message. The choice made while signed out is not touched.
      */
     fun setAccountLanguage(language: String) = viewModelScope.launch {
-        val before = graph.settings.current()
-        graph.settings.update { it.copy(accountLanguage = language, appLanguage = language) }
-        val saved = withContext(Dispatchers.IO) { runCatching { graph.api()?.updateLanguage(language) }.getOrNull() }
+        val call = languageCall.incrementAndGet()
+        val epoch = graph.accountEpoch.get()
+        val before = graph.settings.current().accountLanguage
+        if (confirmedLanguage == null) confirmedLanguage = before
+        languagePatches.incrementAndGet()
+        languageTurn.incrementAndGet()
+        graph.settings.update { it.copy(accountLanguage = language) }
+        val saved = try {
+            withContext(Dispatchers.IO) { runCatching { graph.api()?.updateLanguage(language) }.getOrNull() }
+        } finally {
+            languagePatches.decrementAndGet()
+            languageTurn.incrementAndGet()
+        }
+        if (call != languageCall.get() || !stillAccount(epoch)) return@launch
         if (saved != null) {
-            keepAccount(saved)
+            val now = saved.language?.takeIf { it in SPOKEN } ?: language
+            confirmedLanguage = now
+            graph.settings.update {
+                it.copy(accountLanguage = now, avatarColor = saved.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor)
+            }
         } else {
-            graph.settings.update { it.copy(accountLanguage = before.accountLanguage, appLanguage = before.appLanguage) }
+            graph.settings.update { it.copy(accountLanguage = confirmedLanguage) }
             _message.value = com.echoledger.mobile.notify.AppWords.resources(getApplication())
                 .getString(com.echoledger.mobile.R.string.v2_set_language_not_saved)
         }
     }
 
     /** The account for the Settings card (since v1.7): nothing is said when it can't be read; the card keeps what it had. */
-    suspend fun accountQuietly(): com.echoledger.mobile.data.AccountDto? =
-        runCatching { withContext(Dispatchers.IO) { graph.api()?.account() } }.getOrNull()?.also { keepAccount(it) }
+    suspend fun accountQuietly(): com.echoledger.mobile.data.AccountDto? {
+        val turn = languageTurn.get()
+        val epoch = graph.accountEpoch.get()
+        return runCatching { withContext(Dispatchers.IO) { graph.api()?.account() } }.getOrNull()?.also { keepAccount(it, turn, epoch) }
+    }
 
     /** Signs out every device and console session of the account, this phone too (back to the sign-in screen). */
     suspend fun signOutEverywhere(): Boolean {
@@ -698,7 +747,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
                 }
                 // The account's language and avatar colour (BE-06): the phone speaks its language while signed in.
-                runCatching { graph.api()?.account() }.getOrNull()?.let { keepAccount(it) }
+                val turn = languageTurn.get()
+                val epoch = graph.accountEpoch.get()
+                runCatching { graph.api()?.account() }.getOrNull()?.let { keepAccount(it, turn, epoch) }
                 graph.library.refresh()
                 // The calls waiting for Keep or Discard on any device, which the sync leaves out (Needs you lists them).
                 waitingReadAt = android.os.SystemClock.elapsedRealtime()

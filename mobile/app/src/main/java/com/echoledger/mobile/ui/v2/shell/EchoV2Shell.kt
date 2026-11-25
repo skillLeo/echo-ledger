@@ -373,7 +373,7 @@ private fun ShellBody(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             CompositionLocalProvider(
                 LocalAccountEntry provides AccountEntry(initials) { route = V2Route.Settings },
-                LocalAvatarColour provides settings.avatarColor
+                LocalAvatarColour provides (settings.avatarColor ?: settings.account?.email?.let(::personColour))
             ) {
                 when (val r = route) {
                     V2Route.Settings, is V2Route.SettingsPage -> {

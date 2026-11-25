@@ -198,10 +198,18 @@ private fun RecentActivity(events: List<com.echoledger.mobile.data.SecurityEvent
         }
         EchoSettingRow(
             "${e.summary.ifBlank { e.label }} · $who",
-            subtitle = com.echoledger.mobile.ui.v2.library.LibraryModel.latinDigits(com.echoledger.mobile.ui.formatWhen(e.at)),
+            // In the app's language (its months), never the phone's.
+            subtitle = com.echoledger.mobile.ui.v2.library.LibraryModel.latinDigits(
+                com.echoledger.mobile.ui.formatWhen(e.at, locale = appLocale())
+            ),
             content = true
         )
     }
 }
 
 private const val ACTIVITY_SHOWN = 15
+
+/** The locale of the language the screen speaks (the app's, from the theme's resources), never the phone's. */
+@androidx.compose.runtime.Composable
+internal fun appLocale(): java.util.Locale =
+    androidx.compose.ui.platform.LocalContext.current.resources.configuration.locales[0] ?: java.util.Locale.ENGLISH

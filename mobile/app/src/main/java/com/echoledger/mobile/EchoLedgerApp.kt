@@ -31,6 +31,8 @@ class EchoLedgerApp : Application() {
         ShareGuard.restore(ShareGuardMemory(this))
         // The person's design (classic or the new one), before any screen, overlay or notice asks the flags.
         com.echoledger.mobile.ui.v2.shell.DesignChoice.load(this)
+        // The language of the last settings seen, for the first words before the settings store answers.
+        com.echoledger.mobile.ui.v2.shell.AppLook.load(this)
         // The capture journal (since v1.8): a call the last process left open was lost with it.
         com.echoledger.mobile.recording.CallJournal.processStarted(this)
         graph = AppGraph(this)
@@ -85,6 +87,8 @@ class AppGraph(val context: Context) {
     val settings: SettingsStore by lazy {
         // Every saved change of Hide EchoLedger's live words reaches the floating windows and ShareGuard's memory at once.
         SettingsStore(context, secretCipher, latestSettings) { saved ->
+            // The language spoken now, kept for the next cold start (AppLook.lastKnown).
+            com.echoledger.mobile.ui.v2.shell.AppLook.keep(context, com.echoledger.mobile.ui.v2.shell.AppLook.choice(saved))
             ShareGuard.setHideLive(saved.hideLiveWords)
             // The capture journal keeps the choices that decide whether a call should be recorded, as they change.
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))

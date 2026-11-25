@@ -24,6 +24,7 @@ import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.ActivityScreen
 import com.echoledger.mobile.ui.LibraryScreen
 import com.echoledger.mobile.ui.RecordSheet
@@ -90,6 +91,15 @@ class NavigationParityShotsTest : ScreenTest() {
         EchoBottomBar(MAIN_TABS, MAIN_TABS.first().key, {}, {}, recording = false, onRecord = {}, onRecordLongPress = {})
     }
 
+    private val shots by lazy { ParityShots(compose) }
+
+    /** On the new design's side: waits until the shell speaks the variant's language (the account's, from [shell]). */
+    private fun spoken() {
+        if (shots.classicSide) return
+        val code = if (shots.language == EchoLanguage.Urdu) "ur" else "en"
+        pumpUntil("the account speaks $code") { (vm.settings.value.accountLanguage ?: "en") == code }
+    }
+
     /** The shell in [language] as a signed-in phone speaks it: the account's (BE-06), set here as the server would. */
     @Composable
     private fun shell(dark: Boolean, language: EchoLanguage) {
@@ -115,18 +125,21 @@ class NavigationParityShotsTest : ScreenTest() {
     @Test
     fun libraryWithTheBar() = assertEquals(
         all,
-        ParityShots(compose).shoot(
+        shots.shoot(
             "nav-library",
             classic = { classicWithBar { LibraryScreen(vm, readiness = ReadinessFixtures.HELPER_STOPPED, onReady = {}, onOpen = {}) } },
             v2 = { dark, language -> shell(dark, language) },
-            each = ::rows
+            each = {
+                spoken()
+                rows()
+            }
         )
     )
 
     @Test
     fun theRecordSheet() = assertEquals(
         all,
-        ParityShots(compose).shoot(
+        shots.shoot(
             "nav-record-sheet",
             classic = {
                 classicWithBar { LibraryScreen(vm, readiness = ReadinessFixtures.HELPER_STOPPED, onReady = {}, onOpen = {}) }
@@ -140,6 +153,7 @@ class NavigationParityShotsTest : ScreenTest() {
             },
             v2 = { dark, language -> shell(dark, language) },
             each = {
+                spoken()
                 rows()
                 val record = compose.onAllNodes(hasContentDescription("Record") or hasContentDescription("ریکارڈ"))
                 if (record.fetchSemanticsNodes().isNotEmpty()) record.onFirst().performTouchInput { longClick() }
@@ -169,7 +183,7 @@ class NavigationParityShotsTest : ScreenTest() {
     @Test
     fun activity() = assertEquals(
         all,
-        ParityShots(compose).shoot(
+        shots.shoot(
             "activity",
             classic = {
                 ActivityScreen(
