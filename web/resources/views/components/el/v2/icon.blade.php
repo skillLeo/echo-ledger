@@ -1,7 +1,8 @@
 {{--
     The v2.0 console's one icon family, the same glyphs as the desktop app (desktop/src/components/Icons.tsx): line
     glyphs on a 24-unit grid, one stroke, round ends, currentColor. Outlined at rest; `filled` for the page you are on.
-    Its size comes from CSS (.v2-icon), never from here. Directional glyphs (chevrons, back) turn over right to left.
+    Its size comes from CSS (.v2-icon), never from here. Directional glyphs (chevrons, back) turn over right to left, and
+    so do the help "?" and the chat bubble (W-234).
 --}}
 @props(['name', 'filled' => false])
 @php
@@ -73,7 +74,10 @@
         // The profile's camera badge: Add or Change photo (UX-18).
         'camera' => '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.5-2.2h5.6l1.5 2.2h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.8" r="3.6"/>',
     ];
-    $directional = in_array($name, ['chevron-end', 'chevron-start'], true);
+    // W-234: right to left the help "?" (Urdu ؟) and a chat bubble read mirrored too, as on the desktop and the phone;
+    // added only then, so English draws them as before.
+    $directional = in_array($name, ['chevron-end', 'chevron-start'], true)
+        || (in_array($name, ['help', 'chat'], true) && \App\Filament\Support\ConsoleV2::rtl());
 @endphp
 <svg {{ $attributes->class(['v2-icon', 'v2-icon-flip' => $directional]) }} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{!! $glyphs[$name] ?? $glyphs['dots'] !!}</svg>

@@ -69,3 +69,12 @@ it('mirrors a missed call on Activity in Urdu only', function () {
     rtlIconsConsole('en', false);
     expect((string) $this->get('/app/activity')->assertOk()->getContent())->toMatch('~<span class="el-tile el-tile-amber"><svg aria-hidden="true" xmlns=~');
 });
+
+it('mirrors the rail\'s Help "?" and Ask\'s chat bubble in Urdu, and draws them as before in English', function () {
+    rtlIconsConsole('ur');
+    $ur = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($ur)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon v2-icon-flip"~');
+    rtlIconsConsole('en');
+    $en = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($en)->toMatch('~data-module="help"[^>]*>\s*<span class="v2-rail-icon"><svg class="v2-icon"~');
+});
