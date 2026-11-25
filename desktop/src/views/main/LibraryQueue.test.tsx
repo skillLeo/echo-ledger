@@ -451,6 +451,7 @@ describe("Waiting recordings: assign client", () => {
     expect(shown).toHaveAttribute("aria-hidden", "true");
     // The select keeps its own name and value: a screen reader hears the whole choice, and its list is unchanged.
     expect(select.selectedOptions[0].text).toBe("Auto (English / Urdu / Arabic)");
+    expect(select).toHaveAttribute("title", "Language of the transcript");
     const urdu = within(row("p2")).getByRole("combobox", { name: "Language" }) as HTMLSelectElement;
     expect(urdu.selectedOptions[0].text).toBe("Urdu (with English words)");
     expect(urdu.closest(".queue-language")?.querySelector(".queue-language-label")).toHaveTextContent(/^Urdu$/);
@@ -458,6 +459,9 @@ describe("Waiting recordings: assign client", () => {
     const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
     expect(css).toMatch(/\.queue-language > select\s*\{[^}]*position: absolute;[^}]*opacity: 0/);
     expect(css).toMatch(/\.queue-language:has\(> select:focus-visible\)\s*\{[^}]*outline: 2px solid var\(--focus\)/);
+    // Its list keeps the list's own colours (not an active chip's accent), and the arrow sits at the end in right to left.
+    expect(css).toMatch(/\.queue-language > select option\s*\{[^}]*color: var\(--text\);[^}]*background: var\(--surface\)/);
+    expect(css).toMatch(/\[dir="rtl"\] \.chip\.queue-language\s*\{[^}]*background-position: 10px 50%, 15px 50%/);
   });
 
   it("sends an explicit null for No project", async () => {

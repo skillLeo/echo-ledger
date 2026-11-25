@@ -3,6 +3,7 @@
 // (classic Library, the waiting recordings), saved under docs/design/screens/desktop/d-038/:
 //   <prefix>-waiting-language-chip-<theme>.png        the cards
 //   <prefix>-waiting-language-chip-focus-<theme>.png  after Tab reaches the first chip
+//   <prefix>-waiting-language-chip-rtl-<theme>.png    in Urdu, right to left (the arrow at the chip's end, on the left)
 // The run fails, after the change, when a chip's words are cut or the focused chip shows no ring.
 //   node scripts/languageChip.mjs before
 //   node scripts/languageChip.mjs after
@@ -21,21 +22,29 @@ const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch();
 await mkdir(out, { recursive: true });
 const problems = [];
-for (const theme of ["light", "dark"]) {
+for (const [theme, rtl] of [["light", false], ["dark", false], ["light", true], ["dark", true]]) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
-  await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}`);
+  await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}${rtl ? "&lang=ur" : ""}`);
+  const name = rtl ? `rtl-${theme}` : theme;
   // A busy machine serves the fixture slowly; the wait is for it to load, not a measure of anything. The waiting
   // recordings sit behind the slim line's Review.
-  const review = page.locator(".queue-slim").getByRole("button", { name: "Review" });
+  const review = page.locator(".queue-slim").getByRole("button").last();
   await review.waitFor({ timeout: 60_000 });
   await review.click();
-  const card = page.locator(".queue-actions").filter({ has: page.getByRole("combobox", { name: "Language" }) }).first();
+  const card = page.locator(".queue-actions").filter({ has: page.locator(".queue-language, select.queue-language") }).first();
   await card.waitFor({ timeout: 60_000 });
-  const select = card.getByRole("combobox", { name: "Language" });
+  const select = card.locator("select").first();
   const chip = await select.evaluate((el) => {
     const c = el.closest(".queue-language") ?? el;
     const label = c.querySelector(".queue-language-label");
-    if (label) return { words: (label.textContent ?? "").trim(), cut: label.scrollWidth > label.clientWidth + 1 };
+    if (label) {
+      // The arrow is drawn at the chip's end: on the right left to right, on the left right to left (clear of the words).
+      const box = c.getBoundingClientRect();
+      const words = label.getBoundingClientRect();
+      const rtl = getComputedStyle(c).direction === "rtl";
+      const arrowClear = rtl ? words.left - box.left >= 20 : box.right - words.right >= 20;
+      return { words: (label.textContent ?? "").trim(), cut: label.scrollWidth > label.clientWidth + 1 || !arrowClear };
+    }
     // Before: the select draws its chosen option itself, and its scrollWidth doesn't say when that text is cut, so the
     // words are measured against the room between its paddings.
     const s = getComputedStyle(el);
@@ -45,7 +54,7 @@ for (const theme of ["light", "dark"]) {
     const room = el.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
     return { words, cut: ctx.measureText(words).width > room + 1 };
   });
-  await card.screenshot({ path: join(out, `${prefix}-waiting-language-chip-${theme}.png`) });
+  await card.screenshot({ path: join(out, `${prefix}-waiting-language-chip-${name}.png`) });
   // Keyboard focus: Tab from the element just before the select.
   await select.evaluate((el) => {
     const all = [...document.querySelectorAll("button, select, input, a[href], [tabindex]")].filter((e) => !e.disabled);
@@ -57,9 +66,9 @@ for (const theme of ["light", "dark"]) {
     const s = getComputedStyle(c);
     return { focused: document.activeElement === el, outline: `${s.outlineStyle} ${s.outlineWidth}` };
   });
-  await card.screenshot({ path: join(out, `${prefix}-waiting-language-chip-focus-${theme}.png`) });
-  console.log(theme, JSON.stringify({ ...chip, ...ring }));
-  if (chip.cut || !ring.focused || ring.outline.startsWith("none")) problems.push(theme);
+  if (!rtl) await card.screenshot({ path: join(out, `${prefix}-waiting-language-chip-focus-${theme}.png`) });
+  console.log(name, JSON.stringify({ ...chip, ...ring }));
+  if (chip.cut || !ring.focused || ring.outline.startsWith("none")) problems.push(name);
   await page.close();
 }
 await browser.close();

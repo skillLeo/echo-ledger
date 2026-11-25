@@ -464,7 +464,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                           lies transparent over it, keeping its name, its whole choice for a screen reader and its own list. */}
                       <span className={`chip queue-language ${item.language ? "active" : ""}`} title="Language of the transcript">
                         <span className="queue-language-label" aria-hidden="true">{shortLanguage(item.language)}</span>
-                        <select aria-label="Language" disabled={isBusy}
+                        <select aria-label="Language" title="Language of the transcript" disabled={isBusy}
                           value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
                           {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
                           <optgroup label="More languages">
