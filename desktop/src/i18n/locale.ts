@@ -113,6 +113,18 @@ export function lineDir(line: unknown, lang: Lang = current): "rtl" | "ltr" | "a
   return latin ? "ltr" : "auto";
 }
 
+/**
+ * D-245: the direction of a line that may be built of pieces (elements among its words: a name in a <bdi>, a highlight,
+ * a state's icon) as well as of plain text. In Urdu a pieced line is the app's own line, laid out right to left:
+ * lineDir can't read it, and the browsers' dir="auto" took its first Latin piece (a time, a file name, an app's name)
+ * for the whole line's direction, so the Urdu was cut at its start. Plain text reads as lineDir says; English "auto".
+ */
+export function piecesDir(line: unknown, lang: Lang = current): "rtl" | "ltr" | "auto" {
+  const dir = lineDir(line, lang);
+  if (dir !== "auto" || !isRtl(lang)) return dir;
+  return line !== null && typeof line === "object" && textOf(line) === null ? "rtl" : dir;
+}
+
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
 export function stripIsolates(text: string): string {
   return text.replace(/[\u2066-\u2069]/g, "");

@@ -8,7 +8,7 @@ import { createElement, Fragment } from "react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FSI, lineDir, PDI, resetLanguageForTests, RLI, setLanguage } from "./index";
+import { FSI, lineDir, PDI, piecesDir, resetLanguageForTests, RLI, setLanguage } from "./index";
 import { formatWhen, setClock24, whenPart, whenParts } from "../lib/format";
 import { shortWhen } from "../views/main/ActivityCentre";
 import { clientSummary } from "../views/main/ClientAvatar";
@@ -185,6 +185,26 @@ describe("D-247: a Dialog's and a Sheet's ×", () => {
     urduView.unmount();
     render(<Dialog open title="Rename" closeLabel="Dismiss" onClose={() => undefined} />);
     expect(document.querySelector('[data-close="true"]')).toHaveAttribute("aria-label", "Dismiss");
+  });
+});
+
+describe("D-245: a row's meta line built of pieces", () => {
+  // A time first, then Urdu: dir="auto" took the time's AM for the line's direction and cut the Urdu at its start.
+  const pieced = createElement(Fragment, null, createElement("span", null, "12:52 AM"), " · ", createElement("bdi", null, "Google Meet"), " · آج");
+  it("in Urdu reads right to left; plain text as before (Latin left to right, Urdu right to left, digits auto)", async () => {
+    await urdu();
+    expect(piecesDir(pieced)).toBe("rtl");
+    expect(piecesDir([createElement("mark", { key: "m" }, "invoice"), " was paid"])).toBe("rtl");
+    expect(piecesDir("Payment terms")).toBe("ltr");
+    expect(piecesDir(SENT_BY)).toBe("rtl");
+    expect(piecesDir("3")).toBe("auto");
+    render(<ul><ListRow title="Budget review" meta={pieced} /></ul>);
+    expect(document.querySelector(".el-row__meta-text")).toHaveAttribute("dir", "rtl");
+  });
+  it("in English auto, as always", () => {
+    expect(piecesDir(pieced, "en")).toBe("auto");
+    render(<ul><ListRow title="Budget review" meta={pieced} /></ul>);
+    expect(document.querySelector(".el-row__meta-text")).toHaveAttribute("dir", "auto");
   });
 });
 
