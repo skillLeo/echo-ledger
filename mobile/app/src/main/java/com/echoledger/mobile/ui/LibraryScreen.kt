@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
-import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -298,7 +298,7 @@ fun LibraryScreen(
                         }
                     },
                     trailing = {
-                        BarIcon(Icons.Rounded.Sort, "View: group, sort and density", { viewOpen = true })
+                        BarIcon(Icons.AutoMirrored.Rounded.Sort, "View: group, sort and density", { viewOpen = true })
                     }
                 )
                 if (!searching && items.any { !it.deleted }) {

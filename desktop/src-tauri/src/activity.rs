@@ -54,6 +54,31 @@ pub struct ActivityItem {
     /// The problem is over (2.0.0-r; a server_problem once the server's check passes). Kept off the window's badge.
     #[serde(default)]
     pub resolved: bool,
+    /// The person it is about (contract 2.0.0-aa); `None` for every other item, from an older server (no key) and for
+    /// one that can't be read, which never costs the item itself.
+    #[serde(default, deserialize_with = "lenient_actor", skip_serializing_if = "Option::is_none")]
+    pub actor: Option<ActivityActor>,
+}
+
+/// The person an Activity item is about (contract 2.0.0-aa): a recording's sender, the staff member who asked for a
+/// receipt, unusual use's person. Their picture is the usual signed, versioned link (kept here by `avatar_version`);
+/// without one, their initials in `avatar_color`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivityActor {
+    #[serde(default)]
+    pub id: Option<serde_json::Value>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub avatar_version: Option<u64>,
+    #[serde(default)]
+    pub avatar_color: Option<u8>,
+}
+
+fn lenient_actor<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<ActivityActor>, D::Error> {
+    Ok(Option::<serde_json::Value>::deserialize(deserializer)?.and_then(|v| serde_json::from_value(v).ok()))
 }
 
 /// The only Activity group (2.0.0-r): uploads that didn't finish, shown as one line with Retry all.
@@ -373,6 +398,7 @@ mod tests {
             read: false,
             at: None,
             resolved: false,
+            actor: None,
         };
         assert!(!asked_for(&mut asked, &item("upload_failed", "s1")), "only the transcript answers it");
         assert!(!asked_for(&mut asked, &item("transcript_ready", "s2")));

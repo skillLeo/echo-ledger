@@ -1,8 +1,9 @@
 // Mark as read / Mark as unread for many recordings (contract 2.0.0-y): one request per 200 ids (POST or DELETE
-// /api/sessions/opened) in place of one per recording. Only a server older than the route (the core's null: 405, 404,
-// 403 for DELETE, or no `done`) gets today's one request per recording, and then for 200 at most: the device's
-// requests are limited (240 a minute), so a long run would hold up the sync and the uploads. Any other failure (the
-// server down, busy or out of reach) stops the run: what was done stays, the rest is put back by the caller.
+// /api/sessions/opened) in place of one per recording. Only an answer like a server older than the route (the core's
+// null: 405, 404, 403 for DELETE, or no `done`), first or later, gets today's one request per recording, and then for
+// 200 at most in the run: the device's requests are limited (240 a minute), so a long run would hold up the sync and
+// the uploads. Any other failure (the server down, busy or out of reach) stops the run: what was done stays, the rest
+// is put back by the caller.
 import { api } from "../../lib/ipc";
 
 /** Ids per request (the contract's 200, the core's MAX_BULK), and the most marked one by one on an older server. */
@@ -23,9 +24,7 @@ export const openedProgress = (): OpenedProgress => ({ done: new Set(), notFound
  */
 export async function markOpenedMany(ids: readonly string[], opened: boolean, progress: OpenedProgress): Promise<void> {
   let oneByOne = false;
-  // An older server from the first answer: one by one, for 200 at most. One that took the first requests and not a
-  // later one goes on one by one for the rest.
-  let capped = false;
+  // Requests made one by one in this run: 200 at most, whichever answer started them.
   let single = 0;
   for (let at = 0; at < ids.length; at += OPENED_PER_REQUEST) {
     const chunk = ids.slice(at, at + OPENED_PER_REQUEST);
@@ -38,11 +37,10 @@ export async function markOpenedMany(ids: readonly string[], opened: boolean, pr
         continue;
       }
       oneByOne = true;
-      capped = at === 0;
     }
     for (const id of chunk) {
       if (progress.done.has(id) || progress.notFound.has(id)) continue;
-      if (capped && single >= OPENED_PER_REQUEST) {
+      if (single >= OPENED_PER_REQUEST) {
         progress.left.add(id);
         continue;
       }

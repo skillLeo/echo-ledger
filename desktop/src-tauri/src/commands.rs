@@ -599,20 +599,19 @@ pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: 
         let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
         format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
     };
-    if let Ok(bytes) = tokio::fs::read(&cached).await {
+    if let Some(bytes) = crate::my_account::read_kept_avatar(&cached).await {
         return Ok(Some(to_url(&bytes)));
     }
     if !crate::account::on_server(&url, &server) {
         return Ok(None);
     }
-    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    // No picture to have (403, 404, 410): the initials. Offline, a timeout or the server busy: an error, so the window
+    // asks again later rather than keeping the initials.
+    let Some(bytes) = state.api()?.avatar_bytes(&url).await? else { return Ok(None) };
     if crate::receipts::sniff(&bytes).is_none() {
         return Ok(None);
     }
-    if let Some(dir) = cached.parent() {
-        let _ = tokio::fs::create_dir_all(dir).await;
-        let _ = tokio::fs::write(&cached, &bytes).await;
-    }
+    let _ = crate::my_account::keep_avatar(&cached, &bytes).await;
     Ok(Some(to_url(&bytes)))
 }
 
@@ -2368,8 +2367,9 @@ pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
 }
 
 /// Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y): one request per 200 ids. The saved Library
-/// follows the server's `done` only. `null` from an older server (anything but a `200` with `done`): the page marks
-/// them one by one.
+/// follows the server's `done` only. `null` only for an older server's own answer to the first request (`405`, `404`,
+/// `403` for `DELETE`, or a success without `done`): the page then marks them one by one, 200 at most. Any other
+/// failure (a 5xx, 408, 429, the network) is an error, never `null`.
 #[tauri::command]
 pub async fn sessions_opened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
     opened_many(&app, ids, true).await
