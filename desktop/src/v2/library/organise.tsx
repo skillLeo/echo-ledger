@@ -267,8 +267,9 @@ export function LabelDialog({ ids, known, onClose, say }: { ids: readonly string
 /** Renames a recording; an empty title asks the server for its automatic one again. */
 export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryItem; onClose: () => void; say: Say; onRenamed?: (item: LibraryItem) => void }) {
   // Only a title the person chose is theirs to edit (2.0.0-k): "Call with …", an automatic title or the app's name start
-  // the box empty, with that title shown as its placeholder. An older server (no title_source) keeps the title in the box.
-  const own = item.title_source === undefined || item.title_source === "own";
+  // the box empty, with that title shown as its placeholder. From an older server (no title_source) a title it wrote from
+  // what was said (title_auto) is not the person's either; any other stays in the box.
+  const own = item.title_source === "own" || (item.title_source === undefined && !item.title_auto);
   const [title, setTitle] = useState(own ? item.title ?? "" : "");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);

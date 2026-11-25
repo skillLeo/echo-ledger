@@ -220,12 +220,12 @@ fun LibraryScreen(
     }
     var renaming by remember { mutableStateOf<LibraryItem?>(null) }
     renaming?.let { item ->
-        RenameDialog(item.title.orEmpty(), onRename = { title ->
+        RenameDialog(item.title.orEmpty(), own = ownTitle(item), onRename = { title ->
             renaming = null
             scope.launch {
                 if (vm.organise(item.id, title = title)) {
                     picked = emptySet()
-                    vm.showMessage("Renamed")
+                    vm.showMessage(if (title.isEmpty()) "Back to the title EchoLedger gives it" else "Renamed")
                 }
             }
         }, onDismiss = { renaming = null })
