@@ -97,6 +97,56 @@ export function isolate(value: string): string {
   return `${FSI}${safe}${PDI.repeat(depth)}${PDI}`;
 }
 
+/** U+2067 RIGHT-TO-LEFT ISOLATE: a run that reads right to left whatever surrounds it (lib/format's Urdu dates). */
+export const RLI = "\u2067";
+/**
+ * Letters of the right-to-left scripts: Hebrew, Arabic, Urdu, Syriac, Thaana and their presentation forms, and those
+ * past the basic plane (Hanifi Rohingya, Adlam and the rest, U+10800–U+10FFF and U+1E800–U+1EFFF).
+ */
+const RTL_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+
+/**
+ * The text of a line, when it is text: a string, a number, or a list of them (an RLM put before a line); null for
+ * anything drawn otherwise.
+ */
+function textOf(node: unknown): string | null {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) {
+    let out = "";
+    for (const part of node) {
+      if (part === null || part === undefined || part === false || part === true) continue;
+      const text = textOf(part);
+      if (text === null) return null;
+      out += text;
+    }
+    return out;
+  }
+  return null;
+}
+
+/**
+ * A line's direction for its dir attribute. In English "auto", as the app has always drawn it. In Urdu by its first
+ * letter outside its isolates (the Unicode rule for a paragraph, UAX #9 P2), because the browsers' dir="auto" reads the
+ * first letter even inside one: "Imran کی بھیجی ہوئی ریکارڈنگ", with Imran in an isolate, starts with Urdu once the
+ * isolate is skipped, so it reads right to left, where dir="auto" laid it out left to right. A line with no letter
+ * outside its isolates, or drawn with more than text, stays "auto".
+ */
+export function lineDir(line: unknown, lang: Lang = current): "rtl" | "ltr" | "auto" {
+  if (!isRtl(lang)) return "auto";
+  const text = textOf(line);
+  if (text === null) return "auto";
+  let depth = 0;
+  for (const char of text) {
+    if (OPENERS.has(char)) depth++;
+    else if (char === PDI) depth = Math.max(0, depth - 1);
+    else if (depth > 0) continue;
+    else if (char === "\u200F" || char === "\u061C") return "rtl";
+    else if (char === "\u200E") return "ltr";
+    else if (/\p{L}/u.test(char)) return RTL_LETTER.test(char) ? "rtl" : "ltr";
+  }
+  return "auto";
+}
+
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
 export function stripIsolates(text: string): string {
   return text.replace(/[\u2066-\u2069]/g, "");
