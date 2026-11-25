@@ -1,14 +1,17 @@
 // Desktop Urdu, D4: the lib words the recording page shows have classic callers too. With Urdu on, the windows still in
 // English (the classic Library's waiting list and uploads, the import sheet, the recording's steps and converting bar,
-// the Export menu, Activity's In progress, the transcription language list, the pill's chip) and the new design's
-// lines that are still English (Home's recording line, the shell's status) ask for them in
-// English: exactly the English they had, with no Urdu piece and no isolate. English is their own tests', unchanged.
+// the Export menu, Activity's In progress, the transcription language list, the pill's chip, the Calls settings' app
+// names) and the new design's lines that are still English (Home's recording line, the shell's status, v2 Activity's
+// waiting and skipped lines) ask for them in English: exactly the English they had, with no Urdu piece and no isolate.
+// English is their own tests', unchanged.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { answerConfirm } from "../../test/confirm";
 import { answerConfirmForTests } from "../../lib/confirm";
-import { makeItem, makePendingItem, makeUploadItem } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeSkippedItem, makeStatus, makeUploadItem } from "../../test/fixtures";
+import { ActivityV2 } from "../activity/ActivityV2";
+import { micUserName } from "../../lib/explainer";
 import { LibraryView } from "../../views/main/LibraryView";
 import { ImportSheet } from "../../views/main/ImportSheet";
 import { ConvertFailed, ConvertingBar, RecordingSteps } from "../../views/main/RecordingProgress";
@@ -105,12 +108,35 @@ describe("classic windows in an Urdu window keep their English", () => {
     expect(document.body.textContent).not.toMatch(URDU_OR_ISOLATE);
   });
 
+  it("v2 Activity (not in the account's language yet): the waiting summary and the skipped calls' lines in English", async () => {
+    respond("pending_list", [makePendingItem("p1"), makePendingItem("p2", { startedAt: "2026-10-23T09:00:00Z" })]);
+    respond("skipped_list", [makeSkippedItem("s1"), makeSkippedItem("s2", { callerName: "Omar Khan" })]);
+    respond("upload_list", []);
+    respond("library_list", []);
+    respond("recovered_sessions", []);
+    respond("activity_list", { data: [], unread_count: 0 });
+    render(<div className="el-root"><ActivityV2 status={makeStatus({ pendingDecisions: 2 })} onOpenRecording={vi.fn()} onReview={vi.fn()} onFailed={vi.fn()} onItems={vi.fn()} say={vi.fn()} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText(/^2 calls waiting · oldest Oct 23 · /)).toBeInTheDocument();
+    expect(screen.getByText("Skipped 2 short calls")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    // The caller, the length and the reason in English; the date is lib/format's, in the window's language (its own run).
+    expect(screen.getByText(/^Call with Omar Khan · /).textContent).toMatch(/ · 0:06 · Too short$/);
+  });
+
+  it("the Calls settings' app names (classic) in English; the new design's in the window's language", () => {
+    expect(micUserName({ app: "phone_call", site: null, name: "x.exe" }, "en")).toBe("Phone call");
+    expect(micUserName({ app: "other", site: null, name: "x.exe" }, "en")).toBe("Other");
+    expect(micUserName({ app: "phone_call", site: null, name: "x.exe" })).toBe("فون کال");
+    expect(micUserName({ app: "zoom", site: null, name: "zoom.exe" })).toBe("Zoom");
+  });
+
   it("Activity's In progress, the transcription languages and Home's recording line", () => {
     const rows = inProgressRows(
       [makeUploadItem("u", { state: "uploading", progress: 42, sourceApp: "phone_call" })],
       [makeItem("b", { title: "Board", status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 1, total: 3, eta_seconds: 40 } } })],
     );
-    expect(rows.map((r) => [r.title, r.line])).toEqual([["Phone call call", "Uploading… 42%"], ["Board", "Transcribing… part 2 of 3 · about 40 s left"]]);
+    expect(rows.map((r) => [r.title, r.line])).toEqual([["Phone call", "Uploading… 42%"], ["Board", "Transcribing… part 2 of 3 · about 40 s left"]]);
     expect(LANGUAGES.map(([, label]) => label)).toEqual(expect.arrayContaining(["Auto (English / Urdu / Arabic)", "English only", "French"]));
     expect(recordingLine({ recording: { mode: "call", sourceApp: "other" } as never, paused: false })).toBe("Recording · Other");
     for (const text of [...rows.flat().map(String), ...LANGUAGES.map(([, label]) => label)]) expect(text).not.toMatch(URDU_OR_ISOLATE);

@@ -1,11 +1,12 @@
 // Desktop Urdu, D4, in the screens fixture (every v2 flag and v21_urdu on, the account's language Urdu: "&applang=ur",
 // 1280 × 800), on a Mac and on Windows, in the light and the dark theme: the recording page with its transcript playing,
-// its bookmarks and its screens; the Copy menu; the recording's ⋮ and the Move dialog; a failed
-// transcript with Try again, and with the line for a missing Groq key; the Transcribe dialog with its minutes. It checks
-// that the window reads right to left and that each scene speaks Urdu, and saves
-// docs/design/screens/desktop/urdu-d4/<platform>-<step>.png (light) and <platform>-<step>-dark.png; the run fails when
-// either check doesn't hold. The fixture's answers it lacks (a bookmark on the call with screens, the Transcribe
-// estimate) are given in the page, around the fixture's own IPC mock.
+// its bookmarks and its screens; the Copy menu; the recording's ⋮ and the Move dialog; Rename, Send to WhatsApp and
+// Change language; a screen in its viewer; the Details tab; a recording's steps while it is transcribed; a failed
+// transcript with Try again, and with the line for a missing Groq key; the Transcribe dialog with its minutes; the Label
+// dialog (a server without label lists). It checks that the window reads right to left and that each scene speaks
+// Urdu, and saves docs/design/screens/desktop/urdu-d4/<platform>-<step>.png (light) and <platform>-<step>-dark.png; the
+// run fails when either check doesn't hold. The fixture's answers it lacks (a bookmark on the call with screens, the
+// Transcribe estimate, no label lists) are given in the page, around the fixture's own IPC mock.
 //   node scripts/urduD4.mjs
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -25,31 +26,40 @@ await mkdir(out, { recursive: true });
 const problems = [];
 const root = (page) => page.evaluate(() => `${document.documentElement.lang || "-"}/${document.documentElement.dir || "-"}`);
 
-/** The answers the fixture doesn't give, around its IPC mock: a bookmark on the call with screens, the minutes to use. */
-const extraAnswers = (page) => page.evaluate(() => {
-  const internals = window.__TAURI_INTERNALS__;
-  const invoke = internals.invoke.bind(internals);
-  internals.invoke = async (cmd, args, options) => {
-    if (cmd === "sessions_transcribe_estimate") return { minutes: 7, minutes_left: 120, items: [] };
-    const answer = await invoke(cmd, args, options);
-    if (cmd === "session_detail" && args?.id === "r1") return { ...answer, markers: [{ id: "mk-r1", at_ms: 95_000, tag: "Billing", note: "The Pay button" }] };
-    return answer;
-  };
-});
+/**
+ * The answers the fixture doesn't give, around its IPC mock (wrapped as the mock installs it, before the app asks
+ * anything): a bookmark on the call with screens, the minutes to use, and with `noLists` a server without label lists.
+ */
+const extraAnswers = (page, noLists) => page.addInitScript((withoutLists) => {
+  const internals = {};
+  let mocked = null;
+  Object.defineProperty(internals, "invoke", {
+    configurable: true,
+    set: (invoke) => { mocked = invoke; },
+    get: () => async (cmd, args, options) => {
+      if (cmd === "sessions_transcribe_estimate") return { minutes: 7, minutes_left: 120, items: [] };
+      if (cmd === "lists_get" && withoutLists) return null;
+      const answer = await mocked(cmd, args, options);
+      if (cmd === "session_detail" && args?.id === "r1") return { ...answer, markers: [{ id: "mk-r1", at_ms: 95_000, tag: "Billing", note: "The Pay button" }] };
+      return answer;
+    },
+  });
+  window.__TAURI_INTERNALS__ = internals;
+}, noLists);
 
 try {
   for (const [platform, theme] of [["macos", "light"], ["macos", "dark"], ["windows", "light"], ["windows", "dark"]]) {
     const where = `${platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1"}&theme=${theme}`;
     const label = `${platform} (${theme})`;
     /** The window on the fixture's Library (the Kick-off call open), the account's language Urdu. */
-    const open = async (extra = "") => {
+    const open = async (extra = "", { noLists = false } = {}) => {
       const opened = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
       opened.setDefaultTimeout(120_000);
+      await extraAnswers(opened, noLists);
       await opened.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur${extra}`);
       await opened.getByRole("navigation", { name: "Main" }).waitFor();
       await opened.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
       await opened.waitForTimeout(1000);
-      await extraAnswers(opened);
       return opened;
     };
     /** From the open recording back to the Library, and into the recording called `title`. */
@@ -101,6 +111,35 @@ try {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
 
+    // Rename (a press on the title), Send to WhatsApp, Change language and re-transcribe, each closed with Esc.
+    const dialog = async (step, open, name, words) => {
+      await open();
+      await page.getByRole("dialog", { name }).waitFor();
+      await page.waitForTimeout(500);
+      await shot(step, words);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+    };
+    await dialog("rename-dialog", () => page.locator(".el-recording__title").click(), "نام بدلیں", "خالی چھوڑ دیں");
+    await dialog("whatsapp-dialog", () => page.getByRole("button", { name: "واٹس ایپ پر بھیجیں…" }).click(), "واٹس ایپ پر بھیجیں", "صرف متن");
+    await dialog("language-dialog", async () => {
+      await page.getByRole("button", { name: "ریکارڈنگ کے اختیارات" }).click();
+      await page.getByRole("menuitem", { name: "زبان بدلیں اور دوبارہ ٹرانسکرائب کریں…" }).click();
+    }, "زبان بدلیں اور دوبارہ ٹرانسکرائب کریں", "نیا ٹرانسکرپٹ تیار ہونے تک");
+    // A screen in its viewer: what it shows, what was said around it, the text on it, its file name.
+    await dialog("screen-viewer", () => page.locator(".el-screens-strip .el-screen-thumb").first().click(), /^اسکرین/, "کیا کہا گیا");
+    // The Details tab.
+    await page.getByRole("tab", { name: "تفصیلات" }).click();
+    await page.locator("dl.el-details").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await shot("details", "ٹرانسکرپشن انجن");
+    await page.getByRole("tab", { name: "ٹرانسکرپٹ" }).click();
+
+    // A voice note being transcribed: its steps and Notify me when ready.
+    await openRecording(page, /^وائس نوٹ/);
+    await page.locator('[data-testid="recording-steps"]').waitFor();
+    await shot("transcribing-steps", "تیار ہونے پر اطلاع دیں");
+
     // The failed call: why, in the app's words, and Try again; then its ⋮'s Transcribe… with the minutes.
     await openRecording(page, /^\+92 300 1234567/);
     await shot("failed", "دوبارہ کوشش کریں");
@@ -115,6 +154,16 @@ try {
     page = await open("&failure=needs_transcription_key");
     await openRecording(page, /^\+92 300 1234567/);
     await shot("failed-key", "اپنی Groq کلید شامل کریں");
+    await page.close();
+
+    // Label…, on a server without label lists (with them, the ⋮ has Labels ▸ instead).
+    page = await open("", { noLists: true });
+    await openRecording(page, /^Weekly sync with Northwind/);
+    await page.getByRole("button", { name: "ریکارڈنگ کے اختیارات" }).click();
+    await page.getByRole("menuitem", { name: "لیبل…" }).click();
+    await page.getByRole("dialog", { name: "لیبل" }).waitFor();
+    await page.waitForTimeout(500);
+    await shot("label-dialog", "لیبل لگائیں");
     await page.close();
   }
 } finally {

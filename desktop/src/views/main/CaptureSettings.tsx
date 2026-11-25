@@ -140,7 +140,7 @@ function WhyNotRecorded() {
         {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
           <ul className="why-list">
             {users.map((u, i) => (
-              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u, "en")}</b>: {decisionText(u)}</li>
             ))}
           </ul>
         )}

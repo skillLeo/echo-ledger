@@ -9,7 +9,7 @@ import { api, errorMessage, type BulkExportFormat, type ClientFolder, type Expor
 import { defaultViewOf, viewName } from "../../lib/progress";
 export { shownExportView } from "../../lib/progress";
 import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
-import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
+import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
 import { projectLabel } from "../../lib/projects";
 import { MAX_LABEL_CHARS } from "../../lib/organise";
@@ -112,6 +112,12 @@ export async function recordingCopy(item: LibraryItem): Promise<{ lines: CopyLin
   return { lines, view: shown?.view ?? null, inView: (i) => shown?.lines[i] ?? null };
 }
 
+/** A date in the header, in English whatever the window's language ("9 December 2026", as sentenceDate in English). */
+function englishDate(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
 /**
  * The short header Copy for AI puts above a recording: title, date, people, language. The language is the view's
  * ("Roman Urdu", the words the server writes in its own Copy for AI) when the text below is in one, else the
@@ -123,7 +129,8 @@ export function aiHeader(item: LibraryItem, people: readonly string[], view: Tra
   const language = view ? viewName(view, "en") : item.language_chip || item.language;
   return [
     `# ${item.title?.trim() || english("Recording")}`,
-    [item.started_at ? `${sentenceDate(item.started_at)}, ${formatTime(new Date(item.started_at))}` : null, source, item.duration_ms ? formatDuration(item.duration_ms) : null].filter(Boolean).join(" · "),
+    // The time is formatTime's: "3:42 pm", or "15:42" with the 24-hour clock (Latin digits in every language).
+    [item.started_at ? `${englishDate(item.started_at)}, ${formatTime(new Date(item.started_at))}` : null, source, item.duration_ms ? formatDuration(item.duration_ms) : null].filter(Boolean).join(" · "),
     people.length ? english("People: :people", { people: people.join(", ") }) : null,
     language ? english("Language: :language", { language }) : null,
   ].filter(Boolean).join("\n");
@@ -248,7 +255,7 @@ export function MoveDialog({ ids, title, current, onClose, say }: {
   const ready = target !== "" && (target !== "new" || name.trim() !== "");
   return (
     <Dialog open title={t("Move to project")} onClose={onClose}
-      description={error ?? (ids.length === 1 ? `“${title || t("Recording")}”` : recordingsWord(ids.length))}
+      description={error ?? (ids.length === 1 ? t("“:title”", { title: title || t("Recording") }) : recordingsWord(ids.length))}
       actions={<><Button onClick={onClose}>{t("Cancel")}</Button><Button variant="primary" disabled={!ready} loading={busy} loadingLabel={t("Moving…")} onClick={() => void move()}>{t("Move")}</Button></>}>
       <Select label={t("Move to")} options={options} value={target} onChange={setTarget} disabled={!projects} />
       {target === "new" && <TextField label={t("New project name")} maxLength={120} value={name} onChange={(e) => setName(e.target.value)} autoFocus />}
