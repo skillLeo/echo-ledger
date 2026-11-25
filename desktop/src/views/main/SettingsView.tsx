@@ -47,6 +47,8 @@ export interface SettingsContext {
   role: string | null;
   /** The window has the rail (the rail · panel · page layout); classic's has not. */
   rail?: boolean;
+  /** Zoom is on (UX-07, v21_zoom). */
+  zoom?: boolean;
 }
 
 /** Whether an entry is offered here and now (Settings' search, the list and the window's search use the same). */
@@ -60,6 +62,7 @@ export function settingsAvailability(ctx: SettingsContext): (entry: SettingEntry
     if (r?.account && !ctx.account) return false;
     if (r?.plans && !e) return false;
     if (r?.rail && !ctx.rail) return false;
+    if (r?.zoom && !ctx.zoom) return false;
     switch (entry.id) {
       case "key":
       case "key.saved":

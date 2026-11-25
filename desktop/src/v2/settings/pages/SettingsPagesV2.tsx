@@ -45,10 +45,12 @@ const STARTUP_TITLE = "Start-up";
 /** The Mac's menu bar icon, its timer and the Dock's number, under their own title. */
 const ICON_IDS: readonly string[] = ["app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"];
 
-export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false, grouped = false, available = () => true }: {
+export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false, zoom = false, grouped = false, available = () => true }: {
   section: { id: string; seq: number };
   /** The rail · panel · page layout (its keys on the shortcuts page). */
   threeLevels?: boolean;
+  /** Zoom is on (UX-07, v21_zoom): Appearance has its slider. */
+  zoom?: boolean;
   /** Two levels (UX-11): a top page is drawn in its group's page; a sub-page's way back is to the group's page. */
   grouped?: boolean;
   /** What this computer, account and plan offer: a group's page draws only those pages and switches. */
@@ -112,7 +114,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
-      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} />;
+      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} rail={threeLevels} zoom={zoom} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} threeLevels={threeLevels} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements

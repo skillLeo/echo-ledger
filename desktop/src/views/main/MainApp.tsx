@@ -29,6 +29,8 @@ import { MenuBar } from "../../v2/actions/useMenuBar";
 import { listenToMenuPicks, menuPicksReady, setPickedHandler, useMenuPart } from "../../v2/actions/menuState";
 import { runPicked } from "../../v2/actions/popup";
 import { registerAction } from "../../v2/actions/registry";
+import { ZOOM_DEFAULT, loadZoom, setZoom, useZoom, watchZoomWheel, zoomBy, zoomKey, zoomNow } from "../../lib/zoom";
+import { ZoomBubble, ZoomChip, zoomStepper } from "../../v2/shell/Zoom";
 import { useAvatar } from "./AccountFlows";
 import { minutesLine } from "../../v2/settings/AccountCard";
 import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
@@ -152,6 +154,35 @@ export default function MainApp() {
   // Interface flags: read at start, on each page change and when a recording ends, never while recording; the core's
   // first config answer (ui:flags) applies at once when the window read before it (v2/flags.ts).
   const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  // UX-07 (v21_zoom): zoom like Chrome, in this window only. Off, the window is at 100% (main.tsx may have put a kept
+  // zoom back before the flags were known). On: the kept zoom, the keys (⌘+ ⌘= ⌘− ⌘0, Ctrl elsewhere, the number pad's
+  // too; the menu bar's own on a Mac), Ctrl + the wheel, and the menu bar's View items.
+  const zoomOn = ui.flags.v21_zoom;
+  const zoomLevel = useZoom();
+  const flagsKnown = flagsReadFor !== null;
+  useEffect(() => {
+    if (!flagsKnown) return;
+    if (!zoomOn) {
+      if (zoomNow() !== ZOOM_DEFAULT) setZoom(ZOOM_DEFAULT, false);
+      return;
+    }
+    setZoom(loadZoom(), false);
+    const key = (e: KeyboardEvent) => {
+      const dir = zoomKey(e, menuPlatform.current === "macos");
+      if (dir === null || e.defaultPrevented) return;
+      e.preventDefault();
+      zoomBy(dir);
+    };
+    window.addEventListener("keydown", key);
+    // Ctrl + the wheel off a Mac (a Mac's pinch is the system's own).
+    const stopWheel = menuPlatform.current === "macos" ? () => undefined : watchZoomWheel();
+    const offs = [registerAction("view.zoomIn", () => zoomBy(1)), registerAction("view.zoomOut", () => zoomBy(-1)), registerAction("view.actualSize", () => zoomBy(0))];
+    return () => {
+      window.removeEventListener("keydown", key);
+      stopWheel();
+      offs.forEach((off) => off());
+    };
+  }, [zoomOn, flagsKnown]);
   const threeLevels = useRef(false);
   threeLevels.current = ui.flags["ui_v2.library"];
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
@@ -810,6 +841,7 @@ export default function MainApp() {
         <AppToastV2 duration={(m) => (m.error ? ERROR_MS : MESSAGE_MS)}
           message={toast ? { id: toast.id, text: toast.text, error: toast.error, onOpen: toast.target ? () => goRef.current?.(toast.target!) : undefined } : null}
           onClose={() => setToast((t) => (t?.id === toast?.id ? null : t))} />
+        {zoomOn && <ZoomBubble />}
       </div>
     </Suspense>
   ) : toast && (
@@ -1051,7 +1083,7 @@ export default function MainApp() {
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
-  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"] });
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom });
   const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
     .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
   const upgradeOpen = !!openUpgradeRequest(entitlements);
@@ -1235,15 +1267,15 @@ export default function MainApp() {
                 // Two levels (UX-11): Setup & health is the rail's own place, with no "‹ Settings".
                 ? <SetupHealthV2 platform={status.platform} onBack={ui.flags["ui_v2.library"] ? undefined : onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
                       // Two levels: back to its group's page (About & help), never to "Settings".
                       : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
                   : hasV2Page(section.id, ui.flags["ui_v2.library"])
-                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} onHome={onHome}
-                      onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
+                      onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
@@ -1290,7 +1322,7 @@ export default function MainApp() {
           <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
         </Suspense>
       )}
-      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onClose={() => setHelp(false)} onSettings={openAccount} />}
+      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
@@ -1337,7 +1369,8 @@ export default function MainApp() {
             nav={{
               panelFlyout: ui.flags.v21_panel_flyout,
               layoutFor: liveViews ?? lastViews,
-              titleEnd: <RestartToUpdate appStatus={status} notify={notify} />,
+              // The status items: Restart to update, then the zoom's chip while it isn't 100% (UX-07).
+              titleEnd: <><RestartToUpdate appStatus={status} notify={notify} />{zoomOn && <ZoomChip />}</>,
               placeRequest,
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
@@ -1350,6 +1383,8 @@ export default function MainApp() {
                 { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
                 { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
                 { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
+                // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme.
+                ...(zoomOn ? [{ label: "Zoom", icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
                 ...(shellWorkspace ? [
                   { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
                   ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),
