@@ -11,10 +11,14 @@ import { t } from "../../../i18n";
 
 const isPhone = (d: SecurityDevice) => d.platform === "android" || d.platform === "ios";
 
+/** A platform's name in the window's language: the app's own word for a phone; the systems' names as they are. */
+const platformWords = (platform: string): string => (platform === "android" ? t("Android phone") : platformLabel(platform));
+
 /** "This computer"; "Android phone, active 2 hours ago". */
 export function deviceLine(d: SecurityDevice): string {
   if (d.current) return t("This computer");
-  return `${platformLabel(d.platform)}${d.last_seen_at ? `, active ${formatWhen(d.last_seen_at).toLowerCase()}` : ""}`;
+  const device = platformWords(d.platform);
+  return d.last_seen_at ? t(":device, active :when", { device, when: formatWhen(d.last_seen_at).toLowerCase() }) : device;
 }
 
 function RenameDialogV2({ device, run, onDone }: { device: SecurityDevice; run: Run; onDone: (renamed: boolean) => void }) {
@@ -30,7 +34,7 @@ function RenameDialogV2({ device, run, onDone }: { device: SecurityDevice; run: 
     onDone(saved !== undefined);
   };
   return (
-    <Dialog open title={`Rename ${device.name}`} onClose={() => { if (!busy) onDone(false); }}>
+    <Dialog open title={t("Rename :name", { name: device.name })} onClose={() => { if (!busy) onDone(false); }}>
       <form className="el-form el-form--flush" onSubmit={(e) => void save(e)}>
         <TextField label={t("Name")} value={name} maxLength={64} autoFocus onChange={(e) => setName(e.target.value)} />
         <div className="el-dialog__actions el-dialog__actions--inline">
@@ -46,8 +50,8 @@ export function DevicesPageV2({ run }: { run: Run }) {
   const { devices, error, reload } = useSecurityOverview();
   const [renaming, setRenaming] = useState<SecurityDevice | null>(null);
   const revoke = async (d: SecurityDevice) => {
-    if (!(await confirmAction({ title: `Sign out ${d.name}?`, body: t("It will need to sign in again."), confirm: t("Sign out"), tone: "danger" }))) return;
-    const ok = await run(() => api.revokeDevice(d.id), `${d.name} signed out`);
+    if (!(await confirmAction({ title: t("Sign out :name?", { name: d.name }), body: t("It will need to sign in again."), confirm: t("Sign out"), tone: "danger" }))) return;
+    const ok = await run(() => api.revokeDevice(d.id), t(":name signed out", { name: d.name }));
     if (ok !== undefined) reload();
   };
   // This computer first, then the others as the server lists them.
@@ -61,8 +65,8 @@ export function DevicesPageV2({ run }: { run: Run }) {
                 <ListRow key={d.id} compact anchor={`devices.item.${d.id}`} icon={isPhone(d) ? Icons.DeviceIcon : Icons.LaptopIcon} iconStyle="plain"
                   title={d.name} meta={deviceLine(d)}
                   control={<span className="el-setting__actions">
-                    <Button variant="quiet" size="sm" aria-label={`Rename ${d.name}`} onClick={() => setRenaming(d)}>{t("Rename")}</Button>
-                    {!d.current && <Button variant="quiet" size="sm" className="el-button--danger-text" aria-label={`Sign out ${d.name}`} onClick={() => void revoke(d)}>{t("Sign out")}</Button>}
+                    <Button variant="quiet" size="sm" aria-label={t("Rename :name", { name: d.name })} onClick={() => setRenaming(d)}>{t("Rename")}</Button>
+                    {!d.current && <Button variant="quiet" size="sm" className="el-button--danger-text" aria-label={t("Sign out :name", { name: d.name })} onClick={() => void revoke(d)}>{t("Sign out")}</Button>}
                   </span>} />
               ))}
           </List>

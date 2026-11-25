@@ -16,7 +16,7 @@ export function LockPageV2({ settings, patch, run }: { settings: Settings; patch
   }, []);
   const method = lock?.osMethod ? SYSTEM_LABEL[lock.osMethod].replace("Use ", "") : null;
   const footer = [
-    method ? `${method} or your PIN unlocks it. Recording keeps running while it's locked.` : t("Your PIN unlocks it. Recording keeps running while it's locked."),
+    method ? t(":method or your PIN unlocks it. Recording keeps running while it's locked.", { method }) : t("Your PIN unlocks it. Recording keeps running while it's locked."),
     lock && !lock.hasPin ? t("Set a PIN first. It unlocks the app whenever Windows Hello or Touch ID isn't available.") : null,
   ].filter(Boolean) as string[];
   return (

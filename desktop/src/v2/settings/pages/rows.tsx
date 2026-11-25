@@ -335,8 +335,8 @@ export function ResetDefaults({ page, onReset }: { page: string; onReset: () => 
   const named = useContext(SectionLevelContext) === 3;
   return (
     <div className="el-settings-v2__reset">
-      <Button variant="quiet" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: t("Reset") }).then((yes) => { if (yes) onReset(); })}>
-        {named ? `Reset ${page} to defaults` : t("Reset to defaults")}
+      <Button variant="quiet" onClick={() => void confirmAction({ title: t("Reset :page to defaults?", { page }), confirm: t("Reset") }).then((yes) => { if (yes) onReset(); })}>
+        {named ? t("Reset :page to defaults", { page }) : t("Reset to defaults")}
       </Button>
     </div>
   );

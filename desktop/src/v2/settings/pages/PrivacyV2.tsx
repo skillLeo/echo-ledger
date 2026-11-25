@@ -61,7 +61,7 @@ export function PrivacyPageV2({ account, settings, onAccount, onConsent }: {
           <p>{t("One ZIP with every recording's audio, transcripts, screens, project files and notes. The link works for 24 hours and is emailed to you too.")}</p>
           {exportError && <p className="el-field__error" role="alert">{exportError}</p>}
           {account.deletes_at
-            ? <p>Your account will be deleted on {longDate(account.deletes_at)}. To keep it, sign in on the website and choose Keep my account.</p>
+            ? <p>{t("Your account will be deleted on :date.", { date: longDate(account.deletes_at) })} {t("To keep it, sign in on the website and choose Keep my account.")}</p>
             : <p>{t("Your account and everything only you own are deleted after 7 days. Signing in again before then and choosing Keep my account cancels it.")}</p>}
         </>}>
           <ListRow compact anchor="privacy.export" title={setting("privacy.export").title} meta={exporting?.status === "failed" ? exportLabel ?? undefined : undefined}
@@ -72,7 +72,7 @@ export function PrivacyPageV2({ account, settings, onAccount, onConsent }: {
               </Button>
             } />
           {account.deletes_at ? (
-            <ListRow compact anchor="privacy.cancel_deletion" title={setting("privacy.cancel_deletion").title} meta={`Deletes on ${rowDateWithYear(account.deletes_at)}`}
+            <ListRow compact anchor="privacy.cancel_deletion" title={setting("privacy.cancel_deletion").title} meta={t("Deletes on :date", { date: rowDateWithYear(account.deletes_at) })}
               control={<Button size="sm" onClick={() => void api.openServerPage("app/profile").catch(() => undefined)} aria-label={t("Cancel deletion, opens in browser")}>{t("Cancel deletion")}</Button>} />
           ) : (
             <ListRow compact anchor="privacy.delete_account" title={setting("privacy.delete_account").title}

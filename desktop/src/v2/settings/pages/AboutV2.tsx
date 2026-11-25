@@ -30,7 +30,7 @@ function UpdatesRow({ appStatus }: { appStatus: AppStatus }) {
   const meta = (
     <span className="el-update">
       <span className={status.phase === "failed" ? "el-update__line el-update__line--failed" : "el-update__line"} role="status">{updateLine(status)}</span>
-      {status.checkedAt && status.phase !== "checking" && <span className="el-update__line">Last checked {formatWhen(status.checkedAt)}</span>}
+      {status.checkedAt && status.phase !== "checking" && <span className="el-update__line">{t("Last checked :when", { when: formatWhen(status.checkedAt) })}</span>}
       {ready && status.notes && <span className="el-update__line">{status.notes}</span>}
       {ready && appStatus.recording && <span className="el-update__line">{RECORDING_BLOCKS}</span>}
       {error && <span className="el-update__line el-row__error" role="alert">{error}</span>}

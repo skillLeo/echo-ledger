@@ -9,7 +9,13 @@ import { sendBlocked } from "../../../views/main/MacCheck";
 import { Button, Card, HealthCheckRow, type HealthState } from "../../components";
 import { t } from "../../../i18n";
 
-const STATE_WORD: Record<CheckItem["state"], string> = { ok: "OK", limited: "Limited", off: "Off", failed: "Failed" };
+/** Each state in words, in the window's language (its keys stay the states). */
+const STATE_WORD: Record<CheckItem["state"], string> = {
+  get ok() { return t("OK"); },
+  get limited() { return t("Limited"); },
+  get off() { return t("Off"); },
+  get failed() { return t("Failed"); },
+};
 const HEALTH: Record<CheckItem["state"], HealthState> = { ok: "ok", limited: "limited", off: "problem", failed: "problem" };
 
 function CheckRowV2({ item }: { item: CheckItem }) {
@@ -108,7 +114,7 @@ export function MacCheckPageV2({ status }: { status: AppStatus }) {
           {report ? t("Run Mac check again") : t("Run Mac check")}
         </Button>
       </div>
-      {running && progress && <p role="status" data-testid="mac-check-progress">{progress.index + 1} of {progress.total}: {progress.line}</p>}
+      {running && progress && <p role="status" data-testid="mac-check-progress">{t(":step of :total: :line", { step: progress.index + 1, total: progress.total, line: progress.line })}</p>}
       {report?.stopped && <p className="el-mac-check__stopped" role="status">{report.stopped}</p>}
       {items.length > 0 && <Card><ul className="el-health-list" aria-label={t("Mac check results")}>{items.map((item) => <CheckRowV2 item={item} key={item.key} />)}</ul></Card>}
       {report && (
@@ -119,7 +125,7 @@ export function MacCheckPageV2({ status }: { status: AppStatus }) {
           </div>
           <div className="el-group__note el-caption el-secondary">
             {blocked && <p data-testid="mac-check-send-blocked">{blocked}</p>}
-            {report.sentAt && <p role="status" data-testid="mac-check-sent">Sent to your admin {formatWhen(report.sentAt)}.</p>}
+            {report.sentAt && <p role="status" data-testid="mac-check-sent">{t("Sent to your admin :when.", { when: formatWhen(report.sentAt) })}</p>}
             <p>{t("The report has no names, no recordings and no account. It is sent only when you press the button.")}</p>
           </div>
         </section>

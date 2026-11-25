@@ -233,7 +233,7 @@ export function ShareCheckPageV2() {
           <Card>
             {guided ? (
               <div className="el-form" data-testid="guided">
-                <p ref={question} tabIndex={-1} className="el-body-strong">Share your whole screen in {status.apps.find((a) => a.app === guided)?.name}. A test card is on your screen now. Can you see it on your phone?</p>
+                <p ref={question} tabIndex={-1} className="el-body-strong">{t("Share your whole screen in :app. A test card is on your screen now. Can you see it on your phone?", { app: status.apps.find((a) => a.app === guided)?.name })}</p>
                 <p className="el-secondary">{GUIDED_ALONE}</p>
                 <div className="el-page__actions">
                   <Button onClick={() => void answer(true)}>{t("I can see it")}</Button>

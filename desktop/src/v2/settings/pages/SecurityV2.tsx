@@ -12,7 +12,7 @@ import { AccountFlow, offers, ROWS, useFlows, useSecurityInfo } from "../../../v
 import { Button, Card, Dialog, EmptyState, Icons, List, ListRow } from "../../components";
 import { V2_KIT } from "../accountKit";
 import { Group, LinkSetting, type Run } from "./rows";
-import { t } from "../../../i18n";
+import { t, tc } from "../../../i18n";
 
 export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }: { account: Account; run: Run; onSignedOut: (s: AppStatus) => void; onActivity: () => void }) {
   const [account, setAccount] = useState(given);
@@ -35,7 +35,7 @@ export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }:
   const title = (id: string) => setting(id).title;
   return (
     <>
-      <Group footer={<p>Sign-in codes go to {account.email}.{native ? "" : t(" The password and two-step sign-in are changed on the website.")}</p>}>
+      <Group footer={<p>{t("Sign-in codes go to :email.", { email: account.email })}{native ? "" : ` ${t("The password and two-step sign-in are changed on the website.")}`}</p>}>
         {native ? (
           <>
             <ListRow compact anchor="security.password" title={title("security.password")} label={o.hasPassword ? ROWS.password : ROWS.setPassword}
@@ -44,7 +44,7 @@ export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }:
               value={o.twoStep ? t("On") : t("Off")} chevron onClick={() => flows.open({ kind: o.twoStep ? "two_step_off" : "two_step_on" })} />
             {o.twoStep && (
               <ListRow compact title={t("Recovery codes")} label={ROWS.recoveryCodes}
-                value={o.recoveryLeft != null ? `${o.recoveryLeft} left` : t("Make new")} chevron onClick={() => flows.open({ kind: "recovery_codes" })} />
+                value={o.recoveryLeft != null ? tc(":count left", o.recoveryLeft) : t("Make new")} chevron onClick={() => flows.open({ kind: "recovery_codes" })} />
             )}
             {o.google
               ? <ListRow compact anchor="security.google" title={title("security.google")} label={ROWS.google} value={t("Connected")} chevron onClick={() => flows.open({ kind: "google" })} />
@@ -63,7 +63,7 @@ export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }:
         <Group title={t("Passkeys")} footer={<p>{t("Passkeys sign you in with your phone, fingerprint or face. Add one on the website.")}</p>}>
           {o.passkeys.map((p) => (
             <ListRow key={p.id} compact icon={Icons.LockIcon} iconStyle="plain" title={p.name}
-              meta={p.last_used_at ? `Last used ${formatWhen(p.last_used_at)}` : t("Not used yet")}
+              meta={p.last_used_at ? t("Last used :when", { when: formatWhen(p.last_used_at) }) : t("Not used yet")}
               control={<span className="el-row__buttons">
                 <Button size="sm" variant="quiet" aria-label={ROWS.renamePasskey(p.name)} onClick={() => flows.open({ kind: "rename_passkey", passkey: p })}>{t("Rename")}</Button>
                 <Button size="sm" variant="quiet" aria-label={ROWS.removePasskey(p.name)} onClick={() => flows.open({ kind: "remove_passkey", passkey: p })}>{t("Remove")}</Button>

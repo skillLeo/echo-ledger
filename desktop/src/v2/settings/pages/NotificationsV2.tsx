@@ -18,7 +18,7 @@ export function NotificationsPageV2({ settings, patch, run }: { settings: Settin
   }), t("Test notification sent"));
   const time = (id: "notifications.quiet_from" | "notifications.quiet_to", value: string, save: (v: string) => void) => (
     <ListRow compact anchor={id} title={setting(id).title}
-      control={<TextField label={<span className="el-visually-hidden">{`Quiet hours ${setting(id).title.toLowerCase()}`}</span>} type="time" value={value} disabled={!quiet} dir="ltr"
+      control={<TextField label={<span className="el-visually-hidden">{id === "notifications.quiet_from" ? t("Quiet hours from") : t("Quiet hours to")}</span>} type="time" value={value} disabled={!quiet} dir="ltr"
         className="el-setting__time" onChange={(e) => e.target.value && save(e.target.value)} />} />
   );
   return (

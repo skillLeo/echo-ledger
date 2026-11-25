@@ -14,7 +14,7 @@ import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSetting
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
 import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
-import { t } from "../../../i18n";
+import { t, tc } from "../../../i18n";
 
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
@@ -42,7 +42,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
           const on = appRecords(settings.autoRecordApps, app);
           return (
             <ListRow key={app} compact anchor={`calls.app.${app}`} icon={(p) => <Icons.SourceAppIcon app={app} {...p} />} iconStyle="plain" title={name}
-              control={<Toggle label={`Auto-record ${name}`} hideLabel checked={on} disabled={!settings.autoMode}
+              control={<Toggle label={t("Auto-record :name", { name })} hideLabel checked={on} disabled={!settings.autoMode}
                 onChange={() => void patch({ autoRecordApps: { [app]: !on } })} />} />
           );
         })}
@@ -54,7 +54,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
       <Group title={t("Websites")}>
-        <LinkSetting id="calls.sites" value={sites === 1 ? t("1 rule") : `${sites} rules`} onOpen={onSites} />
+        <LinkSetting id="calls.sites" value={tc(":count rule|:count rules", sites)} onOpen={onSites} />
       </Group>
       <WhyNotRecordedV2 />
       {!settings.consentAcknowledged && (
@@ -128,12 +128,12 @@ export function CallSitesPageV2({ rules, onSave }: { rules: SiteRule[]; onSave: 
     const pattern = rulePattern(rule);
     return (
       <ListRow key={rule.id} compact iconStyle="plain" icon={icon(rule)} title={<span dir="ltr">{pattern}</span>} meta={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}
-        control={<Toggle label={isNeverRule(rule) ? `Never record ${pattern}` : `Record calls on ${pattern}`} hideLabel checked={on} onChange={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />} />
+        control={<Toggle label={isNeverRule(rule) ? t("Never record :pattern", { pattern }) : t("Record calls on :pattern", { pattern })} hideLabel checked={on} onChange={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />} />
     );
   };
   const userRow = (rule: SiteRule) => (
     <ListRow key={rule.id} compact iconStyle="plain" icon={icon(rule)} title={<span dir="ltr">{rulePattern(rule)}</span>} meta={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}
-      control={<Button size="sm" variant="quiet" aria-label={`Remove ${rulePattern(rule)}`} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>{t("Remove")}</Button>} />
+      control={<Button size="sm" variant="quiet" aria-label={t("Remove :name", { name: rulePattern(rule) })} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>{t("Remove")}</Button>} />
   );
   return (
     <>

@@ -39,7 +39,7 @@ export function ProfilePageV2({ account: given, status, run }: { account: Accoun
   const badge = account.email_verified ? undefined : <Badge tone="warning">{t("Not verified")}</Badge>;
   return (
     <>
-      <Group footer={native ? <p>{account.pending_email ? `Waiting for the code sent to ${account.pending_email}.` : t("Your teammates see your name and picture.")}</p>
+      <Group footer={native ? <p>{account.pending_email ? t("Waiting for the code sent to :email.", { email: account.pending_email }) : t("Your teammates see your name and picture.")}</p>
         : <p>{t("Your name and email are changed on the website.")}</p>}>
         {native && (
           <ListRow compact anchor="profile.picture" title={setting("profile.picture").title} label={ROWS.picture} chevron onClick={() => void picture()}

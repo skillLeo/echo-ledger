@@ -67,7 +67,7 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false, l
       </Group>
       {zoom && (
         <Group footer={<>
-          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} Kept on this computer.</p>
+          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} {t("Kept on this computer.")}</p>
           {level !== ZOOM_DEFAULT && <Button size="sm" onClick={() => setZoom(ZOOM_DEFAULT)}>{t("Reset to 100%")}</Button>}
         </>}>
           {/* The steps, as Chrome's: the slider moves from one to the next. */}
@@ -127,7 +127,7 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
     const error = status.shortcutErrors.find(([x]) => x === a)?.[1];
     if (error) return error;
     const conflict = conflictFor(settings.shortcuts[a], platform);
-    return conflict ? `This shortcut also ${conflict}; EchoLedger takes it over.` : null;
+    return conflict ? t("This shortcut also :conflict; EchoLedger takes it over.", { conflict }) : null;
   };
   return (
     <>
@@ -144,9 +144,9 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
               meta={note ? <span className="el-shortcut-note" role="status">{note}</span> : undefined}
               value={listening === a ? <span aria-live="polite">{t("Press keys… (Esc cancels)")}</span> : keys ? <Keys>{prettyShortcut(keys, platform)}</Keys> : t("None")}
               control={<span className="el-setting__actions">
-                {keys && <Button variant="quiet" size="sm" aria-label={`Clear ${title}`} onClick={() => void clear(a)}>{t("Clear")}</Button>}
+                {keys && <Button variant="quiet" size="sm" aria-label={t("Clear :title", { title })} onClick={() => void clear(a)}>{t("Clear")}</Button>}
                 {/* Pressed while it listens; a second press or Esc stops listening. */}
-                <Button variant="secondary" size="sm" aria-label={`Change ${title}`} aria-pressed={listening === a} onClick={() => setListening(listening === a ? null : a)}>
+                <Button variant="secondary" size="sm" aria-label={t("Change :title", { title })} aria-pressed={listening === a} onClick={() => setListening(listening === a ? null : a)}>
                   {t("Change")}
                 </Button>
               </span>} />
