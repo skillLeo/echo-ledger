@@ -206,7 +206,7 @@ describe("the shell", () => {
 
     it("Activity shows how many need you; none shows no badge", () => {
     const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={3}><p /></Shell>);
-    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity3");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity 3");
     rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={0}><p /></Shell>);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Activity" })).toHaveTextContent(/^Activity$/);
   });

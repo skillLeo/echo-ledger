@@ -30,6 +30,7 @@ use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use App\Http\Middleware\NoReferrerOnInvites;
+use App\Http\Middleware\VisitorLanguage;
 use Filament\Http\Middleware\AuthenticateSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -204,8 +205,9 @@ Route::middleware([AuthenticateSession::class, 'throttle:device-sign-in'])->grou
     Route::post('/device/sign-in', [DeviceSignInController::class, 'approve'])->middleware('auth:web')->name('device.sign-in.approve');
 });
 
-// Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.
-Route::middleware(['guest:web', 'throttle:passkey'])->group(function (): void {
+// Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP. Since v2.1
+// its answers read in the visitor's language, as the sign-in page does (VisitorLanguage).
+Route::middleware(['guest:web', 'throttle:passkey', VisitorLanguage::class])->group(function (): void {
     Route::post('/passkeys/login/options', [PasskeyLoginController::class, 'options'])->name('passkeys.login.options');
     Route::post('/passkeys/login', [PasskeyLoginController::class, 'login'])->name('passkeys.login');
 });

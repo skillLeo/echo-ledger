@@ -926,6 +926,8 @@ export default function MainApp() {
   const activityBadge = railBadge(serverBadge, activityItems, waitingAll, waitingHere);
   const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
+  /** Auto-record calls on or off: Record's menu and the Live page's switch (UX-15). */
+  const toggleAutoRecord = () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on");
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
@@ -1415,7 +1417,7 @@ export default function MainApp() {
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
               liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
               setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
-              callRecording: canRecord ? { on: status.autoMode, toggle: () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on") } : undefined,
+              callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
                 // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).
                 { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
@@ -1470,7 +1472,7 @@ export default function MainApp() {
               <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
                   onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
-                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} run={run} />
+                  onCaptions={() => void run(api.toggleCaptions)} onAutoRecord={canRecord ? toggleAutoRecord : undefined} onSettings={openAccount} run={run} />
               </div></Suspense>
             ) : undefined}
             banners={<NoticeLook.Provider value="v2"><div className="el-root el-embedded el-app-banners" role="status" aria-live="polite" aria-label="Notices" data-testid="app-banners">{banners}</div></NoticeLook.Provider>}>

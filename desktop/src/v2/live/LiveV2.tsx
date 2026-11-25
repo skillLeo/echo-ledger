@@ -1,11 +1,12 @@
 // The Live tab in the new look (ui_v2.live, IA 3): everything during a call or session from one place. Record (now,
-// or a voice note), Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate,
+// or a voice note) with the Auto-record calls switch and how calls stand (UX-15, as the phone's Live tab: the same
+// switch as Record's menu), Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate,
 // Dictation and Captions; each opens its feature or its one settings home.
 import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type Settings } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
-import { Button, Card, Icons, List, ListRow, Status } from "../components";
+import { Button, Card, Icons, List, ListRow, Status, Toggle } from "../components";
 import { shellStatus } from "../shell/status";
 import type { Prep } from "../assist/adapter";
 import { PrepScreen } from "../assist/PrepScreen";
@@ -22,13 +23,21 @@ export type LiveV2Props = {
   onRecord?: () => void;
   onVoiceNote?: () => void;
   onCaptions: () => void;
+  /** Auto-record calls on or off (status.autoMode), as Record's menu does; none for a role that can't record. */
+  onAutoRecord?: () => void;
   /** A Settings page ("voice", "captions", "calls"). */
   onSettings: (section: string) => void;
   /** The app's action runner (a notice on failure), for Live Translate's commands. */
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 };
 
-export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, run }: LiveV2Props) {
+/** How calls stand, in the phone's words (UX-15): set up first while the Ready check found a problem, else on or ready. */
+export function callsLine(status: Pick<AppStatus, "autoMode" | "callsReady">): string {
+  if (status.callsReady === false) return "Calls: set up first";
+  return status.autoMode ? "Calls: auto-record on" : "Calls: ready";
+}
+
+export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onAutoRecord, onSettings, run }: LiveV2Props) {
   const [prep, setPrep] = useState<Prep | "new" | null>(null);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -70,8 +79,9 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
         </Card>
         <Card>
           <List label="Recording" className="el-group__rows">
-            <ListRow compact icon={Icons.PhoneIcon} iconStyle="plain" title="Calls and meetings record by themselves"
-              value={status.autoMode ? "On" : "Off"} chevron onClick={() => onSettings("calls")} />
+            <ListRow compact icon={Icons.PhoneIcon} iconStyle="plain" title="Auto-record calls" meta={callsLine(status)}
+              control={<Toggle label="Auto-record calls" hideLabel checked={status.autoMode} disabled={!onAutoRecord} onChange={() => onAutoRecord?.()} />} />
+            <ListRow compact icon={Icons.SettingsIcon} iconStyle="plain" title="Calls & meetings" chevron onClick={() => onSettings("calls")} />
           </List>
         </Card>
       </section>

@@ -102,7 +102,7 @@ function Row({ icon, label, count, strong, current, onClick, children, ...rest }
       {icon && <Icon icon={icon} />}
       <span className="el-nav-item__label" dir="auto">{label}</span>
       {children}
-      {count != null && count > 0 && <span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : ""}`}>{count}</span>}
+      {count != null && count > 0 && <>{" "}<span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : ""}`}>{count}</span></>}
     </button>
   );
 }

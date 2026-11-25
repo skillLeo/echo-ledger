@@ -48,10 +48,16 @@ final class PaymentDetails
         }
         $note = $this->text('payment.note');
         if ($note === null) {
-            return $reference !== null ? "Put {$reference} in the transfer's note." : "Put your request's reference in the transfer's note.";
+            return self::defaultNote($reference);
         }
 
         return str_replace('{reference}', $reference ?? 'your reference', $note);
+    }
+
+    /** The note while staff wrote none (Admin → Plans → Payment details): the console shows it in its own language. */
+    public static function defaultNote(?string $reference): string
+    {
+        return $reference !== null ? "Put {$reference} in the transfer's note." : "Put your request's reference in the transfer's note.";
     }
 
     /** `payment_instructions` for v1.6 apps: the account as text lines and the note, else the v1.6 free text. */

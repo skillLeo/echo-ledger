@@ -5,6 +5,7 @@
 // ("Pin" or "Unpin"), Mac menus get Title Case, Mac right-click menus no shortcuts. checkMenu() is the test's: a menu
 // with a label, a shortcut or an action that isn't in the file fails.
 import list from "./actions.json";
+import { latinKey } from "./latinKey";
 import * as Icons from "../components/icons";
 import type { IconType } from "../components/Button";
 import type { MenuItem } from "../components/Menu";
@@ -321,5 +322,6 @@ export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
     shift: mac ? mods.includes("⇧") : mods.includes("Shift"),
   };
   if (e.metaKey !== want.meta || e.ctrlKey !== want.ctrl || e.altKey !== want.alt || e.shiftKey !== want.shift) return false;
-  return e.key.toLowerCase() === (KEY_NAMES[key] ?? key).toLowerCase();
+  // A non-Latin layout's letter stands for the Latin key at its place (D-221).
+  return latinKey(e).toLowerCase() === (KEY_NAMES[key] ?? key).toLowerCase();
 }
