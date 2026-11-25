@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -196,7 +197,8 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
     val enabled = state.ready && state.error == null
     Column(modifier.fillMaxWidth().background(c.surface).navigationBarsPadding()) {
         HorizontalDivider(thickness = 1.dp, color = c.border)
-        Scrubber(state, enabled, Modifier.fillMaxWidth().padding(horizontal = Space.screen).padding(top = Space.s2))
+        // P-033: the scrubber's 48 dp band takes the place of the gap above it.
+        Scrubber(state, enabled, Modifier.fillMaxWidth().padding(horizontal = Space.screen))
         Row(
             Modifier.fillMaxWidth().height(64.dp).padding(horizontal = Space.s2),
             verticalAlignment = Alignment.CenterVertically
@@ -229,7 +231,10 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
                         val next = PLAYER_SPEEDS.getOrElse(PLAYER_SPEEDS.indexOf(state.speed) + 1) { PLAYER_SPEEDS.first() }
                         state.changeSpeed(next)
                     },
-                    modifier = Modifier.padding(end = Space.s2).semantics { contentDescription = "Playback speed $speed" }
+                    // P-033: a 48 dp target around the 32 dp chip.
+                    modifier = Modifier.padding(end = Space.s2)
+                        .semantics { contentDescription = "Playback speed $speed" }
+                        .minimumInteractiveComponentSize()
                 )
             }
         }
@@ -240,8 +245,8 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
 }
 
 /**
- * A 2 dp track (played part in brand) with a 12 dp thumb; tap or drag to move. Internal for its right-to-left test,
- * which can't make a real player ready.
+ * A 2 dp track (played part in brand) with a 12 dp thumb, in a 48 dp band you tap or drag (P-033: it was 20 dp).
+ * Internal for its right-to-left test, which can't make a real player ready.
  */
 @Composable
 internal fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Modifier) {
@@ -254,7 +259,7 @@ internal fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: M
     }
     Box(
         modifier
-            .height(20.dp)
+            .height(48.dp)
             .pointerInput(enabled, state.totalMs, rtl) {
                 detectTapGestures { seekAt(it.x, size.width) }
             }

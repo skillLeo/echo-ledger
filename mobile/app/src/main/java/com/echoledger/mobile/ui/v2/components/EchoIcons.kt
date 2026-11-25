@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.PhoneCallback
+import androidx.compose.material.icons.automirrored.outlined.PhoneMissed
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
@@ -28,7 +30,6 @@ import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
@@ -65,7 +66,6 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PhoneMissed
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.PushPin
@@ -131,8 +131,7 @@ object EchoIcons {
     val Ask: ImageVector get() = Icons.Outlined.QuestionAnswer
     val Moment: ImageVector get() = Icons.Outlined.BookmarkBorder
 
-    @Suppress("DEPRECATION")
-    val Move: ImageVector get() = Icons.Outlined.DriveFileMove
+    val Move: ImageVector get() = Icons.AutoMirrored.Outlined.DriveFileMove
     val Delete: ImageVector get() = Icons.Outlined.DeleteOutline
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
     val Label: ImageVector get() = Icons.AutoMirrored.Outlined.Label
@@ -172,7 +171,7 @@ object EchoIcons {
     val Translate: ImageVector get() = Icons.Outlined.Translate
     val Assist: ImageVector get() = Icons.Outlined.AutoAwesome
     val Upload: ImageVector get() = Icons.Outlined.FileUpload
-    val Missed: ImageVector get() = Icons.Outlined.PhoneMissed
+    val Missed: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneMissed
 
     // Settings groups
     val Palette: ImageVector get() = Icons.Outlined.Palette

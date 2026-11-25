@@ -361,6 +361,29 @@ pub fn avatars_dir(dir: &std::path::Path) -> std::path::PathBuf {
     dir.join("avatars")
 }
 
+/// A kept picture, when the file holds one: a file cut short or damaged is no picture, and it is downloaded again.
+pub async fn read_kept_avatar(path: &std::path::Path) -> Option<Vec<u8>> {
+    let bytes = tokio::fs::read(path).await.ok()?;
+    crate::receipts::sniff(&bytes).is_some().then_some(bytes)
+}
+
+/// Keeps a picture: written to a file of its own first, then moved into place, so the many rows that ask for the same
+/// person's picture at once never read half of it, and two writers never mix theirs.
+pub async fn keep_avatar(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    if let Some(dir) = path.parent() {
+        tokio::fs::create_dir_all(dir).await?;
+    }
+    let tmp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    tokio::fs::write(&tmp, bytes).await?;
+    if let Err(e) = tokio::fs::rename(&tmp, path).await {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(e);
+    }
+    Ok(())
+}
+
 /// Removes every kept picture (sign-out, another account signing in).
 pub fn clear_avatars(dir: &std::path::Path) {
     let _ = std::fs::remove_dir_all(avatars_dir(dir));
@@ -380,6 +403,29 @@ pub fn recovery_codes_text(codes: &[String], email: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn a_kept_picture_is_moved_into_place_whole_and_a_damaged_one_is_no_picture() {
+        let data = tempfile::tempdir().unwrap();
+        let path = avatars_dir(data.path()).join("person.img");
+        // The smallest WebP the sniffer takes: RIFF, a size, WEBP.
+        let webp = b"RIFF\x0c\x00\x00\x00WEBPVP8 ".to_vec();
+        assert!(crate::receipts::sniff(&webp).is_some(), "the sample is a picture");
+        let writers: Vec<_> = (0..8).map(|_| {
+            let (path, webp) = (path.clone(), webp.clone());
+            tokio::spawn(async move { keep_avatar(&path, &webp).await })
+        }).collect();
+        for w in writers {
+            w.await.unwrap().unwrap();
+        }
+        assert_eq!(read_kept_avatar(&path).await, Some(webp));
+        let left: Vec<_> = std::fs::read_dir(avatars_dir(data.path())).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(left, ["person.img"], "no file of a writer's left behind");
+        // Cut short or damaged: downloaded again.
+        std::fs::write(&path, b"RIF").unwrap();
+        assert_eq!(read_kept_avatar(&path).await, None);
+        assert_eq!(read_kept_avatar(&avatars_dir(data.path()).join("none.img")).await, None);
+    }
 
     #[test]
     fn only_the_listed_actions_reach_the_server_and_ids_stay_in_their_segment() {

@@ -35,8 +35,8 @@ class RecordingNoticeShotsTest : AppTest() {
     }
 
     /** The expanded recording view as the shade lays it out, the width of a phone's notification. */
-    private fun drawn(): View {
-        val n = Notifications.recording(app, "Recording call with Omar", "Both sides · auto · 2 bookmarks", discarding = true)
+    private fun drawn(title: String = "Recording call with Omar", detail: String = "Both sides · auto · 2 bookmarks"): View {
+        val n = Notifications.recording(app, title, detail, discarding = true)
         val activity = buildActivity(androidx.activity.ComponentActivity::class.java).setup().get()
         val parent = FrameLayout(activity)
         val view = n.bigContentView.apply(activity, parent)
@@ -91,6 +91,37 @@ class RecordingNoticeShotsTest : AppTest() {
             val row = view.findViewById<TextView>(R.id.rec_discard).parent as View
             assertTrue(row.height >= (48 * app.resources.displayMetrics.density).toInt())
             view.captureRoboImage(File(out, "phone-notification-recording-ur-largest-${if (dark) "dark" else "light"}.png"))
+        }
+    }
+
+    /**
+     * P-104: a long title takes a second line instead of an ellipsis (the shade and this shot drew it differently), and
+     * the expanded view stays within the 252 dp Android gives a custom notification's content, nothing clipped, at its
+     * tallest: a two-line title, a two-line detail and buttons of two lines.
+     */
+    @Test
+    fun aLongTitleTakesTwoLinesUncutAndTheViewStaysWithinTheShadesLimit() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        largestUrdu()
+        val density = app.resources.displayMetrics.density
+        for (dark in listOf(false, true)) {
+            RuntimeEnvironment.setQualifiers(if (dark) "+night" else "+notnight")
+            val view = drawn(
+                "Recording call with Muhammad Abdullah Siddiqui Qureshi",
+                "Both sides · auto · 2 bookmarks · Muhammad Abdullah Siddiqui Qureshi Textiles"
+            )
+            val title = view.findViewById<TextView>(R.id.rec_title).layout
+            assertEquals("the title's lines", 2, title.lineCount)
+            assertEquals("the title is cut", 0, title.getEllipsisCount(title.lineCount - 1))
+            // The worst case: the detail on two lines too, and a button of two lines.
+            assertEquals("the detail's lines", 2, view.findViewById<TextView>(R.id.rec_detail).layout.lineCount)
+            val buttonLines = listOf(R.id.rec_pause, R.id.rec_stop, R.id.rec_captions, R.id.rec_discard)
+                .maxOf { view.findViewById<TextView>(it).layout.lineCount }
+            assertEquals("the tallest button's lines", 2, buttonLines)
+            assertNothingClipped(view)
+            val content = view.findViewById<View>(R.id.rec_root).height / density
+            assertTrue("the view is $content dp", content <= 252f)
+            view.captureRoboImage(File(out, "phone-notification-recording-ur-largest-long-title-${if (dark) "dark" else "light"}.png"))
         }
     }
 

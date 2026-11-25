@@ -1,6 +1,8 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -112,6 +114,26 @@ class CaptureUiTest : ScreenTest() {
         compose.onNodeWithContentDescription("Auto-record WhatsApp").assertIsOn().performClick()
         pumpUntil("the switch to be saved") { settings().autoRecordApps["whatsapp"] == false }
         assertTrue(settings().autoRecordApps.getValue("whatsapp").not())
+    }
+
+    /**
+     * P-054: with Auto-record off, every app's switch still read On under "these apps are recorded only when you start a
+     * recording". While it's off the apps' switches are dimmed and can't be changed (as on the desktop); the choices stay.
+     */
+    @Test
+    fun `while Auto-record is off the apps' switches are dimmed, and come back when it's on`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = false) } }
+        pumpUntil("settings to load") { !vm.settings.value.autoRecordArmed }
+        show {
+            AutoRecordSection(vm, vm.settings.collectAsState().value)
+        }
+        compose.onNodeWithText("Auto-record is off: these apps are recorded only when you start a recording.").assertExists()
+        compose.onNodeWithContentDescription("Auto-record WhatsApp").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Auto-record Zoom").assertIsNotEnabled()
+
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
+        pumpUntil("Auto-record on") { vm.settings.value.autoRecordArmed }
+        compose.onNodeWithContentDescription("Auto-record WhatsApp").assertIsEnabled().assertIsOn()
     }
 
     @Test

@@ -177,6 +177,8 @@ function emptyView(view: LibraryViewId): { title: string; body: string } | undef
 
 /** More picked than the core takes at once: what the menu and the bar say. */
 const tooManyWords = (picked: number) => t("Up to :max at a time: unselect :extra", { max: MAX_BULK, extra: picked - MAX_BULK });
+/** Over the limit, where Mark as read and unread are still offered (contract 2.0.0-y): the bar's line and the menus'. */
+const overWords = (picked: number) => t("Over :max: only Mark as read or unread. Unselect :extra for the rest", { max: MAX_BULK, extra: picked - MAX_BULK });
 
 
 export type LibraryV2Props = {
@@ -919,37 +921,46 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     // What the server took is kept whatever happens after; only that stays marked.
     const progress = openedProgress();
     const settled = (id: string) => (progress.done.has(id) ? marked : was.get(id)!);
-    const unpick = async () => {
+    const unpick = () => {
       if (!progress.notFound.size) return;
       setPicked((now) => new Set([...now].filter((id) => !progress.notFound.has(id))));
       // None of them is here any more: the selection ends.
       if ([...was.keys()].every((id) => progress.notFound.has(id))) endSelection();
-      // Gone from here (in the bin, another workspace's): a sync takes them out of the list.
-      const list = await api.refreshLibrary().catch(() => null);
-      if (list) setItems(list);
-      put(settled);
+      // Gone from here (in the bin, another workspace's): the Library's sync (one at a time) takes them out of the list,
+      // after the words are said.
+      void syncLibrary().then((list) => {
+        setItems(list);
+        put(settled);
+      }).catch(() => undefined);
     };
     try {
       await markOpenedMany([...was.keys()], !unread, progress);
       // Once more: a sync answered meanwhile from the copy saved before the marks undid them. One the server did not
       // find, or one left out on an older server, goes back as it was.
       put(settled);
-      await unpick();
       const count = progress.done.size;
       if (!count) {
         if (progress.notFound.size) say(tc(":count recording is no longer in your Library|:count recordings are no longer in your Library", progress.notFound.size));
+        unpick();
         return;
       }
       const words = unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", count) : tc("Marked :count recording as read|Marked :count recordings as read", count);
-      // An older server, one by one: 200 at most, and the rest says so.
-      say(progress.left.size ? `${words} · ${tooManyWords(was.size - progress.notFound.size)}` : words);
+      // An older server, one by one: 200 at most. The ones done leave the selection, so what is left stays picked for
+      // the next go, and it says so.
+      if (progress.left.size) {
+        setPicked((now) => new Set([...now].filter((id) => !progress.done.has(id))));
+        say(`${words} · ${tc("The other :count recording is still selected|The other :count recordings are still selected", progress.left.size)}`);
+      } else {
+        say(words);
+      }
+      unpick();
     } catch (e) {
       // Only what was not done goes back; the rest stays marked, and the problem says how many went.
       const done = progress.done;
       put(settled);
-      await unpick();
       const of = { done: done.size, total: was.size - progress.notFound.size, error: errorMessage(e) };
       sayProblem(say, !done.size ? errorMessage(e) : unread ? tc(":done of :total marked as unread · :error", of.done, of) : tc(":done of :total marked as read · :error", of.done, of));
+      unpick();
     }
   };
 
@@ -989,7 +1000,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
    */
   const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set(), own: RecordingMenuParts = {}): MenuItem[] => {
     // More than the core takes at once: only Mark as read and unread (any number), then a line that says so.
-    if (ids.length > MAX_BULK) return [...readItems(ids).map(({ item }) => item), { label: tooManyWords(ids.length), disabled: true, separator: true }];
+    if (ids.length > MAX_BULK) return [...readItems(ids).map(({ item }) => item), { label: overWords(ids.length), disabled: true, separator: true }];
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
     const all = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
@@ -1378,7 +1389,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const recordingMenu = (ids: readonly string[]): { title?: string; items: MenuItem[] } => {
     // More than the core takes at once: only Mark as read and unread (any number), then a line that says so.
     if (ids.length > MAX_BULK) {
-      return { title: manyTitle(ids.length), items: [...readItems(ids, true).map(({ item }) => item), { label: tooManyWords(ids.length), disabled: true, separator: true }] };
+      return { title: manyTitle(ids.length), items: [...readItems(ids, true).map(({ item }) => item), { label: overWords(ids.length), disabled: true, separator: true }] };
     }
     const ctx = recordingContext(ids);
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
@@ -1705,7 +1716,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               <PickBox className="el-lib-toolbar__all" label={allPicked ? t("Unselect all") : t("Select all")} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
               <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? t(":count selected", { count: pickedIds.length }) : t("Select recordings")}</h2>
-              {tooMany && <span className="el-caption el-secondary" role="status">{t("Over :max: only Mark as read or unread. Unselect :extra for the rest", { max: MAX_BULK, extra: pickedIds.length - MAX_BULK })}</span>}
+              {tooMany && <span className="el-caption el-secondary" role="status">{overWords(pickedIds.length)}</span>}
               <div className="el-lib-row2__end">
                 <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
                   onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>

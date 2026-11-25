@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -300,8 +301,10 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings, phoneAppBlock: B
         }
         AutoRecordRules.APPS.forEach { app ->
             val on = AutoRecordRules.records(app, settings.autoRecordApps)
+            // P-054: while Auto-record is off nothing is recorded by itself, so the apps' switches are dimmed and can't
+            // be changed (as on the desktop); each choice stays for when it's on again.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Column(Modifier.weight(1f).padding(end = 12.dp).alpha(if (settings.autoRecordArmed) 1f else 0.5f)) {
                     Text(app.label)
                     // One line only when it tells something: the card already says once when auto-record is off.
                     when {
@@ -313,7 +316,8 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings, phoneAppBlock: B
                 Switch(
                     checked = on,
                     onCheckedChange = { value -> vm.updateSettings { it.copy(autoRecordApps = it.autoRecordApps + (app.wire to value)) } },
-                    modifier = Modifier.semantics { contentDescription = "Auto-record ${app.label}" }
+                    modifier = Modifier.semantics { contentDescription = "Auto-record ${app.label}" },
+                    enabled = settings.autoRecordArmed
                 )
             }
         }

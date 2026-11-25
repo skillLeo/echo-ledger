@@ -2056,6 +2056,12 @@ span.el-projects__fold { cursor: default; }
   position: absolute; inset-block: 0; inset-inline-end: 0; z-index: var(--el-layer-dialog); max-block-size: none;
   border-radius: 0; border-block: 0; border-inline-end: 0; box-shadow: var(--el-shadow-2);
 }
+/* D-244: right to left the drawer opens from the window's left (its end side, mirrored). On a Mac the system's window
+   buttons stay there: its head keeps their 80 points clear, so × sits beside them, never under, as a Sheet's does.
+   Full screen has no buttons (no data-titlebar). */
+[data-platform="macos"][data-titlebar][dir="rtl"] .el-filter--drawer .el-filter__head {
+  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));
+}
 .el-filter-scrim { position: absolute; inset: 0; z-index: var(--el-layer-dialog); background: var(--el-role-scrim-default); }
 .el-filter__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); padding: var(--el-space-8) var(--el-space-8) var(--el-space-8) var(--el-space-16); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-filter__on { margin-inline-start: var(--el-space-8); color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
