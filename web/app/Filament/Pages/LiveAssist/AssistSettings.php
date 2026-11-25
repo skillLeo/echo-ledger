@@ -52,9 +52,20 @@ class AssistSettings extends Page
     /** @var array<string, mixed>|null meeting type => mode, hint level, language help */
     public ?array $data = [];
 
+    /** In the console's language (the new frame in Urdu); English reads as before. */
+    public function getTitle(): string
+    {
+        return __('Live Assist settings');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Settings');
+    }
+
     public function getSubheading(): string
     {
-        return 'What a new prep starts with, for each kind of meeting. You can change it on each prep.';
+        return __('What a new prep starts with, for each kind of meeting. You can change it on each prep.');
     }
 
     public function mount(): void
@@ -66,19 +77,19 @@ class AssistSettings extends Page
     {
         $sections = [];
         foreach (AssistPrep::MEETING_TYPES as $type) {
-            $sections[] = Section::make(AssistRecords::MEETING_TYPES[$type])->compact()->statePath($type)->schema([
+            $sections[] = Section::make(__(AssistRecords::MEETING_TYPES[$type]))->compact()->statePath($type)->schema([
                 Grid::make(['default' => 1, 'sm' => 3])->schema([
-                    Select::make('mode')->label('Mode')->options(AssistRecords::MODES)->required()->selectablePlaceholder(false)
-                        ->helperText('Your plan decides which modes start.'),
-                    Select::make('hint_level')->label('Hints')->options(AssistRecords::HINT_LEVELS)->required()->selectablePlaceholder(false),
-                    Select::make('language_help')->label('Language help')->options(AssistRecords::LANGUAGE_HELP)->required()->selectablePlaceholder(false),
+                    Select::make('mode')->label(__('Mode'))->options(self::words(AssistRecords::MODES))->required()->selectablePlaceholder(false)
+                        ->helperText(__('Your plan decides which modes start.')),
+                    Select::make('hint_level')->label(__('Hints'))->options(self::words(AssistRecords::HINT_LEVELS))->required()->selectablePlaceholder(false),
+                    Select::make('language_help')->label(__('Language help'))->options(self::words(AssistRecords::LANGUAGE_HELP))->required()->selectablePlaceholder(false),
                 ]),
             ]);
         }
 
         return $schema->components([
             ...$sections,
-            Text::make('Live Assist\'s shortcuts (help me now, shorter, hide the card and the rest) are set in the desktop app, under Settings → Shortcuts.'),
+            Text::make(__("Live Assist's shortcuts (help me now, shorter, hide the card and the rest) are set in the desktop app, under Settings → Shortcuts.")),
         ])->statePath('data')->disabled(fn (): bool => ! self::canChange());
     }
 
@@ -86,7 +97,7 @@ class AssistSettings extends Page
     {
         return $schema->components([
             Form::make([EmbeddedSchema::make('form')])->id('form')->livewireSubmitHandler('save')
-                ->footer([Actions::make([Action::make('save')->label('Save')->submit('save')->visible(fn (): bool => self::canChange())])]),
+                ->footer([Actions::make([Action::make('save')->label(__('Save'))->submit('save')->visible(fn (): bool => self::canChange())])]),
         ]);
     }
 
@@ -97,7 +108,18 @@ class AssistSettings extends Page
             return;
         }
         AssistDefaults::save($user, $this->form->getState());
-        Notification::make()->title('Live Assist settings saved')->success()->send();
+        Notification::make()->title(__('Live Assist settings saved'))->success()->send();
+    }
+
+    /**
+     * A list's labels in the console's language; its keys stay as they are.
+     *
+     * @param  array<string, string>  $labels
+     * @return array<string, string>
+     */
+    private static function words(array $labels): array
+    {
+        return array_map(fn (string $label): string => __($label), $labels);
     }
 
     private static function user(): ?User

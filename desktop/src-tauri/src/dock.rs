@@ -5,30 +5,30 @@
 //!   so the application delegate is taught `applicationDockMenu:` (as `app_life` teaches it `applicationShouldTerminate:`),
 //!   which builds the menu afresh each time it opens. Its items carry the menu bar's ids (`native_menu::item_id`), so a
 //!   pick goes through the same routing as the menu bar's (`native_menu::picked`: the core runs these, page or not).
-//! - Its number: the Activity number the rail shows (unread problems and upgrade answers, from the page, plus the calls
-//!   waiting, from the core), unless "Show count on the app icon" is off.
+//! - Its number: the Activity number the rail shows (the server's badge, from the page, plus the calls waiting that only
+//!   this computer knows, from the core), unless "Show count on the app icon" is off.
 //! - Audio files opened with EchoLedger (Finder's Open With, or dropped on the Dock icon) are imported (`opened`).
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use tauri::{AppHandle, Manager};
 
-/// The page's part of the number: what needs the person in Activity (lib/badge.ts actionCount without the calls).
+/// The page's part of the number: the server's Activity badge (lib/badge.ts railBadge without this computer's calls).
 static ACTIVITY: AtomicU32 = AtomicU32::new(0);
 /// What the Dock shows now (u64::MAX: not drawn yet), so the same number is never drawn twice.
 static SHOWN: AtomicU64 = AtomicU64::new(u64::MAX);
 
-/// The Dock's words for a number (pure), as the rail's badge (lib/badge.ts badgeLabel): nothing at 0, then the number,
-/// "9+" above nine.
+/// The Dock's words for a number (pure), as the rail's badge (lib/badge.ts railBadgeLabel): nothing at 0, then the
+/// number, "99+" above 99.
 pub fn badge_label(count: u32) -> Option<String> {
     match count {
         0 => None,
-        1..=9 => Some(count.to_string()),
-        _ => Some("9+".into()),
+        1..=99 => Some(count.to_string()),
+        _ => Some("99+".into()),
     }
 }
 
-/// The number on the Dock icon (pure): the page's Activity part and the calls waiting, or none with the setting off.
+/// The number on the Dock icon (pure): the page's Activity part and the calls waiting here, or none with the setting off.
 pub fn badge_count(activity: u32, waiting_calls: usize, shown: bool) -> u32 {
     if shown { activity.saturating_add(u32::try_from(waiting_calls).unwrap_or(u32::MAX)) } else { 0 }
 }
@@ -43,11 +43,11 @@ pub fn dock_activity_set(app: AppHandle, count: u32) {
 /// The number now, drawn when it changed.
 pub fn follow(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    let waiting = crate::pending::DecisionFiles::in_dir(&state.data_dir).load().waiting();
+    let waiting = crate::pending::DecisionFiles::in_dir(&state.data_dir).load().waiting_here();
     follow_with(app, waiting);
 }
 
-/// The number with the calls waiting the status has just counted (posted to the main thread, never waited for).
+/// The number with the calls waiting here the status has just counted (posted to the main thread, never waited for).
 pub fn follow_with(app: &AppHandle, waiting: usize) {
     let count = badge_count(ACTIVITY.load(Ordering::SeqCst), waiting, app.state::<crate::AppState>().settings().dock_badge);
     let changed = SHOWN.swap(u64::from(count), Ordering::SeqCst) != u64::from(count);
@@ -240,7 +240,10 @@ mod tests {
         assert_eq!(badge_label(0), None);
         assert_eq!(badge_label(3).as_deref(), Some("3"));
         assert_eq!(badge_label(9).as_deref(), Some("9"));
-        assert_eq!(badge_label(10).as_deref(), Some("9+"));
+        // UX-08: the same as the rail's, 99+ above 99 (it stopped at 9+ before).
+        assert_eq!(badge_label(10).as_deref(), Some("10"));
+        assert_eq!(badge_label(99).as_deref(), Some("99"));
+        assert_eq!(badge_label(100).as_deref(), Some("99+"));
         assert_eq!(badge_count(2, 1, true), 3, "Activity's problems and the calls waiting");
         assert_eq!(badge_count(2, 1, false), 0, "Show count on the app icon off");
         // The same rule as the page's badge.

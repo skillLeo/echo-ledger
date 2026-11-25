@@ -306,6 +306,9 @@
 .el-row__control { position: relative; flex: none; display: flex; align-items: center; }
 .el-row__error { color: var(--el-role-danger-default); white-space: normal; }
 .el-row__chevron { display: flex; color: var(--el-role-text-secondary); }
+/* A row that opens what follows it in place (aria-expanded): its chevron turns down while open. */
+.el-row:has(> .el-row__hit[aria-expanded="true"]) > .el-row__chevron .el-icon { rotate: 90deg; }
+[dir="rtl"] .el-row:has(> .el-row__hit[aria-expanded="true"]) > .el-row__chevron .el-icon { rotate: -90deg; }
 .el-row__leading--tick { inline-size: var(--el-space-40); block-size: var(--el-space-40); }
 .el-row__tick {
   display: inline-flex; align-items: center; justify-content: center;
@@ -975,6 +978,8 @@ button.el-step__head { cursor: pointer; }
 .el-group__label > .el-group__title { padding-inline: 0; color: var(--el-role-text-primary); }
 .el-group__desc { margin-block-start: calc(-1 * var(--el-space-8)); padding-inline: var(--el-space-4); }
 .el-group__rows { padding: var(--el-space-4); }
+/* Activity's group line opened (UX-08): each of its items under it, set in by the line's icon column. */
+.el-activity__group { list-style: none; padding-inline-start: var(--el-space-40); }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
@@ -1550,11 +1555,10 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 /* The recording page's labels, each with its × (parity DT-REC-045). */
 .el-recording__labels { display: flex; flex-wrap: wrap; gap: var(--el-space-4); list-style: none; margin: 0; padding: 0; }
 
-/* Rename by clicking the recording's title (parity DT-REC-004): the title reads as text until it is pressed. */
-.el-recording__title { all: unset; cursor: text; border-radius: var(--el-radius-sm); }
+/* Rename by pressing the recording's title (parity DT-REC-004): a button that opens the Rename dialog. */
+.el-recording__title { all: unset; cursor: pointer; border-radius: var(--el-radius-sm); }
 .el-recording__title:hover { background: var(--el-role-bg-subtle); }
 .el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
-.el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }
 
 /* What the engine was not sure of, kept as heard (parity DT-REC-111), and suggested fixes (DT-REC-106, 107). */
 .el-word { all: unset; cursor: pointer; }
@@ -2164,6 +2168,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   font-size: var(--el-desktop-text-badge-size); line-height: var(--el-desktop-text-badge-line); font-weight: var(--el-desktop-text-badge-weight);
   font-family: var(--el-desktop-text-badge-font); font-variant-numeric: tabular-nums; text-align: center;
 }
+/* Red only when something failed (UX-08, the server's tone): the same ring; its text on red is 4.5:1 or more in both themes. */
+.el-rail__count--danger { background: var(--el-role-danger-default); }
 .el-rail__dot {
   position: absolute; inset-block-start: calc(var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
   inset-inline-start: calc(50% + var(--el-desktop-icon-rail) / 2 - var(--el-desktop-badge-inset) - var(--el-desktop-badge-dot) / 2);
@@ -2201,7 +2207,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
    grey, empty space (it drags the window), the search field at the row's end (28 px, 180–260 px wide, 22 % of the
    window between, the place in its placeholder, ⌘K at its end), then the status items. Right to left it is mirrored:
    the field at the left end. As the window narrows the empty space goes first, then the field shrinks to 180 px, then it
-   becomes a ⌕ button; the title's words are never given to the field. No line under it until the page has scrolled. */
+   becomes a ⌕ button; the title's words are never given to the field, and never cut (no ellipsis at any width): beside
+   the ⌕ button the title wraps, or takes a line of its own. No line under it until the page has scrolled. */
 .el-titlerow {
   flex: none; display: flex; align-items: center; gap: var(--el-space-8);
   block-size: var(--el-desktop-titlerow-height); padding-inline: var(--el-space-8) var(--el-space-12);
@@ -2209,15 +2216,13 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 .el-titlerow--scrolled { border-block-end-color: var(--el-role-border-default); }
 .el-titlerow__start, .el-titlerow__end { display: flex; align-items: center; gap: var(--el-space-4); min-inline-size: 0; }
-/* The title's group keeps its whole width beside the field; only beside the ⌕ button (a window under the least width)
-   may it give some, its words cut last. */
+/* The title's group keeps its whole width beside the field (TitleRow measures it on one line before showing the field). */
 .el-titlerow__start { flex: none; }
-.el-titlerow--compact .el-titlerow__start { flex: 0 1 auto; }
 .el-titlerow__end { flex: none; justify-content: flex-end; }
 .el-titlerow__history { display: inline-flex; flex: none; }
 .el-titlerow__title { display: flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; margin: 0 0 0 var(--el-space-4); }
 .el-titlerow__name {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-role-text-primary);
+  white-space: nowrap; color: var(--el-role-text-primary);
   font-size: var(--el-desktop-text-row-title-size); line-height: var(--el-desktop-text-row-title-line); font-weight: var(--el-desktop-text-row-title-weight);
 }
 .el-titlerow__count { flex: none; color: var(--el-role-text-secondary); font-size: var(--el-desktop-text-row-title-size); font-weight: var(--el-text-body-weight, 400); font-variant-numeric: tabular-nums; }
@@ -2227,8 +2232,27 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   flex: 0 1 clamp(var(--el-desktop-search-min-width), var(--el-desktop-search-preferred-width), var(--el-desktop-search-max-width));
   min-inline-size: var(--el-desktop-search-min-width);
 }
-/* No room for the field: a ⌕ button at the row's end. */
-.el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; }
+/* No room for the field beside the whole title (and lead decision 18's narrow case: under the least width, 720 CSS px,
+   zoomed in a small window): a ⌕ button at the row's end, and the title keeps every word, wrapping to a second line when
+   it must (the row grows for it); never an ellipsis. The ⌕ button opens the field across the row, the title stepping
+   aside only while it is open. */
+.el-root .el-titlerow.el-titlerow--narrow, .el-root .el-titlerow.el-titlerow--compact { block-size: auto; min-block-size: var(--el-desktop-search-height); }
+.el-titlerow--narrow .el-titlerow__start, .el-titlerow--compact .el-titlerow__start { flex: 1 1 auto; }
+.el-titlerow--narrow .el-titlerow__title, .el-titlerow--compact .el-titlerow__title { flex: 1 1 auto; align-items: center; }
+.el-titlerow--narrow .el-titlerow__name, .el-titlerow--compact .el-titlerow__name { white-space: normal; min-inline-size: min-content; }
+.el-titlerow--narrow .el-titlerow__middle, .el-titlerow--compact .el-titlerow__middle { flex: none; min-inline-size: auto; margin-inline-start: 0; }
+.el-titlerow--searching .el-titlerow__title { display: none; }
+.el-titlerow--searching .el-titlerow__start { flex: none; }
+.el-titlerow--searching .el-titlerow__middle { flex: 1 1 0; min-inline-size: 0; }
+/* Narrow, the open field is only the field: its placeholder and name say what it searches (⌘K searches everything). */
+.el-titlerow--narrow .el-titlerow__keys, .el-titlerow--narrow .el-titlerow__scope { display: none; }
+/* When its words don't fit beside the controls even on two lines, the title takes the line under them. */
+.el-titlerow--below { flex-wrap: wrap; }
+.el-titlerow--below .el-titlerow__start { display: contents; }
+.el-titlerow--below .el-titlerow__title { order: 1; flex: 1 0 100%; box-sizing: border-box; margin: 0; padding: 0 var(--el-space-4) var(--el-space-4); }
+.el-titlerow--below .el-titlerow__middle { margin-inline-start: auto; }
+/* Narrow, the zoom chip says its percentage without its icon (its name and menu are unchanged). */
+.el-titlerow--narrow .el-zoom-chip .el-icon { display: none; }
 .el-titlerow__search {
   display: flex; align-items: center; gap: var(--el-space-8); box-sizing: border-box;
   inline-size: 100%; block-size: var(--el-desktop-search-height);
@@ -2240,6 +2264,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-titlerow__search--button { text-align: start; }
 .el-titlerow__placeholder { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-titlerow__field { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-text-primary); outline: none; }
+/* One focus ring, the box's: the field inside it draws none of its own (.el-root :focus-visible would). */
+.el-root .el-titlerow__field:focus-visible { outline: none; }
 .el-titlerow__keys { flex: none; font: inherit; font-size: var(--el-desktop-text-small-size); color: var(--el-role-text-secondary); }
 .el-titlerow__scope {
   display: inline-flex; align-items: center; gap: var(--el-space-2); flex: none; max-inline-size: 50%;
@@ -2337,6 +2363,15 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-winbutton:active { background: color-mix(in srgb, var(--el-role-text-primary) var(--el-winbutton-pressed-mix), transparent); }
 .el-winbutton--close:hover { background: var(--el-role-danger-default); color: var(--el-role-text-on-accent); }
 .el-winbutton--close:active { background: color-mix(in srgb, var(--el-role-danger-default) var(--el-winbutton-close-pressed-mix), transparent); color: var(--el-role-text-on-accent); }
+/* Zoomed with Windows' own title row, the window's buttons keep the system's size, as Windows' own do (as the Mac's
+   do): 46 × 48 points, divided by --el-zoom, the row never shorter than its controls. */
+[data-titlebar="win"] .el-rail__top, [data-titlebar="win"] .el-titlerow, [data-titlebar="win"] .el-panel__head, [data-titlebar="win"] .el-winbuttons {
+  block-size: max(calc(var(--el-desktop-titlerow-height-windows) / var(--el-zoom, 1)), var(--el-desktop-search-height));
+}
+[data-titlebar="win"] .el-winbutton { inline-size: calc(var(--el-desktop-window-button-width) / var(--el-zoom, 1)); }
+[data-titlebar="win"] .el-winbutton .el-icon > svg {
+  inline-size: calc(var(--el-desktop-window-button-glyph) / var(--el-zoom, 1)); block-size: calc(var(--el-desktop-window-button-glyph) / var(--el-zoom, 1));
+}
 /* All projects with the three levels: the top-level projects as cards (the tree is the panel's). Its title is the title
    row's (UX-09): the page's head is then a bar, Sort at its start and Request files, New project at its end. */
 .el-page__head--bar { min-block-size: var(--el-space-32); }

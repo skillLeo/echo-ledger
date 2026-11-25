@@ -1346,6 +1346,31 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `GET /api/activity?group=&limit=` (2.0.0-r): only that group's items (`upload_failed`), newest first.
+    pub async fn activity_in_group(&self, group: &str, limit: u32) -> AppResult<serde_json::Value> {
+        let query = [("group", group.to_string()), ("limit", limit.to_string())];
+        let resp = self.authed(self.http.get(self.url("activity")).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/activity/groups` (2.0.0-r): the groups that hold an unresolved item, with how many.
+    pub async fn activity_groups(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("activity/groups")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/activity/retry-all` (2.0.0-r): asks every device of the person to retry that group's uploads.
+    pub async fn activity_retry_all(&self, group: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("activity/retry-all")))?.json(&json!({ "group": group })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/badge` (2.0.0-r): the one Activity number every app shows, `{count, label, tone}`.
+    pub async fn badge(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("badge")))?.send().await?;
+        Self::parse(resp).await
+    }
+
     /// `POST /api/activity/read` (since v1.1): those ids, or everything when `None`.
     pub async fn mark_activity_read(&self, ids: Option<&[String]>) -> AppResult<serde_json::Value> {
         let body = ids.map_or_else(|| json!({}), |ids| json!({ "ids": ids }));

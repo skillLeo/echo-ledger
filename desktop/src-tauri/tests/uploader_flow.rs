@@ -1880,6 +1880,17 @@ fn queue_entries_from_before_v1_1_load_as_queued() {
 }
 
 #[test]
+fn an_upload_row_names_its_recording_on_the_server_once_there_is_one() {
+    // UX-08: Activity's group of uploads that didn't finish lists recordings; the row says which one it is.
+    let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
+    assert!(serde_json::to_value(UploadItem::from(&item)).unwrap().get("sessionId").is_none(), "none yet: left out");
+    item.created_session_id = Some("01JBSESSION".into());
+    assert_eq!(serde_json::to_value(UploadItem::from(&item)).unwrap()["sessionId"], "01JBSESSION");
+    item.server_session_id = Some("01JBLIVE".into());
+    assert_eq!(UploadItem::from(&item).session_id.as_deref(), Some("01JBLIVE"), "the captions' session it finishes");
+}
+
+#[test]
 fn upload_items_for_the_ui_use_camel_case_and_a_stable_id() {
     let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
     item.title = Some("Standup".into());
@@ -1974,6 +1985,36 @@ async fn the_discard_queue_deletes_sessions_and_treats_404_as_done() {
         queue.push(id.to_string());
     }
     assert_eq!(queue.items, ["S3", "S4"]);
+}
+
+// ---- Retry all (BE-03) --------------------------------------------------------------------------------------------
+
+#[test]
+fn retry_all_puts_back_every_failed_upload_of_this_account_and_nothing_else() {
+    use desktop_lib::owner::Owner;
+    let me = Owner::new("https://ledger.example.test", Some("ayesha@example.test"));
+    let other = Owner::new("https://ledger.example.test", Some("sara@example.test"));
+    let item = |name: &str, state: &str, owner: Option<&Owner>| PendingUpload {
+        dir: PathBuf::from(format!("/tmp/recordings/{name}")),
+        state: state.into(),
+        attempts: 4,
+        full_restarts: 1,
+        last_error: Some("The server could not verify this upload.".into()),
+        owner: owner.cloned(),
+        ..PendingUpload::default()
+    };
+    let mut queue = UploadQueue {
+        items: vec![item("a", "failed", None), item("b", "failed", Some(&me)), item("c", "uploading", None), item("d", "failed", Some(&other))],
+    };
+    assert_eq!(queue.retry_failed(Some(&me)), 2, "mine and the ones made before accounts; not Sara's, not one on its way");
+    let by = |id: &str| queue.items.iter().find(|i| i.id() == id).unwrap().clone();
+    for id in ["a", "b"] {
+        let i = by(id);
+        assert_eq!((i.state.as_str(), i.attempts, i.full_restarts, i.last_error.as_deref()), ("queued", 0, 0, None), "{id}: as its own Retry does");
+    }
+    assert_eq!(by("c").state, "uploading");
+    assert_eq!(by("d").state, "failed", "another account's stays as it is");
+    assert_eq!(queue.retry_failed(Some(&me)), 0, "nothing failed of mine: nothing to do");
 }
 
 // ---- Whose recording it is (v1.5) ------------------------------------------------------------------------------
