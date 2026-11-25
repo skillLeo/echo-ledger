@@ -83,7 +83,9 @@ const LEFTOVER_FRAME = ['Help & shortcuts', 'Search recordings, transcripts, pag
  * With the three levels (the new frame and the new Library) Projects is an overview of cards: each says its last
  * activity, and the project's language is in its Settings, not on the card (docs/PLAN_NAV_3_LEVELS.md section 3).
  */
-const LEFTOVER_FRAMED = ['projects' => ['Automatic' => null, 'Last call Nov 17' => 'Last activity Nov 17']];
+const LEFTOVER_FRAMED = ['projects' => ['Automatic' => null, 'Last call Nov 17' => 'Last activity Nov 17'],
+    // UX-18: the plan's page is Plan & billing in the new console, as the account menu says.
+    'settings' => ['Plan & usage' => 'Plan & billing']];
 
 /** A page's English in this world, with the three levels' own words where they differ. */
 function leftoverPhrases(string $page, array $phrases, bool $framed): array
@@ -141,7 +143,7 @@ it('shows the classic pages\' last English in Urdu in the new frame, with Urdu m
     // Settings' home: its words in Urdu, the minutes in Urdu units and every amount in its own order (<bdi>).
     $settings = leftoverPage($this, true, 'ur', 'settings');
     expect(leftoverWords($settings))->toContain('ترتیبات')->toContain('اپ گریڈ کریں')->toContain('اس مہینے')->toContain('ٹرانسکرپشن')
-        ->toContain('1 دسمبر کو دوبارہ شروع ہوگا')->toContain('اسٹوریج')->toContain('ڈیوائسز')->toContain('پلان اور استعمال')->toMatch('/\d+ منٹ/u')
+        ->toContain('1 دسمبر کو دوبارہ شروع ہوگا')->toContain('اسٹوریج')->toContain('ڈیوائسز')->toContain('پلان اور بلنگ')->toMatch('/\d+ منٹ/u')
         ->not->toMatch('/[٠-٩۰-۹]/u');
     expect(substr_count($settings, '<span class="el-set-value" style="max-width:60%"><bdi>'))->toBe(3);
     $create = leftoverWords(leftoverPage($this, true, 'ur', 'project-create'));
@@ -155,9 +157,12 @@ it('keeps the same words in English in the new frame and in classic', function (
             $html = leftoverPage($this, $v2, 'en', $page, $library);
             // With the three levels (the new frame and the new Library) the bell is the rail's Activity
             // (docs/PLAN_NAV_3_LEVELS.md section 2: never the same thing at two levels), so the top bar has none.
-            // Help & shortcuts lists the frame's own keys there in place of the sidebar's [ line.
+            // Help & shortcuts (Keyboard shortcuts in the new console) lists the frame's own keys there in place of the
+            // sidebar's [ line.
             $frame = $v2 && $library ? ['="Notifications, 1 needs you"', 'Fold the sidebar to icons, and back'] : [];
-            foreach ([...leftoverPhrases($page, $phrases, $v2 && $library), ...array_diff(LEFTOVER_FRAME, $frame)] as $english) {
+            // UX-18: in the new console the shortcuts' dialog is Keyboard shortcuts (Help is the Help page).
+            $shown = $v2 ? array_map(fn (string $p): string => $p === 'Help & shortcuts' ? 'Keyboard shortcuts' : $p, LEFTOVER_FRAME) : LEFTOVER_FRAME;
+            foreach ([...leftoverPhrases($page, $phrases, $v2 && $library), ...array_diff($shown, $frame)] as $english) {
                 expect(leftoverHas($html, $english))->toBeTrue(($v2 ? 'v2' : 'classic')." {$page}: \"{$english}\" is missing");
             }
         }

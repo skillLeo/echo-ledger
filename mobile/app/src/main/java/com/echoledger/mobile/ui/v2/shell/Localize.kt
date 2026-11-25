@@ -33,6 +33,10 @@ fun sourceName(res: Resources, wire: String?): String = res.getString(
 object VmMessages {
     private val exact = mapOf(
         "Can't reach the server. Try again." to R.string.v2_vm_cant_reach,
+        // core.Problems' sentences (EL-UX's audit): they come from that mapper, not from a literal in the view model.
+        com.echoledger.mobile.core.Problems.OFFLINE to R.string.v2_vm_offline_check,
+        com.echoledger.mobile.core.Problems.SERVER to R.string.v2_vm_server_problem,
+        com.echoledger.mobile.core.Problems.CERTIFICATE to R.string.v2_vm_certificate,
         "The design could not be changed. Try again." to R.string.v2_vm_design_failed,
         "Could not sign in" to R.string.v2_vm_could_not_sign_in,
         "Could not start the capture helper through Shizuku." to R.string.v2_vm_shizuku_start_failed,

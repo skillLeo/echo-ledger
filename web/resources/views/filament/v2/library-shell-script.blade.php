@@ -85,7 +85,7 @@
             const data = window.Alpine ? window.Alpine.$data(shellEl) : null;
             const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
             // The single key F answers only while the Library has the focus (WCAG 2.1.4): the list, its toolbar or the panel.
-            const act = core.shellKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
+            const act = core.shellKey({ key: e.key, code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
                 modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, panelOpen: !! (data && data.filtersOpen),
                 focused: e.target instanceof Element && shellEl.contains(e.target),
             });
@@ -100,6 +100,8 @@
                 data?.toggleFilters();
             } else if (act.do === 'close-filters') {
                 data?.closeFilters();
+            } else if (act.do === 'help') {
+                window.dispatchEvent(new CustomEvent('el-help'));
             }
         }, true);
     })();

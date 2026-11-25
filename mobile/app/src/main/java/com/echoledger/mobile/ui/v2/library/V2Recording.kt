@@ -724,6 +724,16 @@ fun V2RecordingContent(
                             RowStatus.Failed -> EchoStatus(text.failed, EchoStatusKind.Danger)
                         }
                     }
+                    // Audio kept without a transcript: how long it stays ("Audio · 18 days left"; it left the row, v2.1 UX-16).
+                    if (row.status == RowStatus.Untranscribed) {
+                        LibraryModel.daysLeft(item.expiresAt)?.let { days ->
+                            Text(
+                                androidx.compose.ui.res.pluralStringResource(R.plurals.v2_lib_audio_days_left, days, days),
+                                style = EchoV2.type.meta,
+                                color = c.textSecondary
+                            )
+                        }
+                    }
                     if (head.bookmarks.isNotEmpty()) {
                         Row(
                             Modifier.horizontalScroll(rememberScrollState()),

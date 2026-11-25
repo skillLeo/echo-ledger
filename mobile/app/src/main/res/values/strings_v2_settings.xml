@@ -85,6 +85,8 @@
     <string name="v2_set_value_raw_mic">Raw microphone</string>
     <string name="v2_set_value_tap_to_start">Tap to start</string>
     <string name="v2_set_value_hold_to_talk">Hold to talk</string>
+    <string name="v2_set_value_keyboard_on">Keyboard on</string>
+    <string name="v2_set_value_keyboard_off">Keyboard off</string>
     <string name="v2_set_value_added">Added</string>
     <string name="v2_set_value_not_added">Not added</string>
     <string name="v2_set_value_not_set_up">Not set up</string>

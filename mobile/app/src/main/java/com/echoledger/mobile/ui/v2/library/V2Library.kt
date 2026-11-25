@@ -32,7 +32,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,7 +63,6 @@ import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
-import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
@@ -1223,6 +1221,7 @@ fun V2LibraryContent(
                                                 compact = tools.compact,
                                                 onOpen = { openRow(row) },
                                                 onLongClick = { tools.onToggle(row) },
+                                                underPinned = g.key == PINNED_GROUP,
                                                 returned = back,
                                                 modifier = if (back) Modifier.focusRequester(returnFocus) else Modifier
                                             )
@@ -1425,12 +1424,14 @@ private fun LibraryRow(
     onLongClick: () -> Unit,
     /** The row come back to from its recording (UX-25): a neutral grey ([returnedTint]), not the selection's tint. */
     returned: Boolean = false,
+    /** Under the Pinned header (Group by Date): the header says it, so the row needs no pin of its own. */
+    underPinned: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val c = EchoV2.colors
     val text = v2Text
-    val pinned = stringResource(R.string.v2_lib_pinned_mark)
     val res = androidx.compose.ui.platform.LocalContext.current.resources
+    val pinned = stringResource(R.string.v2_lib_pinned_mark)
     // U19: "Converting to Roman Urdu… 60%" (with its progress ring) or "Couldn't convert…" in place of the snippet.
     val stage = if (row.status == RowStatus.Done) com.echoledger.mobile.core.RowProgress.of(row.item) else null
     val converting = stage?.step == com.echoledger.mobile.core.RowProgress.Step.IMPROVING
@@ -1438,8 +1439,6 @@ private fun LibraryRow(
     val problem = rowProblem(row)
     // Beside the Transcribing badge: "part 2 of 3 · about 1 min left" (classic's row line).
     val transcribing = if (row.status == RowStatus.Transcribing) transcribingDetails(res, row.item.transcript?.finalProgress) else null
-    // Audio kept without a transcript says how long it stays: "Audio · 18 days left".
-    val daysLeft = if (row.status == RowStatus.Untranscribed) LibraryModel.daysLeft(row.item.expiresAt) else null
     // A call kept as audio only during quiet hours or Do Not Disturb, when no card asked (the call-choice plan, 2.0.5).
     val context = androidx.compose.ui.platform.LocalContext.current
     val quiet = row.status == RowStatus.Untranscribed &&
@@ -1456,39 +1455,44 @@ private fun LibraryRow(
             }
         ),
         // A failed transcript or one with nothing heard says so in place of the meta line, as classic's row does;
-        // U19's converting line comes next, then how long kept audio stays.
+        // U19's converting line comes next. How long kept audio stays is in its details (v2.1 UX-16).
         meta = when {
             problem != null -> null
             conversion != null -> conversion
             transcribing != null -> transcribing
             quiet -> stringResource(R.string.cc_quiet_saved)
-            daysLeft != null -> pluralStringResource(R.plurals.v2_lib_audio_days_left, daysLeft, daysLeft)
             else -> row.meta
         },
         titleEnd = row.time,
         metaEnd = {
-            // The screens icon and count (meeting assets) before the length, when it has any.
+            // v2.1 UX-16: at most two small things after the line: one mark and the length. The mark is Important's
+            // flag (named with the row's lists too), else the pin (unless the Pinned header above says it), else the
+            // first list's colour dot (named with all its lists), else the screens count.
             val screens = row.item.screenCount ?: 0
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                // Its lists as their colour dots, up to three, each named for screen readers (D14 §3).
-                row.item.labels.take(3).forEach { label ->
-                    com.echoledger.mobile.ui.v2.components.EchoLabelDot(
-                        LibraryModel.labelColour(row.item, label),
-                        Modifier.semantics { contentDescription = label }
+                val first = row.item.labels.firstOrNull()
+                when {
+                    row.item.important -> androidx.compose.material3.Icon(
+                        EchoIcons.Important,
+                        (listOf(important) + row.item.labels).joinToString(", "),
+                        Modifier.size(EchoTokens.Icon.sm),
+                        tint = c.danger
                     )
-                }
-                if (row.item.important) {
-                    androidx.compose.material3.Icon(EchoIcons.Important, important, Modifier.size(EchoTokens.Icon.sm), tint = c.danger)
-                }
-                if (row.item.pinned) {
-                    androidx.compose.material3.Icon(
+
+                    row.item.pinned && !underPinned -> androidx.compose.material3.Icon(
                         EchoIcons.Pin,
                         pinned,
                         Modifier.size(EchoTokens.Icon.sm),
                         tint = c.textSecondary
                     )
+
+                    first != null -> com.echoledger.mobile.ui.v2.components.EchoLabelDot(
+                        LibraryModel.labelColour(row.item, first),
+                        Modifier.semantics { contentDescription = row.item.labels.joinToString(", ") }
+                    )
+
+                    screens > 0 -> ScreensCountMark(screens)
                 }
-                if (screens > 0) ScreensCountMark(screens)
                 // A length never breaks over two lines, at any text size.
                 Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1, softWrap = false)
             }
@@ -1549,15 +1553,19 @@ private fun rowProblem(row: V2Row): (@Composable () -> Unit)? {
 }
 
 /**
- * A row's source as classic draws it: the app's own mark (its installed icon, else the one icon set's glyph) with the
- * small device badge for a recording made on a computer or on the web; TalkBack hears the app, then the device.
+ * A row's avatar (v2.1 UX-16): the person's initials (a voice note's mic, a meeting's camera) with the source app's own
+ * mark as a small badge. The device leaves the row (it is in the recording's details and Filters › Device); TalkBack
+ * still hears the app, then the device.
  */
 @Composable
 fun RowSourceLogo(row: V2Row) {
     val device = com.echoledger.mobile.core.SourceDevice.from(row.item.sourceDevice)
-    EchoSourceLogo(
+    com.echoledger.mobile.ui.v2.components.EchoRowAvatar(
         com.echoledger.mobile.core.SourceApp.from(row.item.sourceApp),
-        device = device,
+        // The person's or the caller's name only: never the source's name an untitled row shows, nor a title the
+        // server wrote from what was said (the person icon then, with the badge), the desktop's rule too.
+        row.item.title?.takeIf { it.isNotBlank() && !row.item.titleAuto }.orEmpty(),
+        com.echoledger.mobile.core.LibraryKind.of(row.item.facets?.kind, row.item.sourceApp),
         label = if (device == com.echoledger.mobile.core.SourceDevice.PHONE) {
             row.source
         } else {
@@ -1599,6 +1607,9 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.bringBack(key
 }
 
 private const val BRING_BACK_LOOKS = 5
+
+/** The Pinned header's group (Group by Date): its rows need no pin of their own. */
+private val PINNED_GROUP = "date:" + com.echoledger.mobile.core.LibraryGrouping.PINNED
 
 /** How long the row come back to stays tinted at most (UX-25). */
 private const val RETURN_TINT_MS = 60_000L

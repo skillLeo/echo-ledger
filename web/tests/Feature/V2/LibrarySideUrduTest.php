@@ -115,7 +115,7 @@ dataset('library side pages in English', [
     'search with results, classic' => ['library-side-classic-search-en', '/app/search?q=proforma', false],
     'search without results, classic' => ['library-side-classic-search-none-en', '/app/search?q=zebra+crossing', false],
     'recently deleted, classic' => ['library-side-classic-deleted-en', '/app/recently-deleted', false],
-    // On the top plan the avatar menu has Plan and usage (Plan & usage in classic) in place of Upgrade.
+    // On the top plan: classic's avatar menu has Plan & usage in place of Upgrade.
     'search on the top plan, new frame' => ['library-side-search-top-en', '/app/search?q=proforma', true, 'business'],
     'search on the top plan, classic' => ['library-side-classic-search-top-en', '/app/search?q=proforma', false, 'business'],
     // Older and "5 matches" on every result; Recently deleted with nothing in it.
@@ -305,7 +305,10 @@ it('words the restore and delete-now actions, the window and their notices in Ur
     $check('en', ['Delete now', 'Delete now', 'The audio and transcript are erased now. This cannot be undone.'], 'Recording restored', 'Recording erased');
 });
 
-/* The new frame's avatar menu: Upgrade (or Plan and usage on the top plan), Settings, the theme, Admin panel, Sign out. */
+/*
+ * The new frame's account menu (UX-18): Add photo, the theme, Plan & billing, Settings, Keyboard shortcuts, Help, Admin
+ * panel, Sign out; the plan's name in its header as written.
+ */
 it('words the new frame\'s avatar menu in Urdu, and keeps its English', function () {
     $menu = function (string $language, ?string $plan = null): string {
         if ($plan !== null) {
@@ -319,19 +322,23 @@ it('words the new frame\'s avatar menu in Urdu, and keeps its English', function
     };
 
     $ur = $menu('ur');
-    foreach (['>اپ گریڈ کریں<', '>ترتیبات<', '>تھیم<', '>سسٹم<', '>لائٹ<', '>ڈارک<', '>ایڈمن پینل<', '>سائن آؤٹ<', '<span class="v2-chip">Personal</span>'] as $words) {
+    foreach (['>تصویر لگائیں<', '>تھیم<', '>سسٹم<', '>لائٹ<', '>ڈارک<', '>پلان اور بلنگ<', '>ترتیبات<', '>کی بورڈ شارٹ کٹس', '>مدد<', '>ایڈمن پینل<', '>سائن آؤٹ<',
+        '<span class="v2-um-plan">Personal</span>', '>اکاؤنٹ<'] as $words) {
         expect($ur)->toContain($words);
     }
-    expect($ur)->not->toContain('>Upgrade<')->not->toContain('>Admin panel<')->not->toContain('>Sign out<');
+    expect($ur)->not->toContain('>Add photo<')->not->toContain('>Admin panel<')->not->toContain('>Sign out<');
 
     $en = $menu('en');
-    foreach (['>Upgrade<', '>Settings<', '>Theme<', '>System<', '>Light<', '>Dark<', '>Admin panel<', '>Sign out<', '>Personal<'] as $words) {
+    foreach (['>Add photo<', '>Theme<', '>System<', '>Light<', '>Dark<', '>Plan & billing<', '>Settings<', '>Keyboard shortcuts', '>Help<', '>Admin panel<', '>Sign out<',
+        '<span class="v2-um-plan">Personal</span>', '>Account<'] as $words) {
         expect($en)->toContain($words);
     }
-    expect($en)->not->toContain('اپ گریڈ');
+    expect($en)->not->toContain('تصویر');
 
-    expect($menu('ur', 'business'))->toContain('>پلان اور استعمال<')->not->toContain('>اپ گریڈ کریں<')
-        ->and($menu('en', 'business'))->toContain('>Plan and usage<')->not->toContain('>Upgrade<');
+    // Another plan: its name as written, in both languages.
+    $other = (string) Plan::query()->where('key', 'business')->value('name');
+    expect($menu('ur', 'business'))->toContain('<span class="v2-um-plan">'.e($other))
+        ->and($menu('en', 'business'))->toContain('<span class="v2-um-plan">'.e($other));
 });
 
 /*

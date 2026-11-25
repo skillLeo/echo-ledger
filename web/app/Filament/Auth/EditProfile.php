@@ -159,7 +159,7 @@ class EditProfile extends BaseEditProfile
                 if (! $context->available($entry) || ($searching && ! isset($counts[$page]))) {
                     continue;
                 }
-                $rows[] = ['id' => (string) $entry['id'], 'page' => $page, 'title' => (string) $entry['title'], 'icon' => self::ICONS[$page],
+                $rows[] = ['id' => (string) $entry['id'], 'page' => $page, 'title' => SettingsRegistry::titleOf($entry), 'icon' => self::ICONS[$page],
                     'value' => $context->value($entry), 'url' => $context->url($entry), 'count' => $counts[$page] ?? 0, 'current' => $this->subpage === $page];
             }
             if ($rows !== []) {

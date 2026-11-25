@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -23,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.BuildConfig
@@ -34,8 +32,10 @@ import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.phoneFacts
 import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
+import com.echoledger.mobile.ui.v2.components.EchoGroupCard
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
+import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.help.HelpSource
@@ -88,7 +88,7 @@ object SettingsSearch {
 }
 
 /** A page's value on its root row, in the screen's language; null for pages that show none. */
-fun pageValue(res: Resources, page: String, s: AppSettings): String? = when (page) {
+fun pageValue(res: Resources, page: String, s: AppSettings, voiceKeyboard: Boolean = false): String? = when (page) {
     "appearance" -> res.getString(
         when (s.themeMode) {
             "light" -> R.string.v2_set_value_light
@@ -108,15 +108,8 @@ fun pageValue(res: Resources, page: String, s: AppSettings): String? = when (pag
     // The values classic's Settings list shows (SettingsScreens.pageValue), from the same settings, in the screen's language.
     "mic" -> res.getString(if (s.micSource == "mic") R.string.v2_set_value_raw_mic else R.string.v2_set_value_automatic)
 
-    "voice" -> res.getString(
-        if (s.dictationMode ==
-            DICTATION_HOLD
-        ) {
-            R.string.v2_set_value_hold_to_talk
-        } else {
-            R.string.v2_set_value_tap_to_start
-        }
-    )
+    // v2.1 UX-16: the real setting, never an instruction ("Tap to start"): whether the voice keyboard is on.
+    "voice" -> res.getString(if (voiceKeyboard) R.string.v2_set_value_keyboard_on else R.string.v2_set_value_keyboard_off)
 
     "key" -> res.getString(if (s.plan.transcriptionKey?.set == true) R.string.v2_set_value_added else R.string.v2_set_value_not_added)
 
@@ -365,7 +358,13 @@ fun V2SettingsRoot(
     onRequest: (com.echoledger.mobile.ui.FlowStep) -> Unit = {}
 ) {
     val c = EchoV2.colors
-    val res = LocalContext.current.resources
+    val context = LocalContext.current
+    val res = context.resources
+    // Read again each time Settings comes back (the person may have just turned it on in Android's keyboards).
+    var voiceKeyboard by remember { mutableStateOf(com.echoledger.mobile.dictation.VoiceKeyboardState.isOn(context)) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        voiceKeyboard = com.echoledger.mobile.dictation.VoiceKeyboardState.isOn(context)
+    }
     var query by rememberSaveable { mutableStateOf(initialQuery) }
     val hits = remember(query, res) { SettingsSearch.search(res, query) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
@@ -415,50 +414,43 @@ fun V2SettingsRoot(
                     onRequest = onRequest
                 )
             }
+            // v2.1 UX-16: each goal's title as text only, and its pages in one rounded group under it.
             SettingsTree.goals.forEach { (goal, pages) ->
-                item(key = goal.name) { GoalHeader(goal) }
-                // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).
-                if (goal == SettingsGoal.Account) {
-                    settings.plan.usedMinutes?.let { used ->
-                        item(key = "usage") { UsageMeter(used, settings.plan.monthlyMinutes) { onOpen("plan", "plan.usage") } }
+                item(key = goal.name) {
+                    Column {
+                        EchoSectionHeader(stringResource(goal.title))
+                        EchoGroupCard {
+                            // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).
+                            if (goal == SettingsGoal.Account) {
+                                settings.plan.usedMinutes?.let { used ->
+                                    UsageMeter(used, settings.plan.monthlyMinutes) { onOpen("plan", "plan.usage") }
+                                }
+                            }
+                            pages.forEach { page ->
+                                EchoSettingRow(
+                                    SettingsSearch.pageTitle(res, page),
+                                    value = pageValue(res, page, settings, voiceKeyboard),
+                                    icon = SettingsTree.pageIcons[page],
+                                    onClick = { onOpen(page, null) }
+                                )
+                            }
+                        }
                     }
-                }
-                items(pages, key = { it }) { page ->
-                    EchoSettingRow(
-                        SettingsSearch.pageTitle(res, page),
-                        value = pageValue(res, page, settings),
-                        icon = SettingsTree.pageIcons[page],
-                        onClick = { onOpen(page, null) }
-                    )
                 }
             }
             if (signedIn) {
-                item { EchoSettingRow(stringResource(R.string.v2_set_sign_out), icon = EchoIcons.SignOut, onClick = onSignOut) }
+                item(key = "sign-out") {
+                    EchoGroupCard(Modifier.padding(top = EchoTokens.Space.s24, bottom = EchoTokens.Space.s24)) {
+                        EchoSettingRow(stringResource(R.string.v2_set_sign_out), icon = EchoIcons.SignOut, onClick = onSignOut)
+                    }
+                }
             }
         }
     }
 }
 
-/** A group's header: its icon, its name and its one line (docs/PLAN_V2_PARITY.md section 5). */
-@Composable
-private fun GoalHeader(goal: SettingsGoal) {
-    val c = EchoV2.colors
-    androidx.compose.foundation.layout.Row(
-        Modifier.padding(
-            start = EchoTokens.Layout.pagePaddingMobile,
-            end = EchoTokens.Layout.pagePaddingMobile,
-            top = EchoTokens.Space.s24,
-            bottom = EchoTokens.Space.s4
-        ),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-    ) {
-        androidx.compose.material3.Icon(goal.icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
-        Column(Modifier.padding(start = EchoTokens.Space.s12).semantics(mergeDescendants = true) { heading() }) {
-            androidx.compose.material3.Text(stringResource(goal.title), style = EchoV2.type.label, color = c.textPrimary)
-            androidx.compose.material3.Text(stringResource(goal.description), style = EchoV2.type.caption, color = c.textSecondary)
-        }
-    }
-}
+/** The minutes meter's icon (a gauge), never Plan & usage's. */
+val UsageMeterIcon: androidx.compose.ui.graphics.vector.ImageVector get() = EchoIcons.Usage
 
 /** This month's minutes as a bar ("120 of 300 minutes used"); it opens Plan & usage. */
 @Composable
@@ -469,7 +461,8 @@ fun UsageMeter(used: Long, monthly: Long?, onClick: () -> Unit) {
     EchoSettingRow(
         stringResource(R.string.v2_set_usage_title),
         subtitle = words,
-        icon = EchoIcons.Plan,
+        // Its own icon: Plan & usage beside it has the plan's (v2.1 UX-16, no two rows share one).
+        icon = UsageMeterIcon,
         onClick = onClick
     )
     monthly?.takeIf { it > 0 }?.let { limit ->
