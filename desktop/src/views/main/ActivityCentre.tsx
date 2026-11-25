@@ -2,7 +2,11 @@
 // waiting for Keep or Discard, uploads that stopped), the quiet "Skipped 3 short calls" line (v1.5), then the
 // notifications by day. A notification about a recording opens it; the unread count shows beside Activity in the sidebar.
 import { useEffect, useState } from "react";
-import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type LibraryItem, type PendingItem, type SkippedItem, type UploadItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ActivityActor, type ActivityItem, type AppStatus, type LibraryItem, type PendingItem, type SkippedItem, type UploadItem } from "../../lib/ipc";
+import { avatarColour } from "../../v2/components/layout";
+import { initials } from "../../v2/settings/initials";
+import { actorSeed, usePersonPhoto } from "../../v2/activity/ActorAvatar";
+import { personColour, shownPerson } from "../../lib/activityPerson";
 import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
 import { stepOf, uploadLine } from "../../lib/progress";
 import { useWindowShown } from "../../lib/visibility";
@@ -79,6 +83,21 @@ export function useActivityItems(): [ActivityItem[], (items: ActivityItem[]) => 
     };
   }, []);
   return [items, setItems];
+}
+
+/**
+ * The person an item is about (contract 2.0.0-aa) in the tile's place, for the kinds that show a face: their picture,
+ * kept here by its version like every avatar, else their initials in their colour; a picture the server no longer gives
+ * shows the initials.
+ */
+function ActorTile({ actor }: { actor: ActivityActor }) {
+  const photo = usePersonPhoto(actor);
+  const [broken, setBroken] = useState<string | null>(null);
+  return (
+    <span className="activity-tile person" data-colour={avatarColour(personColour(actor), actorSeed(actor))} aria-hidden="true">
+      {photo && broken !== photo ? <img src={photo} alt="" onError={() => setBroken(photo)} /> : initials(actor.name, null)}
+    </span>
+  );
 }
 
 function ActivityTile({ kind, resolved = false }: { kind: string | null; resolved?: boolean }) {
@@ -200,9 +219,10 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
 
   const recovered = useRecovered();
   const row = (i: ActivityItem) => {
+    const person = shownPerson(i);
     const inside = (
       <>
-        <ActivityTile kind={i.kind} resolved={i.resolved} />
+        {person ? <ActorTile actor={person} /> : <ActivityTile kind={i.kind} resolved={i.resolved} />}
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
