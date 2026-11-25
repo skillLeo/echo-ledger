@@ -244,6 +244,7 @@
   --el-desktop-search-preferred-width: 22vw;
   --el-desktop-search-drag-room: 16px;
   --el-desktop-search-results-width: 560px;
+  --el-desktop-resize-closing-opacity: 0.5;
   --el-desktop-window-button-width: 46px;
   --el-desktop-window-button-glyph: 12px;
   --el-desktop-rail-width: 72px;

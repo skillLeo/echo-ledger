@@ -1639,6 +1639,15 @@ body.dragging-views, body.dragging-views * { cursor: grabbing !important; user-s
 .el-shell__edge:hover, .el-shell__edge:focus-visible { background: var(--el-role-accent-soft); }
 .el-shell__edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
 body.resizing-sidebar { cursor: col-resize; user-select: none; }
+/* UX-03: a panel's edge (ResizeEdge): 8 px over its border, the column cursor, tinted under the pointer and when
+   focused. While it is dragged below the closing width the panel fades: let go and it closes. */
+.el-resize-edge { position: absolute; inset-block: 0; z-index: var(--el-layer-sticky); inline-size: var(--el-space-8); cursor: col-resize; touch-action: none; }
+.el-resize-edge--end { inset-inline-end: calc(-1 * var(--el-space-4)); }
+.el-resize-edge--start { inset-inline-start: calc(-1 * var(--el-space-4)); }
+.el-resize-edge:hover, .el-resize-edge:focus-visible { background: var(--el-role-accent-soft); }
+.el-resize-edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+body.el-resizing { cursor: col-resize; user-select: none; }
+.el-panel[data-closing="true"], .el-filter[data-closing="true"] { opacity: var(--el-desktop-resize-closing-opacity); }
 .el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
 .el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
 @media (width < 780px) {
@@ -1977,7 +1986,7 @@ span.el-nav-section__title { cursor: default; }
    list (a column at the list's end), below that it slides over it. */
 .el-filter {
   display: flex; flex-direction: column; flex: none; order: 2;
-  inline-size: calc(var(--el-space-64) * 5);
+  inline-size: var(--el-filter-width, calc(var(--el-space-64) * 5));
   /* As tall as the window leaves it (--el-lib-room: the window's height, set by the Library), its sections scrolling. */
   position: sticky; inset-block-start: 0; max-block-size: calc(var(--el-lib-room, 100%) - var(--el-space-64));
   background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
@@ -2228,8 +2237,9 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 [data-platform="macos"][dir="rtl"] .el-shell--nav .el-titlerow { padding-inline-end: var(--el-desktop-titlerow-keep-clear); }
 
 /* The panel: the place's name, its ⋯ and ⊟; group titles in sentence case; under 1100 px a flyout over the page. */
+/* UX-03: its width is the one kept for the place (--el-panel-width, set by its edge), or the usual one. */
 .el-panel {
-  grid-column: 2; display: flex; flex-direction: column; min-block-size: 0; inline-size: calc(var(--el-space-64) * 4 + var(--el-space-4));
+  grid-column: 2; position: relative; display: flex; flex-direction: column; min-block-size: 0; inline-size: var(--el-panel-width, calc(var(--el-space-64) * 4 + var(--el-space-4)));
   background: var(--el-role-bg-canvas); border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
 /* Its containing block is the grid's second column, which starts where the rail ends. */
@@ -2249,7 +2259,7 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   grid-column: 2 / -1; grid-row: 1; position: absolute; inset: 0; z-index: calc(var(--el-layer-overlay) - 1);
   background: color-mix(in srgb, var(--el-role-scrim-default) 30%, transparent);
 }
-.el-shell--flyouts .el-panel { inline-size: calc(var(--el-space-64) * 4 - var(--el-space-16)); }
+.el-shell--flyouts .el-panel { inline-size: var(--el-panel-width, calc(var(--el-space-64) * 4 - var(--el-space-16))); }
 .el-shell--flyouts .el-panel--flyout { animation: el-panel-in var(--el-motion-base) var(--el-motion-ease-out); }
 @keyframes el-panel-in { from { opacity: 0; translate: calc(-1 * var(--el-space-12)) 0; } }
 :dir(rtl) .el-shell--flyouts .el-panel--flyout { animation-name: el-panel-in-rtl; }
