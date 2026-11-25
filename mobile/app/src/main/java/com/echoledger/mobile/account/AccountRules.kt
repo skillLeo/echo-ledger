@@ -138,9 +138,32 @@ object AccountFormat {
     /** A wait in whole minutes, at least 1 ("try again in 3 minutes"). */
     fun minutes(seconds: Long?): Int = (((seconds ?: 60L) + 59) / 60).toInt().coerceAtLeast(1)
 
-    /** Left-to-right text (an address, a code) kept whole inside a right-to-left sentence. */
-    fun ltr(text: String): String = "⁦$text⁩"
+    /** Left-to-right text (an address, a code) kept whole inside a right-to-left sentence (LRI…PDI, as [isolate]). */
+    fun ltr(text: String): String = if (text.isEmpty()) text else "\u2066${balanced(text)}\u2069"
 
-    /** People's own words (a name) isolated in either direction. */
-    fun isolate(text: String): String = "⁨$text⁩"
+    /**
+     * People's own words (a name) isolated in either direction (FSI…PDI), as the web's IsolatingTranslator::isolate. An
+     * empty text stays empty.
+     */
+    fun isolate(text: String): String = if (text.isEmpty()) text else "\u2068${balanced(text)}\u2069"
+
+    /**
+     * [text] made safe to sit between isolate marks: a closing mark (PDI) with no opener of its own inside it is dropped,
+     * so a typed value can't close the isolate early and let what follows (an override such as U+202E) flip the
+     * sentence; and every isolate it opens and leaves open gets its own PDI, so the rest of the sentence is never left
+     * inside one (the web's W-233).
+     */
+    fun balanced(text: String): String {
+        var depth = 0
+        return buildString {
+            for (ch in text) {
+                when (ch) {
+                    '\u2066', '\u2067', '\u2068' -> depth++
+                    '\u2069' -> if (depth == 0) continue else depth--
+                }
+                append(ch)
+            }
+            repeat(depth) { append('\u2069') }
+        }
+    }
 }
