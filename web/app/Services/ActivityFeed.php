@@ -316,14 +316,15 @@ final class ActivityFeed
     /**
      * [$url]: where the bell's card opens (since v1.6.1), when the kind alone does not say (NoticeTargets). [$title] and
      * [$body] are words as they are (what people wrote) or, since W-218, a line() shown in the reader's language.
+     * [$actor]: the person the item is about, when it is about one (UX-18: the console shows their avatar beside it).
      *
      * @param  string|array{key: string, params: array<string, mixed>}  $title
      * @param  string|array{key: string, params: array<string, mixed>}  $body
      */
-    public function post(User $user, string $kind, string|array $title, string|array $body, ?CaptureSession $session, string $icon, ?string $limit = null, ?string $url = null): void
+    public function post(User $user, string $kind, string|array $title, string|array $body, ?CaptureSession $session, string $icon, ?string $limit = null, ?string $url = null, ?User $actor = null): void
     {
         try {
-            $notification = self::make($title, $body, $kind, $session?->id, $limit, $url)->icon($icon);
+            $notification = self::make($title, $body, $kind, $session?->id, $limit, $url, $actor !== null ? ['actor_id' => $actor->id] : [])->icon($icon);
             if ($session !== null) {
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
@@ -518,10 +519,10 @@ final class ActivityFeed
      * @param  string|array{key: string, params: array<string, mixed>}  $title
      * @param  string|array{key: string, params: array<string, mixed>}  $body
      */
-    public function sharedWithYou(User $recipient, string|array $title, string|array $body, ?string $sessionId): void
+    public function sharedWithYou(User $recipient, string|array $title, string|array $body, ?string $sessionId, ?User $sender = null): void
     {
         try {
-            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
+            $notification = self::make($title, $body, 'shared_with_you', $sessionId, extra: $sender !== null ? ['actor_id' => $sender->id] : [])->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'app'), shouldOpenInNewTab: false)->markAsRead()]);
             $sessionId === null ? $recipient->notifyNow($notification->toDatabase()) : self::upsert($recipient, 'shared_with_you', $sessionId, $notification->toDatabase()->data);
         } catch (Throwable $e) {
@@ -540,14 +541,15 @@ final class ActivityFeed
      * The bell renders a notification's title and body as HTML (sanitised, but links and styles stay), and they hold
      * what people typed (titles, notes, names; since v1.5 from anyone on the server): they are stored escaped, so the
      * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed. [$extra]: what
-     * a kind carries besides (a missed recording's reason and id).
+     * a kind carries besides (a missed recording's reason and id; since UX-18 `actor_id`, the person the item is about,
+     * whose avatar the console shows beside it).
      *
      * Since W-218 a line() is stored twice: in English as the title or body (what the apps and older rows read), and as
      * its key and params in `viewData.lines`, so the console shows it in the reader's language (localized()).
      *
      * @param  string|array{key: string, params: array<string, mixed>}  $title
      * @param  string|array{key: string, params: array<string, mixed>}  $body
-     * @param  array<string, string>  $extra
+     * @param  array<string, int|string>  $extra
      */
     private static function make(string|array $title, string|array $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null, array $extra = []): Notification
     {

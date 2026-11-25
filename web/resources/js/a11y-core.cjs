@@ -6,7 +6,9 @@
 // - A table box that scrolls sideways with nothing to focus in it takes the focus itself, so the keyboard can scroll it
 //   (axe's scrollable-region-focusable, serious); while it has the focus it is a region named by the table's heading.
 // - The rail is one stop of the Tab key: the arrows (and Home, End) move through it (a roving tabindex). The frame's
-//   Blade (filament.v2.frame) writes the same stop before any script runs; this keeps it after each redraw.
+//   Blade (filament.v2.frame) writes the same stop before any script runs; this keeps it after each redraw. The rail's
+//   menus (Record's, Account's) keep their own keys and focus.
+// - A menu with a block that says what it is about (the account menu's header) is described by it.
 // (Esc already closes a tooltip: scripts/a11y.mjs checks it.)
 (function (root, factory) {
     const core = factory();
@@ -90,9 +92,29 @@
         return -1;
     }
 
-    /** The rail's stops, in order: its links and buttons that are shown. */
+    /** A rail's menu (Record's, Account's) and what is in it: their own keys and focus, not the rail's stops. */
+    const MENU = '[role="menu"], .fi-dropdown-panel';
+
+    /** The rail's stops, in order: its links and buttons that are shown, outside its menus. */
     function railItems(rail) {
-        return Array.from(rail.querySelectorAll(RAIL_ITEMS)).filter((el) => el.getClientRects().length > 0);
+        return Array.from(rail.querySelectorAll(RAIL_ITEMS)).filter((el) => el.getClientRects().length > 0
+            && ! (typeof el.closest === 'function' && el.closest(MENU)));
+    }
+
+    /**
+     * A menu with a block that says what it is about (data-menu-description: the account menu's header, who it is) is
+     * described by it (aria-describedby on the menu), so a screen reader in the menu hears it. Answers how many changed.
+     */
+    function describeMenus(doc) {
+        let changed = 0;
+        doc.querySelectorAll('[data-menu-description][id]').forEach((block) => {
+            const menu = block.closest('.fi-dropdown-panel');
+            if (menu && menu.getAttribute('aria-describedby') !== block.id) {
+                menu.setAttribute('aria-describedby', block.id);
+                changed++;
+            }
+        });
+        return changed;
     }
 
     /**
@@ -121,6 +143,7 @@
             queued = false;
             markGroupHeaders(doc);
             markScrollers(doc);
+            describeMenus(doc);
             const rail = doc.querySelector(RAIL);
             if (rail) last = rove(railItems(rail), last);
         };
@@ -147,10 +170,10 @@
         }, true);
         doc.addEventListener('focusin', (e) => {
             const rail = e.target && typeof e.target.closest === 'function' ? e.target.closest(RAIL) : null;
-            if (rail) last = rove(railItems(rail), e.target);
+            if (rail && ! e.target.closest(MENU)) last = rove(railItems(rail), e.target);
         });
         if (typeof win.MutationObserver === 'function') {
-            new win.MutationObserver(later).observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'tabindex'] });
+            new win.MutationObserver(later).observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'tabindex', 'aria-describedby'] });
         }
         win.addEventListener('resize', later);
         doc.addEventListener('alpine:initialized', later);
@@ -164,5 +187,5 @@
         return true;
     }
 
-    return { GROUP_HEADERS, SCROLLERS, RAIL, RAIL_ITEMS, TABLE_HEADINGS, markGroupHeaders, markScrollers, headingOf, railStep, railItems, rove, install };
+    return { GROUP_HEADERS, SCROLLERS, RAIL, RAIL_ITEMS, MENU, TABLE_HEADINGS, markGroupHeaders, markScrollers, describeMenus, headingOf, railStep, railItems, rove, install };
 });

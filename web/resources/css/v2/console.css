@@ -193,6 +193,60 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     font-size: var(--el-text-title-m-size);
 }
 
+/* UX-18: the rail's Account, 28 px with 12 px semibold initials (its target is 40 px: .v2-um-hit). */
+.v2-avatar.is-rail {
+    width: var(--el-desktop-avatar-rail);
+    height: var(--el-desktop-avatar-rail);
+    font-size: var(--el-desktop-text-avatar-rail-size);
+    font-weight: var(--el-desktop-text-avatar-rail-weight);
+}
+
+/* UX-18: Settings › Profile: the 96 px avatar with its camera badge (Add or Change photo) at its bottom end corner. */
+.v2-profile-avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+}
+
+.v2-profile-camera {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+    border: var(--el-space-2) solid var(--el-role-bg-surface);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-profile-camera:hover {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-profile-camera .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* UX-18: on Activity, the avatar of the person an item is about takes its kind's 52 px tile's place, centred in it
+   (10 px each side of the 32 px avatar), so every row's words start in line. */
+.el-row-btn > .v2-avatar.is-list {
+    margin-inline: calc(var(--el-space-8) + var(--el-space-2));
+}
+
+/* UX-18: Settings › Profile, 96 px. */
+.v2-avatar.is-profile {
+    width: var(--el-desktop-avatar-profile);
+    height: var(--el-desktop-avatar-profile);
+    font-size: var(--el-text-display-size);
+    font-weight: var(--el-text-display-weight);
+}
+
 /* BE-06: the person's initials on their colour (the background is set beside it), or their photo. */
 .v2-avatar.is-coloured {
     color: var(--el-role-avatar-text);
@@ -598,7 +652,7 @@ body.el-resizing {
     color: var(--el-role-accent-text);
 }
 
-/* the avatar menu */
+/* the account menu (UX-18): its header is who it is, not an item */
 .v2-um-head {
     display: flex;
     align-items: center;
@@ -607,8 +661,10 @@ body.el-resizing {
     border-radius: var(--el-radius-sm);
 }
 
-.v2-um-head:hover {
-    background-color: var(--el-role-bg-subtle);
+.v2-um-plan {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
 }
 
 .v2-um-text {
@@ -629,13 +685,61 @@ body.el-resizing {
     text-overflow: ellipsis;
 }
 
-.v2-um-theme {
+.v2-um-theme,
+.v2-um-zoom {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--el-space-8);
     padding: var(--el-space-8);
     font-size: var(--el-text-body-size);
+}
+
+/* Plan & billing says the problem the avatar's dot shows: the dot again, then the words, under the item's name. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-problem) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--el-space-2);
+}
+
+.v2-um-problem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    color: var(--el-role-danger-default);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-um-dot.is-inline {
+    position: static;
+    border: 0;
+}
+
+/* Theme's three items take the focus as the menu's items do (its arrows reach them). */
+.v2-um-theme [role='menuitemradio']:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(var(--el-focus-width) * -1);
+    background-color: var(--el-role-bg-surface);
+}
+
+/* An item's key ("Keyboard shortcuts  ?"), and the Zoom row's, at its end. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-key) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-12);
+}
+
+.v2-um-key kbd {
+    font: inherit;
+}
+
+.v2-um-key {
+    color: var(--el-role-text-secondary);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--el-text-caption-size);
+    white-space: nowrap;
 }
 
 /* the bottom bar on phone-width screens */
@@ -977,11 +1081,6 @@ button.v2-row:hover {
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);
     font-variant-numeric: tabular-nums;
-}
-
-.v2-um .v2-chip {
-    min-height: var(--el-icon-lg);
-    font-size: var(--el-text-caption-size);
 }
 
 /* status: colour, icon and text together; one per row */
@@ -3113,7 +3212,91 @@ button.v2-row-tile:focus-visible,
 }
 
 .v2-rail-avatar {
-    padding-block-start: var(--el-space-4);
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* W-230: Filament moves its sidebar with `translate`, and at rest (0) that still makes the sidebar the box a menu with
+   position: fixed is placed in. Right to left the frame is on the right, so the rail's menus (Account, Record) opened
+   a frame's width off the screen. At rest the frame has none; the phone's drawer still slides. */
+:root .fi-sidebar.v2-frame.fi-sidebar-open {
+    translate: none;
+}
+
+@media (min-width: 1024px) {
+    :root .fi-body.fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar.v2-frame:not(.fi-sidebar-open) {
+        translate: none;
+    }
+}
+
+/* UX-18: the account menu is 320 px wide (Filament sized a sidebar's user menu by the sidebar, the box it was placed
+   in before W-230). */
+:root .fi-sidebar .fi-user-menu.v2-um .fi-dropdown-panel {
+    width: calc(var(--el-space-40) * 8);
+    max-width: calc(100% - var(--el-space-24)) !important;
+}
+
+/* UX-18: the rail's Account, a rail item: a 28 px avatar in a 40 px target, "Account" under it; an 8% tint behind the
+   avatar on hover, a 2 px accent ring round it while its menu is open, and an 8 px dot only for an account problem. */
+.v2-um-trigger.is-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    width: calc(var(--el-space-32) * 2);
+    padding-block-end: var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+}
+
+.v2-um-trigger.is-rail:hover,
+.v2-um-trigger.is-rail[aria-expanded='true'] {
+    color: var(--el-role-text-primary);
+}
+
+.v2-um-hit {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-desktop-avatar-rail-hit);
+    height: var(--el-desktop-avatar-rail-hit);
+    border-radius: var(--el-radius-full);
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-um-trigger.is-rail:hover .v2-um-hit {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent);
+}
+
+.v2-um-trigger.is-rail[aria-expanded='true'] .v2-avatar {
+    outline: var(--el-focus-width) solid var(--el-role-accent-default);
+    outline-offset: 0;
+}
+
+/* The top bar's button (no rail): the avatar as it is, the dot on its corner. */
+.v2-um-hit.is-plain {
+    width: auto;
+    height: auto;
+}
+
+.v2-um-hit.is-plain .v2-um-dot {
+    inset-block-start: 0;
+    inset-inline-end: 0;
+}
+
+.v2-um-dot {
+    position: absolute;
+    inset-block-start: var(--el-space-4);
+    inset-inline-end: var(--el-space-4);
+    box-sizing: content-box;
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border: var(--el-space-2) solid var(--el-role-bg-subtle);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
 }
 
 /* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
