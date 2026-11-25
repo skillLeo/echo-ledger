@@ -101,8 +101,9 @@ it('draws the initials in the person\'s colour on the profile card when there is
     $this->user->forceFill(['avatar_color' => 5])->save();
     SettingsContext::forget();
 
-    expect((string) $this->get('/app/settings')->assertOk()->getContent())->toContain('el-pcard-avatar is-initials')->toContain('var(--el-role-avatar-5)')
-        ->toContain('data-initials="AK"');
+    // Since DES-08 drawn by the one avatar component (x-el.avatar), on the card.
+    preg_match('~<div class="el-pcard" data-profile-card>.*?</a>~s', (string) $this->get('/app/settings')->assertOk()->getContent(), $card);
+    expect($card[0] ?? '')->toContain('<span class="v2-avatar is-xl is-coloured is-drawn" data-avatar-color="5" style="background-color: var(--el-role-avatar-5)" data-initials="AK" aria-hidden="true"></span>');
 });
 
 it('changes nothing of anyone else', function () {

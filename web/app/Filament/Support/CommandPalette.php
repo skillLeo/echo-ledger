@@ -63,7 +63,7 @@ final class CommandPalette implements GlobalSearchProvider
         $found = array_slice([...$settings['settings'], ...$settings['help']], 0, 8);
         if ($found !== []) {
             $results->category('Settings', array_map(fn (array $hit): GlobalSearchResult => new GlobalSearchResult(
-                new HtmlString(e((string) $hit['entry']['title']).'<span class="el-palette-hint"> · '.e(SettingsIndex::breadcrumb($hit['entry'])).'</span>'),
+                new HtmlString(e(SettingsIndex::title($hit['entry'])).'<span class="el-palette-hint"> · '.e(SettingsIndex::breadcrumb($hit['entry'])).'</span>'),
                 $context?->url($hit['entry']) ?? ''), $found));
         }
         $commands = array_filter($this->commands(), fn (array $c): bool => self::matches($query, $c[0].' '.$c[2]));
