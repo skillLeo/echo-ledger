@@ -6,7 +6,7 @@
 // Anything the server is still writing or reading is asked for again every few seconds until it is done.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine, type ProjectScreensPage, type SearchResult } from "../../lib/ipc";
-import { formatDuration, formatWhen, timestamp } from "../../lib/format";
+import { formatDuration, formatWhen, timestamp, whenPart, whenParts } from "../../lib/format";
 import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { claimFileDrops } from "../../lib/dropTarget";
@@ -537,7 +537,7 @@ function Memory({ ws, clientId, notify, onChange, onOpenRecording }: {
                       <PlayIcon size={12} />{line.source.at_ms !== null && line.source.at_ms !== undefined ? timestamp(line.source.at_ms) : "Call"}
                     </button>
                   )}
-                  {line.happened_on && <span className="memory-date">{formatWhen(`${line.happened_on}T12:00:00`).split(" · ")[0]}</span>}
+                  {line.happened_on && <span className="memory-date">{whenPart(whenParts(`${line.happened_on}T12:00:00`)?.day ?? "")}</span>}
                   <button type="button" className="btn ghost compact icon-only" aria-pressed={line.pinned} aria-label={`${line.pinned ? "Unpin" : "Pin"} “${line.text}”`}
                     disabled={busy === line.id} onClick={() => void pin(line)}><PinIcon size={15} /></button>
                   <button type="button" className="btn ghost compact icon-only" aria-label={`Remove “${line.text}”`} disabled={busy === line.id} onClick={() => void remove(line)}><TrashIcon size={15} /></button>
@@ -649,7 +649,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
                 <div className="row">
                   <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
                   <div className="item-main">
-                    <div className="item-line"><span className="item-title" dir="auto">{recordingName(item.title)}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
+                    <div className="item-line"><span className="item-title" dir="auto">{recordingName(item.title)}</span><span className="item-time">{whenPart(whenParts(item.started_at)?.day ?? "")}</span></div>
                     <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null, folderName(item) ? `in ${folderName(item)}` : null].filter(Boolean).join(" · ")}</div>
                   </div>
                 </div>
