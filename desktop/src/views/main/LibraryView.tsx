@@ -16,7 +16,7 @@ import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialog
 import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, type UnsureMarkers } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, whenPart, whenParts, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, recordingName, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
@@ -117,8 +117,9 @@ const VIEW_LINE: Record<LibraryViewKey, string> = {
 
 /** The row's time: the clock for today, the day before that (the day group names the rest). */
 export function rowTime(iso?: string): string {
-  const when = formatWhen(iso);
-  return when.startsWith("Today · ") || when.startsWith("Yesterday · ") ? when.slice(when.indexOf(" · ") + 3) : when.split(" · ")[0];
+  const parts = whenParts(iso);
+  if (!parts) return "";
+  return whenPart(parts.today || parts.yesterday ? parts.time : parts.day);
 }
 
 /** The speaker's initial for the avatar of a speaker block. */

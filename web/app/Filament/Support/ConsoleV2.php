@@ -48,6 +48,15 @@ final class ConsoleV2
         return $user instanceof User && Filament::getCurrentPanel()?->getId() === 'admin' && app(InterfaceFlags::class)->active('ui_v2.admin', $user);
     }
 
+    /**
+     * UX-07 and UX-18 (v21_zoom): the account menu's Zoom row. On the web the browser zooms the page (its own keys, which
+     * move every menu and the layout's breakpoints with it); a page can't set that zoom, so the row gives the keys.
+     */
+    public static function zoom(): bool
+    {
+        return self::shell() && self::flag('v21_zoom');
+    }
+
     /** Whether any of the console's v2.0 parts is on: the design values load then. */
     public static function any(): bool
     {

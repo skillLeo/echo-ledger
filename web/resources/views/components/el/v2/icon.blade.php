@@ -70,6 +70,8 @@
         // A label (the desktop's tag) and Rename (its pencil), for the right-click menus (UX-22).
         'label' => '<path d="M3.5 5.5a2 2 0 0 1 2-2h5.2a2 2 0 0 1 1.4.6l8.3 8.3a2 2 0 0 1 0 2.8l-5.2 5.2a2 2 0 0 1-2.8 0l-8.3-8.3a2 2 0 0 1-.6-1.4z"/>'.$dot(8, 8),
         'rename' => '<path d="M14.5 5.5 18.5 9.5M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/>',
+        // The profile's camera badge: Add or Change photo (UX-18).
+        'camera' => '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.5-2.2h5.6l1.5 2.2h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.8" r="3.6"/>',
     ];
     $directional = in_array($name, ['chevron-end', 'chevron-start'], true);
 @endphp

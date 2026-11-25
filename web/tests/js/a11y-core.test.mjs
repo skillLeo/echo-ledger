@@ -239,3 +239,28 @@ test('install: a pass once Alpine has drawn the frame, and a new page\'s stop af
     page.flush();
     assert.deepEqual(page.stops(), ['-1', '0', '-1', '-1'], 'the place you are on, not the stop you left');
 });
+
+test('the rail\'s menus (Record\'s, Account\'s) are not its stops, and focus in one leaves the stop where it was', () => {
+    const page = railPage();
+    core.install(page.document, page.window);
+    const theme = page.item({ role: 'menuitemradio' }, true);
+    page.rail.items = [...page.rail.items, theme];
+    assert.deepEqual(core.railItems(page.rail), [page.logo, page.library, page.more, page.help], 'an open menu\'s items are left out');
+    page.focusin(theme);
+    page.mutate();
+    page.flush();
+    assert.deepEqual(page.stops().slice(0, 4), ['-1', '0', '-1', '-1']);
+    assert.equal(theme.getAttribute('tabindex'), null, 'the menu keeps its own focus');
+});
+
+test('a menu with a block that says what it is about is described by it, once', () => {
+    const panel = el();
+    const head = el({ id: 'v2-um-head-rail', 'data-menu-description': '' }, { closest: (s) => (s === '.fi-dropdown-panel' ? panel : null) });
+    head.id = 'v2-um-head-rail';
+    const lone = el({ id: 'x' }, { closest: () => null });
+    lone.id = 'x';
+    const d = doc({ '[data-menu-description][id]': [head, lone] });
+    assert.equal(core.describeMenus(d), 1);
+    assert.equal(panel.getAttribute('aria-describedby'), 'v2-um-head-rail');
+    assert.equal(core.describeMenus(d), 0);
+});

@@ -226,7 +226,7 @@ final class NavFrame
             return null;
         }
 
-        return ['label' => __((string) $entry['title']), 'url' => $context->url($entry), 'active' => $subpage === $page];
+        return ['label' => __(SettingsRegistry::titleOf($entry)), 'url' => $context->url($entry), 'active' => $subpage === $page];
     }
 
     /**

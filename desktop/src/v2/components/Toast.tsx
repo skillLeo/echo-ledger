@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "./Button";
 import { CloseIcon } from "./icons";
+import { lineDir } from "../../i18n";
 
 /** The toast's time on screen from the token (--el-component-toast-duration), in milliseconds. */
 export function toastDuration(): number {
@@ -152,7 +153,8 @@ export function Toast({ message, actionLabel = "Undo", onAction, onClose, closeL
     <div className="el-toast" ref={box} onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
-      <span className="el-toast__message" dir="auto">{message}</span>
+      {/* In Urdu by its own words, not by a Latin name isolated at its start (lineDir); dir="auto" in English. */}
+      <span className="el-toast__message" dir={lineDir(message)}>{message}</span>
       {onAction && (
         <Button variant="quiet" size="sm" className="el-toast__action" aria-keyshortcuts={canUndo ? (isMac() ? "Meta+Z" : "Control+Z") : undefined} onClick={() => { onAction(); onClose(); }}>{actionLabel}</Button>
       )}
