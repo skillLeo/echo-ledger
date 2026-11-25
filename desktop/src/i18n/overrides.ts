@@ -8,8 +8,4 @@ export const DESKTOP_OVERRIDES: Readonly<Record<string, string>> = {
     "This computer, not this browser: in the app \"this one\" is the computer it runs on (اس کمپیوٹر سے بھی), where the web's line says this browser (اس براؤزر سے بھی).",
   ":count recordings":
     "Two forms: the account card's count of recordings (one English form, given to tc() alone) says ریکارڈنگ for 1, where the web's line has the plural only.",
-  // Decision 26: Import is امپورٹ on every platform (the phone's word); the web's terms-6 brings the same, and these two
-  // go once it is on v1.1.
-  "Import": "A term decided before the web has it (decision 26): امپورٹ, the import sheet's word on the desktop and the phone; the web still says درآمد until terms-6.",
-  "Imported": "A term decided before the web has it (decision 26): امپورٹ شدہ, as Import; the web still says درآمد شدہ until terms-6.",
 };
