@@ -138,11 +138,13 @@ class V2LibraryParityTest : ScreenTest() {
     }
 
     @Test
-    fun aFailedRowSaysTapToRetryAndARowWithNothingHeardSaysNoAudio() {
+    fun aFailedRowSaysATapShowsWhyAndARowWithNothingHeardSaysNoAudio() {
         val noAudio = item("01JB", "Rehman and Sons Textiles", finalStatus = "failed")
             .replace("\"live_available\"", "\"final_error_code\":\"no_audio\",\"live_available\"")
         seed(listOf(item("01JA", "Bilal Traders", finalStatus = "failed"), noAudio), "Bilal Traders")
-        compose.onNodeWithText("Transcription failed · Tap to retry", useUnmergedTree = true).assertExists()
+        // P-043: what a tap does (it opens the recording, which says why and offers Retry), never "Tap to retry".
+        compose.onNodeWithText("Transcription failed · Tap to see why", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Tap to retry", substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithText("No audio", useUnmergedTree = true).assertExists()
         // The failure line takes the meta line's place.
         compose.onAllNodesWithText("Thanks for calling about the invoice", substring = true, useUnmergedTree = true).assertCountEquals(0)

@@ -16,8 +16,8 @@ use desktop_lib::error::AppError;
 use desktop_lib::net::api::ApiClient;
 use desktop_lib::net::models::{SegmentDto, ServerConfig, UsageReport};
 use desktop_lib::net::uploader::{
-    AfterAttempt, DiscardQueue, PendingUpload, UNVERIFIABLE, UploadItem, UploadOutcome, UploadQueue,
-    UploadTiming, UsageQueue, after_attempt, delete_local_audio, drain_discards, drain_usage,
+    AfterAttempt, CallEnd, DiscardQueue, EndQueue, PendingUpload, UNVERIFIABLE, UploadItem, UploadOutcome, UploadQueue,
+    UploadTiming, UsageQueue, after_attempt, delete_local_audio, drain_discards, drain_ends, drain_usage,
     effective_ended_at, file_sha256, flac_stream_info, is_final_failure, missing_chunks, mime_for,
     plan_chunks, states, upload, upload_percent, upload_with,
 };
@@ -1985,6 +1985,83 @@ async fn the_discard_queue_deletes_sessions_and_treats_404_as_done() {
         queue.push(id.to_string());
     }
     assert_eq!(queue.items, ["S3", "S4"]);
+}
+
+// ---- The end of a call (contract 2.0.0-z) -------------------------------------------------------------------------
+
+fn end(id: &str) -> CallEnd {
+    CallEnd { session_id: id.into(), ended_at: "2026-11-26T09:40:12.345Z".into(), duration_ms: 125_000 }
+}
+
+#[tokio::test]
+async fn ends_of_calls_are_sent_and_404_409_422_drop_them_while_5xx_waits_for_the_next_cycle() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/sessions/E1", Reply::json(200, json!({"data": {"id": "E1"}})))
+            .fixed("PATCH", "/api/sessions/E2", Reply::json(409, json!({"error": "not_recording", "message": "This recording isn't being recorded."})))
+            .fixed("PATCH", "/api/sessions/E3", Reply::json(404, fixture("server/sessions_finish_404.json")))
+            .fixed("PATCH", "/api/sessions/E4", Reply::json(422, json!({"message": "The ended at field must be a valid date."})))
+            .fixed("PATCH", "/api/sessions/E5", Reply::json(503, json!({"message": "Service Unavailable"}))),
+    );
+    let ends: Vec<CallEnd> = ["E1", "E2", "E3", "E4", "E5", "E6"].iter().map(|id| end(id)).collect();
+    let drain = drain_ends(&api(&server), &ends).await;
+    assert_eq!(drain.done, ["E1", "E2", "E3", "E4"], "stored, or refused for good");
+    assert!(matches!(drain.stopped, Some(AppError::Server { status: 503, .. })), "{:?}", drain.stopped);
+    assert_eq!(server.requests().len(), 5, "E6 waits for the next cycle after E5 failed");
+    assert_eq!(server.requests()[0].json(), json!({"ended_at": "2026-11-26T09:40:12.345Z", "duration_ms": 125000}));
+
+    // What stays queued is what wasn't done; on disk as ends.json.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ends.json");
+    let mut queue = EndQueue { items: ends };
+    queue.items.retain(|e| !drain.done.contains(&e.session_id));
+    queue.save(&path).unwrap();
+    let left: Vec<String> = EndQueue::load(&path).items.into_iter().map(|e| e.session_id).collect();
+    assert_eq!(left, ["E5", "E6"]);
+}
+
+#[tokio::test]
+async fn an_end_refused_for_good_never_blocks_the_ends_behind_it() {
+    // A 403 (the role changed to viewer) or a 400 is dropped, as a usage report is; 429 and 408 wait like a 5xx.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/sessions/F1", Reply::json(403, json!({"message": "This action is unauthorized."})))
+            .fixed("PATCH", "/api/sessions/F2", Reply::json(400, json!({"message": "Bad request."})))
+            .fixed("PATCH", "/api/sessions/F3", Reply::json(200, json!({"data": {"id": "F3"}})))
+            .fixed("PATCH", "/api/sessions/F4", Reply::json(429, json!({"message": "Too Many Attempts."}))),
+    );
+    let ends: Vec<CallEnd> = ["F1", "F2", "F3", "F4", "F5"].iter().map(|id| end(id)).collect();
+    let drain = drain_ends(&api(&server), &ends).await;
+    assert_eq!(drain.done, ["F1", "F2", "F3"]);
+    assert!(matches!(drain.stopped, Some(AppError::Server { status: 429, .. })), "{:?}", drain.stopped);
+    assert_eq!(server.requests().len(), 4, "F5 waits for the next cycle");
+}
+
+#[tokio::test]
+async fn an_older_server_answers_the_end_with_200_and_the_entry_goes() {
+    // Today's live server validates only the keys it knows and answers 200 with the item, storing nothing: no gate.
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/OLD", Reply::json(200, json!({"data": {"id": "OLD", "title": null}}))));
+    let drain = drain_ends(&api(&server), &[end("OLD")]).await;
+    assert_eq!(drain.done, ["OLD"]);
+    assert!(drain.stopped.is_none());
+}
+
+#[tokio::test]
+async fn an_unpaired_device_keeps_its_ends_of_calls() {
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/E1", Reply::json(401, json!({"message": "Unauthenticated."}))));
+    let drain = drain_ends(&api(&server), &[end("E1")]).await;
+    assert!(drain.done.is_empty());
+    assert!(matches!(drain.stopped, Some(AppError::NotPaired)));
+}
+
+#[test]
+fn the_end_queue_keeps_the_first_end_of_each_session() {
+    let mut queue = EndQueue::default();
+    queue.push(end("E1"));
+    queue.push(CallEnd { duration_ms: 1, ..end("E1") });
+    queue.push(end(""));
+    queue.push(end("E2"));
+    assert_eq!(queue.items.iter().map(|e| (e.session_id.as_str(), e.duration_ms)).collect::<Vec<_>>(), [("E1", 125_000), ("E2", 125_000)]);
 }
 
 // ---- Retry all (BE-03) --------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 <!-- The v2 recording page (parity with classic's recording page). -->
 <resources>
     <string name="v2_rec_more">مزید</string>
-    <string name="v2_rec_menu_organise">ترتیب</string>
+    <string name="v2_rec_menu_organise">منظم کریں</string>
     <string name="v2_rec_menu_transcript">ٹرانسکرپٹ</string>
     <string name="v2_rec_menu_export">ایکسپورٹ</string>
     <string name="v2_rec_rename">نام بدلیں</string>

@@ -88,7 +88,7 @@ describe('smart views and filters', function () {
         $this->today = organisedSession($this, ['started_at' => now()->subHour(), 'title' => 'today']);
         $this->monday = organisedSession($this, ['started_at' => Carbon::parse('2026-10-26 09:00:00', 'UTC'), 'title' => 'monday', 'pinned' => true]);
         $this->old = organisedSession($this, ['started_at' => now()->subDays(20), 'title' => 'old', 'status' => SessionStatus::Failed]);
-        $this->waiting = CaptureSession::factory()->open()->create(['user_id' => $this->owner, 'title' => 'waiting']);
+        $this->waiting = CaptureSession::factory()->waiting()->create(['user_id' => $this->owner, 'title' => 'waiting']);
         $this->old->markers()->create(['at_ms' => 1000, 'tag' => 'Budget', 'source' => 'device']);
         $this->monday->labels()->create(['label' => 'Invoice']);
         $this->uploadFailed = organisedSession($this, ['started_at' => now()->subDays(30), 'title' => 'upload failed']);

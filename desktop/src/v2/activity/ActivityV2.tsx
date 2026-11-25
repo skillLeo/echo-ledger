@@ -151,6 +151,12 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     }
     if (item.session_id) onOpenRecording(item.session_id);
   };
+  /** Marks one read (its Mark read, its menu's Mark as read): never by being shown, so a problem stays until it is seen to. */
+  const markRead = (item: ActivityItem) => {
+    if (item.read) return;
+    void api.markActivityRead([item.id]).catch(() => null);
+    setItems((list) => list?.map((x) => (x.id === item.id ? { ...x, read: true } : x)) ?? null);
+  };
   const readAll = async () => {
     await api.markActivityRead().catch(() => null);
     setItems((list) => list?.map((i) => ({ ...i, read: true })) ?? null);
@@ -216,9 +222,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     "place.open": (c) => { const i = itemOf(c); if (i) void choose(i); },
     "activity.markRead": (c) => {
       const i = itemOf(c);
-      if (!i || i.read) return;
-      void api.markActivityRead([i.id]).catch(() => null);
-      setItems((list) => list?.map((x) => (x.id === i.id ? { ...x, read: true } : x)) ?? null);
+      if (i) markRead(i);
     },
     "activity.retry": () => onFailed(),
   });
@@ -232,11 +236,16 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     void popupNative(shown, at).then((ok) => { if (!ok) setMenu({ at, label: i.title || "Activity", items: shown }); });
   };
 
+  // D-233 (classic's D-066): only a notification about a recording opens something, so only it is a button. One with
+  // nowhere to go (a new device, the server's own problem, a failure with no recording) is a plain row, out of the Tab
+  // order; while unread it ends with a quiet Mark read, so a problem can be cleared on its own, never just by being seen.
   const row = (i: ActivityItem) => (
     <ListRow key={i.id} icon={iconOf(i)} title={i.title ?? ""} strong={!i.read}
       meta={[i.session_id && recovered.has(i.session_id) ? RECOVERED_CHIP : null, i.body, repeatWords(i.repeat_count)].filter(Boolean).join(" · ")}
       badge={!i.read ? <Badge tone="accent">Unread</Badge> : undefined}
-      endTop={i.at ? shortWhen(i.at) : undefined} onClick={() => void choose(i)}
+      endTop={i.at ? shortWhen(i.at) : undefined} onClick={i.session_id ? () => void choose(i) : undefined}
+      control={!i.session_id && !i.read
+        ? <Button size="sm" variant="quiet" aria-label={`Mark read: ${i.title ?? "Activity"}`} onClick={() => markRead(i)}>Mark read</Button> : undefined}
       onContextMenu={(e) => openMenu(i, "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget))} />
   );
 

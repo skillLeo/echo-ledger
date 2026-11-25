@@ -1014,6 +1014,15 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PATCH /api/sessions/{id}` with the end of a call (contract 2.0.0-z): when it ended and how long it lasted, so
+    /// every device shows it waiting for a choice. The server keeps the first one; an older server answers `200` and
+    /// stores nothing. Not an organise action (`update_session` stays as it is).
+    pub async fn end_call(&self, session_id: &str, ended_at: &str, duration_ms: u64) -> AppResult<()> {
+        let body = json!({ "ended_at": ended_at, "duration_ms": duration_ms });
+        let resp = self.authed(self.http.patch(self.url(&format!("sessions/{session_id}"))))?.json(&body).send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(|_| ())
+    }
+
     pub async fn update_session(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.patch(self.url(&format!("sessions/{id}"))))?.json(patch).send().await?;
         Self::parse(resp).await

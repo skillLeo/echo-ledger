@@ -31,7 +31,7 @@ function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
   };
   return (
     <>
-      <Button size="sm" onClick={press}>{LINE_FIX_LABEL[fix]}</Button>
+      <Button size="sm" onClick={press}>{t(LINE_FIX_LABEL[fix])}</Button>
       {problem && <span className="el-field__error" role="alert">{problem}</span>}
     </>
   );
@@ -58,14 +58,14 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
 
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
-      <div className="el-share-top"><p className="el-secondary"><bdi>{SHARE_PRIVACY_LEAD}</bdi></p></div>
+      <div className="el-share-top"><p className="el-secondary"><bdi>{t(SHARE_PRIVACY_LEAD)}</bdi></p></div>
       <Group footer={<p data-testid="share-privacy-footnote"><bdi>{shareFootnote(status?.platform)}</bdi></p>}>
         <ListRow compact anchor="share_privacy.main" title={setting("share_privacy.main").title} value={mainShareValue(status)} control={<MainShareControl status={status} />} />
-        {Object.values(ALWAYS_SHOWN).map((row) => <ListRow key={row.id} compact anchor={row.id} title={setting(row.id).title} meta={row.subtitle} value={ALWAYS_SHOWN_VALUE} />)}
+        {Object.values(ALWAYS_SHOWN).map((row) => <ListRow key={row.id} compact anchor={row.id} title={setting(row.id).title} meta={t(row.subtitle)} value={t(ALWAYS_SHOWN_VALUE)} />)}
         <PinnedRow which="card" />
         <PinnedRow which="captions" />
         <SelectSetting<ShareHiding> id="share_privacy.hiding" value={settings.hideFromSharing === "off" ? "off" : "all"} onChange={(v) => void patch({ hideFromSharing: v })}
-          meta={LIVE_TRANSLATE_SUBTITLE[settings.hideFromSharing === "off" ? "shown" : "hidden"]} />
+          meta={t(LIVE_TRANSLATE_SUBTITLE[settings.hideFromSharing === "off" ? "shown" : "hidden"])} />
       </Group>
       <Group footer={lines.length ? (
         <div className="el-privacy-lines" role="status">
@@ -97,7 +97,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
           {status.zoomInstalled && (
             <>
               <ListRow compact anchor="share_privacy.zoom" title={setting("share_privacy.zoom").title} value={tc(":count setting|:count settings", 1)} expanded={zoomOpen} chevron onClick={() => setZoomOpen((o) => !o)} />
-              {zoomOpen && <li className="el-row el-row--compact el-row--note" data-testid="zoom-steps"><p className="el-secondary">{ZOOM_SETTING}</p></li>}
+              {zoomOpen && <li className="el-row el-row--compact el-row--note" data-testid="zoom-steps"><p className="el-secondary">{t(ZOOM_SETTING)}</p></li>}
             </>
           )}
           <SwitchSetting id="share_privacy.one_window" on={settings.shareOneWindow} onChange={(v) => void patch({ shareOneWindow: v })} hint={null} />
@@ -105,8 +105,8 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
       )}
 
       <Group title={t("Sharing")} footer={<>
-        {barHolds && <p role="status" data-testid="back-after-share">{HIDDEN_WHILE_SHARING}</p>}
-        <p>{ONE_WINDOW_TIP}</p><p>{LIMITS}</p>
+        {barHolds && <p role="status" data-testid="back-after-share">{t(HIDDEN_WHILE_SHARING)}</p>}
+        <p>{t(ONE_WINDOW_TIP)}</p><p>{t(LIMITS)}</p>
         {problem && <p className="el-field__error" role="alert">{problem}</p>}
       </>}>
         <ListRow compact anchor="share_privacy.demo" title={demoSeconds ? t("Hide from screen share again") : setting("share_privacy.demo").title}
@@ -214,14 +214,14 @@ export function ShareCheckPageV2() {
       {problem && <p className="el-field__error" role="alert">{problem}</p>}
       {permissionFirst && (
         <p className="el-privacy-line el-privacy-line--warning" data-testid="permission-first">
-          <Icons.WarningIcon /><span>{permissionFirst.text}</span><Button size="sm" onClick={openSettings}>{OPEN_SYSTEM_SETTINGS}</Button>
+          <Icons.WarningIcon /><span>{permissionFirst.text}</span><Button size="sm" onClick={openSettings}>{t(OPEN_SYSTEM_SETTINGS)}</Button>
         </p>
       )}
       {view && line && (
         <Card className={`el-check-result el-check-result--${view.result}`}>
           <div className="el-form" data-testid="check-result" role="status">
             <p className={`el-check-line el-check-line--${line.tone}`}>{line.text}</p>
-            {line.fix === "open_settings" && <div><Button size="sm" onClick={openSettings}>{OPEN_SYSTEM_SETTINGS}</Button></div>}
+            {line.fix === "open_settings" && <div><Button size="sm" onClick={openSettings}>{t(OPEN_SYSTEM_SETTINGS)}</Button></div>}
             {line.fix === "try_again" && <div><Button size="sm" onClick={() => void run()} disabled={busy}>{t("Try again")}</Button></div>}
             {view.picture && <SidePicturesV2 view={view} />}
           </div>
@@ -234,7 +234,7 @@ export function ShareCheckPageV2() {
             {guided ? (
               <div className="el-form" data-testid="guided">
                 <p ref={question} tabIndex={-1} className="el-body-strong">{t("Share your whole screen in :app. A test card is on your screen now. Can you see it on your phone?", { app: status.apps.find((a) => a.app === guided)?.name })}</p>
-                <p className="el-secondary">{GUIDED_ALONE}</p>
+                <p className="el-secondary">{t(GUIDED_ALONE)}</p>
                 <div className="el-page__actions">
                   <Button onClick={() => void answer(true)}>{t("I can see it")}</Button>
                   <Button onClick={() => void answer(false)}>{t("I can't see it")}</Button>

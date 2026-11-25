@@ -1,32 +1,57 @@
 // Why a call was or wasn't recorded (A1.8; since D-014 in Settings › Calls & meetings, no longer on Home): one plain
 // line per app using the microphone, saying what EchoLedger will do and why, so a call that was not recorded can be
 // understood instead of silently missed. Plain words only: never how sound is captured.
-import { formatTime, processName, rowDate, sourceAppLabel } from "./format";
+import { formatTime, processName, rowDate, sourceAppLabel, whenParts } from "./format";
 import type { IgnoreReason, MicUser, NotRecordedMic } from "./ipc";
+import { language, t } from "../i18n";
 
-/** Why an app is not recorded, in plain words. */
+/** Why an app is not recorded, in plain words (the window's language): the reason on its own, for "…, because …". */
 const NOT_RECORDED: Record<IgnoreReason, string> = {
-  dictation: "no sound is playing, so it looks like dictation",
-  unknown_site: "this website isn't one of your call sites",
-  unknown_app: "it isn't a call app EchoLedger knows",
-  never_record: "it's on your never-record list",
-  auto_off: "auto-record is off",
-  app_off: "auto-record is off for this app",
+  get dictation() { return t("no sound is playing, so it looks like dictation"); },
+  get unknown_site() { return t("this website isn't one of your call sites"); },
+  get unknown_app() { return t("it isn't a call app EchoLedger knows"); },
+  get never_record() { return t("it's on your never-record list"); },
+  get auto_off() { return t("auto-record is off"); },
+  get app_off() { return t("auto-record is off for this app"); },
 };
+/** The same, as a whole line ("Not recorded: …"): one sentence each, never glued. */
+const NOT_RECORDED_LINE: Record<IgnoreReason, string> = {
+  get dictation() { return t("Not recorded: no sound is playing, so it looks like dictation"); },
+  get unknown_site() { return t("Not recorded: this website isn't one of your call sites"); },
+  get unknown_app() { return t("Not recorded: it isn't a call app EchoLedger knows"); },
+  get never_record() { return t("Not recorded: it's on your never-record list"); },
+  get auto_off() { return t("Not recorded: auto-record is off"); },
+  get app_off() { return t("Not recorded: auto-record is off for this app"); },
+};
+const knownReason = (reason: IgnoreReason | null | undefined): reason is IgnoreReason => !!reason && reason in NOT_RECORDED;
 
 /** What EchoLedger does with it (pure): "Recorded now", "Will be recorded", "Will ask you", "Not recorded: …". */
 export function decisionText(user: Pick<MicUser, "decision" | "reason">): string {
   switch (user.decision) {
     case "auto_record":
-      return "Will be recorded";
+      return t("Will be recorded");
     case "recording":
-      return "Recorded now";
+      return t("Recorded now");
     case "ask":
-      return "Will ask you";
+      return t("Will ask you");
     case "off":
-      return `Not recorded: ${NOT_RECORDED.auto_off}`;
+      return NOT_RECORDED_LINE.auto_off;
     default:
-      return `Not recorded${user.reason && NOT_RECORDED[user.reason] ? `: ${NOT_RECORDED[user.reason]}` : ""}`;
+      return knownReason(user.reason) ? NOT_RECORDED_LINE[user.reason] : t("Not recorded");
+  }
+}
+
+/** Why it wasn't recorded, on its own ("auto-record is off"), or "" when no reason is known. */
+function whyNot(user: Pick<MicUser, "decision" | "reason">): string {
+  switch (user.decision) {
+    case "auto_record":
+    case "recording":
+    case "ask":
+      return decisionText(user);
+    case "off":
+      return NOT_RECORDED.auto_off;
+    default:
+      return knownReason(user.reason) ? NOT_RECORDED[user.reason] : "";
   }
 }
 
@@ -53,18 +78,27 @@ export function seenWhen(iso: string, now: Date = new Date()): string {
   const time = formatTime(at);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (at.toDateString() === now.toDateString()) return `at ${time}`;
-  if (at.toDateString() === yesterday.toDateString()) return `yesterday at ${time}`;
-  return `on ${rowDate(iso, now)} at ${time}`;
+  // In another language the day and the time as every date line says them (whenParts: the time kept whole); English
+  // as it always was.
+  const parts = language() === "en" ? null : whenParts(iso, now);
+  const said = parts?.time ?? time;
+  if (at.toDateString() === now.toDateString()) return t("at :time", { time: said });
+  if (at.toDateString() === yesterday.toDateString()) return t("yesterday at :time", { time: said });
+  return t("on :date at :time", { date: parts?.day ?? rowDate(iso, now), time: said });
 }
 
 /** The line about the last app not recorded (pure), kept by the core since EchoLedger started, so a call from before
  * the page was opened is explained too: "Last not recorded: Slack at 3:42 pm, because it isn't a call app EchoLedger
  * knows." */
 export function lastNotRecordedLine(last: NotRecordedMic, now: Date = new Date()): string {
-  const why = decisionText(last.user).replace(/^Not recorded(: )?/, "");
+  const why = whyNot(last.user);
   const when = seenWhen(last.at, now);
-  return `Last not recorded: ${micUserName(last.user)}${when ? ` ${when}` : ""}${why ? `, because ${why}` : ""}.`;
+  const app = micUserName(last.user);
+  // One sentence for each shape (a time known or not, a reason known or not), the values filled in.
+  if (when && why) return t("Last not recorded: :app :when, because :why.", { app, when, why });
+  if (when) return t("Last not recorded: :app :when.", { app, when });
+  if (why) return t("Last not recorded: :app, because :why.", { app, why });
+  return t("Last not recorded: :app.", { app });
 }
 
 export type MicTone = "live" | "ok" | "ask" | "idle";

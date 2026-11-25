@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
 import { searchSettings } from "../../lib/settingsIndex";
-import { SETTINGS, breadcrumbOf, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
+import { SETTINGS, breadcrumbOf, titleOf, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
 import { GOAL_GROUPS, sectionFor } from "./groups";
 import { StartupRowV2, STARTUP_IDS } from "./pages/StartupV2";
 import { ROOT_ICONS } from "../../components/Icons";
@@ -110,7 +110,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
     if ((STARTUP_IDS as readonly string[]).includes(id)) {
       return <StartupRowV2 key={id} id={id} settings={settings} onSettings={setSettings} icon={iconOf(id)} />;
     }
-    return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;
+    return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={titleOf(id)} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;
   };
 
   return (
@@ -126,7 +126,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
               ))}
               {answer.help.length > 0 && <ListSection title={t("Help")} />}
               {answer.help.map((r) => (
-                <ListRow key={r.entry.id} compact icon={Icons.HelpIcon} iconStyle="plain" title={r.entry.title} meta={breadcrumbOf(r.entry) || undefined} chevron onClick={() => go(r.entry)} />
+                <ListRow key={r.entry.id} compact icon={Icons.HelpIcon} iconStyle="plain" title={titleOf(r.entry.id)} meta={breadcrumbOf(r.entry) || undefined} chevron onClick={() => go(r.entry)} />
               ))}
             </List>
           </Card>

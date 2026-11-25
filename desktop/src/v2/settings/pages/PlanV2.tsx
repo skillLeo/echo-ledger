@@ -13,7 +13,7 @@ import { setting } from "../../../lib/settingsRegistry";
 import { canUpgrade, dismissRequest, limitText, percentOf, planHighlights, requestShown, usageText } from "../../../views/main/Upgrade";
 import { Badge, Button, Card, Dialog, Icons, ListRow } from "../../components";
 import { Group, SectionTitle } from "./rows";
-import { lineDir, t, tc, withParts } from "../../../i18n";
+import { dateLocale, isRtl, language, lineDir, t, tc, withParts } from "../../../i18n";
 
 /** The meters under Transcription: the limit, its name in the window's language, the row's id. */
 const meters = (): readonly (readonly [string, string, string])[] => [
@@ -23,8 +23,8 @@ const meters = (): readonly (readonly [string, string, string])[] => [
 ];
 
 /**
- * "You've used 85% of your minutes.": what a meter at 80 % says, its words for each limit (minutes, storage, devices;
- * the rest says team members, as it always has). `upgrade`: with the word Upgrade in its place (withParts).
+ * "You've used 85% of your minutes.": what a meter at 80 % says, its words for each limit (minutes, storage, devices,
+ * daily uploads; a team's seats never block, so never warn). `upgrade`: with the word Upgrade in its place (withParts).
  */
 function usedLine(limitKey: string, percent: number, resets: string | null, upgrade: boolean): string {
   const date = resets ? rowDate(resets) : null;
@@ -34,7 +34,37 @@ function usedLine(limitKey: string, percent: number, resets: string | null, upgr
   }
   if (limitKey === "storage_bytes") return upgrade ? t("You've used :percent% of your storage. :upgrade.", { percent }) : t("You've used :percent% of your storage.", { percent });
   if (limitKey === "devices") return upgrade ? t("You've used :percent% of your devices. :upgrade.", { percent }) : t("You've used :percent% of your devices.", { percent });
+  // D-230: the uploads a day are uploads (they were called team members).
+  if (limitKey === "uploads_per_day") return upgrade ? t("You've used :percent% of your daily uploads. :upgrade.", { percent }) : t("You've used :percent% of your daily uploads.", { percent });
   return upgrade ? t("You've used :percent% of your team members. :upgrade.", { percent }) : t("You've used :percent% of your team members.", { percent });
+}
+
+/**
+ * A plan's price as this page says it: the server's words in English; in another language the app's own, from the
+ * amount when the server gives it (classic's upgrade sheet keeps priceText's English).
+ */
+function planPrice(plan: Parameters<typeof priceText>[0]): string | null {
+  const pkr = typeof plan.price_pkr === "number" && plan.price_pkr > 0 ? Math.round(plan.price_pkr) : null;
+  if (language() === "en" || pkr === null) return priceText(plan);
+  return t("Rs :amount a month", { amount: pkr.toLocaleString("en-US") });
+}
+
+/**
+ * The meter's value said in full for a screen reader: "230 of 600 minutes", "230 minutes" (the row shows "min"); the
+ * others as the row shows them.
+ */
+function spokenUsage(limitKey: string, limit: LimitEntitlement, shown: string): string {
+  if (limitKey !== "monthly_minutes") return shown;
+  const used = limit.used ?? 0;
+  return limit.limit
+    ? tc(":used of :limit minutes", limit.limit, { used: count(used), limit: count(limit.limit) })
+    : tc(":used minutes", used, { used: count(used) });
+}
+
+/** "1 December" for a sentence: English as it always was (the sentence date without its year); in Urdu its own. */
+function dayAndMonth(iso: string): string {
+  if (language() === "en") return sentenceDate(iso).replace(/ \d{4}$/, "");
+  return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString(dateLocale(), { day: "numeric", month: "long" });
 }
 
 /** A word inside a sentence that acts ("upgrade"). */
@@ -73,15 +103,16 @@ function MeterRow({ id, label, limitKey, limit, quiet, onUpgrade }: {
     if (!quiet && onUpgrade) action = <InlineAction onClick={onUpgrade}>{t("plan_context.upgrade")}</InlineAction>;
   }
   const line: ReactNode = words !== null && action ? withParts(words, { upgrade: action }) : words;
-  const value = text.replace(" min", " minutes");
+  const value = spokenUsage(limitKey, limit, text);
   const spoken = resets && share !== null
-    ? t(":label, :value used, resets :date.", { label, value, date: sentenceDate(resets).replace(/ \d{4}$/, "") })
+    ? t(":label, :value used, resets :date.", { label, value, date: dayAndMonth(resets) })
     : t(":label, :value used.", { label, value });
   return (
     <li className="el-row el-row--compact el-meter-row" id={`setting-${id}`} data-setting={id} tabIndex={-1} data-testid={`meter-${limitKey}`}>
       <span className="el-meter-row__line">
         <span className="el-row__title">{label}</span>
-        <span className={`el-meter-row__value${tone ? ` el-storage-value--${tone}` : ""}`} dir="ltr">{text}</span>
+        {/* "230 of 600 min" left to right in English; in Urdu its own words' direction (":limit میں سے :used"). */}
+        <span className={`el-meter-row__value${tone ? ` el-storage-value--${tone}` : ""}`} dir={isRtl() ? lineDir(text) : "ltr"}>{text}</span>
       </span>
       {share !== null
         ? <span className={`el-meter el-meter--wide${tone ? ` el-meter--${tone}` : ""}`} role="meter" aria-label={spoken} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
@@ -231,7 +262,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
   const allowed = canUpgrade(role);
   const quiet = !!open || !allowed;
   const current = e.plans.find((p) => p.key === plan?.key) ?? null;
-  const price = current ? priceText(current) : null;
+  const price = current ? planPrice(current) : null;
   const next = above[0] ?? null;
   const flow = (planKey: string | null) => openUpgradeSheet(null, { plan: planKey });
   const status = (step: "status" | "pay" | "receipt") => openUpgradeSheet(null, { step });
@@ -266,8 +297,8 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
             <div className="el-plan-card__head"><span className="el-title-m" dir={lineDir(title)}>{title}</span></div>
             <div className="el-plan-card__body el-secondary">
               {!allowed && workspace && <Line text={name !== null ? t(":workspace is on :plan. Its owner manages the plan.", { workspace, plan: name })
-                // No plan known: the words the page has always said, as one sentence.
-                : t(":workspace is on Your. Its owner manages the plan.", { workspace })} />}
+                // No plan known (D-230): who manages it.
+                : t(":workspace's plan is managed by its owner.", { workspace })} />}
               {isFree && allowed && <Line text={t("Transcripts use your own free Groq key.")} />}
               {!isFree && price && <Line className="el-tabular" text={price} />}
               {!isFree && <Line text={plan?.expires_at ? t("Paid until :date", { date: rowDateWithYear(plan.expires_at) }) : t("No end date")} />}
@@ -320,10 +351,11 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
             return (
               <Card key={p.key}>
                 <div className="el-plan-card" data-testid={`plan-${p.key}`}>
-                  <div className="el-plan-card__head"><span className="el-title-s">{planName(p)}</span>{priceText(p) && <span className="el-secondary el-tabular">{priceText(p)}</span>}</div>
+                  <div className="el-plan-card__head"><span className="el-title-s">{planName(p)}</span>{planPrice(p) && <span className="el-secondary el-tabular">{planPrice(p)}</span>}</div>
                   <div className="el-plan-card__body">
                     {i > 0 && <Line className="el-secondary" text={t("Everything in :plan, plus:", { plan: planName(above[i - 1]) })} />}
-                    <ul className="el-plan-card__lines">{planHighlights(e, p, below).map((l) => <li key={l}>{l}</li>)}</ul>
+                    {/* The server's highlights stay its English (the lead's call): each line in its own words' direction. */}
+                    <ul className="el-plan-card__lines">{planHighlights(e, p, below).map((l) => <li key={l} dir={isRtl() ? lineDir(l) : undefined}>{l}</li>)}</ul>
                   </div>
                   {!open && <div className="el-plan-card__actions"><Button onClick={() => flow(p.key)}>{t("Choose :plan", { plan: planName(p) })}</Button></div>}
                 </div>

@@ -37,6 +37,20 @@ class CaptureSessionFactory extends Factory
         ];
     }
 
+    /**
+     * A call waiting for the person's choice (contract 2.0.0-z): an open session whose call is over (ended_at sent by
+     * PATCH /api/sessions/{id}), not finished yet.
+     */
+    public function waiting(): static
+    {
+        return $this->state(fn (): array => [
+            'started_at' => now()->subMinutes(5),
+            'ended_at' => now()->subMinute(),
+            'duration_ms' => 240_000,
+            'status' => SessionStatus::Recording,
+        ]);
+    }
+
     /** An open session: the recording is still running (docs/API.md "Session lifecycle"). */
     public function open(): static
     {

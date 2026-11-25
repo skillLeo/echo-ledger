@@ -11,7 +11,7 @@
     <string name="v2_lib_share">شیئر کریں</string>
     <string name="v2_lib_delete">حذف کریں</string>
     <string name="v2_lib_more">مزید</string>
-    <string name="v2_lib_organise">ترتیب دیں</string>
+    <string name="v2_lib_organise">منظم کریں</string>
     <string name="v2_lib_export_header">ایکسپورٹ</string>
     <string name="v2_lib_pin">پن کریں</string>
     <string name="v2_lib_unpin">پن ہٹائیں</string>
@@ -47,7 +47,7 @@
     <string name="v2_lib_sync">ابھی سنک کریں</string>
     <string name="v2_lib_search_in">%1$s میں تلاش کریں</string>
     <string name="v2_lib_recently_deleted">حال ہی میں حذف شدہ</string>
-    <string name="v2_lib_views">منظر</string>
+    <string name="v2_lib_views">ویوز</string>
     <string name="v2_lib_source">ذریعہ</string>
     <string name="v2_lib_date">تاریخ</string>
     <string name="v2_lib_project">پروجیکٹ</string>
@@ -117,7 +117,7 @@
         <item quantity="one">آڈیو · %d دن باقی</item>
         <item quantity="other">آڈیو · %d دن باقی</item>
     </plurals>
-    <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · دوبارہ کوشش کے لیے ٹیپ کریں</string>
+    <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · وجہ جاننے کے لیے ٹیپ کریں</string>
     <string name="v2_lib_row_no_audio">کوئی آواز نہیں</string>
     <string name="v2_lib_not_opened">ابھی کھولی نہیں گئی</string>
 </resources>

@@ -304,7 +304,7 @@ describe('the facets', function () {
 
     it('says what needs the person: a failure, a waiting call, and one stuck for more than 24 hours', function () {
         filtered($this->me, [], [], TranscriptStatus::Failed->value);
-        CaptureSession::factory()->open()->create(['user_id' => $this->me->id]);
+        CaptureSession::factory()->waiting()->create(['user_id' => $this->me->id]);
         filtered($this->me, ['status' => SessionStatus::Uploading, 'started_at' => now()->subHours(30), 'ended_at' => now()->subHours(25)], [], null);
         // Uploading for an hour is not stuck yet.
         filtered($this->me, ['status' => SessionStatus::Uploading, 'started_at' => now()->subHours(2), 'ended_at' => now()->subHour()], [], null);
