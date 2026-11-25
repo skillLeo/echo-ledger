@@ -135,6 +135,40 @@ class ActivityCentreTest : ScreenTest() {
         compose.onNode(hasText("Call rec") and hasClickAction()).assertExists()
     }
 
+    /**
+     * P-043, as D-066 on the desktop and the web's rows: a problem with nowhere to go (no recording) isn't a button either,
+     * so while unread it ends with a quiet Mark read; seeing it never clears it. An informational one is read once seen.
+     */
+    @Test
+    fun `a problem with nowhere to go has Mark read until it is read, and seeing it never clears it`() {
+        val marked = mutableListOf<List<String>?>()
+        var unread = -1
+        show {
+            ActivityScreen(
+                load = {
+                    val server = ActivityItemDto("srv", "server_problem", "Uploads are failing", "The server needs a fix", null)
+                    val device = ActivityItemDto("dev", "device_added", "New device", "Pixel 9 was paired", null)
+                    ActivityResponse(listOf(server, device), 2)
+                },
+                markRead = {
+                    marked += it
+                    1
+                },
+                onOpen = {},
+                onUnread = { unread = it }
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("The server needs a fix").assertExists() }.isSuccess }
+        pumpUntil("the seen item to be marked read") { marked == listOf(listOf("dev")) }
+        compose.onNode(hasText("The server needs a fix") and hasClickAction()).assertDoesNotExist()
+        compose.onAllNodesWithText("Mark read").assertCountEquals(1)
+        assertEquals(1, unread)
+        compose.onNodeWithText("Mark read").performClick()
+        pumpUntil("the problem to be marked read") { marked == listOf(listOf("dev"), listOf("srv")) }
+        pumpUntil("Mark read to go") { runCatching { compose.onNodeWithText("Mark read").assertDoesNotExist() }.isSuccess }
+        assertEquals(0, unread)
+    }
+
     @Test
     fun `a problem raises the badge until it is opened`() {
         val opened = mutableListOf<String>()
