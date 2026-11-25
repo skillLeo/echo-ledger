@@ -14,7 +14,7 @@ function Row({ icon, label, current, onClick, end, strong }: { icon?: IconType; 
       <button type="button" className="el-nav-item el-nav-item--row" aria-current={current ? "page" : undefined} onClick={onClick}>
         {icon && <Icon icon={icon} />}
         <span className="el-nav-item__label" dir="auto">{label}</span>
-        {end !== undefined && end !== null && <span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : " el-nav-item__count--quiet"}`}>{end}</span>}
+        {end !== undefined && end !== null && <>{" "}<span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : " el-nav-item__count--quiet"}`}>{end}</span></>}
       </button>
     </li>
   );
@@ -26,14 +26,17 @@ const Group = ({ title, children }: { title?: string; children: ReactNode }) => 
   </section>
 );
 
-/** Live: call recording (on or off), then Live Assist, Live Translate, Dictation and Captions on the Live page. */
+/**
+ * Live: call recording On or Off (the Live page's Auto-record calls switch, UX-15: the same word for the same setting),
+ * then Live Assist, Live Translate, Dictation and Captions on the Live page.
+ */
 export function LivePanel({ callRecording, onCalls, onPart, current }: {
   callRecording: boolean; onCalls: () => void; onPart: (part: "assist" | "translate" | "dictation" | "captions") => void; current?: string | null;
 }) {
   return (
     <>
       <Group>
-        <Row icon={Icons.PhoneIcon} label="Call recording" end={callRecording ? "Ready" : "Off"} onClick={onCalls} />
+        <Row icon={Icons.PhoneIcon} label="Call recording" end={callRecording ? "On" : "Off"} onClick={onCalls} />
       </Group>
       <Group title="During a call">
         <Row icon={Icons.SparkleIcon} label="Live Assist" current={current === "assist"} onClick={() => onPart("assist")} />

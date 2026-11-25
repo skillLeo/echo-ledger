@@ -28,6 +28,7 @@ import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./fi
 import { contextItems, keyMatches, LIST_SPACE, manyTitle, RECORDING_MANY, RECORDING_ONE, TRASH, TRASH_ITEM } from "../actions/contextMenus";
 import { confirmAction } from "../../lib/confirm";
 import { appWords, currentPlatform, popupNative } from "../actions/popup";
+import { latinKey } from "../actions/latinKey";
 import { useMenuPart } from "../actions/menuState";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
@@ -1157,9 +1158,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   keys.current = (e: KeyboardEvent) => {
     if (organise || context || savingView || newLabel) return;
     const mod = e.metaKey || e.ctrlKey;
+    // With a non-Latin layout on (Urdu), the Latin key at the same place: J, K, X, F, / and ⌘F, ⌘A answer (D-221).
+    const key = latinKey(e);
     // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
     // In the shell's title row (inTitleRow) ⌘F is the row's: it searches this view and says so ("In: All recordings").
-    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+    if (!open && !trash && items && !inTitleRowRef.current && mod && !e.altKey && !e.shiftKey && key.toLowerCase() === "f" && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -1169,16 +1172,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
     // (the search, a field, the pill editor) or with a question open.
     // In the shell the title row answers them (usePageHistory), asking the Library first: nothing moves twice.
-    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+    if (!inShellRef.current && mod && !e.altKey && !e.shiftKey && (key === "[" || key === "]") && !e.defaultPrevented) {
       if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       e.preventDefault();
-      back.current(e.key === "[" ? "back" : "forward");
+      back.current(key === "[" ? "back" : "forward");
       return;
     }
     // One-letter keys (F, /, J, K, X) answer only while focus is in the Library (WCAG 2.1.4, as the web): never while
     // it is in the sidebar, the player or anywhere else in the window.
     const inside = e.target instanceof Node && !!root.current?.contains(e.target);
-    if (!mod && !e.altKey && ["f", "F", "/", "j", "k", "x"].includes(e.key) && !inside) return;
+    if (!mod && !e.altKey && ["f", "F", "/", "j", "k", "x"].includes(key) && !inside) return;
     // Esc closes the open recording and goes back to the list (its row gets focus again).
     if (open && e.key === "Escape" && !e.defaultPrevented) {
       e.preventDefault();
@@ -1193,12 +1196,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       return;
     }
     if (open || trash || !items) return;
-    if (e.key === "/" && !mod) {
+    if (key === "/" && !mod && !e.altKey) {
       e.preventDefault();
+      // In the shell the search is the title row's, outside the Library: / opens it as ⌘F (Edit › Find…) does.
+      if (inTitleRowRef.current && runAction("edit.find", { platform: currentPlatform() })) return;
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
       return;
     }
-    if ((e.key === "f" || e.key === "F") && !mod && !e.altKey) {
+    if ((key === "f" || key === "F") && !mod && !e.altKey) {
       e.preventDefault();
       setPanel(!panel);
       return;
@@ -1215,7 +1220,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       runAction(id, recordingContext(ids));
       return;
     }
-    if (mod && e.key.toLowerCase() === "a" && !e.shiftKey) {
+    if (mod && key.toLowerCase() === "a" && !e.shiftKey) {
       e.preventDefault();
       pickAll();
     } else if (e.key === "Delete" || (e.key === "Backspace" && mod)) {
@@ -1233,14 +1238,17 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     } else if (e.key === "Escape" && panel && !e.defaultPrevented) {
       e.preventDefault();
       setPanel(false);
-    } else if ((e.key === "j" || e.key === "k") && !mod && !e.altKey) {
+    } else if (((key === "j" || key === "k") || ((key === "ArrowDown" || key === "ArrowUp") && focused && !e.shiftKey)) && !mod && !e.altKey) {
+      // J K, and ↓ ↑ on a row (FIX-06: the list by arrows too), go from row to row.
       const rows = [...(root.current?.querySelectorAll<HTMLElement>("[data-row-id]") ?? [])];
       if (!rows.length) return;
       e.preventDefault();
       const at = rows.findIndex((r) => r.dataset.rowId === focused);
-      const to = at < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, at + (e.key === "j" ? 1 : -1)));
+      const down = key === "j" || key === "ArrowDown";
+      const to = at < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, at + (down ? 1 : -1)));
       rows[to].focus();
-    } else if (e.key === "x" && focused && !mod) {
+      rows[to].scrollIntoView?.({ block: "nearest" });
+    } else if (key === "x" && focused && !mod && !e.altKey) {
       e.preventDefault();
       toggle(focused);
     }

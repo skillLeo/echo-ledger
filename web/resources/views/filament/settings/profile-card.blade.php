@@ -42,6 +42,11 @@
     $photo = \App\Services\Accounts\Avatars::of($user)['avatar_url'];
     $v2 = \App\Filament\Support\ConsoleV2::any();
     $label = "{$name}, {$user->email}, {$plan->name} plan".($expires !== null && $plan->key !== 'free' ? ', paid until '.Formats::longDate($expires) : '').'. Opens plan and usage.';
+    // FIX-06: in the new console the card's name is the words it shows, in their order, then where it leads (voice
+    // control users say what they see). A line's own full stop goes, so the name never reads "…X.. Opens".
+    if ($v2) {
+        $label = implode(', ', array_filter([$name, $user->email, $plan->name, rtrim((string) $line, '.'), rtrim((string) $teamLine, '.')])).'. '.__('Opens plan and usage.');
+    }
 @endphp
 <div class="el-pcard" data-profile-card>
     <a href="{{ $planUrl }}" class="el-pcard-body" aria-label="{{ $label }}">

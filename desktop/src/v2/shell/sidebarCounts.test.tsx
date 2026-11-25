@@ -131,7 +131,7 @@ describe("the sidebar's counts", () => {
     expect(cascaded(items[0], "position")).toBe("relative");
     // The number is clipped out of sight, not removed: the row still says "Activity 6".
     expect(cascaded(attention, "clip-path")).toBe("inset(50%)");
-    expect(items[0]).toHaveTextContent("Activity6");
+    expect(items[0]).toHaveTextContent("Activity 6");
     // No count, no dot.
     expect(items[1].querySelector(".el-nav-item__dot")).toBeNull();
   });

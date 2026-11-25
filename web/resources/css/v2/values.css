@@ -92,6 +92,15 @@ html.dark:root {
     --warning-700: var(--el-role-warning-default);
 }
 
+/* FIX-06: in dark, Filament writes a colour's words in its light shades (a primary badge's in its 100: "Owner" on the
+   Workspace page was 1.1 to 1). The accent's soft fill stays the light theme's; the dark one's light shades are its text
+   colour, at 4.5 to 1 and more on the soft fill. */
+html.dark:root:root {
+    --primary-50: var(--el-role-accent-text);
+    --primary-100: var(--el-role-accent-text);
+    --primary-200: var(--el-role-accent-text);
+}
+
 /* Filament's greys are neutral too: light surfaces at the low end, text at the high end. */
 html:root:not(.dark) {
     --gray-50: var(--el-role-bg-canvas);

@@ -61,8 +61,8 @@ trait ManagesPlanPage
             'plan' => $plan,
             'free' => $free,
             'priceLine' => $free ? __('Transcripts use your own free Groq key.') : UpgradeFlow::priceText($plan),
-            'untilLine' => $free ? null : ($expires !== null ? __('Paid until :date', ['date' => Formats::shortDate($expires, year: true)]) : __('No end date')),
-            'footer' => ! $free && $expires !== null ? __('Your plan stops on :date. There is nothing to cancel.', ['date' => Formats::longDate($expires)]) : null,
+            'untilLine' => $free ? null : ($expires !== null ? __('Paid until :date', ['date' => UpgradeFlow::day($expires, year: true)]) : __('No end date')),
+            'footer' => ! $free && $expires !== null ? __('Your plan stops on :date. There is nothing to cancel.', ['date' => UpgradeFlow::longDay($expires)]) : null,
             'trial' => $trial > 0 ? __(':minutes trial minutes left', ['minutes' => number_format($trial)]) : null,
             'managed' => $owner !== null ? __(':workspace is on :plan. Managed by :owner.', ['workspace' => $workspace->name, 'plan' => $plan->name, 'owner' => $owner->name]) : null,
             'buyer' => $buyer && ! $context->flag('member'),
@@ -83,12 +83,12 @@ trait ManagesPlanPage
             'history' => $history->map(fn (UpgradeRequest $r): array => [
                 'id' => $r->id, 'title' => __(':plan, 1 month', ['plan' => UpgradeFlow::planName($r->plan)]), 'value' => UpgradeFlow::amount($r),
                 'line' => match (UpgradeFlow::stage($r)) {
-                    'approved' => __('Approved on :date', ['date' => Formats::shortDate($r->decided_at ?? $r->created_at, year: true)]),
-                    'declined' => __('Not approved on :date', ['date' => Formats::shortDate($r->decided_at ?? $r->created_at, year: true)]),
-                    'cancelled' => __('Cancelled on :date', ['date' => Formats::shortDate($r->decided_at ?? $r->created_at, year: true)]),
-                    'in_review' => __('In review since :date', ['date' => Formats::shortDate(UpgradeFlow::payment($r)['paid_at'] ?? $r->created_at)]),
+                    'approved' => __('Approved on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'declined' => __('Not approved on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'cancelled' => __('Cancelled on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'in_review' => __('In review since :date', ['date' => UpgradeFlow::day(UpgradeFlow::payment($r)['paid_at'] ?? $r->created_at)]),
                     'needs_receipt' => __('Needs a new receipt'),
-                    default => __('Waiting for payment since :date', ['date' => Formats::shortDate($r->created_at)]),
+                    default => __('Waiting for payment since :date', ['date' => UpgradeFlow::day($r->created_at)]),
                 },
                 'url' => UpgradeFlow::statusUrl($r),
             ])->all(),
@@ -133,10 +133,19 @@ trait ManagesPlanPage
     public static function promoError(ApiError $e): string
     {
         return match ($e->apiCode()) {
-            'promo_other_plan' => $e->getMessage(),
+            'promo_other_plan' => self::otherPlanError($e),
             'rate_limited' => __('Too many tries. Please try again in a minute.'),
             default => __("We don't know this code. Check the spelling."),
         };
+    }
+
+    /** PromoCodes::otherPlan's "This code is for {plan}." in the console's language: the plan by the key it carries. */
+    private static function otherPlanError(ApiError $e): string
+    {
+        $key = $e->extra()['plan'] ?? null;
+        $name = is_string($key) ? Plan::query()->where('key', $key)->value('name') : null;
+
+        return is_string($name) ? __('This code is for :plan.', ['plan' => $name]) : $e->getMessage();
     }
 
     /** The request card's Dismiss (an approved or declined request). */

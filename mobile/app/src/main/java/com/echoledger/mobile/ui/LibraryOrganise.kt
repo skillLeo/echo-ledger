@@ -85,32 +85,37 @@ fun OrganiseSection(
 ) {
     var label by remember { mutableStateOf("") }
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Organise", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(
-                onClick = { onKeep(!item.keep) },
-                modifier = Modifier.semantics {
-                    contentDescription =
-                        if (item.keep) "Stop keeping" else "Keep forever"
+        // P-112: when they don't fit beside it (a small phone, large text), Keep forever and Pin go under the title together,
+        // and the title keeps its word whole.
+        FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
+            Text("Organise", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { onKeep(!item.keep) },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            if (item.keep) "Stop keeping" else "Keep forever"
+                    }
+                ) {
+                    Text(if (item.keep) "Kept forever" else "Keep forever", color = if (item.keep) Brand.Success else Brand.Muted)
                 }
-            ) {
-                Text(if (item.keep) "Kept forever" else "Keep forever", color = if (item.keep) Brand.Success else Brand.Muted)
-            }
-            TextButton(
-                onClick = { onPin(!item.pinned) },
-                modifier = Modifier.semantics {
-                    contentDescription =
-                        if (item.pinned) "Unpin" else "Pin"
+                TextButton(
+                    onClick = { onPin(!item.pinned) },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            if (item.pinned) "Unpin" else "Pin"
+                    }
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Rounded.PushPin,
+                        contentDescription = null,
+                        tint = if (item.pinned) Brand.Warning else Brand.Muted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (item.pinned) "Pinned" else "Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
                 }
-            ) {
-                Icon(
-                    androidx.compose.material.icons.Icons.Rounded.PushPin,
-                    contentDescription = null,
-                    tint = if (item.pinned) Brand.Warning else Brand.Muted,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(if (item.pinned) "Pinned" else "Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
             }
         }
         FolderChooser("Folder", folders, item.client?.id, onMove, onCreateClient)

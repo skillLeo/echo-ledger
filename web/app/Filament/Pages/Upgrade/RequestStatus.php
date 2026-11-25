@@ -12,7 +12,6 @@ use App\Filament\Support\UpgradeFlow;
 use App\Models\User;
 use App\Services\Entitlements\PaymentProofs;
 use App\Support\Brand;
-use App\Support\Formats;
 use Filament\Actions\Action;
 use Filament\Panel;
 use Filament\Support\Exceptions\Halt;
@@ -35,28 +34,28 @@ class RequestStatus extends RequestPage
 
     public function getTitle(): string
     {
-        return $this->planName().' request';
+        return __(':plan request', ['plan' => $this->planName()]);
     }
 
     public function cancelRequestAction(): Action
     {
-        return Action::make('cancelRequest')->label('Cancel request')->color('danger')
+        return Action::make('cancelRequest')->label(__('Cancel request'))->color('danger')
             ->requiresConfirmation()->modalIcon(null)
-            ->modalHeading('Cancel this request?')
-            ->modalDescription("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.")
-            ->modalCancelActionLabel('Keep request')->modalSubmitActionLabel('Cancel request')
+            ->modalHeading(__('Cancel this request?'))
+            ->modalDescription(__("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment."))
+            ->modalCancelActionLabel(__('Keep request'))->modalSubmitActionLabel(__('Cancel request'))
             ->action(function (): void {
                 /** @var User $user */
                 $user = auth()->user();
                 try {
                     app(PaymentProofs::class)->cancel($this->upgradeRequest(), $user);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach ".Brand::name().'. Try again.')->danger()->send();
+                    Notification::make()->title($e->apiCode() === 'request_decided' ? __('This request has already been decided.') : __("Couldn't reach :brand. Try again.", ['brand' => Brand::name()]))->danger()->send();
 
                     throw new Halt;
                 }
                 SettingsContext::forget();
-                Notification::make()->title('Request cancelled')->success()->send();
+                Notification::make()->title(__('Request cancelled'))->success()->send();
             });
     }
 
@@ -77,13 +76,13 @@ class RequestStatus extends RequestPage
             'steps' => UpgradeFlow::timeline($request),
             'plan' => $this->planName(),
             'details' => array_values(array_filter([
-                ['Plan', $this->planName().', 1 month', null],
-                ['Amount', UpgradeFlow::amount($request), null],
-                is_string($payload['promo_code'] ?? null) ? ['Promo code', (string) $payload['promo_code'], null] : null,
-                UpgradeFlow::reference($request) !== null ? ['Reference', (string) UpgradeFlow::reference($request), (string) UpgradeFlow::reference($request)] : null,
-                ['Requested', Formats::shortDate($request->created_at, year: true), null],
-                is_string($payment['reference'] ?? null) && $payment['reference'] !== '' ? ['Transaction ID', (string) $payment['reference'], null] : null,
-                is_string($payment['payer_name'] ?? null) && $payment['payer_name'] !== '' ? ['Paid from', (string) $payment['payer_name'], null] : null,
+                [__('Plan'), __(':plan, 1 month', ['plan' => $this->planName()]), null],
+                [__('Amount'), UpgradeFlow::amount($request), null],
+                is_string($payload['promo_code'] ?? null) ? [__('Promo code'), (string) $payload['promo_code'], null] : null,
+                UpgradeFlow::reference($request) !== null ? [__('Reference'), (string) UpgradeFlow::reference($request), (string) UpgradeFlow::reference($request)] : null,
+                [__('Requested'), UpgradeFlow::day($request->created_at, year: true), null],
+                is_string($payment['reference'] ?? null) && $payment['reference'] !== '' ? [__('Transaction ID'), (string) $payment['reference'], null] : null,
+                is_string($payment['payer_name'] ?? null) && $payment['payer_name'] !== '' ? [__('upgrade_context.paid_from_label'), (string) $payment['payer_name'], null] : null,
             ])),
             'proofs' => $this->proofs(),
             'erased' => ($payment['erased'] ?? false) === true,
@@ -91,7 +90,7 @@ class RequestStatus extends RequestPage
             'payUrl' => UpgradeFlow::payUrl($request),
             'receiptUrl' => UpgradeFlow::receiptUrl($request),
             'backUrl' => EditProfile::settingsUrl('plan'),
-            'announce' => session()->pull('el.receipt.sent') === true ? "Receipt sent. We'll check your payment." : null,
+            'announce' => session()->pull('el.receipt.sent') === true ? __("Receipt sent. We'll check your payment.") : null,
             'approvedLine' => UpgradeFlow::approvedLine($request, UpgradeFlow::planName($request->approved_plan ?? $request->plan)),
         ];
     }

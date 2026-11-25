@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -539,7 +540,8 @@ internal fun HelpSection(
     SectionCard {
         PanelTitle("Help & diagnostics")
         if (captureInBuild || engineering) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            // P-117: when both don't fit, Audio probe goes under Capture test, never cut to "Audio".
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
                 if (captureInBuild) EchoButton("Capture test", onSetup, kind = ButtonKind.Secondary)
                 if (engineering) EchoButton("Audio probe", { probing = true }, kind = ButtonKind.Secondary)
             }

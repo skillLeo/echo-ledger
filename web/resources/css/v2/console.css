@@ -1900,6 +1900,12 @@ html .fi-body .el-player .el-chip {
     gap: var(--el-space-12);
 }
 
+/* FIX-06: Previous and Next recording draw 44 px past their 24 px line: the title keeps clear of them, so its Rename
+   stays a whole target. */
+.v2-viewer-head[data-recording-nav] {
+    margin-block-end: var(--el-space-12);
+}
+
 .v2-viewer-head .v2-row-title {
     flex: 1;
 }
@@ -2958,19 +2964,46 @@ button.v2-row-tile:focus-visible,
 .v2-rail-record > .fi-dropdown {
     position: absolute;
     inset-block-start: var(--el-space-24);
-    inset-inline-end: calc(var(--el-space-4) * -1);
+    inset-inline-end: calc(var(--el-space-8) * -1);
 }
 
+/* FIX-06: a 24 px target (WCAG 2.5.8). The 20 px circle (its ::before) stays where it was, at the target's top start
+   corner: the target grows out past Record, never over more of it, so Record keeps a whole 24 px of its own. */
 .v2-rail-rec-more {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--el-space-20);
-    height: var(--el-space-20);
+    width: var(--el-space-24);
+    height: var(--el-space-24);
+    padding-block-end: var(--el-space-4);
+    padding-inline-end: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-more::before {
+    position: absolute;
+    inset-block: 0 var(--el-space-4);
+    inset-inline: 0 var(--el-space-4);
     border: var(--el-border-hairline) solid var(--el-role-border-default);
     border-radius: var(--el-radius-full);
     background-color: var(--el-role-bg-surface);
-    color: var(--el-role-text-secondary);
+    content: '';
+}
+
+.v2-rail-rec-more > .v2-icon {
+    position: relative;
+}
+
+/* FIX-06: its focus ring goes round the 20 px circle you see, not the 24 px target, so it is centred on the circle. */
+.v2-rail-rec-more:focus-visible {
+    outline: none;
+}
+
+.v2-rail-rec-more:focus-visible::before {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
 }
 
 .v2-rail-rec-more .v2-icon {
@@ -3810,4 +3843,17 @@ html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crum
     margin-block: var(--el-space-4);
     margin-inline: calc(-1 * var(--el-space-4));
     border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* FIX-06: the workspace's mark draws its letters, so the button's words are its name and role only. */
+.el-tb-workspace-mark[data-initials]::before {
+    content: attr(data-initials);
+}
+
+/* FIX-06: the console's plain tables (the Workspace page's invitations and invite links, Usage's By person) set their
+   headings at 70 % opacity, under 4.5 to 1: in the new design their heading rows are marked (v2-plain-thead) and drawn
+   whole, in the secondary text colour (WCAG 1.4.3). The inline opacity is classic's, so it needs the !important. */
+.v2-plain-thead {
+    opacity: 1 !important;
+    color: var(--el-role-text-secondary);
 }

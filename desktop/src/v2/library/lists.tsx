@@ -252,7 +252,7 @@ export function LabelsNav({ counts, current, onOpen, onGone, say, onLibraryChang
                 onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openMenu(l, menuPointFor(e.currentTarget)); } }}>
                 <LabelDot name={l.name} colour={l.color} decorative />
                 <span className="el-nav-item__label" dir="auto">{l.name}</span>
-                {(counts[l.key] ?? 0) > 0 && <span className="el-nav-item__count el-caption el-num">{counts[l.key]}</span>}
+                {(counts[l.key] ?? 0) > 0 && <>{" "}<span className="el-nav-item__count el-caption el-num">{counts[l.key]}</span></>}
               </button>
               <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${l.name}`}
                 onClick={(e) => openMenu(l, menuPointFor(e.currentTarget))} data-index={i} />

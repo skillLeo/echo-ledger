@@ -89,7 +89,8 @@ describe("labels in the sidebar and the Library", () => {
     await show();
     expect(labelRows()).toEqual(["Clients, 2", "Home, 1", "Family, 0", "New label"]);
     expect(label("Clients").querySelector(".el-label-dot")).not.toBeNull();
-    expect(label("Clients")).toHaveTextContent("Clients2");
+    // A space between the name and its count, so the visible words are the name's (FIX-06, label in name).
+    expect(label("Clients")).toHaveTextContent("Clients 2");
     expect(label("Family")).toHaveTextContent(/^Family$/);
   });
 

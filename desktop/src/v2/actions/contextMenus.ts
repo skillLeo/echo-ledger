@@ -2,13 +2,14 @@
 // ids in 3b's order and groups ("-" starts a group). Only what fits is shown: what doesn't apply to what was clicked,
 // or that nothing here can do, is left out (not greyed), and a sub-menu with no choices goes too.
 import type { MenuItem } from "../components/Menu";
+import { latinKey } from "./latinKey";
 import { canRun, findAction, menuItems, type ActionContext } from "./registry";
 
 /**
  * Whether a key press is an action's shortcut as actions.json writes it (pure): a Mac's "⇧⌘L" or Windows's
  * "Ctrl+Shift+L", "F2", "Delete". Every modifier must match, so ⌘T is not ⇧⌘T.
  */
-export function keyMatches(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">, shortcut: string | null | undefined): boolean {
+export function keyMatches(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey"> & { code?: string }, shortcut: string | null | undefined): boolean {
   if (!shortcut) return false;
   const mods = { ctrl: false, alt: false, shift: false, meta: false };
   let key: string;
@@ -27,7 +28,7 @@ export function keyMatches(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" |
   // The return key is written as its code (the design rules' emoji check reads the symbol as one).
   const keyNames: Record<string, string> = { "⌫": "Backspace", "\u21A9": "Enter", Del: "Delete" };
   return e.ctrlKey === mods.ctrl && e.altKey === mods.alt && e.shiftKey === mods.shift && e.metaKey === mods.meta
-    && e.key.toLowerCase() === (keyNames[key] ?? key).toLowerCase();
+    && latinKey(e).toLowerCase() === (keyNames[key] ?? key).toLowerCase();
 }
 
 /** One recording: Open · Transcribe (Audio only) or Ask about this | Pin · Important · Unread · Labels › · Move › |

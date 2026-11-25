@@ -22,13 +22,15 @@
         quiet: null,
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': @js(csrf_token()) },
         async options() {
-            return (await fetch(@js(route('passkeys.login.options')), { method: 'POST', headers: this.headers, credentials: 'same-origin' })).json();
+            const answer = await fetch(@js(route('passkeys.login.options')), { method: 'POST', headers: this.headers, credentials: 'same-origin' });
+            if (answer.status === 429) throw Object.assign(new Error(), { name: 'TooManyTries' });
+            return answer.json();
         },
         async finish(credential) {
             const answer = await fetch(@js(route('passkeys.login')), { method: 'POST', headers: this.headers, credentials: 'same-origin', body: JSON.stringify({ credential }) });
             const body = await answer.json();
             if (answer.ok && body.redirect) { window.location.assign(body.redirect); return; }
-            this.error = body.message || 'That passkey could not sign you in.';
+            this.error = answer.status === 429 ? @js(__('Too many tries. Wait a minute, then try again.')) : (body.message || @js(__('That passkey could not sign you in.')));
         },
         async init() {
             if (! (await window.elPasskeys.conditional())) return;
@@ -48,13 +50,14 @@
             try {
                 await this.finish(await window.elPasskeys.get(await this.options()));
             } catch (e) {
-                this.error = e && e.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled.' : 'That passkey could not sign you in.';
+                this.error = e && e.name === 'NotAllowedError' ? @js(__('Passkey sign-in was cancelled.'))
+                    : (e && e.name === 'TooManyTries' ? @js(__('Too many tries. Wait a minute, then try again.')) : @js(__('That passkey could not sign you in.')));
             } finally { this.busy = false; }
         },
         destroy() { this.quiet?.abort(); },
     }"
     @if (! $google) x-show="supported" x-cloak @endif>
-    <div class="el-or" role="separator" aria-label="or"><span>or</span></div>
+    <div class="el-or" role="separator" aria-label="{{ __('or') }}"><span>{{ __('or') }}</span></div>
     <div @class(['el-other-ways-row', 'el-one' => ! $google])>
         @if ($google)
             <a href="{{ route('auth.google.redirect') }}" class="el-auth-btn el-google-btn" data-google>
@@ -65,13 +68,13 @@
                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                     <path fill="none" d="M0 0h48v48H0z"/>
                 </svg>
-                <span>Continue with Google</span>
+                <span>{{ __('Continue with Google') }}</span>
             </a>
         @endif
         <button type="button" class="el-auth-btn el-passkey-btn" data-passkey x-show="supported" x-cloak x-on:click="signIn()" x-bind:disabled="busy"
-            title="Sign in with a passkey: your fingerprint, face or device PIN">
+            title="{{ __('Sign in with a passkey: your fingerprint, face or device PIN') }}">
             @svg('heroicon-o-key', 'el-auth-btn-icon', ['aria-hidden' => 'true'])
-            <span>Passkey</span>
+            <span>{{ __('Passkey') }}</span>
         </button>
     </div>
     <p class="el-other-ways-error" x-show="error" x-text="error" role="alert" x-cloak></p>

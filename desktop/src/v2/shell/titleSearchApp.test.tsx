@@ -71,6 +71,15 @@ describe("the title row's search in the app (UX-20)", () => {
     expect(await screen.findByRole("option", { name: "Show all in the list" })).toBeInTheDocument();
   });
 
+  it("/ from a row of the list goes to the title row's search, as ⌘F does (FIX-06: no Tabs back up)", async () => {
+    await app();
+    const first = await screen.findByRole("button", { name: /^Bilal Qureshi/ });
+    act(() => first.focus());
+    fireEvent.keyDown(first, { key: "/" });
+    await settle();
+    expect(within(screen.getByTestId("title-row")).getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
+  });
+
   it("Ask about \"…\" opens Ask with the question in it", async () => {
     await app();
     fireEvent.keyDown(window, { key: "k", metaKey: true });

@@ -203,7 +203,7 @@ describe("All projects (UX-09)", () => {
     // The page is never the tree (its folders are on the panel and the project's page).
     expect(screen.queryByRole("button", { name: /folders in/ })).toBeNull();
     noteRecentProject("p3");
-    fireEvent.click(screen.getByRole("button", { name: "Sort projects: Name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort: Name" }));
     fireEvent.click(within(screen.getByRole("menu", { name: "Sort projects" })).getByRole("menuitemradio", { name: "Recent" }));
     expect(cards()).toEqual(["Acme", "Zed", "Bilal Traders"]);
     fireEvent.click(screen.getByRole("button", { name: "Request files" }));

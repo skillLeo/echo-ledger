@@ -55,7 +55,7 @@ try {
           retryAll: rows.some((t) => t.includes(group) && t.includes("Retry all")),
           alone: rows.filter((t) => t.includes("Upload didn't finish")).length,
           uploaded: rows.some((t) => t.includes("Uploaded")),
-          badge: badge ? `${badge.textContent}${badge.classList.contains("el-rail__count--danger") ? " red" : ""}` : "none",
+          badge: badge ? `${badge.dataset.count ?? badge.textContent}${badge.classList.contains("el-rail__count--danger") ? " red" : ""}` : "none",
         };
       }, GROUP);
       console.log(`${name}: group line ${m.line}${m.retryAll ? " with Retry all" : ""}; items alone ${m.alone}; Uploaded ${m.uploaded ? "shown" : "MISSING"}; badge ${m.badge}`);

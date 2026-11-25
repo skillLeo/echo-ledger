@@ -6,6 +6,7 @@ namespace App\Filament\Pages\Upgrade;
 
 use App\Filament\Auth\EditProfile;
 use App\Filament\Support\UpgradeFlow;
+use App\Services\Entitlements\PaymentDetails;
 use App\Services\Entitlements\UpgradeRequests;
 use Filament\Panel;
 
@@ -34,7 +35,7 @@ class PayForPlan extends RequestPage
 
     public function getTitle(): string
     {
-        return 'Pay for '.$this->planName();
+        return __('Pay for :plan', ['plan' => $this->planName()]);
     }
 
     /** @return array<string, mixed> */
@@ -49,21 +50,23 @@ class PayForPlan extends RequestPage
             }
             $rows = [];
             $title = is_string($account['title'] ?? null) ? trim((string) $account['title']) : '';
+            // Each row: its label, the value as shown, what Copy copies and the Copy button's name (none for the bank
+            // and the branch), and whether it is a number (monospaced).
             if ($title !== '') {
-                $rows[] = ['Account title', $title, $title, false];
+                $rows[] = [__('Account title'), $title, $title, false, __('Copy account title')];
             }
-            foreach (['bank' => 'Bank', 'branch' => 'Branch'] as $key => $label) {
+            foreach (['bank' => __('Bank'), 'branch' => __('Branch')] as $key => $label) {
                 if (is_string($account[$key] ?? null) && trim((string) $account[$key]) !== '') {
-                    $rows[] = [$label, trim((string) $account[$key]), null, false];
+                    $rows[] = [$label, trim((string) $account[$key]), null, false, null];
                 }
             }
             if (is_string($account['account_number'] ?? null) && trim((string) $account['account_number']) !== '') {
                 $number = trim((string) $account['account_number']);
-                $rows[] = ['Account number', $number, (string) preg_replace('/\s+/', '', $number), true];
+                $rows[] = [__('Account number'), $number, (string) preg_replace('/\s+/', '', $number), true, __('Copy :label', ['label' => __('Account number')])];
             }
             if (is_string($account['iban'] ?? null) && trim((string) $account['iban']) !== '') {
                 $iban = strtoupper((string) preg_replace('/\s+/', '', (string) $account['iban']));
-                $rows[] = ['IBAN', trim(chunk_split($iban, 4, ' ')), $iban, true];
+                $rows[] = ['IBAN', trim(chunk_split($iban, 4, ' ')), $iban, true, __('Copy :label', ['label' => 'IBAN'])];
             }
             if ($rows !== []) {
                 $accounts[] = ['title' => $title, 'rows' => $rows];
@@ -71,6 +74,11 @@ class PayForPlan extends RequestPage
         }
         $reference = UpgradeFlow::reference($request);
         $note = is_string($payment['note'] ?? null) && trim((string) $payment['note']) !== '' ? trim((string) $payment['note']) : null;
+        // The server's own note when staff wrote none (PaymentDetails::defaultNote) is the reference line below: in the
+        // console's language. A note staff wrote shows as written.
+        if ($reference !== null && $note === PaymentDetails::defaultNote($reference)) {
+            $note = null;
+        }
         $instructions = $accounts === [] ? ($note ?? (string) (UpgradeFlow::payload($request)['payment_instructions'] ?? app(UpgradeRequests::class)->paymentInstructions())) : null;
 
         return [
@@ -80,7 +88,7 @@ class PayForPlan extends RequestPage
             'accounts' => $accounts,
             'accountTitle' => $accounts[0]['title'] ?? null,
             'reference' => $reference,
-            'referenceLine' => $accounts !== [] ? ($note ?? ($reference !== null ? "Put {$reference} in the transfer's note." : null)) : ($reference !== null ? "Put {$reference} in the transfer's note." : null),
+            'referenceLine' => $accounts !== [] ? ($note ?? ($reference !== null ? __("Put :reference in the transfer's note.", ['reference' => $reference]) : null)) : ($reference !== null ? __("Put :reference in the transfer's note.", ['reference' => $reference]) : null),
             'instructions' => $instructions,
             'stage' => UpgradeFlow::stage($request),
             'receiptUrl' => UpgradeFlow::receiptUrl($request),
