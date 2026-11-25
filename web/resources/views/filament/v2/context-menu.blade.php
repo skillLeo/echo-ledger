@@ -10,6 +10,6 @@
     @foreach (['TranscriptIcon' => 'transcript', 'PinIcon' => 'star', 'StarIcon' => 'flag', 'MailIcon' => 'inbox', 'LabelIcon' => 'label', 'MoveIcon' => 'move',
         'RenameIcon' => 'rename', 'DownloadIcon' => 'download', 'TrashIcon' => 'trash', 'PlusIcon' => 'plus', 'ShareIcon' => 'share', 'LinkIcon' => 'link',
         'UsersIcon' => 'users', 'SendIcon' => 'chat', 'check' => 'check', 'more' => 'chevron-end'] as $icon => $glyph)
-        <template data-icon="{{ $icon }}"><x-el.v2.icon :name="$glyph" /></template>
+        <template data-icon="{{ $icon }}"><x-el.v2.icon :name="$glyph" :mirror="$icon === 'SendIcon'" /></template>
     @endforeach
 </div>

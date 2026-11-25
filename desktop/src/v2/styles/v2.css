@@ -89,6 +89,9 @@
   unicode-bidi: isolate;
   font-variant-numeric: tabular-nums;
 }
+/* In Urdu a date is one right-to-left run of two isolated parts (lib/format formatWhen: "23 نومبر", "2:00 PM"): it
+   keeps that order inside this box, and stays on one line. */
+:lang(ur) .el-ltr { white-space: nowrap; }
 .el-visually-hidden {
   position: absolute !important;
   inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
@@ -428,11 +431,20 @@
 .el-dialog__head { display: flex; align-items: flex-start; gap: var(--el-space-12); padding: var(--el-space-24) var(--el-space-24) var(--el-space-8); }
 .el-dialog__titles { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-4); }
 .el-dialog__head .el-button--icon { margin-block-start: calc(var(--el-space-4) * -1); margin-inline-end: calc(var(--el-space-8) * -1); }
+/* Right to left a Sheet opens from the window's left (its end side, mirrored). On a Mac the system's window buttons stay
+   there: the head keeps their 80 points clear (with the × button's own pull into the padding), so × sits beside them,
+   never under. Full screen has no buttons (no data-titlebar). */
+[data-platform="macos"][data-titlebar][dir="rtl"] .el-sheet .el-dialog__head {
+  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));
+}
 .el-dialog__body { padding: var(--el-space-8) var(--el-space-24) var(--el-space-16); overflow-y: auto; flex: 1; }
 .el-dialog__actions {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--el-space-8);
   padding: var(--el-space-16) var(--el-space-24) var(--el-space-24);
 }
+/* A quiet way elsewhere in the footer (D-234: "See your request links"): a line of its own at the start edge, the
+   buttons together at the end under it, at any width and in any language. */
+.el-dialog__actions > .el-dialog__aside { flex-basis: 100%; display: flex; justify-content: flex-start; }
 
 /* ---- Banner ---------------------------------------------------------------------------------------------- */
 .el-banner {
@@ -1285,6 +1297,16 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 /* Chromium (WebView2) and WebKit read only the prefixed value; others read the standard one. */
 .el-row__title, .el-row__meta-text, .el-row__value-text, .el-group__note, .el-plan-card__body p, .el-health__title,
 .el-screens-strip__title, .el-nav-item__label {
+  text-align: match-parent;
+  text-align: -webkit-match-parent;
+}
+/* The account card's name (an English name in a right-to-left window) at the window's start edge, as its email. */
+.el-profile__who > .el-title-s {
+  text-align: match-parent;
+  text-align: -webkit-match-parent;
+}
+/* A page's title and the line under it (a project's name, an English subtitle) at the window's start edge too. */
+.el-page__titles > *, .el-page__head > h1 {
   text-align: match-parent;
   text-align: -webkit-match-parent;
 }

@@ -12,7 +12,7 @@
             @elseif ($state['dismiss'])
                 <button type="button" class="el-icon-x" wire:click="dismissRequest" aria-label="Dismiss">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
             @else
-                @svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true'])
+                @svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true']))
             @endif
         </div>
     </div>

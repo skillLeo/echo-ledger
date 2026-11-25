@@ -112,7 +112,8 @@ final class IsolatingTranslator extends Translator
     /**
      * Always wraps, even a value that already looks isolated (wrapping twice is harmless). A closing mark (PDI) with no
      * opener of its own inside the value is dropped, so a typed name cannot close this isolate early and let what
-     * follows (an override such as U+202E) flip the sentence; whatever the value leaves open is closed by the final PDI.
+     * follows (an override such as U+202E) flip the sentence; every isolate the value opens and leaves open gets its
+     * own PDI (W-233), so the rest of the sentence is never left inside one, and the final PDI closes the value's.
      */
     public static function isolate(string $value): string
     {
@@ -133,7 +134,7 @@ final class IsolatingTranslator extends Translator
             $safe .= $char;
         }
 
-        return "\u{2068}{$safe}".self::CLOSE;
+        return "\u{2068}{$safe}".str_repeat(self::CLOSE, $depth).self::CLOSE;
     }
 
     /**

@@ -5,41 +5,42 @@
 // bookmarks. The transcript: its kind ("Final transcript · edited", "Live captions…"), Show as when the owner's views are
 // ready (never made from here), Find (Cmd/Ctrl+F), Copy (the text at once; its chevron: with timestamps, for AI), and its lines with the words
 // a second transcription heard. Nothing here changes it: Save to my library makes a copy that can be changed, and
-// Remove takes it off Shared with me. Same commands as classic: session_detail, transcript_detail, transcript_views.
-import { useEffect, useMemo, useRef, useState } from "react";
+// Remove takes it off Shared with me. Same commands as classic: session_detail, transcript_detail, transcript_views. Its
+// words are in the account's language (useT).
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, type SharedItem, type TranscriptDetail, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
 import { failureLine, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, transcriptStatusLine } from "../../lib/languages";
 import { openSettingsSection } from "../../lib/entitlements";
-import { NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
-import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
+import { needsKeyText } from "../../views/main/Upgrade";
+import { playerHint, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
 import { transcribingLine } from "../../lib/progress";
-import { NO_AUDIO_HINT } from "../../lib/pending";
+import { noAudioHint } from "../../lib/pending";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { NO_TARGET, type Notify } from "../../lib/notice";
-import { sentLine } from "../../views/main/SharedWithMe";
+import { lineDir, t, useT } from "../../i18n";
 import { Badge, Banner, Button, Card, copyMenuItems, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Toggle, Transcript, type Segment } from "../components";
 import { Menu } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { FindBar } from "../library/TranscriptToolsV2";
 import { aiHeader } from "../library/organise";
-import { sharedTitle } from "./model";
+import { quoted, sentLine, sharedTitle, when } from "./model";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 type ShowAs = "original" | TranscriptView;
 
 /** The words under the sender's line: what this view lets you do. */
-export const READ_ONLY_LINE = "You can play and read it. Save to my library makes a copy you can change.";
+export const readOnlyLine = () => t("You can play and read it. Save to my library makes a copy you can change.");
 /** Classic's words when the signed audio link has run out and a fresh one could not be had. */
-export const PLAYBACK_EXPIRED = "Playback link expired. Open the recording again.";
-/** Classic's words before what a second transcription heard on a line (never the engine's name). */
-const SECOND_HEARD = "A second transcription heard:";
+export const playbackExpired = () => t("Playback link expired. Open the recording again.");
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
 const VIEW_ORDER: TranscriptView[] = ["roman", "urdu", "english"];
-const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "اردو" };
+/** A view's name (Urdu's in its own script, in every language). */
+const viewLabel = (view: TranscriptView) => (view === "roman" ? t("Roman Urdu") : view === "english" ? t("English") : "اردو");
 const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
 const isTranscribing = (status?: string | null) => !!status && IN_FLIGHT.has(status);
-const DEVICE_WORDS: Record<string, string> = { phone: "Phone", desktop: "Computer", web: "Web" };
+/** The device a recording was made on, in words (the core's own word when it is another). */
+const deviceWord = (device: string) => (device === "phone" ? t("Phone") : device === "desktop" ? t("Computer") : device === "web" ? t("Web") : device);
 
 /** Keys the page leaves alone: typing, and anything inside a dialog or a menu. */
 const inField = (target: EventTarget | null) =>
@@ -54,6 +55,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   onSave: () => void;
   onRemove: () => void;
 }) {
+  const { t, rtl } = useT();
   const session = item.session!;
   const title = sharedTitle(item);
   const transcriptId = session.transcript?.final_transcript_id ?? session.transcript?.live_transcript_id ?? null;
@@ -66,7 +68,8 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   const [speed, setSpeed] = useState("1");
   const [skipSilence, setSkipSilence] = useState(false);
   const [follow, setFollow] = useState(true);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  /** The signed audio link ran out and a fresh one could not be had. */
+  const [playbackExpiredNow, setPlaybackExpired] = useState(false);
   const [showAs, setShowAs] = useState<ShowAs>("original");
   const [views, setViews] = useState<TranscriptViewsState | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -82,7 +85,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
     let live = true;
     setDetail({ state: "loading" });
     setTranscript(transcriptId ? { state: "loading" } : { state: "ready", value: null });
-    setPlaybackError(null);
+    setPlaybackExpired(false);
     refreshed.current = false;
     api.session(session.id).then((d) => {
       if (!live) return;
@@ -156,13 +159,13 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   // file that reports 0 or 1 s before it has loaded never shows as the length.
   const durationS = Math.max(1, Math.round(playerLength(session.duration_ms, rawSegments, mediaSeconds) / 1000));
   const active = rawSegments && (playing || position > 0) ? activeIndex(rawSegments, position * 1000) : -1;
-  const url = detail.state === "ready" && !playbackError ? detail.value.url : null;
+  const url = detail.state === "ready" && !playbackExpiredNow ? detail.value.url : null;
   const bookmarks = detail.state === "ready" ? detail.value.bookmarks : [];
 
   const toggle = () => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) void a.play().catch(() => notify("The audio didn't play. Try again in a moment.", true));
+    if (a.paused) void a.play().catch(() => notify(t("The audio didn't play. Try again in a moment."), true));
     else a.pause();
   };
   const seek = (s: number) => {
@@ -186,14 +189,14 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   };
   // The signed audio link lives 30 minutes: a failed load asks for a fresh one once, then says so (classic's rule).
   const audioError = () => {
-    if (refreshed.current) return setPlaybackError(PLAYBACK_EXPIRED);
+    if (refreshed.current) return setPlaybackExpired(true);
     refreshed.current = true;
     const failed = detail.state === "ready" ? detail.value.url : null;
     api.session(session.id).then((d) => {
       const next = typeof d.playback_url === "string" ? d.playback_url : null;
       if (next && next !== failed) setDetail((s) => (s.state === "ready" ? { state: "ready", value: { ...s.value, url: next } } : s));
-      else setPlaybackError(PLAYBACK_EXPIRED);
-    }).catch(() => setPlaybackError(PLAYBACK_EXPIRED));
+      else setPlaybackExpired(true);
+    }).catch(() => setPlaybackExpired(true));
   };
 
   // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s; Cmd/Ctrl+F opens Find. Never while typing.
@@ -230,75 +233,81 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
     try {
       const body = copiedTranscript(lines, viewText, withTimestamps, unsure, forAi);
       const people = [...new Set(lines.map((l) => l.speaker))];
-      await navigator.clipboard.writeText(forAi ? `${aiHeader(session, people, showAs !== "original" && views?.status === "ready" ? showAs : null)}\n\n${body}` : body);
-      notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied", false, NO_TARGET);
+      await navigator.clipboard.writeText(forAi ? [aiHeader(session, people, showAs !== "original" && views?.status === "ready" ? showAs : null), body].join("\n\n") : body);
+      notify(forAi ? t("Copied for AI, with the note on unsure words") : withTimestamps ? t("Copied with timestamps") : t("Copied"), false, NO_TARGET);
     } catch {
-      notify("Could not access the clipboard", true);
+      notify(t("Could not access the clipboard"), true);
     }
   };
 
   const source = session.source_app_label ?? (session.source_app ? sourceAppLabel(session.source_app) : null);
-  const device = session.source_device_label ?? (session.source_device ? DEVICE_WORDS[session.source_device] ?? session.source_device : null);
+  const device = session.source_device_label ?? (session.source_device ? deviceWord(session.source_device) : null);
   // When it was recorded, how long, and its project; the time and the length are number isolates (right way round in Urdu).
   const recorded = [
-    formatWhen(session.started_at) ? <span key="at" className="el-ltr">{formatWhen(session.started_at)}</span> : null,
+    session.started_at && formatWhen(session.started_at) ? <Fragment key="at">{when(session.started_at)}</Fragment> : null,
     formatDuration(session.duration_ms) ? <span key="length" className="el-num">{formatDuration(session.duration_ms)}</span> : null,
     session.client?.name ? <span key="project" dir="auto">{session.client.name}</span> : null,
   ].filter(Boolean).flatMap((part, i) => (i ? [" · ", part] : [part]));
   const engine = transcribedIn(session.transcript);
+  // A line of pieces (the source and device; when, how long, the project) runs in the window's direction in Urdu, its
+  // first piece at the start edge whatever its letters; "auto" in English, as always.
+  const pieces = rtl ? "rtl" : "auto";
+  /** Who sent it, when, and their note: one line of text, its direction from its own words (lineDir). */
+  const sent = sentLine(item) + (item.note ? " · " + quoted(item.note) : "");
   const finalStatus = session.transcript?.final_status ?? null;
   const retrying = tDetail && isTranscribing(tDetail.status) ? retryLine(tDetail) : null;
   const warning = scriptWarning(session.transcript?.script_warning);
-  const kindLine = tDetail?.kind === "final" ? `Final transcript${tDetail.edited_at ? " · edited" : ""}`
-    : `Live captions (final transcript pending${partsText(session.transcript?.final_progress) ? ` · ${partsText(session.transcript?.final_progress)}` : ""})`;
+  const parts = partsText(session.transcript?.final_progress);
+  const kindLine = tDetail?.kind === "final" ? (tDetail.edited_at ? t("Final transcript · edited") : t("Final transcript"))
+    : parts ? t("Live captions (final transcript pending · :parts)", { parts }) : t("Live captions (final transcript pending)");
 
   if (detail.state === "error" && transcript.state !== "ready") {
     return (
       <div className="el-page" data-v2="shared-reader">
-        <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Shared</Button>
-        <EmptyState tone="error" icon={Icons.ErrorIcon} title="This recording didn't open" body={detail.message}
-          action={<Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+        <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{t("Shared")}</Button>
+        <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("This recording didn't open")} body={detail.message}
+          action={<Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
       </div>
     );
   }
 
   return (
     <div className="el-page" data-v2="shared-reader" ref={page}>
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Shared</Button>
+      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{t("Shared")}</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
-          <p className="el-page__meta el-secondary" data-testid="source-line" dir="auto">
+          <p className="el-page__meta el-secondary" data-testid="source-line" dir={pieces}>
             <SourceAvatar item={session} size="sm" />
             <span dir="auto">{[source, device].filter(Boolean).join(" · ")}</span>
           </p>
           <h1 className="el-title-l" dir="auto">{title}</h1>
           <p className="el-page__meta el-secondary" data-testid="recorded-line" dir="auto">
-            <span dir="auto" data-testid="recorded">{recorded}</span>
-            <Badge>Read-only</Badge>
-            {item.saved_at && <Badge tone="success">Saved to my library</Badge>}
+            <span dir={pieces} data-testid="recorded">{recorded}</span>
+            <Badge>{t("Read-only")}</Badge>
+            {item.saved_at && <Badge tone="success">{t("Saved to my library")}</Badge>}
           </p>
-          {engine && <p className="el-caption el-secondary" dir="auto">Transcribed in {engine}</p>}
+          {engine && <p className="el-caption el-secondary" dir={lineDir(t("Transcribed in :engine", { engine }))}>{t("Transcribed in :engine", { engine })}</p>}
           {retrying && <p className="el-caption el-secondary" role="status" dir="auto">{retrying}</p>}
           {warning && <p className="el-caption el-row__error" role="status" dir="auto">{warning}</p>}
         </div>
         <div className="el-page__actions">
-          {!item.saved_at && <Button variant="primary" icon={Icons.DownloadIcon} loading={busy} onClick={onSave}>Save to my library</Button>}
-          <Menu label="More for this recording" button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }}
-            items={[{ label: "Remove", icon: Icons.TrashIcon, danger: true, disabled: busy, onPick: onRemove }]} />
+          {!item.saved_at && <Button variant="primary" icon={Icons.DownloadIcon} loading={busy} onClick={onSave}>{t("Save to my library")}</Button>}
+          <Menu label={t("More for this recording")} button={{ variant: "quiet", icon: Icons.MoreIcon, title: t("More") }}
+            items={[{ label: t("Remove"), icon: Icons.TrashIcon, danger: true, disabled: busy, onPick: onRemove }]} />
         </div>
       </header>
 
       <Banner icon={Icons.InfoIcon} testId="reader-sent">
-        <span dir="auto">{sentLine(item)}{item.note ? ` · “${item.note}”` : ""}</span>{" "}<span dir="auto">{READ_ONLY_LINE}</span>
+        <span dir={lineDir(sent)}>{sent}</span>{" "}<span dir="auto">{readOnlyLine()}</span>
       </Banner>
 
       <Card className="el-page__player">
         {detail.state === "loading" ? (
-          <Loading label="Loading the audio"><Skeleton shape="block" /></Loading>
+          <Loading label={t("Loading the audio")}><Skeleton shape="block" /></Loading>
         ) : detail.state === "error" ? (
           // The transcript came, the recording's details (its audio) did not: say why, with one way to try again.
-          <Banner tone="danger" icon={Icons.ErrorIcon} testId="audio-error" action={<Button size="sm" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>}>
-            The audio didn't load. {detail.message}
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="audio-error" action={<Button size="sm" onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>}>
+            {t("The audio didn't load. :error", { error: detail.message })}
           </Banner>
         ) : (
           <>
@@ -308,18 +317,18 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
                 onDurationChange={(e) => setMediaSeconds(e.currentTarget.duration)} onEnded={() => setPlaying(false)}
                 onTimeUpdate={(e) => timeUpdate(e.currentTarget)} onError={audioError} />
             )}
-            {playbackError && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackError}</Banner>}
+            {playbackExpiredNow && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackExpired()}</Banner>}
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
-              end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
+              end={<Select label={t("Playback speed")} hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
                 options={SPEEDS.map((v) => ({ value: v, label: `${v}×`, dir: "ltr" as const }))} />} />
             <div className="el-recording__toggles">
-              <Toggle label="Skip silence" checked={skipSilence} onChange={setSkipSilence} />
-              <Toggle label="Follow" checked={follow} onChange={setFollow} />
-              <span className="el-caption el-secondary el-recording__keys">{PLAYER_HINT}</span>
+              <Toggle label={t("Skip silence")} checked={skipSilence} onChange={setSkipSilence} />
+              <Toggle label={t("Follow")} checked={follow} onChange={setFollow} />
+              <span className="el-caption el-secondary el-recording__keys">{playerHint()}</span>
             </div>
             {bookmarks.length > 0 && (
-              <ul className="el-bookmarks" aria-label="Bookmarks">
+              <ul className="el-bookmarks" aria-label={t("Bookmarks")}>
                 {bookmarks.map((b) => (
                   <li key={b.id}>
                     <Button size="sm" variant="secondary" icon={Icons.PinIcon} title={b.note ?? undefined} disabled={!url}
@@ -335,39 +344,40 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
       </Card>
 
       {tDetail && !isTranscribing(tDetail.status) && tDetail.status !== "failed" && (
-        <div className="el-recording__actions" role="toolbar" aria-label="Find and copy">
+        <div className="el-recording__actions" role="toolbar" aria-label={t("Find and copy")}>
           <span className="el-caption el-secondary">{kindLine}</span>
           <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-pressed={findOpen} aria-keyshortcuts="Meta+F Control+F" disabled={segments.length === 0}
-            title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}>Find</Button>
-          <SplitButton label="Copy" icon={Icons.CopyIcon} mainLabel="Copy text" onClick={() => void copy(false)} menuLabel="More copy options"
+            title={t("Find in this transcript (Ctrl+F)")} onClick={() => setFindOpen(!findOpen)}>{t("Find")}</Button>
+          <SplitButton label={t("Copy")} icon={Icons.CopyIcon} mainLabel={t("Copy text")} onClick={() => void copy(false)} menuLabel={t("More copy options")}
             disabled={segments.length === 0} items={copyMenuItems({ withTimestamps: () => void copy(true), forAi: () => void copy(false, true) })} />
         </div>
       )}
 
-      <section className="el-group" aria-label="Transcript">
+      <section className="el-group" aria-label={t("Transcript")}>
         {transcript.state === "loading" ? (
-          <Loading label="Loading the transcript"><Card><Skeleton /><Skeleton width="long" /><Skeleton width="medium" /></Card></Loading>
+          <Loading label={t("Loading the transcript")}><Card><Skeleton /><Skeleton width="long" /><Skeleton width="medium" /></Card></Loading>
         ) : transcript.state === "error" ? (
-          <EmptyState tone="error" icon={Icons.ErrorIcon} title="The transcript didn't load" body={transcript.message}
-            action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+          <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("The transcript didn't load")} body={transcript.message}
+            action={<Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
         ) : tDetail?.status === "failed" ? (
-          <EmptyState tone="error" icon={Icons.ErrorIcon} title="Transcription failed."
-            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${NO_AUDIO_HINT}` : ""}{tDetail.error_code === "needs_transcription_key" ? ` ${NEEDS_KEY_TEXT}` : ""}</>}
+          <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("Transcription failed.")}
+            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${noAudioHint()}` : ""}{tDetail.error_code === "needs_transcription_key" ? ` ${needsKeyText()}` : ""}</>}
             action={needsKeyAction(tDetail.error_code) ? (
-              <Button onClick={() => openSettingsSection("transcription-key")}>{tDetail.error_code === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}</Button>
+              <Button onClick={() => openSettingsSection("transcription-key")}>{tDetail.error_code === "own_key_rejected" ? t("Check my Groq key") : t("Add my Groq key")}</Button>
             ) : undefined} />
         ) : tDetail && isTranscribing(tDetail.status) ? (
-          <EmptyState icon={Icons.PendingIcon} title="Transcribing" body={transcribingLine(session.transcript?.final_progress ?? tDetail.progress)} />
+          <EmptyState icon={Icons.PendingIcon} title={t("Transcribing")} body={transcribingLine(session.transcript?.final_progress ?? tDetail.progress)} />
         ) : segments.length > 0 ? (
           <>
             {canShowAs && (
               <div className="el-recording__viewbar">
-                <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
-                  options={[...VIEW_ORDER.filter((v) => tDetail!.views!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
-                    { value: "original" as ShowAs, label: "Original" }]} />
+                <Segmented label={t("Show as")} value={showAs} onChange={(v) => void chooseView(v)}
+                  options={[...VIEW_ORDER.filter((v) => tDetail!.views!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: viewLabel(v) })),
+                    { value: "original" as ShowAs, label: t("Original") }]} />
                 {showAs !== "original" && (
                   <span className="el-caption el-secondary" role="status">
-                    {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.` : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
+                    {views?.status === "ready" ? t(":view view. The transcript itself is unchanged.", { view: viewLabel(showAs) })
+                      : t("Writing the :view view… this takes a minute or two.", { view: viewLabel(showAs) })}
                   </span>
                 )}
               </div>
@@ -375,19 +385,19 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
             {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
               onStep={(d) => matches.length && setFindAt((findCurrent + d + matches.length) % matches.length)} onClose={() => { setFindOpen(false); setFindQuery(""); }} />}
             <Card>
-              <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={url ? playFrom : undefined}
+              <Transcript label={t("Transcript")} grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={url ? playFrom : undefined}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => {
-                  if (viewText(i) !== null) return views?.kept?.[showAs as TranscriptView]?.includes(i) ? <span className="el-segment__note">· original words</span> : null;
+                  if (viewText(i) !== null) return views?.kept?.[showAs as TranscriptView]?.includes(i) ? <span className="el-segment__note">{t("· original words")}</span> : null;
                   const check = rawSegments?.[i]?.check;
-                  return check ? <span className="el-segment__note" dir="auto">{SECOND_HEARD} {check.text}</span> : null;
+                  return check ? <span className="el-segment__note" dir="auto">{t("A second transcription heard: :text", { text: check.text })}</span> : null;
                 }} />
             </Card>
           </>
         ) : tDetail ? (
-          <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
+          <EmptyState icon={Icons.TranscriptIcon} title={t("The transcript is empty")} body={t("No speech was detected in this recording.")} />
         ) : (
-          <EmptyState icon={Icons.TranscriptIcon} title="No transcript yet" body={isTranscribing(finalStatus) ? transcribingLine(session.transcript?.final_progress) : transcriptStatusLine(finalStatus)} />
+          <EmptyState icon={Icons.TranscriptIcon} title={t("No transcript yet")} body={isTranscribing(finalStatus) ? transcribingLine(session.transcript?.final_progress) : transcriptStatusLine(finalStatus)} />
         )}
       </section>
     </div>

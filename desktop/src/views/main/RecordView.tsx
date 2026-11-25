@@ -67,7 +67,7 @@ export function RecordView({ status, run, onImport, assistOn = false, projects =
         : null;
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
-  const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
+  const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp, "en")) : "";
   const bluetooth = useBluetoothMic(recording?.clientRef ?? null);
   // Discard asks first; it discards only the recording it asked about (another may have started meanwhile).
   const recordingNow = useRef(recording?.clientRef ?? null);

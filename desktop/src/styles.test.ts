@@ -476,3 +476,20 @@ describe("the Library and recording page never clip or scroll sideways", () => {
     expect(prop(".head-chip.retranscribe-row .chip-select > select", "max-width")).toContain("100%");
   });
 });
+
+describe("the classic sidebar's Activity count and the Settings profile card (D-002, D-229)", () => {
+  it("gives the sidebar's Activity count the accent colour; Settings' match count stays grey (D-002)", () => {
+    // A second, bare .nav-count rule (Settings' search count) came later and turned the sidebar's badge grey.
+    expect(prop(".nav-count", "background")).toBe("var(--accent-strong)");
+    expect(prop(".nav-count", "color")).toBe("var(--on-accent)");
+    expect(prop(".settings-root .nav-count", "background")).toBe("var(--surface-2)");
+  });
+
+  it("lets Upgrade go under the profile card's words in a narrow Settings, never cutting the email (D-229)", () => {
+    // jsdom's stylesheet drops container queries, so the block is read as text.
+    const narrow = css.match(/@container settings \(max-width: 759px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(narrow).toMatch(/\.profile-card \{ flex-wrap: wrap; \}/);
+    // flex: 1 sized the words from 0, so the card never wrapped and the email got its "…" beside Upgrade.
+    expect(narrow).toMatch(/\.profile-body \{ flex: 1 1 auto; \}/);
+  });
+});

@@ -4,7 +4,7 @@
 --}}
 <x-filament-panels::page class="el-settings-page">
     <div class="el-flow" data-flow="receipt">
-        <a href="{{ $statusUrl }}" class="el-set-back">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __(':plan request', ['plan' => $this->planName()]) }}</a>
+        <a href="{{ $statusUrl }}" class="el-set-back">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chevron-left', ['aria-hidden' => 'true'])) {{ __(':plan request', ['plan' => $this->planName()]) }}</a>
         <h1 class="el-set-h1">{{ __('Send receipt') }}</h1>
         @if ($stage === 'needs_receipt' && filled($proofRequest))
             <div class="el-set-box" style="padding:12px 16px;margin-bottom:12px;background:var(--warning-soft)" role="status">

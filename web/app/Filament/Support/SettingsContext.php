@@ -147,6 +147,15 @@ final class SettingsContext
     }
 
     /**
+     * UX-18: the account's problem the rail's avatar shows as its dot, or null. On the web you are signed in while you
+     * see it, so the one there is is a payment that failed: staff asked for another receipt (needs_receipt).
+     */
+    public function accountProblem(): ?string
+    {
+        return $this->openRequest()?->stage() === UpgradeRequest::STAGE_NEEDS_RECEIPT ? 'payment' : null;
+    }
+
+    /**
      * Whether the entry's requirements hold for this person.
      *
      * @param  array<string, mixed>  $entry

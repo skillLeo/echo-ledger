@@ -136,7 +136,7 @@ class Notice extends Notification
             <?= $attributes ?>
         >
             <?= generate_icon_html(
-                $this->getIcon(),
+                RtlIcons::icon($this->getIcon()),
                 attributes: (new FilamentComponentAttributeBag)->color(IconComponent::class, $this->getIconColor())->class(['fi-no-notification-icon']),
                 size: $this->getIconSize(),
             )?->toHtml() ?>

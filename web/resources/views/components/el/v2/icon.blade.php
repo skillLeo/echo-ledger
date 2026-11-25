@@ -1,9 +1,11 @@
 {{--
     The v2.0 console's one icon family, the same glyphs as the desktop app (desktop/src/components/Icons.tsx): line
     glyphs on a 24-unit grid, one stroke, round ends, currentColor. Outlined at rest; `filled` for the page you are on.
-    Its size comes from CSS (.v2-icon), never from here. Directional glyphs (chevrons, back) turn over right to left.
+    Its size comes from CSS (.v2-icon), never from here. Directional glyphs (chevrons, back) turn over right to left, and
+    so do the help "?" (W-234), Ask's bubble (D-231) and the chat bubble as an action (`mirror`, W-235); as a recording's
+    source it never does.
 --}}
-@props(['name', 'filled' => false])
+@props(['name', 'filled' => false, 'mirror' => false])
 @php
     $gear = 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z';
     $fill = $filled ? 'currentColor' : 'none';
@@ -70,8 +72,14 @@
         // A label (the desktop's tag) and Rename (its pencil), for the right-click menus (UX-22).
         'label' => '<path d="M3.5 5.5a2 2 0 0 1 2-2h5.2a2 2 0 0 1 1.4.6l8.3 8.3a2 2 0 0 1 0 2.8l-5.2 5.2a2 2 0 0 1-2.8 0l-8.3-8.3a2 2 0 0 1-.6-1.4z"/>'.$dot(8, 8),
         'rename' => '<path d="M14.5 5.5 18.5 9.5M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/>',
+        // The profile's camera badge: Add or Change photo (UX-18).
+        'camera' => '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.5-2.2h5.6l1.5 2.2h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.8" r="3.6"/>',
     ];
-    $directional = in_array($name, ['chevron-end', 'chevron-start'], true);
+    // W-234: right to left the help "?" (Urdu ؟) and Ask's bubble (D-231) read mirrored too, as on the desktop and the
+    // phone, and so does a chat bubble where it is an action ([mirror]: Send to WhatsApp…). As a recording's source it is
+    // the app's own mark, which never mirrors (D4 §7, W-235). Added only right to left, so English draws them as before.
+    $directional = in_array($name, ['chevron-end', 'chevron-start'], true)
+        || (in_array($name, ['help', 'ask'], true) || ($name === 'chat' && $mirror)) && \App\Filament\Support\ConsoleV2::rtl();
 @endphp
 <svg {{ $attributes->class(['v2-icon', 'v2-icon-flip' => $directional]) }} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{!! $glyphs[$name] ?? $glyphs['dots'] !!}</svg>

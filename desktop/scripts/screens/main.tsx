@@ -197,6 +197,11 @@ function privacyStatus() {
     permission: !screen.includes("-error"),
     floatingOpen: true,
     displays: mac ? 2 : 1,
+    // `&mainhide=1`: the main window hidden from screen shares until 16:30 today (the core's English words beside it).
+    ...(params.get("mainhide") === "1" ? {
+      mainHide: { until: { kind: "at", at_ms: new Date(new Date().setHours(16, 30, 0, 0)).getTime() }, sinceMs: Date.now() },
+      mainHiddenUntil: "until 16:30",
+    } : {}),
   };
 }
 const free = planParam === "free" || screen.endsWith("-free");
@@ -332,7 +337,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   }),
   // "&applang=ur" (with v21_urdu in uiflags): the account's language is Urdu, so the app speaks it (src/i18n); the
   // Language setting's PATCH is answered as the server would.
-  account_get: () => ({ ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT), language: accountLanguage }),
+  // `&email=…`: the account's email (D-229: a long one on the profile card).
+  account_get: () => ({
+    ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
+    ...(params.get("email") ? { email: params.get("email") } : {}),
+    language: accountLanguage,
+  }),
   // Only the language is answered; every other account action (the Security page's "security"…) gets nothing, as before.
   account_call: ({ action, body }) => {
     if (action !== "language") return null;
@@ -405,7 +415,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   // `&grouped=1` (UX-08): uploads that didn't finish as the server groups them, and its one Activity number (3 of them
   // and the failed transcript: 4, red).
   activity_list: () => {
-    const data = grouped ? ACTIVITY_GROUPED : ACTIVITY;
+    // `&deviceunread=1` (D-233): the new device's notification not read yet (it has nowhere to go: a plain row, Mark read).
+    const data = (grouped ? ACTIVITY_GROUPED : ACTIVITY).map((a) => (params.get("deviceunread") === "1" && a.kind === "device_paired" ? { ...a, read: false } : a));
     return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
   },
   activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),

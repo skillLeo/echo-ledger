@@ -10,7 +10,8 @@ import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../compone
 import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
-import { REVOKE_LINK_QUESTION } from "../../lib/sharing";
+import { revokeLinkQuestion } from "../../lib/sharing";
+import { wordsIn, type Lang } from "../../i18n";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -275,8 +276,11 @@ export const EXPORTS: [ExportFormat, string][] = [
   ["vtt", "Web subtitles (.vtt)"],
 ];
 
-/** What "PDF (print)" does: the desktop has no PDF writer of its own, the browser's print page makes the file. */
-export const PDF_HINT = "PDF (print) opens a print page in your browser: choose Save as PDF there.";
+/** What "PDF (print)" does: the desktop has no PDF writer of its own, the browser's print page makes the file. In the
+ * window's language, or English with `lang` "en" (classic's Export menu). */
+export function pdfHint(lang?: Lang): string {
+  return wordsIn(lang).t("PDF (print) opens a print page in your browser: choose Save as PDF there.");
+}
 
 /** Export → Meeting pack (since v1.5): the transcript with each screen at its moment, as a print page or a ZIP. */
 export const PACKS: [string, MeetingPackFormat, boolean, string][] = [
@@ -304,7 +308,7 @@ export function ExportMenu({ onExport, viewLabel = null, onPack }: {
   return (
     <>
       <label htmlFor={id} className="sr-only">Export</label>
-      <select id={id} className="select compact" value="" title={PDF_HINT} onChange={(e) => { choose(e.target.value); e.target.value = ""; }}>
+      <select id={id} className="select compact" value="" title={pdfHint("en")} onChange={(e) => { choose(e.target.value); e.target.value = ""; }}>
         {/* Each option takes its own direction: in a right-to-left window "Export…" would read "…Export" (D4 §6). */}
         <option dir="auto" value="">{viewLabel ? `Export as ${viewLabel}…` : "Export…"}</option>
         {EXPORTS.map(([format, label]) => <option dir="auto" key={format} value={format}>{label}</option>)}
@@ -363,7 +367,7 @@ export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
     }
   };
   const revoke = async (id: string) => {
-    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
+    if (!(await confirmAction(revokeLinkQuestion("en")))) return;
     try {
       await api.revokeShare(id);
       await load();

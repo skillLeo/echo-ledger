@@ -1,6 +1,6 @@
 // Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
 // language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
-import { dateLocale, language, numberLocale } from "../i18n/locale.ts";
+import { dateLocale, isolate, language, numberLocale, PDI, RLI, t, wordsIn, type Lang } from "../i18n/locale.ts";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
@@ -23,9 +23,23 @@ export const SOURCE_APP_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-/** The display label of a `source_app` id; an id the app does not know yet is shown as is. */
-export function sourceAppLabel(app: string): string {
-  return SOURCE_APP_LABELS[app] ?? app;
+/**
+ * The display label of a `source_app` id: an app by its name in every language, the three that are words ("Phone call",
+ * "Voice note", "Other") in the window's language, or in English with `lang` "en" (a window still in English); an id
+ * the app does not know yet is shown as is.
+ */
+export function sourceAppLabel(app: string, lang?: Lang): string {
+  const { t } = wordsIn(lang);
+  switch (app) {
+    case "phone_call":
+      return t("Phone call");
+    case "voice_note":
+      return t("Voice note");
+    case "other":
+      return t("Other");
+    default:
+      return SOURCE_APP_LABELS[app] ?? app;
+  }
 }
 
 export function formatDuration(ms?: number | null): string {
@@ -49,17 +63,43 @@ export function clockTime(date: Date): string {
     : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-export function formatWhen(iso?: string, now: Date = new Date()): string {
-  if (!iso) return "";
+/** When something happened, in parts, in the window's language: the day ("Today", "Yesterday", "23 Nov") and the time. */
+export type WhenParts = { day: string; time: string; today: boolean; yesterday: boolean };
+
+/**
+ * The parts of formatWhen, for a place that shows only one of them (Activity's time today, a project's last call, a
+ * row's time): never by splitting formatWhen's line, which in Urdu is one right-to-left run. In Urdu the day is آج, کل
+ * or "23 نومبر" and the time keeps its space from breaking ("2:00 PM" whole). Null with no date, or one that isn't.
+ */
+export function whenParts(iso?: string | null, now: Date = new Date()): WhenParts | null {
+  if (!iso) return null;
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const sameDay = date.toDateString() === now.toDateString();
-  const time = clockTime(date);
-  if (sameDay) return `Today · ${time}`;
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
-  return `${date.toLocaleDateString(language() === "ur" ? "ur-PK" : [], { month: "short", day: "numeric" })} · ${time}`;
+  if (Number.isNaN(date.getTime())) return null;
+  const today = date.toDateString() === now.toDateString();
+  const before = new Date(now);
+  before.setDate(now.getDate() - 1);
+  const yesterday = date.toDateString() === before.toDateString();
+  const urdu = language() === "ur";
+  const time = urdu ? clockTime(date).replace(/\s/g, "\u00A0") : clockTime(date);
+  if (today) return { day: urdu ? t("Today") : "Today", time, today, yesterday };
+  if (yesterday) return { day: urdu ? t("Yesterday") : "Yesterday", time, today, yesterday };
+  return { day: date.toLocaleDateString(urdu ? "ur-PK" : [], { month: "short", day: "numeric" }), time, today, yesterday };
+}
+
+/** One of whenParts' parts as a line shows it: as it is in English; in Urdu in its own isolate, closed. */
+export function whenPart(part: string): string {
+  return language() === "ur" ? isolate(part) : part;
+}
+
+/**
+ * When something happened: "Today · 2:00 PM", "Yesterday · 2:00 PM", "23 Nov · 2:00 PM". In Urdu the day and the time
+ * are each their own isolated run inside one right-to-left run, so neither a left-to-right box (.el-ltr) nor a sentence
+ * around it swaps the month and the time or puts PM on its own line. English as it always was.
+ */
+export function formatWhen(iso?: string, now: Date = new Date()): string {
+  const parts = whenParts(iso, now);
+  if (!parts) return "";
+  return language() === "ur" ? `${RLI}${whenPart(parts.day)} · ${whenPart(parts.time)}${PDI}` : `${parts.day} · ${parts.time}`;
 }
 
 export function timestamp(ms: number): string {
@@ -161,8 +201,8 @@ export function copiedTranscript(
 }
 
 /** Display form of an accelerator for the current platform. */
-export function prettyShortcut(accelerator: string | undefined, platform: string): string {
-  if (!accelerator) return "Not set";
+export function prettyShortcut(accelerator: string | undefined, platform: string, lang?: Lang): string {
+  if (!accelerator) return wordsIn(lang).t("Not set");
   return accelerator
     .split("+")
     .map((k) => {

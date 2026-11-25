@@ -669,7 +669,10 @@ describe("Keyboard shortcuts v2", () => {
 
   it("warns when a shortcut is one browsers use", async () => {
     await show("shortcuts");
-    expect(screen.getByText(/This shortcut also opens the element picker \(DevTools\) in browsers; EchoLedger takes it over\./)).toBeInTheDocument();
+    // EL-UX (D3a review): who else uses it, never what it does there, so the app's name is the only value.
+    // Start or stop saving (Ctrl+Shift+R) and Copy the last 2 minutes (Ctrl+Shift+C), both browsers' keys.
+    const notes = screen.getAllByText("This shortcut is also used by browsers; EchoLedger takes it over.");
+    expect(notes.map((note) => note.closest("[data-setting]")?.getAttribute("data-setting"))).toEqual(["shortcuts.global.toggle_saving", "shortcuts.global.copy_last2_min"]);
   });
 });
 
@@ -717,6 +720,7 @@ describe("Plan & usage v2", () => {
     expect(screen.getByTestId("plan-ultra")).toHaveTextContent("Everything in Pro, plus:");
     fireEvent.click(screen.getByRole("button", { name: /^See every feature/ }));
     expect(screen.getByRole("table", { name: "Every feature" })).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Every feature" })).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Feature", "Free (yours)", "Pro", "Ultra"]);
     expect(screen.getByRole("button", { name: /^See every feature/ })).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(screen.getByRole("button", { name: "Promo code" }));
     expect(screen.getByTestId("sheet")).toHaveTextContent("pro|choose");
@@ -771,6 +775,19 @@ describe("Plan & usage v2", () => {
     cleanup();
     await show("key");
     expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+  });
+
+  it("D-230: near the uploads a day the meter says uploads, never team members; a team with no plan known says who manages it", async () => {
+    const e = sampleEntitlements("pro");
+    e.limits.uploads_per_day = { limit: 200, used: 170 };
+    await showPlan(e);
+    expect(screen.getByTestId("meter-uploads_per_day")).toHaveTextContent("You've used 85% of your daily uploads.");
+    expect(screen.getByTestId("meter-uploads_per_day")).not.toHaveTextContent("team members");
+    cleanup();
+    respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
+    await showPlan({ ...sampleEntitlements("pro"), plan: null });
+    expect(screen.getByText("Qureshi Textiles's plan is managed by its owner.")).toBeInTheDocument();
+    expect(screen.queryByText(/is on Your/)).toBeNull();
   });
 
   it("a team's member: the plan's facts, who manages it, and no button", async () => {

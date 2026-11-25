@@ -25,7 +25,7 @@ export function RecordingSteps({ item, improving, notify }: {
   notify?: Notify;
 }) {
   const [asked, setAsked] = useState(false);
-  const { step, line } = stepOf(item);
+  const { step, line } = stepOf(item, null, "en");
   // An upload has no other place to say its percent; a transcript's progress is said where the transcript will be.
   const failed = itemState(item) === "failed";
   if (!step && !improving) return null;
@@ -57,7 +57,7 @@ export function RecordingSteps({ item, improving, notify }: {
 
 /** The slim bar over a readable transcript while its views are written (C3): a small spinner, the words, the percent. */
 export function ConvertingBar({ view, percent }: { view: TranscriptView | null; percent: number | null }) {
-  const label = convertingText(view, percent);
+  const label = convertingText(view, percent, "en");
   return (
     <div className="improving-bar" data-testid="improving-bar">
       <span className="small muted converting-line" role="status"><span className="spinner" aria-hidden="true" />{label}</span>
@@ -72,7 +72,7 @@ export function ConvertingBar({ view, percent }: { view: TranscriptView | null; 
 export function ConvertFailed({ view, onRetry, retrying }: { view: TranscriptView | null; onRetry?: () => void; retrying?: boolean }) {
   return (
     <div className="convert-failed" data-testid="convert-failed" role="status">
-      <span className="small muted"><AlertIcon size={14} />{convertFailedText(view)}</span>
+      <span className="small muted"><AlertIcon size={14} />{convertFailedText(view, "en")}</span>
       {onRetry && <button type="button" className="btn ghost compact" disabled={retrying} onClick={onRetry}>{retrying ? "Starting…" : "Try again"}</button>}
     </div>
   );

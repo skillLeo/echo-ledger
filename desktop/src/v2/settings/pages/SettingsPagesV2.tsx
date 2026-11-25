@@ -31,17 +31,16 @@ import { ExcludedAppsPageV2, MicrophonePageV2, ScreenMomentsPageV2 } from "./Rec
 import { StoragePageV2 } from "./StorageV2";
 import { AppearancePageV2, ShortcutsPageV2, useThemeChoice, type LanguageChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
+import { t } from "../../../i18n";
 
 /** Where a section asks the page to go: the setting (highlighted), else in a group's page its section (or its top). */
-function targetOf(t: { page: string; setting: string | null }, seq: number, grouped: boolean): PageTarget | null {
-  if (t.setting) return { id: t.setting, seq };
-  if (!grouped || setting(t.page).page !== null) return null;
-  const group = groupOf(t.page);
-  return { id: t.page, seq, how: group && entryOf(group) === t.page ? "top" : "part" };
+function targetOf(goal: { page: string; setting: string | null }, seq: number, grouped: boolean): PageTarget | null {
+  if (goal.setting) return { id: goal.setting, seq };
+  if (!grouped || setting(goal.page).page !== null) return null;
+  const group = groupOf(goal.page);
+  return { id: goal.page, seq, how: group && entryOf(group) === goal.page ? "top" : "part" };
 }
 
-/** The start-up switches with a title of their own on a group's page (Shortcuts & start-up). */
-const STARTUP_TITLE = "Start-up";
 /** The Mac's menu bar icon, its timer and the Dock's number, under their own title. */
 const ICON_IDS: readonly string[] = ["app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"];
 
@@ -80,10 +79,10 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
   const [account, setAccount] = useAccount();
   const platform = status.platform;
   useEffect(() => {
-    const t = sectionTarget(section.id, grouped);
-    if (!t) return;
-    setPage(t.page);
-    setTarget(targetOf(t, section.seq, grouped));
+    const goal = sectionTarget(section.id, grouped);
+    if (!goal) return;
+    setPage(goal.page);
+    setTarget(targetOf(goal, section.seq, grouped));
   }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = (next: string) => {
@@ -150,18 +149,18 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       <>
         <div className="el-settings-kept" hidden={!!parent}>
           {kept && (
-            <SettingsPage key={kept.title} kind="group" title={kept.title} target={parent ? null : target}>
+            <SettingsPage key={kept.title} kind="group" title={t(kept.title)} target={parent ? null : target}>
               <GroupParts group={kept} available={available} body={bodyFor} settings={settings} onSettings={setSettings}
                 onHelp={onSection ? () => onSection("help") : undefined} />
             </SettingsPage>
           )}
         </div>
-        {parent && <SettingsPage key={page} title={setting(page).title} back={home ? home.title : setting(parent).title} target={target} onBack={back}>{bodyFor(page)}</SettingsPage>}
+        {parent && <SettingsPage key={page} title={setting(page).title} back={home ? t(home.title) : setting(parent).title} target={target} onBack={back}>{bodyFor(page)}</SettingsPage>}
       </>
     );
   }
   return (
-    <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : "Settings"} target={target}
+    <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : t("Settings")} target={target}
       onBack={() => (!parent ? onHome() : V2_SETTINGS_PAGES.has(parent) ? open(parent) : onSection ? onSection(parent) : onHome())}>
       {bodyFor(page)}
     </SettingsPage>
@@ -204,10 +203,11 @@ function GroupParts({ group, available, body, settings, onSettings, onHelp }: {
       const row = (rowId: string) => <StartupRowV2 key={rowId} id={rowId} settings={settings} onSettings={onSettings} />;
       const own = startup.filter((s) => !ICON_IDS.includes(s));
       const icons = startup.filter((s) => ICON_IDS.includes(s));
-      parts.push({ key: "startup", title: STARTUP_TITLE, body: (
+      // The start-up switches, with a title of their own on the group's page (Shortcuts & start-up).
+      parts.push({ key: "startup", title: t("Start-up"), body: (
         <>
           {own.length > 0 && <Group>{own.map(row)}</Group>}
-          {icons.length > 0 && <Group title="Menu bar & Dock">{icons.map(row)}</Group>}
+          {icons.length > 0 && <Group title={t("Menu bar & Dock")}>{icons.map(row)}</Group>}
         </>
       ) });
       continue;
@@ -220,7 +220,8 @@ function GroupParts({ group, available, body, settings, onSettings, onHelp }: {
   return (
     <>
       {parts.map((p) => {
-        const shown = titled && !p.untitled && p.title !== group.title;
+        // A page named as its group (Privacy & data) has no title of its own: compared in English, as the group's ids.
+        const shown = titled && !p.untitled && findSetting(p.key)?.title !== group.title;
         return (
           <section key={p.key} className="el-settings-part" id={partId(p.key)} aria-labelledby={shown ? `${partId(p.key)}-title` : undefined}>
             {shown && <h2 className="el-title-s el-settings-part__title" id={`${partId(p.key)}-title`} tabIndex={-1}>{p.title}</h2>}

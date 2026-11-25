@@ -44,6 +44,10 @@ it('answers every flag, off, by default, in the contract\'s order', function () 
         'v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane',
         // Since 2.0.0-s.
         'v21_win_titlebar',
+        // Since 2.0.0-v (an addition).
+        'v21_urdu',
+        // Since 2.0.0-w.
+        'call_rules',
     ])->and($classic)->toBeFalse();
 });
 
@@ -69,6 +73,20 @@ describe('the v2.1 flags (contract 2.0.0-r)', function () {
             ->and(uiFlagsOf($other)[0])->toBe(flagsWith());
         app(InterfaceFlags::class)->set('v21_zoom', true, 0, [], []);
         expect(uiFlagsOf($other)[0])->toBe(flagsWith(['v21_zoom']));
+    });
+
+    it('has v21_urdu, the desktop\'s Urdu: off or everyone like the others, never opt-in (2.0.0-v, an addition)', function () {
+        expect(InterfaceFlags::V21)->toContain('v21_urdu')
+            ->and(InterfaceFlags::LABELS['v21_urdu'])->toBe('v2.1 desktop: the app in the account\'s language (Urdu)')
+            ->and(InterfaceFlags::hasOptIn('v21_urdu'))->toBeFalse()
+            ->and(array_slice(InterfaceFlags::V21, -1))->toBe(['v21_urdu']);
+
+        [$admin, $other] = [Fx::user(), Fx::user()];
+        expect(uiFlagsOf($admin)[0]['v21_urdu'])->toBeFalse();
+        app(InterfaceFlags::class)->set('v21_urdu', false, 0, [], [$admin->id]);
+        expect(uiFlagsOf($admin)[0])->toBe(flagsWith(['v21_urdu']))->and(uiFlagsOf($other)[0])->toBe(flagsWith());
+        app(InterfaceFlags::class)->set('v21_urdu', true, 0, [], []);
+        expect(uiFlagsOf($other)[0])->toBe(flagsWith(['v21_urdu']));
     });
 
     it('has no opt-in, and the person\'s design choice neither turns one on nor off', function () {
@@ -143,7 +161,7 @@ it('turns a flag on for a share of accounts, the same accounts every time', func
     expect($people->contains(fn (User $p): bool => $flags->active('ui_v2.ask', $p)))->toBeFalse();
 });
 
-it('turns every ui_v2 flag off with Switch back to classic, but not live_assist or the v2.1 flags, and back on', function () {
+it('turns every ui_v2 flag off with Switch back to classic, but not live_assist, the v2.1 flags or call_rules, and back on', function () {
     $user = Fx::user();
     $flags = app(InterfaceFlags::class);
     foreach (InterfaceFlags::names() as $name) {
@@ -152,11 +170,12 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist 
     $api = $this->api(Fx::token(Fx::device($user, ['workspace_id' => $user->current_workspace_id])));
 
     $api->putJson('/api/account/ui', ['classic' => true])->assertOk()
-        // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them.
-        ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21]), 'ui_classic' => true,
+        // Since 2.0.0-r the v2.1 flags are not the design either: classic leaves them as the admin set them (since
+        // 2.0.0-w call_rules too).
+        ->assertExactJson(['ui_flags' => flagsWith(['live_assist', ...InterfaceFlags::V21, InterfaceFlags::CALL_RULES]), 'ui_classic' => true,
             // A person who went back to classic can try the new design again.
             'ui_design' => ['choice' => 'classic', 'current' => 'classic', 'can_try' => true, 'can_switch_back' => false]]);
-    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist', ...InterfaceFlags::V21]))
+    expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist', ...InterfaceFlags::V21, InterfaceFlags::CALL_RULES]))
         ->and($user->fresh()->ui_classic)->toBeTrue();
 
     $api->putJson('/api/account/ui', ['classic' => false])->assertOk()->assertJsonPath('ui_classic', false);

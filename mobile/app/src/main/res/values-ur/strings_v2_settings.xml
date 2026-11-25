@@ -99,7 +99,7 @@
         <item quantity="other">%1$d ایپس</item>
     </plurals>
     <string name="v2_set_search_settings">ترتیبات تلاش کریں</string>
-    <string name="v2_set_no_settings_title">\"%1$s\" سے کوئی ترتیب نہیں ملی</string>
+    <string name="v2_set_no_settings_title">\"%1$s\" سے ترتیبات میں کچھ نہیں ملا</string>
     <string name="v2_set_no_settings_body">کوئی اور لفظ آزمائیں، جیسے زبان، لاک یا تھیم۔</string>
     <string name="v2_set_phone_font">فون کا فونٹ استعمال کریں</string>
     <string name="v2_set_phone_font_help">متن فون کی ترتیبات والے فونٹ میں نظر آئے گا</string>

@@ -13,10 +13,10 @@ import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
 import { SharedView } from "./SharedView";
 import { RequestLinksSheet } from "./RequestLinks";
-import { settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
+import { settingsAvailability, signOutBody } from "./SettingsView";
 import { ConfirmHost } from "./ConfirmHost";
 import { roleOf } from "./AccountSettings";
-import { searchSettings } from "../../lib/settingsIndex";
+import { palettePages, paletteSettings } from "../../v2/settings/palette";
 import { OnboardingView } from "./OnboardingView";
 import { OtherSideBanner, PermissionLossNotice } from "./Permissions";
 import { AfterCallNotice } from "./AfterCallNotice";
@@ -48,7 +48,7 @@ import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
 import { call as accountCall, failureText, replyText } from "../../lib/account";
-import { useLanguage, type Lang } from "../../i18n";
+import { t, useLanguage, type Lang } from "../../i18n";
 import { accountLanguage, useFollowLanguage } from "../../i18n/language";
 import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
@@ -1134,7 +1134,8 @@ export default function MainApp() {
   const libraryCounts = libraryFacts ? {
     ...libraryViewCounts(libraryFacts.facts),
     // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
-    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+    // The calls waiting here add only those the server has no session for (the others are those items): never twice.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisionsHere ?? status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
   } : null;
   const labelCounts: Record<string, number> = {};
   for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;
@@ -1148,8 +1149,7 @@ export default function MainApp() {
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
   const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
-  const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
-    .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
+  const findSettings = (query: string) => paletteSettings(query, settingsAvailable, openAccount);
   const upgradeOpen = !!openUpgradeRequest(entitlements);
   // Every page, place, project and Settings page by name, for the window's search (the palette).
   const pages: ShellPage[] = [
@@ -1162,7 +1162,7 @@ export default function MainApp() {
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
-    ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
+    ...palettePages(settingsAvailable, openAccount),
     { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
@@ -1338,7 +1338,7 @@ export default function MainApp() {
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
                       // Two levels: back to its group's page (About & help), never to "Settings".
-                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: t(HELP_GROUP.title) } : { onBack: onHome })} />
                   : hasV2Page(section.id, ui.flags["ui_v2.library"])
                     ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
                       language={urdu && account ? { value: accountLanguage(account) ?? lang, onChange: (l) => void changeLanguage(l), error: languageError } : undefined}
@@ -1415,7 +1415,7 @@ export default function MainApp() {
         {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
         {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app, "en"))}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
             workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
@@ -1446,7 +1446,7 @@ export default function MainApp() {
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
               liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
-              setupAttention: shellChip(status, sourceAppLabel).kind === "setup",
+              setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
                 // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).

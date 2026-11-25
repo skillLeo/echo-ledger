@@ -592,7 +592,8 @@ class ViewCaptureSession extends ViewRecord
                         $this->historyAction(),
                     ])->dropdown(false)->visible(fn (): bool => $this->editableTranscript() !== null),
                     ActionGroup::make([
-                        $this->downloadAction(),
+                        // W-237: a menu item like the others; the classic header's Download stays a button.
+                        $this->downloadAction()->grouped(),
                         $this->wrongScriptAction(),
                         $this->showAsAction(),
                         WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label(__('WhatsApp')),

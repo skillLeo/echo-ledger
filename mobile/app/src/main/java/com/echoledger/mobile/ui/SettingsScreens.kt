@@ -86,12 +86,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.BuildConfig
@@ -363,63 +370,97 @@ private fun ProfileCard(
         listOfNotNull(name, email, if (signedIn) "${plan.displayName} plan" else null).joinToString(", ") +
             if (signedIn) ". Opens plan and usage." else ""
     com.echoledger.mobile.ui.design.SettingsSection(null) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.weight(1f).clickable(enabled = signedIn, onClickLabel = "Open plan and usage", onClick = onOpen)
-                    .semantics(mergeDescendants = true) { contentDescription = spoken }.padding(Space.s4),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                com.echoledger.mobile.ui.design.Avatar(name, size = 56.dp)
-                Column(Modifier.padding(start = Space.s3).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        name,
-                        style = type.titleM,
-                        color = c.text,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    email?.let {
+        // P-061: Upgrade sits beside the name and email while they fit whole there, else under them (a long email, a
+        // small phone, large text); a sibling of the card's tap target either way.
+        Layout(
+            content = {
+                Row(
+                    Modifier.clickable(enabled = signedIn, onClickLabel = "Open plan and usage", onClick = onOpen)
+                        .semantics(mergeDescendants = true) { contentDescription = spoken }.padding(Space.s4),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.echoledger.mobile.ui.design.Avatar(name, size = 56.dp)
+                    Column(Modifier.padding(start = Space.s3).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            it,
-                            style = type.body,
-                            color = c.textMuted,
+                            name,
+                            style = type.titleM,
+                            color = c.text,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                    }
-                    if (signedIn) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            com.echoledger.mobile.ui.design.PlanTag(plan.displayName)
-                            planLine?.let {
-                                Text(
-                                    it,
-                                    style = type.labelM.copy(fontWeight = FontWeight.Normal),
-                                    color = c.textMuted,
-                                    modifier = Modifier.padding(start = Space.s2),
-                                    maxLines = 1
-                                )
-                            }
+                        email?.let {
+                            Text(
+                                it,
+                                style = type.body,
+                                color = c.textMuted,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
-                        plan.membership()?.takeIf {
-                            plan.role != "owner" || plan.workspace?.equals("Personal", ignoreCase = true) == false
-                        }?.let {
-                            Text(it, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
+                        if (signedIn) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                                com.echoledger.mobile.ui.design.PlanTag(plan.displayName)
+                                planLine?.let {
+                                    Text(
+                                        it,
+                                        style = type.labelM.copy(fontWeight = FontWeight.Normal),
+                                        color = c.textMuted,
+                                        modifier = Modifier.padding(start = Space.s2),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            plan.membership()?.takeIf {
+                                plan.role != "owner" || plan.workspace?.equals("Personal", ignoreCase = true) == false
+                            }?.let {
+                                Text(it, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
+                            }
                         }
                     }
                 }
+                if (upgradeLabel != null) {
+                    com.echoledger.mobile.ui.design.EchoButton(
+                        upgradeLabel,
+                        onUpgrade,
+                        Modifier.padding(end = Space.s4),
+                        kind = if (filled) {
+                            com.echoledger.mobile.ui.design.ButtonKind.Primary
+                        } else {
+                            com.echoledger.mobile.ui.design.ButtonKind.Secondary
+                        }
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            measurePolicy = remember { ProfileCardLayout(textStart = Space.s4 + 56.dp + Space.s3, below = Space.s3) }
+        )
+    }
+}
+
+/**
+ * [ProfileCard]'s two parts: the card (avatar, name, email, plan) and Upgrade. Beside, as the Row they were: Upgrade at
+ * its own width and the card in the rest, both centred; that only while the card's words fit there whole. Otherwise
+ * the card takes the whole width and Upgrade goes under it, in line with the text ([textStart]), [below] above the edge.
+ */
+private class ProfileCardLayout(private val textStart: Dp, private val below: Dp) : MeasurePolicy {
+    override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
+        val card = measurables[0]
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else card.maxIntrinsicWidth(Constraints.Infinity)
+        val button = measurables.getOrNull(1)?.measure(loose.copy(maxWidth = width))
+        if (button == null || card.maxIntrinsicWidth(Constraints.Infinity) <= width - button.width) {
+            val room = (width - (button?.width ?: 0)).coerceAtLeast(0)
+            val words = card.measure(loose.copy(minWidth = room, maxWidth = room))
+            val height = maxOf(words.height, button?.height ?: 0).coerceAtLeast(constraints.minHeight)
+            return layout(width, height) {
+                words.placeRelative(0, Alignment.CenterVertically.align(words.height, height))
+                button?.placeRelative(room, Alignment.CenterVertically.align(button.height, height))
             }
-            if (upgradeLabel != null) {
-                com.echoledger.mobile.ui.design.EchoButton(
-                    upgradeLabel,
-                    onUpgrade,
-                    Modifier.padding(end = Space.s4),
-                    kind = if (filled) {
-                        com.echoledger.mobile.ui.design.ButtonKind.Primary
-                    } else {
-                        com.echoledger.mobile.ui.design.ButtonKind.Secondary
-                    }
-                )
-            }
+        }
+        val words = card.measure(loose.copy(minWidth = width, maxWidth = width))
+        return layout(width, words.height + button.height + below.roundToPx()) {
+            words.placeRelative(0, 0)
+            button.placeRelative(textStart.roundToPx(), words.height)
         }
     }
 }

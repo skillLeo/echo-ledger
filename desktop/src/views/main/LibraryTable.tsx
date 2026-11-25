@@ -44,16 +44,16 @@ function cell(item: LibraryItem, column: TableColumn, views: ViewsSummary | null
     case "length":
       return formatDuration(item.duration_ms);
     case "app":
-      return item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : "");
+      return item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app, "en") : "");
     case "project":
       return item.client?.name ?? "Inbox";
     case "status": {
       const state = itemState(item);
       // A ready recording whose default view is still written says so (U19), with the percent once there is one.
-      const converting = state === "ready" ? rowViewsLine(views) : null;
+      const converting = state === "ready" ? rowViewsLine(views, "en") : null;
       if (converting?.state === "making") return <span className="pill processing"><span className="spinner" aria-hidden="true" />{converting.text}</span>;
       if (converting?.state === "failed") return <span className="pill failed" data-testid="convert-failed-pill"><AlertIcon size={14} aria-hidden="true" />{converting.text}</span>;
-      return <span className={`pill ${state}`}>{state === "processing" ? stepOf(item).line ?? STATE_TEXT[state] : STATE_TEXT[state]}</span>;
+      return <span className={`pill ${state}`}>{state === "processing" ? stepOf(item, null, "en").line ?? STATE_TEXT[state] : STATE_TEXT[state]}</span>;
     }
     case "labels":
       return (item.labels ?? []).map((l) => <span key={l} className="label-chip small">{l}</span>);

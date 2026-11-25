@@ -1,6 +1,7 @@
 // The library's transcript player (plan B6): which line and word are being played, skipping silences, speaker
 // names and grouping, the keys, and search snippets. Pure; the views only wire them to the audio element.
 import type { Segment } from "./ipc";
+import { wordsIn, type Lang } from "../i18n/locale.ts";
 
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 /** Silences shorter than this are not skipped. */
@@ -73,8 +74,16 @@ export type PlayerKey = "toggle" | "back10" | "forward10" | "back5" | "forward5"
 /** The keys `playerKey` answers, as people read them: the player's tooltips, its hint and Help all say these (D-047). */
 export const PLAYER_KEYS: Readonly<Record<PlayerKey, string>> = { toggle: "Space", back5: "←", forward5: "→", back10: "Shift+←", forward10: "Shift+→" };
 
-/** The player's one-line hint, from the same keys. */
-export const PLAYER_HINT = `${PLAYER_KEYS.toggle} plays · ${PLAYER_KEYS.back5} / ${PLAYER_KEYS.forward5} 5 s · ${PLAYER_KEYS.back10} / ${PLAYER_KEYS.forward10} 10 s`;
+/**
+ * The player's one-line hint, from the same keys, in the window's language (or English with `lang` "en"). The keys keep
+ * their names in every language, and each is one value of the line.
+ */
+export function playerHint(lang?: Lang): string {
+  const seconds = (n: number) => `${n} s`;
+  return wordsIn(lang).t(":toggle plays · :back5 / :forward5 :short · :back10 / :forward10 :long", { ...PLAYER_KEYS, short: seconds(5), long: seconds(10) });
+}
+/** The hint in English, for a window still in English (classic's player). */
+export const PLAYER_HINT = playerHint("en");
 
 /**
  * What a key does in the player: Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s. Since v1.6

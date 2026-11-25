@@ -4,5 +4,5 @@
     @foreach ($meters as $meter)
         @include('filament.settings.meter', ['meter' => $meter, 'withId' => false])
     @endforeach
-    <x-el.row :title="__('Plan & usage')" :href="\App\Filament\Auth\EditProfile::settingsUrl('plan')" :value="$context->plan()->name" chevron />
+    <x-el.row :title="\App\Filament\Support\ConsoleV2::any() ? __('Plan & billing') : __('Plan & usage')" :href="\App\Filament\Auth\EditProfile::settingsUrl('plan')" :value="$context->plan()->name" chevron />
 </x-el.section>

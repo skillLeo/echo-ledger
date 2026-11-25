@@ -105,6 +105,16 @@ it('never lets a typed name close its isolate and flip the sentence', function (
         ->and(mb_substr_count($line, PDI))->toBe(mb_substr_count($line, FSI));
 });
 
+it('closes every isolate a typed name opens, inside its own, so the rest of the sentence is never left isolated (W-233)', function () {
+    app()->setLocale('ur');
+    $rlo = "\u{202E}";
+    $lri = "\u{2066}";
+
+    expect(IsolatingTranslator::isolate('Ali'.FSI.'evil'))->toBe(FSI.'Ali'.FSI.'evil'.PDI.PDI)
+        ->and(IsolatingTranslator::isolate('Ali'.$rlo.$lri.'x'))->toBe(FSI.'Ali'.$rlo.$lri.'x'.PDI.PDI)
+        ->and(__('Open the menu for :name', ['name' => 'Ali'.FSI.'evil']))->toBe(FSI.'Ali'.FSI.'evil'.PDI.PDI.' کا مینو کھولیں');
+});
+
 it('uses the app\'s locale when the one given is empty, as Laravel does', function () {
     app()->setLocale('ur');
 
@@ -129,7 +139,8 @@ it('isolates a name on an Urdu console page', function () {
 
     $html = (string) $this->get('/app')->assertOk()->getContent();
 
-    expect($html)->toContain('aria-label="'.FSI.'Ahmed Khan'.PDI.' کا مینو کھولیں"');
+    // UX-18: the rail's Account is named "Account, <name>" ("اکاؤنٹ، <name>"), the name in its own isolate.
+    expect($html)->toContain('aria-label="اکاؤنٹ، '.FSI.'Ahmed Khan'.PDI.'"');
 });
 
 it('isolates enums and stringable objects by their value', function () {

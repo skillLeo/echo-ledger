@@ -18,7 +18,7 @@
                 @php($value = $context->tag($entry) === null ? $context->value($entry) : null)
                 <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}"
                     aria-label="{{ __(':setting, in :place', ['setting' => SettingsIndex::title($entry), 'place' => SettingsIndex::breadcrumb($entry)]) }}{{ $value ? ', '.$value : '' }}">
-                    @svg($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
+                    @svg(...\App\Filament\Support\RtlIcons::of($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true']))
                     <span class="el-set-text">
                         <span class="el-set-title">{!! SettingsIndex::marked(SettingsIndex::title($entry), $query) !!}</span>
                         <span class="el-set-sub">{{ SettingsIndex::breadcrumb($entry) }}</span>
@@ -42,7 +42,7 @@
                 @php($answer = __((string) $entry['answer']))
                 @php($stop = str_contains($answer, '. ') ? '.' : (str_contains($answer, '۔ ') ? '۔' : null))
                 <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}">
-                    @svg('heroicon-o-question-mark-circle', ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
+                    @svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-question-mark-circle', ['class' => 'el-set-icon', 'aria-hidden' => 'true']))
                     <span class="el-set-text">
                         <span class="el-set-title">{!! SettingsIndex::marked(SettingsIndex::title($entry), $query) !!}</span>
                         <span class="el-set-sub">{{ $stop === null ? $answer : \Illuminate\Support\Str::before($answer, $stop.' ').$stop }}</span>
@@ -61,7 +61,7 @@
             <x-el.section :title="__('Closest matches')">
                 @foreach ($results['closest'] as $entry)
                     <a href="{{ $context->url($entry) }}" class="el-set-row has-icon el-result" data-result="{{ $entry['id'] }}">
-                        @svg($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
+                        @svg(...\App\Filament\Support\RtlIcons::of($this->resultIcon($entry), ['class' => 'el-set-icon', 'aria-hidden' => 'true']))
                         <span class="el-set-text">
                             <span class="el-set-title">{{ SettingsIndex::title($entry) }}</span>
                             <span class="el-set-sub">{{ SettingsIndex::breadcrumb($entry) }}</span>

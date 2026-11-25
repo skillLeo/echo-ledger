@@ -1,10 +1,16 @@
 import type { ComponentPropsWithRef, ComponentType, MouseEvent, ReactNode } from "react";
+import { MIRRORED_IN_RTL } from "./icons";
 
 export type IconType = ComponentType<{ className?: string }>;
 
-/** An icon from icons.ts at one of the three sizes; `directional` glyphs (chevrons, arrows) mirror right-to-left. */
+/**
+ * An icon from icons.ts at one of the three sizes; `directional` glyphs (chevrons, arrows) mirror right-to-left, and
+ * so do the ones that point a way or read as text wherever they are drawn (icons.ts MIRRORED_IN_RTL: sort, sign out,
+ * send, Ask, help, D-231).
+ */
 export function Icon({ icon: Glyph, size = "sm", directional = false }: { icon: IconType; size?: "sm" | "md" | "lg"; directional?: boolean }) {
-  const cls = ["el-icon", size !== "sm" && `el-icon--${size}`, directional && "el-icon--directional"].filter(Boolean).join(" ");
+  const mirrored = directional || MIRRORED_IN_RTL.has(Glyph);
+  const cls = ["el-icon", size !== "sm" && `el-icon--${size}`, mirrored && "el-icon--directional"].filter(Boolean).join(" ");
   return <span className={cls} aria-hidden="true"><Glyph /></span>;
 }
 

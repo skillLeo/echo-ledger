@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\User;
+use App\Services\ActivityActors;
 use App\Services\ActivityFeed;
 use App\Services\UploadRetries;
 use Illuminate\Http\JsonResponse;
@@ -30,9 +31,12 @@ final class ActivityController extends Controller
             $query->where('dedupe_key', 'like', $data['group'].':%');
         }
         $items = $query->limit((int) ($data['limit'] ?? 30))->get();
+        // Since 2.0.0-aa (UX-18): the person each item is about, for its icon place (two queries for the whole page).
+        $people = ActivityActors::of($user, $items);
 
         return response()->json([
-            'data' => $items->map(fn (DatabaseNotification $n): array => ActivityFeed::payload($n))->values(),
+            'data' => $items->map(fn (DatabaseNotification $n): array => [...ActivityFeed::payload($n),
+                'actor' => ActivityActors::payload($people[$n->id] ?? null)])->values(),
             'unread_count' => $user->unreadNotifications()->count(),
             // Since 2.0.0-r (BE-03): the person's latest Retry all; an app newer than its own last run retries.
             'retry_requested_at' => UploadRetries::requestedAt($user),

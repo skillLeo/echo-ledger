@@ -5,6 +5,7 @@ import { setting } from "../../../lib/settingsRegistry";
 import { NOT_SHOWN, NOTIFICATION_CATEGORIES } from "../../../views/main/SecuritySettings";
 import { ListRow, TextField } from "../../components";
 import { Group, ResetDefaults, SwitchSetting, type Patch, type Run } from "./rows";
+import { t } from "../../../i18n";
 
 const isOn = (map: Partial<Record<string, boolean>> | undefined, c: string) => map?.[c] !== false;
 
@@ -13,16 +14,16 @@ export function NotificationsPageV2({ settings, patch, run }: { settings: Settin
   const soundsOn = NOTIFICATION_CATEGORIES.some(([c]) => isOn(settings.notificationSounds, c));
   const quiet = settings.quietHours && all;
   const test = () => void run(() => api.notificationTest("other").then((shown) => {
-    if (!shown) throw NOT_SHOWN;
-  }), "Test notification sent");
+    if (!shown) throw t(NOT_SHOWN);
+  }), t("Test notification sent"));
   const time = (id: "notifications.quiet_from" | "notifications.quiet_to", value: string, save: (v: string) => void) => (
     <ListRow compact anchor={id} title={setting(id).title}
-      control={<TextField label={<span className="el-visually-hidden">{`Quiet hours ${setting(id).title.toLowerCase()}`}</span>} type="time" value={value} disabled={!quiet} dir="ltr"
+      control={<TextField label={<span className="el-visually-hidden">{id === "notifications.quiet_from" ? t("Quiet hours from") : t("Quiet hours to")}</span>} type="time" value={value} disabled={!quiet} dir="ltr"
         className="el-setting__time" onChange={(e) => e.target.value && save(e.target.value)} />} />
   );
   return (
     <>
-      <Group footer={<p>No notifications in quiet hours, except Call capture & readiness. They still wait in the bell.</p>}>
+      <Group footer={<p>{t("No notifications in quiet hours, except Call capture & readiness. They still wait in the bell.")}</p>}>
         <SwitchSetting id="notifications.enabled" on={all} onChange={(v) => void patch({ activityNotifications: v })} />
         <SwitchSetting id="notifications.sounds" on={soundsOn} disabled={!all}
           onChange={(v) => void patch({ notificationSounds: Object.fromEntries(NOTIFICATION_CATEGORIES.map(([c]) => [c, v])) })} />
@@ -30,7 +31,7 @@ export function NotificationsPageV2({ settings, patch, run }: { settings: Settin
         {time("notifications.quiet_from", settings.quietFrom, (v) => void patch({ quietFrom: v }))}
         {time("notifications.quiet_to", settings.quietTo, (v) => void patch({ quietTo: v }))}
       </Group>
-      <Group title="Notify me about">
+      <Group title={t("Notify me about")}>
         {NOTIFICATION_CATEGORIES.map(([category]) => (
           <SwitchSetting key={category} id={`notifications.kind.${category}`} on={isOn(settings.notificationCategories, category)} disabled={!all}
             onChange={(v) => void patch({ notificationCategories: { [category]: v } })} />
@@ -39,7 +40,7 @@ export function NotificationsPageV2({ settings, patch, run }: { settings: Settin
       <Group>
         <ListRow compact anchor="notifications.test" title={setting("notifications.test").title} onClick={test} />
       </Group>
-      <ResetDefaults page="Notifications" onReset={() => void patch({
+      <ResetDefaults page={t("Notifications")} onReset={() => void patch({
         activityNotifications: true, quietHours: false,
         notificationCategories: Object.fromEntries(NOTIFICATION_CATEGORIES.map(([c]) => [c, true])),
         notificationSounds: Object.fromEntries(NOTIFICATION_CATEGORIES.map(([c]) => [c, true])),

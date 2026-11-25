@@ -6,7 +6,7 @@ import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type Li
 import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
 import { stepOf, uploadLine } from "../../lib/progress";
 import { useWindowShown } from "../../lib/visibility";
-import { formatWhen } from "../../lib/format";
+import { whenPart, whenParts } from "../../lib/format";
 import { dayGroup, recordingName } from "../../lib/library";
 import { skippedLine, skippedMeta, uploadTitle, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon, LucideServerIcon } from "../../components/Icons";
@@ -27,10 +27,10 @@ export interface InProgressRow {
 
 /** The rows of In progress (pure): this computer's uploads first, then the Library's recordings still moving. */
 export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InProgressRow[] {
-  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u), line: uploadLine(u), recordingId: null }));
+  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u, "en"), line: uploadLine(u, "en"), recordingId: null }));
   const moving = items
     .filter((i) => !i.deleted)
-    .map((i) => ({ item: i, step: stepOf(i) }))
+    .map((i) => ({ item: i, step: stepOf(i, null, "en") }))
     .filter(({ step }) => step.step !== null)
     .map(({ item, step }) => ({ id: item.id, title: recordingName(item.title), line: step.line ?? "", recordingId: item.id }));
   return [...sending, ...moving];
@@ -98,11 +98,11 @@ export function activitySubtitle(needsYou: number, unread: number): string {
   return "Nothing needs you. Finished transcripts, problems, devices and shares show up here.";
 }
 
-/** Today's notifications show the time, older ones the day. */
+/** Today's notifications show the time, older ones the day (whenParts: in Urdu too, each in its own isolate). */
 export function shortWhen(iso: string | null): string {
-  if (!iso) return "";
-  const text = formatWhen(iso);
-  return text.startsWith("Today · ") ? text.slice("Today · ".length) : text.split(" · ")[0];
+  const parts = whenParts(iso);
+  if (!parts) return "";
+  return whenPart(parts.today ? parts.time : parts.day);
 }
 
 export function ActivityView({ status, notify, onOpenRecording, onReview, onItems }: {
@@ -199,18 +199,32 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
   const recovered = useRecovered();
-  const row = (i: ActivityItem) => (
-    <li key={i.id}>
-      <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>
+  const row = (i: ActivityItem) => {
+    const inside = (
+      <>
         <ActivityTile kind={i.kind} resolved={i.resolved} />
         <span className="activity-main">
           <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
         </span>
         {i.at && <span className="item-time">{shortWhen(i.at)}</span>}
-      </button>
-    </li>
-  );
+      </>
+    );
+    // D-066: only a notification about a recording opens something. One with nowhere to go (a new device, the server's
+    // own problem) isn't a button; while unread it ends with a quiet Mark read, so a problem can be cleared on its own.
+    return (
+      <li key={i.id}>
+        {i.session_id ? (
+          <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>{inside}</button>
+        ) : (
+          <div className={`activity-item static ${i.read ? "" : "unread"}`}>
+            {inside}
+            {!i.read && <button type="button" className="btn text compact" aria-label={`Mark read: ${i.title}`} onClick={() => void choose(i)}>Mark read</button>}
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="activity-page">
@@ -224,7 +238,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
               <HourglassIcon size={22} />
               <div className="action-card-main">
                 <span className="action-card-title">Transcribe or delete?</span>
-                <span className="small muted">{pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}</span>
+                <span className="small muted">{pending.length > 0 ? waitingSummary(pending, undefined, "en") : `${status.pendingDecisions} waiting for your decision`}</span>
               </div>
               <button type="button" className="btn text" onClick={() => onReview(pending[0]?.id ?? null)}>Review</button>
             </div>
@@ -279,7 +293,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
       {skipped.length > 0 && (
         <section className="skipped-calls" aria-label="Skipped calls" data-testid="skipped-calls">
           <div className="skipped-head">
-            <span className="skipped-line">{skippedLine(skipped.length)}</span>
+            <span className="skipped-line">{skippedLine(skipped.length, "en")}</span>
             <button type="button" className="btn text compact" aria-expanded={showSkipped} aria-controls={showSkipped ? "skipped-list" : undefined}
               onClick={() => setShowSkipped((v) => !v)}>
               {showSkipped ? "Hide" : "Show"}
@@ -288,7 +302,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
           {showSkipped && (
             <ul id="skipped-list" className="skipped-list">
               {skipped.map((item) => {
-                const meta = skippedMeta(item);
+                const meta = skippedMeta(item, undefined, "en");
                 return (
                   <li key={item.id} className="skipped-row">
                     <span className="skipped-meta" dir="auto" title={meta}>{meta}</span>

@@ -1,31 +1,45 @@
 // Meeting assets in the v2 look (v1.8 P4.3, as the phone shows them): the screens mark on a Library row, the Screens
 // strip under a recording's title, the screens between its transcript lines at their moments, and the viewer with
 // what was said around each screen, Play from here and Delete. Pictures come through the core from their signed links
-// (today's usePicture); a link that has run out (30 minutes) has the list read again once, for fresh links.
+// (today's usePicture); a link that has run out (30 minutes) has the list read again once, for fresh links. In the
+// account's language: a screen's label is said here ("Screen 7 · 14:32", as lib/screens' screenLabel in English).
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { ScreenMoment } from "../../lib/ipc";
-import { saidLines, screenAlt, screenLabel } from "../../lib/screens";
+import { saidLines } from "../../lib/screens";
+import { timestamp } from "../../lib/format";
 import { usePicture } from "../../views/main/ScreenMoments";
 import { Button, Dialog, Icon, Icons } from "../components";
+import { lineDir, t, tc, useT } from "../../i18n";
+
+/** "Screen 7 · 14:32", in the window's language. */
+const screenLabel = (screen: Pick<ScreenMoment, "index" | "at_ms">) => t("Screen :index · :time", { index: screen.index, time: timestamp(screen.at_ms) });
+/** What a screen shows, for its picture's alternative text: the description, else its label. */
+const screenAlt = (screen: Pick<ScreenMoment, "index" | "at_ms" | "description">) => screen.description?.trim() || screenLabel(screen);
+/** "1 screen", "3 screens". */
+const screensWord = (count: number) => tc(":count screen|:count screens", count);
 
 /** The Library row's mark: a screen icon and the count, read as "3 screens". */
 export function ScreensMark({ count }: { count: number }) {
+  useT();
   if (count <= 0) return null;
   return (
     <span className="el-screens-mark">
       <Icon icon={Icons.ScreenIcon} />
       <span className="el-num" aria-hidden="true">{count}</span>
-      <span className="el-visually-hidden">{count === 1 ? "1 screen" : `${count} screens`}</span>
+      <span className="el-visually-hidden">{screensWord(count)}</span>
     </span>
   );
 }
 
 /** A screen's thumbnail with its label ("Screen 7 · 14:32"); a click opens the viewer. */
 export function ScreenThumb({ screen, onOpen }: { screen: ScreenMoment; onOpen: () => void }) {
+  const { t } = useT();
   const { src, failed } = usePicture(screen.thumb_url);
   const label = screenLabel(screen);
+  const about = screen.description?.trim();
   return (
-    <button type="button" className="el-screen-thumb" onClick={onOpen} aria-label={screen.description?.trim() ? `${label}: ${screen.description.trim()}` : label}>
+    <button type="button" className="el-screen-thumb" onClick={onOpen}
+      aria-label={about ? t("Screen :index · :time: :about", { index: screen.index, time: timestamp(screen.at_ms), about }) : label}>
       <span className="el-screen-thumb__picture" aria-hidden="true">
         {src ? <img src={src} alt="" /> : failed ? <Icon icon={Icons.ScreenIcon} size="md" /> : <span className="el-skeleton el-screen-thumb__wait" />}
       </span>
@@ -36,10 +50,11 @@ export function ScreenThumb({ screen, onOpen }: { screen: ScreenMoment; onOpen: 
 
 /** The Screens strip under a recording's title: every screen in time order, scrolled sideways. */
 export function ScreensStrip({ screens, onOpen }: { screens: ScreenMoment[]; onOpen: (index: number) => void }) {
+  useT();
   if (screens.length === 0) return null;
   return (
     <section className="el-screens-strip" aria-labelledby="el-screens-strip-title">
-      <h2 className="el-body-strong el-screens-strip__title" id="el-screens-strip-title" dir="auto">{screens.length === 1 ? "1 screen" : `${screens.length} screens`}</h2>
+      <h2 className="el-body-strong el-screens-strip__title" id="el-screens-strip-title" dir={lineDir(screensWord(screens.length))}>{screensWord(screens.length)}</h2>
       <ul className="el-screens-strip__list">
         {screens.map((s, i) => <li key={s.id}><ScreenThumb screen={s} onOpen={() => onOpen(i)} /></li>)}
       </ul>
@@ -49,8 +64,9 @@ export function ScreensStrip({ screens, onOpen }: { screens: ScreenMoment[]; onO
 
 /** The screens a transcript line is followed by. */
 export function LineScreens({ screens, onOpen }: { screens: ScreenMoment[]; onOpen: (screen: ScreenMoment) => void }) {
+  const { t } = useT();
   return (
-    <ul className="el-line-screens" aria-label="Screens at this moment">
+    <ul className="el-line-screens" aria-label={t("Screens at this moment")}>
       {screens.map((s) => <li key={s.id}><ScreenThumb screen={s} onOpen={() => onOpen(s)} /></li>)}
     </ul>
   );
@@ -71,6 +87,7 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
   onDelete?: (screen: ScreenMoment) => void;
   onExpired?: () => void;
 }) {
+  const { t, tc } = useT();
   const at = Math.max(0, Math.min(index, screens.length - 1));
   const screen = screens[at] as ScreenMoment | undefined;
   const { src, failed } = usePicture(screen?.image_url ?? null);
@@ -98,23 +115,23 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
     <Dialog open wide title={screenLabel(screen)} description={screen.description?.trim() || undefined} onClose={onClose}
       actions={(onPlay || onDelete) && (
         <>
-          {onDelete && <Button variant="danger" icon={Icons.TrashIcon} onClick={() => onDelete(screen)}>Delete screen</Button>}
-          {onPlay && <Button variant="primary" icon={Icons.PlayIcon} onClick={() => onPlay(screen)}>Play from here</Button>}
+          {onDelete && <Button variant="danger" icon={Icons.TrashIcon} onClick={() => onDelete(screen)}>{t("Delete screen")}</Button>}
+          {onPlay && <Button variant="primary" icon={Icons.PlayIcon} onClick={() => onPlay(screen)}>{t("Play from here")}</Button>}
         </>
       )}>
       <div className="el-screen-viewer" onKeyDown={onKey}>
         <div className="el-screen-viewer__stage">
-          <Button variant="quiet" icon={Icons.ChevronStartIcon} directional aria-label="Previous screen" disabled={at === 0} onClick={() => step(-1)} />
+          <Button variant="quiet" icon={Icons.ChevronStartIcon} directional aria-label={t("Previous screen")} disabled={at === 0} onClick={() => step(-1)} />
           <div className="el-screen-viewer__picture" data-testid="screen-picture">
             {src ? <img src={src} alt={screenAlt(screen)} width={screen.width || undefined} height={screen.height || undefined} />
-              : failed ? <p className="el-secondary">The picture couldn't be loaded.</p>
-                : <span className="el-skeleton el-screen-viewer__wait" role="img" aria-label="Loading the picture" />}
+              : failed ? <p className="el-secondary">{t("The picture couldn't be loaded.")}</p>
+                : <span className="el-skeleton el-screen-viewer__wait" role="img" aria-label={t("Loading the picture")} />}
           </div>
-          <Button variant="quiet" icon={Icons.ChevronEndIcon} directional aria-label="Next screen" disabled={at === screens.length - 1} onClick={() => step(1)} />
+          <Button variant="quiet" icon={Icons.ChevronEndIcon} directional aria-label={t("Next screen")} disabled={at === screens.length - 1} onClick={() => step(1)} />
         </div>
-        <p className="el-caption el-secondary" aria-live="polite">{at + 1} of {screens.length}</p>
+        <p className="el-caption el-secondary" aria-live="polite">{tc(":n of :count", screens.length, { n: at + 1 })}</p>
         <section className="el-screen-viewer__said" aria-labelledby="el-screen-said">
-          <h3 className="el-body-strong" id="el-screen-said">What was said</h3>
+          <h3 className="el-body-strong" id="el-screen-said">{t("What was said")}</h3>
           {lines.length > 0 ? (
             <ul className="el-said">
               {lines.map((l, i) => (
@@ -122,16 +139,16 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
               ))}
             </ul>
           ) : (
-            <p className="el-secondary">Nothing was said within 15 seconds of this screen.</p>
+            <p className="el-secondary">{t("Nothing was said within 15 seconds of this screen.")}</p>
           )}
         </section>
         {screen.ocr_text?.trim() && (
           <details className="el-screen-viewer__text">
-            <summary>Text on the screen</summary>
+            <summary>{t("Text on the screen")}</summary>
             <p dir="auto">{screen.ocr_text}</p>
           </details>
         )}
-        {screen.file_name && <p className="el-caption el-secondary">File name <span className="el-num" dir="ltr">{screen.file_name}</span></p>}
+        {screen.file_name && <p className="el-caption el-secondary">{t("File name")} <span className="el-num" dir="ltr">{screen.file_name}</span></p>}
       </div>
     </Dialog>
   );

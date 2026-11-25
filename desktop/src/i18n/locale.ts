@@ -54,6 +54,65 @@ export function isolate(value: string): string {
   return `${FSI}${safe}${PDI.repeat(depth)}${PDI}`;
 }
 
+/** U+2067 RIGHT-TO-LEFT ISOLATE: a run that reads right to left whatever surrounds it (lib/format's Urdu dates). */
+export const RLI = "\u2067";
+/**
+ * Letters of the right-to-left scripts: Hebrew, Arabic, Urdu, Syriac, Thaana and their presentation forms, and those
+ * past the basic plane (Hanifi Rohingya, Adlam and the rest, U+10800–U+10FFF and U+1E800–U+1EFFF).
+ */
+const RTL_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+
+/**
+ * The text of a line, when it is text: a string, a number, or a list of them (an RLM put before a line); null for
+ * anything drawn otherwise.
+ */
+function textOf(node: unknown): string | null {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) {
+    let out = "";
+    for (const part of node) {
+      if (part === null || part === undefined || part === false || part === true) continue;
+      const text = textOf(part);
+      if (text === null) return null;
+      out += text;
+    }
+    return out;
+  }
+  return null;
+}
+
+/**
+ * A line's direction for its dir attribute. In English "auto", as the app has always drawn it. In Urdu, outside its
+ * isolates (the browsers' dir="auto" reads the first letter even inside one, so "Imran کی بھیجی ہوئی ریکارڈنگ", with
+ * Imran in an isolate, laid out left to right):
+ * - a line with any right-to-left letter reads right to left, even when a name or a brand comes first ("Mac چیک",
+ *   "Windows 11 پر آف", "EchoLedger کی ونڈوز چھپائیں"): it is an Urdu sentence;
+ * - a line with only Latin letters (a person's own English, a server's message) reads left to right, as before;
+ * - an RLM or ALM (or an LRM) before any letter says it outright;
+ * - a line with no letter outside its isolates, or drawn with more than text, stays "auto".
+ */
+export function lineDir(line: unknown, lang: Lang = current): "rtl" | "ltr" | "auto" {
+  if (!isRtl(lang)) return "auto";
+  const text = textOf(line);
+  if (text === null) return "auto";
+  let depth = 0;
+  let latin = false;
+  for (const char of text) {
+    if (OPENERS.has(char)) depth++;
+    else if (char === PDI) depth = Math.max(0, depth - 1);
+    else if (depth > 0) continue;
+    else if (char === "\u200F" || char === "\u061C") {
+      if (!latin) return "rtl";
+    } else if (char === "\u200E") {
+      if (!latin) return "ltr";
+    } else if (/\p{L}/u.test(char)) {
+      if (RTL_LETTER.test(char)) return "rtl";
+      latin = true;
+    }
+  }
+  return latin ? "ltr" : "auto";
+}
+
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
 export function stripIsolates(text: string): string {
   return text.replace(/[\u2066-\u2069]/g, "");
@@ -195,4 +254,17 @@ export function announceLanguage(): void {
 export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/**
+ * t and tc in `lang`, for words a window still in English shows too (lib's helpers): the window's language (the
+ * default), or "en" whatever the window's is: the English key itself, its values filled in and never isolated, as t()
+ * and tc() give it in English. A classic caller passes "en", so its English sentence never gets an Urdu piece.
+ */
+export function wordsIn(lang?: Lang): { t: (text: string, values?: Values) => string; tc: (text: string, n: number, values?: Values) => string } {
+  if (lang !== "en") return { t, tc };
+  return {
+    t: (text, values) => (values ? fill(CONTEXT_EN[text] ?? text, values, false) : CONTEXT_EN[text] ?? text),
+    tc: (text, n, values) => fill(choose(CONTEXT_EN[text] ?? text, n, "en"), values?.count === undefined || values.count === null ? { ...values, count: n } : values, false),
+  };
 }
