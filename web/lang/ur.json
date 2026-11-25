@@ -1813,5 +1813,21 @@
     "Waiting for the meeting": "میٹنگ کا انتظار",
     "Ready": "تیار",
     "Being made": "بن رہی ہے",
-    "Could not be made": "نہیں بن سکی"
+    "Could not be made": "نہیں بن سکی",
+    "Recordings and projects others sent you. Save one to keep your own copy in this workspace.": "وہ ریکارڈنگز اور پروجیکٹس جو دوسروں نے آپ کو بھیجے۔ اس ورک اسپیس میں اپنی کاپی رکھنے کے لیے انہیں محفوظ کریں۔",
+    "Note": "نوٹ",
+    "Saved": "محفوظ کیا",
+    "Not yet": "ابھی نہیں",
+    "Save to my library": "میری لائبریری میں محفوظ کریں",
+    "Save a copy?": "کاپی محفوظ کریں؟",
+    "The project and its recordings are copied into this workspace. Your copy stays when the sender deletes theirs.": "پروجیکٹ اور اس کی ریکارڈنگز اس ورک اسپیس میں کاپی ہو جاتی ہیں۔ بھیجنے والا اپنی حذف کر دے تو بھی آپ کی کاپی رہتی ہے۔",
+    "The recording, its audio and transcript are copied into this workspace's Inbox. Your copy stays when the sender deletes theirs.": "ریکارڈنگ، اس کی آڈیو اور ٹرانسکرپٹ اس ورک اسپیس کے ان باکس میں کاپی ہو جاتی ہیں۔ بھیجنے والا اپنی حذف کر دے تو بھی آپ کی کاپی رہتی ہے۔",
+    "It goes off your list. The sender keeps theirs.": "یہ آپ کی فہرست سے ہٹ جاتی ہے۔ بھیجنے والے کے پاس ان کی اپنی رہتی ہے۔",
+    "Removed from Shared with me": "میرے ساتھ شیئر شدہ سے ہٹا دیا گیا",
+    "Nothing shared with you yet": "ابھی آپ کے ساتھ کچھ شیئر نہیں ہوا",
+    "When a teammate sends you a recording or a project, it appears here.": "جب کوئی ساتھی آپ کو ریکارڈنگ یا پروجیکٹ بھیجے گا، وہ یہاں نظر آئے گا۔",
+    "Saved to your library": "آپ کی لائبریری میں محفوظ ہو گیا",
+    "Your copy is yours to edit, share or delete. Click to open it.": "یہ کاپی آپ کی ہے: اس میں ترمیم کریں، اسے شیئر یا حذف کریں۔ کھولنے کے لیے کلک کریں۔",
+    "This project has no recordings yet.": "اس پروجیکٹ میں ابھی کوئی ریکارڈنگ نہیں ہے۔",
+    "The transcript is not ready yet.": "ٹرانسکرپٹ ابھی تیار نہیں ہے۔"
 }

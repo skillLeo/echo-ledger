@@ -6,8 +6,10 @@ namespace App\Filament\Pages;
 
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\PersonAvatar;
 use App\Filament\Support\PlanLock;
 use App\Models\User;
 use App\Models\Workspace;
@@ -39,6 +41,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use UnitEnum;
@@ -118,7 +121,7 @@ class WorkspaceSettings extends Page implements HasTable
             EmbeddedTable::make(),
             View::make('filament.pages.workspace-invitations')
                 ->visible(fn (): bool => $this->can('invite'))
-                ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'links' => $this->openLinks(), 'plan' => $this->planLine()]),
+                ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'links' => $this->openLinks(), 'plan' => $this->planLine(), 'v2' => ConsoleV2::any()]),
             // Since v1.6 (P2.5): what each role may do here, as the admin panel shows staff roles.
             View::make('filament.pages.workspace-roles-matrix')->viewData(fn (): array => ['rows' => self::ROLE_MATRIX, 'mine' => $this->roleOf($this->user())?->value]),
         ]);
@@ -131,7 +134,10 @@ class WorkspaceSettings extends Page implements HasTable
             ->heading(__('People'))
             ->description(__("Each person's recordings and projects are theirs alone, owners and admins included, until they share them. Owners and admins invite and remove people and revoke devices; viewers open what is shared with them and record nothing."))
             ->columns([
-                TextColumn::make('name')->label(__('Name')),
+                // DES-08: in the new console each person's avatar is beside their name.
+                ConsoleV2::any()
+                    ? TextColumn::make('name')->label(__('Name'))->formatStateUsing(fn (User $record): HtmlString => PersonAvatar::cell($record))
+                    : TextColumn::make('name')->label(__('Name')),
                 TextColumn::make('email')->label(__('Email')),
                 TextColumn::make('role')->label(__('Role'))->badge()
                     ->state(fn (User $record): string => $this->roleOf($record)?->label() ?? '')
@@ -475,7 +481,7 @@ class WorkspaceSettings extends Page implements HasTable
     {
         return WorkspaceInviteLink::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('revoked_at')->where('expires_at', '>', now())
             ->with('creator')->orderBy('expires_at')->limit(100)->get()->filter(fn (WorkspaceInviteLink $l): bool => $l->usable())
-            ->map(fn (WorkspaceInviteLink $l): array => ['id' => $l->id, 'role' => __($l->role->label()), 'by' => $l->creator->name ?? '—',
+            ->map(fn (WorkspaceInviteLink $l): array => ['id' => $l->id, 'role' => __($l->role->label()), 'by' => $l->creator->name ?? '—', 'creator' => $l->creator,
                 'uses' => $l->max_uses === null ? __(':uses joined', ['uses' => $l->uses]) : __(':uses of :max joined', ['uses' => $l->uses, 'max' => $l->max_uses]),
                 'expires' => $l->expires_at->diffForHumans()])
             ->values()->all();
