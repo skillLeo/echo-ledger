@@ -2366,8 +2366,9 @@ pub async fn session_unopen(app: AppHandle, id: String) -> AppResult<()> {
 }
 
 /// Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y): one request per 200 ids. The saved Library
-/// follows the server's `done` only. `null` from an older server (anything but a `200` with `done`): the page marks
-/// them one by one.
+/// follows the server's `done` only. `null` only for an older server's own answer to the first request (`405`, `404`,
+/// `403` for `DELETE`, or a success without `done`): the page then marks them one by one, 200 at most. Any other
+/// failure (a 5xx, 408, 429, the network) is an error, never `null`.
 #[tauri::command]
 pub async fn sessions_opened(app: AppHandle, ids: Vec<String>) -> AppResult<Option<OpenedMany>> {
     opened_many(&app, ids, true).await
