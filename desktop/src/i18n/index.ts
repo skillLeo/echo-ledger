@@ -76,9 +76,11 @@ export type Values = Record<string, string | number | null | undefined>;
 
 /**
  * A value in a right-to-left line, in its own isolate: a Latin name or a number keeps its direction. The web's
- * IsolatingTranslator::isolate exactly: an empty value stays empty, and a closing mark (PDI) with no opener of its own
- * inside the value is dropped, so a typed name can't close this isolate early and let what follows (an override such as
- * U+202E) flip the sentence; whatever the value leaves open is closed by the final PDI.
+ * IsolatingTranslator::isolate: an empty value stays empty; a closing mark (PDI) with no opener of its own inside the
+ * value is dropped, so a typed name can't close this isolate early and let what follows (an override such as U+202E)
+ * flip the sentence; and every isolate the value opens (FSI, LRI, RLI) and leaves open is closed before the final PDI
+ * (D-224), so a name typed with an FSI in it ("Ali", U+2068, "evil") can't leave the rest of the sentence inside its
+ * isolate. The final PDI then closes this isolate, and with it any embedding or override the value opened (U+202E).
  */
 export function isolate(value: string): string {
   if (value === "") return value;
@@ -92,7 +94,7 @@ export function isolate(value: string): string {
     }
     safe += char;
   }
-  return `${FSI}${safe}${PDI}`;
+  return `${FSI}${safe}${PDI.repeat(depth)}${PDI}`;
 }
 
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
