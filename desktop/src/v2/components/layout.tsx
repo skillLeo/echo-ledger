@@ -26,8 +26,13 @@ export function avatarColour(color: number | null | undefined, seed: string): nu
  * shows the initials. The name is said by what holds it, so the avatar itself is hidden from assistive tools.
  * Sizes: rail 28, list 32 (sm), account menu 40, md 48, profile 96.
  */
-export function Avatar({ initials, size = "md", color, seed, photo }: {
+export function Avatar({ initials, size = "md", color, seed, photo, drawn = false }: {
   initials: string;
+  /**
+   * The initials drawn, not written (FIX-06): where what holds the avatar is named otherwise ("Account, Ayesha Khan"),
+   * so its visible words stay part of its name (label in name).
+   */
+  drawn?: boolean;
   size?: "sm" | "md" | "rail" | "list" | "menu" | "profile";
   /** The server's avatar_color (0–7); left out, one from `seed` (else the initials). */
   color?: number | null;
@@ -37,8 +42,9 @@ export function Avatar({ initials, size = "md", color, seed, photo }: {
   const [broken, setBroken] = useState<string | null>(null);
   const showPhoto = !!photo && broken !== photo;
   return (
-    <span className={`el-avatar el-avatar--${size}`} data-colour={avatarColour(color, seed ?? initials)} aria-hidden="true">
-      {showPhoto ? <img src={photo!} alt="" onError={() => setBroken(photo!)} /> : initials}
+    <span className={`el-avatar el-avatar--${size}`} data-colour={avatarColour(color, seed ?? initials)} aria-hidden="true"
+      data-initials={drawn && !showPhoto ? initials : undefined}>
+      {showPhoto ? <img src={photo!} alt="" onError={() => setBroken(photo!)} /> : drawn ? null : initials}
     </span>
   );
 }
@@ -82,7 +88,7 @@ export function NavItem({ icon, label, current, count, onClick }: { icon: IconTy
       aria-label={count ? `${label}, ${count}` : undefined}>
       <Icon icon={icon} size="md" />
       <span className="el-nav-item__label">{label}</span>
-      {count !== undefined && <span className="el-nav-item__count el-caption el-num">{count}</span>}
+      {count !== undefined && <>{" "}<span className="el-nav-item__count el-caption el-num">{count}</span></>}
       {count !== undefined && count > 0 && <span className="el-attention-dot el-nav-item__dot" aria-hidden="true" />}
     </button>
   );

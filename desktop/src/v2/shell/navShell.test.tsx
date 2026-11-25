@@ -245,7 +245,7 @@ describe("the three levels", () => {
       expect(names).toEqual(["Record", "More ways to record", "Library", "More, Activity 2, Live recording", "Settings", "Account, Ayesha Khan, needs setup"]);
       const more = rail().getByRole("button", { name: /^More, / });
       expect(more.querySelector(".el-rail__label")!.textContent).toBe("More");
-      expect(more.querySelector(".el-rail__count")!.textContent).toBe("2");
+      expect(more.querySelector(".el-rail__count")).toHaveAttribute("data-count", "2");
       expect(more).not.toHaveAttribute("aria-current");
       fireEvent.click(more);
       const menu = screen.getByRole("menu", { name: "More places" });
@@ -254,6 +254,16 @@ describe("the three levels", () => {
       expect(onPlace).toHaveBeenLastCalledWith("activity", false);
       // The page is one of More's places: More is the selected item, and its menu ticks it.
       expect(rail().getByRole("button", { name: /^More, / })).toHaveAttribute("aria-current", "page");
+      // FIX-06: still one Tab stop (More, holding the page), and ↓ moves on from it without opening its menu.
+      const stops = rail().getAllByRole("button").filter((b) => b.tabIndex === 0);
+      expect(stops.map((b) => b.getAttribute("aria-label"))).toEqual(["More, Activity 2, Live recording"]);
+      stops[0].focus();
+      fireEvent.keyDown(stops[0], { key: "ArrowDown" });
+      expect(rail().getByRole("button", { name: "Settings" })).toHaveFocus();
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+      expect(rail().getByRole("button", { name: /^More, / })).toHaveFocus();
+      expect(screen.queryByRole("menu")).toBeNull();
       fireEvent.click(rail().getByRole("button", { name: /^More, / }));
       expect(within(screen.getByRole("menu", { name: "More places" })).getByRole("menuitemradio", { name: /^Activity/ })).toHaveAttribute("aria-checked", "true");
     } finally {
@@ -284,9 +294,16 @@ describe("the three levels", () => {
       // And so does its tooltip.
       expect(accountTip(["library", "projects", "live", "ask", "activity"])).toBe("Library, Projects, Live, Ask and Activity; account, theme and settings");
       expect(accountTip([])).toBe("Account, theme and settings");
-      expect(me.querySelector(".el-rail__count")!.textContent).toBe("2");
+      expect(me.querySelector(".el-rail__count")).toHaveAttribute("data-count", "2");
       // The page (the Library) is one of them: the avatar is the selected item.
       expect(me).toHaveAttribute("aria-current", "page");
+      // FIX-06: one Tab stop (the avatar, holding the page); ↑ moves on from it without opening its menu.
+      expect(rail().getAllByRole("button").filter((b) => b.tabIndex === 0)).toEqual([me]);
+      me.focus();
+      fireEvent.keyDown(me, { key: "ArrowUp" });
+      expect(rail().getByRole("button", { name: "Settings" })).toHaveFocus();
+      expect(screen.queryByRole("menu")).toBeNull();
+      me.focus();
       fireEvent.click(me);
       const menu = screen.getByRole("menu", { name: "Account, Ayesha Khan" });
       // The places first, then (a hairline) Setup & health and Help (a short window), then the account's own.
@@ -361,6 +378,52 @@ describe("the three levels", () => {
       Object.defineProperty(window, "innerHeight", { value: 900, configurable: true, writable: true });
       act(() => { window.dispatchEvent(new Event("resize")); });
     }
+  });
+
+  it("FIX-06: the rail is one Tab stop (the page's own item); ↑ ↓ Home End go through it, and never open a menu there", () => {
+    setWidth(1440);
+    render(<App />);
+    const buttons = () => rail().getAllByRole("button");
+    const stops = () => buttons().filter((b) => b.tabIndex === 0).map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    // One stop: the page's own (the Library).
+    expect(stops()).toEqual(["Library"]);
+    const library = rail().getByRole("button", { name: "Library" });
+    library.focus();
+    fireEvent.keyDown(library, { key: "ArrowDown" });
+    expect(rail().getByRole("button", { name: "Projects" })).toHaveFocus();
+    expect(stops()).toEqual(["Projects"]);
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    const account = rail().getByRole("button", { name: /^Account, / });
+    expect(account).toHaveFocus();
+    // Past the end: it stays, and the avatar's menu (a menu's button opens on ↓ or ↑) stays shut.
+    fireEvent.keyDown(account, { key: "ArrowDown" });
+    expect(account).toHaveFocus();
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.keyDown(account, { key: "ArrowUp" });
+    expect(rail().getByRole("button", { name: "Settings" })).toHaveFocus();
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(rail().getByRole("button", { name: "Record" })).toHaveFocus();
+    // Record's menu button: ↓ goes on to the Library, its menu stays shut (Enter or Space opens it).
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    const more = rail().getByRole("button", { name: "More ways to record" });
+    expect(more).toHaveFocus();
+    fireEvent.keyDown(more, { key: "ArrowDown" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(rail().getByRole("button", { name: "Library" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(more).toHaveFocus();
+    expect(stops()).toEqual(["More ways to record"]);
+    // A key with a modifier is the window's (⌘↓ and the like), not the rail's.
+    fireEvent.keyDown(more, { key: "ArrowDown", metaKey: true });
+    expect(more).toHaveFocus();
+    // The page changes while the keyboard is elsewhere (⌘2, or a click that doesn't focus, as on a Mac): the stop is the
+    // page's own item again, not the one last gone to.
+    act(() => (document.activeElement as HTMLElement).blur());
+    fireEvent.keyDown(window, { key: "2", metaKey: true });
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    act(() => (document.activeElement as HTMLElement).blur());
+    expect(stops()).toEqual(["Projects"]);
   });
 
   it("Record's menu (DES-02): New recording, Import audio files, the Auto-record tick on or off, the Record page", () => {

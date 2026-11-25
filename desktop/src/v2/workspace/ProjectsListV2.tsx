@@ -73,8 +73,8 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
             <>
               <Menu label="Sort projects" align="start"
                 items={PROJECT_SORTS.map((o) => ({ label: o.label, radio: true, checked: o.value === sort, onPick: () => setSort(o.value) }))}
-                button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, "aria-label": `Sort projects: ${sortLabel}`,
-                  text: `Sort: ${sortLabel}` }} />
+                // Named by its words ("Sort: Name"), so what it shows is its name (FIX-06, label in name).
+                button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: `Sort: ${sortLabel}` }} />
               <div className="el-page__actions">
                 {requestButton}
                 <Button variant="primary" icon={Icons.PlusIcon} onClick={onNew}>New project</Button>

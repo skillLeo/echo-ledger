@@ -58,7 +58,8 @@ describe("the rail's Activity number (UX-08)", () => {
     await settle();
     expect(activity()).toHaveAccessibleName("Activity, 6");
     const count = activity().querySelector(".el-rail__count")!;
-    expect(count).toHaveTextContent("6");
+    // The number is drawn from data-count (FIX-06: label in name); the name says it.
+    expect(count).toHaveAttribute("data-count", "6");
     expect(count).not.toHaveClass("el-rail__count--danger");
     // The core adds the calls waiting that only this computer knows to the Dock's number itself.
     expect(callsOf("dock_activity_set").at(-1)).toEqual({ count: 5 });

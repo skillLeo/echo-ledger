@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "check:a11y": "node scripts/axeCheck.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

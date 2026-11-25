@@ -1,6 +1,9 @@
 // UX-20: the title row's parts (TitleRow); the shell around it is in shellTitleRow.test.tsx.
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import { EVERYTHING, SHORT_FIELD, TitleRow, searchFits, type TitleRowProps } from "./TitleRow";
 
@@ -53,7 +56,9 @@ describe("the title row (UX-20)", () => {
     const { rerender } = render(<TitleRow {...base} place="projects" onEverything={onEverything} />);
     const field = within(row()).getByRole("button", { name: /Search projects/ });
     expect(field).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K");
-    expect(field.textContent).toMatch(/K$/);
+    // The keys' hint is drawn (FIX-06, label in name); they are the field's aria-keyshortcuts.
+    expect(field.querySelector(".el-titlerow__keys")).toHaveAttribute("data-keys", expect.stringMatching(/K$/));
+    expect(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles/v2.css"), "utf8")).toContain(".el-titlerow__keys::before { content: attr(data-keys); }");
     fireEvent.click(field);
     expect(onEverything).toHaveBeenCalledWith("");
     rerender(<TitleRow {...base} place="activity" onEverything={onEverything} />);
