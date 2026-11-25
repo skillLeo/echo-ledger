@@ -22,8 +22,8 @@ fn an_item_about_a_person_carries_them_and_one_that_cant_be_read_never_costs_the
          "actor": {"id": 12, "name": "Ana", "avatar_url": "https://ledger.example.test/api/avatars/12/1763700000?signature=x", "avatar_version": 1763700000, "avatar_color": 3}},
         {"id": "b", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call", "session_id": "01JB", "read": false, "at": null, "actor": null},
         {"id": "c", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call", "session_id": "01JD", "read": true, "at": null},
-        {"id": "d", "kind": "unusual_use", "title": "Unusual use", "body": "", "session_id": null, "read": false, "at": null, "actor": "Ana"},
-        {"id": "e", "kind": "receipt_requested", "title": "A receipt was asked for", "body": "", "session_id": null, "read": false, "at": null, "actor": {"id": 7, "name": "Sara", "avatar_url": null, "avatar_version": null, "avatar_color": 9000}}
+        {"id": "d", "kind": "unusual_usage", "title": "Unusual use", "body": "", "session_id": null, "read": false, "at": null, "actor": "Ana"},
+        {"id": "e", "kind": "upgrade_receipt_requested", "title": "A receipt was asked for", "body": "", "session_id": null, "read": false, "at": null, "actor": {"id": 7, "name": "Sara", "avatar_url": null, "avatar_version": null, "avatar_color": 9000}}
     ]))
     .unwrap();
     assert_eq!(items.len(), 5, "every item is read");
