@@ -20,6 +20,7 @@ import androidx.compose.ui.test.swipeLeft
 import com.echoledger.mobile.core.Activity
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
+import com.echoledger.mobile.data.ActorDto
 import com.echoledger.mobile.notify.ActivityWorker
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -281,5 +282,45 @@ class ActivityCentreTest : ScreenTest() {
         compose.onNodeWithText("Not answered", substring = true).assertExists()
         compose.onAllNodesWithText("Restore")[0].performClick()
         assertEquals(1, restored.size)
+    }
+
+    @Test
+    fun `a shared recording shows its sender in the tile's place, a warning keeps its tile (2_0_0-aa)`() {
+        show {
+            ActivityScreen(
+                load = {
+                    ActivityResponse(
+                        listOf(
+                            ActivityItemDto(
+                                "a1",
+                                "shared_with_you",
+                                "Ayesha Khan sent you a call",
+                                "Payment terms",
+                                "s-a1",
+                                actor = ActorDto(id = 7, name = "Ayesha Khan", avatarColor = 3)
+                            ),
+                            ActivityItemDto(
+                                "a2",
+                                "unusual_usage",
+                                "Unusual use",
+                                "Farah Malik recorded 9 hours",
+                                null,
+                                actor = ActorDto(id = 8, name = "Farah Malik")
+                            )
+                        ),
+                        0
+                    )
+                },
+                markRead = { 0 },
+                onOpen = {},
+                onUnread = {}
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Payment terms").assertExists() }.isSuccess }
+        val looks = compose.onAllNodes(
+            androidx.compose.ui.test.hasTestTag(com.echoledger.mobile.ui.v2.activity.ACTOR_AVATAR_TAG),
+            useUnmergedTree = true
+        ).fetchSemanticsNodes().map { it.config[com.echoledger.mobile.ui.v2.activity.ActorLookKey] }
+        assertEquals(listOf(com.echoledger.mobile.ui.v2.activity.ActorLook(picture = false, initials = "AK", colour = 3)), looks)
     }
 }

@@ -439,7 +439,13 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
         title = item.title.ifBlank { "Update" },
         time = rowTime(item.at, today),
         meta = item.body,
-        tile = { IconTile(icon, tint) },
+        // 2.0.0-aa: the person the item is about, for the kinds that show a face; else the kind's tile.
+        tile = {
+            com.echoledger.mobile.ui.v2.activity.ActivityPeople.shownPerson(item)?.let {
+                com.echoledger.mobile.ui.v2.activity.ActorAvatar(it, size = 44.dp, classic = true)
+            }
+                ?: IconTile(icon, tint)
+        },
         onClick = onClick,
         onLongClick = onClick,
         unopened = !item.read,

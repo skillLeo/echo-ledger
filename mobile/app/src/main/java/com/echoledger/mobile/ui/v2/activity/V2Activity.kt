@@ -412,7 +412,8 @@ private fun ActivityRow(item: com.echoledger.mobile.data.ActivityItemDto, today:
         title = ActivityWords.title(res, item, locale),
         meta = item.body.ifBlank { null },
         titleEnd = time(item.at, today, locale),
-        leading = { EchoAvatar(icon = ActivityWords.icon(item)) },
+        // 2.0.0-aa: the person the item is about, for the kinds that show a face (ActivityPeople.KINDS).
+        leading = { ActivityPeople.shownPerson(item)?.let { ActorAvatar(it) } ?: EchoAvatar(icon = ActivityWords.icon(item)) },
         unread = !item.read,
         onClick = onClick
     )

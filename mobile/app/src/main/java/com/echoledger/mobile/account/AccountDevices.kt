@@ -103,10 +103,25 @@ class AvatarCache(private val dir: File, private val origin: String) {
 
     fun get(person: String, version: Long): ByteArray? = file(person, version).takeIf { it.isFile }?.readBytes()
 
+    /**
+     * Keeps [bytes] as [person]'s picture of [version], whole or not at all: written beside it first and then renamed
+     * (atomic in one folder), so a reader never sees half a file; the older versions go only after the rename.
+     */
     fun put(person: String, version: Long, bytes: ByteArray) {
         dir.mkdirs()
-        dir.listFiles { f -> f.name.startsWith(safe(person) + "_") }?.forEach { it.delete() }
-        file(person, version).writeBytes(bytes)
+        val target = file(person, version)
+        val draft = File(dir, "${target.name}.${System.nanoTime()}.tmp")
+        draft.writeBytes(bytes)
+        if (!draft.renameTo(target)) {
+            target.delete()
+            if (!draft.renameTo(target)) {
+                draft.delete()
+                return
+            }
+        }
+        dir.listFiles { f ->
+            f.name.startsWith(safe(person) + "_") && f.name != target.name && !f.name.endsWith(".tmp")
+        }?.forEach { it.delete() }
     }
 
     fun forget(person: String) {
@@ -122,9 +137,17 @@ class AvatarCache(private val dir: File, private val origin: String) {
 
         fun of(context: Context, origin: String) = AvatarCache(dir(context), origin)
 
+        private val cleared = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+        /** [forget] runs with every [clearAll] (the pictures kept in memory, [ActorPictures]). */
+        fun onClearAll(forget: () -> Unit) {
+            cleared += forget
+        }
+
         /** Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. */
         fun clearAll(context: Context) {
             dir(context).deleteRecursively()
+            cleared.forEach { it() }
         }
 
         /** The person an avatar address belongs to (`/api/avatars/{user}/{version}`), or [fallback]. */

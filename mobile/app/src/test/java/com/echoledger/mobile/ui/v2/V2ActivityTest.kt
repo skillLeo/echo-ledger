@@ -1,7 +1,9 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -13,10 +15,14 @@ import com.echoledger.mobile.calls.MissedItem
 import com.echoledger.mobile.calls.MissedReason
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
+import com.echoledger.mobile.data.ActorDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.ui.v2.activity.ACTOR_AVATAR_TAG
 import com.echoledger.mobile.ui.v2.activity.ActivityActions
+import com.echoledger.mobile.ui.v2.activity.ActorLook
+import com.echoledger.mobile.ui.v2.activity.ActorLookKey
 import com.echoledger.mobile.ui.v2.activity.V2ActivityContent
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
@@ -207,5 +213,86 @@ class V2ActivityTest : ScreenTest() {
         compose.onNode(hasText("Retry") and hasClickAction()).performClick()
         await("You're all caught up")
         assertEquals(2, loads)
+    }
+
+    // Contract 2.0.0-aa: the person an item is about takes its icon's place, for the neutral kinds only (decision 27).
+
+    private fun actorLooks() = compose.onAllNodes(hasTestTag(ACTOR_AVATAR_TAG), useUnmergedTree = true).fetchSemanticsNodes().map {
+        it.config[ActorLookKey]
+    }
+
+    @Test
+    fun aSharedRecordingShowsItsSendersInitialsOnTheirColourAndAWarningKeepsItsIcon() {
+        answer = ActivityResponse(
+            listOf(
+                item("a1", "Ayesha Khan sent you Payment terms", "2026-11-21T09:00:00Z", kind = "shared_with_you")
+                    .copy(actor = ActorDto(id = 7, name = "Ayesha Khan", avatarColor = 3)),
+                item(
+                    "a2",
+                    "Unusual use",
+                    "2026-11-21T08:00:00Z",
+                    kind = "unusual_usage"
+                ).copy(actor = ActorDto(id = 8, name = "Farah Malik", avatarColor = 4)),
+                item(
+                    "a3",
+                    "We need another receipt",
+                    "2026-11-21T07:00:00Z",
+                    kind = "upgrade_receipt_requested"
+                ).copy(actor = ActorDto(id = 9, name = "Sara Ali")),
+                item("a4", "Transcript ready", "2026-11-21T06:00:00Z")
+            )
+        )
+        show()
+        await("Ayesha Khan sent you")
+        assertEquals(listOf(ActorLook(picture = false, initials = "AK", colour = 3)), actorLooks())
+    }
+
+    @Test
+    fun anUpgradeRequestShowsThePersonAndAnUrduNamesInitialsStayApart() {
+        answer = ActivityResponse(
+            listOf(
+                item(
+                    "a1",
+                    "عائشہ خان asked for Pro",
+                    "2026-11-21T09:00:00Z",
+                    kind = "upgrade_requested"
+                ).copy(actor = ActorDto(id = 13, name = "عائشہ خان"))
+            )
+        )
+        show(language = EchoLanguage.Urdu)
+        await("asked for Pro")
+        // No avatar_color: the id modulo 8 (13 → 5), as the server's own rule.
+        assertEquals(listOf(ActorLook(picture = false, initials = "ع\u200Cخ", colour = 5)), actorLooks())
+    }
+
+    @Test
+    fun noActorOrAnOlderServerKeepsTheKindsIconAndTheRowReadsAsBefore() {
+        answer =
+            ActivityResponse(listOf(item("a1", "Ayesha Khan sent you Payment terms", "2026-11-21T09:00:00Z", kind = "shared_with_you")))
+        show()
+        await("Ayesha Khan sent you")
+        assertEquals(emptyList<ActorLook>(), actorLooks())
+    }
+
+    @Test
+    fun talkBackHearsTheRowNotTheInitials() {
+        answer = ActivityResponse(
+            listOf(
+                item(
+                    "a1",
+                    "Ayesha Khan sent you Payment terms",
+                    "2026-11-21T09:00:00Z",
+                    kind = "shared_with_you"
+                ).copy(actor = ActorDto(id = 7, name = "Ayesha Khan"))
+            )
+        )
+        show()
+        await("Ayesha Khan sent you")
+        // What TalkBack reads is the merged tree: the avatar's initials are cleared from it (the unmerged tree a test
+        // can ask for keeps replaced nodes for debugging, which TalkBack never sees).
+        compose.onAllNodesWithText("AK", substring = false).assertCountEquals(0)
+        val row = compose.onNode(hasText("Ayesha Khan sent you", substring = true) and hasClickAction()).fetchSemanticsNode()
+        assertTrue("the row's words have no initials", !hasText("AK").matches(row))
+        assertEquals(1, compose.onAllNodes(hasTestTag(ACTOR_AVATAR_TAG), useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 }
