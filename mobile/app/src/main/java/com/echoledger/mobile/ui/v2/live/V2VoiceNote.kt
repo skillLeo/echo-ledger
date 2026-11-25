@@ -92,7 +92,9 @@ fun V2VoiceNoteScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** A Bluetooth headset with a microphone is connected (the phone's audio devices). */
-    headsetConnected: (Context) -> Boolean = BluetoothMic::connected
+    headsetConnected: (Context) -> Boolean = BluetoothMic::connected,
+    /** Opened from the New sheet's Import audio: the file picker at once. */
+    importNow: Boolean = false
 ) {
     val context = LocalContext.current
     val settings by vm.settings.collectAsState()
@@ -123,6 +125,13 @@ fun V2VoiceNoteScreen(
     }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch { picked = vm.describeFiles(uris) }
+    }
+    var importAsked by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(importNow) {
+        if (importNow && !importAsked) {
+            importAsked = true
+            runCatching { import.launch(arrayOf("audio/*", "video/*")) }
+        }
     }
     if (picked.isNotEmpty()) {
         val clients by vm.clients.collectAsState()

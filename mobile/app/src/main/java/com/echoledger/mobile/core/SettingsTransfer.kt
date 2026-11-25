@@ -81,6 +81,10 @@ object SettingsTransfer {
         "deletePhoneAppCopy",
         // The small after-call bar needs this phone's overlay permission (v2.1).
         "afterCallBar",
+        // How often this phone opened the app and showed the Record hint (v2.1).
+        "appOpens",
+        "recordHintShows",
+        "recordHintDone",
         // Where the control pill sits belongs to this phone's screen.
         "pillEdge",
         "pillY",

@@ -8,6 +8,11 @@
       "mobile": {
         "$type": "dimension",
         "$value": "16px"
+      },
+      "phone": {
+        "$type": "dimension",
+        "$value": "24px",
+        "$description": "One UI's minimum side margin (v2.1 UX-14): the phone Library's header, chips and rows"
       }
     },
     "row": {

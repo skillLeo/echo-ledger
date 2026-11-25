@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Filament\Support\SettingsContext;
+use App\Models\Device;
 use App\Models\RequestLink;
 use App\Services\Sharing\RequestLinks;
+use App\Support\Brand;
 use Filament\Actions\Action;
+use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
 
 /*
@@ -115,6 +119,107 @@ it('draws the Sign in a device window from the new frame\'s own copy, in Urdu wi
     $as(false, 'en');
     expect(mountedWindow(Livewire::test(ListDevices::class)->mountAction('pair'))['pairing']->getView())->toBe('filament.pair-device');
     expect(view('filament.pair-device', ['getState' => $field])->render())->toContain('Waiting for the app…')->toContain('Server: https://echoledger.test<br>');
+});
+
+it('opens a device row\'s Sign in again window from the new frame\'s own copy in the new frame, and classic\'s view in classic (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    // The table shows signed-in devices by default (its Show filter): Show › Signed out lists this row.
+    $window = fn (): array => mountedWindow(Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out')->mountAction(TestAction::make('signInAgain')->table($device->fresh())));
+
+    $as(true, 'ur');
+    expect($window()['pairing']->getView())->toBe('filament.v2.pair-device');
+    $page = Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out');
+    $page->assertActionExists(TestAction::make('signInAgain')->table($device->fresh()), fn (Action $a): bool => str_contains((string) $a->getModalHeading(), 'کو دوبارہ سائن اِن کریں')
+        && str_contains((string) $a->getModalHeading(), $device->fresh()->readableName())
+        && str_contains((string) $a->getModalDescription(), 'اس ڈیوائس پر') && str_contains((string) $a->getModalDescription(), '10 منٹ'));
+
+    $as(false, 'en');
+    expect($window()['pairing']->getView())->toBe('filament.pair-device');
+    Livewire::test(ListDevices::class)->filterTable('shown', 'signed_out')
+        ->assertActionExists(TestAction::make('signInAgain')->table($device->fresh()), fn (Action $a): bool => $a->getModalHeading() === 'Sign in '.$device->fresh()->readableName().' again'
+            && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.');
+});
+
+it('opens Settings › Devices\' Sign in a device and Sign in again windows from the new frame\'s copy, in Urdu, and classic\'s English otherwise (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    $settings = fn () => Livewire::test(EditProfile::class, ['subpage' => 'devices']);
+    $again = TestAction::make('signInAgain')->arguments(['device' => $device->id]);
+
+    $as(true, 'ur');
+    expect(mountedWindow($settings()->mountAction('signInDevice'))['pairing']->getView())->toBe('filament.v2.pair-device')
+        ->and(mountedWindow($settings()->mountAction($again))['pairing']->getView())->toBe('filament.v2.pair-device');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getModalHeading() === 'فون یا کمپیوٹر سائن اِن کریں'
+        && str_contains((string) $a->getModalDescription(), 'QR کوڈ اسکین کریں') && $a->getModalCancelActionLabel() === __('Done'));
+    $settings()->assertActionExists($again, fn (Action $a): bool => str_contains((string) $a->getModalHeading(), 'کو دوبارہ سائن اِن کریں')
+        && str_contains((string) $a->getModalDescription(), 'اس کی ریکارڈنگز اور نام برقرار رہتے ہیں۔'));
+
+    $as(false, 'en');
+    expect(mountedWindow($settings()->mountAction('signInDevice'))['pairing']->getView())->toBe('filament.pair-device')
+        ->and(mountedWindow($settings()->mountAction($again))['pairing']->getView())->toBe('filament.pair-device');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getModalHeading() === 'Sign in a phone or computer'
+        && $a->getModalDescription() === 'Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.'
+        && $a->getModalCancelActionLabel() === 'Done');
+    $settings()->assertActionExists($again, fn (Action $a): bool => $a->getModalHeading() === 'Sign in '.$device->fresh()->readableName().' again'
+        && $a->getModalDescription() === 'Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.');
+});
+
+it('words Settings › Devices\' button and each device\'s window (name, sign out, remove) in Urdu in the new frame, and as before in classic (W-208)', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $device->forceFill(['signed_out_at' => now()])->save();
+    $name = $device->fresh()->readableName();
+    $as = function (bool $v2, string $language): void {
+        webParityDesign($v2);
+        $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+        $prefs['shell'] = ['app_language' => $language];
+        $this->owner->forceFill(['console_preferences' => $prefs])->save();
+        SettingsContext::forget();
+        app('auth')->forgetGuards();
+        $this->actingAs($this->owner->fresh(), 'web');
+        app()->setLocale($v2 ? $language : 'en');
+    };
+    $settings = fn () => Livewire::test(EditProfile::class, ['subpage' => 'devices']);
+    $window = TestAction::make('device')->arguments(['device' => $device->id]);
+    // The window's buttons (Sign out, Sign in again, Remove from list) as the mounted window carries them.
+    $footer = fn ($page): array => array_values(array_map(fn (Action $a): string => (string) $a->getLabel(), $page->instance()->getMountedAction()->getExtraModalFooterActions()));
+
+    $as(false, 'en');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getLabel() === 'Sign in a device');
+    expect(mountedWindow($settings()->mountAction($window))['name']->getLabel())->toBe('Name');
+    expect($footer($settings()->mountAction($window)))->toBe(['Sign in again', 'Remove from list']);
+    expect($settings()->mountAction([$window, TestAction::make('forgetDevice')])->instance()->getMountedAction()->getModalHeading())->toBe('Remove '.$name.' from the list?');
+
+    $as(true, 'ur');
+    $settings()->assertActionExists('signInDevice', fn (Action $a): bool => $a->getLabel() === 'ڈیوائس سائن اِن کریں');
+    expect(mountedWindow($settings()->mountAction($window))['name']->getLabel())->toBe('نام');
+    expect($footer($settings()->mountAction($window)))->toBe(['دوبارہ سائن اِن کریں', 'فہرست سے ہٹائیں']);
+    expect((string) $settings()->mountAction([$window, TestAction::make('forgetDevice')])->instance()->getMountedAction()->getModalHeading())
+        ->toContain('کو فہرست سے ہٹائیں؟')->toContain($name);
+    $settings()->callAction([$window, TestAction::make('forgetDevice')])->assertNotified('فہرست سے ہٹا دی گئی');
+    // The page's own list buttons say the same in Urdu (revokeDevice / removeDevice).
+    $settings()->call('removeDevice', $device->id)->assertNotified('یہ ڈیوائس پہلے ہی ہٹا دی گئی تھی');
+    $settings()->call('revokeDevice', $device->id)->assertNotified('یہ ڈیوائس پہلے ہی سائن آؤٹ تھی');
 });
 
 it('shows the New request link title\'s placeholder in Urdu in the new frame, and still names an empty title the server\'s way', function () {

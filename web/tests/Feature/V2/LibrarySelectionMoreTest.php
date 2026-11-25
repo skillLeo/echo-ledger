@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\V2CopyForAi;
@@ -15,6 +18,9 @@ use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Entitlements\Entitlements;
 use App\Services\InterfaceFlags;
+use App\Services\TranscribeLater;
+use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
@@ -23,6 +29,7 @@ use Illuminate\Bus\Dispatcher;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Queue\CallQueuedClosure;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -322,4 +329,196 @@ it('shows the text with its own Copy button when the browser refuses a copy made
         ->toContain("box.querySelector('[data-copy-now]').onclick = async () => {");
     // The Copy button's own click writes the clipboard (a fresh user gesture), and one failure wording is used.
     expect(substr_count($html, 'Could not access the clipboard'))->toBe(0);
+});
+
+/** A recording of [$owner] kept as audio only (the after-call card's Save audio), its audio here, two channels. */
+function selectionAudioOnly(object $test, string $title, int $ms, ?object $owner = null, array $attributes = []): CaptureSession
+{
+    $session = Fx::session($owner ?? $test->owner, $owner === null ? $test->device : null, ['title' => $title, 'duration_ms' => $ms,
+        'status' => SessionStatus::AudioOnly, 'transcribe' => false, ...$attributes]);
+    Fx::readyRecording($session, 'audio of '.$title);
+
+    return $session->fresh();
+}
+
+/** A recording whose transcript failed (the engine could not be reached), its audio here. */
+function selectionFailedTranscript(object $test, string $title, int $ms): CaptureSession
+{
+    $session = Fx::session($test->owner, $test->device, ['title' => $title, 'duration_ms' => $ms, 'status' => SessionStatus::Failed]);
+    Fx::readyRecording($session, 'audio of '.$title);
+    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed,
+        'error_code' => TranscriptErrorCode::ProviderUnreachable->value]);
+
+    return $session->fresh();
+}
+
+/** @param  list<CaptureSession>  $sessions */
+function selectionIds(array $sessions): array
+{
+    return array_map(fn (CaptureSession $r): string => (string) $r->id, $sessions);
+}
+
+/** The one notice sent so far. */
+function selectionMoreNotice(): array
+{
+    $notices = json_decode(selectionMoreNotices(), true);
+    expect($notices)->toHaveCount(1);
+
+    return array_values($notices)[0];
+}
+
+it('starts audio-only recordings through TranscribeLater (2.0.0-j): its minutes in the window, started at once', function () {
+    selectionPlan($this, 'pro', 120);
+    Queue::fake();
+    $first = selectionAudioOnly($this, 'Saved call', 150_000);
+    $second = selectionAudioOnly($this, 'Second saved call', 30_000);
+
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereIn('id', [$first->id, $second->id, $this->done->id])->get());
+    // TranscribeLater's plan minutes: each length rounded up, times the billed channels (2:30 and 0:30 in stereo: 6 + 2).
+    expect($plan['minutes'])->toBe(8)->and($plan['left'])->toBe(120)->and($plan['can'])->toBeTrue()
+        ->and($plan['words'])->toBe('About 8 minutes of the 120 minutes left this month.')
+        ->and(selectionIds($plan['later']))->toEqualCanonicalizing([(string) $first->id, (string) $second->id])->and($plan['restart'])->toBe([]);
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$first->id, $second->id, $this->done->id]);
+    expect(selectionMoreNotices())->toContain('Transcribing 2 recordings · 1 skipped (already transcribed or no audio)');
+    foreach ([$first, $second] as $session) {
+        $session = $session->fresh();
+        expect($session->status)->toBe(SessionStatus::Processing)->and($session->transcribe)->toBeTrue()
+            ->and($session->finalTranscript?->status)->toBe(TranscriptStatus::Pending);
+    }
+    // Not the console's own queued restart: TranscribeLater started them (their minutes now count as in flight).
+    expect(Queue::pushed(CallQueuedClosure::class))->toHaveCount(0)
+        ->and(app(TranscribeLater::class)->minutesLeft((int) $this->owner->current_workspace_id, (int) $this->owner->id, fresh: true))->toBe(112);
+});
+
+it('starts a mixed selection: the audio-only one through TranscribeLater, the failed transcript again as before, one notice for both', function () {
+    selectionPlan($this, 'pro', 120);
+    Queue::fake();
+    $saved = selectionAudioOnly($this, 'Saved call', 60_000);
+    $failed = selectionFailedTranscript($this, 'Failed call', 60_000);
+
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereIn('id', [$saved->id, $failed->id, $this->waiting->id])->get());
+    // One sentence over both: 1:00 stereo through TranscribeLater (2), 1:00 stereo restarted (2) and 2:30 stereo (5).
+    expect(selectionIds($plan['later']))->toBe([(string) $saved->id])
+        ->and(selectionIds($plan['restart']))->toEqualCanonicalizing([(string) $failed->id, (string) $this->waiting->id])
+        ->and($plan['minutes'])->toBe(9)->and($plan['words'])->toBe('About 9 minutes of the 120 minutes left this month.');
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$saved->id, $failed->id, $this->waiting->id]);
+    expect(selectionMoreNotices())->toContain('Transcribing 3 recordings')->not->toContain('skipped')->not->toContain('could not start');
+    expect($saved->fresh()->status)->toBe(SessionStatus::Processing)->and($saved->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending);
+    // The failed one (and the one kept without a transcript) start again on the queue, as the recording page's Transcribe again.
+    expect($failed->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Failed)->and(selectionRunQueuedStarts())->toBe(2)
+        ->and($failed->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending)
+        ->and($this->waiting->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending);
+});
+
+it('starts nothing on Free without the person\'s own key, and says where to add it, never the server\'s words', function () {
+    selectionPlan($this, 'free', 0);
+    Queue::fake();
+    $saved = selectionAudioOnly($this, 'Saved call', 60_000);
+    $failed = selectionFailedTranscript($this, 'Failed call', 60_000);
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$saved->id, $failed->id]);
+    $notice = selectionMoreNotice();
+    expect($notice['title'])->toBe('This plan transcribes with your own Groq key. Add it in Settings › Transcription key.')
+        ->and($notice['status'])->toBe('danger')->and($notice['url'])->toBe(EditProfile::settingsUrl('transcription-key'))
+        ->and($notice['title'])->not->toContain(TranscriptErrorCode::plainWords(TranscriptErrorCode::NeedsTranscriptionKey));
+    // All or none: the failed one does not start either.
+    expect($saved->fresh()->status)->toBe(SessionStatus::AudioOnly)->and($saved->fresh()->finalTranscript)->toBeNull()
+        ->and(Queue::pushed(CallQueuedClosure::class))->toHaveCount(0)->and($failed->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Failed);
+
+    // In the console's language.
+    app()->setLocale('ur');
+    expect(CaptureSessionsTable::transcribeRefused(new ApiError(403, 'needs_transcription_key', 'x'), 1)->getTitle())
+        ->toBe('یہ پلان آپ کی اپنی Groq کلید سے ٹرانسکرائب کرتا ہے۔ اسے ترتیبات › ٹرانسکرپشن کی کلید میں شامل کریں۔');
+});
+
+it('starts nothing over the month\'s minutes and says so as the desktop does', function () {
+    selectionPlan($this, 'pro', 5);
+    Queue::fake();
+    // 2:30 in stereo is 6 of TranscribeLater's minutes, one more than is left.
+    $saved = selectionAudioOnly($this, 'Saved call', 150_000);
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($saved->id)->get());
+    expect($plan['can'])->toBeFalse()
+        ->and($plan['words'])->toBe('About 6 minutes of the 5 minutes left this month. That is more than is left, so nothing will start. Pick fewer recordings.');
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$saved->id]);
+    $notice = selectionMoreNotice();
+    expect($notice['title'])->toBe('This needs 6 minutes, and 5 minutes are left this month.')->and($notice['status'])->toBe('danger');
+    expect($saved->fresh()->status)->toBe(SessionStatus::AudioOnly)->and($saved->fresh()->finalTranscript)->toBeNull();
+
+    // When the server refuses it (minutes spent elsewhere a moment before): the same sentence, never the server's own.
+    $refused = fn (string $code, array $extra = []) => CaptureSessionsTable::transcribeRefused(new ApiError(403, $code, PlanLimits::MINUTES_MESSAGE, $extra), 3);
+    expect($refused('budget_exceeded', ['limit' => 'monthly_minutes', 'minutes_needed' => 6, 'minutes_left' => 0])->getTitle())
+        ->toBe('This needs 6 minutes and no minutes are left this month.')
+        ->and($refused('budget_exceeded', ['minutes_needed' => 1, 'minutes_left' => 1])->getTitle())->toBe('This needs 1 minute, and 1 minute is left this month.')
+        ->and($refused('rate_limited')->getTitle())->toBe('Another transcription is being started. Try again in a moment.')
+        ->and($refused('server_busy')->getTitle())->toBe('Another transcription is being started. Try again in a moment.')
+        ->and($refused('something_new')->getTitle())->toBe('Nothing to transcribe · 3 could not start');
+});
+
+it('starts nothing while another start of the workspace holds it, and asks to try again', function () {
+    selectionPlan($this, 'pro', 120);
+    Queue::fake();
+    $saved = selectionAudioOnly($this, 'Saved call', 60_000);
+    $failed = selectionFailedTranscript($this, 'Failed call', 60_000);
+    $wait = TranscribeLater::$lockWaitSeconds;
+    TranscribeLater::$lockWaitSeconds = 0;
+    $lock = Cache::lock('transcribe-later:'.$this->owner->current_workspace_id, 30);
+    $lock->get();
+    try {
+        Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$saved->id, $failed->id]);
+    } finally {
+        $lock->release();
+        TranscribeLater::$lockWaitSeconds = $wait;
+    }
+    $notice = selectionMoreNotice();
+    expect($notice['title'])->toBe('Another transcription is being started. Try again in a moment.')->and($notice['status'])->toBe('danger');
+    expect($saved->fresh()->status)->toBe(SessionStatus::AudioOnly)->and(Queue::pushed(CallQueuedClosure::class))->toHaveCount(0);
+});
+
+it('never starts an audio-only recording for a read-only console or a viewer', function () {
+    // A member (the small console, read-only): no Transcribe, and nothing starts when it is called directly.
+    [$member, $theirs] = selectionMate($this, WorkspaceRole::Member);
+    $theirs->forceFill(['status' => SessionStatus::AudioOnly, 'transcribe' => false])->save();
+    Queue::fake();
+    $this->actingAs($member, 'web');
+    Livewire::test(ListCaptureSessions::class)->assertTableBulkActionDoesNotExist('transcribeInMenu');
+    try {
+        Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$theirs->id]);
+    } catch (Throwable) {
+        // Refused before it runs: what matters is that nothing started.
+    }
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($theirs->id)->get());
+    expect($theirs->fresh()->status)->toBe(SessionStatus::AudioOnly)->and($theirs->fresh()->finalTranscript)->toBeNull()
+        ->and($plan['ready'])->toBe([])->and($plan['later'])->toBe([]);
+
+    // The server's operator has the whole console, but as a viewer here their own audio-only recording from before does
+    // not start: TranscribeLater refuses a viewer, and Transcribe… leaves it out.
+    $workspaceId = (int) $this->owner->current_workspace_id;
+    $operator = Fx::superAdmin(['name' => 'Ops']);
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($workspaceId), $operator, WorkspaceRole::Viewer);
+    $old = selectionAudioOnly($this, 'Before the change', 60_000, $operator, ['workspace_id' => $workspaceId]);
+    $operator->forceFill(['current_workspace_id' => $workspaceId])->save();
+    $this->actingAs($operator->fresh(), 'web');
+    expect(CurrentWorkspace::id())->toBe($workspaceId);
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($old->id)->get());
+    expect($plan['ready'])->toBe([])->and($plan['can'])->toBeFalse()
+        ->and($plan['words'])->toBe('Nothing here can be transcribed: each one is already transcribed or has no audio.');
+    expect($old->fresh()->status)->toBe(SessionStatus::AudioOnly)->and($old->fresh()->finalTranscript)->toBeNull();
+
+    // Nor does their own failed transcript start again: one check covers both kinds (not only TranscribeLater's).
+    $failed = Fx::session($operator, Fx::device($operator), ['title' => 'Failed before', 'duration_ms' => 60_000, 'status' => SessionStatus::Failed, 'workspace_id' => $workspaceId]);
+    Fx::readyRecording($failed, 'audio of the failed one');
+    $failed->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed,
+        'error_code' => TranscriptErrorCode::ProviderUnreachable->value]);
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey([$old->id, $failed->id])->get());
+    expect($plan['restart'])->toBe([])->and($plan['ready'])->toBe([])->and($plan['can'])->toBeFalse();
+    try {
+        Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$old->id, $failed->id]);
+    } catch (Throwable) {
+        // Refused before it runs: what matters is that nothing started.
+    }
+    expect(Queue::pushed(CallQueuedClosure::class))->toHaveCount(0)
+        ->and($failed->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Failed);
 });
