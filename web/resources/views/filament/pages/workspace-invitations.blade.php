@@ -6,7 +6,9 @@
     @if ($invitations === [])
         <p style="font-size:.85rem;opacity:.7;margin:0">{{ __('No invitation is waiting.') }}</p>
     @else
-        <div style="overflow-x:auto">
+        {{-- W-220: the box that scrolls holds the table's hidden "Actions" too (position), so on a phone the page
+             itself never scrolls sideways (right to left it shifted the page and showed the hidden panel). --}}
+        <div style="overflow-x:auto;position:relative">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                 <thead>
                     <tr style="text-align:left;opacity:.7">
@@ -36,7 +38,7 @@
     @if ($links === [])
         <p style="font-size:.85rem;opacity:.7;margin:0">{{ __('No invite link is open.') }}</p>
     @else
-        <div style="overflow-x:auto">
+        <div style="overflow-x:auto;position:relative">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                 <thead>
                     <tr style="text-align:left;opacity:.7">

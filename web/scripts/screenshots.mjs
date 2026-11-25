@@ -243,6 +243,87 @@ function headerProblems() {
     return { problems: [...new Set(problems)], steps };
 }
 
+/** The console's language for the account signed in (Settings › Appearance), as a person sets it. */
+async function consoleLanguage(page, base, code) {
+    await page.goto(`${base}/app/settings/appearance`, { waitUntil: 'load' });
+    const radio = page.locator(`[data-setting="appearance.app_language"] [role=radio][lang=${code}]`);
+    if ((await radio.getAttribute('aria-checked')) === 'true') return;
+    // Saved, the page is drawn again in that language.
+    await Promise.all([page.waitForEvent('load'), radio.click()]);
+    await page.waitForTimeout(1500);
+}
+
+/**
+ * In the page (W-220): the page itself never scrolls sideways (a wide table scrolls in its own box), naming the box that
+ * pushes it wider; and on a phone the frame's panel, while closed, is out of the window. Right to left the Workspace
+ * page at 390 px was 448 px wide (the invitations table's hidden "Actions" escaped its scrolling box), so the page shifted
+ * and the hidden panel showed over its edge. Answers what went wrong.
+ */
+function pageProblems() {
+    const problems = [];
+    const html = document.documentElement;
+    const over = html.scrollWidth - html.clientWidth;
+    if (over > 1) {
+        // Down from the body, the box whose hiding makes the page narrower, as deep as it goes.
+        let culprit = null;
+        for (let node = document.body, depth = 0; node && depth < 60; depth++) {
+            const next = [...node.children].find((c) => {
+                const before = c.style.display;
+                c.style.display = 'none';
+                const narrower = html.scrollWidth < html.clientWidth + over;
+                c.style.display = before;
+                return narrower;
+            });
+            if (!next) break;
+            culprit = next;
+            node = next;
+        }
+        const what = culprit
+            ? `${culprit.tagName.toLowerCase()}${typeof culprit.className === 'string' && culprit.className.trim() ? '.' + culprit.className.trim().split(/\s+/).slice(0, 2).join('.') : ''} "${(culprit.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`
+            : 'nothing found';
+        problems.push(`the page scrolls sideways by ${over} px (${what})`);
+    }
+    const sidebar = document.querySelector('.fi-main-sidebar');
+    if (sidebar && window.innerWidth < 1024 && !window.Alpine?.store('sidebar')?.isOpen) {
+        const r = sidebar.getBoundingClientRect();
+        const inside = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+        if (inside > 1 && r.height > 1 && getComputedStyle(sidebar).visibility !== 'hidden') problems.push(`the closed panel shows ${Math.round(inside)} px inside the window`);
+    }
+    return problems;
+}
+
+/** The pages pageFits checks, by name: the Workspace page first, then the other pages whose tables are wide. */
+const FIT_PAGES = [['workspace', '/app/workspace'], ['shared', '/app/shared-with-me'], ['links', '/app/shares'], ['usage', '/app/usage'],
+    ['devices', '/app/settings/devices'], ['trash', '/app/recently-deleted']];
+
+/**
+ * W-220: at this width, in English and in Urdu, each of FIT_PAGES fits the window (pageProblems) and its header keeps its
+ * words (headerProblems: the heading and the header's buttons whole, in the window and not covered). The account is left
+ * in English, on the Workspace page. Answers what went wrong.
+ */
+async function pageFits(page, base) {
+    const wrong = [];
+    page.setDefaultTimeout(90000);
+    const width = page.viewportSize().width;
+    try {
+        for (const code of ['en', 'ur']) {
+            await consoleLanguage(page, base, code);
+            for (const [name, path] of FIT_PAGES) {
+                await page.goto(base + path, { waitUntil: 'load' });
+                await page.waitForTimeout(1200);
+                const found = [...await page.evaluate(pageProblems), ...(await page.evaluate(headerProblems)).problems];
+                console.log(`fit ${name} ${width} ${code}: ${found.length ? found.length + ' problems' : 'fits'}`);
+                wrong.push(...found.map((p) => `${name} ${code}: ${p}`));
+            }
+        }
+    } finally {
+        await consoleLanguage(page, base, 'en');
+        await page.goto(base + FIT_PAGES[0][1], { waitUntil: 'load' });
+    }
+
+    return wrong;
+}
+
 /**
  * Decision 18 on the web console's header: at this width, in English and in Urdu, on the Library (all recordings, a
  * saved view, and that view with a long name), Live, Activity and Projects, no tab or toolbar label is cut or wrapped,
@@ -256,14 +337,7 @@ async function headerFits(page, base) {
     const width = page.viewportSize().width;
     const shots = `${out}/title-row`;
     mkdirSync(shots, { recursive: true });
-    const language = async (code) => {
-        await page.goto(`${base}/app/settings/appearance`, { waitUntil: 'load' });
-        const radio = page.locator(`[data-setting="appearance.app_language"] [role=radio][lang=${code}]`);
-        if ((await radio.getAttribute('aria-checked')) === 'true') return;
-        // Saved, the page is drawn again in that language.
-        await Promise.all([page.waitForEvent('load'), radio.click()]);
-        await page.waitForTimeout(1500);
-    };
+    const language = (code) => consoleLanguage(page, base, code);
     try {
         for (const code of ['en', 'ur']) {
             await language(code);
@@ -338,6 +412,9 @@ const pages = {
     'library-keep-place': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, wide: true, scenario: keepPlace, settle: 300 },
     // Decision 18: the header keeps every label and the title's words, in English and Urdu (headerFits' checks).
     'header-fit': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, scenario: headerFits, settle: 300 },
+    // W-220: the Workspace page and the other pages with wide tables fit a phone in English and Urdu (pageFits' checks;
+    // ONLY=page-fit WIDTHS=390).
+    'page-fit': { path: '/app/workspace', full: false, scenario: pageFits, settle: 300 },
     'library-table': { path: '/app/sessions', run: "document.querySelector('[data-layout=table]')?.click()", after: "document.querySelector('[data-layout=list]')?.click()", wide: true },
     // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
     'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
