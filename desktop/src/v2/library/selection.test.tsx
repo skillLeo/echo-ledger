@@ -1045,7 +1045,7 @@ describe("Trash, Undo and the limits", () => {
     fireEvent.contextMenu(rows()[0], { clientX: 10, clientY: 10 });
     const menu = screen.getByRole("menu", { name: "Actions for 201 recordings" });
     // Mark as unread first (any number, contract 2.0.0-y), then the limit for the rest.
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Mark as unreadCtrl+Shift+U", "Up to 200 at a time: unselect 1"]);
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Mark as unreadCtrl+Shift+U", "Over 200: only Mark as read or unread. Unselect 1 for the rest"]);
     expect(within(menu).getAllByRole("menuitem")[1]).toHaveAttribute("aria-disabled", "true");
   }, 30_000);
 });
