@@ -1,6 +1,7 @@
 // Desktop Urdu, D2, in the screens fixture (every v2 flag and v21_urdu on, the account's language Urdu: "&applang=ur",
 // 1280 × 800), on a Mac and on Windows, in the light and the dark theme: Shared with me's list, My links and Request
-// links (lib/sharing.ts's words), a recording a teammate sent open read-only, and the Request files sheet. It checks
+// links (lib/sharing.ts's words), a recording a teammate sent open read-only, the Request files sheet, and what the
+// new design opens with the sharing words: a recording's Share sheet and a project's filing rules. It checks
 // that the window reads right to left and that the page speaks Urdu, and saves
 // docs/design/screens/desktop/urdu-d2/<platform>-<step>.png (light) and <platform>-<step>-dark.png; the run fails when
 // either check doesn't hold.
@@ -27,12 +28,17 @@ try {
   for (const [platform, theme] of [["macos", "light"], ["macos", "dark"], ["windows", "light"], ["windows", "dark"]]) {
     const where = `${platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1"}&theme=${theme}`;
     const label = `${platform} (${theme})`;
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
-    page.setDefaultTimeout(120_000);
-    await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
-    await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 15_000 }).catch(() => undefined);
-    await page.waitForTimeout(1000);
+    /** The window on a screen of the fixture, the account's language Urdu. */
+    const open = async (screen) => {
+      const opened = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
+      opened.setDefaultTimeout(120_000);
+      await opened.goto(`${base}scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
+      await opened.getByRole("navigation", { name: "Main" }).waitFor();
+      await opened.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 15_000 }).catch(() => undefined);
+      await opened.waitForTimeout(1000);
+      return opened;
+    };
+    let page = await open("library");
     /** Saves the window, after checking its direction and that `words` (Urdu) are on it. */
     const shot = async (step, words) => {
       await page.mouse.move(0, 0);
@@ -74,6 +80,23 @@ try {
     await page.getByRole("dialog", { name: "فائلیں منگوائیں" }).waitFor();
     await page.waitForTimeout(400);
     await shot("request-sheet", "لوگوں کو نظر آنے والا عنوان");
+    await page.close();
+
+    // A recording's Share sheet, from the Library's recording page (its own words aren't in the account's language yet).
+    page = await open("library");
+    await page.getByRole("button", { name: "Share", exact: true }).first().click();
+    await page.getByRole("dialog", { name: /شیئر کریں$/ }).waitFor();
+    await page.waitForTimeout(400);
+    await shot("share-sheet", "کون کھول سکتا ہے");
+    await page.close();
+
+    // A project's filing rules (Projects › Acme Holdings, under its recordings).
+    page = await open("projects");
+    await page.getByRole("button", { name: /^Acme Holdings/ }).first().click();
+    const rules = page.getByRole("region", { name: "رکھنے کے قواعد" });
+    await rules.waitFor();
+    await rules.scrollIntoViewIfNeeded();
+    await shot("project-rules", "رکھنے کے قواعد");
     await page.close();
   }
 } finally {

@@ -112,7 +112,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     try {
       const saved = await api.saveShared(item.id);
       setData((d) => ({ ...d, withMe: (d.withMe ?? []).map((i) => (i.id === item.id ? { ...i, saved_at: new Date().toISOString() } : i)) }));
-      notify(item.kind === "project" ? (item.title ? t("Saved :name to your projects", { name: item.title }) : t("Saved the project to your projects")) : t("Saved to your Library"), false,
+      notify(item.kind === "project" ? (item.title !== null ? t("Saved :name to your projects", { name: item.title }) : t("Saved the project to your projects")) : t("Saved to your Library"), false,
         saved?.client_id ? { kind: "project", id: saved.client_id } : saved?.session_id ? { kind: "recording", id: saved.session_id } : NO_TARGET);
       onSaved?.(saved ?? {}, item);
     } catch (e) {

@@ -12,12 +12,12 @@ import { answerConfirmForTests } from "../../lib/confirm";
 import type { ClientFolder, RequestLink, ShareLink, SharedItem } from "../../lib/ipc";
 import type { SharedTab } from "../../views/main/Sidebar";
 import {
-  audienceText, downloadText, EXPIRY_CHOICES, expiryChoices, filedByRuleText, limitsText, linkState, receivedText, requestState, REVOKE_LINK_QUESTION,
-  revokeLinkQuestion, revokeRequestQuestion, RULE_KINDS, ruleKinds, ruleText, viewsText,
+  audienceText, downloadText, expiryChoices, filedByRuleText, limitsText, linkState, receivedText, requestState,
+  revokeLinkQuestion, revokeRequestQuestion, ruleKinds, ruleText, viewsText,
 } from "../../lib/sharing";
 import { FSI, PDI, resetLanguageForTests, setLanguage, stripIsolates } from "../../i18n";
 import { SharedV2 } from "./SharedV2";
-import { PLAYBACK_EXPIRED } from "./SharedReader";
+import { playbackExpired } from "./SharedReader";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -316,7 +316,7 @@ describe("a shared recording, read-only, in Urdu", () => {
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("اے آئی کے لیے کاپی ہو گیا، غیر یقینی الفاظ کے نوٹ کے ساتھ", false, undefined);
     // What goes to the clipboard has no isolates.
-    expect(writeText).toHaveBeenLastCalledWith(expect.not.stringMatching(/[⁦-⁩]/));
+    expect(writeText).toHaveBeenLastCalledWith(expect.not.stringMatching(/[\u2066-\u2069]/));
     writeText.mockImplementationOnce(() => Promise.reject(new Error("denied")));
     fireEvent.click(within(bar).getByRole("button", { name: "متن کاپی کریں" }));
     await act(flushAsync);
@@ -454,11 +454,10 @@ describe("the sharing words (lib/sharing.ts)", () => {
     expect(ruleKinds().map(([, words]) => words)).toEqual(["عنوان میں ہو", "ایپ", "رابطہ نمبر یا ای میل"]);
     expect(revokeLinkQuestion()).toEqual({ title: "یہ لنک منسوخ کریں؟", body: "یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔", confirm: "منسوخ کریں", tone: "danger" });
     expect(revokeRequestQuestion().title).toBe("یہ درخواست کا لنک منسوخ کریں؟");
-    // The constants the windows not in t() yet read were read as the app loaded: English, whatever the language now.
-    expect(REVOKE_LINK_QUESTION).toEqual({ title: "Revoke this link?", body: "It stops working for everyone who has it.", confirm: "Revoke", tone: "danger" });
-    expect(EXPIRY_CHOICES.map(([, words]) => words)).toEqual(["Never", "In 1 hour", "In 1 day", "In 7 days", "In 30 days", "On a date…"]);
-    expect(RULE_KINDS.map(([, words]) => words)).toEqual(["Title contains", "App", "Contact number or email"]);
-    expect(PLAYBACK_EXPIRED).toBe("Playback link expired. Open the recording again.");
+    // A window still in English asks for English ("en"): the same words as always, whatever the window's language.
+    expect(revokeRequestQuestion("en")).toEqual({ title: "Revoke this request link?", body: "It stops taking files from everyone who has it.", confirm: "Revoke", tone: "danger" });
+    // The recording page's expired-link line is read when it is shown, in the language of the moment.
+    expect(playbackExpired()).toBe("آڈیو کے لنک کی میعاد ختم ہو گئی۔ ریکارڈنگ دوبارہ کھولیں۔");
   });
 
   it("plurals choose as trans_choice does, in Urdu and in English", async () => {

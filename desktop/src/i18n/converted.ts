@@ -5,4 +5,7 @@ export const CONVERTED: readonly string[] = [
   // D2: Shared with me, its read-only view and the Request files sheet, with the sharing words they show.
   "v2/shared/",
   "lib/sharing.ts",
+  // and what the new design opens with them: the share sheet (the recording page's Share) and a project's filing rules.
+  "views/main/ShareDialog.tsx",
+  "v2/workspace/Rules.tsx",
 ];

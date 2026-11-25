@@ -33,8 +33,6 @@ type ShowAs = "original" | TranscriptView;
 export const readOnlyLine = () => t("You can play and read it. Save to my library makes a copy you can change.");
 /** Classic's words when the signed audio link has run out and a fresh one could not be had. */
 export const playbackExpired = () => t("Playback link expired. Open the recording again.");
-/** The same, read once when this file loads: for the recording page (v2/library), until it calls playbackExpired(). */
-export const PLAYBACK_EXPIRED = playbackExpired();
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
 const VIEW_ORDER: TranscriptView[] = ["roman", "urdu", "english"];
 /** A view's name (Urdu's in its own script, in every language). */

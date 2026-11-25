@@ -21,7 +21,7 @@ import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../
 import { usePoll } from "../../lib/usePoll";
 import { canTryAgain, failureLine, languageLabel, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, usedBackupEngine } from "../../lib/languages";
 import { openSettingsSection } from "../../lib/entitlements";
-import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
+import { playbackExpired } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
@@ -546,14 +546,14 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   [segments, editing, editLine, matches, findCurrent, tDetail, fixesShown, openFix, fixBusy, screensAfter, canPlay, showAs, views]);
   const renderText = (i: number) => (i === active && activeWordAt >= 0 ? lineText(i, activeWordAt) : parts[i]?.text);
   const audioError = () => {
-    if (refreshedLink.current) return setPlaybackError(PLAYBACK_EXPIRED);
+    if (refreshedLink.current) return setPlaybackError(playbackExpired());
     refreshedLink.current = true;
     const failed = detail.state === "ready" ? detail.value.url : null;
     api.session(item.id).then((d) => {
       const next = typeof d.playback_url === "string" ? d.playback_url : null;
       if (next && next !== failed) setDetail((s) => (s.state === "ready" ? { state: "ready", value: { ...s.value, url: next } } : s));
-      else setPlaybackError(PLAYBACK_EXPIRED);
-    }).catch(() => setPlaybackError(PLAYBACK_EXPIRED));
+      else setPlaybackError(playbackExpired());
+    }).catch(() => setPlaybackError(playbackExpired()));
   };
   const engine = transcribedIn(item.transcript);
   const warning = scriptWarning(item.transcript?.script_warning);
