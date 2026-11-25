@@ -8,6 +8,6 @@
     @endif
     <span class="el-sb-label">{{ $label }}</span>
     @if (filled($badge ?? null))
-        <span class="el-sb-badge"><span class="el-sr">, needs you: </span>{{ $badge }}</span>
+        <span class="el-sb-badge"><span class="el-sr">{{ __(', needs you:') }} </span>{{ $badge }}</span>
     @endif
 </a>

@@ -25,6 +25,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Livewire\Attributes\Url;
 use UnitEnum;
 
@@ -47,6 +48,12 @@ class Search extends Page
 
     protected static ?string $title = 'Search';
 
+    /** In the console's language: the page's name, not the command (the same English word). */
+    public function getTitle(): string|Htmlable
+    {
+        return __('library_context.search_title');
+    }
+
     #[Url(as: 'q')]
     public string $query = '';
 
@@ -65,22 +72,23 @@ class Search extends Page
         $workspaceId = (int) CurrentWorkspace::id();
 
         return $schema->statePath('filters')->components([
-            TextInput::make('q')->hiddenLabel()->placeholder('Search titles and transcripts — "quoted words" stay together')
+            TextInput::make('q')->hiddenLabel()->placeholder(__('Search titles and transcripts — "quoted words" stay together'))
                 ->autofocus()->live(debounce: 400)->maxLength(200)->afterStateUpdated(function (?string $state): void {
                     $this->query = (string) $state;
                     $this->page = 1;
                 }),
             Grid::make(['default' => 2, 'lg' => 4])->schema([
-                Select::make('client_id')->label('Project')->live()->placeholder('Any project')
+                Select::make('client_id')->label(__('Project'))->live()->placeholder(__('Any project'))
                     ->options(fn () => Client::query()->where('workspace_id', $workspaceId)->where('user_id', CurrentWorkspace::userId())->orderBy('name')->pluck('name', 'id')->all()),
-                Select::make('source_app')->label('App')->live()->placeholder('Any app')->options(SourceApp::class),
-                Select::make('source_device')->label('Device')->live()->placeholder('Any device')->options(SourceDevice::class),
-                Select::make('status')->label('Status')->live()->placeholder('Any status')->options(SessionStatus::class),
-                DatePicker::make('from')->label('From')->live()->native(false),
-                DatePicker::make('to')->label('To')->live()->native(false),
-                Select::make('tag')->label('Bookmark tag')->live()->placeholder('Any tag')
-                    ->options(fn () => array_combine($tags = app(SettingsRepository::class)->markerTags(), $tags)),
-                Toggle::make('bookmarked')->label('Bookmarked only')->live()->inline(false),
+                Select::make('source_app')->label(__('App'))->live()->placeholder(__('Any app'))->options(self::choices(SourceApp::class))->enum(SourceApp::class),
+                Select::make('source_device')->label(__('Device'))->live()->placeholder(__('Any device'))->options(self::choices(SourceDevice::class))->enum(SourceDevice::class),
+                Select::make('status')->label(__('Status'))->live()->placeholder(__('Any status'))->options(self::choices(SessionStatus::class))->enum(SessionStatus::class),
+                // The dates' range: "From" in lang/ur.json is the general one (a source), so these are the search's own.
+                DatePicker::make('from')->label(__('library_context.search_from'))->live()->native(false),
+                DatePicker::make('to')->label(__('library_context.search_to'))->live()->native(false),
+                Select::make('tag')->label(__('Bookmark tag'))->live()->placeholder(__('Any tag'))
+                    ->options(fn () => array_combine($tags = app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => __($tag), $tags))),
+                Toggle::make('bookmarked')->label(__('Bookmarked only'))->live()->inline(false),
             ]),
         ]);
     }
@@ -126,6 +134,17 @@ class Search extends Page
             'urlFor' => fn (CaptureSession $s, ?int $ms = null): string => CaptureSessionResource::getUrl('view', ['record' => $s]).($ms !== null ? '?t='.$ms : ''),
             'tz' => app(SettingsRepository::class)->displayTimezone(),
         ];
+    }
+
+    /**
+     * An enum's cases as a filter's choices, each named in the console's language (the values stay the cases').
+     *
+     * @param  class-string<SourceApp|SourceDevice|SessionStatus>  $enum
+     * @return array<string, string>
+     */
+    private static function choices(string $enum): array
+    {
+        return collect($enum::cases())->mapWithKeys(fn (SourceApp|SourceDevice|SessionStatus $case): array => [$case->value => __((string) $case->getLabel())])->all();
     }
 
     private static function value(mixed $state): ?string

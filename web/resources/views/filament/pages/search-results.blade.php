@@ -29,23 +29,23 @@
         .dark .el-search button { border-color: rgba(255,255,255,.2); }
     </style>
     @if (mb_strlen($query) < 2)
-        <p class="el-muted">Type at least two characters. Every word must match; filters narrow the results.</p>
+        <p class="el-muted">{{ __('Type at least two characters. Every word must match; filters narrow the results.') }}</p>
     @elseif ($items->isEmpty())
-        <p class="el-muted">Nothing found for “{{ $query }}”. Try fewer words or other filters.</p>
+        <p class="el-muted">{{ __('Nothing found for “:query”. Try fewer words or other filters.', ['query' => $query]) }}</p>
     @else
         @foreach ($items as $session)
             @php($found = $hits[$session->id] ?? ['hits' => [], 'count' => 0])
             <div class="el-card">
                 <a class="el-title" href="{{ $urlFor($session) }}" dir="auto">{{ $session->displayTitle() }}</a>
                 <div class="el-muted">
-                    {{ $session->started_at->copy()->setTimezone($tz)->format('M j, Y · '.\App\Filament\Support\Shell::timeFormat()) }} · {{ $session->source_app->getLabel() }}
+                    {{ \App\Filament\Support\ConsoleDates::dateTime($session->started_at->copy()->setTimezone($tz), \App\Filament\Support\Shell::timeFormat()) }} · {{ __($session->source_app->getLabel()) }}
                     @if ($session->client) · {{ $session->client->name }} @endif
-                    @if ($found['count'] > count($found['hits'])) · {{ $found['count'] }} matches @endif
+                    @if ($found['count'] > count($found['hits'])) · {{ trans_choice(':count match|:count matches', $found['count'], ['count' => $found['count']]) }} @endif
                 </div>
                 @if ($found['hits'] !== [])
                     <div class="el-hits">
                         @foreach ($found['hits'] as $hit)
-                            <a class="el-hit" href="{{ $urlFor($session, $hit['start_ms']) }}" aria-label="Play {{ $session->displayTitle() }} from {{ \App\Services\TranscriptExporter::clock($hit['start_ms']) }}">
+                            <a class="el-hit" href="{{ $urlFor($session, $hit['start_ms']) }}" aria-label="{{ __('Play :title from :clock', ['title' => $session->displayTitle(), 'clock' => \App\Services\TranscriptExporter::clock($hit['start_ms'])]) }}">
                                 <span class="el-t el-muted">{{ \App\Services\TranscriptExporter::clock($hit['start_ms']) }}</span>
                                 <span class="el-snip" dir="auto"><strong>{{ $hit['speaker'] }}:</strong> {!! $mark($hit['snippet'], $hit['highlights']) !!}</span>
                             </a>
@@ -55,8 +55,8 @@
             </div>
         @endforeach
         <div class="el-pager">
-            @if ($page > 1)<button type="button" wire:click="previousPage">Newer</button>@endif
-            @if ($more)<button type="button" wire:click="nextPage">Older</button>@endif
+            @if ($page > 1)<button type="button" wire:click="previousPage">{{ __('library_context.search_newer') }}</button>@endif
+            @if ($more)<button type="button" wire:click="nextPage">{{ __('library_context.search_older') }}</button>@endif
         </div>
     @endif
 </div>
