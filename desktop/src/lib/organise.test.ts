@@ -6,6 +6,27 @@ import { makeItem } from "../test/fixtures";
 const NOW = new Date(2026, 9, 28, 15, 0, 0);
 const at = (y: number, m: number, d: number, h = 9) => new Date(y, m, d, h).toISOString();
 
+describe("the classic Waiting view (contract 2.0.0-z)", () => {
+  const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+  const call = (id: string, extra: Parameters<typeof makeItem>[1]) => makeItem(id, { status: "recording", ...extra });
+  it("has a call once it is over (ended_at) or started more than 4 hours ago, never one still being recorded", () => {
+    const items = [
+      call("live", { started_at: ago(3 * 60_000) }),
+      call("over", { started_at: ago(3 * 60_000), ended_at: ago(60_000) }),
+      call("four", { started_at: ago(4 * 3_600_000) }),
+      call("older", { started_at: ago(4 * 3_600_000 + 1000) }),
+    ];
+    expect(items.filter((i) => inSmartView(i, "waiting", NOW)).map((i) => i.id)).toEqual(["over", "older"]);
+    expect(smartViewCounts(items, NOW).waiting).toBe(2);
+    // A server state that may be stale (Waiting to upload, synced while the call ran) doesn't stop the clock; its
+    // Waiting wins.
+    expect(inSmartView(call("stale", { started_at: ago(4 * 3_600_000 + 1000), facets: { state: "waiting_to_upload" } }), "waiting", NOW)).toBe(true);
+    expect(inSmartView(call("sent", { started_at: ago(60_000), facets: { state: "waiting" } }), "waiting", NOW)).toBe(true);
+    // All has none of them, as on the server.
+    expect(items.filter((i) => inSmartView(i, "all", NOW))).toEqual([]);
+  });
+});
+
 describe("smart views (B15)", () => {
   const today = makeItem("today", { started_at: at(2026, 9, 28) });
   const monday = makeItem("monday", { started_at: at(2026, 9, 26), pinned: true });
@@ -33,7 +54,8 @@ describe("smart views (B15)", () => {
   });
 
   it("counts every view", () => {
-    expect(smartViewCounts(items, NOW)).toEqual({ all: 6, today: 2, this_week: 3, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
+    // All leaves out the call whose session is still `recording` (contract 2.0.0-z: only Waiting has it).
+    expect(smartViewCounts(items, NOW)).toEqual({ all: 5, today: 2, this_week: 3, waiting: 1, bookmarked: 1, failed: 2, pinned: 1 });
   });
 });
 

@@ -6,6 +6,7 @@
 // all of them check the shared file web/tests/Fixtures/library-facets.json. Filters are kept in the contract's own
 // shape (a filter set), so a saved view goes to the server as it is. Pure, so the rules are tested without a window.
 import type { LibraryItem } from "../../lib/ipc";
+import { isWaiting } from "../../lib/organise";
 
 /**
  * The library views in the sidebar's LIBRARY section, in its order. Since v2.1 (docs/PLAN_V2_1_POLISH.md section 1) Not
@@ -164,14 +165,15 @@ const processingSince = (item: LibraryItem) => Date.parse(item.processing_since 
 
 /**
  * Why a recording needs the person, or null (Needs you, one reason at most, the first that holds): `waiting` (a call
- * still waiting for Keep or Discard on the server: session `recording`), `failed` (Status Failed: an upload, a
+ * over and waiting for Keep or Discard on the server: session `recording`, see isWaiting; a call still being recorded
+ * needs nothing yet), `failed` (Status Failed: an upload, a
  * transcript or the recording failed), `stuck` (still Processing more than 24 hours after its current attempt began,
  * else after it ended; exactly 24 hours is not stuck yet). The calls and
  * uploads waiting on this computer are not in the library list: needsYouCount adds them.
  */
 export function needsReason(item: LibraryItem, now: number): "waiting" | "failed" | "stuck" | null {
   if (item.deleted) return null;
-  if (item.status === "recording") return "waiting";
+  if (item.status === "recording") return isWaiting(item, now) ? "waiting" : null;
   const status = statusOf(item);
   if (status === "failed") return "failed";
   if (status !== "processing") return null;

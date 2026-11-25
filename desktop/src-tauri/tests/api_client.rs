@@ -681,6 +681,16 @@ async fn transcripts_are_posted_and_deletes_accept_an_empty_204() {
     assert_eq!(status, 404);
 }
 
+#[tokio::test]
+async fn the_end_of_a_call_is_a_patch_with_when_it_ended_and_how_long_it_lasted() {
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/S1", Reply::json(200, json!({"data": {"id": "S1"}}))));
+    let c = client(&server);
+    c.end_call("S1", "2026-11-26T09:40:12.345Z", 125_000).await.unwrap();
+    let sent = &server.requests()[0];
+    assert_eq!((sent.method.as_str(), sent.target.as_str()), ("PATCH", "/api/sessions/S1"));
+    assert_eq!(sent.json(), json!({"ended_at": "2026-11-26T09:40:12.345Z", "duration_ms": 125000}), "only the end, never an organise key");
+}
+
 // ---- Status code mapping ---------------------------------------------------------------------------------------
 
 #[tokio::test]

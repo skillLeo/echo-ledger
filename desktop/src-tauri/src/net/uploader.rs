@@ -985,6 +985,64 @@ impl DiscardQueue {
     }
 }
 
+/// The end of a call to tell the server (contract 2.0.0-z): its open session, when the call ended (ISO 8601, UTC) and
+/// how long it lasted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallEnd {
+    pub session_id: String,
+    pub ended_at: String,
+    pub duration_ms: u64,
+}
+
+/// Ends of calls to send (`ends.json`), one per session: the server keeps the first, so the first queued stays.
+#[derive(Default, Serialize, Deserialize)]
+pub struct EndQueue {
+    #[serde(default)]
+    pub items: Vec<CallEnd>,
+}
+
+impl EndQueue {
+    pub fn load(path: &Path) -> Self {
+        load_json(path)
+    }
+
+    pub fn save(&self, path: &Path) -> AppResult<()> {
+        save_json(path, self)
+    }
+
+    pub fn push(&mut self, end: CallEnd) {
+        if !end.session_id.is_empty() && !self.items.iter().any(|e| e.session_id == end.session_id) {
+            self.items.push(end);
+        }
+    }
+}
+
+/// Result of sending queued ends of calls.
+#[derive(Debug, Default)]
+pub struct EndDrain {
+    /// Session ids to remove from the queue (stored, or refused for good).
+    pub done: Vec<String>,
+    pub stopped: Option<AppError>,
+}
+
+/// `PATCH /api/sessions/{id}` with each queued end, oldest first: `200` is done; a refusal for good (`404` gone, `409`
+/// `not_recording` already decided, `422`, a `403` after a role change…) drops it, as `drain_usage` does, so it never
+/// blocks the ends behind it; anything transient (or `NotPaired`) stops the drain so the rest waits for the next cycle.
+pub async fn drain_ends(api: &ApiClient, ends: &[CallEnd]) -> EndDrain {
+    let mut out = EndDrain::default();
+    for end in ends {
+        match api.end_call(&end.session_id, &end.ended_at, end.duration_ms).await {
+            Ok(()) => out.done.push(end.session_id.clone()),
+            Err(e) if e.is_permanent() && !matches!(e, AppError::NotPaired) => out.done.push(end.session_id.clone()),
+            Err(e) => {
+                out.stopped = Some(e);
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Result of sending queued usage reports.
 #[derive(Debug, Default)]
 pub struct UsageDrain {

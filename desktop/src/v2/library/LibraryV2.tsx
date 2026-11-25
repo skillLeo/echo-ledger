@@ -31,7 +31,7 @@ import { latinKey } from "../actions/latinKey";
 import { useMenuPart } from "../actions/menuState";
 import { choiceItems, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
 import {
-  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, prepare, searchWords, shownTabs, tabCounts, toggleValue,
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, inTab, LIBRARY_TAB_NAMES, matchesSearch, needsReason, prepare, searchWords, shownTabs, tabCounts, toggleValue,
   type LibraryTab,
   type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
 } from "./facets";
@@ -746,9 +746,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     let made: ReturnType<typeof facetCounts> | null = null;
     return () => (made ??= facetCounts(searched.filter((f) => inTab(f, tab)), applied, prepared.names, Date.now(), undefined, prepared.facts));
   }, [searched, applied, prepared, tab]);
-  // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
-  // which no other view has), whatever the filters and the search, as the server's Needs you does.
-  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
+  // Needs you lists the server's waiting recordings too (a call over and waiting for Keep or Discard: session
+  // `recording`, which no other view has; not one still being recorded), whatever the filters and the search, as the
+  // server's Needs you does.
+  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => needsReason(i, Date.now()) === "waiting") : []), [items, baseView, trash]);
   // The page's tabs (All · Calls · Meetings · Voice notes), by Source, ANDed with the filters; counted with the
   // place, the filters and the search.
   const filtered = useMemo(() => filterFacts(searched, applied), [searched, applied]);
