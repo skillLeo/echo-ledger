@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Vitest turns imported CSS into an empty module, so the file is read from disk.
 const css = readFileSync(join(here, "styles.css"), "utf8");
 const tauriConf = JSON.parse(readFileSync(join(here, "../src-tauri/tauri.conf.json"), "utf8")) as {
-  app: { windows: { label: string; minWidth: number }[] };
+  app: { windows: { label: string; minWidth: number; minHeight: number }[] };
 };
 
 let rules: CSSRule[] = [];
@@ -116,6 +116,8 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     // Half of a 1440 pt screen (the owner works in half screens).
     expect(main.minWidth).toBe(720);
     expect(main.minWidth).toBeLessThanOrEqual(1029);
+    // FIX-08 (lead decisions 4 and 11): 560 tall until the new rail fits at 520 (scripts/minSize.mjs measures both).
+    expect(main.minHeight).toBe(560);
   });
 
   it("fits the two columns on a page that is not narrow, and the nested column beside them where it is shown", () => {
