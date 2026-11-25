@@ -312,7 +312,7 @@ function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Proj
     const rows = children(parent);
     if (!rows.length) return null;
     return (
-      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label : undefined} role={parent === null ? undefined : "group"}>
+      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label : undefined}>
         {rows.map((p) => {
           const kids = children(p.id).length > 0;
           const open = kids && !folds.has(p.id);
@@ -628,7 +628,7 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
                   aria-current={current === "library" && places.current === p.key ? "page" : undefined}
                   onClick={() => { setOwn(null); places.open(p.key); }}>
                   <span className="el-nav-item__label" dir="auto">{p.label}</span>
-                  <span className="el-nav-item__count el-caption el-num">{p.count}</span>
+                  {" "}<span className="el-nav-item__count el-caption el-num">{p.count}</span>
                 </button>
               </li>
             ))}

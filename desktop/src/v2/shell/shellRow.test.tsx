@@ -261,7 +261,7 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
       "Setup, needs setup", "Help", "Settings", "Account, Ayesha Khan",
     ]);
     const activity = rail().getByRole("button", { name: "Activity, 12" });
-    expect(activity.querySelector(".el-rail__count")!.textContent).toBe("12");
+    expect(activity.querySelector(".el-rail__count")).toHaveAttribute("data-count", "12");
     expect(rail().getByRole("button", { name: "Library" }).querySelector(".el-rail__count, .el-rail__dot")).toBeNull();
     // Dots: Live's (red, recording) and Setup's (something to do).
     expect(rail().getByRole("button", { name: "Live, recording" }).querySelector(".el-rail__dot--live")).not.toBeNull();
@@ -296,7 +296,8 @@ describe("the rail (DES-01) and the avatar (DES-08)", () => {
     const me = rail().getByRole("button", { name: "Account, Ayesha Khan" });
     expect(me.querySelector(".el-avatar")).toHaveClass("el-avatar--rail");
     expect(me.querySelector(".el-avatar")).toHaveAttribute("data-colour", "4");
-    expect(me.querySelector(".el-avatar")!.textContent).toBe("AK");
+    // The initials are drawn (FIX-06, label in name: the item is named Account).
+    expect(me.querySelector(".el-avatar")).toHaveAttribute("data-initials", "AK");
     expect(me.closest(".el-rail__me")!.querySelector(".el-rail__label")!.textContent).toBe("Account");
     fireEvent.click(me);
     const menu = screen.getByRole("menu", { name: "Account, Ayesha Khan" });

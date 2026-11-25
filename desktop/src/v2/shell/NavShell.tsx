@@ -575,8 +575,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                   </div>
                 )}
                 button={{ variant: "quiet", className: "el-rail__item el-rail__avatar", "aria-label": meName, "aria-current": meHere ? "page" : undefined, ...meTip,
-                  text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} />
-                    {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(meCount)}</span>
+                  text: <><span className="el-rail__icon"><Avatar initials={initials(me.name, me.email)} size="rail" color={me.color} seed={me.email} photo={me.photo} drawn />
+                    {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(meCount) ?? undefined} aria-hidden="true" />
                       : meLive ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" />
                         : short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
                     <span className="el-rail__label" aria-hidden="true">Account</span></> }} />

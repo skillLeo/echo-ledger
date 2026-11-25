@@ -26,11 +26,11 @@ const place = (name) => async (page) => {
 const steps = (...all) => async (page) => {
   for (const s of all) await s(page);
 };
-/** [name, fixture screen, steps, langs] */
+/** [name, fixture screen, steps]; a "-win" screen in Windows' frame (a Mac draws its menus itself, outside the page). */
 const SCREENS = [
   ["library", "library", place("Library")],
   ["recording", "library", async (page) => { await place("Library")(page); await page.locator("button[data-row-id]").first().click(); await page.waitForTimeout(1500); }],
-  ["record-menu", "library", async (page) => { await rail(page).getByRole("button", { name: "More ways to record" }).click(); await page.getByRole("menu").waitFor(); }],
+  ["record-menu-win", "library", async (page) => { await rail(page).getByRole("button", { name: "More ways to record" }).click(); await page.getByRole("menu").waitFor(); }],
   ["avatar-menu", "library", async (page) => { await rail(page).getByRole("button", { name: /^Account/ }).click(); await page.getByRole("menu").waitFor(); }],
   ["title-search", "library", async (page) => { await place("Library")(page); await page.getByTestId("title-row").getByRole("searchbox").first().click(); await page.keyboard.type("invoice"); await page.waitForTimeout(800); }],
   ["projects", "projects", place("Projects")],
@@ -57,7 +57,8 @@ try {
     for (const lang of LANGS[name] ?? ["en"]) for (const theme of ["light", "dark"]) {
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
       page.setDefaultTimeout(120_000);
-      await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&lights=1${lang === "ur" ? "&lang=ur" : ""}`);
+      const where = name.endsWith("-win") ? "&platform=windows" : "&platform=macos&lights=1";
+      await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}&uiflags=${V2_FLAGS}${where}${lang === "ur" ? "&lang=ur" : ""}`);
       await rail(page).waitFor();
       await page.waitForTimeout(1200);
       const label = `${name} ${lang} ${theme}`;
@@ -99,9 +100,13 @@ try {
     const moved = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.textContent?.trim());
     console.log(`rail: ↓ from ${stops[0]} to ${moved}`);
     if (!moved || moved === stops[0]) problems.push("rail: ↓ didn't move");
+    // The ring: the item's outline, or (the rail's) a 2 px ring round its icon.
     const ring = await page.evaluate(() => {
-      const s = getComputedStyle(document.activeElement);
-      return s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 2;
+      const el = document.activeElement;
+      const s = getComputedStyle(el);
+      if (s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 2) return true;
+      const icon = el.querySelector(".el-rail__icon");
+      return !!icon && /0px 0px 0px 2px/.test(getComputedStyle(icon).boxShadow);
     });
     if (!ring) problems.push("rail: no 2 px focus ring on the item gone to");
     await page.close();

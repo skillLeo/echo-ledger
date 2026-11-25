@@ -53,7 +53,8 @@ describe("the title row (UX-20)", () => {
     const { rerender } = render(<TitleRow {...base} place="projects" onEverything={onEverything} />);
     const field = within(row()).getByRole("button", { name: /Search projects/ });
     expect(field).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K");
-    expect(field.textContent).toMatch(/K$/);
+    // The keys' hint is drawn (FIX-06, label in name); they are the field's aria-keyshortcuts.
+    expect(field.querySelector(".el-titlerow__keys")).toHaveAttribute("data-keys", expect.stringMatching(/K$/));
     fireEvent.click(field);
     expect(onEverything).toHaveBeenCalledWith("");
     rerender(<TitleRow {...base} place="activity" onEverything={onEverything} />);

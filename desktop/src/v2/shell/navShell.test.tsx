@@ -245,7 +245,7 @@ describe("the three levels", () => {
       expect(names).toEqual(["Record", "More ways to record", "Library", "More, Activity 2, Live recording", "Settings", "Account, Ayesha Khan, needs setup"]);
       const more = rail().getByRole("button", { name: /^More, / });
       expect(more.querySelector(".el-rail__label")!.textContent).toBe("More");
-      expect(more.querySelector(".el-rail__count")!.textContent).toBe("2");
+      expect(more.querySelector(".el-rail__count")).toHaveAttribute("data-count", "2");
       expect(more).not.toHaveAttribute("aria-current");
       fireEvent.click(more);
       const menu = screen.getByRole("menu", { name: "More places" });
@@ -284,7 +284,7 @@ describe("the three levels", () => {
       // And so does its tooltip.
       expect(accountTip(["library", "projects", "live", "ask", "activity"])).toBe("Library, Projects, Live, Ask and Activity; account, theme and settings");
       expect(accountTip([])).toBe("Account, theme and settings");
-      expect(me.querySelector(".el-rail__count")!.textContent).toBe("2");
+      expect(me.querySelector(".el-rail__count")).toHaveAttribute("data-count", "2");
       // The page (the Library) is one of them: the avatar is the selected item.
       expect(me).toHaveAttribute("aria-current", "page");
       fireEvent.click(me);
