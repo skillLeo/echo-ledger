@@ -9,11 +9,12 @@ import { hoursWords, useTrashKeepHours } from "../../../lib/trash";
 import { storageValue } from "../../../views/main/SecuritySettings";
 import { ListRow } from "../../components";
 import { Group } from "./rows";
+import { t } from "../../../i18n";
 
 /** "1 year", "2 years", "30 days". */
 export function retentionWords(days: number): string {
-  if (days >= 365 && days % 365 === 0) return days === 365 ? "1 year" : `${days / 365} years`;
-  return days === 1 ? "1 day" : `${days} days`;
+  if (days >= 365 && days % 365 === 0) return days === 365 ? t("1 year") : `${days / 365} years`;
+  return days === 1 ? t("1 day") : `${days} days`;
 }
 
 export function StoragePageV2({ limitBytes = null }: { limitBytes?: number | null }) {
@@ -25,7 +26,7 @@ export function StoragePageV2({ limitBytes = null }: { limitBytes?: number | nul
   }, []);
   const percent = info && limitBytes ? Math.min(100, Math.round((info.recordings_bytes / limitBytes) * 100)) : null;
   const tone = percent === null ? "" : percent >= 100 ? "full" : percent >= 80 ? "warn" : "";
-  const used = info ? storageValue(info.recordings_bytes, limitBytes) : "Checking…";
+  const used = info ? storageValue(info.recordings_bytes, limitBytes) : t("Checking…");
   return (
     <Group footer={<>
       <p>Recordings are deleted after the time your plan keeps them, unless you keep them or their project does. Deleted recordings stay in Trash for {hoursWords(trashHours)}.</p>
@@ -39,7 +40,7 @@ export function StoragePageV2({ limitBytes = null }: { limitBytes?: number | nul
           </span>
         ) : undefined} />
       <ListRow compact anchor="storage.count" title={setting("storage.count").title}
-        value={info ? (info.recordings_count === 1 ? "1 recording" : `${info.recordings_count.toLocaleString("en-US")} recordings`) : undefined} />
+        value={info ? (info.recordings_count === 1 ? t("1 recording") : `${info.recordings_count.toLocaleString("en-US")} recordings`) : undefined} />
       <ListRow compact anchor="storage.retention" title={setting("storage.retention").title} value={info ? retentionWords(info.retention_days) : undefined} />
       <ListRow compact anchor="storage.bin" title={titleV2(setting("storage.bin"))} value={hoursWords(trashHours)} />
     </Group>

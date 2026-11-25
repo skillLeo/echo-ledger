@@ -8,6 +8,7 @@ import { setting } from "../../../lib/settingsRegistry";
 import { confirmAction } from "../../../lib/confirm";
 import { highlightSetting } from "../../../views/main/SettingsControls";
 import { Button, Card, Icons, List, ListRow, Loading, Radio, Segmented, Select, SkeletonRow, Toggle } from "../../components";
+import { t } from "../../../i18n";
 
 /** On a Mac the way back's keys are ⌘[ (Alt+← and Ctrl+[ elsewhere). */
 const MAC_KEYS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -194,7 +195,7 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
   return (
     <section className="el-group" aria-labelledby={title ? id : undefined}>
       {title && <SectionTitle id={id}>{title}</SectionTitle>}
-      <Card><List label={title ?? "Settings"} className="el-group__rows">{children}</List></Card>
+      <Card><List label={title ?? t("Settings")} className="el-group__rows">{children}</List></Card>
       {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{footer}</div>}
     </section>
   );
@@ -202,12 +203,12 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
 
 /** A page about plans on a server that has none (entitlements answered null): said once, instead of waiting forever. */
 export function NoPlans() {
-  return <Card><p className="el-no-plans el-secondary" role="status">Your server doesn't have plans yet.</p></Card>;
+  return <Card><p className="el-no-plans el-secondary" role="status">{t("Your server doesn't have plans yet.")}</p></Card>;
 }
 
 /** While the settings are read. */
 export function PageLoading() {
-  return <Loading label="Loading settings"><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
+  return <Loading label={t("Loading settings")}><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
 }
 
 export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; hint?: ReactNode }) {
@@ -334,8 +335,8 @@ export function ResetDefaults({ page, onReset }: { page: string; onReset: () => 
   const named = useContext(SectionLevelContext) === 3;
   return (
     <div className="el-settings-v2__reset">
-      <Button variant="quiet" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: "Reset" }).then((yes) => { if (yes) onReset(); })}>
-        {named ? `Reset ${page} to defaults` : "Reset to defaults"}
+      <Button variant="quiet" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: t("Reset") }).then((yes) => { if (yes) onReset(); })}>
+        {named ? `Reset ${page} to defaults` : t("Reset to defaults")}
       </Button>
     </div>
   );

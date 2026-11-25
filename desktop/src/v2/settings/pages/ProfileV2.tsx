@@ -13,6 +13,7 @@ import { Avatar, Badge, ListRow } from "../../components";
 import { initials } from "../initials";
 import { V2_KIT } from "../accountKit";
 import { Group, type Run } from "./rows";
+import { t } from "../../../i18n";
 
 export function ProfilePageV2({ account: given, status, run }: { account: Account; status: AppStatus; run: Run }) {
   const [account, setAccount] = useState(given);
@@ -35,11 +36,11 @@ export function ProfilePageV2({ account: given, status, run }: { account: Accoun
   const row = (id: string, value: string) => <ListRow compact anchor={id} title={setting(id).title} value={value} />;
   const name = account.name || account.email.split("@")[0];
   const native = accountNative(account);
-  const badge = account.email_verified ? undefined : <Badge tone="warning">Not verified</Badge>;
+  const badge = account.email_verified ? undefined : <Badge tone="warning">{t("Not verified")}</Badge>;
   return (
     <>
-      <Group footer={native ? <p>{account.pending_email ? `Waiting for the code sent to ${account.pending_email}.` : "Your teammates see your name and picture."}</p>
-        : <p>Your name and email are changed on the website.</p>}>
+      <Group footer={native ? <p>{account.pending_email ? `Waiting for the code sent to ${account.pending_email}.` : t("Your teammates see your name and picture.")}</p>
+        : <p>{t("Your name and email are changed on the website.")}</p>}>
         {native && (
           <ListRow compact anchor="profile.picture" title={setting("profile.picture").title} label={ROWS.picture} chevron onClick={() => void picture()}
             leading={<Avatar initials={initials(account.name, account.email)} size="list" photo={avatar} color={account.avatar_color} seed={account.email} />} />
@@ -57,7 +58,7 @@ export function ProfilePageV2({ account: given, status, run }: { account: Accoun
         {workspace && row("profile.workspace", workspace)}
         {account.created_at && row("profile.since", rowDateWithYear(account.created_at))}
         {!native && (
-          <ListRow compact anchor="profile.edit" title={setting("profile.edit").title} label="Edit profile, opens in browser" meta="Opens the website" chevron
+          <ListRow compact anchor="profile.edit" title={setting("profile.edit").title} label={t("Edit profile, opens in browser")} meta={t("Opens the website")} chevron
             onClick={() => void run(() => api.openServerPage("app/profile"))} />
         )}
       </Group>

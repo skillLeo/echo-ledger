@@ -7,6 +7,7 @@ import { api, errorMessage, listenTo, type AppStatus, type CheckItem, type Check
 import { formatWhen } from "../../../lib/format";
 import { sendBlocked } from "../../../views/main/MacCheck";
 import { Button, Card, HealthCheckRow, type HealthState } from "../../components";
+import { t } from "../../../i18n";
 
 const STATE_WORD: Record<CheckItem["state"], string> = { ok: "OK", limited: "Limited", off: "Off", failed: "Failed" };
 const HEALTH: Record<CheckItem["state"], HealthState> = { ok: "ok", limited: "limited", off: "problem", failed: "problem" };
@@ -90,7 +91,7 @@ export function MacCheckPageV2({ status }: { status: AppStatus }) {
   if (!running && (status.recording || status.dictationActive)) {
     return (
       <Card>
-        <p className="el-mac-check__line" data-testid="mac-check-recording">Finish the current recording to run the Mac check.</p>
+        <p className="el-mac-check__line" data-testid="mac-check-recording">{t("Finish the current recording to run the Mac check.")}</p>
       </Card>
     );
   }
@@ -100,28 +101,26 @@ export function MacCheckPageV2({ status }: { status: AppStatus }) {
   return (
     <div className="el-settings-v2" data-testid="mac-check">
       <p className="el-secondary">
-        The Mac check looks at macOS, the permissions, the microphone, the other side of a call, your meeting apps, the
-        captions and screen moments, one at a time. It takes about 15 seconds: say something when it asks, and it plays
-        one soft tone.
+        {t("The Mac check looks at macOS, the permissions, the microphone, the other side of a call, your meeting apps, the captions and screen moments, one at a time. It takes about 15 seconds: say something when it asks, and it plays one soft tone.")}
       </p>
       <div className="el-page__actions">
-        <Button variant="primary" disabled={running} loading={running} loadingLabel="Checking…" onClick={() => void run()}>
-          {report ? "Run Mac check again" : "Run Mac check"}
+        <Button variant="primary" disabled={running} loading={running} loadingLabel={t("Checking…")} onClick={() => void run()}>
+          {report ? t("Run Mac check again") : t("Run Mac check")}
         </Button>
       </div>
       {running && progress && <p role="status" data-testid="mac-check-progress">{progress.index + 1} of {progress.total}: {progress.line}</p>}
       {report?.stopped && <p className="el-mac-check__stopped" role="status">{report.stopped}</p>}
-      {items.length > 0 && <Card><ul className="el-health-list" aria-label="Mac check results">{items.map((item) => <CheckRowV2 item={item} key={item.key} />)}</ul></Card>}
+      {items.length > 0 && <Card><ul className="el-health-list" aria-label={t("Mac check results")}>{items.map((item) => <CheckRowV2 item={item} key={item.key} />)}</ul></Card>}
       {report && (
         <section className="el-group">
           <div className="el-page__actions">
-            <Button onClick={() => void copy()}>{copied ? "Copied" : "Copy report"}</Button>
-            <Button disabled={!!blocked || sending} loading={sending} loadingLabel="Sending…" onClick={() => void send()}>Send to my admin</Button>
+            <Button onClick={() => void copy()}>{copied ? t("Copied") : t("Copy report")}</Button>
+            <Button disabled={!!blocked || sending} loading={sending} loadingLabel={t("Sending…")} onClick={() => void send()}>{t("Send to my admin")}</Button>
           </div>
           <div className="el-group__note el-caption el-secondary">
             {blocked && <p data-testid="mac-check-send-blocked">{blocked}</p>}
             {report.sentAt && <p role="status" data-testid="mac-check-sent">Sent to your admin {formatWhen(report.sentAt)}.</p>}
-            <p>The report has no names, no recordings and no account. It is sent only when you press the button.</p>
+            <p>{t("The report has no names, no recordings and no account. It is sent only when you press the button.")}</p>
           </div>
         </section>
       )}

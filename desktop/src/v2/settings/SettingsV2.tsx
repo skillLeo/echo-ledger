@@ -17,11 +17,17 @@ import { useEntitlements } from "../../lib/entitlements";
 import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, type IconType } from "../components";
 import { AccountCard } from "./AccountCard";
 import { SHOW_PANEL_EVENT } from "../shell/NavRail";
+import { t } from "../../i18n";
 
 export { GOAL_GROUPS, entryOf, groupOf, sectionFor, ungrouped } from "./groups";
 
-const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, "-");
-const THEME_WORDS = { system: "System", light: "Light", dark: "Dark" } as const;
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, "-");
+/** The theme's words, in the window's language. */
+const THEME_WORDS = {
+  get system() { return t("System"); },
+  get light() { return t("Light"); },
+  get dark() { return t("Dark"); },
+};
 const iconOf = (id: string): IconType => (ROOT_ICONS[id] as IconType | undefined) ?? Icons.SettingsIcon;
 
 export type SettingsV2Props = {
@@ -64,16 +70,16 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   if (inPanel) {
     return (
       <div className="el-page el-page--narrow" data-v2="settings">
-        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
+        <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">{t("Settings")}</h1></header>
         <AccountCard />
         <div className="el-settings-home__groups">
-          <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
-          <Button onClick={() => window.dispatchEvent(new Event(SHOW_PANEL_EVENT))}>Show groups</Button>
+          <p className="el-secondary">{t("Choose a group in the panel, or search there for any setting.")}</p>
+          <Button onClick={() => window.dispatchEvent(new Event(SHOW_PANEL_EVENT))}>{t("Show groups")}</Button>
         </div>
         {onSignOut && (
           <Card>
-            <List label="Sign out" className="el-group__rows">
-              <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title="Sign out" onClick={onSignOut} />
+            <List label={t("Sign out")} className="el-group__rows">
+              <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title={t("Sign out")} onClick={onSignOut} />
             </List>
           </Card>
         )}
@@ -96,7 +102,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   const row = (id: string) => {
     if (id === "setup_health") {
       return setupHealth
-        ? <ListRow key={id} compact icon={Icons.ReadyIcon} iconStyle="plain" title="Setup & health" chevron onClick={() => open("setup_health")} />
+        ? <ListRow key={id} compact icon={Icons.ReadyIcon} iconStyle="plain" title={t("Setup & health")} chevron onClick={() => open("setup_health")} />
         : null;
     }
     const entry = SETTINGS.find((e) => e.id === id);
@@ -109,26 +115,26 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
 
   return (
     <div className="el-page el-page--narrow" data-v2="settings">
-      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">Settings</h1></header>
-      <SearchField label="Search settings" value={query} onChange={setQuery} />
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">{t("Settings")}</h1></header>
+      <SearchField label={t("Search settings")} value={query} onChange={setQuery} />
       {answer ? (
         answer.settings.length + answer.help.length > 0 ? (
           <Card>
-            <List label="Results" className="el-group__rows">
+            <List label={t("Results")} className="el-group__rows">
               {answer.settings.map((r) => (
                 <ListRow key={r.entry.id} compact title={titleV2(r.entry)} meta={r.breadcrumb || undefined} chevron onClick={() => go(r.entry)} />
               ))}
-              {answer.help.length > 0 && <ListSection title="Help" />}
+              {answer.help.length > 0 && <ListSection title={t("Help")} />}
               {answer.help.map((r) => (
                 <ListRow key={r.entry.id} compact icon={Icons.HelpIcon} iconStyle="plain" title={r.entry.title} meta={breadcrumbOf(r.entry) || undefined} chevron onClick={() => go(r.entry)} />
               ))}
             </List>
           </Card>
         ) : (
-          <EmptyState icon={Icons.SearchIcon} title="No settings match" body="Try another word, such as language, storage or captions."
+          <EmptyState icon={Icons.SearchIcon} title={t("No settings match")} body={t("Try another word, such as language, storage or captions.")}
             action={answer.closest.length > 0
-              ? <div className="el-filterbar" role="group" aria-label="Closest matches">{answer.closest.map((e) => <Chip key={e.id} label={titleV2(e)} onToggle={() => go(e)} />)}</div>
-              : <Button onClick={() => setQuery("")}>Clear search</Button>} />
+              ? <div className="el-filterbar" role="group" aria-label={t("Closest matches")}>{answer.closest.map((e) => <Chip key={e.id} label={titleV2(e)} onToggle={() => go(e)} />)}</div>
+              : <Button onClick={() => setQuery("")}>{t("Clear search")}</Button>} />
         )
       ) : (
         <>
@@ -149,8 +155,8 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
           })}
           {onSignOut && (
             <Card>
-              <List label="Sign out" className="el-group__rows">
-                <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title="Sign out" onClick={onSignOut} />
+              <List label={t("Sign out")} className="el-group__rows">
+                <ListRow compact icon={Icons.SignOutIcon} iconStyle="plain" title={t("Sign out")} onClick={onSignOut} />
               </List>
             </Card>
           )}

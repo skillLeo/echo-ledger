@@ -12,6 +12,7 @@ import { AccountFlow, offers, ROWS, useFlows, useSecurityInfo } from "../../../v
 import { Button, Card, Dialog, EmptyState, Icons, List, ListRow } from "../../components";
 import { V2_KIT } from "../accountKit";
 import { Group, LinkSetting, type Run } from "./rows";
+import { t } from "../../../i18n";
 
 export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }: { account: Account; run: Run; onSignedOut: (s: AppStatus) => void; onActivity: () => void }) {
   const [account, setAccount] = useState(given);
@@ -27,58 +28,58 @@ export function SecurityPageV2({ account: given, run, onSignedOut, onActivity }:
   const web = () => void run(() => api.openServerPage("app/profile"));
   const signOutEverywhere = async () => {
     setConfirming(false);
-    const signedOut = await run(api.signOutEverywhere, "Signed out everywhere");
+    const signedOut = await run(api.signOutEverywhere, t("Signed out everywhere"));
     if (signedOut) onSignedOut(signedOut);
   };
   const o = offers(account, native ? info : null);
   const title = (id: string) => setting(id).title;
   return (
     <>
-      <Group footer={<p>Sign-in codes go to {account.email}.{native ? "" : " The password and two-step sign-in are changed on the website."}</p>}>
+      <Group footer={<p>Sign-in codes go to {account.email}.{native ? "" : t(" The password and two-step sign-in are changed on the website.")}</p>}>
         {native ? (
           <>
             <ListRow compact anchor="security.password" title={title("security.password")} label={o.hasPassword ? ROWS.password : ROWS.setPassword}
-              value={o.hasPassword ? "Change" : "Not set"} chevron onClick={() => flows.open({ kind: "password" })} />
+              value={o.hasPassword ? t("Change") : t("Not set")} chevron onClick={() => flows.open({ kind: "password" })} />
             <ListRow compact anchor="security.two_step" title={title("security.two_step")} label={o.twoStep ? ROWS.twoStepOff : ROWS.twoStepOn}
-              value={o.twoStep ? "On" : "Off"} chevron onClick={() => flows.open({ kind: o.twoStep ? "two_step_off" : "two_step_on" })} />
+              value={o.twoStep ? t("On") : t("Off")} chevron onClick={() => flows.open({ kind: o.twoStep ? "two_step_off" : "two_step_on" })} />
             {o.twoStep && (
-              <ListRow compact title="Recovery codes" label={ROWS.recoveryCodes}
-                value={o.recoveryLeft != null ? `${o.recoveryLeft} left` : "Make new"} chevron onClick={() => flows.open({ kind: "recovery_codes" })} />
+              <ListRow compact title={t("Recovery codes")} label={ROWS.recoveryCodes}
+                value={o.recoveryLeft != null ? `${o.recoveryLeft} left` : t("Make new")} chevron onClick={() => flows.open({ kind: "recovery_codes" })} />
             )}
             {o.google
-              ? <ListRow compact anchor="security.google" title={title("security.google")} label={ROWS.google} value="Connected" chevron onClick={() => flows.open({ kind: "google" })} />
-              : <ListRow compact anchor="security.google" title={title("security.google")} value="Not connected" />}
+              ? <ListRow compact anchor="security.google" title={title("security.google")} label={ROWS.google} value={t("Connected")} chevron onClick={() => flows.open({ kind: "google" })} />
+              : <ListRow compact anchor="security.google" title={title("security.google")} value={t("Not connected")} />}
           </>
         ) : (
           <>
-            <ListRow compact anchor="security.password" title={title("security.password")} label="Password, opens in browser" meta="Opens the website" chevron onClick={web} />
-            <ListRow compact anchor="security.two_step" title={title("security.two_step")} label="Two-step sign-in, opens in browser" meta="Opens the website" value={account.two_factor ? "On" : "Off"} chevron onClick={web} />
-            <ListRow compact anchor="security.google" title={title("security.google")} value={account.google ? "Connected" : "Not connected"} />
+            <ListRow compact anchor="security.password" title={title("security.password")} label={t("Password, opens in browser")} meta={t("Opens the website")} chevron onClick={web} />
+            <ListRow compact anchor="security.two_step" title={title("security.two_step")} label={t("Two-step sign-in, opens in browser")} meta={t("Opens the website")} value={account.two_factor ? t("On") : t("Off")} chevron onClick={web} />
+            <ListRow compact anchor="security.google" title={title("security.google")} value={account.google ? t("Connected") : t("Not connected")} />
           </>
         )}
         <LinkSetting id="security.activity" onOpen={onActivity} />
       </Group>
       {native && (
-        <Group title="Passkeys" footer={<p>Passkeys sign you in with your phone, fingerprint or face. Add one on the website.</p>}>
+        <Group title={t("Passkeys")} footer={<p>{t("Passkeys sign you in with your phone, fingerprint or face. Add one on the website.")}</p>}>
           {o.passkeys.map((p) => (
             <ListRow key={p.id} compact icon={Icons.LockIcon} iconStyle="plain" title={p.name}
-              meta={p.last_used_at ? `Last used ${formatWhen(p.last_used_at)}` : "Not used yet"}
+              meta={p.last_used_at ? `Last used ${formatWhen(p.last_used_at)}` : t("Not used yet")}
               control={<span className="el-row__buttons">
-                <Button size="sm" variant="quiet" aria-label={ROWS.renamePasskey(p.name)} onClick={() => flows.open({ kind: "rename_passkey", passkey: p })}>Rename</Button>
-                <Button size="sm" variant="quiet" aria-label={ROWS.removePasskey(p.name)} onClick={() => flows.open({ kind: "remove_passkey", passkey: p })}>Remove</Button>
+                <Button size="sm" variant="quiet" aria-label={ROWS.renamePasskey(p.name)} onClick={() => flows.open({ kind: "rename_passkey", passkey: p })}>{t("Rename")}</Button>
+                <Button size="sm" variant="quiet" aria-label={ROWS.removePasskey(p.name)} onClick={() => flows.open({ kind: "remove_passkey", passkey: p })}>{t("Remove")}</Button>
               </span>} />
           ))}
-          <ListRow compact anchor="security.passkeys" title={title("security.passkeys")} label={ROWS.addPasskey} meta="Opens the website" chevron
+          <ListRow compact anchor="security.passkeys" title={title("security.passkeys")} label={ROWS.addPasskey} meta={t("Opens the website")} chevron
             onClick={() => void run(() => api.openServerPage("app/settings/security/passkeys"))} />
         </Group>
       )}
       <Group>
         <ListRow compact anchor="security.signout_all" title={title("security.signout_all")}
-          control={<Button size="sm" variant="danger" icon={Icons.SignOutIcon} onClick={() => setConfirming(true)}>Sign out everywhere</Button>} />
+          control={<Button size="sm" variant="danger" icon={Icons.SignOutIcon} onClick={() => setConfirming(true)}>{t("Sign out everywhere")}</Button>} />
       </Group>
       {confirming && (
-        <Dialog open alert title="Sign out everywhere?" description="You'll be signed out on every phone, computer and browser, including this one." onClose={() => setConfirming(false)}
-          actions={<><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="danger" onClick={() => void signOutEverywhere()}>Sign out everywhere</Button></>} />
+        <Dialog open alert title={t("Sign out everywhere?")} description={t("You'll be signed out on every phone, computer and browser, including this one.")} onClose={() => setConfirming(false)}
+          actions={<><Button onClick={() => setConfirming(false)}>{t("Cancel")}</Button><Button variant="danger" onClick={() => void signOutEverywhere()}>{t("Sign out everywhere")}</Button></>} />
       )}
       {flows.flow && <AccountFlow kit={V2_KIT} flow={flows.flow} account={account} onClose={flows.close} onDone={done} />}
     </>
@@ -92,9 +93,9 @@ export function SignInActivityPageV2() {
     <>
       <Card>
         {events.length === 0 ? (
-          <EmptyState icon={Icons.ClockIcon} title="Nothing recorded yet" body="Sign-ins and sign-outs on your devices appear here." />
+          <EmptyState icon={Icons.ClockIcon} title={t("Nothing recorded yet")} body={t("Sign-ins and sign-outs on your devices appear here.")} />
         ) : (
-          <List label="Recent activity" className="el-group__rows">
+          <List label={t("Recent activity")} className="el-group__rows">
             {events.slice(0, 15).map((e) => <ListRow key={e.id} compact title={eventLine(e)} meta={formatWhen(e.at)} />)}
           </List>
         )}

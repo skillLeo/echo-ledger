@@ -31,13 +31,14 @@ import { ExcludedAppsPageV2, MicrophonePageV2, ScreenMomentsPageV2 } from "./Rec
 import { StoragePageV2 } from "./StorageV2";
 import { AppearancePageV2, ShortcutsPageV2, useThemeChoice, type LanguageChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
+import { t } from "../../../i18n";
 
 /** Where a section asks the page to go: the setting (highlighted), else in a group's page its section (or its top). */
-function targetOf(t: { page: string; setting: string | null }, seq: number, grouped: boolean): PageTarget | null {
-  if (t.setting) return { id: t.setting, seq };
-  if (!grouped || setting(t.page).page !== null) return null;
-  const group = groupOf(t.page);
-  return { id: t.page, seq, how: group && entryOf(group) === t.page ? "top" : "part" };
+function targetOf(goal: { page: string; setting: string | null }, seq: number, grouped: boolean): PageTarget | null {
+  if (goal.setting) return { id: goal.setting, seq };
+  if (!grouped || setting(goal.page).page !== null) return null;
+  const group = groupOf(goal.page);
+  return { id: goal.page, seq, how: group && entryOf(group) === goal.page ? "top" : "part" };
 }
 
 /** The start-up switches with a title of their own on a group's page (Shortcuts & start-up). */
@@ -80,10 +81,10 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
   const [account, setAccount] = useAccount();
   const platform = status.platform;
   useEffect(() => {
-    const t = sectionTarget(section.id, grouped);
-    if (!t) return;
-    setPage(t.page);
-    setTarget(targetOf(t, section.seq, grouped));
+    const goal = sectionTarget(section.id, grouped);
+    if (!goal) return;
+    setPage(goal.page);
+    setTarget(targetOf(goal, section.seq, grouped));
   }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = (next: string) => {
@@ -161,7 +162,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
     );
   }
   return (
-    <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : "Settings"} target={target}
+    <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : t("Settings")} target={target}
       onBack={() => (!parent ? onHome() : V2_SETTINGS_PAGES.has(parent) ? open(parent) : onSection ? onSection(parent) : onHome())}>
       {bodyFor(page)}
     </SettingsPage>
@@ -207,7 +208,7 @@ function GroupParts({ group, available, body, settings, onSettings, onHelp }: {
       parts.push({ key: "startup", title: STARTUP_TITLE, body: (
         <>
           {own.length > 0 && <Group>{own.map(row)}</Group>}
-          {icons.length > 0 && <Group title="Menu bar & Dock">{icons.map(row)}</Group>}
+          {icons.length > 0 && <Group title={t("Menu bar & Dock")}>{icons.map(row)}</Group>}
         </>
       ) });
       continue;
