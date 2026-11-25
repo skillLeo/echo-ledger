@@ -67,7 +67,7 @@ function recordingUrduDownload(object $test): string
 it('words the chips, the banners, the details card and the drawer in Urdu', function () {
     recordingUrduAs($this, 'ur');
     expect(recordingUrduHtml($this, '/app/sessions/'.$this->call->id))
-        ->toContain('aria-label="ترتیب"')
+        ->toContain('aria-label="منظم کریں"')
         ->toContain('aria-label="Qureshi Textiles۔ پروجیکٹ بدلیں"')
         ->toContain('aria-label="زبان: انگریزی۔ کسی اور زبان میں دوبارہ ٹرانسکرائب کریں"')
         ->toContain('title="رکھی گئی ریکارڈنگز کبھی خود بخود حذف نہیں ہوتیں"')
