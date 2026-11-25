@@ -154,13 +154,13 @@
             @endforeach
 
             @if (is_array($r['follow_up_email'] ?? null))
-                @php($copyEmail = '{ text: '.\Illuminate\Support\Js::from($r['follow_up_email']['subject']."\n\n".$r['follow_up_email']['body']).' }')
+                @php($copyEmail = '{ text: '.\Illuminate\Support\Js::from($r['follow_up_email']['subject']."\n\n".$r['follow_up_email']['body']).', copied: '.\Illuminate\Support\Js::from(__('Copied')).' }')
                 <x-filament::section :heading="__('Follow-up email')">
                     <p style="margin:0 0 .5rem;font-weight:600">{{ $r['follow_up_email']['subject'] }}</p>
                     <p style="margin:0;white-space:pre-line">{{ $r['follow_up_email']['body'] }}</p>
                     <div style="margin-top:.75rem">
                         <x-filament::button color="gray" size="sm" icon="heroicon-o-clipboard" :x-data="$copyEmail"
-                            x-on:click="window.navigator.clipboard.writeText(text); $tooltip(@js(__('Copied')), { timeout: 1500 })">{{ __('Copy email') }}</x-filament::button>
+                            x-on:click="window.navigator.clipboard.writeText(text); $tooltip(copied, { timeout: 1500 })">{{ __('Copy email') }}</x-filament::button>
                     </div>
                 </x-filament::section>
             @endif
