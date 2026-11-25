@@ -47,6 +47,7 @@ import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.UsageReport
+import com.echoledger.mobile.net.CallEndWorker
 import com.echoledger.mobile.net.CaptionTokens
 import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.SttEvent
@@ -1540,6 +1541,11 @@ class RecordingService : LifecycleService() {
                     DiscardWorker.enqueue(this, stored.id, sessionId)
                     graph.recordings.update(stored.id) { it.copy(serverSessionId = null) }
                 }
+            }
+            // Contract 2.0.0-z: the end of the call reaches the session the captions opened at once, before the card
+            // shows, so every device sees it waiting. Not for one being deleted (no sound, skipped, Stop and delete).
+            if (stored != null && !silent && skip == null && deleteAtMs == null) {
+                stored.serverSessionId?.let { CallEndWorker.enqueue(this, stored.id, it, endedMs, stored.durationMs) }
             }
             val themeMode = settings.themeMode
             main.post {

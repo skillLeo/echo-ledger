@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.data.LocalRecording
+import com.echoledger.mobile.net.CallEndWorker
 import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
@@ -379,6 +380,16 @@ object Decisions {
             UploadWorker.cancel(context, recordingId)
         } else if (back.state == WAITING) {
             DecisionTimeoutWorker.schedule(context, recordingId)
+        }
+        // Contract 2.0.0-z: a call whose delete is undone is over and waiting again, so its end reaches the session the
+        // captions opened (a Stop and delete never sent it; after the card's Discard it was queued already, and the
+        // server keeps the first end). Left to the person, the server's delete goes ahead: no end for a session it deletes.
+        if (!leftToPerson) {
+            back.serverSessionId?.let { sessionId ->
+                runCatching { Instant.parse(back.endedAt).toEpochMilli() }.getOrNull()?.let { endedAtMs ->
+                    CallEndWorker.enqueue(context, back.id, sessionId, endedAtMs, back.durationMs)
+                }
+            }
         }
         if (widget) WidgetStateStore.refresh(context)
         return back
