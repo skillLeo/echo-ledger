@@ -168,6 +168,34 @@ describe("Find in the Library", () => {
     expect(rows().slice(0, 2)).toEqual(["c", "d"]);
   });
 
+  it("UX-03: the filters' edge sets their width, 280 to 420 px, kept on this computer; let go below 160 px they close", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    const edge = () => screen.getByRole("separator", { name: "Resize the filters" });
+    const aside = () => screen.getByTestId("filter-panel");
+    expect(edge()).toHaveAttribute("aria-valuenow", "320");
+    expect(edge()).toHaveAttribute("aria-valuemin", "280");
+    expect(edge()).toHaveAttribute("aria-valuemax", "420");
+    // At the page's end: its start edge, so dragging toward the page widens them.
+    fireEvent.pointerDown(edge(), { button: 0, clientX: 1000 });
+    fireEvent.pointerMove(edge(), { clientX: 940 });
+    fireEvent.pointerUp(edge(), { clientX: 940 });
+    expect(aside().style.getPropertyValue("--el-filter-width")).toBe("380px");
+    expect(window.localStorage.getItem("echoledger-library-filters-width")).toBe("380");
+    fireEvent.keyDown(edge(), { key: "ArrowRight", shiftKey: true });
+    expect(edge()).toHaveAttribute("aria-valuenow", "348");
+    // Let go well past the least width: they close, as Close filters does, and keep their width.
+    fireEvent.pointerDown(edge(), { button: 0, clientX: 1000 });
+    fireEvent.pointerMove(edge(), { clientX: 1200 });
+    fireEvent.pointerUp(edge(), { clientX: 1200 });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    fireEvent.click(filtersButton());
+    expect(edge()).toHaveAttribute("aria-valuenow", "348");
+    fireEvent.doubleClick(edge());
+    expect(aside().style.getPropertyValue("--el-filter-width")).toBe("");
+    expect(window.localStorage.getItem("echoledger-library-filters-width")).toBeNull();
+  });
+
   it("[Filters] opens the panel and closes it; it stays as it was left", async () => {
     const { unmount } = await show();
     fireEvent.click(filtersButton());
@@ -492,7 +520,9 @@ describe("Find in the Library", () => {
     // F is a letter while the drawer has focus (it is modal): only Escape is said to close it.
     expect(close).toHaveAttribute("aria-keyshortcuts", "Escape");
     const save = inside.getByRole("button", { name: "Save as view" });
-    const last = [...drawer.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")].at(-1)!;
+    // The last stop is the drawer's edge (UX-03: it sets their width from the keyboard too).
+    const last = [...drawer.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].at(-1)!;
+    expect(last).toHaveAttribute("role", "separator");
     last.focus();
     fireEvent.keyDown(last, { key: "Tab" });
     expect(close).toHaveFocus();

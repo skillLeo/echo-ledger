@@ -964,10 +964,11 @@ fun V2LibraryContent(
         val t = tools ?: return@LaunchedEffect
         val id = t.returnedTo ?: return@LaunchedEffect
         if (broughtBack != id) {
+            // Once per return: a drag in the first frames cancels it, and a rotation then never moves the list again.
+            broughtBack = id
             val searching = query.trim().length >= 2
             val shown = t.groups.filter { g -> !(g.name.isNotEmpty() && !searching) || g.key !in t.folded }
             listState.bringBack(id, shown.flatMap { g -> g.rows.map { it.id } }, openedAt)
-            broughtBack = id
         }
         runCatching { returnFocus.requestFocus() }
     }

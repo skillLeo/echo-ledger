@@ -8,6 +8,7 @@ export { TextField, SearchField, TextArea } from "./fields";
 export { Select, type SelectOption } from "./Select";
 export { List, ListRow, ListSection, type ListRowProps } from "./ListRow";
 export { SplitButton, type SplitButtonProps } from "./SplitButton";
+export { ResizeEdge, clampWidth, dragEnd } from "./ResizeEdge";
 export { Chip, FilterBar } from "./FilterBar";
 export { Toast, ToastRegion, toastDuration } from "./Toast";
 export { Dialog, Sheet, useFocusTrap } from "./Dialog";

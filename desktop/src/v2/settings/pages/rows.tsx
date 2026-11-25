@@ -140,7 +140,7 @@ export function SegmentedSetting<T extends string>({ id, value, options = option
   return <ListRow compact anchor={id} title={s.title} control={<Segmented label={s.title} value={value} options={options} onChange={onChange} />} />;
 }
 
-export function SliderSetting({ id, value, min, max, step, format, onChange }: {
+export function SliderSetting({ id, value, min, max, step, format, onChange, onRelease = false }: {
   id: string;
   value: number;
   min: number;
@@ -148,12 +148,50 @@ export function SliderSetting({ id, value, min, max, step, format, onChange }: {
   step: number;
   format: (v: number) => string;
   onChange: (v: number) => void;
+  /**
+   * Apply only once let go (the zoom, UX-07: the page would rescale under the pointer and the value jump): while it is
+   * dragged the row shows the value; the native change (a release, or an arrow key at once) applies it.
+   */
+  onRelease?: boolean;
 }) {
   const s = setting(id);
+  const [draft, setDraft] = useState<number | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const live = useRef(onChange);
+  live.current = onChange;
+  const now = useRef(value);
+  now.current = value;
+  // The value changed elsewhere (⌘+, the chip, Reset): the row shows it, not what a drag left.
+  useEffect(() => setDraft(null), [value]);
+  useEffect(() => {
+    const el = input.current;
+    if (!onRelease || !el) return;
+    const done = () => {
+      setDraft(null);
+      live.current(Number(el.value));
+    };
+    // A drag let go where it started fires no change: nothing to apply, so what it showed goes. Any other release is the
+    // change's (it follows), which applies it.
+    const letGo = () => {
+      if (Number(el.value) === now.current) setDraft(null);
+    };
+    const left = () => setDraft(null);
+    el.addEventListener("change", done);
+    el.addEventListener("pointerup", letGo);
+    el.addEventListener("pointercancel", letGo);
+    el.addEventListener("blur", left);
+    return () => {
+      el.removeEventListener("change", done);
+      el.removeEventListener("pointerup", letGo);
+      el.removeEventListener("pointercancel", letGo);
+      el.removeEventListener("blur", left);
+    };
+  }, [onRelease]);
+  const shown = draft ?? value;
   return (
-    <ListRow compact anchor={id} title={s.title} value={format(value)}
-      control={<input type="range" className="el-range" aria-label={s.title} aria-valuetext={format(value)} min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(Number(e.target.value))} />} />
+    <ListRow compact anchor={id} title={s.title} value={format(shown)}
+      control={<input ref={input} type="range" className="el-range" aria-label={s.title} aria-valuetext={format(shown)} min={min} max={max} step={step} value={shown}
+        onChange={(e) => (onRelease ? setDraft(Number(e.target.value)) : onChange(Number(e.target.value)))} />} />
   );
 }
 

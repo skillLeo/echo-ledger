@@ -92,7 +92,7 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
             <Button icon={Icons.CopyIcon} onClick={() => void copy()}>Copy link</Button>
           </div>
         )}
-        <Button variant="quiet" size="sm" icon={Icons.InboxIcon} onClick={() => { onClose(); onShowLinks(); }}>See your request links</Button>
+        <Button variant="quiet" size="sm" icon={Icons.RequestFilesIcon} onClick={() => { onClose(); onShowLinks(); }}>See your request links</Button>
       </div>
     </Sheet>
   );
