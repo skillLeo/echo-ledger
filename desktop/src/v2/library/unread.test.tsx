@@ -207,10 +207,12 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
     fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    const synced = callsOf("library_refresh").length;
     fireEvent.click(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitem", { name: /Mark as unread/ }));
     await act(flushAsync);
     expect(callsOf("sessions_unopened")).toEqual([{ ids: ["bilal", "usman"] }]);
-    expect(callsOf("library_refresh").length).toBeGreaterThan(0);
+    // The Library is synced again for the one not found.
+    expect(callsOf("library_refresh").length).toBeGreaterThan(synced);
     expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
     expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "true");
     expect(row("Usman Chaudhry")).toHaveAttribute("aria-pressed", "false");
@@ -253,7 +255,7 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     expect(screen.getByText("The server is busy. Try again in a minute.")).toBeInTheDocument();
   });
 
-  it("an older server and 450 picked: one by one for the first 200 only, the rest put back, and it says so", async () => {
+  it("an older server and 450 picked: one by one for the first 200 only; those leave the selection, the rest stays picked, and it says so", async () => {
     respond("library_list", many);
     respond("library_refresh", many);
     const onItems = vi.fn();
@@ -265,10 +267,13 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200], "asked once");
     expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(0, 200).map((i) => i.id));
     expect(unreadCount(onItems)).toBe(200);
-    expect(screen.getByText("Marked 200 recordings as unread · Up to 200 at a time: unselect 250")).toBeInTheDocument();
+    expect(screen.getByText("Marked 200 recordings as unread · The other 250 recordings are still selected")).toBeInTheDocument();
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("250 selected");
+    expect(row("Call 0")).toHaveAttribute("aria-pressed", "false");
+    expect(row("Call 200")).toHaveAttribute("aria-pressed", "true");
   }, 60_000);
 
-  it("the first 200 taken at once and the next answered as an older server: one by one for exactly the rest", async () => {
+  it("the first 200 taken at once and the next answered as an older server: one by one for the next 200, the cap the same", async () => {
     respond("library_list", many);
     respond("library_refresh", many);
     let asked = 0;
@@ -279,10 +284,11 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
     fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
     await act(flushAsync);
-    expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200, 200], "the third chunk goes one by one too");
-    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(200).map((i) => i.id));
-    expect(unreadCount(onItems)).toBe(450);
-    expect(screen.getByText("Marked 450 recordings as unread")).toBeInTheDocument();
+    expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200, 200], "the third chunk is not asked for many again");
+    expect(callsOf("session_unopen").map((c) => c.id)).toEqual(many.slice(200, 400).map((i) => i.id));
+    expect(unreadCount(onItems)).toBe(400);
+    expect(screen.getByText("Marked 400 recordings as unread · The other 50 recordings are still selected")).toBeInTheDocument();
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("50 selected");
   }, 60_000);
 
   it("one by one and one fails partway: what was done stays marked, the rest goes back, and it says how many of 450", async () => {
@@ -314,8 +320,8 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     expect(bar()).toHaveTextContent("Over 200: only Mark as read or unread. Unselect 250 for the rest");
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     const more = screen.getByRole("menu", { name: "More actions" });
-    expect(within(more).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as unread", "Up to 200 at a time: unselect 250"]);
-    fireEvent.click(within(more).getByRole("menuitem", { name: /Mark as unread/ }));
+    expect(within(more).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as unread", "Over 200: only Mark as read or unread. Unselect 250 for the rest"]);
+    fireEvent.click(within(more).getByRole("menuitem", { name: /^Mark as unread/ }));
     await act(flushAsync);
     expect(callsOf("sessions_unopened").map((c) => (c.ids as string[]).length)).toEqual([200, 200, 50]);
     expect(screen.getByText("Marked 450 recordings as unread")).toBeInTheDocument();
@@ -324,8 +330,8 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     respondWith("sessions_opened", allDone);
     fireEvent.contextMenu(row("Call 0"), { clientX: 40, clientY: 60 });
     const menu = screen.getByRole("menu", { name: "Actions for 450 recordings" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as read", "Up to 200 at a time: unselect 250"]);
-    fireEvent.click(within(menu).getByRole("menuitem", { name: /Mark as read/ }));
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.querySelector(".el-menu__label")?.textContent ?? m.textContent)).toEqual(["Mark as read", "Over 200: only Mark as read or unread. Unselect 250 for the rest"]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /^Mark as read/ }));
     await act(flushAsync);
     expect(callsOf("sessions_opened").map((c) => (c.ids as string[]).length)).toEqual([200, 200, 50]);
   }, 60_000);
@@ -343,9 +349,10 @@ describe("Mark as unread (UX-22, contract 2.0.0-t)", () => {
     await act(flushAsync);
     fireEvent.click(row("Bilal Qureshi"), { ctrlKey: true });
     fireEvent.click(row("Usman Chaudhry"), { ctrlKey: true });
+    const synced = callsOf("library_refresh").length;
     fireEvent.keyDown(document.body, { key: "U", ctrlKey: true, shiftKey: true });
     await act(flushAsync);
-    expect(callsOf("library_refresh").length).toBeGreaterThan(0);
+    expect(callsOf("library_refresh").length).toBeGreaterThan(synced);
     expect(screen.queryByRole("button", { name: "Bilal Qureshi" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Usman Chaudhry" })).toBeNull();
     expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();

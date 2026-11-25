@@ -45,12 +45,13 @@ export function isWaiting(item: LibraryItem, now: number): boolean {
 /** Same rules as the server: calendar day and Monday-based week in local time, recordings still waiting, and so on. */
 export function inSmartView(item: LibraryItem, view: SmartView, now: Date = new Date()): boolean {
   if (item.deleted) return false;
+  // D-243: a call's session still `recording` (being recorded, or waiting for Keep or Discard) is in no view but
+  // Waiting, as on the server (LibraryOrganiser leaves it out of every other) and in the new design.
+  if (item.status === "recording" && view !== "waiting") return false;
   const started = item.started_at ? Date.parse(item.started_at) : NaN;
   switch (view) {
     case "all":
-      // A call's session still `recording` (being recorded, or waiting for Keep or Discard) is in no list but Waiting, as
-      // on the server and in the new design.
-      return item.status !== "recording";
+      return true;
     case "today":
       return started >= startOfDay(now).getTime() && started < startOfDay(now).getTime() + 86_400_000;
     case "this_week": {

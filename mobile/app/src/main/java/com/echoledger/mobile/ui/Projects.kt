@@ -23,10 +23,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderShared
@@ -168,7 +168,7 @@ object ProjectTree {
  */
 enum class SmartFolder(val key: String, val label: String, val icon: ImageVector, val server: Boolean = false) {
     INBOX("inbox", "No project", Icons.Rounded.Inbox),
-    WHATSAPP("whatsapp", "WhatsApp", Icons.Rounded.Chat),
+    WHATSAPP("whatsapp", "WhatsApp", Icons.AutoMirrored.Rounded.Chat),
     WHATSAPP_BUSINESS("whatsapp_business", "WhatsApp Business", Icons.Rounded.Business),
     GOOGLE_MEET("google_meet", "Google Meet", Icons.Rounded.VideoCall),
     ZOOM("zoom", "Zoom", Icons.Rounded.VideoCall),
