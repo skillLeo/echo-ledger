@@ -7,8 +7,9 @@ import type { ActivityBadge, ActivityItem } from "./ipc";
 /** How many notifications are read for the badge (newest first): more than "9+" ever needs. */
 export const BADGE_READ_LIMIT = 50;
 
-/** Answers to an upgrade request (docs/API.md "Upgrade requests"). */
-const UPGRADE_REPLIES = new Set(["upgrade_approved", "upgrade_declined"]);
+/** Answers to an upgrade request (docs/API.md "Upgrade requests"), the receipt asked for among them (the server's
+ * ActionBadge::UPGRADE_REPLIES). */
+const UPGRADE_REPLIES = new Set(["upgrade_approved", "upgrade_declined", "upgrade_receipt_requested"]);
 /** A call an app saw but didn't record (docs/API.md "Missed recordings"): it needs action, as the server counts it. */
 const MISSED_RECORDING = "missed_recording";
 

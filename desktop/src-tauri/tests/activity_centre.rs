@@ -165,6 +165,29 @@ mod retry_all {
     }
 
     #[tokio::test]
+    async fn the_first_retry_all_an_account_ever_asks_for_runs_here() {
+        // The account has never pressed Retry all (null), then presses it on the phone (T1): that one runs here once.
+        let answers = [json!(null), json!(null), json!(T1), json!(T1)];
+        let server = MockServer::start(Router::new().route("GET", "/api/activity", move |_, n| {
+            Action::Reply(Reply::json(200, json!({"data": [], "unread_count": 0, "retry_requested_at": answers[n.min(3)]})))
+        }));
+        common::init_tls();
+        let api = ApiClient::new(&server.base_url(), &[], Some(TOKEN.to_string())).unwrap();
+        let data = tempfile::tempdir().unwrap();
+        failed_queue(data.path());
+        let lock = Mutex::new(());
+        let mut steps = Vec::new();
+        for _ in 0..4 {
+            let answer = api.activity(20).await.unwrap();
+            steps.push(follow_retry_all(data.path(), &lock, &me(), answer["retry_requested_at"].as_str()).unwrap());
+        }
+        assert_eq!(steps, [RetryAllStep::Nothing, RetryAllStep::Nothing, RetryAllStep::Ran(2), RetryAllStep::Nothing]);
+        assert_eq!(states(data.path()), ["queued", "queued", "failed"], "mine went back to the queue; Sara's stays as it is");
+        // Another account that has a real time on its first poll here still only learns it (a fresh sign-in).
+        assert_eq!(follow_retry_all(data.path(), &lock, &other(), Some(T1)).unwrap(), RetryAllStep::Learned);
+    }
+
+    #[tokio::test]
     async fn retry_all_from_here_retries_here_asks_the_others_and_is_not_run_again_by_the_poll() {
         let server = MockServer::start(
             Router::new().fixed("POST", "/api/activity/retry-all", Reply::json(202, json!({"retry_requested_at": T2, "count": 3}))),

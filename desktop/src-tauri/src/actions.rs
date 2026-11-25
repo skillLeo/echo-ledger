@@ -2411,10 +2411,16 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let _ = seen.save(&path);
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
     // A Retry all asked from any app (the phone, the web console, this window): this computer retries that account's
-    // failed uploads once (BE-03), and only while the same account is signed in.
-    if let (Some(owner), Some(asked)) = (asked_for.as_ref(), answer.get("retry_requested_at").and_then(serde_json::Value::as_str))
+    // failed uploads once (BE-03), and only while the same account is signed in. A null says the account has never asked
+    // (noted, so its first Retry all runs here); an older server without the field says nothing.
+    let asked = match answer.get("retry_requested_at") {
+        Some(serde_json::Value::Null) => Some(None),
+        Some(serde_json::Value::String(at)) => Some(Some(at.as_str())),
+        _ => None,
+    };
+    if let (Some(owner), Some(asked)) = (asked_for.as_ref(), asked)
         && state.owner().as_ref() == Some(owner)
-        && let Ok(crate::activity::RetryAllStep::Ran(n)) = crate::activity::follow_retry_all(&state.data_dir, &state.queue_lock, owner, Some(asked))
+        && let Ok(crate::activity::RetryAllStep::Ran(n)) = crate::activity::follow_retry_all(&state.data_dir, &state.queue_lock, owner, asked)
     {
         retried_uploads(app, n);
     }

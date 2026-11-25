@@ -246,7 +246,7 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
         <PanelToggle />
         <div className="el-page__titles">
           <h1 className="el-title-l" ref={pageTitle} tabIndex={-1}>Activity</h1>
-          <p className="el-secondary" aria-live="polite">{activitySubtitle(needsYou, unread)}</p>
+          <p className="el-secondary" aria-live="polite" dir="auto">{activitySubtitle(needsYou, unread)}</p>
         </div>
         {unread > 0 && <div className="el-page__actions"><Button variant="quiet" icon={Icons.CheckIcon} onClick={() => void readAll()}>Mark all read</Button></div>}
       </header>

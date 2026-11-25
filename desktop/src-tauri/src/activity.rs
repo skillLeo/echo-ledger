@@ -60,19 +60,27 @@ pub struct ActivityItem {
 pub const UPLOAD_FAILED_GROUP: &str = "upload_failed";
 
 /// `retry_all_ran.json` (BE-03): for each account on this computer (its [`account_key`]), the last Retry all
-/// (`retry_requested_at`, a server time) this computer has run or learned, so each one runs here once.
+/// (`retry_requested_at`, a server time) this computer has run or learned, so each one runs here once; or
+/// [`NONE_YET`] when the poll said the account has never asked for one, so the first one it asks for runs here.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetryAllRan {
     #[serde(default)]
     pub by: std::collections::BTreeMap<String, String>,
 }
 
+/// What [`RetryAllRan`] keeps for an account whose poll read `retry_requested_at` null with nothing kept: it has never
+/// asked for a Retry all, so the first one it asks for is new and runs here (not only learned).
+pub const NONE_YET: &str = "none";
+
 /// What the person's latest Retry all means here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RetryAllDue {
     /// Nothing asked, an unreadable time, or one this computer has already run (or an older one).
     No,
-    /// The first one this account sees here (a fresh sign-in, or the first poll since this version): learned, not run.
+    /// The first time this account sees here, with nothing kept for it (a fresh sign-in, or the first poll since this
+    /// version): learned, not run, as it may be from before. After a poll that said none ([`NONE_YET`]) it is [`Run`].
+    ///
+    /// [`Run`]: RetryAllDue::Run
     First,
     /// Newer than the last one run here: run it now.
     Run,
@@ -118,11 +126,22 @@ impl RetryAllRan {
         let Some(asked) = requested.and_then(server_time) else { return RetryAllDue::No };
         match self.by.get(account) {
             None => RetryAllDue::First,
+            Some(ran) if ran == NONE_YET => RetryAllDue::Run,
             Some(ran) => match server_time(ran) {
                 Some(ran) if asked <= ran => RetryAllDue::No,
                 _ => RetryAllDue::Run,
             },
         }
+    }
+
+    /// Records that `account` has never asked for a Retry all (the poll read null), when nothing is kept for it yet: a
+    /// time kept stays. Whether it changed anything.
+    pub fn note_none_yet(&mut self, account: &str) -> bool {
+        if self.by.contains_key(account) {
+            return false;
+        }
+        self.by.insert(account.to_string(), NONE_YET.to_string());
+        true
     }
 
     /// Records `at` for `account`, keeping the later of it and what is there (an older answer never undoes a newer one).
@@ -158,15 +177,23 @@ pub fn note_retry_all(data_dir: &Path, lock: &std::sync::Mutex<()>, owner: &crat
     ran.save(&path)
 }
 
-/// The poll's half of Retry all (BE-03): `asked` is `retry_requested_at` from `GET /api/activity`, read for `owner`. A
-/// newer one than this computer ran retries `owner`'s failed uploads and is recorded only once that worked; the first
-/// one an account sees here is only learned (a fresh sign-in never runs an old request). All under the queue's lock.
+/// The poll's half of Retry all (BE-03): `asked` is `retry_requested_at` from `GET /api/activity`, read for `owner`
+/// (None: the server said null, the account has never asked). A newer one than this computer ran retries `owner`'s
+/// failed uploads and is recorded only once that worked. The first time an account sees here with nothing kept is only
+/// learned (a fresh sign-in never runs an old request); after a null it is the account's first Retry all, and runs. All
+/// under the queue's lock.
 pub fn follow_retry_all(data_dir: &Path, lock: &std::sync::Mutex<()>, owner: &crate::owner::Owner, asked: Option<&str>) -> crate::error::AppResult<RetryAllStep> {
     use crate::net::uploader::UploadQueue;
     let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
     let path = crate::net::sync::paths::retry_all_ran(data_dir);
     let mut ran = RetryAllRan::load(&path);
     let key = account_key(owner);
+    if asked.is_none() {
+        if ran.note_none_yet(&key) {
+            ran.save(&path)?;
+        }
+        return Ok(RetryAllStep::Nothing);
+    }
     let step = match ran.due(&key, asked) {
         RetryAllDue::No => return Ok(RetryAllStep::Nothing),
         RetryAllDue::First => RetryAllStep::Learned,
@@ -311,6 +338,15 @@ mod tests {
         assert_eq!(ran.due("a", Some("2026-11-25T08:59:00Z")), RetryAllDue::No, "an older one: no");
         assert_eq!(ran.due("a", Some("2026-11-25T09:00:01Z")), RetryAllDue::Run, "a newer one: yes");
         assert_eq!(ran.due("b", Some("2026-11-25T08:00:00Z")), RetryAllDue::First, "another account keeps its own");
+        // An account the poll said has never asked: its first Retry all runs here; a kept time is never undone by it.
+        assert!(ran.note_none_yet("c"));
+        assert!(!ran.note_none_yet("c"), "noted once");
+        assert_eq!(ran.due("c", None), RetryAllDue::No);
+        assert_eq!(ran.due("c", Some("2026-11-25T08:00:00Z")), RetryAllDue::Run, "after none: the first one runs");
+        ran.note("c", "2026-11-25T08:00:00Z");
+        assert_eq!(ran.due("c", Some("2026-11-25T08:00:00Z")), RetryAllDue::No, "and only once");
+        assert!(!ran.note_none_yet("a"), "a kept time stays");
+        assert_eq!(ran.by["a"], "2026-11-25T09:00:00Z");
         // An older answer finishing late never undoes a newer one.
         ran.note("a", "2026-11-25T10:00:00Z");
         ran.note("a", "2026-11-25T09:30:00Z");

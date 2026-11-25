@@ -43,6 +43,8 @@ describe("the v2 Activity page", () => {
     const { onItems } = await show(makeStatus({ pendingDecisions: 1 }));
     expect(screen.getByRole("heading", { level: 1, name: "Activity" })).toBeInTheDocument();
     expect(screen.getByText("2 things need you. Your other notifications follow, newest first.")).toBeInTheDocument();
+    // Its own direction: in Urdu the sentence keeps its full stop and number where English puts them.
+    expect(screen.getByText("2 things need you. Your other notifications follow, newest first.")).toHaveAttribute("dir", "auto");
     expect(onItems).toHaveBeenCalledWith(ITEMS);
   });
 

@@ -96,6 +96,29 @@ describe("the rail's Activity number (UX-08)", () => {
     expect(activity().querySelector(".el-rail__count")).toBeNull();
   });
 
+  it("another sign-in never shows the last account's number; a call decided here reads the number again", async () => {
+    respond("badge_get", { count: 5, label: "5", tone: "accent" });
+    app();
+    await settle();
+    await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 5");
+    // Deciding a waiting call the server counts (one with captions): its number is read again at once.
+    respond("badge_get", { count: 4, label: "4", tone: "accent" });
+    await act(() => emitEvent("pending:changed", []));
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 4");
+    // Another account signs in, and its number can't be read yet: the list here counts, never the first account's 4.
+    fail("badge_get", "Network error: the server did not answer");
+    await act(() => emitEvent("app:status", makeStatus({ signIn: "sign-in-2" })));
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 2, something failed");
+    respond("badge_get", { count: 1, label: "1", tone: "accent" });
+    await act(() => emitEvent("activity:updated", 0));
+    await settle();
+    expect(activity()).toHaveAccessibleName("Activity, 1");
+  });
+
   it("never read (offline from the start): counted here from the list, red for the failed transcript", async () => {
     fail("badge_get", "The server is unreachable.");
     app();

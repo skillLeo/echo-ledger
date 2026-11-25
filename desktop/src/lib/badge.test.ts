@@ -20,6 +20,12 @@ describe("the Activity badge counts only what needs the person (v1.6, P6)", () =
     expect(actionCount(items)).toBe(5);
   });
 
+  it("counts a request for the payment receipt like the other upgrade replies (the server's ActionBadge::UPGRADE_REPLIES)", () => {
+    expect(needsAction({ kind: "upgrade_receipt_requested", read: false })).toBe(true);
+    expect(needsAction({ kind: "upgrade_receipt_requested", read: true })).toBe(false);
+    expect(actionCount([item("upgrade_receipt_requested"), item("upgrade_approved")])).toBe(2);
+  });
+
   it("leaves out what was read", () => {
     expect(actionCount([item("transcript_failed", true), item("upgrade_approved", true), item("transcript_failed")])).toBe(1);
   });

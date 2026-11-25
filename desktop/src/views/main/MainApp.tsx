@@ -199,7 +199,7 @@ export default function MainApp() {
   const [activityItems, setActivityItems] = useActivityItems();
   // UX-08: the server's one number (GET /api/badge), the same on the phone and the web console; counted here from the list
   // while it can't be read (offline, an older server).
-  const serverBadge = useActivityBadge(!!status?.paired);
+  const serverBadge = useActivityBadge(!!status?.paired, status?.signIn ?? null);
   // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting that only this computer knows, so the
   // rest is sent (the server's number, or, counted here, the list and the calls the server has sessions for).
   const waitingAll = status?.pendingDecisions ?? 0;
