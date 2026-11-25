@@ -107,7 +107,10 @@ class AccountLanguageTest : ScreenTest() {
         compose.onNode(hasText("اردو") and hasClickAction()).performScrollTo().performClick()
         pumpUntil("sent") { server.requestsTo("PATCH", "/api/account").isNotEmpty() }
         assertTrue(server.requestsTo("PATCH", "/api/account").single().bodyText().contains("\"language\":\"ur\""))
-        pumpUntil("kept") { vm.settings.value.accountLanguage == "ur" }
+        pumpUntil("answered") { vm.languageChangesInFlight() == 0 }
+        assertEquals("ur", vm.settings.value.accountLanguage)
+        // The choice made while signed out is never written by a choice made signed in, even one the server took.
+        assertEquals("system", vm.settings.value.appLanguage)
     }
 
     @Test
@@ -145,7 +148,8 @@ class AccountLanguageTest : ScreenTest() {
         pumpUntil("the sync read the account") { server.requestsTo("GET", "/api/account").isNotEmpty() && !vm.syncing.value }
         assertEquals("the older answer undid nothing", "ur", vm.settings.value.accountLanguage)
         release.countDown()
-        pumpUntil("saved") { server.requestsTo("PATCH", "/api/account").isNotEmpty() }
+        // The change's answer applied (the request is recorded before its answer is even written).
+        pumpUntil("answered") { vm.languageChangesInFlight() == 0 }
         assertEquals("ur", vm.settings.value.accountLanguage)
     }
 
@@ -167,10 +171,12 @@ class AccountLanguageTest : ScreenTest() {
         vm.setAccountLanguage("ur")
         pumpUntil("the first on its way") { asked.get() }
         vm.setAccountLanguage("en")
-        pumpUntil("the second saved") { server.requestsTo("PATCH", "/api/account").size >= 1 && vm.settings.value.accountLanguage == "en" }
+        // The second answered and applied, the first still held.
+        pumpUntil("the second answered") { server.requestsTo("PATCH", "/api/account").size == 2 && vm.languageChangesInFlight() == 1 }
+        assertEquals("en", vm.settings.value.accountLanguage)
         release.countDown()
-        pumpUntil("both answered") { server.requestsTo("PATCH", "/api/account").size == 2 }
-        compose.waitForIdle()
+        // The first's late answer applied too (or not): nothing on its way any more.
+        pumpUntil("both answered") { vm.languageChangesInFlight() == 0 }
         assertEquals("the latest choice stays", "en", vm.settings.value.accountLanguage)
     }
 
@@ -194,9 +200,11 @@ class AccountLanguageTest : ScreenTest() {
         runBlocking { app.graph.settings.update { it.copy(appLanguage = "en") } }
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
-        server.on("GET", "/api/account", FakeServer.json(200, account("ur")))
-        vm.refresh()
-        pumpUntil("account A in Urdu") { AppLook.choice(vm.settings.value) == "ur" }
+        // Account A chooses Urdu here, signed in: the account's language, never the choice made signed out.
+        server.on("PATCH", "/api/account", FakeServer.json(200, account("ur")))
+        vm.setAccountLanguage("ur")
+        pumpUntil("account A in Urdu") { vm.languageChangesInFlight() == 0 && AppLook.choice(vm.settings.value) == "ur" }
+        assertEquals("en", vm.settings.value.appLanguage)
         vm.unpair()
         pumpUntil("signed out") { !vm.settings.value.paired }
         assertEquals("the signed-out choice", "en", AppLook.choice(vm.settings.value))
@@ -206,6 +214,42 @@ class AccountLanguageTest : ScreenTest() {
         assertEquals("not account A's while B is read", "en", AppLook.choice(vm.settings.value))
         vm.refresh()
         pumpUntil("account B") { vm.settings.value.accountLanguage == "en" }
+    }
+
+    /**
+     * A sign-in (through the pairing, as from the QR): the last account's language and colour go at once, and the new
+     * account's are read before its first sync (whose own read fails here), so the first screens speak its language.
+     */
+    @Test
+    fun aSignInForgetsTheLastAccountsLanguageAndReadsTheNewOnesAtOnce() {
+        runBlocking { app.pairLocally(server) }
+        vm.updateSettings { it.copy(accountLanguage = "ur", avatarColor = 2) }
+        pumpUntil("account A in Urdu") { vm.settings.value.accountLanguage == "ur" }
+        server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        val registered = com.echoledger.mobile.testsupport.ServerFixtures.registerResponse()
+        server.on("POST", "/api/devices/register", FakeServer.json(201, registered))
+        val gate = server.hold()
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        server.on("GET", "/api/account") { req ->
+            // The new sign-in's reads (its token): the first is held, then answers; the sync's after it fail.
+            if (req.headers["Authorization"]?.contains("0123456789abcdef") != true) {
+                FakeServer.json(401, """{"message":"Unauthenticated."}""")
+            } else if (reads.incrementAndGet() == 1) {
+                gate.await(30)
+                FakeServer.json(200, account("en", colour = 6))
+            } else {
+                FakeServer.json(500, """{"message":"x"}""")
+            }
+        }
+        vm.pairWith(com.echoledger.mobile.core.PairingPayload(server.baseUrl, "TEST2345", emptyList()), "")
+        pumpUntil("the new account read") { reads.get() >= 1 }
+        pumpUntil("account A's language and colour gone") {
+            vm.settings.value.accountLanguage == null && vm.settings.value.avatarColor == null
+        }
+        assertEquals("not account A's while B is read", "en", AppLook.choice(vm.settings.value))
+        gate.open()
+        pumpUntil("account B kept") { vm.settings.value.accountLanguage == "en" }
+        assertEquals(6, vm.settings.value.avatarColor)
     }
 
     /** Before the settings are read (a cold start's first notification): the language kept at the last save, else English. */
@@ -224,10 +268,17 @@ class AccountLanguageTest : ScreenTest() {
     fun thePersonsInitialsAreDrawnOnTheirColour() {
         assertEquals(4, com.echoledger.mobile.ui.v2.shell.personColour("sample@example.test"))
         assertEquals(5, com.echoledger.mobile.ui.v2.shell.personColour("Bilal@Example.com "))
+        // As the Account and Profile pages draw it with no picture: the initials on the account's colour.
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 androidx.compose.runtime.CompositionLocalProvider(com.echoledger.mobile.ui.v2.shell.LocalAvatarColour provides 5) {
-                    com.echoledger.mobile.ui.v2.shell.PersonAvatar("SO", androidx.compose.ui.Modifier.testTag("avatar"))
+                    com.echoledger.mobile.ui.v2.account.AccountAvatar(
+                        name = "Sana Owais",
+                        url = null,
+                        version = null,
+                        person = "p1",
+                        modifier = androidx.compose.ui.Modifier.testTag("avatar")
+                    )
                 }
             }
         }
@@ -236,6 +287,20 @@ class AccountLanguageTest : ScreenTest() {
         val want = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Light.avatar5.toArgb()
         val near = listOf(16, 8, 0).all { kotlin.math.abs((drawn shr it and 0xff) - (want shr it and 0xff)) <= 3 }
         assertTrue("avatar5 drawn: ${Integer.toHexString(drawn)}", near)
+    }
+
+    /** English on a French phone: the dates use the app's language's months, never the phone's. */
+    @Test
+    @org.robolectric.annotation.Config(qualifiers = "fr")
+    fun englishOnAFrenchPhoneUsesEnglishMonths() {
+        var locale: java.util.Locale? = null
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                locale = com.echoledger.mobile.ui.v2.account.appLocale()
+            }
+        }
+        compose.waitForIdle()
+        assertEquals("en", locale?.language)
     }
 
     @Test

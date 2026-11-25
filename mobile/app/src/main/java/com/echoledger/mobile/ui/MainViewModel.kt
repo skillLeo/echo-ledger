@@ -575,22 +575,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun keepAccount(account: com.echoledger.mobile.data.AccountDto, turn: Long, epoch: Int) {
         if (!stillAccount(epoch)) return
-        val settled = languagePatches.get() == 0 && turn == languageTurn.get()
-        val language = account.language?.takeIf { it in SPOKEN && settled }
+        var kept: String? = null
         graph.settings.update {
             if (!stillAccount(epoch)) return@update it
+            // Checked with the write: a choice tapped just before it is never overwritten by this older read.
+            val settled = languagePatches.get() == 0 && turn == languageTurn.get()
+            kept = account.language?.takeIf { l -> l in SPOKEN && settled }
             it.copy(
-                accountLanguage = language ?: it.accountLanguage,
+                accountLanguage = kept ?: it.accountLanguage,
                 avatarColor = account.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor
             )
         }
-        if (language != null) confirmedLanguage = language
+        kept?.let { confirmedLanguage = it }
     }
 
-    /** Changes of the account's language: the latest call's number, those on their way, and a turn that moves with each. */
+    /**
+     * Changes of the account's language: the latest call's number, those on their way (until their answer is applied),
+     * a turn that moves with each, and the number of the latest call whose answer the server confirmed.
+     */
     private val languageCall = java.util.concurrent.atomic.AtomicLong()
     private val languagePatches = java.util.concurrent.atomic.AtomicInteger()
     private val languageTurn = java.util.concurrent.atomic.AtomicLong()
+    private var confirmedCall = 0L
+
+    /** The changes of the account's language still on their way, their answer not applied yet (for the tests). */
+    @androidx.annotation.VisibleForTesting
+    internal fun languageChangesInFlight(): Int = languagePatches.get()
 
     /** The languages the app speaks. */
     private val SPOKEN = setOf("en", "ur")
@@ -610,24 +620,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (confirmedLanguage == null) confirmedLanguage = before
         languagePatches.incrementAndGet()
         languageTurn.incrementAndGet()
-        graph.settings.update { it.copy(accountLanguage = language) }
-        val saved = try {
-            withContext(Dispatchers.IO) { runCatching { graph.api()?.updateLanguage(language) }.getOrNull() }
+        try {
+            graph.settings.update { it.copy(accountLanguage = language) }
+            val saved = withContext(Dispatchers.IO) { runCatching { graph.api()?.updateLanguage(language) }.getOrNull() }
+            if (!stillAccount(epoch)) return@launch
+            val now = saved?.let { it.language?.takeIf { l -> l in SPOKEN } ?: language }
+            // Any answer the server gave is what it holds now, unless a later call's answer came first: a refusal of
+            // the latest call puts back the newest language the server confirmed.
+            if (now != null && call > confirmedCall) {
+                confirmedCall = call
+                confirmedLanguage = now
+            }
+            if (call != languageCall.get()) return@launch
+            if (saved != null) {
+                graph.settings.update {
+                    it.copy(accountLanguage = now, avatarColor = saved.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor)
+                }
+            } else {
+                graph.settings.update { it.copy(accountLanguage = confirmedLanguage) }
+                _message.value = com.echoledger.mobile.notify.AppWords.resources(getApplication())
+                    .getString(com.echoledger.mobile.R.string.v2_set_language_not_saved)
+            }
         } finally {
             languagePatches.decrementAndGet()
             languageTurn.incrementAndGet()
-        }
-        if (call != languageCall.get() || !stillAccount(epoch)) return@launch
-        if (saved != null) {
-            val now = saved.language?.takeIf { it in SPOKEN } ?: language
-            confirmedLanguage = now
-            graph.settings.update {
-                it.copy(accountLanguage = now, avatarColor = saved.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor)
-            }
-        } else {
-            graph.settings.update { it.copy(accountLanguage = confirmedLanguage) }
-            _message.value = com.echoledger.mobile.notify.AppWords.resources(getApplication())
-                .getString(com.echoledger.mobile.R.string.v2_set_language_not_saved)
         }
     }
 
