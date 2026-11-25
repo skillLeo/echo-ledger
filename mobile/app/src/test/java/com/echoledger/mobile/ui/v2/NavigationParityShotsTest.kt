@@ -90,8 +90,17 @@ class NavigationParityShotsTest : ScreenTest() {
         EchoBottomBar(MAIN_TABS, MAIN_TABS.first().key, {}, {}, recording = false, onRecord = {}, onRecordLongPress = {})
     }
 
+    /** The shell in [language] as a signed-in phone speaks it: the account's (BE-06), set here as the server would. */
     @Composable
-    private fun shell(dark: Boolean, language: EchoLanguage) = EchoV2Shell(
+    private fun shell(dark: Boolean, language: EchoLanguage) {
+        androidx.compose.runtime.LaunchedEffect(language) {
+            app.graph.settings.update { it.copy(accountLanguage = if (language == EchoLanguage.Urdu) "ur" else "en") }
+        }
+        shellOf(dark, language)
+    }
+
+    @Composable
+    private fun shellOf(dark: Boolean, language: EchoLanguage) = EchoV2Shell(
         vm,
         UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.library" to true, "ui_v2.live" to true, "ui_v2.ask" to true)),
         darkTheme = dark,

@@ -21,6 +21,21 @@ object AppLook {
         else -> 1f
     }
 
+    /** The languages the app speaks. */
+    private val SPOKEN = setOf("en", "ur")
+
+    /**
+     * The language to speak, as a choice ("en", "ur", or "system" for the phone's), for everything the app writes.
+     * Signed in, the account's (its `language`, the same on every device), else the last one known on this phone while
+     * it loads or can't be read, else a language chosen here, else English: never the phone's own. Signed out, the
+     * choice in Settings, which may follow the phone. The desktop's rule too (src/i18n/language.ts).
+     */
+    fun choice(s: com.echoledger.mobile.data.AppSettings): String = if (s.paired) {
+        s.accountLanguage?.takeIf { it in SPOKEN } ?: s.appLanguage.takeIf { it in SPOKEN } ?: "en"
+    } else {
+        s.appLanguage
+    }
+
     /** The app's language: `en` or `ur` as chosen, else the phone's ([system]). */
     fun language(choice: String, system: EchoLanguage): EchoLanguage = when (choice) {
         "en" -> EchoLanguage.English
@@ -66,7 +81,7 @@ fun OverlayLook(
     val look = stored ?: com.echoledger.mobile.data.AppSettings()
     com.echoledger.mobile.ui.v2.theme.EchoV2Theme(
         darkTheme = dark,
-        language = AppLook.language(look.appLanguage, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
+        language = AppLook.language(AppLook.choice(look), com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
         phoneFont = false
     ) {
         AppLook.TextSize(look.textSize, content)

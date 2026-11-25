@@ -37,6 +37,6 @@ object AppWords {
      */
     fun resources(context: Context): Resources {
         val graph = (context.applicationContext as? EchoLedgerApp)?.graph ?: return context.resources
-        return resources(context, graph.liveSettings.value?.appLanguage)
+        return resources(context, graph.liveSettings.value?.let(com.echoledger.mobile.ui.v2.shell.AppLook::choice))
     }
 }

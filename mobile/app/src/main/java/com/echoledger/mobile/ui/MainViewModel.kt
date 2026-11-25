@@ -552,11 +552,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    suspend fun account(): com.echoledger.mobile.data.AccountDto? = workspaceCall("The account could not be loaded.") { it.account() }
+    suspend fun account(): com.echoledger.mobile.data.AccountDto? =
+        workspaceCall("The account could not be loaded.") { it.account() }?.also { keepAccount(it) }
+
+    /**
+     * What the phone keeps of the account it read (BE-06): its language, spoken while signed in (also while the account
+     * next loads or can't be read), and its avatar colour. A language the app doesn't speak keeps the last one known.
+     */
+    suspend fun keepAccount(account: com.echoledger.mobile.data.AccountDto) {
+        graph.settings.update {
+            it.copy(
+                accountLanguage = account.language?.takeIf { l -> l == "en" || l == "ur" } ?: it.accountLanguage,
+                avatarColor = account.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor
+            )
+        }
+    }
+
+    /**
+     * Settings › Appearance › App language while signed in: the account's language (`PATCH /api/account`), so it
+     * changes on every device. Shown at once; put back, with a message, when the server says no.
+     */
+    fun setAccountLanguage(language: String) = viewModelScope.launch {
+        val before = graph.settings.current()
+        graph.settings.update { it.copy(accountLanguage = language, appLanguage = language) }
+        val saved = withContext(Dispatchers.IO) { runCatching { graph.api()?.updateLanguage(language) }.getOrNull() }
+        if (saved != null) {
+            keepAccount(saved)
+        } else {
+            graph.settings.update { it.copy(accountLanguage = before.accountLanguage, appLanguage = before.appLanguage) }
+            _message.value = com.echoledger.mobile.notify.AppWords.resources(getApplication())
+                .getString(com.echoledger.mobile.R.string.v2_set_language_not_saved)
+        }
+    }
 
     /** The account for the Settings card (since v1.7): nothing is said when it can't be read; the card keeps what it had. */
     suspend fun accountQuietly(): com.echoledger.mobile.data.AccountDto? =
-        runCatching { withContext(Dispatchers.IO) { graph.api()?.account() } }.getOrNull()
+        runCatching { withContext(Dispatchers.IO) { graph.api()?.account() } }.getOrNull()?.also { keepAccount(it) }
 
     /** Signs out every device and console session of the account, this phone too (back to the sign-in screen). */
     suspend fun signOutEverywhere(): Boolean {
@@ -666,6 +697,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { graph.api()?.entitlements() }.getOrNull()?.let { e ->
                     graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
                 }
+                // The account's language and avatar colour (BE-06): the phone speaks its language while signed in.
+                runCatching { graph.api()?.account() }.getOrNull()?.let { keepAccount(it) }
                 graph.library.refresh()
                 // The calls waiting for Keep or Discard on any device, which the sync leaves out (Needs you lists them).
                 waitingReadAt = android.os.SystemClock.elapsedRealtime()

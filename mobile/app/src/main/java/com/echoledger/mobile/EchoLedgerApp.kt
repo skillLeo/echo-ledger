@@ -46,7 +46,9 @@ class EchoLedgerApp : Application() {
             graph.scope.launch(Dispatchers.IO) {
                 runCatching {
                     // The channels were named in the phone's language a moment ago: in the app's, when it has its own.
-                    if (graph.settings.current().appLanguage != "system") Notifications.createChannels(this@EchoLedgerApp)
+                    if (com.echoledger.mobile.ui.v2.shell.AppLook.choice(graph.settings.current()) != "system") {
+                        Notifications.createChannels(this@EchoLedgerApp)
+                    }
                 }
             }
         }
@@ -94,7 +96,7 @@ class AppGraph(val context: Context) {
                 shownNotify = notify
                 scope.launch(lookRefresh) { runCatching { com.echoledger.mobile.notify.AfterCallNotice.followFlag(context, notify) } }
             }
-            val look = saved.appLanguage to saved.textSize
+            val look = com.echoledger.mobile.ui.v2.shell.AppLook.choice(saved) to saved.textSize
             if (shownLook != look) {
                 // One after another, each with the latest language: a slow one never names them after an older choice.
                 scope.launch(lookRefresh) {

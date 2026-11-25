@@ -22,8 +22,25 @@ object PendingIcons {
     val PhoneCallback: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneCallback
 }
 
-/** The person's avatar: their initials, or the person icon when there is no name (never a "?", which reads as Help). */
+/**
+ * The person's avatar: their initials in white on their colour (DES-08: the account's `avatar_color`, the same on every
+ * device; before the account has been read, a stable pick from the initials, never grey), or the person icon when there
+ * is no name (never a "?", which reads as Help).
+ */
 @Composable
 fun PersonAvatar(initials: String, modifier: Modifier = Modifier) {
-    if (initials.isBlank()) EchoAvatar(modifier, icon = PendingIcons.Person) else EchoAvatar(modifier, initials = initials)
+    if (initials.isBlank()) {
+        EchoAvatar(modifier, icon = PendingIcons.Person)
+    } else {
+        val index = LocalAvatarColour.current
+            ?: com.echoledger.mobile.ui.v2.components.contactAvatarIndex(com.echoledger.mobile.ui.v2.components.contactKey(initials))
+        EchoAvatar(
+            modifier,
+            initials = initials,
+            fill = com.echoledger.mobile.ui.v2.components.avatarFill(com.echoledger.mobile.ui.v2.theme.EchoV2.colors, index.mod(8))
+        )
+    }
 }
+
+/** The signed-in person's avatar colour (0-7) as the account says it ([PersonAvatar]); null until it has been read. */
+val LocalAvatarColour = androidx.compose.runtime.staticCompositionLocalOf<Int?> { null }

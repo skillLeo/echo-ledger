@@ -168,7 +168,7 @@ fun EchoV2Shell(
     openLibrary: Int = 0
 ) {
     val settings by vm.settings.collectAsState()
-    val shown = AppLook.language(settings.appLanguage, language)
+    val shown = AppLook.language(AppLook.choice(settings), language)
     EchoV2Theme(darkTheme = darkTheme, language = shown, phoneFont = settings.phoneFont, wallpaperColours = settings.dynamicColour) {
         AppLook.TextSize(settings.textSize) {
             val toasts = remember { EchoToastState(clock) }
@@ -195,7 +195,7 @@ fun EchoV2Frame(vm: MainViewModel, darkTheme: Boolean, language: EchoLanguage = 
     val settings by vm.settings.collectAsState()
     EchoV2Theme(
         darkTheme = darkTheme,
-        language = AppLook.language(settings.appLanguage, language),
+        language = AppLook.language(AppLook.choice(settings), language),
         phoneFont = settings.phoneFont,
         wallpaperColours = settings.dynamicColour
     ) {
@@ -371,7 +371,10 @@ private fun ShellBody(
     }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            CompositionLocalProvider(LocalAccountEntry provides AccountEntry(initials) { route = V2Route.Settings }) {
+            CompositionLocalProvider(
+                LocalAccountEntry provides AccountEntry(initials) { route = V2Route.Settings },
+                LocalAvatarColour provides settings.avatarColor
+            ) {
                 when (val r = route) {
                     V2Route.Settings, is V2Route.SettingsPage -> {
                         val page = (r as? V2Route.SettingsPage)?.page
