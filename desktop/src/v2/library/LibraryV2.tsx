@@ -12,15 +12,14 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
-import { eraseIn } from "../../views/main/LibraryOrganise";
-import { hoursWords, useTrashKeepHours } from "../../lib/trash";
+import { useTrashKeepHours } from "../../lib/trash";
 import type { NoticeTarget, Notify } from "../../lib/notice";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
   Badge, Banner, Button, Card, Dialog, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion, BackToTop, scrollRootOf,
 } from "../components";
-import { binHours, binSentence, isUntranscribed, rowModel, rowState, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
+import { binHours, binSentence, eraseInWords, groupTitle, isUntranscribed, recordings, trashTime, rowModel, rowState, TIME_ONLY_GROUPS, type RowModel, type SavedView } from "./model";
 import { RecordingRow } from "./RecordingRow";
 import { useFitRow } from "./fitRow";
 import { usePageTitle } from "../pageTitle";
@@ -54,10 +53,12 @@ import { addToListMenu, listKey, NewLabelFor, useLists } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
-  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
+  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, RenameDialog,
   sayProblem, TranscribeDialog, WhatsAppDialog, ZIP_FORMATS,
 } from "./organise";
-import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
+import { moveRecordings } from "../../views/main/ProjectDialogs";
+import { projectLabel } from "../../lib/projects";
+import { t, tc, useLanguage } from "../../i18n";
 
 /** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
 export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
@@ -113,8 +114,8 @@ const NARROW = 1024;
  * narrow (under 1024 px, or with the filters beside it below WIDE_WITH_PANEL).
  */
 export function placeholderFor(width: number, filtersBeside: boolean): string {
-  if (width >= (filtersBeside ? WIDE_WITH_PANEL : NARROW)) return `Search recordings ${MOD}F`;
-  return `Search ${MOD}F`;
+  if (width >= (filtersBeside ? WIDE_WITH_PANEL : NARROW)) return t("Search recordings :keys", { keys: `${MOD}F` });
+  return t("Search :keys", { keys: `${MOD}F` });
 }
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -132,7 +133,7 @@ type Message = { id: number; text: string; action?: { label: string; run: () => 
 export function queueNotice(say: (text: string, action?: Message["action"], error?: boolean) => void, text: string, error?: boolean, target?: NoticeTarget): void {
   if (target?.kind !== "action") return say(text, undefined, error);
   const tail = / · ([^·]+)$/.exec(text);
-  say(tail ? text.slice(0, tail.index) : text, { label: tail ? tail[1] : "Undo", run: target.run }, error);
+  say(tail ? text.slice(0, tail.index) : text, { label: tail ? tail[1] : t("Undo"), run: target.run }, error);
 }
 
 const readPanel = () => {
@@ -161,14 +162,21 @@ function useWindowSize(): { width: number; height: number } {
   return size;
 }
 
-/** What a library view says when nothing is in it. */
-const EMPTY_VIEW: Partial<Record<LibraryViewId, { title: string; body: string }>> = {
-  needs: { title: "Nothing needs you", body: "Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here." },
-  unread: { title: "You've opened every recording", body: "New recordings show here until you open them." },
-  important: { title: "Nothing marked important yet", body: "Recordings you mark important show here." },
-  // Since v2.1 one view (Not transcribed merged into it): every recording kept without a transcript.
-  audio_only: { title: "No audio-only recordings", body: "Recordings kept as audio, without a transcript, show here to transcribe later." },
-};
+/** What a library view says when nothing is in it (in the window's language). */
+function emptyView(view: LibraryViewId): { title: string; body: string } | undefined {
+  switch (view) {
+    case "needs": return { title: t("Nothing needs you"), body: t("Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here.") };
+    case "unread": return { title: t("You've opened every recording"), body: t("New recordings show here until you open them.") };
+    case "important": return { title: t("Nothing marked important yet"), body: t("Recordings you mark important show here.") };
+    // Since v2.1 one view (Not transcribed merged into it): every recording kept without a transcript.
+    case "audio_only": return { title: t("No audio-only recordings"), body: t("Recordings kept as audio, without a transcript, show here to transcribe later.") };
+    default: return undefined;
+  }
+}
+
+/** More picked than the core takes at once: what the menu and the bar say. */
+const tooManyWords = (picked: number) => t("Up to :max at a time: unselect :extra", { max: MAX_BULK, extra: picked - MAX_BULK });
+
 
 export type LibraryV2Props = {
   /** Import (the empty Library's button; the sidebar's ● Record ▾ has it too). */
@@ -206,6 +214,8 @@ export type LibraryV2Props = {
 };
 
 export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, onPlace, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
+  // Drawn again in the window's language when it changes (desktop Urdu, D1).
+  useLanguage();
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -769,7 +779,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const listOf = (_all: readonly LibraryItem[] | null) => ({ rows: shown });
 
   const remove = async (item: LibraryItem) => {
-    const title = item.title?.trim() || "Recording";
+    const title = item.title?.trim() || t("Recording");
     try {
       await api.deleteSession(item.id);
       const order = listOf(items).rows;
@@ -778,8 +788,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setItems((list) => list?.filter((i) => i.id !== item.id) ?? list);
       setOpenId(null);
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-      say(`"${title}" moved to Trash`, {
-        label: "Undo",
+      say(t('":title" moved to Trash', { title }), {
+        label: t("Undo"),
         run: () => void api.restoreSession(item.id).then(async () => {
           await load();
           setFocusAfter({ rowId: item.id, seq: ++seq.current });
@@ -806,8 +816,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     await load();
     const left = ids.length - back;
-    if (left === 0) say(`${recordingsWord(back)} back`);
-    else sayProblem(say, `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
+    if (left === 0) say(tc(":count recording back|:count recordings back", back));
+    else sayProblem(say, firstError ? tc(":back back · :left still in Trash: :error", back, { back, left, error: firstError }) : tc(":back back · :left still in Trash", back, { back, left }));
   };
   /** Delete a whole view or more than this many: asked first. */
   const ASK_ABOVE = 20;
@@ -831,19 +841,19 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       const gone = await api.bulkSessions([...ids], "delete");
       endSelection();
       if (!gone) {
-        sayProblem(say, "Nothing was moved to Trash. Try again, or reload the Library.");
+        sayProblem(say, t("Nothing was moved to Trash. Try again, or reload the Library."));
         void load();
         return;
       }
-      const kept = `kept there for ${hoursWords(keepHours)}`;
+      const kept = t("kept there for :time", { time: trashTime(keepHours) });
       if (gone !== ids.length) {
         // Only some went: the server's list says which. Undo brings back only those that are gone from it.
         // When the list can't be read, Undo tries every picked one (those still in the Library just stay).
-        const text = `${gone} of ${ids.length} moved to Trash · ${kept}`;
+        const text = tc(":gone of :total moved to Trash · :kept", gone, { gone, total: ids.length, kept });
         const now = await api.library().catch(() => null);
         // Some stayed: a problem, said as one (never pushed off by a newer message), with Undo for those that went.
         if (!now) {
-          say(text, { label: "Undo", run: () => void restoreMany(ids) }, true);
+          say(text, { label: t("Undo"), run: () => void restoreMany(ids) }, true);
           return;
         }
         const still = new Set(now.filter((i) => !i.deleted).map((i) => i.id));
@@ -853,14 +863,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ?? order.find((i) => still.has(i.id)) ?? null;
         setItems(now);
         setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined, true);
+        say(text, moved.length ? { label: t("Undo"), run: () => void restoreMany(moved) } : undefined, true);
         return;
       }
       const order = listOf(items).rows;
       const next = order.find((i) => !ids.includes(i.id)) ?? null;
       setItems((list) => list?.filter((i) => !ids.includes(i.id)) ?? list);
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-      say(`${recordingsWord(gone)} moved to Trash · ${kept}`, { label: "Undo", run: () => void restoreMany(ids) });
+      say(tc(":count recording moved to Trash · :kept|:count recordings moved to Trash · :kept", gone, { kept }), { label: t("Undo"), run: () => void restoreMany(ids) });
     } catch (e) {
       sayProblem(say, errorMessage(e));
     }
@@ -874,8 +884,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const changed = ids.filter((id) => inList(id) !== on);
     try {
       await api.bulkSessions([...ids], on ? "label" : "unlabel", null, list.name);
-      say(on ? `Added to ${list.name}` : `Removed from ${list.name}`, changed.length ? {
-        label: "Undo",
+      say(on ? t("Added to :name", { name: list.name }) : t("Removed from :name", { name: list.name }), changed.length ? {
+        label: t("Undo"),
         run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => sayProblem(say, errorMessage(e))),
       } : undefined);
       await Promise.all([load(), reloadLists()]);
@@ -891,7 +901,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     if (!chosen.length) return;
     if (chosen.length > MAX_BULK) {
-      say(`Up to ${MAX_BULK} at a time: unselect ${chosen.length - MAX_BULK}`);
+      say(tooManyWords(chosen.length));
       return;
     }
     const was = new Map(chosen.map((i) => [i.id, { opened: i.opened, read: readHere.has(i.id) }]));
@@ -914,18 +924,19 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       }
       // Once more: a sync answered meanwhile from the copy saved before the marks undid them.
       put(() => marked);
-      say(`Marked ${recordingsWord(was.size)} as ${unread ? "unread" : "read"}`);
+      say(unread ? tc("Marked :count recording as unread|Marked :count recordings as unread", was.size) : tc("Marked :count recording as read|Marked :count recordings as read", was.size));
     } catch (e) {
       // Only what was not done goes back; the rest stays marked, and the problem says how many went.
       put((id) => (done.has(id) ? marked : was.get(id)!));
-      sayProblem(say, done.size ? `${done.size} of ${was.size} marked as ${unread ? "unread" : "read"} · ${errorMessage(e)}` : errorMessage(e));
+      const of = { done: done.size, total: was.size, error: errorMessage(e) };
+      sayProblem(say, !done.size ? errorMessage(e) : unread ? tc(":done of :total marked as unread · :error", of.done, of) : tc(":done of :total marked as read · :error", of.done, of));
     }
   };
 
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
     try {
       const changed = await api.bulkSessions([...ids], action);
-      say(ids.length === 1 ? done : `${done} · ${recordingsWord(changed)}`);
+      say(ids.length === 1 ? done : `${done} · ${recordings(changed)}`);
       await load();
     } catch (e) {
       sayProblem(say, errorMessage(e));
@@ -938,43 +949,47 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
    */
   const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set(), own: RecordingMenuParts = {}): MenuItem[] => {
     // More than the core takes at once: the menu says so and does nothing else.
-    if (ids.length > MAX_BULK) return [{ label: `Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`, disabled: true }];
+    if (ids.length > MAX_BULK) return [{ label: tooManyWords(ids.length), disabled: true }];
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
     const all = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
     const none = (test: (i: LibraryItem) => boolean) => !chosen.some(test);
     const list: (MenuItem & { key: string })[] = [];
-    const add = (key: string, item: MenuItem) => { if (!without.has(key)) list.push({ key, ...item }); };
-    if (one) add("open", { label: "Open", icon: Icons.TranscriptIcon, onPick: () => setOpenId(one.id) });
+    // A group named in English elsewhere (a label's menu, the recording page's Export) is said in the window's language
+    // too, so its items stay one group with these; one said already is left as it is.
+    const add = (key: string, item: MenuItem) => { if (!without.has(key)) list.push({ key, ...item, ...(item.group ? { group: t(item.group) } : {}) }); };
+    const organise = t("Organise");
+    const exporting = t("Export");
+    if (one) add("open", { label: t("Open"), icon: Icons.TranscriptIcon, onPick: () => setOpenId(one.id) });
     // The same selection mode X and Select start, with this recording ticked.
-    if (one && !selecting) add("select", { label: "Select", icon: Icons.SelectIcon, shortcut: "X", onPick: () => startSelecting(one.id) });
-    if (one) add("rename", { label: "Rename…", icon: Icons.RenameIcon, group: "Organise", onPick: () => setOrganise({ kind: "rename", item: one }) });
-    add("move", { label: "Move to project…", icon: Icons.MoveIcon, group: "Organise",
+    if (one && !selecting) add("select", { label: t("Select"), icon: Icons.SelectIcon, shortcut: "X", onPick: () => startSelecting(one.id) });
+    if (one) add("rename", { label: t("Rename…"), icon: Icons.RenameIcon, group: organise, onPick: () => setOrganise({ kind: "rename", item: one }) });
+    add("move", { label: t("Move to project…"), icon: Icons.MoveIcon, group: organise,
       onPick: () => setOrganise({ kind: "move", ids: [...ids], title: one?.title, current: one ? one.client?.id ?? null : undefined }) });
     // Lists (D14): tick the lists the recordings go in, or make a new one for them. Add to list takes Label…'s place;
     // a server without lists keeps Label….
-    if (!lists) add("label", { label: "Label…", icon: Icons.LabelIcon, group: "Organise", onPick: () => setOrganise({ kind: "label", ids: [...ids] }) });
+    if (!lists) add("label", { label: t("Label…"), icon: Icons.LabelIcon, group: organise, onPick: () => setOrganise({ kind: "label", ids: [...ids] }) });
     if (lists) {
       add("lists", addToListMenu({ lists, chosen, onToggle: (list, on) => void putInList(ids, list, on), onNew: () => setNewLabel({ ids: [...ids] }) }));
     }
-    if (!all((i) => !!i.pinned)) add("pin", { label: "Pin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "pin", "Pinned") });
-    if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
-    if (!all((i) => !!i.keep)) add("keep", { label: "Keep forever", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "keep", "Kept forever") });
-    if (!none((i) => !!i.keep)) add("unkeep", { label: "Allow auto clean-up", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "unkeep", "Auto clean-up allowed") });
+    if (!all((i) => !!i.pinned)) add("pin", { label: t("Pin"), icon: Icons.PinIcon, group: organise, onPick: () => void bulk(ids, "pin", t("Pinned")) });
+    if (!none((i) => !!i.pinned)) add("unpin", { label: t("Unpin"), icon: Icons.PinIcon, group: organise, onPick: () => void bulk(ids, "unpin", t("Unpinned")) });
+    if (!all((i) => !!i.keep)) add("keep", { label: t("Keep forever"), icon: Icons.KeepIcon, group: organise, onPick: () => void bulk(ids, "keep", t("Kept forever")) });
+    if (!none((i) => !!i.keep)) add("unkeep", { label: t("Allow auto clean-up"), icon: Icons.KeepIcon, group: organise, onPick: () => void bulk(ids, "unkeep", t("Auto clean-up allowed")) });
     // Mark as important (UX-22): actions.json's item, the same as a right-click's (the selection bar's ⋮ and the
     // recording page's menu have it too).
-    for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: "Organise" });
+    for (const item of menuItems(["recording.important"], recordingContext(ids))) add("important", { ...item, group: organise });
     if (!one || isUntranscribed(one)) {
       add("transcribe", ids.length > MAX_TRANSCRIBE
-        ? { label: `Transcribe (${MAX_TRANSCRIBE} at a time)`, icon: Icons.TranscriptIcon, group: "Organise", disabled: true }
-        : { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
+        ? { label: t("Transcribe (:max at a time)", { max: MAX_TRANSCRIBE }), icon: Icons.TranscriptIcon, group: organise, disabled: true }
+        : { label: t("Transcribe…"), icon: Icons.TranscriptIcon, group: organise, onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
     }
-    for (const item of own.organise ?? []) add(item.label, { group: "Organise", ...item });
+    for (const item of own.organise ?? []) add(item.label, { group: organise, ...item });
     add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say, shownExportView(chosen))));
-    for (const item of own.export_more ?? []) add(item.label, { group: "Export", ...item });
-    add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: own.ai ?? (() => void copyForAiToClipboard(chosen, say)) });
-    if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
-    add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
+    for (const item of own.export_more ?? []) add(item.label, { group: exporting, ...item });
+    add("ai", { label: t("Copy for AI"), icon: Icons.SparkleIcon, group: exporting, onPick: own.ai ?? (() => void copyForAiToClipboard(chosen, say)) });
+    if (one) add("whatsapp", { label: t("Send to WhatsApp…"), icon: Icons.SendIcon, group: exporting, onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
+    add("delete", { label: ids.length === 1 ? t("Delete") : t("Delete :count", { count: ids.length }), icon: Icons.TrashIcon, group: t("Danger"), danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
     return list.map(({ key: _key, ...item }) => item);
   };
 
@@ -985,23 +1000,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const rowActions = (item: LibraryItem, r: RowModel): ReactNode => (
     <>
       {r.state?.key === "audio_only" && (
-        <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} aria-label={`Transcribe ${r.title}`} title="Transcribe"
-          onClick={() => setOrganise({ kind: "transcribe", ids: [item.id] })}>Transcribe</Button>
+        <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} aria-label={t("Transcribe :title", { title: r.title })} title={t("Transcribe")}
+          onClick={() => setOrganise({ kind: "transcribe", ids: [item.id] })}>{t("Transcribe")}</Button>
       )}
-      <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={`${item.pinned ? "Unpin" : "Pin"} ${r.title}`} title={item.pinned ? "Unpin" : "Pin"}
-        onClick={() => void bulk([item.id], item.pinned ? "unpin" : "pin", item.pinned ? "Unpinned" : "Pinned")} />
+      <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={item.pinned ? t("Unpin :title", { title: r.title }) : t("Pin :title", { title: r.title })}
+        title={item.pinned ? t("Unpin") : t("Pin")}
+        onClick={() => void bulk([item.id], item.pinned ? "unpin" : "pin", item.pinned ? t("Unpinned") : t("Pinned"))} />
       {lists ? (
-        <Menu label={`Label ${r.title}`} button={{ variant: "quiet", size: "sm", icon: Icons.LabelIcon, title: "Label" }}
+        <Menu label={t("Label :title", { title: r.title })} button={{ variant: "quiet", size: "sm", icon: Icons.LabelIcon, title: t("Label") }}
           items={() => addToListMenu({ lists, chosen: [item], onToggle: (list, on) => void putInList([item.id], list, on), onNew: () => setNewLabel({ ids: [item.id] }) }).items ?? []} />
       ) : (
-        <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={`Label ${r.title}`} title="Label" onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
+        <Button size="sm" variant="quiet" icon={Icons.LabelIcon} aria-label={t("Label :title", { title: r.title })} title={t("Label")} onClick={() => setOrganise({ kind: "label", ids: [item.id] })} />
       )}
       {/* The same menu as a right-click (UX-22): the system's on a Mac, ours elsewhere. */}
       {currentPlatform() === "macos" ? (
-        <Button size="sm" variant="quiet" icon={Icons.MoreIcon} aria-label={`More for ${r.title}`} aria-haspopup="menu"
+        <Button size="sm" variant="quiet" icon={Icons.MoreIcon} aria-label={t("More for :title", { title: r.title })} aria-haspopup="menu"
           onClick={(e) => showMenu({ at: menuPointFor(e.currentTarget), ids: [item.id] })} />
       ) : (
-        <Menu label={`More for ${r.title}`} items={() => recordingMenu([item.id]).items} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
+        <Menu label={t("More for :title", { title: r.title })} items={() => recordingMenu([item.id]).items} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />
       )}
     </>
   );
@@ -1011,7 +1027,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       await api.restoreSession(b.id);
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
       await load();
-      say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
+      say(t('":title" restored', { title: b.title || t("Recording") }), { label: t("Open"), run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
     } catch (e) {
       sayProblem(say, errorMessage(e));
     }
@@ -1021,7 +1037,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     try {
       await api.eraseFromBin(b.id);
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
-      say(`"${b.title || "Recording"}" deleted forever`);
+      say(t('":title" deleted forever', { title: b.title || t("Recording") }));
     } catch (e) {
       sayProblem(say, errorMessage(e));
     }
@@ -1085,15 +1101,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }, (ids, projectId) => void dropMove(ids, projectId));
   };
   const dropMove = async (ids: string[], projectId: string | null) => {
-    if (ids.length > MAX_BULK) return say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
+    if (ids.length > MAX_BULK) return say(tooManyWords(ids.length));
     try {
       const changed = await api.bulkSessions(ids, "move", projectId);
       if (!projectId) {
         // No project (today's Inbox): out of every project.
-        say(ids.length === 1 ? "Taken out of its project" : `${recordingsWord(changed)} taken out of their projects`);
+        say(ids.length === 1 ? t("Taken out of its project") : tc(":count recording taken out of their projects|:count recordings taken out of their projects", changed));
       } else {
-        const name = (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? "the project";
-        say(ids.length === 1 ? `Moved to ${name}` : `${recordingsWord(changed)} moved to ${name}`);
+        const name = (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? t("the project");
+        say(ids.length === 1 ? t("Moved to :name", { name }) : tc(":count recording moved to :name|:count recordings moved to :name", changed, { name }));
       }
       endSelection();
       await load();
@@ -1228,7 +1244,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       if (!ids.length) return;
       e.preventDefault();
       if (ids.length > MAX_BULK) {
-        say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
+        say(tooManyWords(ids.length));
         return;
       }
       deleteOrAsk(ids);
@@ -1319,7 +1335,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const oneOf = (item: MenuItem): MenuItem => ({ ...item, radio: true });
   const recordingMenu = (ids: readonly string[]): { title?: string; items: MenuItem[] } => {
     // More than the core takes at once: the menu says so and does nothing else.
-    if (ids.length > MAX_BULK) return { title: manyTitle(ids.length), items: [{ label: `Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`, disabled: true }] };
+    if (ids.length > MAX_BULK) return { title: manyTitle(ids.length), items: [{ label: tooManyWords(ids.length), disabled: true }] };
     const ctx = recordingContext(ids);
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
@@ -1335,10 +1351,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           ...contextItems(["-", "label.new"], ctx).map((item, at) => (at === 0 && lists?.length ? { ...item, separator: true } : item)),
         ],
         "recording.moveToProject": choiceItems("recording.moveToProject", [
-          { value: "none", label: appWords("No project", ctx.platform), checked: where === "none" },
+          { value: "none", label: appWords(t("No project"), ctx.platform), checked: where === "none" },
           ...[...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ value: p.id, label: p.name, checked: where === p.id })),
         ], ctx).map(oneOf),
-        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: appWords(f.label, ctx.platform) })), ctx),
+        "recording.exportAs": choiceItems("recording.exportAs", ZIP_FORMATS.map((f) => ({ value: f.format, label: appWords(t(f.label), ctx.platform) })), ctx),
       }, LIBRARY_KEYS),
     };
   };
@@ -1348,9 +1364,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const listSpaceMenu = (): MenuItem[] => {
     const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
-      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(SORT_NAMES[k], ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
-      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(GROUP_NAMES[k], ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
-      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label: appWords(label, ctx.platform), checked: density === d })), ctx).map(oneOf),
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(t(SORT_NAMES[k]), ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(t(GROUP_NAMES[k]), ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
+      "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label: appWords(t(label), ctx.platform), checked: density === d })), ctx).map(oneOf),
     }, LIBRARY_KEYS);
   };
   /** Shows a menu at a point: the system's on a Mac (ours if it can't), ours elsewhere. */
@@ -1370,7 +1386,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (target.closest("li, a, button, input, textarea, select, header, .el-lib-row2, .el-banner, .el-empty, [role='status'], [role='menu'], [role='dialog'], [role='toolbar'], [role='tablist'], [data-testid='filter-panel'], .el-filter-panel")) return;
     // Only the list's area, under row 2 (or Trash's list): not the title, the count, a banner or an empty state.
     const el = root.current;
-    const list = el?.querySelector<HTMLElement>(trash ? '[aria-label="Deleted recordings"]' : ".el-lib-list");
+    const list = el?.querySelector<HTMLElement>(trash ? ".el-lib-trash" : ".el-lib-list");
     if (!list) return;
     const from = trash ? list.getBoundingClientRect().top : el?.querySelector(".el-lib-row2")?.getBoundingClientRect().bottom ?? list.getBoundingClientRect().top;
     if (e.clientY < from) return;
@@ -1390,7 +1406,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const emptyTrash = async () => {
     const all = bin ?? [];
     if (!all.length) return;
-    const ok = await confirmAction({ title: "Empty the trash?", body: `${recordingsWord(all.length)} and their transcripts are erased from the server. This can't be undone.`, confirm: "Empty trash", tone: "danger" });
+    const ok = await confirmAction({
+      title: t("Empty the trash?"),
+      body: tc(":count recording and their transcripts are erased from the server. This can't be undone.|:count recordings and their transcripts are erased from the server. This can't be undone.", all.length),
+      confirm: t("Empty trash"), tone: "danger",
+    });
     if (!ok) return;
     let erased = 0;
     for (const b of all) {
@@ -1403,15 +1423,17 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     setBin((list) => list?.filter((x) => !all.some((b) => b.id === x.id)) ?? list);
     await loadBin();
-    say(erased === all.length ? `Trash emptied · ${recordingsWord(erased)}` : `Erased ${erased} of ${all.length}; the rest stay in Trash`);
+    say(erased === all.length ? tc("Trash emptied · :count recording|Trash emptied · :count recordings", erased) : tc("Erased :erased of :total; the rest stay in Trash", erased, { erased, total: all.length }));
   };
   /** Move to project › a project (or No project), as Move to project… does. */
   const moveTo = async (ids: readonly string[], projectId: string | null) => {
     const title = ids.length === 1 ? (items ?? []).find((i) => i.id === ids[0])?.title ?? null : null;
     try {
       await moveRecordings(ids, projectId);
-      say(projectId ? movedText(ids.length, title, (projects ?? []) as unknown as ClientFolder[], projectId)
-        : ids.length === 1 ? `Took “${title || "the recording"}” out of its project` : `Took ${ids.length} recordings out of their projects`);
+      // ProjectDialogs' movedText, in the window's language.
+      const where = projectId ? projectLabel((projects ?? []) as unknown as ClientFolder[], projectId) || t("the project") : "";
+      say(projectId ? (ids.length === 1 ? t("Moved “:title” to :where", { title: title || t("the recording"), where }) : t("Moved :count recordings to :where", { count: ids.length, where }))
+        : ids.length === 1 ? t("Took “:title” out of its project", { title: title || t("the recording") }) : t("Took :count recordings out of their projects", { count: ids.length }));
       await load();
     } catch (e) {
       sayProblem(say, errorMessage(e));
@@ -1421,8 +1443,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const runs: Record<string, ((ctx: ActionContext) => void) | undefined> = {
     "recording.open": (c) => { if (c.targets?.[0]) setOpenId(c.targets[0]); },
     "recording.transcribe": (c) => setOrganise({ kind: "transcribe", ids: [...(c.targets ?? [])] }),
-    "recording.pin": (c) => void bulk(c.targets ?? [], c.state?.pinned ? "unpin" : "pin", c.state?.pinned ? "Unpinned" : "Pinned"),
-    "recording.important": (c) => void bulk(c.targets ?? [], c.state?.important ? "unimportant" : "important", c.state?.important ? "Not important" : "Marked as important"),
+    "recording.pin": (c) => void bulk(c.targets ?? [], c.state?.pinned ? "unpin" : "pin", c.state?.pinned ? t("Unpinned") : t("Pinned")),
+    "recording.important": (c) => void bulk(c.targets ?? [], c.state?.important ? "unimportant" : "important", c.state?.important ? t("Not important") : t("Marked as important")),
     // Mark as unread, or Mark as read once every one is unread (the menu's word says which); with none named, the
     // recording open now.
     "recording.unread": (c) => {
@@ -1468,7 +1490,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       if (!unread.length) return;
       setReadHere((r) => new Set([...r, ...unread]));
       for (const id of unread) void api.markOpened(id).catch(() => undefined);
-      say(`Marked ${recordingsWord(unread.length)} as read`);
+      say(tc("Marked :count recording as read|Marked :count recordings as read", unread.length));
     },
     "view.transcribeAll": () => {
       const audioOnly = (items ?? []).filter((i) => !i.deleted && rowState(i)?.key === "audio_only").map((i) => i.id);
@@ -1500,10 +1522,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
 
   const dialogs = (
     <>
-      {context?.trash && <ContextMenu label={context.ids.length ? "Deleted recording actions" : "Trash actions"} items={trashMenu(context.ids)} at={context.at} onClose={() => setContext(null)} />}
+      {context?.trash && <ContextMenu label={context.ids.length ? t("Deleted recording actions") : t("Trash actions")} items={trashMenu(context.ids)} at={context.at} onClose={() => setContext(null)} />}
       {context && !context.trash && (context.space
-        ? <ContextMenu label="List actions" items={listSpaceMenu()} at={context.at} onClose={() => setContext(null)} />
-        : <ContextMenu label={context.ids.length === 1 ? "Recording actions" : `Actions for ${context.ids.length} recordings`} title={manyTitle(context.ids.length)}
+        ? <ContextMenu label={t("List actions")} items={listSpaceMenu()} at={context.at} onClose={() => setContext(null)} />
+        : <ContextMenu label={context.ids.length === 1 ? t("Recording actions") : t("Actions for :count recordings", { count: context.ids.length })} title={manyTitle(context.ids.length)}
           items={recordingMenu(context.ids).items} at={context.at} onClose={() => setContext(null)} />)}
       {organise?.kind === "move" && <MoveDialog ids={organise.ids} title={organise.title} current={organise.current} onClose={closeOrganise} say={say} />}
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
@@ -1511,20 +1533,20 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       {organise?.kind === "whatsapp" && <WhatsAppDialog item={organise.item} onClose={() => setOrganise(null)} say={say} />}
       {newLabel && <NewLabelFor ids={newLabel.ids} onClose={() => setNewLabel(null)} onMade={(list, ids) => void putInList(ids, list, true)} />}
       {savingView && (
-        <ViewNameDialog title="Save as view" save="Save view" onClose={() => setSavingView(false)}
-          note={unsaved ? `Saves these filters, the search and the sort as a view in the sidebar, on every device. ${scopeName(scope)} itself stays in the sidebar.`
-            : "Saves these filters, the search and the sort as a view in the sidebar, on every device."}
+        <ViewNameDialog title={t("Save as view")} save={t("Save view")} onClose={() => setSavingView(false)}
+          note={unsaved ? t("Saves these filters, the search and the sort as a view in the sidebar, on every device. :place itself stays in the sidebar.", { place: scopeName(scope) })
+            : t("Saves these filters, the search and the sort as a view in the sidebar, on every device.")}
           onSave={async (name) => {
             const made = await viewsStore.create(name, viewSpec());
             setSavingView(false);
             show({ kind: "saved", id: made.id }, {}, true);
-            say(`Saved as ${made.name}`);
+            say(t("Saved as :name", { name: made.name }));
           }} />
       )}
-      <Dialog open={!!askDelete} alert title={`Move ${recordingsWord(askDelete?.length ?? 0)} to Trash?`}
-        description={`They stay in Trash for ${hoursWords(keepHours)}, then their audio and transcripts are erased. Undo brings them back.`}
+      <Dialog open={!!askDelete} alert title={tc("Move :count recording to Trash?|Move :count recordings to Trash?", askDelete?.length ?? 0)}
+        description={t("They stay in Trash for :time, then their audio and transcripts are erased. Undo brings them back.", { time: trashTime(keepHours) })}
         onClose={() => setAskDelete(null)}
-        actions={<><Button onClick={() => setAskDelete(null)}>Cancel</Button><Button variant="danger" onClick={() => askDelete && void removeMany(askDelete)}>Move to Trash</Button></>} />
+        actions={<><Button onClick={() => setAskDelete(null)}>{t("Cancel")}</Button><Button variant="danger" onClick={() => askDelete && void removeMany(askDelete)}>{t("Move to Trash")}</Button></>} />
       {organise?.kind === "rename" && <RenameDialog item={organise.item} onClose={closeOrganise} say={say}
         onRenamed={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)} />}
     </>
@@ -1548,13 +1570,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // The window's title row (UX-20) shows the list's place, its count and the search; a recording opened as its own
   // page shows none of them. Without a title row the page keeps its own header (inTitleRow false).
   const inTitleRow = usePageTitle(open && (layout !== "table" || trash) ? null
-    : { title, count, search: trash ? undefined : { placeholder: "Search recordings", scope: title, query, setQuery } });
+    : { title, count, search: trash ? undefined : { placeholder: t("Search recordings"), scope: title, query, setQuery } });
   /** A toolbar's keys (the selection bar, as the shared SelectionBar): ← → between its controls, Home and End to the ends. */
   const toolbarKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
     const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
     const next = rtl ? "ArrowLeft" : "ArrowRight";
     const prev = rtl ? "ArrowRight" : "ArrowLeft";
-    if (![next, prev, "Home", "End"].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+    if (!(e.key === next || e.key === prev || e.key === "Home" || e.key === "End") || e.altKey || e.metaKey || e.ctrlKey) return;
     const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [role="checkbox"]')]
       .filter((c) => !c.closest('[role="menu"]'));
     const at = controls.indexOf(document.activeElement as HTMLElement);
@@ -1602,14 +1624,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
 
   // Sort & display ▾: List or Table (and the table's Columns), Sort, Group by, Density.
   const displayMenu: MenuItem[] = [
-    { label: "List", group: "Show as", checked: layout === "list", radio: true, onPick: () => setLayout("list") },
-    { label: "Table", group: "Show as", checked: layout === "table", radio: true, onPick: () => setLayout("table") },
-    ...(layout === "table" ? [{ label: "Columns", group: "Show as", icon: Icons.ColumnsIcon, items: columnsMenu(columns, setColumns) }] : []),
-    ...SORT_ORDER.map((k: SortKey) => ({ label: SORT_NAMES[k], group: "Sort", checked: choice.sort === k, radio: true, onPick: () => setChoice({ ...choice, sort: k }) })),
-    ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
-    ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
+    { label: t("List"), group: t("Show as"), checked: layout === "list", radio: true, onPick: () => setLayout("list") },
+    { label: t("Table"), group: t("Show as"), checked: layout === "table", radio: true, onPick: () => setLayout("table") },
+    ...(layout === "table" ? [{ label: t("Columns"), group: t("Show as"), icon: Icons.ColumnsIcon, items: columnsMenu(columns, setColumns) }] : []),
+    ...SORT_ORDER.map((k: SortKey) => ({ label: t(SORT_NAMES[k]), group: t("Sort"), checked: choice.sort === k, radio: true, onPick: () => setChoice({ ...choice, sort: k }) })),
+    ...GROUP_ORDER.map((k) => ({ label: t(GROUP_NAMES[k]), group: t("Group by"), checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
+    ...DENSITIES.map(([d, label]) => ({ label: t(label), group: t("Density"), checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
-  const viewEmpty = scope.kind === "view" ? EMPTY_VIEW[scope.view] : undefined;
+  const viewEmpty = scope.kind === "view" ? emptyView(scope.view) : undefined;
   const panelShown = panel && !trash && !choosing;
 
   return (
@@ -1627,52 +1649,52 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               <PanelToggle />
               <h1 className="el-title-m el-lib-toolbar__title">
                 <span dir="auto">{title}</span>
-                {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
+                {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordings(count)}`}>{count}</span>}
               </h1>
               {!trash && (
-                <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
+                <SearchField label={t("Search recordings")} value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
                   placeholder={placeholderFor(width, panelShown && !drawer)} className="el-lib-toolbar__search" />
               )}
             </header>
           )}
           {choosing ? (
             // Selection mode: the tabs row turns into the selection bar, its box lined up with the rows' (UX-05).
-            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label="Selected recordings" onKeyDown={toolbarKeys}>
-              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
+            <div className="el-lib-row2 el-selectbar" role="toolbar" aria-label={t("Selected recordings")} onKeyDown={toolbarKeys}>
+              <PickBox className="el-lib-toolbar__all" label={allPicked ? t("Unselect all") : t("Select all")} keyshortcuts="Meta+A Control+A"
                 checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
-              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h2>
-              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
+              <h2 className="el-body-strong el-lib-row2__selected" aria-live="polite" dir="auto">{pickedIds.length ? t(":count selected", { count: pickedIds.length }) : t("Select recordings")}</h2>
+              {tooMany && <span className="el-caption el-secondary" role="status">{tooManyWords(pickedIds.length)}</span>}
               <div className="el-lib-row2__end">
                 <Button size="sm" variant="quiet" icon={Icons.TranscriptIcon} disabled={!pickedIds.length || tooMany || pickedIds.length > MAX_TRANSCRIBE}
                   onClick={() => setOrganise({ kind: "transcribe", ids: pickedIds })}>
-                  {pickedIds.length > MAX_TRANSCRIBE && !tooMany ? `Transcribe (${MAX_TRANSCRIBE} at a time)` : "Transcribe"}
+                  {pickedIds.length > MAX_TRANSCRIBE && !tooMany ? t("Transcribe (:max at a time)", { max: MAX_TRANSCRIBE }) : t("Transcribe")}
                 </Button>
                 <Button size="sm" variant="quiet" icon={Icons.MoveIcon} disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })}>Move to project</Button>
+                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })}>{t("Move to project")}</Button>
                 <Button size="sm" variant="quiet" icon={Icons.LabelIcon} disabled={!pickedIds.length || tooMany}
-                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })}>Label</Button>
+                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })}>{t("Label")}</Button>
                 {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="Share or export" button={{ variant: "quiet", size: "sm", icon: Icons.ShareIcon, text: "Export", "aria-label": "Share or export", title: "Share or export" }}
-                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+                  <Menu label={t("Share or export")} button={{ variant: "quiet", size: "sm", icon: Icons.ShareIcon, text: t("Export"), "aria-label": t("Share or export"), title: t("Share or export") }}
+                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: t("Export transcripts") })),
+                      { label: t("Copy for AI"), icon: Icons.SparkleIcon, group: t("Copy"), onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
                 )}
-                <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title="Delete (Del)" aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
-                  onClick={() => deleteOrAsk(pickedIds)}>Delete</Button>
+                <Button size="sm" variant="quiet" icon={Icons.TrashIcon} title={t("Delete (:key)", { key: "Del" })} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                  onClick={() => deleteOrAsk(pickedIds)}>{t("Delete")}</Button>
                 {pickedIds.length > 0 && !tooMany && (
-                  <Menu label="More actions" button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
+                  <Menu label={t("More actions")} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }}
                     items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "transcribe", "export", "ai", "delete"]))} />
                 )}
-                <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
+                <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Cancel selection")} aria-keyshortcuts="Escape" onClick={endSelection} />
               </div>
             </div>
           ) : !trash && (
             // Row 2 (40 px): the kinds on the start side (Other only while it has recordings), the list's controls on the end.
             <div ref={row2} className="el-lib-row2">
-              <div ref={row2Tabs} className={`el-lib-tabs${row2Fit.scrolls ? " el-lib-tabs--scrolls" : ""}`} role="tablist" aria-label="Kinds of recording">
-                {tabsShown.map((t) => (
-                  <button key={t} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1}
-                    onClick={() => setTab(t)} onKeyDown={(e) => {
-                      const at = tabsShown.indexOf(t);
+              <div ref={row2Tabs} className={`el-lib-tabs${row2Fit.scrolls ? " el-lib-tabs--scrolls" : ""}`} role="tablist" aria-label={t("Kinds of recording")}>
+                {tabsShown.map((kind) => (
+                  <button key={kind} type="button" role="tab" className="el-lib-tabs__tab" aria-selected={tab === kind} tabIndex={tab === kind ? 0 : -1}
+                    onClick={() => setTab(kind)} onKeyDown={(e) => {
+                      const at = tabsShown.indexOf(kind);
                       const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
                       const step = e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : e.key === (rtl ? "ArrowRight" : "ArrowLeft") ? -1 : 0;
                       // Home and End: the first and the last tab (Back to top leaves keys in a tab list alone).
@@ -1683,41 +1705,41 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       setTab(next);
                       (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
                     }}>
-                    {LIBRARY_TAB_NAMES[t]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[t]}`}>{tabCount[t]}</span>
+                    {t(LIBRARY_TAB_NAMES[kind])}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[kind]}`}>{tabCount[kind]}</span>
                   </button>
                 ))}
               </div>
               <div ref={row2End} className="el-lib-row2__end">
                 <Button size="sm" variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
-                  aria-label={row2Fit.labels ? undefined : filtersOn ? `Filters, ${filtersOn}` : "Filters"}
-                  title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
-                  {row2Fit.labels && "Filters"}{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                  aria-label={row2Fit.labels ? undefined : filtersOn ? t("Filters, :count", { count: filtersOn }) : t("Filters")}
+                  title={t("Filters (:key)", { key: "F" })} className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
+                  {row2Fit.labels && t("Filters")}{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
                 </Button>
-                <Menu label="Sort & display" items={displayMenu}
-                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: row2Fit.labels ? "Sort & display" : undefined,
-                    title: `Sort & display: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+                <Menu label={t("Sort & display")} items={displayMenu}
+                  button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: row2Fit.labels ? t("Sort & display") : undefined,
+                    title: t("Sort & display: :sort · Group: :group", { sort: t(SORT_NAMES[choice.sort]), group: t(GROUP_NAMES[choice.group]) }) }} />
               </div>
             </div>
           )}
           {!trash && !choosing && (filtersOn > 0 || changed) && (
             <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}
               onSaveView={() => setSavingView(true)} onSaveChanges={changed && savedView ? () => {
-                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => sayProblem(say, errorMessage(e)));
+                void viewsStore.update(savedView.id, viewSpec()).then(() => say(t("Saved :name", { name: savedView.name }))).catch((e) => sayProblem(say, errorMessage(e)));
               } : undefined} />
           )}
           {top && scope.kind === "view" && scope.view === "all" && !filtersOn && !query && !choosing && <LibraryTop {...top} items={items} />}
           {!trash && syncError && items && (
             <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
-              action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
-              Couldn't sync with the server. Showing what is saved on this computer.
+              action={<Button size="sm" loading={syncing} loadingLabel={t("Syncing…")} onClick={() => void sync()}>{t("Retry")}</Button>}>
+              {t("Couldn't sync with the server. Showing what is saved on this computer.")}
             </Banner>
           )}
           {!trash && !choosing && (
             <QueueV2 queue={queue} reviewRequest={reviewRequest} openWaiting={baseView === "needs"} parts={baseView === "needs" ? "needs" : "progress"} />
           )}
           {!trash && found.length > 0 && (
-            <section className="el-group el-hits" aria-label="Matches in transcripts">
-              <h2 className="el-caption el-body-strong el-group__title">In transcripts</h2>
+            <section className="el-group el-hits" aria-label={t("Matches in transcripts")}>
+              <h2 className="el-caption el-body-strong el-group__title">{t("In transcripts")}</h2>
               <Card>
                 <ul className="el-group__rows">
                   {found.map((r) => {
@@ -1726,11 +1748,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       <li key={r.session.id} className="el-hit">
                         <div className="el-hit__head">
                           <span className="el-body-strong" dir="auto">{name}</span>
-                          <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</span>
+                          <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${tc(":count matches", r.hit_count)}` : ""}</span>
                         </div>
                         {r.hits.map((h) => (
                           <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}
-                            aria-label={`Play ${name} from ${timestamp(h.start_ms)}`}>
+                            aria-label={t("Play :name from :time", { name, time: timestamp(h.start_ms) })}>
                             <span className="el-num el-caption el-secondary">{timestamp(h.start_ms)}</span>
                             <span dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
                           </button>
@@ -1744,18 +1766,18 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           )}
           {trash ? (
             binError ? (
-              <EmptyState tone="error" icon={Icons.ErrorIcon} title="Trash didn't load" body={binError} action={<Button variant="primary" onClick={() => void loadBin()}>Try again</Button>} />
+              <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("Trash didn't load")} body={binError} action={<Button variant="primary" onClick={() => void loadBin()}>{t("Try again")}</Button>} />
             ) : !bin ? (
-              <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
+              <Loading label={t("Loading Trash")}>{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
             ) : bin.length === 0 ? (
-              <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin, keepHours))} />
+              <EmptyState icon={Icons.TrashIcon} title={t("Trash is empty")} body={binSentence(binHours(bin, keepHours))} />
             ) : (
               <>
                 <p className="el-secondary">{binSentence(binHours(bin, keepHours))}</p>
-                <List label="Deleted recordings">
+                <List label={t("Deleted recordings")} className="el-lib-trash">
                   {bin.map((b) => (
-                    <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
-                      meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
+                    <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || t("Recording")}
+                      meta={t("Deleted :date · :erase", { date: rowDate(b.deleted_at), erase: eraseInWords(b.erase_at) })}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
@@ -1763,8 +1785,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       }}
                       control={
                         <span className="el-row__buttons">
-                          <Button size="sm" onClick={() => void restore(b)}>Restore</Button>
-                          <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={`Delete "${b.title || "Recording"}" forever`} onClick={() => setErase(b)} />
+                          <Button size="sm" onClick={() => void restore(b)}>{t("Restore")}</Button>
+                          <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={t('Delete ":title" forever', { title: b.title || t("Recording") })} onClick={() => setErase(b)} />
                         </span>
                       }
                       endTop={b.duration_ms ? <span className="el-num">{formatDuration(b.duration_ms)}</span> : undefined} />
@@ -1773,41 +1795,41 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               </>
             )
           ) : error && !items ? (
-            <EmptyState tone="error" icon={Icons.ErrorIcon} title="The library didn't load" body={error}
-              action={<Button variant="primary" onClick={() => void load()}>Try again</Button>} />
+            <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("The library didn't load")} body={error}
+              action={<Button variant="primary" onClick={() => void load()}>{t("Try again")}</Button>} />
           ) : !items ? (
-            <Loading label="Loading recordings">{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
+            <Loading label={t("Loading recordings")}>{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
           ) : prepared.facts.length === 0 && needsHere === 0 && scope.kind === "view" && scope.view === "all" ? (
-            <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
-              body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
-              action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
+            <EmptyState icon={Icons.LibraryIcon} title={t("No recordings yet")}
+              body={t("Calls and meetings you record on this computer or your phone, and files you import, appear here.")}
+              action={onImport ? <Button onClick={onImport}>{t("Import")}</Button> : undefined} />
           ) : matching === 0 && needsHere > 0 ? null : matching === 0 && filtersOn > 0 ? (
-            <EmptyState icon={Icons.FilterIcon} title="No recordings match these filters"
-              body={query ? "Take a filter off, or clear the search." : "Take a filter off, or clear them all."}
-              action={<Button onClick={clearFilters}>Clear filters</Button>} />
+            <EmptyState icon={Icons.FilterIcon} title={t("No recordings match these filters")}
+              body={query ? t("Take a filter off, or clear the search.") : t("Take a filter off, or clear them all.")}
+              action={<Button onClick={clearFilters}>{t("Clear filters")}</Button>} />
           ) : matching === 0 && query.trim() ? (
-            <EmptyState icon={Icons.SearchIcon} title="No recordings match" body="Try another word, or clear the search to see every recording."
-              action={<Button onClick={() => setQuery("")}>Clear search</Button>} />
+            <EmptyState icon={Icons.SearchIcon} title={t("No recordings match")} body={t("Try another word, or clear the search to see every recording.")}
+              action={<Button onClick={() => setQuery("")}>{t("Clear search")}</Button>} />
           ) : matching === 0 && labelKey ? (
-            <EmptyState icon={Icons.LabelIcon} title={`Nothing in ${labelName(labelKey)} yet`} body="Add recordings from their ⋮ menu: Labels."
-              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>Show all</Button>} />
+            <EmptyState icon={Icons.LabelIcon} title={t("Nothing in :name yet", { name: labelName(labelKey) })} body={t("Add recordings from their ⋮ menu: Labels.")}
+              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>{t("Show all")}</Button>} />
           ) : matching === 0 ? (
-            <EmptyState icon={Icons.LibraryIcon} title={viewEmpty?.title ?? `Nothing in ${title} yet`} body={viewEmpty?.body ?? "Recordings appear here when they fit this view."}
-              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>Show all</Button>} />
+            <EmptyState icon={Icons.LibraryIcon} title={viewEmpty?.title ?? t("Nothing in :name yet", { name: title })} body={viewEmpty?.body ?? t("Recordings appear here when they fit this view.")}
+              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>{t("Show all")}</Button>} />
           ) : layout === "table" ? (
             <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={choosing} picked={picked}
               onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered} onPick={pickRow}
               onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
-              rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+              rowActions={(item) => <Menu label={t("More for :title", { title: recordingName(item.title) })} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
-            <List label="Recordings" className="el-lib-list">
+            <List label={t("Recordings")} className="el-lib-list">
               {groups.map((g) => [
                 g.label ? (
-                  <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
+                  <ListSection key={g.key} title={groupTitle(g)} count={g.items.length} collapsed={collapsed.has(g.key)}
                     onToggle={() => fold(g.key)}
                     // A folded section's rows can't be picked: its box shows only while it is open.
                     pick={choosing && !collapsed.has(g.key) ? {
-                      state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? `Clear ${g.label}` : `Select all in ${g.label}`,
+                      state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? t("Clear :name", { name: groupTitle(g) }) : t("Select all in :name", { name: groupTitle(g) }),
                       onToggle: () => setPicked((p) => toggleGroup(g.items, p)),
                     } : undefined} />
                 ) : null,
@@ -1831,10 +1853,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           {items && <BackToTop />}
         </div>
       </div>
-      <Dialog open={!!erase} alert title="Delete forever?"
-        description={erase ? `"${erase.title || "Recording"}" and its transcript are erased from the server. This can't be undone.` : undefined}
+      <Dialog open={!!erase} alert title={t("Delete forever?")}
+        description={erase ? t('":title" and its transcript are erased from the server. This can\'t be undone.', { title: erase.title || t("Recording") }) : undefined}
         onClose={() => setErase(null)}
-        actions={<><Button onClick={() => setErase(null)}>Cancel</Button><Button variant="danger" onClick={() => erase && void eraseNow(erase)}>Delete forever</Button></>} />
+        actions={<><Button onClick={() => setErase(null)}>{t("Cancel")}</Button><Button variant="danger" onClick={() => erase && void eraseNow(erase)}>{t("Delete forever")}</Button></>} />
       {drawerPage}
       {dialogs}
       {toasts}
@@ -1861,7 +1883,7 @@ function Drawer({ label, onClose, children }: { label: string; onClose: () => vo
         }
         trap(e);
       }}>
-      <Button ref={close} variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label="Close" aria-keyshortcuts="Escape" onClick={onClose} />
+      <Button ref={close} variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label={t("Close")} aria-keyshortcuts="Escape" onClick={onClose} />
       {children}
     </div>
   );

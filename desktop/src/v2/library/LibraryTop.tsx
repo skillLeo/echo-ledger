@@ -8,6 +8,7 @@ import { accessOf, usePermissions } from "../../views/main/Permissions";
 import { permissionKinds } from "../setup/SetupHealth";
 import { checklist, type ChecklistItem } from "../home/HomeV2";
 import { Button, Card, Icon, Icons } from "../components";
+import { t } from "../../i18n";
 
 const HIDDEN_KEY = "echoledger-library-setup-hidden";
 const readHidden = () => {
@@ -69,20 +70,21 @@ export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord }: L
   if (!steps) return null;
   return (
     <div className="el-library-top">
-      <Card className="el-library-setup" label="Get started">
+      <Card className="el-library-setup" label={t("Get started")}>
         <div className="el-group__head">
-          <h2 className="el-body-strong">Get started</h2>
-          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide Get started" onClick={hide} />
+          <h2 className="el-body-strong">{t("Get started")}</h2>
+          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Hide Get started")} onClick={hide} />
         </div>
-        <ol className="el-steps" aria-label="Get started">
+        <ol className="el-steps" aria-label={t("Get started")}>
           {steps.map((item, i) => (
             <li key={item.id} className={`el-step${item.done ? " el-step--done" : ""}`}>
               <span className="el-step__number" aria-hidden="true">{item.done ? <Icon icon={Icons.CheckIcon} /> : i + 1}</span>
               <div className="el-step__main el-home-check">
-                <span className="el-step__title">{item.title}</span>
-                <span className="el-caption">{item.done ? "Done" : "To do"}</span>
+                {/* Home's checklist words (HomeV2.tsx), said in the window's language. */}
+                <span className="el-step__title">{t(item.title)}</span>
+                <span className="el-caption">{item.done ? t("Done") : t("To do")}</span>
               </div>
-              {!item.done && <Button size="sm" onClick={() => run(item.id)}>{item.action}</Button>}
+              {!item.done && <Button size="sm" onClick={() => run(item.id)}>{t(item.action)}</Button>}
             </li>
           ))}
         </ol>

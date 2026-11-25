@@ -10,6 +10,7 @@
 // window's <html lang dir>: the right-to-left layout, the Nastaliq face for Arabic-script letters and the Urdu type
 // sizes follow from it (styles.css, v2.css).
 import { useSyncExternalStore } from "react";
+import { CONTEXT_EN } from "./context";
 
 export type Lang = "en" | "ur";
 export const LANGS: readonly Lang[] = ["en", "ur"];
@@ -75,9 +76,11 @@ export type Values = Record<string, string | number | null | undefined>;
 
 /**
  * A value in a right-to-left line, in its own isolate: a Latin name or a number keeps its direction. The web's
- * IsolatingTranslator::isolate exactly: an empty value stays empty, and a closing mark (PDI) with no opener of its own
- * inside the value is dropped, so a typed name can't close this isolate early and let what follows (an override such as
- * U+202E) flip the sentence; whatever the value leaves open is closed by the final PDI.
+ * IsolatingTranslator::isolate: an empty value stays empty; a closing mark (PDI) with no opener of its own inside the
+ * value is dropped, so a typed name can't close this isolate early and let what follows (an override such as U+202E)
+ * flip the sentence; and every isolate the value opens (FSI, LRI, RLI) and leaves open is closed before the final PDI
+ * (D-224), so a name typed with an FSI in it ("Ali", U+2068, "evil") can't leave the rest of the sentence inside its
+ * isolate. The final PDI then closes this isolate, and with it any embedding or override the value opened (U+202E).
  */
 export function isolate(value: string): string {
   if (value === "") return value;
@@ -91,7 +94,7 @@ export function isolate(value: string): string {
     }
     safe += char;
   }
-  return `${FSI}${safe}${PDI}`;
+  return `${FSI}${safe}${PDI.repeat(depth)}${PDI}`;
 }
 
 /** The text without the isolates (for text that leaves the window: the clipboard, a file name, the server). */
@@ -129,9 +132,15 @@ export function fill(line: string, values: Values, rtl = isRtl()): string {
   return line.replace(new RegExp(keys.join("|"), "g"), (hit) => map.get(hit) ?? hit);
 }
 
-/** The words for `text` (English: the key itself), with its values filled in. */
+/** The line for a key: the catalogue's; else a context key's English (context.ts); else the English key itself. */
+const lineOf = (text: string): string => lines[text] ?? CONTEXT_EN[text] ?? text;
+
+/**
+ * The words for `text` (English: the key itself, or a context key's English: t("library_context.saved_view") is
+ * "View"), with its values filled in.
+ */
 export function t(text: string, values?: Values): string {
-  const line = lines[text] ?? text;
+  const line = lineOf(text);
   return values ? fill(line, values) : line;
 }
 
@@ -196,7 +205,7 @@ export function choose(line: string, n: number, lang: Lang = current): string {
  * number given unless the values say their own (`{ count: count(n) }` for "3,000" or Urdu's digits).
  */
 export function tc(text: string, count: number, values?: Values): string {
-  const line = lines[text] ?? text;
+  const line = lineOf(text);
   const filled = values?.count === undefined || values.count === null ? { ...values, count } : values;
   return fill(choose(line, count), filled);
 }
