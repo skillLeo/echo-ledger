@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
 
 /**
  * Dark mode's stock buttons and labels are readable (since v1.8.1, bug P-014), and in a right-to-left language the
- * scrubber seeks where it was touched (P-015).
+ * scrubber seeks where it was touched (P-015) and the icons that point somewhere point the other way (P-038).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -88,6 +88,25 @@ class ContrastAndRtlTest {
             .filter { it.extension == "kt" && "/ui/v2/" !in it.path && it.name != "ReadableAccent.kt" }
             .filter { material.containsMatchIn(it.readText()) }
             .map { it.name }.toList()
+        assertEquals(emptyList<String>(), offenders)
+    }
+
+    @Test
+    fun `the classic screens use Material's right to left icon wherever it has one`() {
+        // P-038: sort, chat, undo, help, move and missed call drew left to right in Urdu, on the classic screens and the
+        // new ones. Material ships a mirroring twin; any icon that has one uses it.
+        val icon = Regex("""androidx\.compose\.material\.icons\.(filled|outlined|rounded|sharp|twotone)\.(\w+)""")
+        // Twins Material has for icons that point nowhere: Hide windows (a screen with a stroke through it) stays.
+        val notDirectional = setOf("StopScreenShare")
+        val offenders = java.io.File("src/main/java/com/echoledger/mobile").walkTopDown()
+            .filter { it.extension == "kt" }
+            .flatMap { file -> icon.findAll(file.readText()).map { "${file.name}: ${it.groupValues[1]}.${it.groupValues[2]}" } }
+            .filter { hit ->
+                val (style, name) = hit.substringAfter(": ").split('.')
+                name !in notDirectional &&
+                    runCatching { Class.forName("androidx.compose.material.icons.automirrored.$style.${name}Kt") }.isSuccess
+            }
+            .distinct().toList()
         assertEquals(emptyList<String>(), offenders)
     }
 
