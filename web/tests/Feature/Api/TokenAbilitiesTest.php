@@ -49,6 +49,9 @@ function abilityRoutes(): array
         're-transcribe as' => ['POST', "/api/sessions/{$id}/retranscribe", 'sessions:write'],
         'mark opened' => ['POST', "/api/sessions/{$id}/opened", 'library:read'],
         'mark unread' => ['DELETE', "/api/sessions/{$id}/opened", 'library:read'],
+        // Since 2.0.0-y.
+        'mark many read' => ['POST', '/api/sessions/opened', 'library:read'],
+        'mark many unread' => ['DELETE', '/api/sessions/opened', 'library:read'],
         'delete bookmark' => ['DELETE', "/api/sessions/{$id}/markers/{$id}", 'sessions:write'],
         'rename speakers' => ['PUT', "/api/sessions/{$id}/speakers", 'sessions:write'],
         'edit transcript' => ['PATCH', "/api/transcripts/{$id}", 'sessions:write'],

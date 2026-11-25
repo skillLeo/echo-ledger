@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-x (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-y (2026-11-25, accepted 2026-11-25 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-y (accepted 2026-11-25 by EL-Lead; bulk Mark as read / unread): `POST /api/sessions/opened` and `DELETE /api/sessions/opened` take up to 200 ids and do for each what `POST` and `DELETE /api/sessions/{id}/opened` do for one, in one call: `200 {"done": [...], "not_found": [...]}`, a recording the person cannot read listed back, never an error for the whole batch. Additions only. (Built on 2.0.0-w and -x, which land just before it.) **Clients** (Mac, Windows and Android ship together): Mark as read and Mark as unread on a selection send one `POST` or `DELETE /api/sessions/opened` per 200 ids instead of one request each. Both apps set `opened` on the rows from `done` and drop the ids in `not_found` from the selection without an error. The phone also gains Mark as read and Mark as unread for one recording (2.0.0-t's `DELETE /api/sessions/{id}/opened`), which it lacks (lead decision 25).
 2.0.0-x (accepted 2026-11-25 by EL-Lead; CC5, docs/PLAN_CALL_CHOICE.md and docs/PLAN_CALL_RULES.md §3, see "Choices that follow the account (since 2.0.0-x)"): the rest of the call choice's state is kept for the account too, behind the same `call_rules` flag: the two privacy switches (`hide_live_words`, `block_screenshots`), the first-time hint, the "Always do this?" streak and whether it was offered, and the contacts and Sources whose "Always …?" offer the person turned down. `preferences` in `GET /api/call-rules` and in `call_rules` of `GET /api/config`, `PATCH /api/call-rules/preferences`, and `POST` / `DELETE /api/call-rules/declined`. Additions only, no migration. **Clients** (Mac, Windows and Android ship together): behind the same flag, both apps read `preferences` from `call_rules` in `GET /api/config` instead of their own copies, apply `hide_live_words` and `block_screenshots` as their system allows, and send each change with `PATCH /api/call-rules/preferences`, one key at a time (the first-time hint, "Always do this?" offered, the streak). An "Always … for Ahmed?" offer turned down or ignored is `POST /api/call-rules/declined`, and undoing it is `DELETE`; neither app offers it again for anything in `declined` of `GET /api/call-rules`.
 2.0.0-w (accepted 2026-11-24 by EL-Lead; B5, docs/PLAN_CALL_RULES.md, see "Call rules (since 2.0.0-w)"): the person's call rules, kept on the server for every device of the account: the "After each call" default (`ask` | `always_transcribe` | `always_audio` | `dont_record`) and "When to ask", the short-call setting, and rules per contact, per contact group and per Source, with one order (contact, then group, then Source, then the default). New routes under `/api/call-rules`, `call_rules` in `GET /api/config`, and the interface flag `call_rules` (off for everyone but the admin's lists at first). Additions only: an app that does not know them keeps its own per-device setting. **Clients** (Mac, Windows and Android ship together): only while `ui_flags.call_rules` is true, both apps read `call_rules` from `GET /api/config` and decide each call by "Which rule wins"; their call rules screens read `GET /api/call-rules` and save with `PUT /api/call-rules/settings` and `POST`, `PATCH` and `DELETE /api/call-rules/{id}`. A `dont_record` for a Source or the default stops capture before it starts on both. For a contact, Android (Full) reads the number at ringing and captures nothing; the desktop and the Play build stop and delete as soon as the contact is known, and say exactly that (lead decision 25). Groups are Android (Full) only, asking for the contacts permission when a group rule is first used; the desktop offers none. With the flag off or the key absent, each app keeps its own per-device setting.
 2.0.0-v (accepted 2026-11-25 by EL-Lead; W-INC-1125): a new Activity kind, `server_problem`, for super admins only, when the server's PHP lacks what uploads need, with the fix in its body; one item per problem, `resolved` when the server's check passes again. See "Activity centre". An addition only: an app that does not know the kind shows its title and body.
@@ -1774,6 +1775,26 @@ marked unread: `204`). Like opening, it never changes the recording (no `updated
 library). From then on library items carry `"opened": false` for them, the recording is in Unread (`view=unread`)
 and counted in `library.unread`, until it is opened again. The same recordings as `POST …/opened`: one the person
 cannot see (another workspace's, or another person's they were not given) → `404`.
+
+### `POST /api/sessions/opened` — `library:read` (since 2.0.0-y)
+Mark as read for many recordings in one call (the apps' selection: Mark as read): `{"ids": ["01JB…", …]}`, 1 to 200
+ids → `200 {"done": ["01JB…", …], "not_found": ["01JC…"]}`. For each id it does what `POST /api/sessions/{id}/opened`
+does for one, with the same rules:
+- `done` lists the recordings the asking person can read, whose open is now theirs (opening again only moves the time).
+- `not_found` lists every other id, as it was sent: another workspace's, another person's they were not given, one in
+  the bin, or none at all. Those are never an error for the whole batch, and nothing is said about why.
+- An id sent twice counts once, in the order of its first place.
+- It never changes a recording (no `updated_at`, no reorder, no re-sync of the library) and never anyone else's opens.
+- More than 200 ids, or an id that is not a string, is `422 validation_failed` with `errors` and `error_codes`
+  (`too_long` with `max: 200` on `ids`), and nothing is marked.
+
+### `DELETE /api/sessions/opened` — `library:read` (since 2.0.0-y)
+Mark as unread for many recordings in one call: `{"ids": [...]}`, 1 to 200 → `200 {"done": [...], "not_found":
+[...]}`. For each id it does what `DELETE /api/sessions/{id}/opened` does: it takes back only the asking person's own
+open. A recording they had not opened, or already marked unread, is in `done` too (idempotent). From then on those
+recordings carry `"opened": false` for them, are in Unread and are counted in `library.unread` (`GET
+/api/library/facets`). The same `not_found`, the same 200 at most, the same `422` as `POST`. It never moves a recording
+to the bin: that is `DELETE /api/sessions/{id}`.
 
 ### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
 `200 {"data": [ShareLink]}`, newest first. The URL is not shown again.

@@ -150,17 +150,22 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('live-translate/token', LiveTranslateTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.live-translate.token');
         Route::post('usage', [UsageController::class, 'store'])->middleware(['abilities:stt:token', EnsureCanRecord::class])->name('api.usage.store');
 
+        // Since 2.0.0-y: Mark as read / unread for many recordings, before every sessions/{id} route (which only takes a
+        // recording's ULID anyway), so DELETE sessions/opened can never be read as moving a recording to the bin.
+        Route::post('sessions/opened', [SessionController::class, 'openedMany'])->middleware('abilities:library:read')->name('api.sessions.opened.many');
+        Route::delete('sessions/opened', [SessionController::class, 'unopenedMany'])->middleware('abilities:library:read')->name('api.sessions.unopened.many');
+
         Route::middleware('abilities:sessions:write')->group(function (): void {
             // Since v1.5 a viewer's device records, uploads and changes nothing (403 not_allowed): `record` on recording
             // and upload routes, `ownContent` where a person makes or changes their own recordings and projects. Taking
             // back a link stays open to everyone, as it only narrows who sees a recording.
             $own = EnsureCanRecord::class.':ownContent';
             Route::post('sessions', [SessionController::class, 'store'])->middleware(EnsureCanRecord::class)->name('api.sessions.store');
-            Route::post('sessions/{id}/finish', [SessionController::class, 'finish'])->name('api.sessions.finish');
-            Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->middleware(EnsureCanRecord::class)->name('api.sessions.recordings');
-            Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->middleware(EnsureCanRecord::class)->name('api.sessions.transcripts');
-            Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->middleware($own)->name('api.sessions.destroy');
-            Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->middleware($own)->name('api.sessions.update');
+            Route::post('sessions/{id}/finish', [SessionController::class, 'finish'])->whereUlid('id')->name('api.sessions.finish');
+            Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->whereUlid('id')->middleware(EnsureCanRecord::class)->name('api.sessions.recordings');
+            Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->whereUlid('id')->middleware(EnsureCanRecord::class)->name('api.sessions.transcripts');
+            Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->whereUlid('id')->middleware($own)->name('api.sessions.destroy');
+            Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->whereUlid('id')->middleware($own)->name('api.sessions.update');
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->middleware($own)->name('api.sessions.bulk');
             // Since 2.0.0-i: a label's colour in the workspace.
             Route::put('labels/color', [OrganiseController::class, 'labelColor'])->middleware($own)->name('api.labels.color');
@@ -191,9 +196,9 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->middleware($own)->name('api.clients.files.destroy');
             Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware([$own, 'throttle:ask'])->name('api.clients.ask');
             // Since 2.0.0-o: Ask about one recording, and across the person's own recordings, as a project's Ask.
-            Route::post('sessions/{id}/ask', [AskController::class, 'recording'])->middleware([$own, 'throttle:ask'])->name('api.sessions.ask');
+            Route::post('sessions/{id}/ask', [AskController::class, 'recording'])->whereUlid('id')->middleware([$own, 'throttle:ask'])->name('api.sessions.ask');
             Route::post('ask', [AskController::class, 'all'])->middleware([$own, 'throttle:ask'])->name('api.ask');
-            Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->middleware($own)->name('api.sessions.notes.make');
+            Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->whereUlid('id')->middleware($own)->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             // Since v1.6 (P3): a readable name of the person's own choosing.
@@ -245,24 +250,24 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('account/two-factor/recovery-codes', [AccountSecurityController::class, 'recoveryCodes'])->middleware('throttle:account-two-factor')->name('api.account.two-factor.recovery-codes');
             Route::delete('account/two-factor', [AccountSecurityController::class, 'disableTwoFactor'])->middleware('throttle:account-two-factor')->name('api.account.two-factor.disable');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
-            Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');
+            Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->whereUlid('id')->middleware($own)->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');
-            Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
+            Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->whereUlid('id')->middleware($own)->name('api.sessions.markers.store');
             // Since 2.0.0-j throttled like "Transcribe": on an audio-only recording it starts the first transcript.
-            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.retranscribe');
+            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->whereUlid('id')->middleware([$own, 'throttle:transcribe'])->name('api.sessions.retranscribe');
             // Since v1.8 (contract 1.8.0-e): audio only and "Transcribe later", one recording or many.
             Route::post('sessions/transcribe', [TranscribeLaterController::class, 'many'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe.many');
-            Route::post('sessions/{id}/transcribe', [TranscribeLaterController::class, 'one'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe');
-            Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->middleware($own)->name('api.sessions.markers.destroy');
+            Route::post('sessions/{id}/transcribe', [TranscribeLaterController::class, 'one'])->whereUlid('id')->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe');
+            Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->whereUlid('id')->middleware($own)->name('api.sessions.markers.destroy');
             // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).
-            Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->middleware($own)->name('api.sessions.screens.destroy');
-            Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->middleware($own)->name('api.sessions.speakers');
-            Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->middleware($own)->name('api.sessions.shares.store');
+            Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->whereUlid('id')->middleware($own)->name('api.sessions.screens.destroy');
+            Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->whereUlid('id')->middleware($own)->name('api.sessions.speakers');
+            Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->whereUlid('id')->middleware($own)->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
             // Share links for a project (v1.5): its recordings behind one link.
             Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->middleware($own)->name('api.clients.shares.store');
             // Sending to a teammate (v1.5): a recording or project to accounts on this server; save a copy of one sent to you.
-            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->middleware([$own, 'throttle:send'])->name('api.sessions.send');
+            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->whereUlid('id')->middleware([$own, 'throttle:send'])->name('api.sessions.send');
             Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->middleware([$own, 'throttle:send'])->name('api.clients.send');
             // Stop sharing stays open to everyone, like taking back a link: it only narrows who sees a recording.
             Route::delete('sent/{id}', [TeammateController::class, 'stopSharing'])->name('api.sent.destroy');
@@ -296,15 +301,15 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::get('activity/groups', [ActivityController::class, 'groups'])->name('api.activity.groups');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
-            Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
-            Route::post('sessions/{id}/opened', [SessionController::class, 'opened'])->name('api.sessions.opened');
+            Route::get('sessions/{id}', [SessionController::class, 'show'])->whereUlid('id')->name('api.sessions.show');
+            Route::post('sessions/{id}/opened', [SessionController::class, 'opened'])->whereUlid('id')->name('api.sessions.opened');
             // Since 2.0.0-t (UX-22): Mark as unread, the asking person's open taken back.
-            Route::delete('sessions/{id}/opened', [SessionController::class, 'unopened'])->name('api.sessions.unopened');
+            Route::delete('sessions/{id}/opened', [SessionController::class, 'unopened'])->whereUlid('id')->name('api.sessions.unopened');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
-            Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
+            Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->whereUlid('id')->name('api.sessions.shares');
             Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
             Route::get('sent', [TeammateController::class, 'sent'])->name('api.sent');
             Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
@@ -315,12 +320,12 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');
             Route::get('clients/{id}/rules', [FilingRuleController::class, 'index'])->name('api.clients.rules');
-            Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->name('api.sessions.notes');
+            Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->whereUlid('id')->name('api.sessions.notes');
             // Screen moments (v1.5): a recording's screens in time order, and a project's Screens tab.
-            Route::get('sessions/{id}/screens', [ScreenController::class, 'index'])->name('api.sessions.screens');
+            Route::get('sessions/{id}/screens', [ScreenController::class, 'index'])->whereUlid('id')->name('api.sessions.screens');
             Route::get('clients/{id}/screens', [ScreenController::class, 'project'])->name('api.clients.screens');
             // Meeting pack (v1.5): the transcript with its screens, a page to print or a ZIP.
-            Route::get('sessions/{id}/pack', [PackController::class, 'show'])->name('api.sessions.pack');
+            Route::get('sessions/{id}/pack', [PackController::class, 'show'])->whereUlid('id')->name('api.sessions.pack');
             // Your account (v1.5): "Export my data", one ZIP made in the background.
             Route::post('account/export', [AccountController::class, 'export'])->name('api.account.export');
             Route::get('account/export/{id}', [AccountController::class, 'exportStatus'])->name('api.account.export.show');
@@ -360,7 +365,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
     });
 
     // Screen moments (v1.5): pictures sent during a meeting count against the upload limit, not the general one.
-    Route::post('sessions/{id}/screens', [ScreenController::class, 'store'])
+    Route::post('sessions/{id}/screens', [ScreenController::class, 'store'])->whereUlid('id')
         ->middleware(['abilities:sessions:write', 'throttle:uploads', EnsureCanRecord::class])->name('api.sessions.screens.store');
 
     // Upload routes have their own, larger limit (a stricter limiter in front would make it unreachable).

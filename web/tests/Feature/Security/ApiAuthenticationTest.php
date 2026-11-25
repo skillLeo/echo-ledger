@@ -66,6 +66,9 @@ function secDeviceGuardedRoutes(): array
         'POST live-translate/token' => ['POST', '/api/live-translate/token', 'stt:token'],
         'POST sessions/{id}/opened' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/opened', 'library:read'],
         'DELETE sessions/{id}/opened' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID.'/opened', 'library:read'],
+        // Since 2.0.0-y: the same for many.
+        'POST sessions/opened' => ['POST', '/api/sessions/opened', 'library:read'],
+        'DELETE sessions/opened' => ['DELETE', '/api/sessions/opened', 'library:read'],
         // Since 2.0.0-j: audio only and "Transcribe later".
         'POST sessions/{id}/transcribe' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcribe', 'sessions:write'],
         'POST sessions/transcribe' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
@@ -276,8 +279,9 @@ it('exposes exactly the documented public API routes and guards every other one'
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
     // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
     // 2.0.0-p: the five saved view routes and the filter counts; 2.0.0-r: the badge, the Activity's groups and Retry all;
-    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-w: the five call rules routes; 2.0.0-x: three more.
-    expect($guarded)->toBe(186);
+    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-w: the five call rules routes; 2.0.0-x: three more;
+    // 2.0.0-y: Mark as read / unread for many.
+    expect($guarded)->toBe(188);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
