@@ -118,7 +118,7 @@ class ClientResource extends Resource
                             $fail(__(ProjectTree::NAME_TAKEN));
                         }
                     }),
-                Select::make('parent_id')->label(__('Inside'))->placeholder(__('Top level (no folder)'))->searchable()
+                Select::make('parent_id')->label(__('client_context.field_inside'))->placeholder(__('Top level (no folder)'))->searchable()
                     ->options(fn (?Client $record): array => SharingActions::folderOptions($record))
                     ->default(fn (): ?string => is_string(request()->query('parent')) ? request()->query('parent') : null)
                     // At most four levels, never inside itself (the same checks as the API).

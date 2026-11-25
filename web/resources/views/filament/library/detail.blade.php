@@ -37,7 +37,7 @@
         <aside class="el-drawer" role="dialog" aria-modal="false" aria-labelledby="el-drawer-title" data-recording-drawer="{{ $detail->id }}">
             <header class="el-drawer-top">
                 <span class="el-drawer-source">@include('filament.library.tile', ['row' => $row]) <span>{{ $row['app'] }} · {{ $row['device'] }}</span></span>
-                <button type="button" class="el-icon-btn" wire:click="closeRecording" aria-label="Close (Esc)" title="Close (Esc)">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
+                <button type="button" class="el-icon-btn" wire:click="closeRecording" aria-label="{{ __('Close (Esc)') }}" title="{{ __('Close (Esc)') }}">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
             </header>
             <div class="el-detail-head">
                 <h2 class="el-detail-title" id="el-drawer-title">{{ $row['title'] }}</h2>
@@ -46,8 +46,8 @@
                     @if ($detail->client) · <a class="el-link" href="{{ \App\Filament\Resources\Clients\ClientResource::getUrl('view', ['record' => $detail->client]) }}">{{ $detail->client->name }}</a>@endif
                 </p>
                 <div class="el-chips">
-                    <span class="el-chip el-chip-static @if ($detail->client) el-on @endif">@svg($detail->client ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $detail->client?->name ?? 'No project' }}</span></span>
-                    <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ \App\Stt\LanguageChoice::label($final->language ?? $detail->language) }}</span></span>
+                    <span class="el-chip el-chip-static @if ($detail->client) el-on @endif">@svg($detail->client ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $detail->client?->name ?? __('No project') }}</span></span>
+                    <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ __(\App\Stt\LanguageChoice::label($final->language ?? $detail->language)) }}</span></span>
                     @foreach ($detail->labels as $label)
                         <span class="el-chip el-chip-static">@svg('heroicon-o-tag', ['aria-hidden' => 'true'])<span>{{ $label->label }}</span></span>
                     @endforeach
@@ -65,7 +65,7 @@
                     </div>
                 @endif
                 <div class="el-detail-actions">
-                    <a href="{{ $url }}" class="el-pill el-pill-primary" wire:navigate>@svg('heroicon-o-play', ['aria-hidden' => 'true']) Open</a>
+                    <a href="{{ $url }}" class="el-pill el-pill-primary" wire:navigate>@svg('heroicon-o-play', ['aria-hidden' => 'true']) {{ __('Open') }}</a>
                     @if (! \App\Services\Workspaces\ConsoleAccess::readOnly())
                         {{ $this->drawerWhatsappAction }}
                     @endif
@@ -73,16 +73,16 @@
                         <button type="button" class="el-pill" x-data="{ done: false, text: @js($fullText) }"
                             x-on:click="navigator.clipboard.writeText(text).then(() => { done = true; setTimeout(() => done = false, 2000) })">
                             @svg('heroicon-o-clipboard-document', ['aria-hidden' => 'true'])
-                            <span x-text="done ? 'Copied' : 'Copy text'">Copy text</span>
+                            <span x-text="done ? @js(__('Copied')) : @js(__('Copy text'))">{{ __('Copy text') }}</span>
                         </button>
                     @endif
                 </div>
             </div>
             <div class="el-detail-body">
                 @if ($turns === [])
-                    <p class="el-muted">No transcript yet.</p>
+                    <p class="el-muted">{{ __('No transcript yet.') }}</p>
                 @else
-                    <p class="el-caption" style="margin-bottom: var(--space-3)">Transcript{{ $view !== null ? ' · '.\App\Services\Views\TranscriptViews::VIEWS[$view] : '' }}{{ count($segments) > 40 ? ' · the first 40 lines' : '' }}</p>
+                    <p class="el-caption" style="margin-bottom: var(--space-3)">{{ __('Transcript') }}{{ $view !== null ? ' · '.__(\App\Services\Views\TranscriptViews::VIEWS[$view]) : '' }}{{ count($segments) > 40 ? ' · '.__('the first 40 lines') : '' }}</p>
                     <div class="el-turns">
                         @foreach ($turns as $turn)
                             <div class="el-turn el-speaker-{{ $turn['channel'] }}">
@@ -93,7 +93,7 @@
                         @endforeach
                     </div>
                     @if (count($segments) > 40)
-                        <a href="{{ $url }}" class="el-text-btn" style="margin-top: var(--space-4)" wire:navigate>Open the whole transcript</a>
+                        <a href="{{ $url }}" class="el-text-btn" style="margin-top: var(--space-4)" wire:navigate>{{ __('Open the whole transcript') }}</a>
                     @endif
                 @endif
             </div>

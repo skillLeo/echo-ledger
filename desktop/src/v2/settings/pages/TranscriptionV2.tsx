@@ -8,7 +8,7 @@ import { confirmAction } from "../../../lib/confirm";
 import { LANGUAGES } from "../../../views/main/AppSettings";
 import { GROQ_KEYS } from "../../../views/main/Upgrade";
 import { Button, Card, Icons, ListRow, TextField } from "../../components";
-import { Group, ResetDefaults, SelectSetting, type Patch } from "./rows";
+import { Group, ResetDefaults, SectionTitle, SelectSetting, type Patch } from "./rows";
 
 export function LanguagePageV2({ settings, patch }: { settings: Settings; patch: Patch }) {
   return (
@@ -90,7 +90,7 @@ export function KeyPageV2({ e }: { e: Entitlements }) {
       ) : <p className="el-secondary">Transcripts on Free use your own free Groq key. It takes about 2 minutes.</p>}
       <Card label={key?.set ? "Replace the key" : "Add your key"}>
         <div className="el-form">
-          <h2 className="el-body-strong">{key?.set ? "Replace the key" : "Add your key"}</h2>
+          <SectionTitle className="el-body-strong">{key?.set ? "Replace the key" : "Add your key"}</SectionTitle>
           <ol className="el-steps-list" aria-label="Steps">
             <li className="el-steps-list__item">
               <span>Open <strong>{GROQ_KEYS}</strong> and sign in. It's free.</span>

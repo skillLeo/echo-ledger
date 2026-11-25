@@ -2,6 +2,7 @@
 // setting a section asks for ("voice", "voice#voice.cleanup", a setting's own id, or a v1.6 name).
 import { findSetting, pageFor } from "../../../lib/settingsRegistry";
 import { LEGACY_SECTIONS } from "../../../views/main/SettingsView";
+import { entryOf, groupOf } from "../groups";
 
 export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "voice", "voice.replacements", "voice.snippets", "voice.history",
@@ -20,19 +21,25 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "help.mac_check",
 ]);
 
-/** The page a section opens and the setting to highlight there; null for an unknown section. */
-export function sectionTarget(sectionId: string): { page: string; setting: string | null } | null {
+/**
+ * The page a section opens and the setting to highlight there; null for an unknown section. In two levels (`grouped`)
+ * a root switch with no page of its own (Start when I sign in) opens its group's page, scrolled to it.
+ */
+export function sectionTarget(sectionId: string, grouped = false): { page: string; setting: string | null } | null {
   const [where, id] = (LEGACY_SECTIONS[sectionId] ?? sectionId).split("#");
   const entry = findSetting(where);
   if (!entry) return null;
   // A root row that is one setting but has a page of its own (Language).
   const page = entry.id === "transcription.language" ? entry.id : pageFor(entry);
-  if (!page) return null;
+  if (!page) {
+    const group = grouped && entry.kind !== "page" ? groupOf(entry.id) : null;
+    return group ? { page: entryOf(group), setting: id ?? entry.id } : null;
+  }
   return { page, setting: id ?? (entry.kind === "page" ? null : entry.id) };
 }
 
-/** Whether a section opens a v2 page. */
-export function hasV2Page(sectionId: string): boolean {
-  const t = sectionTarget(sectionId);
+/** Whether a section opens a v2 page (in two levels, a root switch's group page too). */
+export function hasV2Page(sectionId: string, grouped = false): boolean {
+  const t = sectionTarget(sectionId, grouped);
   return !!t && V2_SETTINGS_PAGES.has(t.page);
 }

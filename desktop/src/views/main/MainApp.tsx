@@ -4,7 +4,7 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount, needsAction as needsActionItem } from "../../lib/badge";
+import { needsAction as needsActionItem, railBadge } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
 import { TopBar, workspacesOf } from "./TopBar";
@@ -59,6 +59,7 @@ import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type Not
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
 import { shellChip } from "../../v2/shell/status";
+import { useActivityBadge } from "../../v2/activity/useBadge";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
@@ -72,6 +73,7 @@ import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
+import { entryOf, groupOf } from "../../v2/settings/groups";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
@@ -108,6 +110,11 @@ type Tab = MainTab;
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
 /** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
 export const WIZARD_FLAGS_WAIT_MS = 1500;
+/** Help's group in two levels (UX-11): its way back goes to that group's page. */
+const HELP_GROUP = (() => {
+  const group = groupOf("help")!;
+  return { title: group.title, entry: entryOf(group) };
+})();
 /** The pages in words, for a Back link that returns to one ("Library"). */
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
@@ -227,8 +234,14 @@ export default function MainApp() {
   const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
-  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting, so only Activity's part is sent.
-  const activityPart = actionCount(activityItems, 0);
+  // UX-08: the server's one number (GET /api/badge), the same on the phone and the web console; counted here from the list
+  // while it can't be read (offline, an older server).
+  const serverBadge = useActivityBadge(!!status?.paired, status?.signIn ?? null);
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting that only this computer knows, so the
+  // rest is sent (the server's number, or, counted here, the list and the calls the server has sessions for).
+  const waitingAll = status?.pendingDecisions ?? 0;
+  const waitingHere = status?.pendingDecisionsHere ?? waitingAll;
+  const activityPart = Math.max(0, railBadge(serverBadge, activityItems, waitingAll, waitingHere).count - waitingHere);
   useEffect(() => {
     void api.dockActivitySet(activityPart).catch(() => undefined);
   }, [activityPart]);
@@ -892,7 +905,9 @@ export default function MainApp() {
     );
   }
 
-  const needsYou = actionCount(activityItems, status.pendingDecisions);
+  // The rail's number: the server's, plus the calls waiting on this computer (only it holds them); red when something failed.
+  const activityBadge = railBadge(serverBadge, activityItems, waitingAll, waitingHere);
+  const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
@@ -1228,7 +1243,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} show={activityShow} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
+            <ActivityV2 status={status} show={activityShow} needsYou={needsYou} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -1258,15 +1273,18 @@ export default function MainApp() {
               inPanel={ui.flags["ui_v2.library"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
-                ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
+                // Two levels (UX-11): Setup & health is the rail's own place, with no "‹ Settings".
+                ? <SetupHealthV2 platform={status.platform} onBack={ui.flags["ui_v2.library"] ? undefined : onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
                   ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
-                      : { onBack: onHome })} />
-                  : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                      // Two levels: back to its group's page (About & help), never to "Settings".
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
+                  : hasV2Page(section.id, ui.flags["ui_v2.library"])
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
+                      onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
@@ -1341,7 +1359,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
             rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
-            workspace={shellWorkspace} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+            workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}

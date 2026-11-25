@@ -1148,7 +1148,8 @@ describe("parity with today's Settings pages, in every state", () => {
     // Since 2.0.0-l the account is changed in the app: the same rows and the same dialogs in both designs.
     { name: "Profile, changed in the app", section: "profile", account: NATIVE,
       today: () => <ProfilePage account={NATIVE} status={makeStatus()} run={run} />,
-      map: { "button: Edit profile, opens in browser": ["button", "Edit profile, opens in browser"] },
+      // UX-11 (lead decision 10): with the profile changed in the app, the new look has no way out to the website's.
+      otherSide: { "button: Edit profile, opens in browser": "UX-11: the profile is edited in the app; the website is only for billing" },
       steps: [{ name: "Change name", today: press("Change name") }, { name: "Change email", today: press("Change email") }, { name: "Remove picture", today: press("Remove picture") }],
       lines: ["Your teammates see your name and picture.", "This is the name your teammates see.", "Your initials show instead, everywhere."] },
     { name: "Sign-in & security, changed in the app", section: "security", account: NATIVE,
