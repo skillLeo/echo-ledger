@@ -96,8 +96,8 @@ private val pad = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMob
 
 @Composable
 private fun Buttons(ur: Boolean) = Gallery {
-    EchoButton(t(ur, "Transcribe", "ٹرانسکرپٹ بنائیں"), {}, pad, icon = EchoIcons.Transcribe)
-    EchoButton(t(ur, "Share to WhatsApp", "واٹس ایپ پر شیئر کریں"), {}, pad, kind = EchoButtonKind.Secondary, icon = EchoIcons.Share)
+    EchoButton(t(ur, "Transcribe", "ٹرانسکرائب کریں"), {}, pad, icon = EchoIcons.Transcribe)
+    EchoButton(t(ur, "Share to WhatsApp", "WhatsApp پر شیئر کریں"), {}, pad, kind = EchoButtonKind.Secondary, icon = EchoIcons.Share)
     EchoButton(t(ur, "Not now", "ابھی نہیں"), {}, pad, kind = EchoButtonKind.Quiet)
     EchoButton(t(ur, "Delete 3 recordings", "3 ریکارڈنگز حذف کریں"), {}, pad, kind = EchoButtonKind.Danger)
     EchoButton(t(ur, "Upload", "اپ لوڈ کریں"), {}, pad, loading = true, loadingText = t(ur, "Uploading", "اپ لوڈ ہو رہی ہے"))
@@ -179,7 +179,7 @@ private fun ListRows(ur: Boolean) = Gallery {
     )
     EchoSettingRow(
         t(ur, "Capture helper", "کیپچر ہیلپر"),
-        subtitle = t(ur, "Records both sides of WhatsApp calls", "واٹس ایپ کال کی دونوں آوازیں ریکارڈ کرتا ہے"),
+        subtitle = t(ur, "Records both sides of WhatsApp calls", "WhatsApp کال کی دونوں آوازیں ریکارڈ کرتا ہے"),
         trailing = { EchoStatus(t(ur, "Needs setup", "سیٹ اپ باقی"), EchoStatusKind.Warning) },
         onClick = {}
     )
@@ -216,9 +216,9 @@ private fun Dialogs(ur: Boolean) = Gallery {
         modifier = pad
     )
     EchoDialogContent(
-        t(ur, "Transcribe 4 recordings?", "4 ریکارڈنگز کا ٹرانسکرپٹ بنائیں؟"),
+        t(ur, "Transcribe 4 recordings?", "4 ریکارڈنگز ٹرانسکرائب کریں؟"),
         t(ur, "This uses 41 of your 88 remaining minutes.", "اس میں آپ کے باقی 88 میں سے 41 منٹ لگیں گے۔"),
-        t(ur, "Transcribe", "ٹرانسکرپٹ بنائیں"),
+        t(ur, "Transcribe", "ٹرانسکرائب کریں"),
         {},
         t(ur, "Cancel", "منسوخ"),
         {},
@@ -231,7 +231,7 @@ private fun Sheets(ur: Boolean) = Gallery {
     var chosen by remember { mutableIntStateOf(0) }
     EchoSheetContent(t(ur, "Share", "شیئر"), onClose = {}) {
         listOf(
-            t(ur, "WhatsApp", "واٹس ایپ"),
+            t(ur, "WhatsApp", "WhatsApp"),
             t(ur, "Link to the transcript", "ٹرانسکرپٹ کا لنک"),
             t(ur, "Audio file", "آڈیو فائل")
         ).forEachIndexed { i, label -> EchoRadio(chosen == i, { chosen = i }, label) }
@@ -267,7 +267,7 @@ private fun Switches(ur: Boolean) = Gallery {
         ),
         supporting = t(ur, "Uses minutes from your plan", "آپ کے پلان کے منٹ استعمال ہوتے ہیں")
     )
-    EchoSwitch(b, { b = it }, t(ur, "Record WhatsApp Business calls", "واٹس ایپ بزنس کالز ریکارڈ کریں"))
+    EchoSwitch(b, { b = it }, t(ur, "Record WhatsApp Business calls", "WhatsApp Business کالز ریکارڈ کریں"))
     EchoSwitch(true, {
     }, t(ur, "Live captions", "لائیو کیپشنز"), supporting = t(ur, "Available on the Pro plan", "پرو پلان میں دستیاب"), enabled = false)
 }
@@ -298,7 +298,7 @@ private fun Radios(ur: Boolean) = Gallery {
     listOf(
         t(ur, "Do nothing", "کچھ نہ کریں"),
         t(ur, "Show the after-call card", "کال کے بعد کارڈ دکھائیں"),
-        t(ur, "Transcribe at once", "فوراً ٹرانسکرپٹ بنائیں")
+        t(ur, "Transcribe at once", "فوراً ٹرانسکرائب کریں")
     ).forEachIndexed { i, label -> EchoRadio(chosen == i, { chosen = i }, label) }
 }
 
@@ -320,7 +320,7 @@ private fun LoadingAndErrors(ur: Boolean) = Gallery {
         pad
     )
     EchoBanner(
-        t(ur, "WhatsApp recording needs setup.", "واٹس ایپ ریکارڈنگ کا سیٹ اپ باقی ہے۔"),
+        t(ur, "WhatsApp recording needs setup.", "WhatsApp ریکارڈنگ کا سیٹ اپ باقی ہے۔"),
         EchoBannerKind.Warning,
         pad,
         actionLabel = t(ur, "Set up", "سیٹ اپ")

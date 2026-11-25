@@ -205,7 +205,7 @@ class VoicePageParityTest : ScreenTest() {
         language = EchoLanguage.Urdu
         showBoth()
         pumpUntil("Urdu") {
-            listOf("وائس نوٹ شیئر کرنے کے بعد", "وائس کی بورڈ آن کریں", "لغت اور متبادل", "حالیہ ڈکٹیشنز").all {
+            listOf("وائس نوٹ شیئر کرنے کے بعد", "وائس کی بورڈ آن کریں", "لغت اور متبادلات", "حالیہ ڈکٹیشنز").all {
                 compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty()
             }
         }

@@ -37,6 +37,6 @@
     <string name="v2_lt_test">ترجمہ آزمائیں</string>
     <string name="v2_lt_test_again">دوبارہ آزمائیں</string>
     <string name="v2_lt_cost">تقریباً $%1$s فی گھنٹہ، اور جب کوئی بول رہا ہو تو فی گھنٹہ %2$d MB تک موبائل ڈیٹا (خاموشی میں کچھ نہیں)۔</string>
-    <string name="v2_lt_settings_game">گیم کی سیٹنگز</string>
-    <string name="v2_lt_settings_watch">ویڈیو کی سیٹنگز</string>
+    <string name="v2_lt_settings_game">گیم کی ترتیبات</string>
+    <string name="v2_lt_settings_watch">ویڈیو کی ترتیبات</string>
 </resources>

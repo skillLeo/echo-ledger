@@ -245,7 +245,7 @@ class AboutPageParityTest : ScreenTest() {
     fun inUrduAboutAndTheLineSpeakUrdu() {
         language = EchoLanguage.Urdu
         showBoth()
-        pumpUntil("Urdu") { listOf("اپ ڈیٹس دیکھیں", "سیٹنگز ایکسپورٹ کریں", "یہ فون", "سیٹ اپ گائیڈ").all(::shown) }
+        pumpUntil("Urdu") { listOf("اپ ڈیٹس دیکھیں", "ترتیبات ایکسپورٹ کریں", "یہ فون", "سیٹ اپ گائیڈ").all(::shown) }
     }
 
     private fun keyless() = PlanState(

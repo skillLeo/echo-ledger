@@ -18,7 +18,7 @@
     <string name="v2_pc_report_note">رپورٹ میں اس فون کا بنانے والا، ماڈل اور Android ورژن اور اوپر کی لائنیں ہوتی ہیں، انگریزی میں، جیسے آپ کا ایڈمن پڑھتا ہے۔ یہ آپ کے ایڈمن کو صرف بھیجیں پر تھپتھپانے سے جاتی ہے۔</string>
     <string name="v2_pc_report_note_signed_out">رپورٹ ایڈمن کو بھیجنے کے لیے سائن ان کریں۔ رپورٹ کاپی کرنا ابھی چلتا ہے۔</string>
     <string name="v2_pc_keep_running">%1$s پر EchoLedger کو چلتا رکھیں</string>
-    <string name="v2_pc_open_settings">سیٹنگز کھولیں</string>
+    <string name="v2_pc_open_settings">ترتیبات کھولیں</string>
     <string name="v2_pc_fix_named">%1$s: %2$s</string>
     <string name="v2_pc_row">%1$s۔ %2$s</string>
     <string name="v2_pc_state_ok">چلتا ہے</string>
@@ -64,18 +64,18 @@
     <string name="v2_pc_b_huawei">Huawei یا Honor</string>
     <string name="v2_pc_b_pixel">Pixel</string>
     <string name="v2_pc_b_other">اس فون</string>
-    <string name="v2_pc_s_samsung_1">سیٹنگز ← بیٹری ← پس منظر کے استعمال کی حدیں ← کبھی خود نہ سونے والی ایپس ← EchoLedger شامل کریں۔</string>
-    <string name="v2_pc_s_samsung_2">سیٹنگز ← ایپس ← EchoLedger ← بیٹری ← بلا روک ٹوک۔</string>
-    <string name="v2_pc_s_xiaomi_1">سیٹنگز ← ایپس ← ایپس کا انتظام ← EchoLedger ← خود شروع (Autostart): آن۔</string>
+    <string name="v2_pc_s_samsung_1">ترتیبات ← بیٹری ← پس منظر کے استعمال کی حدیں ← کبھی خود نہ سونے والی ایپس ← EchoLedger شامل کریں۔</string>
+    <string name="v2_pc_s_samsung_2">ترتیبات ← ایپس ← EchoLedger ← بیٹری ← بلا روک ٹوک۔</string>
+    <string name="v2_pc_s_xiaomi_1">ترتیبات ← ایپس ← ایپس کا انتظام ← EchoLedger ← خود شروع (Autostart): آن۔</string>
     <string name="v2_pc_s_xiaomi_2">اسی صفحے پر: بیٹری سیور ← کوئی پابندی نہیں۔</string>
     <string name="v2_pc_s_xiaomi_3">حالیہ ایپس کھولیں، EchoLedger کی جھلک دبائے رکھیں اور تالا تھپتھپائیں، تاکہ حالیہ ایپس صاف کرنے پر بھی یہ چلتی رہے۔</string>
-    <string name="v2_pc_s_oppo_1">سیٹنگز ← ایپس ← ایپ کا انتظام ← EchoLedger ← بیٹری کا استعمال ← پس منظر کی سرگرمی اور خود شروع ہونے کی اجازت دیں۔</string>
+    <string name="v2_pc_s_oppo_1">ترتیبات ← ایپس ← ایپ کا انتظام ← EchoLedger ← بیٹری کا استعمال ← پس منظر کی سرگرمی اور خود شروع ہونے کی اجازت دیں۔</string>
     <string name="v2_pc_s_oppo_2">حالیہ ایپس کھولیں، EchoLedger کی جھلک پر مینو تھپتھپائیں اور لاک چنیں۔</string>
-    <string name="v2_pc_s_oneplus_2">سیٹنگز ← بیٹری ← بیٹری آپٹیمائزیشن ← EchoLedger ← آپٹیمائز نہ کریں۔</string>
-    <string name="v2_pc_s_vivo_1">سیٹنگز ← بیٹری ← پس منظر میں بجلی کے استعمال کا انتظام ← EchoLedger ← پابندی نہ لگائیں۔</string>
-    <string name="v2_pc_s_vivo_2">سیٹنگز ← ایپس ← خود شروع (Autostart) ← EchoLedger: آن۔</string>
-    <string name="v2_pc_s_huawei_1">سیٹنگز ← بیٹری ← ایپ لانچ ← EchoLedger: خودکار انتظام بند کریں۔</string>
+    <string name="v2_pc_s_oneplus_2">ترتیبات ← بیٹری ← بیٹری آپٹیمائزیشن ← EchoLedger ← آپٹیمائز نہ کریں۔</string>
+    <string name="v2_pc_s_vivo_1">ترتیبات ← بیٹری ← پس منظر میں بجلی کے استعمال کا انتظام ← EchoLedger ← پابندی نہ لگائیں۔</string>
+    <string name="v2_pc_s_vivo_2">ترتیبات ← ایپس ← خود شروع (Autostart) ← EchoLedger: آن۔</string>
+    <string name="v2_pc_s_huawei_1">ترتیبات ← بیٹری ← ایپ لانچ ← EchoLedger: خودکار انتظام بند کریں۔</string>
     <string name="v2_pc_s_huawei_2">کھلنے والے خانے میں خود لانچ، ثانوی لانچ اور پس منظر میں چلنا آن رہنے دیں۔</string>
-    <string name="v2_pc_s_pixel_1">سیٹنگز ← ایپس ← EchoLedger ← ایپ کی بیٹری کا استعمال ← بلا روک ٹوک۔</string>
-    <string name="v2_pc_s_other_1">سیٹنگز ← ایپس ← EchoLedger ← بیٹری ← بلا روک ٹوک (یا آپٹیمائز نہ کریں)۔</string>
+    <string name="v2_pc_s_pixel_1">ترتیبات ← ایپس ← EchoLedger ← ایپ کی بیٹری کا استعمال ← بلا روک ٹوک۔</string>
+    <string name="v2_pc_s_other_1">ترتیبات ← ایپس ← EchoLedger ← بیٹری ← بلا روک ٹوک (یا آپٹیمائز نہ کریں)۔</string>
 </resources>

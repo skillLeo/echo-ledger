@@ -36,7 +36,7 @@
     <string name="n_open_setup_restart">سیٹ اپ، کال ریکارڈنگ کھولیں اور ہیلپر دوبارہ شروع کریں، پھر ایک کال آزمائیں۔</string>
     <string name="n_call_not_recorded">کال ریکارڈ نہیں ہوئی</string>
     <string name="n_no_audio">کوئی آواز ریکارڈ نہیں ہوئی</string>
-    <string name="n_to_check_text">%1$s بجے کی آپ کی کال: فون نہیں بتاتا کہ اس کی ریکارڈنگ فائل کس ایپ نے بنائی۔ اگر یہ اسی کال کی ہے تو امپورٹ کرنے کے لیے سیٹنگز کھولیں۔</string>
+    <string name="n_to_check_text">%1$s بجے کی آپ کی کال: فون نہیں بتاتا کہ اس کی ریکارڈنگ فائل کس ایپ نے بنائی۔ اگر یہ اسی کال کی ہے تو امپورٹ کرنے کے لیے ترتیبات کھولیں۔</string>
     <string name="n_to_check_title">فون ایپ کی ریکارڈنگ امپورٹ کریں؟</string>
     <string name="n_imported_one">کال کی ریکارڈنگ لے آئی گئی</string>
     <string name="n_imported_many">%1$d کال ریکارڈنگز لے آئی گئیں</string>
@@ -92,7 +92,7 @@
     <string name="n_lt_overlay">لائیو ترجمہ دیکھنے کے لیے EchoLedger کو دوسری ایپس کے اوپر دکھانے کی اجازت دیں۔</string>
     <string name="n_lt_no_plan">لائیو ترجمہ آپ کے پلان میں نہیں ہے۔</string>
     <string name="n_lt_choose_games">پہلے گیم ترجمہ میں اپنی گیمز چنیں۔</string>
-    <string name="n_lt_start_helper">کال ریکارڈ کرنے والا ہیلپر شروع کریں (سیٹنگز › معلومات › یہ فون › سیٹ اپ گائیڈ)، یا آواز شیئر کرنے کے لیے ایپ سے لائیو ترجمہ شروع کریں۔</string>
+    <string name="n_lt_start_helper">کال ریکارڈ کرنے والا ہیلپر شروع کریں (ترتیبات › معلومات › یہ فون › سیٹ اپ گائیڈ)، یا آواز شیئر کرنے کے لیے ایپ سے لائیو ترجمہ شروع کریں۔</string>
     <string name="n_lt_nothing_playing">ابھی کچھ نہیں چل رہا۔ پہلے گیم یا ویڈیو شروع کریں، پھر لائیو ترجمہ۔</string>
     <string name="n_lt_could_not_start">لائیو ترجمہ شروع نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔</string>
     <string name="n_lt_not_set_up">لائیو ترجمہ ابھی سرور پر سیٹ اپ نہیں ہوا۔ اپنے ایڈمن سے پوچھیں۔</string>
@@ -145,5 +145,5 @@
     <string name="c_decisions">کالز اور مسائل</string>
     <string name="c_decisions_d">کال کے بعد پوچھتا ہے کہ اسے رکھیں یا نہیں، اور بتاتا ہے جب کوئی کال ریکارڈ نہ ہو سکے</string>
     <string name="c_after_call">کال کے بعد</string>
-    <string name="c_after_call_d">ہر کال کے بعد خاموشی سے پوچھتا ہے کہ ٹرانسکرپٹ بنائیں یا حذف کریں</string>
+    <string name="c_after_call_d">ہر کال کے بعد خاموشی سے پوچھتا ہے کہ ٹرانسکرائب کریں یا حذف کریں</string>
 </resources>

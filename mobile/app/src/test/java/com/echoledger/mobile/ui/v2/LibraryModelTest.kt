@@ -86,7 +86,7 @@ class LibraryModelTest {
     @Test
     fun sourcesAreNamedFromTheirKeyNotTheServersEnglish() {
         val item = items.first().copy(sourceAppLabel = "WhatsApp")
-        assertEquals("واٹس ایپ", LibraryModel.row(item, now, urdu, Locale.forLanguageTag("ur-PK")).source)
+        assertEquals("WhatsApp", LibraryModel.row(item, now, urdu, Locale.forLanguageTag("ur-PK")).source)
         assertEquals("WhatsApp", LibraryModel.row(item, now, english, Locale.UK).source)
     }
 

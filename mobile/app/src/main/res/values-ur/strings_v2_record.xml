@@ -14,7 +14,7 @@
     <string name="v2_vn_level">آواز کی سطح</string>
     <string name="v2_vn_import">فائلیں امپورٹ کریں</string>
     <string name="v2_vn_bluetooth">بلوٹوتھ ہیڈسیٹ جڑا ہوا ہے۔ بلوٹوتھ مائیک سے درستگی کم ہوتی ہے۔</string>
-    <string name="v2_vn_never_auto">وائس نوٹس خود بخود ریکارڈ نہیں ہوتے — انہیں واٹس ایپ سے EchoLedger پر شیئر کریں۔</string>
+    <string name="v2_vn_never_auto">وائس نوٹس خود بخود ریکارڈ نہیں ہوتے — انہیں WhatsApp سے EchoLedger پر شیئر کریں۔</string>
     <string name="v2_vn_retry_now">ابھی دوبارہ کوشش کریں</string>
     <string name="v2_vn_will_retry">دوبارہ کوشش ہو گی: %1$s</string>
     <string name="v2_vn_viewer">آپ %1$s میں ناظر ہیں: آپ اپنے ساتھ شیئر کی گئی چیزیں کھول سکتے ہیں، ریکارڈ نہیں کر سکتے۔</string>

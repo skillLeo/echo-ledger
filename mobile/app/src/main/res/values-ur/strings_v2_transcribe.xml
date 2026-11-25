@@ -9,7 +9,7 @@
     <string name="v2_tx_uses_none">آپ کے پلان کے منٹ استعمال نہیں ہوں گے۔</string>
     <string name="v2_tx_budget">اس مہینے منٹ کافی نہیں: %1$d چاہییں، %2$d باقی۔ کچھ شروع نہیں ہوا۔</string>
     <string name="v2_tx_budget_short">اس مہینے منٹ کافی نہیں۔ کچھ شروع نہیں ہوا۔</string>
-    <string name="v2_tx_needs_key">فری پلان پر ٹرانسکرائب کرنے کے لیے سیٹنگز › ٹرانسکرپشن کی کلید میں اپنی کلید شامل کریں۔</string>
+    <string name="v2_tx_needs_key">فری پلان پر ٹرانسکرائب کرنے کے لیے ترتیبات › ٹرانسکرپشن کی کلید میں اپنی کلید شامل کریں۔</string>
     <string name="v2_tx_not_audio_only">یہ پہلے ہی ٹرانسکرائب ہو چکی ہے یا ابھی اپ لوڈ ہو رہی ہے۔</string>
     <string name="v2_tx_failed">ٹرانسکرائب نہیں ہو سکی۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_tx_not_enough_title">منٹ کافی نہیں</string>

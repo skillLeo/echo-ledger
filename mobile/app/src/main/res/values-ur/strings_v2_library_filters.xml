@@ -40,7 +40,7 @@
     <string name="v2_lf_lang_it">اطالوی</string>
     <string name="v2_lf_lang_nl">ڈچ</string>
     <string name="v2_lf_lang_unknown">نامعلوم</string>
-    <string name="v2_lf_imported">درآمد شدہ</string>
+    <string name="v2_lf_imported">امپورٹ شدہ</string>
     <string name="v2_lf_pill">%1$s: %2$s</string>
     <string name="v2_lf_pill_not">%1$s نہیں ہے: %2$s</string>
     <string name="v2_lf_pill_edit">%1$s بدلیں</string>
@@ -82,7 +82,7 @@
     <string name="v2_lf_no_match_body">کم فلٹرز آزمائیں، یا انہیں صاف کریں۔</string>
     <string name="v2_lf_label_name">لیبل کا نام</string>
     <string name="v2_lf_kind_count">%1$s %2$d</string>
-    <string name="v2_lf_waiting_row">انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
+    <string name="v2_lf_waiting_row">انتظار میں: ٹرانسکرائب کریں یا حذف کریں</string>
     <plurals name="v2_lf_show_results">
         <item quantity="one">%1$d نتیجہ دکھائیں</item>
         <item quantity="other">%1$d نتائج دکھائیں</item>

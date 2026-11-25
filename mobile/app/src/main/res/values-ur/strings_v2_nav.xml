@@ -55,13 +55,13 @@
         <item quantity="one">%1$d اپ لوڈ نہیں ہوئی</item>
         <item quantity="other">%1$d اپ لوڈ نہیں ہوئیں</item>
     </plurals>
-    <string name="v2_lib_need_waiting_one">1 کال انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
-    <string name="v2_lib_need_waiting">%1$d کالز انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
+    <string name="v2_lib_need_waiting_one">1 کال انتظار میں: ٹرانسکرائب کریں یا حذف کریں</string>
+    <string name="v2_lib_need_waiting">%1$d کالز انتظار میں: ٹرانسکرائب کریں یا حذف کریں</string>
     <string name="v2_lib_need_more">%1$s · %2$d مزید</string>
     <string name="v2_lib_need_review">دیکھیں</string>
     <string name="v2_lib_need_fix">ٹھیک کریں</string>
     <string name="v2_act_title">سرگرمی</string>
-    <string name="v2_act_mark_all">سب کو پڑھا ہوا کریں</string>
+    <string name="v2_act_mark_all">سب کو پڑھی ہوئی کریں</string>
     <string name="v2_act_needs">توجہ درکار</string>
     <string name="v2_act_today">آج</string>
     <string name="v2_act_earlier">پہلے</string>
@@ -104,6 +104,6 @@
     <string name="v2_act_why_line">فون لائن نہیں کھل سکی، اس لیے کال ریکارڈ نہیں ہوئی۔</string>
     <string name="v2_act_why_background">اینڈرائیڈ نے خودکار ریکارڈنگ کو پس منظر میں شروع نہیں ہونے دیا۔</string>
     <string name="v2_act_why_not_running">کال شروع ہوتے وقت خودکار ریکارڈنگ چل نہیں رہی تھی۔</string>
-    <string name="v2_act_keep_all">سب کا ٹرانسکرپٹ بنائیں</string>
+    <string name="v2_act_keep_all">سب ٹرانسکرائب کریں</string>
     <string name="v2_act_discard_all">سب حذف کریں</string>
 </resources>

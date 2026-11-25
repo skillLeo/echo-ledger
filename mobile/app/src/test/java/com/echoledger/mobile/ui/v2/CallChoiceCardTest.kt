@@ -202,7 +202,7 @@ class CallChoiceCardTest {
         language = EchoLanguage.Urdu
         show(ask)
         awaitLogo()
-        compose.onNodeWithContentDescription("واٹس ایپ", substring = true).assertExists()
+        compose.onNodeWithContentDescription("WhatsApp", substring = true).assertExists()
         val meta = compose.onNodeWithText("0:44", substring = true).fetchSemanticsNode()
             .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single()
         assertEquals("\u20680:44\u2069 · ابھی", meta.text)
@@ -270,7 +270,7 @@ class CallChoiceCardTest {
     /** Every button inside the card, none on another, at each size and language. */
     private fun assertFits(variant: String) {
         val root = compose.onRoot().getBoundsInRoot()
-        val words = if (language == EchoLanguage.Urdu) listOf("حذف کریں", "ٹرانسکرپٹ بنائیں") else listOf("Delete", "Transcribe")
+        val words = if (language == EchoLanguage.Urdu) listOf("حذف کریں", "ٹرانسکرائب کریں") else listOf("Delete", "Transcribe")
         val bounds = words.map { compose.onNodeWithText(it).assertIsDisplayed().getBoundsInRoot() }
         bounds.forEach { b -> assertTrue("$variant: a button leaves the screen", b.left >= root.left && b.right <= root.right) }
         val (a, b) = bounds

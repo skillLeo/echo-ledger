@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="v2_fold_inbox">کوئی پروجیکٹ نہیں</string>
-    <string name="v2_fold_whatsapp">واٹس ایپ</string>
-    <string name="v2_fold_whatsapp_business">واٹس ایپ بزنس</string>
-    <string name="v2_fold_google_meet">گوگل میٹ</string>
-    <string name="v2_fold_zoom">زوم</string>
-    <string name="v2_fold_teams">ٹیمز</string>
+    <string name="v2_fold_whatsapp">WhatsApp</string>
+    <string name="v2_fold_whatsapp_business">WhatsApp Business</string>
+    <string name="v2_fold_google_meet">Google Meet</string>
+    <string name="v2_fold_zoom">Zoom</string>
+    <string name="v2_fold_teams">Teams</string>
     <string name="v2_fold_phone">فون</string>
     <string name="v2_fold_voice_notes">وائس نوٹس</string>
-    <string name="v2_fold_imported">درآمد شدہ</string>
+    <string name="v2_fold_imported">امپورٹ شدہ</string>
     <string name="v2_fold_shared">میرے ساتھ شیئر کردہ</string>
     <string name="v2_fold_failed_title">%1$s لوڈ نہیں ہو سکا</string>
     <string name="v2_fold_failed_body">کنکشن دیکھیں اور دوبارہ کوشش کریں۔</string>
@@ -17,7 +17,7 @@
     <string name="v2_fold_shared_empty_body">ساتھیوں کی بھیجی ہوئی ریکارڈنگز اور پروجیکٹس یہاں دکھائی دیں گے۔</string>
     <string name="v2_fold_empty_title">%1$s میں کچھ نہیں</string>
     <string name="v2_fold_inbox_empty">جو ریکارڈنگز کسی پروجیکٹ میں نہیں، وہ یہاں دکھائی دیں گی۔</string>
-    <string name="v2_fold_imported_empty">آپ کی درآمد کردہ، کنسول میں اپ لوڈ کی گئی یا ریکویسٹ لنک سے ملی فائلیں یہاں دکھائی دیں گی۔</string>
+    <string name="v2_fold_imported_empty">آپ کی امپورٹ کردہ، کنسول میں اپ لوڈ کی گئی یا ریکویسٹ لنک سے ملی فائلیں یہاں دکھائی دیں گی۔</string>
     <string name="v2_fold_app_empty">%1$s کی ریکارڈنگز یہاں دکھائی دیں گی۔</string>
     <string name="v2_fold_shared_item">شیئر کردہ</string>
     <string name="v2_fold_a_teammate">ایک ساتھی</string>

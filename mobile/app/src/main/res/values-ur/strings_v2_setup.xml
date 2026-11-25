@@ -8,7 +8,7 @@
     <string name="v2_setup_status_voice">وائس نوٹس تیار ہیں</string>
     <string name="v2_setup_checks">صحت کی جانچ</string>
     <string name="v2_setup_helper">کیپچر ہیلپر</string>
-    <string name="v2_setup_helper_intro">واٹس ایپ اور دوسری ایپس کی کالز کی دونوں آوازیں ریکارڈ کرتا ہے۔ ایک بار سیٹ اپ کریں؛ فون دوبارہ شروع ہونے کے بعد صرف ایک ٹیپ۔</string>
+    <string name="v2_setup_helper_intro">WhatsApp اور دوسری ایپس کی کالز کی دونوں آوازیں ریکارڈ کرتا ہے۔ ایک بار سیٹ اپ کریں؛ فون دوبارہ شروع ہونے کے بعد صرف ایک ٹیپ۔</string>
     <string name="v2_setup_check_again">دوبارہ جانچیں</string>
     <string name="v2_setup_not_available">اس فون پر کال کیپچر دستیاب نہیں۔ وائس نوٹس اور شیئر کی ہوئی ریکارڈنگز پھر بھی کام کرتی ہیں۔</string>
     <string name="v2_setup_done">مکمل</string>
@@ -16,7 +16,7 @@
     <string name="v2_setup_step_developer">ڈیولپر آپشنز آن کریں</string>
     <string name="v2_setup_step_developer_detail">فون کی ترتیبات میں \'فون کے بارے میں\' کھولیں اور بلڈ نمبر پر 7 بار ٹیپ کریں۔</string>
     <string name="v2_setup_step_install">شیزوکو انسٹال کریں</string>
-    <string name="v2_setup_step_install_detail">گوگل پلے سے مفت۔ اس سے EchoLedger اپنا کیپچر ہیلپر شروع کر سکتا ہے۔</string>
+    <string name="v2_setup_step_install_detail">Google Play سے مفت۔ اس سے EchoLedger اپنا کیپچر ہیلپر شروع کر سکتا ہے۔</string>
     <string name="v2_setup_step_pair">وائرلیس ڈیبگنگ سے شیزوکو جوڑیں</string>
     <string name="v2_setup_step_pair_detail">شیزوکو میں Pairing پر ٹیپ کریں۔ پھر ڈیولپر آپشنز ‹ وائرلیس ڈیبگنگ میں \'پیئرنگ کوڈ سے جوڑیں\' پر ٹیپ کریں اور 6 ہندسوں کا کوڈ شیزوکو کی اطلاع میں لکھیں۔ صرف ایک بار۔</string>
     <string name="v2_setup_step_start">شیزوکو شروع کریں</string>

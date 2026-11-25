@@ -42,7 +42,7 @@
     <string name="v2_in_qr_help">کمپیوٹر پر سائن ان ہیں؟ کنسول میں اکاؤنٹ › ڈیوائسز › ڈیوائس سائن ان کریں کھولیں، پھر اس کا QR کوڈ یہاں اسکین کریں۔</string>
     <string name="v2_in_scan">QR کوڈ اسکین کریں</string>
     <string name="v2_in_camera_needed">اسکین کے لیے کیمرے کی اجازت چاہیے۔ آپ کوڈ لکھ بھی سکتے ہیں۔</string>
-    <string name="v2_in_camera_off">EchoLedger کے لیے کیمرے کی اجازت بند ہے۔ ایپ کی سیٹنگز کھول کر اجازت دینے کے لیے QR کوڈ اسکین کریں دبائیں، یا کوڈ لکھیں۔</string>
+    <string name="v2_in_camera_off">EchoLedger کے لیے کیمرے کی اجازت بند ہے۔ ایپ کی ترتیبات کھول کر اجازت دینے کے لیے QR کوڈ اسکین کریں دبائیں، یا کوڈ لکھیں۔</string>
     <string name="v2_in_one_time">ون ٹائم سائن ان کوڈ</string>
     <string name="v2_in_with_code">کوڈ سے سائن ان کریں</string>
     <string name="v2_in_browser">براؤزر میں سائن ان کریں (پاس کی)</string>

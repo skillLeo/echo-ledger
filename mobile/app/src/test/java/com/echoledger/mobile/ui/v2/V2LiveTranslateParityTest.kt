@@ -116,7 +116,7 @@ class V2LiveTranslateParityTest : ScreenTest() {
         page(language = EchoLanguage.Urdu)
         pumpUntil("Urdu") { seen("گیم ترجمہ") && seen("کریڈٹ درکار ہے") }
         assertTrue(seen("شروع کریں"))
-        assertTrue(seen("گیم کی سیٹنگز"))
+        assertTrue(seen("گیم کی ترتیبات"))
     }
 
     @Test

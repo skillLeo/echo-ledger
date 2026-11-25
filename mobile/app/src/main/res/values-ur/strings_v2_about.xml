@@ -14,10 +14,10 @@
     <string name="v2_ab_allow">اجازت دیں</string>
     <string name="v2_ab_installing">اپ ڈیٹ انسٹال ہو رہی ہے: Android کی اسکرین پر تصدیق کریں۔</string>
     <string name="v2_ab_try_again">دوبارہ کوشش کریں</string>
-    <string name="v2_ab_transfer">آپ کی سیٹنگز</string>
+    <string name="v2_ab_transfer">آپ کی ترتیبات</string>
     <string name="v2_ab_transfer_help">اپنی ترجیحات فائل میں محفوظ کریں یا دوسرے فون پر لوڈ کریں۔ فائل میں کبھی آپ کی پیئرنگ، ٹوکن یا لاک نہیں ہوتا۔</string>
-    <string name="v2_ab_export">سیٹنگز ایکسپورٹ کریں</string>
-    <string name="v2_ab_import">سیٹنگز امپورٹ کریں</string>
+    <string name="v2_ab_export">ترتیبات ایکسپورٹ کریں</string>
+    <string name="v2_ab_import">ترتیبات امپورٹ کریں</string>
     <string name="v2_ab_phone">یہ فون</string>
     <string name="v2_ab_setup_guide">سیٹ اپ گائیڈ</string>
     <string name="v2_st_deletes">آپ کا اکاؤنٹ %1$s کو حذف ہو جائے گا۔</string>

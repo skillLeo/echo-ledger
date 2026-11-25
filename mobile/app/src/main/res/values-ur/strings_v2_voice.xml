@@ -2,7 +2,7 @@
 <!-- The v2 Voice notes & dictation settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
 <resources>
     <string name="v2_vc_after_share">وائس نوٹ شیئر کرنے کے بعد</string>
-    <string name="v2_vc_after_share_help">جب آپ واٹس ایپ یا کسی اور ایپ سے وائس نوٹ یا آڈیو فائل EchoLedger پر شیئر کریں</string>
+    <string name="v2_vc_after_share_help">جب آپ WhatsApp یا کسی اور ایپ سے وائس نوٹ یا آڈیو فائل EchoLedger پر شیئر کریں</string>
     <string name="v2_vc_open">وائس نوٹ کھولیں (پہلے سے طے)</string>
     <string name="v2_vc_stay">جس ایپ سے شیئر کیا اسی میں رہیں، اور تیار ہونے پر خاموشی سے بتائیں</string>
     <string name="v2_vc_keyboard">وائس کی بورڈ</string>
@@ -13,7 +13,7 @@
     <string name="v2_vc_cleanup_help">“اوں” ہٹاتا ہے، بڑے حروف اور فل اسٹاپ لگاتا ہے۔</string>
     <string name="v2_vc_sounds">شروع اور بند ہونے کی آوازیں</string>
     <string name="v2_vc_new_line">لائن توڑنے کے لیے “new line” یا “new paragraph” بولیں۔</string>
-    <string name="v2_vc_replacements">لغت اور متبادل</string>
+    <string name="v2_vc_replacements">لغت اور متبادلات</string>
     <string name="v2_vc_replacements_help">ناموں کے ہجے درست کریں، یا چھوٹے لفظ کی جگہ لمبا لفظ رکھیں۔</string>
     <string name="v2_vc_nothing">(کچھ نہیں)</string>
     <string name="v2_vc_remove">ہٹائیں</string>

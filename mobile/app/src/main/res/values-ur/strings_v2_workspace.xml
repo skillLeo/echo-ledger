@@ -7,8 +7,8 @@
     <string name="v2_ws_create">بنائیں</string>
     <string name="v2_ws_list_empty_title">ابھی کوئی پروجیکٹ نہیں</string>
     <string name="v2_ws_list_empty_body">پروجیکٹ کسی کلائنٹ کی ریکارڈنگز، فائلیں اور یادداشت ایک جگہ رکھتا ہے۔</string>
-    <string name="v2_ws_shared_imported">میرے ساتھ شیئر کردہ اور درآمد شدہ</string>
-    <string name="v2_ws_shared_imported_help">ساتھیوں کی بھیجی ہوئی اور درآمد کی گئی ریکارڈنگز</string>
+    <string name="v2_ws_shared_imported">میرے ساتھ شیئر کردہ اور امپورٹ شدہ</string>
+    <string name="v2_ws_shared_imported_help">ساتھیوں کی بھیجی ہوئی اور امپورٹ کی گئی ریکارڈنگز</string>
     <string name="v2_ws_count_rec_one">1 ریکارڈنگ</string>
     <string name="v2_ws_count_rec_other">%1$d ریکارڈنگز</string>
     <string name="v2_ws_count_folder_one">1 فولڈر</string>

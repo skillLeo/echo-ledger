@@ -2,7 +2,7 @@
 <!-- The call choice (before, during and after a call): word for word docs/v2/copy/call-choice.md. values/ is English,
      values-ur/ Urdu: keep the keys the same (the deck's keys with cc_ in front). -->
 <resources>
-    <string name="cc_transcribe">ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_transcribe">ٹرانسکرائب کریں</string>
     <string name="cc_save_audio_only">صرف آڈیو محفوظ کریں</string>
     <string name="cc_delete">حذف کریں</string>
     <string name="cc_dont_record">ریکارڈ نہ کریں</string>
@@ -10,16 +10,16 @@
     <string name="cc_setting_title">ہر کال کے بعد</string>
     <string name="cc_setting_ask">مجھ سے پوچھیں</string>
     <string name="cc_setting_ask_help">ہر کال کے بعد ایک چھوٹا کارڈ۔</string>
-    <string name="cc_setting_transcribe">ہر کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_setting_transcribe">ہر کال ٹرانسکرائب کریں</string>
     <string name="cc_setting_transcribe_help">کوئی سوال نہیں۔</string>
     <string name="cc_setting_audio">صرف آڈیو محفوظ کریں</string>
-    <string name="cc_setting_audio_help">کوئی سوال نہیں۔ چاہیں تو بعد میں لائبریری سے ٹرانسکرپٹ بنائیں۔</string>
+    <string name="cc_setting_audio_help">کوئی سوال نہیں۔ چاہیں تو بعد میں لائبریری سے ٹرانسکرائب کریں۔</string>
     <string name="cc_setting_off">کالز ریکارڈ نہ کریں</string>
     <string name="cc_setting_off_help">کالز ریکارڈ نہیں ہوں گی۔ پھر بھی پِل یا ریکارڈ سے کوئی کال ریکارڈ کر سکتے ہیں۔</string>
     <string name="cc_when_title">کب پوچھیں</string>
     <string name="cc_when_after">کال کے بعد (تجویز کردہ)</string>
     <string name="cc_when_start">کال کے شروع میں</string>
-    <string name="cc_pill_transcribe">اس کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_pill_transcribe">یہ کال ٹرانسکرائب کریں</string>
     <string name="cc_pill_audio">صرف آڈیو محفوظ کریں</string>
     <string name="cc_pill_stop_delete">روکیں اور حذف کریں</string>
     <string name="cc_start_banner">یہ کال ریکارڈ ہو رہی ہے</string>
@@ -45,8 +45,8 @@
     <string name="cc_ac_saved">%1$s · کال محفوظ ہو گئی</string>
     <string name="cc_ac_hint">صرف آڈیو رکھنے کے لیے ہٹا دیں۔ اسے ترتیبات › ہر کال کے بعد میں بدلیں۔</string>
     <string name="cc_ac_grouped">%1$d کالز محفوظ ہو گئیں</string>
-    <string name="cc_ac_transcribe_all">سب کا ٹرانسکرپٹ بنائیں</string>
-    <string name="cc_ac_always_transcribe">ہمیشہ ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_ac_transcribe_all">سب ٹرانسکرائب کریں</string>
+    <string name="cc_ac_always_transcribe">ہمیشہ ٹرانسکرائب کریں</string>
     <string name="cc_ac_always_audio">ہمیشہ صرف آڈیو</string>
     <string name="cc_ac_ready">ٹرانسکرپٹ تیار ہے</string>
     <string name="cc_ac_bar_saved">%1$s · %2$s محفوظ</string>
