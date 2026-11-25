@@ -14,7 +14,7 @@ export function NotificationsPageV2({ settings, patch, run }: { settings: Settin
   const soundsOn = NOTIFICATION_CATEGORIES.some(([c]) => isOn(settings.notificationSounds, c));
   const quiet = settings.quietHours && all;
   const test = () => void run(() => api.notificationTest("other").then((shown) => {
-    if (!shown) throw NOT_SHOWN;
+    if (!shown) throw t(NOT_SHOWN);
   }), t("Test notification sent"));
   const time = (id: "notifications.quiet_from" | "notifications.quiet_to", value: string, save: (v: string) => void) => (
     <ListRow compact anchor={id} title={setting(id).title}

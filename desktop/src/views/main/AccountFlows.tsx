@@ -10,6 +10,7 @@ import {
   proofAfter, proofBody, proofFor, replyText, rulesLine, sentence, spacedSecret, type AccountReply, type PasswordRules, type ProofKind, type SecurityInfo,
   type TwoFactorStart,
 } from "../../lib/account";
+import { t } from "../../i18n";
 
 // ---- The kit each design draws with ---------------------------------------------------------------------------------
 
@@ -48,21 +49,21 @@ export type AccountKit = {
 
 /** The words of the rows on both designs' pages: the same names in each, so both read the same to a screen reader. */
 export const ROWS = {
-  name: "Change name",
-  picture: "Change picture",
-  removePicture: "Remove picture",
-  email: "Change email",
-  pendingEmail: "Check your new address",
-  password: "Change password",
-  setPassword: "Set a password",
-  twoStepOn: "Turn on two-step sign-in",
-  twoStepOff: "Turn off two-step sign-in",
-  recoveryCodes: "New recovery codes",
-  google: "Unlink Google",
-  addPasskey: "Add a passkey on the website",
-  renamePasskey: (name: string) => `Rename passkey ${name}`,
-  removePasskey: (name: string) => `Remove passkey ${name}`,
-} as const;
+  get name() { return t("Change name"); },
+  get picture() { return t("Change picture"); },
+  get removePicture() { return t("Remove picture"); },
+  get email() { return t("Change email"); },
+  get pendingEmail() { return t("Check your new address"); },
+  get password() { return t("Change password"); },
+  get setPassword() { return t("Set a password"); },
+  get twoStepOn() { return t("Turn on two-step sign-in"); },
+  get twoStepOff() { return t("Turn off two-step sign-in"); },
+  get recoveryCodes() { return t("New recovery codes"); },
+  get google() { return t("Unlink Google"); },
+  get addPasskey() { return t("Add a passkey on the website"); },
+  renamePasskey: (name: string) => t("Rename passkey :name", { name }),
+  removePasskey: (name: string) => t("Remove passkey :name", { name }),
+};
 
 export type Flow =
   | { kind: "name" | "email" | "password" | "two_step_on" | "two_step_off" | "recovery_codes" | "google" | "remove_picture" }

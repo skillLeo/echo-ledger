@@ -129,13 +129,13 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
     blocked,
     // The switch row says what screen moments are; the plan's row in its place doesn't, so the line goes here.
     locked ? setting("screen.enabled").description : null,
-    on ? TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? WINDOWS_WHOLE_SCREEN : "") : null,
+    on ? TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? ` ${t(WINDOWS_WHOLE_SCREEN.trim())}` : "") : null,
     on && status?.platform === "windows" ? (status.borderless
       ? t("Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings.")
       : t("Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it.")) : null,
-    on && status?.platform === "macos" ? (status.permission ? MONTHLY_NOTE : asked
+    on && status?.platform === "macos" ? (status.permission ? t(MONTHLY_NOTE) : asked
       ? t("Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again.")
-      : `${t("macOS asks once for the Screen Recording permission.")} ${MONTHLY_NOTE}`) : null,
+      : `${t("macOS asks once for the Screen Recording permission.")} ${t(MONTHLY_NOTE)}`) : null,
   ].filter(Boolean) as string[];
   return (
     <div className="el-settings-v2" data-testid="screen-moments-card">
