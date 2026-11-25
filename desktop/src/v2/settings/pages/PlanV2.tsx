@@ -35,7 +35,9 @@ function MeterRow({ id, label, limitKey, limit, quiet, onUpgrade }: {
   const tone = percent >= 100 && blocks ? "full" : percent >= 80 ? "warn" : "";
   const text = usageText(limitKey, limit);
   const resets = limitKey === "monthly_minutes" && limit.resets_at ? limit.resets_at : null;
-  const words = limitKey === "monthly_minutes" ? "minutes" : limitKey === "storage_bytes" ? "storage" : limitKey === "devices" ? "devices" : "team members";
+  // D-230: what the 80 % line calls each limit (the uploads were "team members"; a team's seats never block, so never warn).
+  const words = limitKey === "monthly_minutes" ? "minutes" : limitKey === "storage_bytes" ? "storage" : limitKey === "devices" ? "devices"
+    : limitKey === "uploads_per_day" ? "daily uploads" : "team members";
   let line: ReactNode = share === null ? (limitKey === "monthly_minutes" ? "No monthly limit" : null) : resets ? `Resets ${rowDate(resets)}` : null;
   if (percent >= 100 && blocks) {
     line = limitKey === "monthly_minutes" ? `Transcription is paused${resets ? ` until ${rowDate(resets)}` : ""}.`
@@ -227,7 +229,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
           <div className="el-plan-card">
             <div className="el-plan-card__head"><span className="el-title-m" dir="auto">{isFree ? "Free plan" : `${name} plan`}</span></div>
             <div className="el-plan-card__body el-secondary">
-              {!allowed && workspace && <p dir="auto">{workspace} is on {name}. Its owner manages the plan.</p>}
+              {!allowed && workspace && <p dir="auto">{plan ? `${workspace} is on ${name}. Its owner manages the plan.` : `${workspace}'s plan is managed by its owner.`}</p>}
               {isFree && allowed && <p dir="auto">Transcripts use your own free Groq key.</p>}
               {!isFree && price && <p dir="auto" className="el-tabular">{price}</p>}
               {!isFree && <p dir="auto">{plan?.expires_at ? `Paid until ${rowDateWithYear(plan.expires_at)}` : "No end date"}</p>}
