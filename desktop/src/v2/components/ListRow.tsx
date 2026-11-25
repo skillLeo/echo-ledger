@@ -2,7 +2,7 @@ import { useId, type KeyboardEvent, type MouseEvent, type PointerEvent, type Rea
 import { Icon, type IconType } from "./Button";
 import { PickBox } from "./choices";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
-import { lineDir } from "../../i18n";
+import { lineDir, piecesDir } from "../../i18n";
 
 /** A list of rows with an accessible name. */
 export function List({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -136,7 +136,8 @@ export function ListRow({
           <span className="el-row__meta el-caption">
             {badge && <span id={`${id}-badge`}>{badge}</span>}
             {mark && <span className="el-row__mark" id={`${id}-mark`}>{mark}</span>}
-            {meta && <span className="el-row__meta-text" id={`${id}-meta`} dir={lineDir(meta)}>{meta}</span>}
+            {/* D-245: a meta line built of pieces reads right to left in Urdu (piecesDir), plain text as lineDir says. */}
+            {meta && <span className="el-row__meta-text" id={`${id}-meta`} dir={piecesDir(meta)}>{meta}</span>}
           </span>
         )}
       </span>
