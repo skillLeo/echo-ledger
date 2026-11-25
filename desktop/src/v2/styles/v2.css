@@ -1139,6 +1139,15 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 /* Settings pages in the new look: rows' controls, colour swatches, a pair of fields, reset. */
 .el-settings-v2 { display: flex; flex-direction: column; gap: var(--el-space-16); }
 .el-settings-v2 .el-group { margin: 0; }
+/* DES-05: a section's title is text only, 13 px semibold in the secondary colour, 24 px above it (the page's 16 px gap
+   and 8 more); no icon, chevron or hover, never clickable; a heading for screen readers. Its rows are one rounded group. */
+.el-settings-v2 .el-group__title { color: var(--el-role-text-secondary); font-weight: var(--el-text-body-strong-weight); }
+.el-settings-v2 .el-group__title:not(:lang(ur), :lang(ar)) { font-size: var(--el-desktop-text-secondary-size); line-height: var(--el-desktop-text-secondary-line); }
+.el-settings-v2 .el-group:has(> .el-group__title) { margin-block-start: var(--el-space-8); }
+/* A group's page (UX-11): each of its pages a part under its title (title.s), the parts well apart. */
+.el-settings-part { display: flex; flex-direction: column; gap: var(--el-space-16); min-inline-size: 0; scroll-margin-block-start: var(--el-space-24); }
+.el-settings-part + .el-settings-part { margin-block-start: var(--el-space-24); }
+.el-settings-part__title { color: var(--el-role-text-primary); padding-inline: var(--el-space-4); }
 .el-setting__select { min-inline-size: calc(var(--el-space-64) * 3.5); max-inline-size: calc(var(--el-space-64) * 5); }
 .el-range { inline-size: calc(var(--el-space-64) * 2.5); accent-color: var(--el-role-accent-default); cursor: pointer; margin: 0; }
 .el-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
@@ -1161,7 +1170,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-steps-list__item { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
 .el-key-paste { display: flex; align-items: flex-end; gap: var(--el-space-8); flex-wrap: wrap; }
 .el-key-paste > .el-field { flex: 1; min-inline-size: calc(var(--el-space-64) * 3); }
-.el-form > h2.el-body-strong { margin: 0; font-size: var(--el-text-body-size); }
+.el-form > :is(h2, h3).el-body-strong { margin: 0; font-size: var(--el-text-body-size); }
 .el-prose { display: grid; gap: var(--el-space-12); max-inline-size: calc(var(--el-space-64) * 10); }
 .el-prose .consent-notice p { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 .el-form--flush { padding: 0; gap: var(--el-space-12); }
@@ -1210,6 +1219,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-shortcut-note { color: var(--el-role-warning-default); white-space: normal; }
 /* A row's value and buttons go under its name when the row is too narrow for both (zoomed, a narrow window): the
    shortcuts, and About's updates. */
+.el-shortcuts { display: flex; flex-direction: column; gap: var(--el-space-16); }
 .el-shortcuts .el-row, .el-rows-wrap .el-row { flex-wrap: wrap; row-gap: var(--el-space-4); }
 .el-shortcuts .el-row__main, .el-rows-wrap .el-row__main { flex: 1 1 calc(var(--el-space-64) * 3); }
 .el-shortcuts .el-row__value, .el-rows-wrap .el-row__value { max-inline-size: none; margin-inline-start: auto; }
@@ -2274,10 +2284,6 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-panel-drops .el-nav-drop { display: flex; }
 
 /* Settings with the three levels: the group's sections in an inner list beside the page. */
-.el-settings-split { display: flex; align-items: flex-start; gap: var(--el-space-16); min-block-size: 0; }
-.el-settings-split__list { flex: none; inline-size: calc(var(--el-space-64) * 3); padding: var(--el-space-24) var(--el-space-8) 0 var(--el-space-16); position: sticky; inset-block-start: 0; }
-.el-settings-split__title { margin: 0 var(--el-space-8) var(--el-space-8); color: var(--el-role-text-secondary); }
-.el-settings-split > .el-settings-page { flex: 1; min-inline-size: 0; }
 /* ---- macOS: the title-bar strip in a normal window (D-214, lib/titlebar.ts) ---------------------------------------------
    The window's own close, minimize and zoom sit in an empty strip across the top, as tall as their native row, in the
    chrome's colour: nothing of ours under or beside them. It drags the window and zooms it on a double click

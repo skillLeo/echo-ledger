@@ -70,6 +70,7 @@ import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
+import { entryOf, groupOf } from "../../v2/settings/groups";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
@@ -107,6 +108,11 @@ const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shar
 /** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
 export const WIZARD_FLAGS_WAIT_MS = 1500;
 /** The pages in words, for a Back link that returns to one ("Library"). */
+/** Help's group in two levels (UX-11): its way back goes to that group's page. */
+const HELP_GROUP = (() => {
+  const group = groupOf("help")!;
+  return { title: group.title, entry: entryOf(group) };
+})();
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
@@ -1226,15 +1232,18 @@ export default function MainApp() {
               inPanel={ui.flags["ui_v2.library"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
-                ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
+                // Two levels (UX-11): Setup & health is the rail's own place, with no "‹ Settings".
+                ? <SetupHealthV2 platform={status.platform} onBack={ui.flags["ui_v2.library"] ? undefined : onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
                   ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
-                      : { onBack: onHome })} />
-                  : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                      // Two levels: back to its group's page (About & help), never to "Settings".
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: HELP_GROUP.title } : { onBack: onHome })} />
+                  : hasV2Page(section.id, ui.flags["ui_v2.library"])
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} onHome={onHome}
+                      onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>

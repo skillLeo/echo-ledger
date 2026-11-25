@@ -114,17 +114,32 @@ describe("the places' panels", () => {
     expect(onOpen).toHaveBeenCalledWith("p3");
   });
 
-  it("Settings' page in three levels: the home has no groups (they are the panel's); a page has its group's sections beside it", () => {
+  it("Settings' page in two levels (UX-11): the home has no groups (they are the panel's); a page is drawn whole, with no inner list", () => {
+    // The rule changed with UX-11: a page used to have its group's sections in an inner list beside it (a third level).
     const renderPage = vi.fn((section: { id: string }) => <p>Page {section.id}</p>);
     const { rerender } = render(<SettingsV2 available={everything} renderPage={renderPage} inPanel />);
     expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
     expect(screen.queryByRole("searchbox")).toBeNull();
     rerender(<SettingsV2 available={everything} renderPage={renderPage} inPanel section={{ id: "calls", seq: 1 }} />);
-    const inner = within(screen.getByRole("navigation", { name: "Recording sections" }));
-    expect(inner.getAllByRole("button").map((b) => b.textContent)).toHaveLength(4);
-    expect(inner.getAllByRole("button").find((b) => b.getAttribute("aria-current") === "page")).toBeDefined();
+    expect(screen.queryByRole("navigation", { name: "Recording sections" })).toBeNull();
+    expect(document.querySelector(".el-settings-split__list")).toBeNull();
     expect(screen.getByText("Page calls")).toBeInTheDocument();
-    fireEvent.click(inner.getAllByRole("button")[1]);
-    expect(screen.getByText("Page mic")).toBeInTheDocument();
+  });
+
+  it("Settings' panel: a group opens its page from the top (About & help at About, never straight into Help)", () => {
+    const onOpen = vi.fn();
+    render(<SettingsPanel current="help" onOpen={onOpen} available={everything} />);
+    // Help is in About & help: the group is the current one.
+    expect(screen.getByRole("button", { name: "About & help" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "About & help" }));
+    expect(onOpen).toHaveBeenLastCalledWith("about");
+    fireEvent.click(screen.getByRole("button", { name: "Shortcuts & start-up" }));
+    expect(onOpen).toHaveBeenLastCalledWith("shortcuts");
+    fireEvent.click(screen.getByRole("button", { name: "Recording" }));
+    expect(onOpen).toHaveBeenLastCalledWith("calls");
+    // A search result opens its group's page scrolled to it: the start-up switch has no page of its own.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "start when I sign in" } });
+    fireEvent.click(within(screen.getByRole("list", { name: "Matches" })).getByRole("button", { name: "Start when I sign in" }));
+    expect(onOpen).toHaveBeenLastCalledWith("app.autostart#app.autostart");
   });
 });
