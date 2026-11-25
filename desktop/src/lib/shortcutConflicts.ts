@@ -41,6 +41,15 @@ const MACOS: Record<string, string> = {
   "Cmd+M": "minimises the window",
 };
 
+/** Who else uses a shortcut: browsers, many apps, or the one app or system it belongs to (its name). */
+export type ConflictOwner = { kind: "browsers" } | { kind: "many_apps" } | { kind: "app"; name: string };
+
+/** Each known shortcut's owner where it isn't browsers (the browser ones say "in browsers" or "browser"). */
+const OWNERS: Record<string, string> = {
+  "Ctrl+Shift+V": "many apps", "Ctrl+Shift+S": "many apps",
+  "Cmd+Space": "Spotlight", "Cmd+Alt+R": "Safari",
+};
+
 /** "CommandOrControl+Shift+c" → "Ctrl+Shift+C" (or Cmd on macOS), in a fixed modifier order. */
 export function normaliseAccelerator(accelerator: string, platform: Platform): string {
   const parts = accelerator.split("+").map((p) => p.trim()).filter(Boolean);
@@ -64,4 +73,20 @@ export function conflictFor(accelerator: string | undefined, platform: Platform)
   const key = normaliseAccelerator(accelerator, platform);
   const table = { ...COMMON, ...(platform === "macos" ? MACOS : WINDOWS) };
   return table[key] ?? null;
+}
+
+/**
+ * Who else uses a shortcut (desktop Urdu, EL-UX): browsers, many apps, or one app or system by its name (Spotlight,
+ * Safari; else Windows or macOS for the system's own keys); null when it is not a known one.
+ */
+export function conflictOwner(accelerator: string | undefined, platform: Platform): ConflictOwner | null {
+  if (!accelerator) return null;
+  const key = normaliseAccelerator(accelerator, platform);
+  const what = conflictFor(accelerator, platform);
+  if (what === null) return null;
+  const owner = OWNERS[key];
+  if (owner === "many apps") return { kind: "many_apps" };
+  if (owner) return { kind: "app", name: owner };
+  if (/\bbrowsers?\b/.test(what)) return { kind: "browsers" };
+  return { kind: "app", name: platform === "macos" ? "macOS" : "Windows" };
 }
