@@ -108,17 +108,19 @@ class TranslatePreviewTest {
      */
     private fun assertNewest(line: String, lines: Int) {
         val tail = SemanticsMatcher("the end of the line") { node ->
-            node.config.getOrNull(SemanticsProperties.Text)?.joinToString("")?.let { it.isNotEmpty() && line.endsWith(it) } == true
+            node.config.getOrNull(SemanticsProperties.Text)?.joinToString("")?.trimStart('\u061C', '\u200E')
+                ?.let { it.isNotEmpty() && line.endsWith(it) } == true
         }
         val shownNode = compose.onNode(tail, useUnmergedTree = true)
-        val shownText = shownNode.fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("")
+        val shownWithMark = shownNode.fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("")
+        val shownText = shownWithMark.trimStart('\u061C', '\u200E')
         assertTrue("an older line is shown too: \"$shownText\"", shownText.length < line.length)
         assertTrue("it starts a word: \"$shownText\"", line[line.length - shownText.length - 1].isWhitespace())
-        val layout = layoutOf(shownText)
+        val layout = layoutOf(shownWithMark)
         assertNull(TextCuts.problem(layout))
         assertEquals("its newest $lines lines", lines, layout.lineCount)
-        assertEquals("shown whole", layout.size.height.toFloat(), shown(shownText).height, 1.5f)
-        assertInsideFrame(shownText)
+        assertEquals("shown whole", layout.size.height.toFloat(), shown(shownWithMark).height, 1.5f)
+        assertInsideFrame(shownWithMark)
     }
 
     private fun shoot(name: String) {

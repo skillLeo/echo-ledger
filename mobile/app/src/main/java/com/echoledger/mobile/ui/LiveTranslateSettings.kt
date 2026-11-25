@@ -386,6 +386,15 @@ internal fun SubtitlePreview(
 }
 
 /**
+ * P-127: [text] from [from] on, as the preview shows its newest lines. Cut mid-line, digits at its start would resolve as
+ * European numbers (the Arabic letter before them is gone), so a ٪, % or - beside them could change sides: a mark of the
+ * line's direction goes first, for the layout only (U+061C, the Arabic letter mark, right to left; U+200E left to right),
+ * so they read as they did in the whole line. Uncut, the text is as it is.
+ */
+internal fun newestText(text: String, from: Int, rtl: Boolean): String =
+    if (from <= 0) text else (if (rtl) "\u061C" else "\u200E") + text.substring(from)
+
+/**
  * P-119: a preview's translation line. Try it's growing line ([newest]) shows its newest [lines] lines, as the overlay
  * does (TranslateTextView: older lines move up out of its window), its end always in view: the whole line is laid out
  * to find where those lines start, and only the text from there is shown, so nothing of an older line shows (Nastaliq
@@ -406,7 +415,7 @@ private fun PreviewLines(text: String, style: TextStyle, lines: Int, newest: Boo
         val laid = whole[0]
         val from = if (newest && laid != null && laid.lineCount > lines) laid.getLineStart(laid.lineCount - lines) else 0
         val shown = subcompose("shown") {
-            Text(text.substring(from), style = greedy, modifier = Modifier.fillMaxWidth())
+            Text(newestText(text, from, style.textDirection == TextDirection.Rtl), style = greedy, modifier = Modifier.fillMaxWidth())
         }.single().measure(loose)
         layout(constraints.constrainWidth(shown.width), constraints.constrainHeight(shown.height)) { shown.place(0, 0) }
     }
