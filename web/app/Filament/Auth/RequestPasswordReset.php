@@ -39,8 +39,8 @@ class RequestPasswordReset extends BaseRequestPasswordReset
             },
         );
 
-        Notification::make()->title('Check your email')
-            ->body('If an account uses that address, a link to choose a new password is on its way.')
+        Notification::make()->title(__('Check your email'))
+            ->body(__('If an account uses that address, a link to choose a new password is on its way.'))
             ->success()->send();
         $this->form->fill();
     }

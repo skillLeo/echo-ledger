@@ -77,11 +77,11 @@ class Login extends BaseLogin
     {
         parent::mount();
         if (session()->pull('account.suspended') === true) {
-            Notification::make()->title('This account is suspended')->body(self::SUSPENDED)->danger()->persistent()->send();
+            Notification::make()->title(__('This account is suspended'))->body(__(self::SUSPENDED))->danger()->persistent()->send();
         }
     }
 
-    /** What a suspended account is told when it tries to sign in (since v1.6). */
+    /** What a suspended account is told when it tries to sign in (since v1.6); the English key, shown through the translator. */
     public const SUSPENDED = 'This account is suspended. Write to the owner of this server to ask why.';
 
     public function authenticate(): ?LoginResponse
@@ -106,7 +106,7 @@ class Login extends BaseLogin
     {
         $email = $this->email();
         if (User::query()->where('email', $email)->whereNotNull('suspended_at')->exists()) {
-            throw ValidationException::withMessages(['data.email' => self::SUSPENDED]);
+            throw ValidationException::withMessages(['data.email' => __(self::SUSPENDED)]);
         }
         $guard = app(SignInGuard::class);
         $locked = $guard->lockedFor($email);
@@ -134,10 +134,10 @@ class Login extends BaseLogin
         try {
             $answer = app(EmailCodes::class)->start($email);
         } catch (ApiError $e) {
-            throw ValidationException::withMessages(['data.email' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.email' => self::codeError($e)]);
         }
         if ($answer['account'] === 'existing' && User::query()->where('email', $email)->whereNotNull('suspended_at')->exists()) {
-            throw ValidationException::withMessages(['data.email' => self::SUSPENDED]);
+            throw ValidationException::withMessages(['data.email' => __(self::SUSPENDED)]);
         }
         $this->confirmedEmail = $email;
         $this->data['email'] = $email;
@@ -173,13 +173,13 @@ class Login extends BaseLogin
                 $this->data['turnstile'] = null;
                 $this->dispatch('turnstile-reset');
             }
-            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+            Notification::make()->title(self::codeError($e))->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }
         $this->data['code'] = null;
         $this->step = self::STEP_CODE;
-        Notification::make()->title('Code sent')->body("Check {$this->confirmedEmail} for a 6-digit code.")->success()->send();
+        Notification::make()->title(__('Code sent'))->body(__('Check :email for a 6-digit code.', ['email' => $this->confirmedEmail]))->success()->send();
 
         return null;
     }
@@ -201,7 +201,7 @@ class Login extends BaseLogin
                 return null;
             }
         } catch (ApiError $e) {
-            throw ValidationException::withMessages(['data.code' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.code' => self::codeError($e)]);
         }
         if ($user->hasTwoFactor()) {
             $this->step = self::STEP_OTP;
@@ -221,7 +221,7 @@ class Login extends BaseLogin
         }
         $guard = app(SignInGuard::class);
         if ($guard->lockedFor($this->confirmedEmail) > 0) {
-            Notification::make()->title('Too many failed sign-ins. Try again later.')->danger()->send();
+            Notification::make()->title(__('Too many failed sign-ins. Try again later.'))->danger()->send();
 
             return null;
         }
@@ -231,13 +231,13 @@ class Login extends BaseLogin
         } catch (ApiError $e) {
             $this->step = self::STEP_CODE;
 
-            throw ValidationException::withMessages(['data.code' => $e->getMessage()]);
+            throw ValidationException::withMessages(['data.code' => self::codeError($e)]);
         }
         $user = User::query()->where('email', $this->confirmedEmail)->firstOrFail();
         if (! app(TwoFactorCodes::class)->verify($user, trim((string) ($this->data['otp'] ?? '')))) {
             $guard->fail($this->confirmedEmail, $user->id);
 
-            throw ValidationException::withMessages(['data.otp' => 'That code is wrong or was used already.']);
+            throw ValidationException::withMessages(['data.otp' => __('That code is wrong or was used already.')]);
         }
         $codes->useUp($row);
 
@@ -258,7 +258,7 @@ class Login extends BaseLogin
             $user = DB::transaction(function () use ($codes, $state): User {
                 $email = $codes->redeemSignUpToken((string) $this->signUpToken);
                 if (User::query()->where('email', $email)->exists()) {
-                    throw new ApiError(422, 'invalid_code', 'An account with this email exists already. Sign in instead.');
+                    throw new ApiError(422, 'invalid_code', 'An account with this email exists already. Sign in instead.', ['account' => 'existing']);
                 }
                 $codes->assertMaySignUp($email);
                 $user = app(SignUp::class)->create(['name' => (string) $state['name'], 'email' => $email, 'password' => Str::password(40)],
@@ -271,7 +271,7 @@ class Login extends BaseLogin
         } catch (ApiError $e) {
             $this->signUpToken = null;
             $this->step = self::STEP_EMAIL;
-            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+            Notification::make()->title(self::codeError($e))->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }
@@ -281,6 +281,37 @@ class Login extends BaseLogin
         $this->redirect(GetTheApps::getUrl(panel: 'app'));
 
         return null;
+    }
+
+    /**
+     * The words for an answer of EmailCodes (docs/API.md "Sign-up and sign-in with an email code") in the console's
+     * language; the API's own words stay English. Each English line is the API's, word for word.
+     */
+    public static function codeError(ApiError $e): string
+    {
+        $extra = $e->extra();
+        $left = $extra['attempts_left'] ?? null;
+
+        return match ($e->apiCode()) {
+            'invalid_code' => match (true) {
+                is_int($left) && $left > 0 => trans_choice('That code is not right. :count try left.|That code is not right. :count tries left.', $left),
+                is_int($left) => __('That code is not right. Ask for a new one.'),
+                ($extra['account'] ?? null) === 'existing' => __('An account with this email exists already. Sign in instead.'),
+                // EmailCodes::redeemSignUpToken ("This sign-up has expired. Start again with your email."), or any other
+                // wording of the API's: its own words, in the console's language when they have a line.
+                default => __($e->getMessage()),
+            },
+            'code_expired' => __('This code has expired. Ask for a new one.'),
+            'resend_too_soon' => is_int($extra['resend_after'] ?? null)
+                ? __('Wait :seconds seconds before asking for a new code.', ['seconds' => (string) $extra['resend_after']])
+                : __($e->getMessage()),
+            'too_many_attempts' => __('Too many codes asked for. Try again later.'),
+            'turnstile_failed' => __('The check that you are not a robot did not pass. Try it again.'),
+            'sign_up_closed' => __('Sign-up is closed on this server. Ask the owner for an invitation.'),
+            'email_not_allowed' => __('This email address cannot be used to sign up. Use your usual email address.'),
+            'sign_up_limit' => __('Too many new accounts from this network today. Try again tomorrow.'),
+            default => __($e->getMessage()),
+        };
     }
 
     /** Whether the Turnstile check shows with the email, on the first step: on the sign-up page (since v1.6.2). */
@@ -314,10 +345,10 @@ class Login extends BaseLogin
     private function signInAs(User $user): LoginResponse
     {
         if ($user->isSuspended()) {
-            throw ValidationException::withMessages(['data.code' => self::SUSPENDED]);
+            throw ValidationException::withMessages(['data.code' => __(self::SUSPENDED)]);
         }
         if (! $this->isUserAllowedToAccessPanel($user)) {
-            throw ValidationException::withMessages(['data.code' => 'This account cannot use the console. Ask a workspace owner to add you.']);
+            throw ValidationException::withMessages(['data.code' => __('This account cannot use the console. Ask a workspace owner to add you.')]);
         }
         if (! $user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
@@ -368,21 +399,25 @@ class Login extends BaseLogin
             View::make('filament.auth.turnstile')->viewData(['siteKey' => $turnstile->siteKey()])
                 ->visible(fn (): bool => $turnstile->active() && ($this->step === self::STEP_HUMAN || ($this->step === self::STEP_EMAIL && $this->asksForTurnstileFirst()))),
             Hidden::make('turnstile'),
-            TextInput::make('code')->label('Code from the email')->placeholder('6 digits')
+            TextInput::make('code')->label(__('Code from the email'))->placeholder(__('6 digits'))
                 ->required(fn (): bool => in_array($this->step, [self::STEP_CODE, self::STEP_OTP], true))
                 ->autocomplete('one-time-code')->extraInputAttributes(['inputmode' => 'numeric', 'maxlength' => '9'])
                 ->maxLength(9)->autofocus()
                 ->visible(fn (): bool => $this->step === self::STEP_CODE),
-            TextInput::make('otp')->label('Code from your authenticator app')->helperText('Or one of your recovery codes.')
+            TextInput::make('otp')->label(__('Code from your authenticator app'))->helperText(__('Or one of your recovery codes.'))
                 ->required(fn (): bool => $this->step === self::STEP_OTP)->autocomplete('one-time-code')->maxLength(64)
                 ->visible(fn (): bool => $this->step === self::STEP_OTP),
-            TextInput::make('name')->label('Your name')->required(fn (): bool => $this->step === self::STEP_PROFILE)->maxLength(120)->autocomplete('name')
+            TextInput::make('name')->label(__('Your name'))->required(fn (): bool => $this->step === self::STEP_PROFILE)->maxLength(120)->autocomplete('name')
                 ->visible(fn (): bool => $this->step === self::STEP_PROFILE),
-            Text::make(RecordingConsent::TEXT)->visible(fn (): bool => $this->step === self::STEP_PROFILE),
+            Text::make(__(RecordingConsent::TEXT))->visible(fn (): bool => $this->step === self::STEP_PROFILE),
             Checkbox::make('accept_terms')
-                ->label(new HtmlString('I accept the <a href="'.e(route('legal.terms')).'" target="_blank" class="underline">Terms</a> and the <a href="'.e(route('legal.privacy')).'" target="_blank" class="underline">Privacy Policy</a>'))
+                // One sentence; each link is made around its own words (escaped), the address never inside the words.
+                ->label(new HtmlString(__('I accept the <terms>Terms</terms> and the <privacy>Privacy Policy</privacy>', [
+                    'terms' => fn (string $words): string => '<a href="'.e(route('legal.terms')).'" target="_blank" class="underline">'.e($words).'</a>',
+                    'privacy' => fn (string $words): string => '<a href="'.e(route('legal.privacy')).'" target="_blank" class="underline">'.e($words).'</a>',
+                ])))
                 ->accepted(fn (): bool => $this->step === self::STEP_PROFILE)
-                ->validationMessages(['accepted' => 'Accept the Terms and the Privacy Policy to make your account.'])
+                ->validationMessages(['accepted' => __('Accept the Terms and the Privacy Policy to make your account.')])
                 ->visible(fn (): bool => $this->step === self::STEP_PROFILE),
             $this->getRememberFormComponent(),
         ]);
@@ -391,7 +426,7 @@ class Login extends BaseLogin
     protected function getEmailFormComponent(): Component
     {
         return TextInput::make('email')
-            ->label('Email')
+            ->label(__('Email'))
             ->email()
             ->required()
             ->maxLength(255)
@@ -399,7 +434,7 @@ class Login extends BaseLogin
             ->autocomplete('username webauthn')
             ->autofocus()
             ->readOnly(fn (): bool => $this->step !== self::STEP_EMAIL)
-            ->hintAction(Action::make('startOver')->label('Use another email')->action(fn () => $this->startOver())
+            ->hintAction(Action::make('startOver')->label(__('Use another email'))->action(fn () => $this->startOver())
                 ->visible(fn (): bool => $this->step !== self::STEP_EMAIL));
     }
 
@@ -413,7 +448,7 @@ class Login extends BaseLogin
 
     protected function getRememberFormComponent(): Component
     {
-        return Checkbox::make('remember')->label('Keep me signed in')
+        return Checkbox::make('remember')->label(__('Keep me signed in'))
             ->visible(fn (): bool => in_array($this->step, [self::STEP_PASSWORD, self::STEP_CODE], true));
     }
 
@@ -422,15 +457,15 @@ class Login extends BaseLogin
         return [
             // The label follows the step (a closure: the actions are made once for the page).
             $this->getAuthenticateFormAction()->label(fn (): string => match ($this->step) {
-                self::STEP_PASSWORD => 'Sign in',
-                self::STEP_HUMAN => 'Email me a code',
-                self::STEP_PROFILE => 'Create my account',
-                default => 'Continue',
+                self::STEP_PASSWORD => __('Sign in'),
+                self::STEP_HUMAN => __('Email me a code'),
+                self::STEP_PROFILE => __('Create my account'),
+                default => __('Continue'),
             }),
-            Action::make('emailMeACode')->label('Email me a code instead')->link()->color('gray')
+            Action::make('emailMeACode')->label(__('Email me a code instead'))->link()->color('gray')
                 ->visible(fn (): bool => $this->step === self::STEP_PASSWORD)
                 ->action(fn () => $this->emailCode()),
-            Action::make('sendAgain')->label('Send a new code')->link()->color('gray')
+            Action::make('sendAgain')->label(__('Send a new code'))->link()->color('gray')
                 ->visible(fn (): bool => $this->step === self::STEP_CODE)
                 ->action(fn () => $this->emailCode()),
         ];
@@ -443,12 +478,12 @@ class Login extends BaseLogin
         }
 
         return match ($this->step) {
-            self::STEP_PASSWORD => 'Welcome back',
-            self::STEP_HUMAN => 'One quick check',
-            self::STEP_CODE => 'Check your email',
-            self::STEP_OTP => 'Two-step sign-in',
-            self::STEP_PROFILE => 'Create your account',
-            default => 'Sign in or create an account',
+            self::STEP_PASSWORD => __('Welcome back'),
+            self::STEP_HUMAN => __('One quick check'),
+            self::STEP_CODE => __('Check your email'),
+            self::STEP_OTP => __('Two-step sign-in'),
+            self::STEP_PROFILE => __('Create your account'),
+            default => __('Sign in or create an account'),
         };
     }
 
@@ -459,12 +494,12 @@ class Login extends BaseLogin
         }
 
         return match ($this->step) {
-            self::STEP_CODE => 'We sent a 6-digit code to '.$this->confirmedEmail.'. It works for 10 minutes.',
-            self::STEP_HUMAN => 'Confirm you are not a robot, then we email you a code.',
-            self::STEP_OTP => 'Enter the code from your authenticator app.',
-            self::STEP_PROFILE => 'Last step: your name, and the Terms.',
+            self::STEP_CODE => __('We sent a 6-digit code to :email. It works for 10 minutes.', ['email' => (string) $this->confirmedEmail]),
+            self::STEP_HUMAN => __('Confirm you are not a robot, then we email you a code.'),
+            self::STEP_OTP => __('Enter the code from your authenticator app.'),
+            self::STEP_PROFILE => __('Last step: your name, and the Terms.'),
             self::STEP_PASSWORD => null,
-            default => app(SignUp::class)->mode() === SignUp::ANYONE ? 'Enter your email. New here? We will make your free account.' : 'Enter your email to continue.',
+            default => app(SignUp::class)->mode() === SignUp::ANYONE ? __('Enter your email. New here? We will make your free account.') : __('Enter your email to continue.'),
         };
     }
 }
