@@ -2442,6 +2442,11 @@ pub fn spawn_activity_poll(app: AppHandle) {
 
 /// Reads `GET /api/config` (never refused, v1.6 P2.7) so the window's update, announcement and maintenance banners
 /// and the upload hold follow the server within a minute, whether or not anything waits to upload.
+/// Reads the config again now (a call-rules route said the flag is off): the flags and the call rules follow.
+pub async fn refresh_config_now(app: &AppHandle) {
+    refresh_config(app).await;
+}
+
 async fn refresh_config(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     if !state.is_paired() {
@@ -2457,6 +2462,8 @@ async fn refresh_config(app: &AppHandle) {
                 state.upload_notify.notify_one();
             }
             emit_status(app);
+            // The account's call rules (2.0.0-w): read again when their version moved; gone with the flag.
+            crate::call_rules::sync(app).await;
         }
         Err(e) => {
             state.note_hold(&e);

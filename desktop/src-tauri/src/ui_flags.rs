@@ -17,7 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The flags this app knows, as the contract names them.
-pub const KNOWN: [&str; 16] = [
+pub const KNOWN: [&str; 17] = [
     "ui_v2.shell",
     "ui_v2.home",
     "ui_v2.library",
@@ -38,6 +38,8 @@ pub const KNOWN: [&str; 16] = [
     "v21_zoom",
     // Desktop Urdu: the window speaks the account's language (src/i18n). Without it here the window never heard it.
     "v21_urdu",
+    // Call rules (contract 2.0.0-w and -x): the account's After each call, its rules and its remembered choices.
+    "call_rules",
 ];
 
 /// The event the window hears when the cached flags change.

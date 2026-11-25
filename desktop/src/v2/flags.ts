@@ -24,6 +24,8 @@ export const UI_FLAG_NAMES = [
   "v21_zoom",
   // Desktop Urdu: the account's language (src/i18n). Off, the app is in English, as before.
   "v21_urdu",
+  // Call rules (contract 2.0.0-w and -x): the account's After each call, its rules and its remembered choices.
+  "call_rules",
 ] as const;
 export type UiFlagName = (typeof UI_FLAG_NAMES)[number];
 export type UiFlags = Record<UiFlagName, boolean>;

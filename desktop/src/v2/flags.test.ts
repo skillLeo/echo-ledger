@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useLayoutEffect, useState } from "react";
-import { ALL_OFF, DESIGN_KEY, DESKTOP_V2_FLAGS, READ_RETRY_MS, anyV2, chooseDesign, designOffer, parseUiState, readDesign, readUiState, setClassic, useUiFlags } from "./flags";
+import { ALL_OFF, DESIGN_KEY, DESKTOP_V2_FLAGS, READ_RETRY_MS, anyV2, applyDesign, chooseDesign, designOffer, parseUiState, readDesign, readUiState, setClassic, useUiFlags } from "./flags";
 import { callsOf, emitEvent, fail, flushAsync, listen, listenerCount, resetTauriMock, respond, respondWith } from "../test/tauri";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../test/tauri")).coreModule);
@@ -24,6 +24,15 @@ describe("reading the interface flags", () => {
     expect(Object.keys(state.flags)).not.toContain("ui_v2.future");
     expect(parseUiState(null)).toEqual(ALL_OFF);
     expect(parseUiState({ ui_flags: "nope" })).toEqual(ALL_OFF);
+  });
+
+  it("call_rules (contract 2.0.0-w) is a known feature flag: read as sent, and the design chosen here never changes it", () => {
+    const on = parseUiState({ ui_flags: { call_rules: true }, ui_classic: false });
+    expect(on.flags.call_rules).toBe(true);
+    expect(parseUiState({ ui_flags: { call_rules: "yes" } }).flags.call_rules).toBe(false);
+    expect(applyDesign(on, "classic").flags.call_rules).toBe(true);
+    expect(applyDesign(on, "v2").flags.call_rules).toBe(true);
+    expect(applyDesign(parseUiState({ ui_flags: {} }), "v2").flags.call_rules).toBe(false);
   });
 
   it("an older core without the command means the classic screens", async () => {

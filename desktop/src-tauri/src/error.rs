@@ -37,7 +37,7 @@ const PLAIN_CODES: [&str; 11] = [
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 40] = [
+const CODE_TEXT: [(&str, &str); 41] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -88,6 +88,8 @@ const CODE_TEXT: [(&str, &str); 40] = [
     ("budget_exhausted", "This month's Live Assist time is used up. Captions go on."),
     ("session_active", "Live Assist is already running for you on another device."),
     ("session_ended", "This Live Assist session has ended."),
+    // Call rules (2.0.0-w): 500 a person at most.
+    ("too_many_rules", "You have 500 call rules, the most there can be. Remove one first."),
 ];
 
 /// `503 provider_not_configured` from `stt/token` and `live-translate/token` (docs/API.md), in the app's words.

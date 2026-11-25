@@ -464,6 +464,7 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     state.api_cache.clear();
     state.note_sign_out()?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
+    crate::call_rules::clear(&state.data_dir);
     *state.library.lock().await = LibraryCache::default();
     Ok(status(&app))
 }
@@ -2394,6 +2395,115 @@ async fn opened_many(app: &AppHandle, ids: Vec<String>, opened: bool) -> AppResu
         eprintln!("[echoledger] saving the Library after Mark as read or unread: {e}");
     }
     Ok(Some(answer))
+}
+
+/// Call rules (contract 2.0.0-w): the account's answer kept for this sign-in, read now when none is kept yet; `null`
+/// while the person's `call_rules` flag is off (this computer's own settings apply).
+#[tauri::command]
+pub async fn call_rules_get(app: AppHandle) -> AppResult<Option<crate::net::models::CallRules>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    if !crate::call_rules::flag_on(&state) {
+        return Ok(None);
+    }
+    if let Some(kept) = crate::call_rules::kept(&state) {
+        return Ok(Some(kept));
+    }
+    crate::call_rules::sync(&app).await;
+    Ok(crate::call_rules::kept(&state))
+}
+
+/// The account's After each call, When to ask and Short calls (`PUT /api/call-rules/settings`); the answer is kept.
+#[tauri::command]
+pub async fn call_rules_settings_set(app: AppHandle, settings: serde_json::Value) -> AppResult<crate::net::models::CallRules> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.put_call_rule_settings(&settings).await;
+    let rules = call_rule_answer(&app, answer).await?;
+    crate::call_rules::keep(&app, &rules)?;
+    Ok(rules)
+}
+
+/// One rule for a contact or a Source (`POST /api/call-rules`, `201` new or `200` replaced): the kept answer with it.
+#[tauri::command]
+pub async fn call_rule_save(app: AppHandle, rule: serde_json::Value) -> AppResult<crate::net::models::CallRules> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.create_call_rule(&rule).await;
+    let saved = call_rule_answer(&app, answer).await?;
+    with_kept_rules(&app, |rules| crate::call_rules::with_rule(rules, saved)).await
+}
+
+/// A rule's choice or name (`PATCH /api/call-rules/{id}`). One another device removed: the rules are read again and
+/// it says so.
+#[tauri::command]
+pub async fn call_rule_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<crate::net::models::CallRules> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.update_call_rule(&id, &patch).await {
+        Err(AppError::Server { status: 404, code: Some(code), .. }) if code == "rule_not_found" => {
+            reread_call_rules(&app).await;
+            Err(AppError::msg(crate::call_rules::RULE_GONE_TEXT))
+        }
+        answer => {
+            let saved = call_rule_answer(&app, answer).await?;
+            with_kept_rules(&app, |rules| crate::call_rules::with_rule(rules, saved)).await
+        }
+    }
+}
+
+/// Removes a rule (`DELETE /api/call-rules/{id}`); one already gone counts as removed.
+#[tauri::command]
+pub async fn call_rule_delete(app: AppHandle, id: String) -> AppResult<crate::net::models::CallRules> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.delete_call_rule(&id).await {
+        Err(AppError::Server { status: 404, code: Some(code), .. }) if code == "rule_not_found" => {
+            reread_call_rules(&app).await;
+            Ok(with_kept_rules(&app, |rules| crate::call_rules::without_rule(rules, &id)).await?)
+        }
+        answer => {
+            call_rule_answer(&app, answer).await?;
+            with_kept_rules(&app, |rules| crate::call_rules::without_rule(rules, &id)).await
+        }
+    }
+}
+
+/// A change's answer: in the app's words when it failed; a `404 not_found` (the flag turned off) forgets the kept rules
+/// and reads the config again, so this computer's own settings apply.
+async fn call_rule_answer<T>(app: &AppHandle, answer: AppResult<T>) -> AppResult<T> {
+    match answer {
+        Err(e) if crate::call_rules::flag_is_off(&e) => {
+            crate::call_rules::forget(app);
+            crate::actions::refresh_config_now(app).await;
+            Err(crate::call_rules::change_error(e))
+        }
+        other => other.map_err(crate::call_rules::change_error),
+    }
+}
+
+/// The kept rules changed by `change`, kept and returned (read first when none is kept yet).
+async fn with_kept_rules(app: &AppHandle, change: impl FnOnce(crate::net::models::CallRules) -> crate::net::models::CallRules) -> AppResult<crate::net::models::CallRules> {
+    let state = app.state::<AppState>();
+    if crate::call_rules::kept(&state).is_none() {
+        crate::call_rules::sync(app).await;
+    }
+    let rules = change(crate::call_rules::kept(&state).unwrap_or_default());
+    crate::call_rules::keep(app, &rules)?;
+    Ok(rules)
+}
+
+/// Reads the account's rules again now (another device changed them), whatever version is kept.
+async fn reread_call_rules(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Ok(api) = state.api() else { return };
+    match api.call_rules().await {
+        Ok(rules) => {
+            let _ = crate::call_rules::keep(app, &rules);
+        }
+        Err(e) if crate::call_rules::flag_is_off(&e) => crate::call_rules::forget(app),
+        Err(_) => {}
+    }
 }
 
 /// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps

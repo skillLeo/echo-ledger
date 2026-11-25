@@ -1212,6 +1212,40 @@ export interface SessionOrganisePatch {
   language?: TranscriptionLanguage | null;
 }
 
+/** The four choices for a call (contract 2.0.0-w "The choices"). */
+export type CallAction = "ask" | "always_transcribe" | "always_audio" | "dont_record";
+
+/** One call rule: for a contact (`number` and/or `name`), a contact group (set on the phone) or a Source. */
+export interface CallRule {
+  id: string;
+  kind: "contact" | "group" | "source";
+  number?: string | null;
+  name?: string | null;
+  group?: "favourites" | "saved_contacts" | "unknown_numbers" | null;
+  source_app?: string | null;
+  action: CallAction;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** A new rule as the desktop makes them: a Source, or a contact by name (it knows no numbers). */
+export type CallRuleInput = { kind: "source"; source_app: string; action: CallAction } | { kind: "contact"; name: string; action: CallAction };
+
+/** `GET /api/call-rules` (contract 2.0.0-w): the account's settings (`after_call` null: never chosen) and its rules. */
+export interface CallRules {
+  after_call: CallAction | null;
+  ask_when: "after_call" | "at_start" | null;
+  short_calls: "dont_keep" | "keep" | null;
+  short_call_seconds: number | null;
+  version: number | null;
+  updated_at: string | null;
+  rules: CallRule[];
+  /** Turned-down offers (2.0.0-x), as sent. */
+  declined: unknown[];
+  /** The choices that follow the account (2.0.0-x), as sent. */
+  preferences?: unknown;
+}
+
 /** Mark as read / unread for many (contract 2.0.0-y): the recordings marked, and every other id as it was sent. */
 export type OpenedMany = { done: string[]; not_found: string[] };
 
@@ -1864,6 +1898,8 @@ export interface EventPayloads {
   "dictation:level": number;
   "lock:changed": LockStatus;
   "activity:updated": number;
+  /** The account's call rules kept for this sign-in changed (contract 2.0.0-w); null: none, the flag is off. */
+  "call_rules:changed": CallRules | null;
   "signin:done": AppStatus;
   "signin:failed": string;
   /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
@@ -2317,6 +2353,16 @@ export const api = {
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
   activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number; retry_requested_at?: string | null }>("activity_list", { limit }),
+  /** The account's call settings and rules (contract 2.0.0-w), kept for this sign-in; null while the flag is off. */
+  callRules: () => invoke<CallRules | null>("call_rules_get"),
+  /** After each call, When to ask and Short calls for the account (`PUT /api/call-rules/settings`). */
+  callRulesSettingsSet: (settings: Partial<Pick<CallRules, "after_call" | "ask_when" | "short_calls">>) => invoke<CallRules>("call_rules_settings_set", { settings }),
+  /** One rule for a contact (by name) or a Source; a second one for the same replaces it (`POST /api/call-rules`). */
+  callRuleSave: (rule: CallRuleInput) => invoke<CallRules>("call_rule_save", { rule }),
+  /** A rule's choice or name (`PATCH /api/call-rules/{id}`). */
+  callRuleUpdate: (id: string, patch: { action?: CallAction; name?: string }) => invoke<CallRules>("call_rule_update", { id, patch }),
+  /** Removes a rule (`DELETE /api/call-rules/{id}`); one already gone counts as removed. */
+  callRuleDelete: (id: string) => invoke<CallRules>("call_rule_delete", { id }),
   /** One group's items (2.0.0-r: "upload_failed"), newest first. */
   activityGroupItems: (group: string, limit = 50) => invoke<{ data: ActivityItem[] }>("activity_group_list", { group, limit }),
   activityGroups: () => invoke<{ data: ActivityGroup[] }>("activity_groups"),

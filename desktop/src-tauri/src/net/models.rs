@@ -92,6 +92,80 @@ pub struct ServerConfig {
     /// [`ServerConfig::trash_keep_hours`].
     #[serde(default)]
     pub trash: Option<serde_json::Value>,
+    /// The person's call settings (contract 2.0.0-w), only while their `call_rules` flag is on; none otherwise (and from
+    /// an older server). Its `version` says when `GET /api/call-rules` is to be read again.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub call_rules: Option<CallRulesConfig>,
+}
+
+/// `call_rules` in `GET /api/config` (contract 2.0.0-w; `preferences` since 2.0.0-x), each field read on its own.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CallRulesConfig {
+    /// `ask`, `always_transcribe`, `always_audio` or `dont_record`; none when the person never chose on any device.
+    #[serde(default, deserialize_with = "lenient")]
+    pub after_call: Option<String>,
+    /// `after_call` or `at_start`.
+    #[serde(default, deserialize_with = "lenient")]
+    pub ask_when: Option<String>,
+    /// `dont_keep` or `keep`.
+    #[serde(default, deserialize_with = "lenient")]
+    pub short_calls: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub short_call_seconds: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub version: Option<u64>,
+    /// The choices that follow the account (2.0.0-x), as sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<serde_json::Value>,
+}
+
+/// `GET /api/call-rules` (contract 2.0.0-w), and the answer of every route that changes the settings: the person's
+/// settings and rules, contact, group, Source, then by name.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CallRules {
+    #[serde(default, deserialize_with = "lenient")]
+    pub after_call: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub ask_when: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub short_calls: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub short_call_seconds: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub version: Option<u64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub updated_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub rules: Vec<CallRule>,
+    /// The contacts and Sources whose "Always … for Ahmed?" offer was turned down (2.0.0-x), newest first, as sent.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub declined: Vec<serde_json::Value>,
+    /// The choices that follow the account (2.0.0-x), as sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<serde_json::Value>,
+}
+
+/// One call rule: for a contact (`number` and/or `name`), a contact group (Android only) or a Source (`source_app`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallRule {
+    pub id: String,
+    /// `contact`, `group` or `source`.
+    pub kind: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub number: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub name: Option<String>,
+    /// `favourites`, `saved_contacts` or `unknown_numbers`.
+    #[serde(default, deserialize_with = "lenient")]
+    pub group: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub source_app: Option<String>,
+    /// `ask`, `always_transcribe`, `always_audio` or `dont_record`.
+    pub action: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub created_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub updated_at: Option<String>,
 }
 
 /// How long a deleted recording can be restored when the server does not say (contract 2.0.0-b).

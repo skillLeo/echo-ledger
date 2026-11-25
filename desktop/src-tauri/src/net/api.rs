@@ -1154,6 +1154,43 @@ impl ApiClient {
         Ok(Some(all))
     }
 
+    /// `GET /api/call-rules` (since 2.0.0-w, behind the `call_rules` flag; `404 not_found` while it is off).
+    pub async fn call_rules(&self) -> AppResult<CallRules> {
+        let resp = self.authed(self.http.get(self.url("call-rules")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/call-rules/settings`: any of `after_call`, `ask_when` and `short_calls`; the whole answer back.
+    pub async fn put_call_rule_settings(&self, settings: &serde_json::Value) -> AppResult<CallRules> {
+        let resp = self.authed(self.http.put(self.url("call-rules/settings")))?.json(settings).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/call-rules`: one rule, `201` when new, `200` when it replaced the one for the same contact or Source.
+    pub async fn create_call_rule(&self, rule: &serde_json::Value) -> AppResult<CallRule> {
+        let resp = self.authed(self.http.post(self.url("call-rules")))?.json(rule).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/call-rules/{id}`: its `action` and/or `name`.
+    pub async fn update_call_rule(&self, id: &str, patch: &serde_json::Value) -> AppResult<CallRule> {
+        let resp = self.authed(self.http.patch(self.call_rule_url(id)?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/call-rules/{id}`: `204`.
+    pub async fn delete_call_rule(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.call_rule_url(id)?))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `api/call-rules/<id>` with the id as one path segment.
+    fn call_rule_url(&self, id: &str) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("call-rules")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(id);
+        Ok(url)
+    }
+
     /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
     fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
         let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;

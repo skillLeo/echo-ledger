@@ -438,6 +438,12 @@ describe("wire types", () => {
     expect(known).toContain("v21_urdu");
   });
 
+  it("call rules carry the fields the Rust models send (2.0.0-w)", () => {
+    for (const name of ["CallRules", "CallRule"]) {
+      expect(sorted(tsInterfaceKeys(name)), name).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name, false)));
+    }
+  });
+
   it("a screen has the fields the Rust model reads, file_name and said included (2.0.0-e)", () => {
     expect(sorted(tsInterfaceKeys("ScreenMoment"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ScreenMoment"), "ScreenMoment", false)));
   });

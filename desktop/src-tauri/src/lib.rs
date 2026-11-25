@@ -9,6 +9,7 @@ pub mod app_menu;
 pub mod assist;
 pub mod audio;
 pub mod call_guard;
+pub mod call_rules;
 mod commands;
 pub mod deep_link;
 pub mod detect;
@@ -819,6 +820,11 @@ pub fn run() {
             commands::client_create,
             commands::session_opened,
             commands::session_unopen,
+            commands::call_rules_get,
+            commands::call_rules_settings_set,
+            commands::call_rule_save,
+            commands::call_rule_update,
+            commands::call_rule_delete,
             commands::sessions_opened,
             commands::sessions_unopened,
             commands::lists_get,
