@@ -80,7 +80,7 @@ it('keeps each format\'s extension left to right and reads the menu in Urdu', fu
     $page = Livewire::test(ListCaptureSessions::class)->selectTableRecords($this->recordings->pluck('id')->all());
     $organise = collect(collect(collect($page->instance()->getTable()->getToolbarActions())->last()->getActions())[0]->getActions());
     expect($organise->map(fn ($a): string => (string) $a->getLabel())->all())
-        ->toBe(['ترتیب', 'پن کریں', 'پن ہٹائیں', 'اہم نشان لگائیں', 'اہم کا نشان ہٹائیں', 'ہمیشہ رکھیں', 'ہمیشہ رکھنا بند کریں', 'پروجیکٹ میں منتقل کریں', 'لیبل لگائیں', 'لیبل ہٹائیں', 'ٹرانسکرائب کریں…']);
+        ->toBe(['منظم کریں', 'پن کریں', 'پن ہٹائیں', 'اہم نشان لگائیں', 'اہم کا نشان ہٹائیں', 'ہمیشہ رکھیں', 'ہمیشہ رکھنا بند کریں', 'پروجیکٹ میں منتقل کریں', 'لیبل لگائیں', 'لیبل ہٹائیں', 'ٹرانسکرائب کریں…']);
 });
 
 /** The notices sent so far, as JSON (read the way assertNotified reads them, so they are taken). */
