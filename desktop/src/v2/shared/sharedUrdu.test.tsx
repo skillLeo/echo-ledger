@@ -28,10 +28,11 @@ const iso = (value: string | number) => `${FSI}${value}${PDI}`;
 const RLM = "\u200F";
 /**
  * The times in an element: in Urdu each is one piece in its own direction (dir="auto", not English's forced
- * left-to-right .el-ltr), so an Urdu date ("23 نومبر · 2:00 PM") reads right to left with its day first.
+ * left-to-right .el-ltr), its clock one left-to-right piece inside it, so an Urdu date ("23 نومبر · 2:00 PM") reads right
+ * to left with its day first and "2:00 PM" stays whole.
  */
 const timesIn = (el: Element) => [...el.querySelectorAll("span")].filter((s) => /\d:\d\d/.test(s.textContent ?? "") && !s.querySelector("span"))
-  .map((s) => (s.getAttribute("dir") === "auto" && !s.classList.contains("el-ltr") ? "own direction" : s.className || "plain"));
+  .map((s) => (s.getAttribute("dir") === "ltr" && s.parentElement?.getAttribute("dir") === "auto" ? "own direction" : s.className || "plain"));
 /** An element's text without the isolates, to read a whole line. */
 const plain = (el: Element) => stripIsolates(el.textContent ?? "");
 

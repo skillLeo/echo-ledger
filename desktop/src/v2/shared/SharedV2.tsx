@@ -56,7 +56,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
   /** Saved: a recording (`session_id`) or a project (`client_id`) is now in this workspace. */
   onSaved?: (saved: { session_id?: string; client_id?: string }, item: SharedItem) => void;
 }) {
-  const { t, lang } = useT();
+  const { t, tc, lang } = useT();
   const [data, setData] = useState<SharedData>({ withMe: null, links: null, requests: null });
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +286,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
 
       {/* The tabs' names are the sidebar's (SHARED_TABS, in English), put in the account's language here. */}
       <Tabs label={t("Shared")} value={tab} onChange={onTab}
-        tabs={SHARED_TABS.map(([value, label]) => ({ value, label: counts[value] === null ? t(label) : t(":tab · :count", { tab: t(label), count: counts[value] }) }))}>
+        tabs={SHARED_TABS.map(([value, label]) => ({ value, label: counts[value] === null ? t(label) : tc(":tab · :count", counts[value] ?? 0, { tab: t(label) }) }))}>
         {tab === "with-me" ? withMePanel : tab === "links" ? linksPanel : requestsPanel}
       </Tabs>
 

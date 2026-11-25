@@ -157,6 +157,6 @@ export function receivedText(count: number): string {
 export function limitsText(link: Pick<RequestLink, "max_files" | "max_mb">): string {
   if (link.max_files && link.max_mb) return tc("Up to :count file of :mb MB|Up to :count files of :mb MB", link.max_files, { mb: link.max_mb });
   if (link.max_files) return tc("Up to :count file|Up to :count files", link.max_files);
-  if (link.max_mb) return t("Files of up to :mb MB", { mb: link.max_mb });
+  if (link.max_mb) return tc("Files of up to :mb MB", link.max_mb, { mb: link.max_mb });
   return "";
 }

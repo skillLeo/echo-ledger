@@ -2,7 +2,7 @@
 // the account's language (src/i18n): read when they are shown, so a change of language shows at once.
 import { createElement, Fragment, type ReactNode } from "react";
 import type { SharedItem } from "../../lib/ipc";
-import { formatWhen } from "../../lib/format";
+import { clockTime, formatWhen } from "../../lib/format";
 import { isRtl, t } from "../../i18n";
 
 /** A shared item's title: the recording's name (Recording when it has none), else the item's or the project's. */
@@ -17,11 +17,18 @@ export function senderOf(item: Pick<SharedItem, "from">): string {
 
 /**
  * A date and time with words ("Yesterday · 4:05 PM"): one piece, kept left to right in its own face; .el-num is for bare
- * numbers. In Urdu it is one piece in its own direction instead: its date is in Urdu ("23 نومبر · 2:00 PM", read right to
- * left, the day first) and a forced left-to-right order would turn the month and the time round.
+ * numbers. In Urdu it is one piece in its own direction instead, its clock one left-to-right piece inside it: the date is
+ * in Urdu ("23 نومبر · 2:00 PM", read right to left, the day first), and a forced left-to-right order would turn the
+ * month and the time round, while a free one would put PM before 2:00.
  */
-export const when = (iso: string): ReactNode =>
-  isRtl() ? createElement("span", { dir: "auto" }, formatWhen(iso)) : createElement("span", { className: "el-ltr" }, formatWhen(iso));
+export function when(iso: string): ReactNode {
+  const words = formatWhen(iso);
+  if (!isRtl()) return createElement("span", { className: "el-ltr" }, words);
+  const clock = clockTime(new Date(iso));
+  if (!clock || !words.endsWith(clock)) return createElement("span", { dir: "auto" }, words);
+  // The clock stays on one line: never 2:00 at the end of one and PM at the start of the next.
+  return createElement("span", { dir: "auto" }, words.slice(0, -clock.length), createElement("span", { dir: "ltr", style: { whiteSpace: "nowrap" } }, clock));
+}
 
 /** "From Imran · Yesterday · 4:05 PM": who sent it, and when (the time one left-to-right piece). */
 export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): ReactNode {
