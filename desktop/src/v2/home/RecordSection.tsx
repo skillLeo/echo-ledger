@@ -25,7 +25,8 @@ export type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefine
 export function recordingLine(status: Pick<AppStatus, "recording" | "paused">): string {
   const r = status.recording;
   if (!r) return "Not recording";
-  const what = r.mode === "mic_note" ? "voice note" : sourceAppLabel(r.sourceApp);
+  // The line is still English (Home is not in the account's language yet): the app's words in English too.
+  const what = r.mode === "mic_note" ? "voice note" : sourceAppLabel(r.sourceApp, "en");
   return `${status.paused ? "Paused" : "Recording"} · ${what}`;
 }
 

@@ -293,7 +293,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
             </span>
           )}
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
-          {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
+          {/* A chord reads left to right in every language (⇧⌘L, never L⌘⇧ in a right-to-left menu). */}
+          {item.shortcut && <kbd className="el-menu__shortcut el-caption" dir="ltr" aria-hidden="true">{item.shortcut}</kbd>}
           {item.items && <Icon icon={ChevronEndIcon} directional />}
         </div>
         {subOpen && item.items && (

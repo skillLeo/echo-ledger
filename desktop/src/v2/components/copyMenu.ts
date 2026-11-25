@@ -1,5 +1,6 @@
 import type { MenuItem } from "./Menu";
 import { ClockIcon, CopyIcon, SparkleIcon, TranscriptIcon } from "./icons";
+import { t } from "../../i18n";
 
 export type CopyHandlers = {
   /** The transcript as it reads on screen. */
@@ -12,11 +13,20 @@ export type CopyHandlers = {
 
 export type CopyWords = { text: string; withTimestamps: string; withoutTimestamps: string; forAi: string };
 
+/** The items' words, in the window's language whenever they are read. */
 export const COPY_WORDS: CopyWords = {
-  text: "Copy text",
-  withTimestamps: "Copy with timestamps",
-  withoutTimestamps: "Copy without timestamps",
-  forAi: "Copy for AI",
+  get text() {
+    return t("Copy text");
+  },
+  get withTimestamps() {
+    return t("Copy with timestamps");
+  },
+  get withoutTimestamps() {
+    return t("Copy without timestamps");
+  },
+  get forAi() {
+    return t("Copy for AI");
+  },
 };
 
 /**

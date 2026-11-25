@@ -27,10 +27,10 @@ export interface InProgressRow {
 
 /** The rows of In progress (pure): this computer's uploads first, then the Library's recordings still moving. */
 export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InProgressRow[] {
-  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u), line: uploadLine(u), recordingId: null }));
+  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u, "en"), line: uploadLine(u, "en"), recordingId: null }));
   const moving = items
     .filter((i) => !i.deleted)
-    .map((i) => ({ item: i, step: stepOf(i) }))
+    .map((i) => ({ item: i, step: stepOf(i, null, "en") }))
     .filter(({ step }) => step.step !== null)
     .map(({ item, step }) => ({ id: item.id, title: recordingName(item.title), line: step.line ?? "", recordingId: item.id }));
   return [...sending, ...moving];
@@ -238,7 +238,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
               <HourglassIcon size={22} />
               <div className="action-card-main">
                 <span className="action-card-title">Transcribe or delete?</span>
-                <span className="small muted">{pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}</span>
+                <span className="small muted">{pending.length > 0 ? waitingSummary(pending, undefined, "en") : `${status.pendingDecisions} waiting for your decision`}</span>
               </div>
               <button type="button" className="btn text" onClick={() => onReview(pending[0]?.id ?? null)}>Review</button>
             </div>
@@ -293,7 +293,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
       {skipped.length > 0 && (
         <section className="skipped-calls" aria-label="Skipped calls" data-testid="skipped-calls">
           <div className="skipped-head">
-            <span className="skipped-line">{skippedLine(skipped.length)}</span>
+            <span className="skipped-line">{skippedLine(skipped.length, "en")}</span>
             <button type="button" className="btn text compact" aria-expanded={showSkipped} aria-controls={showSkipped ? "skipped-list" : undefined}
               onClick={() => setShowSkipped((v) => !v)}>
               {showSkipped ? "Hide" : "Show"}
@@ -302,7 +302,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
           {showSkipped && (
             <ul id="skipped-list" className="skipped-list">
               {skipped.map((item) => {
-                const meta = skippedMeta(item);
+                const meta = skippedMeta(item, undefined, "en");
                 return (
                   <li key={item.id} className="skipped-row">
                     <span className="skipped-meta" dir="auto" title={meta}>{meta}</span>

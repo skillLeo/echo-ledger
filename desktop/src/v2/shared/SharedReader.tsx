@@ -12,10 +12,10 @@ import { api, errorMessage, type SharedItem, type TranscriptDetail, type Transcr
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
 import { failureLine, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, transcriptStatusLine } from "../../lib/languages";
 import { openSettingsSection } from "../../lib/entitlements";
-import { NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
-import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
+import { needsKeyText } from "../../views/main/Upgrade";
+import { playerHint, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
 import { transcribingLine } from "../../lib/progress";
-import { NO_AUDIO_HINT } from "../../lib/pending";
+import { noAudioHint } from "../../lib/pending";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { lineDir, t, useT } from "../../i18n";
@@ -325,7 +325,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
             <div className="el-recording__toggles">
               <Toggle label={t("Skip silence")} checked={skipSilence} onChange={setSkipSilence} />
               <Toggle label={t("Follow")} checked={follow} onChange={setFollow} />
-              <span className="el-caption el-secondary el-recording__keys">{PLAYER_HINT}</span>
+              <span className="el-caption el-secondary el-recording__keys">{playerHint()}</span>
             </div>
             {bookmarks.length > 0 && (
               <ul className="el-bookmarks" aria-label={t("Bookmarks")}>
@@ -361,7 +361,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
             action={<Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />
         ) : tDetail?.status === "failed" ? (
           <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("Transcription failed.")}
-            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${NO_AUDIO_HINT}` : ""}{tDetail.error_code === "needs_transcription_key" ? ` ${NEEDS_KEY_TEXT}` : ""}</>}
+            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${noAudioHint()}` : ""}{tDetail.error_code === "needs_transcription_key" ? ` ${needsKeyText()}` : ""}</>}
             action={needsKeyAction(tDetail.error_code) ? (
               <Button onClick={() => openSettingsSection("transcription-key")}>{tDetail.error_code === "own_key_rejected" ? t("Check my Groq key") : t("Add my Groq key")}</Button>
             ) : undefined} />

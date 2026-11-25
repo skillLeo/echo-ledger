@@ -236,6 +236,30 @@ describe("the Library's right-click menus (UX-22)", () => {
     expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["usman"], action: "important", clientId: null, label: null });
   });
 
+  it("Mark as read and Mark as unread are in the selection bar's ⋮ (contract 2.0.0-y): both for a mix, one request for the picked", async () => {
+    const mixed = ITEMS.map((i) => ({ ...i, opened: i.id !== "usman" }));
+    respond("library_list", mixed);
+    respond("library_refresh", mixed);
+    respondWith("sessions_opened", (args) => ({ done: (args as { ids: string[] }).ids, not_found: [] }));
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    const more = () => {
+      fireEvent.click(within(screen.getByRole("toolbar", { name: "Selected recordings" })).getByRole("button", { name: "More actions" }));
+      return screen.getByRole("menu", { name: "More actions" });
+    };
+    const read = (menu: HTMLElement) => words(menu).filter((w) => /^Mark as (un)?read$/.test(w ?? ""));
+    expect(read(more())).toEqual(["Mark as read", "Mark as unread"]);
+    // The key goes on the one it runs: Mark as unread, as one of them is read.
+    expect(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitem", { name: /Mark as unread/ })).toHaveTextContent("Ctrl+Shift+U");
+    expect(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitem", { name: /Mark as read/ })).not.toHaveTextContent("Ctrl+Shift+U");
+    fireEvent.click(within(screen.getByRole("menu", { name: "More actions" })).getByRole("menuitem", { name: /Mark as read/ }));
+    await act(flushAsync);
+    expect(callsOf("sessions_opened")).toEqual([{ ids: ["bilal", "usman"] }]);
+    // Every one read now: only Mark as unread.
+    expect(read(more())).toEqual(["Mark as unread"]);
+  });
+
   it("Trash: a deleted recording's Restore | Delete immediately…; Trash's own Empty trash… asks, then erases every one", async () => {
     const BIN = [
       { id: "old1", title: "Old call", deleted_at: "2026-11-23T09:00:00Z", erase_at: "2026-11-25T09:00:00Z", duration_ms: 60_000 },
