@@ -206,7 +206,8 @@ describe("Settings › Appearance › Language", () => {
     await act(async () => answer({ ...REPLY, data: { ...ACCOUNT, language: "ur" } }));
     await settle();
     await waitFor(() => expect(language()).toBe("ur"));
-    expect(within(screen.getByRole("radiogroup", { name: "Language" })).getByRole("radio", { name: "اردو" })).toBeChecked();
+    // The window is in Urdu now, the setting's title too (D3b): Language is زبان.
+    expect(within(screen.getByRole("radiogroup", { name: "زبان" })).getByRole("radio", { name: "اردو" })).toBeChecked();
   });
 
   it("a change that couldn't be sent is said as the account pages say it", async () => {

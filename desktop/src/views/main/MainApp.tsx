@@ -13,10 +13,10 @@ import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
 import { SharedView } from "./SharedView";
 import { RequestLinksSheet } from "./RequestLinks";
-import { settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
+import { settingsAvailability, signOutBody } from "./SettingsView";
 import { ConfirmHost } from "./ConfirmHost";
 import { roleOf } from "./AccountSettings";
-import { searchSettings } from "../../lib/settingsIndex";
+import { palettePages, paletteSettings } from "../../v2/settings/palette";
 import { OnboardingView } from "./OnboardingView";
 import { OtherSideBanner, PermissionLossNotice } from "./Permissions";
 import { AfterCallNotice } from "./AfterCallNotice";
@@ -1148,8 +1148,7 @@ export default function MainApp() {
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
   const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
-  const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
-    .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
+  const findSettings = (query: string) => paletteSettings(query, settingsAvailable, openAccount);
   const upgradeOpen = !!openUpgradeRequest(entitlements);
   // Every page, place, project and Settings page by name, for the window's search (the palette).
   const pages: ShellPage[] = [
@@ -1162,7 +1161,7 @@ export default function MainApp() {
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
-    ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
+    ...palettePages(settingsAvailable, openAccount),
     { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
