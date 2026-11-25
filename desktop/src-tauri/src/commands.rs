@@ -542,8 +542,8 @@ pub async fn account_call(app: AppHandle, action: String, id: Option<String>, bo
         return Err(AppError::msg("That is not something this app can change."));
     }
     let reply = state.api()?.account_request(method, &path, &body).await?;
-    // The name, the picture or the email changed: the shell's avatar and name follow.
-    if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm") {
+    // The name, the picture, the email or the language changed: the shell's avatar, name and words follow.
+    if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm" | "language") {
         let _ = app.emit("account:changed", ());
     }
     Ok(reply)

@@ -62,6 +62,21 @@ fn the_account_carries_its_picture_password_and_pending_email_since_2_0_0_l() {
 }
 
 #[test]
+fn the_account_carries_its_colour_and_language_since_2_0_0_r() {
+    // BE-06: the avatar's colour, picked once by the server, and the interface language, the same on every device.
+    let account: AccountDto = serde_json::from_str(&sample("account")).unwrap();
+    assert_eq!(account.avatar_color, Some(1));
+    assert_eq!(account.language.as_deref(), Some("en"));
+    // Handed to the window as the server wrote them; an older server's account has neither.
+    let shown = serde_json::to_value(&account).unwrap();
+    assert_eq!((shown["avatar_color"].as_u64(), shown["language"].as_str()), (Some(1), Some("en")));
+    let older: AccountDto = serde_json::from_str(r#"{"name":"A","email":"a@example.test","avatar_color":"teal","language":7}"#).unwrap();
+    assert_eq!((older.avatar_color, older.language.as_deref()), (None, None));
+    let shown = serde_json::to_value(&older).unwrap();
+    assert!(shown.get("avatar_color").is_none() && shown.get("language").is_none());
+}
+
+#[test]
 fn the_account_names_staff_and_lists_the_workspaces_as_the_server_sends_them() {
     // v1.6 (P4): the switcher's list and the avatar menu's Admin panel come from this answer.
     let account: desktop_lib::net::models::AccountDto = serde_json::from_str(&sample("account")).expect("account.json");

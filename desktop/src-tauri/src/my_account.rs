@@ -19,10 +19,12 @@ pub struct Action {
 }
 
 /// Every action the window may ask for; anything else is refused before a request is made.
-pub const ACTIONS: [Action; 18] = [
+pub const ACTIONS: [Action; 19] = [
     Action { name: "security", method: "GET", path: "account/security" },
     Action { name: "proof_code", method: "POST", path: "account/proof-code" },
     Action { name: "name", method: "PATCH", path: "account" },
+    // The interface language (BE-06): the same PATCH, its own name so the window's refusal words fit.
+    Action { name: "language", method: "PATCH", path: "account" },
     Action { name: "avatar_remove", method: "DELETE", path: "account/avatar" },
     Action { name: "email", method: "POST", path: "account/email" },
     Action { name: "email_confirm", method: "POST", path: "account/email/confirm" },
@@ -369,6 +371,7 @@ mod tests {
     #[test]
     fn only_the_listed_actions_reach_the_server_and_ids_stay_in_their_segment() {
         assert_eq!(route("name", None).unwrap(), ("PATCH", "account".to_string()));
+        assert_eq!(route("language", None).unwrap(), ("PATCH", "account".to_string()));
         assert_eq!(route("two_factor_off", None).unwrap(), ("DELETE", "account/two-factor".to_string()));
         assert_eq!(route("device_sign_out", Some("01m7zddc7v12m6cg01k9mbxa2h")).unwrap(), ("DELETE", "account/devices/01m7zddc7v12m6cg01k9mbxa2h".to_string()));
         assert_eq!(route("passkey_rename", Some("abc_DEF-1")).unwrap().1, "account/passkeys/abc_DEF-1");

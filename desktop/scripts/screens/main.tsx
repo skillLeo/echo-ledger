@@ -294,6 +294,7 @@ const SERVER_NOTICES: Record<string, unknown> = {
   "library-announcement": { appUpdate: null, announcement: { text: "New in 1.6: send a recording to WhatsApp from its page, as text, with the voice, or as a link.", level: "info", until: null }, maintenance: null, waiting: null },
 };
 
+let accountLanguage = params.get("applang") === "ur" ? "ur" : "en";
 const commands: Record<string, (args: Args) => unknown> = {
   ready_last: () => READY_REPORT,
   ready_check: () => READY_REPORT,
@@ -329,7 +330,13 @@ const commands: Record<string, (args: Args) => unknown> = {
     // "library-banners-mac": a forgotten permission and 80 % of the minutes at once; one banner shows.
     budget: screen === "library-banners-mac" ? "warn" : "ok",
   }),
-  account_get: () => (params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
+  // "&applang=ur" (with v21_urdu in uiflags): the account's language is Urdu, so the app speaks it (src/i18n); the
+  // Language setting's PATCH is answered as the server would.
+  account_get: () => ({ ...(params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT), language: accountLanguage }),
+  account_call: ({ action, body }) => {
+    if (action === "language") accountLanguage = String((body as { language?: string } | null)?.language ?? "en");
+    return { ok: true, status: 200, data: { ...ACCOUNT, language: accountLanguage }, code: null, message: null, accepts: [], errorCodes: null, errors: null };
+  },
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",

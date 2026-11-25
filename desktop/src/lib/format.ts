@@ -1,4 +1,6 @@
-// Formatting helpers shared by views (pure; covered by Vitest in Phase 4).
+// Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
+// language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
+import { dateLocale, language, numberLocale } from "../i18n";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
@@ -43,8 +45,8 @@ export function setClock24(on: boolean): void {
 }
 export function clockTime(date: Date): string {
   return clock24
-    ? date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-    : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    ? date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 export function formatWhen(iso?: string, now: Date = new Date()): string {
@@ -57,7 +59,7 @@ export function formatWhen(iso?: string, now: Date = new Date()): string {
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
-  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
+  return `${date.toLocaleDateString(language() === "ur" ? "ur-PK" : [], { month: "short", day: "numeric" })} · ${time}`;
 }
 
 export function timestamp(ms: number): string {
@@ -255,12 +257,12 @@ export function fileSize(bytes: number): string {
 
 /** Money as the apps write it: "Rs 2,999" (whole rupees, grouped). */
 export function rupees(amount: number): string {
-  return `Rs ${Math.round(amount).toLocaleString("en-US")}`;
+  return `Rs ${Math.round(amount).toLocaleString(numberLocale())}`;
 }
 
 /** A whole number with groups: "3,000". */
 export function count(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
+  return Math.round(n).toLocaleString(numberLocale());
 }
 
 /** A date in a row: "9 Dec" within this year, "9 Dec 2026" otherwise, in this computer's time zone. */
@@ -269,7 +271,7 @@ export function rowDate(iso: string | null | undefined, now: Date = new Date()):
   const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(at.getTime())) return "";
   const thisYear = at.getFullYear() === now.getFullYear();
-  return at.toLocaleDateString("en-GB", thisYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep");
+  return at.toLocaleDateString(dateLocale(), thisYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep");
 }
 
 /** A date in a row that always has its year: "9 Dec 2026". */
@@ -281,12 +283,12 @@ export function rowDateWithYear(iso: string | null | undefined): string {
 export function sentenceDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
 }
 
 /** A time of day by Settings › Appearance › Times: "3:42 pm" (12-hour) or "15:42" (24-hour). */
 export function formatTime(date: Date): string {
-  if (clock24) return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  if (clock24) return date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const h = date.getHours();
   const m = date.getMinutes();
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;

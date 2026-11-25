@@ -31,7 +31,7 @@ export interface FieldCode {
 export type AccountAction =
   | "security" | "proof_code" | "name" | "avatar_remove" | "email" | "email_confirm" | "email_cancel" | "password"
   | "device_rename" | "device_sign_out" | "browser_sign_out" | "google_unlink" | "passkey_rename" | "passkey_remove"
-  | "two_factor_begin" | "two_factor_confirm" | "recovery_codes" | "two_factor_off";
+  | "two_factor_begin" | "two_factor_confirm" | "recovery_codes" | "two_factor_off" | "language";
 
 /** `GET /api/account/security`. */
 export interface SecurityInfo {
