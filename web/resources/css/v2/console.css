@@ -233,6 +233,12 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     height: var(--el-icon-sm);
 }
 
+/* UX-18: on Activity, the avatar of the person an item is about takes its kind's 52 px tile's place, centred in it, so
+   every row's words start in line. */
+.el-row-btn > .v2-avatar.is-list {
+    margin-inline: calc((52px - var(--el-desktop-avatar-list)) / 2);
+}
+
 /* UX-18: Settings › Profile, 96 px. */
 .v2-avatar.is-profile {
     width: var(--el-desktop-avatar-profile);

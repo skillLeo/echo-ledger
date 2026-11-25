@@ -49,8 +49,9 @@
             <div class="v2-um-head" data-account-head>
                 <x-el.avatar :person="$user" size="large" />
                 <span class="v2-um-text">
-                    <span class="v2-um-name" dir="auto">{{ $name }}</span>
-                    <span class="v2-um-email" dir="ltr">{{ $user->email }}</span>
+                    {{-- Each in its own direction, every line at the menu's start (as x-el.person). --}}
+                    <span class="v2-um-name"><bdi>{{ $name }}</bdi></span>
+                    <span class="v2-um-email"><bdi dir="ltr">{{ $user->email }}</bdi></span>
                     <span class="v2-um-plan">{{ $planLine }}</span>
                 </span>
             </div>

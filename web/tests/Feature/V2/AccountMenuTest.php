@@ -108,8 +108,8 @@ it('opens a menu with the header, then Add photo without a photo, Theme, Plan & 
     // The header is who it is (not a link): the 40 px avatar, the name, the email, the plan and the month's minutes.
     preg_match('~<div class="v2-um-head" data-account-head>.*?</div>~s', $menu, $head);
     expect($head[0] ?? '')->toContain('<span class="v2-avatar is-large is-coloured" data-avatar-color="0"')
-        ->toContain('<span class="v2-um-name" dir="auto">Saif Hassam</span>')
-        ->toContain('<span class="v2-um-email" dir="ltr">saif@example.com</span>')
+        ->toContain('<span class="v2-um-name"><bdi>Saif Hassam</bdi></span>')
+        ->toContain('<span class="v2-um-email"><bdi dir="ltr">saif@example.com</bdi></span>')
         ->toMatch('~<span class="v2-um-plan">[^<]+</span>~')
         ->not->toContain('<a ');
 
