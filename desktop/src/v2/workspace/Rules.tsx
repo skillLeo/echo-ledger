@@ -8,7 +8,6 @@ import { RULE_APPS, ruleKinds, ruleText } from "../../lib/sharing";
 import { useT } from "../../i18n";
 import { Button, Card, Icons, List, ListRow, Select, TextField } from "../components";
 import { sayProblem, type Say } from "../library/organise";
-import { windowLine } from "../shared/model";
 
 export function RulesV2({ projectId, projectName, say }: {
   projectId: string;
@@ -89,7 +88,7 @@ export function RulesV2({ projectId, projectName, say }: {
         {list.length > 0 && (
           <List label={t(":name filing rules", { name: projectName })} className="el-group__rows">
             {list.map((rule) => (
-              <ListRow key={String(rule.id)} compact iconStyle="plain" title={windowLine(ruleText(rule))}
+              <ListRow key={String(rule.id)} compact iconStyle="plain" title={ruleText(rule)}
                 icon={rule.kind === "app" ? (p) => <Icons.SourceAppIcon app={rule.value} {...p} /> : rule.kind === "contact" ? Icons.PhoneIcon : Icons.TranscriptIcon}
                 control={<Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={t("Remove the rule :rule", { rule: ruleText(rule) })} disabled={busy} onClick={() => void remove(rule)} />} />
             ))}

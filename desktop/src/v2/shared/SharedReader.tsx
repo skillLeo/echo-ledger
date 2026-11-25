@@ -18,13 +18,13 @@ import { transcribingLine } from "../../lib/progress";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { NO_TARGET, type Notify } from "../../lib/notice";
-import { t, useT } from "../../i18n";
+import { lineDir, t, useT } from "../../i18n";
 import { Badge, Banner, Button, Card, copyMenuItems, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Toggle, Transcript, type Segment } from "../components";
 import { Menu } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { FindBar } from "../library/TranscriptToolsV2";
 import { aiHeader } from "../library/organise";
-import { quoted, sentLine, sharedTitle, when, windowLine } from "./model";
+import { quoted, sentLine, sharedTitle, when } from "./model";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 type ShowAs = "original" | TranscriptView;
@@ -55,7 +55,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   onSave: () => void;
   onRemove: () => void;
 }) {
-  const { t } = useT();
+  const { t, rtl } = useT();
   const session = item.session!;
   const title = sharedTitle(item);
   const transcriptId = session.transcript?.final_transcript_id ?? session.transcript?.live_transcript_id ?? null;
@@ -249,6 +249,11 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
     session.client?.name ? <span key="project" dir="auto">{session.client.name}</span> : null,
   ].filter(Boolean).flatMap((part, i) => (i ? [" · ", part] : [part]));
   const engine = transcribedIn(session.transcript);
+  // A line of pieces (the source and device; when, how long, the project) runs in the window's direction in Urdu, its
+  // first piece at the start edge whatever its letters; "auto" in English, as always.
+  const pieces = rtl ? "rtl" : "auto";
+  /** Who sent it, when, and their note: one line of text, its direction from its own words (lineDir). */
+  const sent = sentLine(item) + (item.note ? " · " + quoted(item.note) : "");
   const finalStatus = session.transcript?.final_status ?? null;
   const retrying = tDetail && isTranscribing(tDetail.status) ? retryLine(tDetail) : null;
   const warning = scriptWarning(session.transcript?.script_warning);
@@ -271,16 +276,17 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{t("Shared")}</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
-          <p className="el-page__meta el-secondary" data-testid="source-line" dir="auto">
-            {windowLine(<><SourceAvatar item={session} size="sm" /><span dir="auto">{[source, device].filter(Boolean).join(" · ")}</span></>)}
+          <p className="el-page__meta el-secondary" data-testid="source-line" dir={pieces}>
+            <SourceAvatar item={session} size="sm" />
+            <span dir="auto">{[source, device].filter(Boolean).join(" · ")}</span>
           </p>
           <h1 className="el-title-l" dir="auto">{title}</h1>
           <p className="el-page__meta el-secondary" data-testid="recorded-line" dir="auto">
-            <span dir="auto" data-testid="recorded">{windowLine(recorded.length ? recorded : null)}</span>
+            <span dir={pieces} data-testid="recorded">{recorded}</span>
             <Badge>{t("Read-only")}</Badge>
             {item.saved_at && <Badge tone="success">{t("Saved to my library")}</Badge>}
           </p>
-          {engine && <p className="el-caption el-secondary" dir="auto">{windowLine(t("Transcribed in :engine", { engine }))}</p>}
+          {engine && <p className="el-caption el-secondary" dir={lineDir(t("Transcribed in :engine", { engine }))}>{t("Transcribed in :engine", { engine })}</p>}
           {retrying && <p className="el-caption el-secondary" role="status" dir="auto">{retrying}</p>}
           {warning && <p className="el-caption el-row__error" role="status" dir="auto">{warning}</p>}
         </div>
@@ -292,7 +298,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
       </header>
 
       <Banner icon={Icons.InfoIcon} testId="reader-sent">
-        <span dir="auto">{sentLine(item)}{item.note ? " · " + quoted(item.note) : ""}</span>{" "}<span dir="auto">{readOnlyLine()}</span>
+        <span dir={lineDir(sent)}>{sent}</span>{" "}<span dir="auto">{readOnlyLine()}</span>
       </Banner>
 
       <Card className="el-page__player">

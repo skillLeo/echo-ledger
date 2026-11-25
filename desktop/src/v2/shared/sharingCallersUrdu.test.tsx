@@ -10,6 +10,7 @@ import { answerConfirm } from "../../test/confirm";
 import { answerConfirmForTests } from "../../lib/confirm";
 import { audienceText, expiryChoices, filedByRuleText, limitsText, linkState, receivedText, requestState, revokeLinkQuestion, ruleKinds, ruleText, viewsText } from "../../lib/sharing";
 import { FSI, PDI, resetLanguageForTests, setLanguage } from "../../i18n";
+import { formatWhen } from "../../lib/format";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { RequestLinksSheet } from "../../views/main/RequestLinks";
 import { SharedView } from "../../views/main/SharedView";
@@ -75,8 +76,9 @@ describe("classic windows in an Urdu window keep their English", () => {
     expect(rows[0].querySelector(".badge")).toHaveClass("state-active");
     expect(rows[0].querySelector(".badge")).toHaveTextContent("Active");
     expect(rows[1].querySelector(".badge")).toHaveClass("state-revoked");
-    // The sharing words are English and never isolated (a date is lib/format's, in the window's language).
-    expect(rows.map((r) => r.querySelector(".data-main")?.textContent ?? "").join(" ")).not.toMatch(/[\u2066-\u2069]/);
+    // The sharing words are English and never isolated; a date is lib/format's, in the window's language (its own run).
+    const lines = rows.map((r) => r.querySelector(".data-main")?.textContent ?? "").join(" ");
+    expect(lines.replace(/\u2067[\s\S]*?\u2069\u2069/g, "")).not.toMatch(/[\u2066-\u2069]/);
   });
 
   it("the words in English whatever the window's language (lang \"en\"), with no isolates", () => {
@@ -121,6 +123,9 @@ describe("the share sheet in Urdu (the recording page's Share)", () => {
     const rows = within(screen.getByRole("list", { name: "شیئر لنکس" })).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent(`صرف ${iso("ana@example.com")}`);
     expect(rows[0]).toHaveTextContent(/^.*فعال · .+ کو بنا · .+ کو بند ہو گا · ڈاؤن لوڈ کی اجازت ہے/);
+    // Each date is formatWhen's own run (its day, then its time whole), isolated in the line: never "PM 11:59".
+    expect(rows[0].textContent).toContain(`${iso(formatWhen(LINK.created_at))} کو بنا · ${iso(formatWhen(LINK.expires_at!))} کو بند ہو گا`);
+    expect(formatWhen(LINK.expires_at!)).toMatch(/^\u2067\u2068[^\u2069]+\u2069 · \u2068\d{1,2}:\d{2}\u00A0[^\s\u2069]+\u2069\u2069$/);
     expect(rows[0]).toHaveTextContent(`${iso(`${iso(3)} بار دیکھا گیا`)} · آخری بار`);
     expect(rows[1]).toHaveTextContent("واپس لیا گیا · ");
     expect(rows[1]).toHaveTextContent("کو بند ہو گیا · صرف پڑھیں اور سنیں");
@@ -167,8 +172,8 @@ describe("a project's filing rules in Urdu", () => {
     fireEvent.click(screen.getByRole("button", { name: "قاعدہ شامل کریں" }));
     await act(flushAsync);
     expect(say).toHaveBeenLastCalledWith(`قاعدہ شامل ہو گیا: ${iso(`${iso("Zoom")} سے`)}`);
-    // An app's rule starts with its name in Latin letters: its line still reads right to left (a right-to-left mark first).
-    expect(screen.getByText(`\u200F${iso("Zoom")} سے`)).toHaveAttribute("dir", "auto");
+    // An app's rule starts with its name in Latin letters: its line still reads right to left, from its own words.
+    expect(screen.getByText(`${iso("Zoom")} سے`)).toHaveAttribute("dir", "rtl");
     fireEvent.click(screen.getByRole("button", { name: `قاعدہ ہٹائیں: ${iso(`عنوان میں “${iso("Qureshi")}” ہو`)}` }));
     await act(flushAsync);
     expect(say).toHaveBeenLastCalledWith(`قاعدہ ہٹا دیا گیا: ${iso(`عنوان میں “${iso("Qureshi")}” ہو`)}`, expect.objectContaining({ label: "واپس کریں" }));

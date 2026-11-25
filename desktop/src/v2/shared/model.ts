@@ -2,7 +2,7 @@
 // the account's language (src/i18n): read when they are shown, so a change of language shows at once.
 import { createElement, Fragment, type ReactNode } from "react";
 import type { SharedItem } from "../../lib/ipc";
-import { clockTime, formatWhen } from "../../lib/format";
+import { formatWhen } from "../../lib/format";
 import { isRtl, t } from "../../i18n";
 
 /** A shared item's title: the recording's name (Recording when it has none), else the item's or the project's. */
@@ -16,40 +16,28 @@ export function senderOf(item: Pick<SharedItem, "from">): string {
 }
 
 /**
- * A date and time with words ("Yesterday · 4:05 PM"): one piece, kept left to right in its own face; .el-num is for bare
- * numbers. In Urdu it is one piece in its own direction instead, its clock one left-to-right piece inside it: the date is
- * in Urdu ("23 نومبر · 2:00 PM", read right to left, the day first), and a forced left-to-right order would turn the
- * month and the time round, while a free one would put PM before 2:00.
+ * A date and time with words ("Yesterday · 4:05 PM"): one piece, kept left to right in its own face (.el-ltr); .el-num
+ * is for bare numbers. In Urdu formatWhen is one right-to-left run of the day and the time, each isolated (lib/format),
+ * which .el-ltr keeps whole and on one line.
  */
-export function when(iso: string): ReactNode {
-  const words = formatWhen(iso);
-  if (!isRtl()) return createElement("span", { className: "el-ltr" }, words);
-  const clock = clockTime(new Date(iso));
-  if (!clock || !words.endsWith(clock)) return createElement("span", { dir: "auto" }, words);
-  // The clock stays on one line: never 2:00 at the end of one and PM at the start of the next.
-  return createElement("span", { dir: "auto" }, words.slice(0, -clock.length), createElement("span", { dir: "ltr", style: { whiteSpace: "nowrap" } }, clock));
+export const when = (iso: string): ReactNode => createElement("span", { className: "el-ltr" }, formatWhen(iso));
+
+/**
+ * A line with a date in it ("Stops Nov 4 · 9:00 AM"), given as the line for a date. In English the date is its own
+ * left-to-right piece (.el-ltr) in the line, as always. In Urdu the line is text, the date formatWhen's own run in it,
+ * so a row reads the line's direction from its words (lineDir reads a line of text, not one drawn with a box in it).
+ */
+export function dated(line: (date: string) => string, iso: string): ReactNode {
+  return isRtl() ? line(formatWhen(iso)) : withNode(line(SLOT), when(iso));
 }
 
-/** "From Imran · Yesterday · 4:05 PM": who sent it, and when (the time one left-to-right piece). */
-export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): ReactNode {
-  const from = t("From :name", { name: senderOf(item) });
-  return item.sent_at ? createElement(Fragment, null, from, " · ", when(item.sent_at)) : from;
+/** "From Imran · Yesterday · 4:05 PM": who sent it, and when. */
+export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): string {
+  return [t("From :name", { name: senderOf(item) }), item.sent_at ? formatWhen(item.sent_at) : null].filter(Boolean).join(" · ");
 }
 
 /** The sender's note, in quotes: “Please check the totals” (in Urdu its own isolate, whatever its script). */
 export const quoted = (note: string): string => t("“:note”", { note });
-
-/** U+200F RIGHT-TO-LEFT MARK: invisible, a right-to-left letter for the line's direction. */
-const RLM = "\u200F";
-/**
- * A line of words or values in the window's direction, in a place that finds its own (dir="auto": a row's line, the
- * page's meta lines): in Urdu it starts with a right-to-left mark, so a line that begins with a value in Latin letters
- * ("Imran", "Acme Ltd", "Today", "WhatsApp") still reads right to left, its first piece at the right. English: the
- * line as it is.
- */
-export function windowLine(line: ReactNode): ReactNode {
-  return isRtl() && line !== null && line !== undefined && line !== false && line !== "" ? createElement(Fragment, null, RLM, line) : line;
-}
 
 /**
  * Where a React node (a time in its own span) stands in a line: t("Stops :date", { date: SLOT }) and then

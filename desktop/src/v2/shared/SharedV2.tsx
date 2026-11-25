@@ -9,14 +9,15 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEve
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
 import { audienceText, limitsText, linkStatus, receivedText, requestStatus, revokeLinkQuestion, revokeRequestQuestion, statusText, viewsText, type LinkStatus } from "../../lib/sharing";
 import { confirmAction } from "../../lib/confirm";
-import { t, useT } from "../../i18n";
+import { isRtl, t, useT } from "../../i18n";
+import { formatWhen } from "../../lib/format";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { SHARED_TABS, type SharedTab } from "../../views/main/Sidebar";
 import { BackToTop, Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Tabs, type Tone } from "../components";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
-import { quoted, senderOf, sharedTitle, SLOT, when, windowLine, withNode } from "./model";
+import { dated, quoted, senderOf, sharedTitle, SLOT, when, withNode } from "./model";
 import { RequestLinkSheet } from "./RequestLinkSheet";
 
 /** What each tab lists, read when the page opens; null while loading (a server without it gives an empty list). */
@@ -30,16 +31,28 @@ const STATE_TONE: Record<LinkStatus, Tone> = { active: "success", revoked: "neut
 
 type RowEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>;
 
-/** "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”", the time an isolate. */
+/**
+ * "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”". In English the time is its own
+ * left-to-right piece (.el-ltr); in Urdu the line is text, so the row reads its direction from its words (lineDir).
+ */
 export function sharedMeta(item: SharedItem): ReactNode {
   const name = senderOf(item);
-  return windowLine(<>{item.kind === "project" ? t("Project from :name", { name }) : t("Recording from :name", { name })}{item.sent_at && <> · {when(item.sent_at)}</>}{item.note ? " · " + quoted(item.note) : ""}</>);
+  const from = item.kind === "project" ? t("Project from :name", { name }) : t("Recording from :name", { name });
+  const note = item.note ? " · " + quoted(item.note) : "";
+  if (isRtl()) return [from, item.sent_at ? formatWhen(item.sent_at) : null].filter(Boolean).join(" · ") + note;
+  return <>{from}{item.sent_at && <> · {when(item.sent_at)}</>}{note}</>;
 }
-/** "3 views · last viewed Today · 9:00 AM", as lib/sharing's viewsText, the time an isolate. */
-const viewsLine = (link: ShareLink): ReactNode =>
-  link.view_count && link.last_viewed_at
+/**
+ * A link's line: "Anyone with the link · 3 views · last viewed Today · 9:00 AM · until Nov 4 · 9:00 AM", as
+ * sharedMeta: the times their own pieces in English, one line of text in Urdu.
+ */
+function linkMeta(link: ShareLink): ReactNode {
+  if (isRtl()) return [audienceText(link), viewsText(link), link.expires_at ? t("until :date", { date: formatWhen(link.expires_at) }) : null].filter(Boolean).join(" · ");
+  const views = link.view_count && link.last_viewed_at
     ? withNode(t(":views · last viewed :when", { views: viewsText({ ...link, last_viewed_at: null }), when: SLOT }), when(link.last_viewed_at))
     : viewsText(link);
+  return <>{audienceText(link)} · {views}{link.expires_at && <> · {withNode(t("until :date", { date: SLOT }), when(link.expires_at))}</>}</>;
+}
 
 export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocusHandled, onOpenRecording, onOpenProject, onSaved }: {
   tab: SharedTab;
@@ -230,7 +243,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
               const items = linkMenu(link);
               return (
                 <ListRow key={link.id} rowId={link.id} icon={link.client_id && !link.session_id ? Icons.FolderIcon : Icons.LinkIcon} title={title} actionsShown="always" metaLines={2}
-                  meta={windowLine(<>{audienceText(link)} · {viewsLine(link)}{link.expires_at && <> · {withNode(t("until :date", { date: SLOT }), when(link.expires_at))}</>}</>)}
+                  meta={linkMeta(link)}
                   badge={<Badge tone={STATE_TONE[state]}>{statusText(state)}</Badge>}
                   onClick={link.session_id || link.client_id ? () => openLink(link) : undefined}
                   onContextMenu={rowMenu(t("Actions for :name", { name: title }), items)}
@@ -251,8 +264,8 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocus
     const into = projectName(link.client_id);
     return (
       <ListRow key={link.id} rowId={link.id} icon={Icons.RequestFilesIcon} title={title} actionsShown="always" metaLines={2}
-        meta={windowLine([into ? t("Into :project", { project: into }) : t("Into no project"), receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · "))}
-        endTop={link.expires_at ? windowLine(withNode(state === "active" ? t("Stops :date", { date: SLOT }) : t("Stopped :date", { date: SLOT }), when(link.expires_at))) : t("Never stops")}
+        meta={[into ? t("Into :project", { project: into }) : t("Into no project"), receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
+        endTop={link.expires_at ? dated((date) => (state === "active" ? t("Stops :date", { date }) : t("Stopped :date", { date })), link.expires_at) : t("Never stops")}
         badge={<Badge tone={STATE_TONE[state]}>{statusText(state)}</Badge>}
         onContextMenu={rowMenu(t("Actions for :name", { name: title }), items)}
         actions={items.length > 0 ? more(t("More for :name", { name: title }), () => requestMenu(link)) : undefined} />

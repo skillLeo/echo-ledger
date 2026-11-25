@@ -15,7 +15,8 @@ import {
   audienceText, downloadText, expiryChoices, filedByRuleText, limitsText, linkState, receivedText, requestState,
   revokeLinkQuestion, revokeRequestQuestion, ruleKinds, ruleText, viewsText,
 } from "../../lib/sharing";
-import { FSI, PDI, resetLanguageForTests, setLanguage, stripIsolates } from "../../i18n";
+import { FSI, PDI, RLI, resetLanguageForTests, setLanguage, stripIsolates } from "../../i18n";
+import { formatWhen } from "../../lib/format";
 import { SharedV2 } from "./SharedV2";
 import { playbackExpired } from "./SharedReader";
 
@@ -24,15 +25,15 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 
 /** A value in its isolate, as the words put it in Urdu. */
 const iso = (value: string | number) => `${FSI}${value}${PDI}`;
-/** U+200F RIGHT-TO-LEFT MARK: an Urdu line that sits in a dir="auto" place starts with it (it may begin with a Latin value). */
-const RLM = "\u200F";
 /**
- * The times in an element: in Urdu each is one piece in its own direction (dir="auto", not English's forced
- * left-to-right .el-ltr), its clock one left-to-right piece inside it, so an Urdu date ("23 نومبر · 2:00 PM") reads right
- * to left with its day first and "2:00 PM" stays whole.
+ * formatWhen in Urdu (lib/format): one right-to-left run (RLI … PDI) of the day (آج, کل, "23 نومبر") and then the time,
+ * each in its own isolate, the time's space one that doesn't break ("4:05 PM" never split).
  */
-const timesIn = (el: Element) => [...el.querySelectorAll("span")].filter((s) => /\d:\d\d/.test(s.textContent ?? "") && !s.querySelector("span"))
-  .map((s) => (s.getAttribute("dir") === "ltr" && s.parentElement?.getAttribute("dir") === "auto" ? "own direction" : s.className || "plain"));
+const URDU_WHEN = /^\u2067\u2068[^\u2069]+\u2069 · \u2068\d{1,2}:\d{2}\u00A0[^\s\u2069]+\u2069\u2069$/;
+/** The innermost element in `within` whose whole text is `text` (getByText would read a no-break space as a space). */
+const withText = (within: Element, text: string) => [...within.querySelectorAll("span, p")].reverse().find((el) => el.textContent === text) ?? null;
+/** No right-to-left mark anywhere: a line takes its direction from its own words (lineDir), not from a mark. */
+const NO_MARK = /\u200F/;
 /** An element's text without the isolates, to read a whole line. */
 const plain = (el: Element) => stripIsolates(el.textContent ?? "");
 
@@ -122,12 +123,14 @@ describe("Shared in Urdu", () => {
     await show();
     expect(screen.getByRole("list", { name: "میرے ساتھ شیئر شدہ" })).toBeInTheDocument();
     const meta = row("Call a").querySelector(".el-row__meta-text") as HTMLElement;
-    // The line starts with a right-to-left mark: it begins with a Latin name, and its place (dir="auto") still reads it
-    // right to left.
-    expect(meta).toHaveAttribute("dir", "auto");
-    expect(meta.textContent).toMatch(new RegExp(`^${RLM}${FSI}Imran${PDI} کی بھیجی ہوئی ریکارڈنگ · `));
-    expect(meta.textContent).toContain(` · “${iso("Please check the totals")}”`);
-    expect(timesIn(row("Call a"))).toEqual(["own direction"]);
+    // One line of text that begins with a Latin name: the row reads it right to left from its own words (lineDir).
+    expect(meta).toHaveAttribute("dir", "rtl");
+    const at = WITH_ME[0].sent_at!;
+    expect(meta.textContent).toBe(`${iso("Imran")} کی بھیجی ہوئی ریکارڈنگ · ${formatWhen(at)} · “${iso("Please check the totals")}”`);
+    // The date in order: yesterday (کل) and then the time, whole.
+    expect(formatWhen(at)).toMatch(URDU_WHEN);
+    expect(formatWhen(at)).toBe(`${RLI}${iso("کل")} · ${FSI}4:05\u00A0PM${PDI}${PDI}`);
+    expect(meta.textContent).not.toMatch(NO_MARK);
     expect(row("Weekly sync")).toHaveTextContent(`${iso("sara@acme.pk")} کی بھیجی ہوئی ریکارڈنگ`);
     expect(row("Weekly sync")).toHaveTextContent("محفوظ کیا");
     expect(row("Acme")).toHaveTextContent(`${iso("Imran")} کا بھیجا ہوا پروجیکٹ`);
@@ -190,9 +193,12 @@ describe("Shared in Urdu", () => {
     const first = row("Acme kickoff");
     expect(plain(first)).toContain("لنک والا کوئی بھی · 3 بار دیکھا گیا · آخری بار ");
     expect(plain(first)).toContain(" دیکھا گیا · ");
-    expect(first.textContent).toContain(`${iso(`${iso(3)} بار دیکھا گیا`)} · آخری بار ${FSI}`);
-    expect(timesIn(first)).toEqual(["own direction", "own direction"]);
-    expect(plain(first)).toMatch(/ تک/);
+    expect(first.textContent).toContain(`${iso(`${iso(3)} بار دیکھا گیا`)} · آخری بار ${iso(formatWhen(LINKS[0].last_viewed_at!))} دیکھا گیا`);
+    expect(first.textContent).toContain(` · ${iso(formatWhen(LINKS[0].expires_at!))} تک`);
+    expect(formatWhen(LINKS[0].last_viewed_at!)).toMatch(URDU_WHEN);
+    expect(formatWhen(LINKS[0].last_viewed_at!)).toContain(iso("آج"));
+    expect(first.querySelector(".el-row__meta-text")).toHaveAttribute("dir", "rtl");
+    expect(first.textContent).not.toMatch(NO_MARK);
     expect(first).toHaveTextContent("فعال");
     expect(row(`پروجیکٹ: ${iso("Acme Ltd")}`)).toHaveTextContent(`صرف ${iso("omar@acme.pk")} · ابھی کسی نے نہیں دیکھا`);
     expect(row("ایک ریکارڈنگ")).toHaveTextContent(`${iso(1)} بار دیکھا گیا`);
@@ -210,9 +216,13 @@ describe("Shared in Urdu", () => {
   it("Request links: into, received (one and many), the limits, when it stops, and Revoke's question and message", async () => {
     const { notify } = await show("requests");
     const active = row("Send me your voice notes");
-    expect(active.querySelector(".el-row__meta-text")?.textContent).toBe(`${RLM}${iso("Acme Ltd")} میں · ${iso(4)} فائلیں موصول ہوئیں · زیادہ سے زیادہ ${iso(20)} فائلیں، ہر ایک ${iso(100)} MB تک`);
-    expect(plain(active)).toMatch(/ کو بند ہو گا/);
-    expect(timesIn(active)).toEqual(["own direction"]);
+    const activeMeta = active.querySelector(".el-row__meta-text");
+    expect(activeMeta?.textContent).toBe(`${iso("Acme Ltd")} میں · ${iso(4)} فائلیں موصول ہوئیں · زیادہ سے زیادہ ${iso(20)} فائلیں، ہر ایک ${iso(100)} MB تک`);
+    expect(activeMeta).toHaveAttribute("dir", "rtl");
+    // When it stops: one line of text, the date's run in it, read right to left from its words.
+    const stops = withText(active, `${iso(formatWhen(REQUESTS[0].expires_at!))} کو بند ہو گا`);
+    expect(stops).toHaveAttribute("dir", "rtl");
+    expect(formatWhen(REQUESTS[0].expires_at!)).toMatch(URDU_WHEN);
     expect(row("Old drop")).toHaveTextContent("کسی پروجیکٹ میں نہیں · ابھی کچھ موصول نہیں ہوا");
     expect(plain(row("Old drop"))).toMatch(/ کو بند ہو گیا/);
     expect(row("One file")).toHaveTextContent(`کسی پروجیکٹ میں نہیں · ${iso(1)} فائل موصول ہوئی · زیادہ سے زیادہ ${iso(1)} فائل، ہر ایک ${iso(50)} MB تک`);
@@ -237,7 +247,8 @@ describe("Shared in Urdu", () => {
     await act(() => setLanguage("en", { root: false }));
     expect(screen.getByRole("tab", { name: "With me · 3" })).toBeInTheDocument();
     expect(row("Call a").querySelector(".el-row__meta-text")?.textContent).toBe("Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”");
-    expect(timesIn(row("Call a"))).toEqual(["el-ltr"]);
+    expect(within(row("Call a")).getByText("Yesterday · 4:05 PM")).toHaveClass("el-ltr");
+    expect(row("Call a").querySelector(".el-row__meta-text")).toHaveAttribute("dir", "auto");
   });
 });
 
@@ -258,20 +269,23 @@ describe("a shared recording, read-only, in Urdu", () => {
     await openReader();
     expect(screen.getByRole("button", { name: "شیئر شدہ" })).toBeInTheDocument();
     expect(screen.getByText("صرف پڑھنے کے لیے")).toBeInTheDocument();
-    expect(screen.getByText(`${RLM}${iso("Urdu")} میں ٹرانسکرائب ہوئی`)).toHaveAttribute("dir", "auto");
-    expect(screen.getByTestId("recorded").textContent).toMatch(new RegExp(`^${RLM}`));
-    expect(timesIn(screen.getByTestId("recorded"))).toEqual(["own direction", "el-num"]);
-    // The source line, its logo first, starts at the window's start edge too.
-    expect(screen.getByTestId("source-line").firstChild?.textContent).toBe(RLM);
+    expect(screen.getByText(`${iso("Urdu")} میں ٹرانسکرائب ہوئی`)).toHaveAttribute("dir", "rtl");
+    // The lines of pieces (when · how long · project; the source and device) run in the window's direction, the date
+    // formatWhen's run in its .el-ltr box.
+    const recorded = screen.getByTestId("recorded");
+    expect(recorded).toHaveAttribute("dir", "rtl");
+    expect(recorded.querySelector(".el-ltr")?.textContent).toMatch(URDU_WHEN);
+    expect(screen.getByTestId("source-line")).toHaveAttribute("dir", "rtl");
+    expect(document.body.textContent).not.toMatch(NO_MARK);
     expect(screen.getByTestId("source-line")).toHaveTextContent("فون");
     expect(screen.getByRole("button", { name: "میری لائبریری میں محفوظ کریں" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "اس ریکارڈنگ کے مزید اختیارات" }));
     expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["ہٹائیں"]);
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     const banner = screen.getByTestId("reader-sent");
-    expect(banner.textContent).toContain(`منجانب ${iso("Imran")} · `);
-    expect(banner.textContent).toContain(` · “${iso("Please check the totals")}” آپ اسے چلا اور پڑھ سکتے ہیں۔ میری لائبریری میں محفوظ کریں سے ایک کاپی بنتی ہے جسے آپ بدل سکتے ہیں۔`);
-    expect(timesIn(banner)).toEqual(["own direction"]);
+    const from = withText(banner, `منجانب ${iso("Imran")} · ${formatWhen(WITH_ME[0].sent_at!)} · “${iso("Please check the totals")}”`);
+    expect(from).toHaveAttribute("dir", "rtl");
+    expect(banner.textContent).toContain(`” آپ اسے چلا اور پڑھ سکتے ہیں۔ میری لائبریری میں محفوظ کریں سے ایک کاپی بنتی ہے جسے آپ بدل سکتے ہیں۔`);
     // Saved: the badge.
     fireEvent.click(screen.getByRole("button", { name: "میری لائبریری میں محفوظ کریں" }));
     await act(flushAsync);
