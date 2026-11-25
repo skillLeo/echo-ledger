@@ -94,8 +94,9 @@ export function placeList(places: readonly Place[]): string {
 }
 
 /** The avatar's tooltip: the account, and the places it holds when not even More fits (UX-07). */
-export function accountTip(held: readonly Place[]): string {
-  return held.length ? `${placeList(held)}; account, theme and settings` : "Account, theme and settings";
+export function accountTip(held: readonly Place[], failed = false): string {
+  const tip = held.length ? `${placeList(held)}; account, theme and settings` : "Account, theme and settings";
+  return failed ? `${tip}, ${FAILED_WORDS}` : tip;
 }
 
 /** The places as menu items (More's, or the avatar's when not even More fits), each with its icon, ⌘ key and Activity's
@@ -114,15 +115,19 @@ export function placeMenuItems(places: readonly Place[], current: Place | null, 
  * shortcut and Activity's count. It carries Activity's badge and Live's dot when they are in it, and is the selected
  * item (its menu ticking the page) while the page is one of its places.
  */
-export function RailMore({ places, current, icons, activityCount, liveDot, liveDotWords, onPick }: {
+export function RailMore({ places, current, icons, activityCount, activityTone, liveDot, liveDotWords, onPick }: {
   places: readonly Place[]; current: Place | null; icons: Record<Place, IconType>; activityCount?: number;
+  /** Activity's badge colour (UX-08): red, with "something failed" in its words, when something failed. */
+  activityTone?: "accent" | "danger";
   liveDot?: boolean; liveDotWords?: string; onPick: (place: Place) => void;
 }) {
   const count = places.includes("activity") && activityCount ? activityCount : undefined;
+  const failed = !!count && activityTone === "danger";
   const dot = !count && places.includes("live") && !!liveDot;
   const here = !!current && places.includes(current);
-  const [tipProps, tip] = useTip("More");
-  const spoken = ["More", count ? `${PLACE_NAMES.activity} ${count}` : null, places.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null]
+  const [tipProps, tip] = useTip(failed ? `More, ${FAILED_WORDS}` : "More");
+  const spoken = ["More", count ? `${PLACE_NAMES.activity} ${count}` : null, failed ? FAILED_WORDS : null,
+    places.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null]
     .filter(Boolean).join(", ");
   const items = placeMenuItems(places, current, icons, activityCount, onPick);
   return (
@@ -130,7 +135,7 @@ export function RailMore({ places, current, icons, activityCount, liveDot, liveD
       <Menu label="More places" items={items} align="start"
         button={{ variant: "quiet", className: "el-rail__item", "aria-label": spoken, "aria-current": here ? "page" : undefined, ...tipProps,
           text: <><span className="el-rail__icon"><Icon icon={Icons.MoreIcon} size="md" />
-            {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
+            {count ? <span className={`el-rail__count el-num${failed ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(count)}</span>
               : dot ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" /> : null}</span>
             <span className="el-rail__label" aria-hidden="true">More</span></> }} />
       {tip}
