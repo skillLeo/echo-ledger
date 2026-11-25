@@ -423,6 +423,8 @@ pub async fn read_with_first_sync(api: &crate::net::api::ApiClient, settings: &S
     if rules.after_call.is_some() {
         return Ok(rules);
     }
+    // This runs while EchoLedger is locked too, on purpose: it is the automatic sync of this computer's own choice, made
+    // before, never a change by someone at the keyboard (those check the lock: ensure_unlocked).
     api.put_call_rule_settings(&device_choice(settings)).await
 }
 
