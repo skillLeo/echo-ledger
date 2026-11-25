@@ -3,6 +3,12 @@
 // command palette search them (lib/settingsIndex.ts), and SettingsView.test.tsx keeps rows and entries equal both ways.
 // Ids, titles, options and keywords follow the shared settings registry, so the phone, the console and this app use
 // the same names in the same order.
+//
+// The entries' words are English data (search, ids and tests read them as they are). In the window's language they are
+// shown through the accessors below: setting(), titleV2(), titleOf(), pathOf(), breadcrumbOf() and optionLabel() give
+// them through t() (desktop Urdu, D3), so English is exactly as before and Urdu reads the catalogue's lines.
+
+import { language, t } from "../i18n";
 
 export type SettingKind = "page" | "switch" | "choice" | "segmented" | "slider" | "action" | "link" | "info" | "list" | "help";
 /** The headers of the Settings root, in order. */
@@ -386,16 +392,48 @@ export const SETTINGS: readonly SettingEntry[] = [
 
 const BY_ID = new Map(SETTINGS.map((e) => [e.id, e]));
 
-/** One entry by id (throws for an id that is not in the registry, so a typo fails in tests at once). */
+/** Titles that read differently in their place: their context key (i18n/context.ts), whose English is the title. */
+const TITLE_KEYS: Readonly<Record<string, string>> = {
+  "notifications.quiet_from": "settings_context.quiet_from",
+  "notifications.quiet_to": "settings_context.quiet_to",
+};
+/** Entries whose title is a name (a call app): the same in every language, as the app's own name is. */
+const NAMED = new Set(CALL_APPS.map(([app]) => `calls.app.${app}`));
+
+/** An entry's title in the window's language: a name as it is, a title read in its place by its context key. */
+export function shownTitle(entry: SettingEntry): string {
+  const own = BY_ID.get(entry.id) ?? entry;
+  return NAMED.has(own.id) ? own.title : t(TITLE_KEYS[own.id] ?? own.title);
+}
+
+/**
+ * An entry as the window shows it: in English the entry itself; in another language a copy whose title, title in the
+ * new look, description and options' labels are the catalogue's. An option named in its own language (lang: "اردو",
+ * "English") keeps its words. The id, page, kind, keywords and the rest stay as they are.
+ */
+function shown(entry: SettingEntry): SettingEntry {
+  if (language() === "en") return entry;
+  return {
+    ...entry,
+    title: shownTitle(entry),
+    ...(entry.titleV2 ? { titleV2: t(entry.titleV2) } : {}),
+    ...(entry.description ? { description: t(entry.description) } : {}),
+    ...(entry.options ? { options: entry.options.map((o) => (o.lang ? o : { ...o, label: t(o.label) })) } : {}),
+  };
+}
+
+/** One entry by id, in the window's language (throws for an id that is not in the registry, so a typo fails at once). */
 export function setting(id: string): SettingEntry {
   const entry = BY_ID.get(id);
   if (!entry) throw new Error(`No setting "${id}" in the registry`);
-  return entry;
+  return shown(entry);
 }
 
-/** The title the new look shows: its own when it has one ("Trash"), else the title. */
+/** The title the new look shows, in the window's language: its own when it has one ("Trash"), else the title. */
 export function titleV2(entry: SettingEntry): string {
-  return entry.titleV2 ?? entry.title;
+  // From the registry's own entry (a copy setting() gave is already in the window's language).
+  const own = BY_ID.get(entry.id) ?? entry;
+  return own.titleV2 ? t(own.titleV2) : shownTitle(own);
 }
 
 /** The entry, or none for an id that is not in the registry. */
@@ -403,7 +441,7 @@ export function findSetting(id: string): SettingEntry | undefined {
   return BY_ID.get(id);
 }
 
-/** The title of a setting: rows read it from here. */
+/** The title of a setting, in the window's language: rows read it from here. */
 export function titleOf(id: string): string {
   return setting(id).title;
 }
@@ -416,17 +454,21 @@ export function rootOf(entry: SettingEntry): RootSection {
   return current?.root ?? "";
 }
 
-/** `[root header, page title, sub-page title]`: where the entry lives; a page's own path ends with its title. */
-export function pathOf(entry: SettingEntry): string[] {
+/**
+ * `[root header, page title, sub-page title]`: where the entry lives, in the window's language; a page's own path ends
+ * with its title.
+ */
+export function pathOf(given: SettingEntry, say: (words: string) => string = t): string[] {
+  const entry = BY_ID.get(given.id) ?? given;
   const chain: string[] = [];
   let current: SettingEntry | undefined = entry.kind === "page" ? entry : entry.page ? BY_ID.get(entry.page) : undefined;
   while (current) {
-    chain.unshift(current.title);
+    chain.unshift(say(current.title));
     current = current.page ? BY_ID.get(current.page) : undefined;
   }
   const root = rootOf(entry);
-  if (entry.page === null && entry.kind !== "page") chain.push(entry.title);
-  return root ? [root, ...chain] : chain;
+  if (entry.page === null && entry.kind !== "page") chain.push(say(entry.title));
+  return root ? [say(root), ...chain] : chain;
 }
 
 /** How deep an entry is: a root row or root page 1, a row on a page 2, a row on a sub-page 3. */
@@ -440,11 +482,16 @@ export function depthOf(entry: SettingEntry): number {
   return depth;
 }
 
-/** The breadcrumb a search result shows: the path without its last segment when that is the title ("App › Appearance"). */
-export function breadcrumbOf(entry: SettingEntry): string {
-  const path = pathOf(entry);
+/**
+ * The breadcrumb a search result shows: the path without its last segment when that is the title ("App › Appearance"),
+ * in the window's language (`say`: the English, for the search index).
+ */
+export function breadcrumbOf(given: SettingEntry, say: (words: string) => string = t): string {
+  // Which segment goes is decided on the English path and title, then the rest is said in the window's language.
+  const entry = BY_ID.get(given.id) ?? given;
+  const path = pathOf(entry, (english) => english);
   if (path[path.length - 1] === entry.title) path.pop();
-  return path.join(" › ");
+  return path.map(say).join(" › ");
 }
 
 /** The page a result opens: the entry's own page for a page, else the page it sits on (null: the root). */
