@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { activitySubtitle, ActivityView } from "./ActivityCentre";
 import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsPage as NotificationsCard, notificationsValue } from "./SecuritySettings";
@@ -30,7 +33,7 @@ describe("activity page (B18)", () => {
     renderPage();
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).toHaveTextContent("Recovered"));
-    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveTextContent("Recovered");
+    expect(screen.getByText("Pixel 9 paired").closest("li")).not.toHaveTextContent("Recovered");
   });
 
   it("lists the notifications with the unread one marked, and hands the list to the badge", async () => {
@@ -39,7 +42,7 @@ describe("activity page (B18)", () => {
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
     expect(screen.getByText("Pixel 9 paired")).toBeInTheDocument();
     expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
-    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
+    expect(screen.getByText("Pixel 9 paired").closest(".activity-item")).not.toHaveClass("unread");
     // The badge gets the list in an effect after the list is shown (a slow runner sees the list first).
     await waitFor(() => expect(onItems).toHaveBeenCalledWith(ITEMS));
   });
@@ -59,11 +62,11 @@ describe("activity page (B18)", () => {
       { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: "2026-10-28T09:05:00Z", resolved: true },
     ], unread_count: 2 });
     renderPage();
-    const open = (await screen.findByText("Uploads are failing: the server's PHP is missing sodium")).closest("button")!;
+    const open = (await screen.findByText("Uploads are failing: the server's PHP is missing sodium")).closest("li")!;
     const tile = open.querySelector(".activity-tile")!;
     expect(tile).toHaveClass("failed");
     expect(tile.querySelector('path[d="M6 6h.01"]'), "the server's icon").not.toBeNull();
-    const fixed = screen.getByText("Fixed: uploads work again").closest("button")!.querySelector(".activity-tile")!;
+    const fixed = screen.getByText("Fixed: uploads work again").closest("li")!.querySelector(".activity-tile")!;
     expect(fixed).not.toHaveClass("failed");
     expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
   });
@@ -84,6 +87,33 @@ describe("activity page (B18)", () => {
     await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]));
     await waitFor(() => expect(onItems.mock.lastCall?.[0].every((i: { read: boolean }) => i.read)).toBe(true));
     await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread"));
+  });
+
+  it("D-066: only a notification about a recording is a button; one with nowhere to go has Mark read while unread", async () => {
+    const mac = { id: "n4", kind: "device_paired", title: "Mac mini signed in", body: "It can now record.", session_id: null, read: false, at: "2026-10-28T08:00:00Z" };
+    respond("activity_list", { data: [...ITEMS, mac], unread_count: 2 });
+    respond("activity_read", { unread_count: 1 });
+    const { onOpenRecording } = renderPage();
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+    expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("activity-item");
+    // A new device opens nothing: its row isn't a button (no hover, not in the Tab order), read or not.
+    const paired = screen.getByText("Pixel 9 paired").closest("li")!;
+    const signedIn = screen.getByText("Mac mini signed in").closest("li")!;
+    expect(screen.getByText("Pixel 9 paired").closest("button")).toBeNull();
+    expect(screen.getByText("Mac mini signed in").closest("button")).toBeNull();
+    expect(within(paired).queryByRole("button")).toBeNull();
+    // Unread, it ends with a quiet Mark read that marks just that one.
+    fireEvent.click(within(signedIn).getByRole("button", { name: "Mark read: Mac mini signed in" }));
+    await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: ["n4"] }]));
+    await waitFor(() => expect(within(signedIn).queryByRole("button")).toBeNull());
+    expect(signedIn.querySelector(".activity-item")).not.toHaveClass("unread");
+    expect(onOpenRecording).not.toHaveBeenCalled();
+  });
+
+  it("D-066: a row with nowhere to go has no pointer and no hover", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    expect(css).toMatch(/\.activity-item\.static[^{]*\{[^}]*cursor: default/);
+    expect(css).toMatch(/\.activity-item\.static:hover[^{]*\{[^}]*background: transparent/);
   });
 
   it("marks everything read", async () => {

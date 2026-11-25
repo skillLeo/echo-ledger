@@ -7,7 +7,7 @@ import { api, type AppStatus, type Settings, type ShortcutAction } from "../../.
 import { acceleratorFromEvent, prettyShortcut } from "../../../lib/format";
 import { changePreferences, DEFAULT_PREFERENCES, loadPreferences, PREFERENCES_EVENT, type Preferences } from "../../../lib/shell";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../../lib/theme";
-import { conflictFor } from "../../../lib/shortcutConflicts";
+import { conflictOwner } from "../../../lib/shortcutConflicts";
 import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
 import { appKeys } from "../../../views/main/AppSettings";
 import { Button, ListRow } from "../../components";
@@ -15,6 +15,7 @@ import { Group, ResetDefaults, SegmentedSetting, SliderSetting, SwitchSetting, t
 import { setZoom, useZoom, zoomHint, ZOOM_DEFAULT, ZOOM_STEPS } from "../../../lib/zoom";
 import { useDesignSwitch } from "../../flags";
 import type { Lang } from "../../../i18n";
+import { t } from "../../../i18n";
 
 /** The account's language (v21_urdu): the one it speaks, how to change it on the server, and a refusal to say. */
 export type LanguageChoice = { value: Lang; onChange: (lang: Lang) => void; error?: string | null };
@@ -57,7 +58,7 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false, l
           <SegmentedSetting id="appearance.language" value={language.value} onChange={language.onChange} />
         </Group>
       )}
-      <Group footer={<p>Kept on this computer. Times follow your choice everywhere in the app.</p>}>
+      <Group footer={<p>{t("Kept on this computer. Times follow your choice everywhere in the app.")}</p>}>
         <SegmentedSetting id="appearance.theme" value={theme} onChange={onTheme} />
         <SegmentedSetting id="appearance.sidebar" value={prefs.sidebarStyle} onChange={(v) => setPref({ sidebarStyle: v })} />
         <SegmentedSetting id="appearance.density" value={prefs.density} onChange={(v) => setPref({ density: v })} />
@@ -66,8 +67,8 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false, l
       </Group>
       {zoom && (
         <Group footer={<>
-          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} Kept on this computer.</p>
-          {level !== ZOOM_DEFAULT && <Button size="sm" onClick={() => setZoom(ZOOM_DEFAULT)}>Reset to 100%</Button>}
+          <p>{zoomHint(/Mac|iPhone|iPad/.test(navigator.platform))} {t("Kept on this computer.")}</p>
+          {level !== ZOOM_DEFAULT && <Button size="sm" onClick={() => setZoom(ZOOM_DEFAULT)}>{t("Reset to 100%")}</Button>}
         </>}>
           {/* The steps, as Chrome's: the slider moves from one to the next. */}
           <SliderSetting id="appearance.zoom" value={ZOOM_STEPS.indexOf(level as (typeof ZOOM_STEPS)[number])} min={0} max={ZOOM_STEPS.length - 1} step={1}
@@ -75,7 +76,7 @@ export function AppearancePageV2({ theme, onTheme, rail = false, zoom = false, l
         </Group>
       )}
       <DesignRowV2 />
-      <ResetDefaults page="Appearance" onReset={() => { onTheme("system"); setPref({ ...DEFAULT_PREFERENCES }); if (zoom) setZoom(ZOOM_DEFAULT); }} />
+      <ResetDefaults page={t("Appearance")} onReset={() => { onTheme("system"); setPref({ ...DEFAULT_PREFERENCES }); if (zoom) setZoom(ZOOM_DEFAULT); }} />
     </>
   );
 }
@@ -85,9 +86,9 @@ function DesignRowV2() {
   const design = useDesignSwitch();
   if (!design.canSwitchBack) return null;
   return (
-    <Group footer={<>{design.error && <p className="el-field__error" role="alert">{design.error}</p>}<p>Classic stays available while the new design is finished.</p></>}>
-      <ListRow compact anchor="appearance.design" title={setting("appearance.design").title} value="New design"
-        control={<Button size="sm" loading={design.busy} loadingLabel="Switching…" onClick={() => void design.choose("classic")}>Switch back to classic</Button>} />
+    <Group footer={<>{design.error && <p className="el-field__error" role="alert">{design.error}</p>}<p>{t("Classic stays available while the new design is finished.")}</p></>}>
+      <ListRow compact anchor="appearance.design" title={setting("appearance.design").title} value={t("New design")}
+        control={<Button size="sm" loading={design.busy} loadingLabel={t("Switching…")} onClick={() => void design.choose("classic")}>{t("Switch back to classic")}</Button>} />
     </Group>
   );
 }
@@ -112,7 +113,7 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
       const accel = acceleratorFromEvent(e, platform);
       if (!accel) return;
       setListening(null);
-      const next = await run(() => api.setShortcut(listening, accel), "Shortcut saved");
+      const next = await run(() => api.setShortcut(listening, accel), t("Shortcut saved"));
       if (next) onSettings(next);
     };
     window.addEventListener("keydown", onKey);
@@ -125,13 +126,17 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
   const noteFor = (a: ShortcutAction): string | null => {
     const error = status.shortcutErrors.find(([x]) => x === a)?.[1];
     if (error) return error;
-    const conflict = conflictFor(settings.shortcuts[a], platform);
-    return conflict ? `This shortcut also ${conflict}; EchoLedger takes it over.` : null;
+    // Who else uses it, by name (EL-UX: only the app's name is a value; browsers and many apps have their own lines).
+    const owner = conflictOwner(settings.shortcuts[a], platform);
+    if (!owner) return null;
+    if (owner.kind === "browsers") return t("This shortcut is also used by browsers; EchoLedger takes it over.");
+    if (owner.kind === "many_apps") return t("This shortcut is also used by many apps; EchoLedger takes it over.");
+    return t("This shortcut is also used by :app; EchoLedger takes it over.", { app: owner.name });
   };
   return (
     <>
       <div className="el-shortcuts">
-      <Group title="Global shortcuts" footer={<p>They work while another app is in front. A shortcut another EchoLedger action uses is refused.</p>}>
+      <Group title={t("Global shortcuts")} footer={<p>{t("They work while another app is in front. A shortcut another EchoLedger action uses is refused.")}</p>}>
         {SHORTCUT_ACTIONS.map(([action]) => {
           const a = action as ShortcutAction;
           const id = `shortcuts.global.${a}`;
@@ -141,22 +146,22 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
           return (
             <ListRow key={a} compact anchor={id} title={title}
               meta={note ? <span className="el-shortcut-note" role="status">{note}</span> : undefined}
-              value={listening === a ? <span aria-live="polite">Press keys… (Esc cancels)</span> : keys ? <Keys>{prettyShortcut(keys, platform)}</Keys> : "None"}
+              value={listening === a ? <span aria-live="polite">{t("Press keys… (Esc cancels)")}</span> : keys ? <Keys>{prettyShortcut(keys, platform)}</Keys> : t("None")}
               control={<span className="el-setting__actions">
-                {keys && <Button variant="quiet" size="sm" aria-label={`Clear ${title}`} onClick={() => void clear(a)}>Clear</Button>}
+                {keys && <Button variant="quiet" size="sm" aria-label={t("Clear :title", { title })} onClick={() => void clear(a)}>{t("Clear")}</Button>}
                 {/* Pressed while it listens; a second press or Esc stops listening. */}
-                <Button variant="secondary" size="sm" aria-label={`Change ${title}`} aria-pressed={listening === a} onClick={() => setListening(listening === a ? null : a)}>
-                  Change
+                <Button variant="secondary" size="sm" aria-label={t("Change :title", { title })} aria-pressed={listening === a} onClick={() => setListening(listening === a ? null : a)}>
+                  {t("Change")}
                 </Button>
               </span>} />
           );
         })}
       </Group>
-      <Group title="In the app" footer={<p>These work while EchoLedger is in front.</p>}>
+      <Group title={t("In the app")} footer={<p>{t("These work while EchoLedger is in front.")}</p>}>
         {appKeys(platform, threeLevels).map(([keys, what], i) => <ListRow key={keys} compact anchor={i === 0 ? "shortcuts.app" : undefined} title={what} value={<Keys>{keys}</Keys>} />)}
       </Group>
       </div>
-      <ResetDefaults page="Keyboard shortcuts" onReset={() => void run(api.resetShortcuts, "Shortcuts reset").then((s) => s && onSettings(s))} />
+      <ResetDefaults page={t("Keyboard shortcuts")} onReset={() => void run(api.resetShortcuts, t("Shortcuts reset")).then((s) => s && onSettings(s))} />
     </>
   );
 }

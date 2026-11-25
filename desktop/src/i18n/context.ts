@@ -5,4 +5,7 @@
 export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // A saved view's name while My views are still being read (ur.json's "View" is the layout: انداز).
   "library_context.saved_view": "View",
+  // The word Upgrade inside a Plan & usage meter's line ("… of your minutes. Upgrade."): in Urdu the noun alone (اپ
+  // گریڈ), the sentence says کریں after it; the button Upgrade is the verb (اپ گریڈ کریں).
+  "plan_context.upgrade": "Upgrade",
 };
