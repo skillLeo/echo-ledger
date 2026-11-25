@@ -410,7 +410,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   // `&grouped=1` (UX-08): uploads that didn't finish as the server groups them, and its one Activity number (3 of them
   // and the failed transcript: 4, red).
   activity_list: () => {
-    const data = grouped ? ACTIVITY_GROUPED : ACTIVITY;
+    // `&deviceunread=1` (D-233): the new device's notification not read yet (it has nowhere to go: a plain row, Mark read).
+    const data = (grouped ? ACTIVITY_GROUPED : ACTIVITY).map((a) => (params.get("deviceunread") === "1" && a.kind === "device_paired" ? { ...a, read: false } : a));
     return { data, unread_count: data.filter((a) => !a.read).length, retry_requested_at: null };
   },
   activity_groups: () => ({ data: grouped ? ACTIVITY_GROUPS : [] }),
