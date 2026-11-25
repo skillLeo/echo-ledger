@@ -223,9 +223,9 @@ class EditProfile extends BaseEditProfile
     /** Sign out (the root's last row): "Sign out?" then the sign-in page. */
     public function signOutAction(): Action
     {
-        return Action::make('signOut')->label('Sign out')
-            ->requiresConfirmation()->modalHeading('Sign out?')->modalDescription(null)->modalIcon(null)
-            ->modalSubmitActionLabel('Sign out')->color('danger')
+        return Action::make('signOut')->label(__('Sign out'))
+            ->requiresConfirmation()->modalHeading(__('Sign out?'))->modalDescription(null)->modalIcon(null)
+            ->modalSubmitActionLabel(__('Sign out'))->color('danger')
             ->action(function (): void {
                 Filament::auth()->logout();
                 session()->invalidate();
