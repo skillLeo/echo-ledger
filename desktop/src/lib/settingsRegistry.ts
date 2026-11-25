@@ -26,6 +26,8 @@ export interface SettingRequires {
   rail?: boolean;
   /** Only with zoom (UX-07, v21_zoom). */
   zoom?: boolean;
+  /** Only where the app speaks Urdu too (v21_urdu). */
+  urdu?: boolean;
 }
 
 export interface SettingEntry {
@@ -258,6 +260,9 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "appearance.compact_rail", title: "Compact rail (icons only)", page: "appearance", kind: "switch", requires: { rail: true }, resettable: true,
     description: "The rail shows its icons without their names. Point at an icon to see its name.",
     keywords: ["rail", "icons only", "hide names", "hide labels", "labels", "compact", "smaller"], ru: ["sirf icons", "naam chhupao"], ur: ["صرف آئیکن"] },
+  { id: "appearance.language", title: "Language", page: "appearance", kind: "segmented", requires: { urdu: true, account: true },
+    description: "The same on the web and the phone.", options: opts(["en", "English", true], ["ur", "اردو"]),
+    keywords: ["language", "urdu", "english", "translate", "right to left"], ru: ["zaban", "urdu", "angrezi"], ur: ["زبان", "اردو", "انگریزی"] },
   { id: "appearance.zoom", title: "Zoom", page: "appearance", kind: "slider", requires: { zoom: true }, resettable: true,
     description: "Zoom in and out, or back to 100%.",
     keywords: ["zoom", "zoom in", "zoom out", "bigger", "smaller", "scale", "magnify", "actual size"], ru: ["bara karo", "chhota karo"], ur: ["زوم", "بڑا کریں"] },

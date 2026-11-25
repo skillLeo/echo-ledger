@@ -49,6 +49,8 @@ export interface SettingsContext {
   rail?: boolean;
   /** Zoom is on (UX-07, v21_zoom). */
   zoom?: boolean;
+  /** The app speaks Urdu too (v21_urdu): Appearance has Language. */
+  urdu?: boolean;
 }
 
 /** Whether an entry is offered here and now (Settings' search, the list and the window's search use the same). */
@@ -63,6 +65,7 @@ export function settingsAvailability(ctx: SettingsContext): (entry: SettingEntry
     if (r?.plans && !e) return false;
     if (r?.rail && !ctx.rail) return false;
     if (r?.zoom && !ctx.zoom) return false;
+    if (r?.urdu && !ctx.urdu) return false;
     switch (entry.id) {
       case "key":
       case "key.saved":
