@@ -1,6 +1,8 @@
 // Settings › Profile in the new look, with today's data (AccountSettings.tsx): who is signed in, the email (and
 // whether it is verified), the workspace and role on a team, and since when. Since 2.0.0-l the picture, name and email
 // are changed here (views/main/AccountFlows.tsx, the same flows classic draws); an older server changes them on the web.
+// UX-11: the profile is edited in the app, the website only for billing; so with the app's own flows there is no "Edit
+// profile · Opens the website" (the language waits for BE-06's profile).
 import { useEffect, useState } from "react";
 import { api, type Account, type AppStatus } from "../../../lib/ipc";
 import { rowDateWithYear } from "../../../lib/format";
@@ -54,8 +56,10 @@ export function ProfilePageV2({ account: given, status, run }: { account: Accoun
           : <ListRow compact anchor="profile.email" title={setting("profile.email").title} value={account.email} badge={badge} />}
         {workspace && row("profile.workspace", workspace)}
         {account.created_at && row("profile.since", rowDateWithYear(account.created_at))}
-        <ListRow compact anchor="profile.edit" title={setting("profile.edit").title} label="Edit profile, opens in browser" meta="Opens the website" chevron
-          onClick={() => void run(() => api.openServerPage("app/profile"))} />
+        {!native && (
+          <ListRow compact anchor="profile.edit" title={setting("profile.edit").title} label="Edit profile, opens in browser" meta="Opens the website" chevron
+            onClick={() => void run(() => api.openServerPage("app/profile"))} />
+        )}
       </Group>
       {flows.flow && <AccountFlow kit={V2_KIT} flow={flows.flow} account={account} onClose={flows.close} onDone={done} />}
     </>

@@ -13,7 +13,7 @@ import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSam
 import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSettings";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
-import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
+import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
 
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
@@ -93,7 +93,7 @@ function WhyNotRecordedV2() {
   }, [shown]);
   return (
     <section className="el-group" aria-labelledby="el-why-not">
-      <h2 className="el-caption el-body-strong el-group__title" id="el-why-not">Why a call wasn't recorded</h2>
+      <SectionTitle id="el-why-not">Why a call wasn't recorded</SectionTitle>
       <Card>
         <div className="el-why" data-testid="why-not-recorded" aria-live="polite">
           {users.length === 0 ? <p className="el-secondary">No app is using the microphone now.</p> : (
@@ -137,16 +137,16 @@ export function CallSitesPageV2({ rules, onSave }: { rules: SiteRule[]; onSave: 
   return (
     <>
       <section className="el-group" aria-label="Record calls on">
-        <h2 className="el-caption el-body-strong el-group__title">Record calls on</h2>
+        <SectionTitle>Record calls on</SectionTitle>
         <Card><List label="Call sites" className="el-group__rows">{BUILTIN_SITE_RULES.filter((r) => !isNeverRule(r)).map(builtinRow)}{mine.filter((r) => !isNeverRule(r)).map(userRow)}</List></Card>
       </section>
       <section className="el-group" aria-label="Never record">
-        <h2 className="el-caption el-body-strong el-group__title">Never record</h2>
+        <SectionTitle>Never record</SectionTitle>
         <Card><List label="Never record" className="el-group__rows">{BUILTIN_SITE_RULES.filter(isNeverRule).map(builtinRow)}{mine.filter(isNeverRule).map(userRow)}</List></Card>
       </section>
       <Card label="Add a site">
         <form className="el-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-          <h2 className="el-body-strong">Add a site</h2>
+          <SectionTitle className="el-body-strong">Add a site</SectionTitle>
           <div className="el-settings-v2__pair">
             <Select label="App" value={app} onChange={setApp} options={SITE_RULE_APPS.map(([value, label]) => ({ value, label }))} />
             <TextField label="Address or title contains" value={text} dir="ltr" onChange={(e) => setText(e.target.value)} />

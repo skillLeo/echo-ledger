@@ -1,48 +1,24 @@
 // Settings in the new look (ui_v2.settings): one searchable list grouped by goal (docs/v2/IA.md 5.1–5.9), the profile
 // card with the plan and Upgrade on top. Search finds every individual setting by the words the classic search knows
 // (lib/settingsIndex.ts) and jumps to it; a page opens today's page for that feature (its one home), scrolled to the
-// setting and highlighted.
+// setting and highlighted. In two levels (UX-11, with the panel) the panel has the search and the groups, and a page is
+// a group's page (SettingsPagesV2): no inner list.
 import { PanelToggle } from "../shell/NavRail";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, errorMessage, type Settings, type StorageInfo } from "../../lib/ipc";
+import { api, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
 import { searchSettings } from "../../lib/settingsIndex";
 import { SETTINGS, breadcrumbOf, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
+import { GOAL_GROUPS, sectionFor } from "./groups";
+import { StartupRowV2, STARTUP_IDS } from "./pages/StartupV2";
 import { ROOT_ICONS } from "../../components/Icons";
 import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
-import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType, Select } from "../components";
+import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, type IconType } from "../components";
 import { AccountCard } from "./AccountCard";
 import { SHOW_PANEL_EVENT } from "../shell/NavRail";
 
-/**
- * The goal groups of IA 5 and the root entries each holds (one home per feature), each with its icon and a one-line
- * description of what is inside (PLAN_V2_PARITY 5).
- */
-export const GOAL_GROUPS: readonly { title: string; icon: IconType; description: string; ids: readonly string[] }[] = [
-  { title: "Recording", icon: Icons.RecordIcon, description: "Which calls are recorded, and the microphone, screen and voice used.", ids: ["calls", "mic", "screen", "voice"] },
-  { title: "Transcription & language", icon: Icons.TranscriptIcon, description: "The languages your calls are in, your own words, and your transcription key.", ids: ["transcription.language", "words", "key"] },
-  { title: "Live & overlays", icon: Icons.CaptionsIcon, description: "Captions during calls, and what others see when you share your screen.", ids: ["captions", "share_privacy"] },
-  { title: "Privacy & data", icon: Icons.PrivacyIcon, description: "What is kept, for how long, and the app lock.", ids: ["privacy", "storage", "lock"] },
-  { title: "Notifications", icon: Icons.BellIcon, description: "What EchoLedger tells you, and when.", ids: ["notifications"] },
-  { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
-  { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
-  { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
-  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, opening EchoLedger when you sign in, and its icons.",
-    ids: ["shortcuts", "app.autostart", "app.on_close", "app.menu_bar_icon", "app.menu_bar_timer", "app.dock_badge"] },
-  { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
-];
-
-/** Every root entry of the registry sits in exactly one goal group (sign out has its own row). */
-export function ungrouped(): string[] {
-  const grouped = new Set(GOAL_GROUPS.flatMap((g) => g.ids));
-  return SETTINGS.filter((e) => e.page === null && e.kind !== "help" && e.id !== "signout" && !grouped.has(e.id)).map((e) => e.id);
-}
-
-/** What opening a search result asks today's Settings for: the page, and the setting to scroll to. */
-export function sectionFor(entry: SettingEntry): string {
-  return entry.kind === "page" ? entry.id : `${entry.page ?? entry.id}#${entry.id}`;
-}
+export { GOAL_GROUPS, entryOf, groupOf, sectionFor, ungrouped } from "./groups";
 
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, "-");
 const THEME_WORDS = { system: "System", light: "Light", dark: "Dark" } as const;
@@ -61,24 +37,17 @@ export type SettingsV2Props = {
   /** Shown under the groups ("Switch back to classic"). */
   footer?: ReactNode;
   /**
-   * The three levels (PLAN_NAV_3_LEVELS §3, §4): the groups and the search are the panel's, so the home shows the
-   * profile card and Sign out only, and a page has its group's sections in an inner list beside it.
+   * Two levels (UX-11): the groups and the search are the panel's, so the home shows the profile card and Sign out only,
+   * and a page is its group's whole page (no inner list).
    */
   inPanel?: boolean;
 };
-
-/** The goal group a section is in (a page or one of its settings: "calls", "calls#calls.after"). */
-export function groupOf(sectionId: string) {
-  const id = sectionId.split("#")[0].split(".")[0];
-  return GOAL_GROUPS.find((g) => g.ids.some((x) => x === sectionId.split("#")[0] || x.split(".")[0] === id)) ?? null;
-}
 
 export function SettingsV2({ available, section = null, renderPage, onSignOut, setupHealth = false, footer, inPanel = false }: SettingsV2Props) {
   const [opened, setOpened] = useState<{ id: string; seq: number } | null>(null);
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
-  const [autostartError, setAutostartError] = useState<string | null>(null);
   const entitlements = useEntitlements();
   const seq = useRef(1000);
 
@@ -91,35 +60,6 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   }, [section]);
 
   const open = (id: string) => setOpened({ id, seq: ++seq.current });
-  if (opened && inPanel) {
-    // The group's sections beside the page (Level 3: an inner list, as a site's settings have).
-    const group = groupOf(opened.id);
-    // Setup & health is the rail's own (one home): never in the inner list.
-    const ids = (group?.ids ?? []).filter((id) => id !== "setup_health" && !!SETTINGS.find((e) => e.id === id && available(e)));
-    const here = opened.id.split("#")[0];
-    return (
-      <div className="el-settings-split">
-        {group && ids.length > 1 && (
-          <nav className="el-settings-split__list" aria-label={`${group.title} sections`}>
-            <h2 className="el-caption el-body-strong el-settings-split__title">{group.title}</h2>
-            <ul className="el-nav-list">
-              {ids.map((id) => {
-                const entry = SETTINGS.find((e) => e.id === id);
-                const name = id === "setup_health" ? "Setup & health" : entry ? titleV2(entry) : id;
-                return (
-                  <li key={id}>
-                    <button type="button" className="el-nav-item el-nav-item--row" aria-current={here === id || here.startsWith(`${id}.`) ? "page" : undefined}
-                      onClick={() => open(id)}><span className="el-nav-item__label">{name}</span></button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
-        <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>
-      </div>
-    );
-  }
   if (opened) return <div className="el-settings-page">{renderPage(opened, () => setOpened(null))}</div>;
   if (inPanel) {
     return (
@@ -161,37 +101,8 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
     }
     const entry = SETTINGS.find((e) => e.id === id);
     if (!entry || !available(entry)) return null;
-    if (id === "app.autostart") {
-      return (
-        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
-          meta={autostartError ? <span className="el-row__error" role="alert">{autostartError}</span> : undefined}
-          control={settings ? <Toggle label={entry.title} hideLabel checked={settings.autostart}
-            onChange={(on) => {
-              setAutostartError(null);
-              void api.updateSettings({ autostart: on }).then(setSettings, (e) => setAutostartError(errorMessage(e)));
-            }} /> : undefined} />
-      );
-    }
-    // FIX-11: the Mac's menu bar icon, its timer and the Dock's number, switched here.
-    const ICON_SWITCHES: Record<string, "menuBarIcon" | "menuBarTimer" | "dockBadge"> = {
-      "app.menu_bar_icon": "menuBarIcon", "app.menu_bar_timer": "menuBarTimer", "app.dock_badge": "dockBadge",
-    };
-    // FIX-12 (Windows): what ✕ does.
-    if (id === "app.on_close") {
-      return (
-        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
-          control={settings ? <Select label={entry.title} hideLabel value={settings.closeQuits ? "quit" : "keep"}
-            options={[{ value: "keep", label: "Keep running in the background (recommended)" }, { value: "quit", label: "Quit" }]}
-            onChange={(v) => void api.updateSettings({ closeQuits: v === "quit" }).then(setSettings, () => undefined)} /> : undefined} />
-      );
-    }
-    const key = ICON_SWITCHES[id];
-    if (key) {
-      return (
-        <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} meta={entry.description}
-          control={settings ? <Toggle label={entry.title} hideLabel checked={settings[key] !== false}
-            onChange={(on) => void api.updateSettings({ [key]: on }).then(setSettings, () => undefined)} /> : undefined} />
-      );
+    if ((STARTUP_IDS as readonly string[]).includes(id)) {
+      return <StartupRowV2 key={id} id={id} settings={settings} onSettings={setSettings} icon={iconOf(id)} />;
     }
     return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;
   };

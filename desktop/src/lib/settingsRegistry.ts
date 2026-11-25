@@ -357,7 +357,8 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["close account", "remove account", "delete account"], ru: ["account khatam", "account delete", "hatao"], ur: ["اکاؤنٹ ختم"] },
 
   // ---- Support ------------------------------------------------------------------------------------------------------
-  { id: "help", title: "Help", page: null, root: "Support", kind: "page", keywords: ["support", "help", "problem", "not working"], ru: ["madad", "masla"], ur: ["مدد"] },
+  { id: "help", title: "Help", page: null, root: "Support", kind: "page", description: "Guides, keyboard shortcuts, what's new and contact support",
+    keywords: ["support", "help", "problem", "not working"], ru: ["madad", "masla"], ur: ["مدد"] },
   { id: "help.mac_check", title: "Mac check", page: "help", kind: "page", requires: { os: "macos" }, keywords: ["macos permissions", "diagnostics", "report"] },
   { id: "about", title: "About", page: null, root: "Support", kind: "page", keywords: ["version", "app info"] },
   { id: "about.version", title: "Version", page: "about", kind: "info", keywords: ["version", "build"] },
