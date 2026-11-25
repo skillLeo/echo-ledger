@@ -151,7 +151,7 @@ describe("Shared in Urdu", () => {
     await act(flushAsync);
     expect(notify).toHaveBeenLastCalledWith("آپ کی لائبریری میں محفوظ ہو گیا", false, { kind: "recording", id: "copy-1" });
     fireEvent.contextMenu(row("Weekly sync"));
-    expect(screen.getByRole("menu", { name: `${iso("Weekly sync")} کے اعمال` })).toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: `${iso("Weekly sync")} کے اختیارات` })).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "ہٹائیں" }));
     await act(flushAsync);
     expect(callsOf("shared_remove")).toEqual([{ id: "b" }]);
@@ -210,12 +210,12 @@ describe("Shared in Urdu", () => {
   it("Request links: into, received (one and many), the limits, when it stops, and Revoke's question and message", async () => {
     const { notify } = await show("requests");
     const active = row("Send me your voice notes");
-    expect(active.querySelector(".el-row__meta-text")?.textContent).toBe(`${RLM}${iso("Acme Ltd")} میں · ${iso(4)} فائلیں موصول ہوئیں · زیادہ سے زیادہ ${iso(20)} فائلیں، ہر ایک ${iso(100)} ایم بی تک`);
+    expect(active.querySelector(".el-row__meta-text")?.textContent).toBe(`${RLM}${iso("Acme Ltd")} میں · ${iso(4)} فائلیں موصول ہوئیں · زیادہ سے زیادہ ${iso(20)} فائلیں، ہر ایک ${iso(100)} MB تک`);
     expect(plain(active)).toMatch(/ کو بند ہو گا/);
     expect(timesIn(active)).toEqual(["own direction"]);
     expect(row("Old drop")).toHaveTextContent("کسی پروجیکٹ میں نہیں · ابھی کچھ موصول نہیں ہوا");
     expect(plain(row("Old drop"))).toMatch(/ کو بند ہو گیا/);
-    expect(row("One file")).toHaveTextContent(`کسی پروجیکٹ میں نہیں · ${iso(1)} فائل موصول ہوئی · زیادہ سے زیادہ ${iso(1)} فائل، ہر ایک ${iso(50)} ایم بی تک`);
+    expect(row("One file")).toHaveTextContent(`کسی پروجیکٹ میں نہیں · ${iso(1)} فائل موصول ہوئی · زیادہ سے زیادہ ${iso(1)} فائل، ہر ایک ${iso(50)} MB تک`);
     expect(row("One file")).toHaveTextContent("کبھی بند نہیں ہوتا");
 
     const asked = answerConfirm();
@@ -411,14 +411,14 @@ describe("the Request files sheet in Urdu", () => {
     expect(within(sheet).getByLabelText("دن")).toHaveAttribute("type", "date");
     fireEvent.change(within(sheet).getByLabelText("دن"), { target: { value: "2026-12-01" } });
     expect(sheet).toHaveTextContent("فائلیں، 1 سے 100");
-    expect(sheet).toHaveTextContent("ہر فائل کے ایم بی، 1 سے 2048");
+    expect(sheet).toHaveTextContent("ہر فائل کے MB، 1 سے 2048");
     fireEvent.change(within(sheet).getByLabelText("زیادہ سے زیادہ"), { target: { value: "500" } });
-    fireEvent.change(within(sheet).getByLabelText("سب سے بڑی فائل (ایم بی)"), { target: { value: "5000" } });
+    fireEvent.change(within(sheet).getByLabelText("سب سے بڑی فائل (MB)"), { target: { value: "5000" } });
     expect(sheet).toHaveTextContent("1 سے 100 تک فائلیں چنیں۔");
-    expect(sheet).toHaveTextContent("1 سے 2048 ایم بی تک چنیں۔");
+    expect(sheet).toHaveTextContent("1 سے 2048 MB تک چنیں۔");
     expect(within(sheet).getByRole("button", { name: "لنک بنائیں" })).toBeDisabled();
     fireEvent.change(within(sheet).getByLabelText("زیادہ سے زیادہ"), { target: { value: "5" } });
-    fireEvent.change(within(sheet).getByLabelText("سب سے بڑی فائل (ایم بی)"), { target: { value: "50" } });
+    fireEvent.change(within(sheet).getByLabelText("سب سے بڑی فائل (MB)"), { target: { value: "50" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "لنک بنائیں" }));
     await act(flushAsync);
     expect(callsOf("request_link_create")[0]).toMatchObject({ options: { title: "مجھے اپنے وائس نوٹس بھیجیں", clientId: "c1", maxFiles: 5, maxMb: 50 } });
@@ -469,8 +469,8 @@ describe("the sharing words (lib/sharing.ts)", () => {
     expect(receivedText(0)).toBe("ابھی کچھ موصول نہیں ہوا");
     expect(limitsText({ max_files: 1, max_mb: null })).toBe(`زیادہ سے زیادہ ${iso(1)} فائل`);
     expect(limitsText({ max_files: 20, max_mb: null })).toBe(`زیادہ سے زیادہ ${iso(20)} فائلیں`);
-    expect(limitsText({ max_files: 1, max_mb: 100 })).toBe(`زیادہ سے زیادہ ${iso(1)} فائل، ہر ایک ${iso(100)} ایم بی تک`);
-    expect(limitsText({ max_files: null, max_mb: 50 })).toBe(`ہر فائل ${iso(50)} ایم بی تک`);
+    expect(limitsText({ max_files: 1, max_mb: 100 })).toBe(`زیادہ سے زیادہ ${iso(1)} فائل، ہر ایک ${iso(100)} MB تک`);
+    expect(limitsText({ max_files: null, max_mb: 50 })).toBe(`ہر فائل ${iso(50)} MB تک`);
     expect(limitsText({ max_files: null, max_mb: null })).toBe("");
     await setLanguage("en", { root: false });
     expect(viewsText({ view_count: 1, last_viewed_at: null })).toBe("1 view");
