@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { api, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
 import { CALL_APPS, setting } from "../../../lib/settingsRegistry";
-import { SKIP_SHORTER_THAN } from "../../../lib/pending";
+import { skipShorterThan } from "../../../lib/pending";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../../lib/explainer";
 import { useWindowShown } from "../../../lib/visibility";
 import { sourceAppLabel } from "../../../lib/format";
@@ -50,7 +50,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         {platform === "macos" && <SwitchSetting id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Group>
       <Group footer={<p>{t("Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.")}</p>}>
-        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
+        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan().map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
       <Group title={t("Websites")}>

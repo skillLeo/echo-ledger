@@ -14,7 +14,7 @@ import { fillWidth } from "../../lib/motion";
 import { CheckIcon } from "../../components/ControlIcons";
 import { ActionRow, ConfirmDialog, InfoRow, LinkRow, Section, Tag, rowAttrs } from "./SettingsControls";
 import { confirmAction } from "../../lib/confirm";
-import { t, tc } from "../../i18n";
+import { t, tc, wordsIn, type Lang } from "../../i18n";
 
 export { UpgradeSheet } from "./UpgradeFlow";
 
@@ -576,5 +576,10 @@ export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
   );
 }
 
-/** A recording whose transcript failed because there is no key yet (`needs_transcription_key`). */
-export const NEEDS_KEY_TEXT = "This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.";
+/** A recording whose transcript failed because there is no key yet (`needs_transcription_key`), in the window's language
+ * (or English with `lang` "en"). */
+export function needsKeyText(lang?: Lang): string {
+  return wordsIn(lang).t("This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.");
+}
+/** The same in English, for classic's recording view. */
+export const NEEDS_KEY_TEXT = needsKeyText("en");

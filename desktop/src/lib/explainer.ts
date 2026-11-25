@@ -3,7 +3,7 @@
 // understood instead of silently missed. Plain words only: never how sound is captured.
 import { formatTime, processName, rowDate, sourceAppLabel, whenParts } from "./format";
 import type { IgnoreReason, MicUser, NotRecordedMic } from "./ipc";
-import { language, t } from "../i18n";
+import { language, t, type Lang } from "../i18n";
 
 /** Why an app is not recorded, in plain words (the window's language): the reason on its own, for "…, because …". */
 const NOT_RECORDED: Record<IgnoreReason, string> = {
@@ -55,9 +55,10 @@ function whyNot(user: Pick<MicUser, "decision" | "reason">): string {
   }
 }
 
-/** The app as people know it: the call app's name, the website, or the program's name. */
-export function micUserName(user: Pick<MicUser, "app" | "site" | "name">): string {
-  return user.app ? sourceAppLabel(user.app) : user.site?.trim() || processName(user.name);
+/** The app as people know it: the call app's name, the website, or the program's name. A call app's label is in the
+ * window's language, or in English with `lang` "en" (a window still in English: classic's Calls settings). */
+export function micUserName(user: Pick<MicUser, "app" | "site" | "name">, lang?: Lang): string {
+  return user.app ? sourceAppLabel(user.app, lang) : user.site?.trim() || processName(user.name);
 }
 
 /** Whether an app using the microphone is left unrecorded (pure): what the "last one not recorded" line is about. */
