@@ -23,6 +23,7 @@ use App\Services\SettingsRepository;
 use Filament\Actions\Action;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -566,4 +567,30 @@ it('words a declined request in Urdu, its step "not approved" in the request\'s 
         "<span class=\"el-plan-card-name\">We couldn't confirm your payment</span>", '<span class="el-tag">Not approved</span>',
         '<span class="el-set-title">Not approved</span>', 'aria-label="Not approved, done, 17 Nov, 11:42 am"',
     ]);
+});
+
+it('writes the Plan page\'s dates in Urdu as the rest of the console does, and its English as before', function () {
+    Carbon::setTestNow(Carbon::parse('2026-11-17 11:42:00', 'UTC'));
+    Workspace::query()->whereKey($this->owner->current_workspace_id)->update(['plan_expires_at' => '2026-12-17 10:00:00']);
+    upgradeUrduRequest($this->owner);
+
+    upgradeUrduAs($this, 'ur');
+    expect(upgradeUrduPage($this, '/app/settings/plan'))
+        ->toContain(upgradeUrduIsolated('17 دسمبر 2026').' تک ادائیگی ہو چکی')
+        ->toContain('آپ کا پلان '.upgradeUrduIsolated('17 دسمبر 2026').' کو ختم ہو جائے گا۔')
+        ->toContain(upgradeUrduIsolated('17 نومبر').' سے ادائیگی کا انتظار')
+        ->not->toContain('17 Dec')->not->toContain('17 Nov');
+
+    upgradeUrduAs($this, 'en');
+    expect(upgradeUrduPage($this, '/app/settings/plan'))
+        ->toContain('Paid until 17 Dec 2026')->toContain('Your plan stops on 17 December 2026. There is nothing to cancel.')
+        ->toContain('Waiting for payment since 17 Nov');
+    Carbon::setTestNow();
+});
+
+it('names the second bank account as "account 2" in Urdu', function () {
+    app()->setLocale('ur');
+    expect(__('Pay to, account :number', ['number' => '2']))->toBe('اکاؤنٹ '.upgradeUrduIsolated('2').' میں ادائیگی');
+    app()->setLocale('en');
+    expect(__('Pay to, account :number', ['number' => '2']))->toBe('Pay to, account 2');
 });

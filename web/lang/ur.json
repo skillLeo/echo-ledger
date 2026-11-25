@@ -1865,8 +1865,7 @@
     "Amount": "رقم",
     "Copy the amount": "رقم کاپی کریں",
     "Send exactly this amount. A different amount can slow down your upgrade.": "بالکل یہی رقم بھیجیں۔ مختلف رقم بھیجنے سے آپ کے اپ گریڈ میں تاخیر ہو سکتی ہے۔",
-    "Pay to": "ادائیگی بنام",
-    "Pay to, account :number": "ادائیگی اس اکاؤنٹ میں، اکاؤنٹ :number",
+    "Pay to, account :number": "اکاؤنٹ :number میں ادائیگی",
     "Account title": "اکاؤنٹ ٹائٹل",
     "Copy account title": "اکاؤنٹ ٹائٹل کاپی کریں",
     "Bank": "بینک",
@@ -1924,7 +1923,6 @@
     "Add receipt": "رسید شامل کریں",
     "Requested": "درخواست دی گئی",
     "Transaction ID": "ٹرانزیکشن ID",
-    "Paid from": "ادائیگی کا ذریعہ",
     "a plan": "کوئی پلان",
     "Checking your payment": "آپ کی ادائیگی چیک ہو رہی ہے",
     "In review": "جانچ میں",
@@ -2037,5 +2035,7 @@
     "Too many new accounts from this network today. Try again tomorrow.": "آج اس نیٹ ورک سے بہت زیادہ نئے اکاؤنٹس بنے۔ کل دوبارہ کوشش کریں۔",
     "Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it.": "ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کا تقاضا ہو، اپنی میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔",
     "If an account uses that address, a link to choose a new password is on its way.": "اگر کوئی اکاؤنٹ یہ ایڈریس استعمال کرتا ہے تو نیا پاس ورڈ چننے کا لنک آ رہا ہے۔",
-    "Your request for :plan is still waiting. We will tell you once it is decided.": "آپ کی :plan کی درخواست ابھی انتظار میں ہے۔ فیصلہ ہوتے ہی ہم آپ کو بتائیں گے۔"
+    "Your request for :plan is still waiting. We will tell you once it is decided.": "آپ کی :plan کی درخواست ابھی انتظار میں ہے۔ فیصلہ ہوتے ہی ہم آپ کو بتائیں گے۔",
+    "It was used already, it ended, it was taken back, or the person who sent it can no longer invite. Ask for a new one.": "یہ دعوت پہلے ہی استعمال ہو چکی ہے، ختم ہو گئی ہے، واپس لے لی گئی ہے، یا بھیجنے والا اب دعوت نہیں دے سکتا۔ نئی دعوت مانگیں۔",
+    "This invite link is no longer open: it ended, it was revoked, or as many people as it allowed have joined. Ask for a new one.": "دعوت کا یہ لنک اب کھلا نہیں: یہ ختم ہو گیا، واپس لے لیا گیا، یا جتنے لوگوں کی اجازت تھی وہ شامل ہو چکے ہیں۔ نیا لنک مانگیں۔"
 }

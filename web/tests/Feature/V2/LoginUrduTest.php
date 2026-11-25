@@ -7,6 +7,8 @@ use App\Filament\Auth\Login;
 use App\Filament\Auth\RequestPasswordReset;
 use App\Mail\EmailCodeMail;
 use App\Services\Accounts\EmailCodes;
+use App\Services\Accounts\Invitations;
+use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
@@ -325,3 +327,16 @@ it('answers Forgot password in each language', function (string $language, strin
     'Urdu' => ['ur', 'اپنی ای میل دیکھیں · اگر کوئی اکاؤنٹ یہ ایڈریس استعمال کرتا ہے تو نیا پاس ورڈ چننے کا لنک آ رہا ہے۔'],
     'English as before' => ['en', 'Check your email · If an account uses that address, a link to choose a new password is on its way.'],
 ]);
+
+it('tells a closed invitation and a closed invite link in each language, the English as the services write it', function () {
+    $invitation = new ApiError(410, 'invitation_closed', Invitations::CLOSED);
+    $link = new ApiError(410, 'link_closed', InviteLinks::CLOSED);
+
+    app()->setLocale('ur');
+    expect(Login::codeError($invitation))->toBe('یہ دعوت پہلے ہی استعمال ہو چکی ہے، ختم ہو گئی ہے، واپس لے لی گئی ہے، یا بھیجنے والا اب دعوت نہیں دے سکتا۔ نئی دعوت مانگیں۔')
+        ->and(Login::codeError($link))->toBe('دعوت کا یہ لنک اب کھلا نہیں: یہ ختم ہو گیا، واپس لے لیا گیا، یا جتنے لوگوں کی اجازت تھی وہ شامل ہو چکے ہیں۔ نیا لنک مانگیں۔');
+
+    app()->setLocale('en');
+    expect(Login::codeError($invitation))->toBe(Invitations::CLOSED)
+        ->and(Login::codeError($link))->toBe(InviteLinks::CLOSED);
+});
