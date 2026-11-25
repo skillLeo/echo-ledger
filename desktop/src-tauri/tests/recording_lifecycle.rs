@@ -507,6 +507,19 @@ fn waiting_recordings_survive_a_restart() {
 }
 
 #[test]
+fn a_waiting_call_the_server_has_a_session_for_is_counted_by_the_server_not_again_here() {
+    // UX-08: the server's badge counts a waiting call it has a session for (captions opened one); the rail and the Dock
+    // add only the ones it doesn't know.
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "a", None, Utc::now())).unwrap();
+    files.add(decision(root.path(), "b", Some("01SESSIONAAAAAAAAAAAAAAAAA"), Utc::now())).unwrap();
+    let store = files.load();
+    assert_eq!(store.waiting(), 2, "both wait for the person");
+    assert_eq!(store.waiting_here(), 1, "only the one without a server session is this computer's own to count");
+}
+
+#[test]
 fn a_pending_file_from_before_v1_5_loads_with_every_recording_waiting() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());

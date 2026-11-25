@@ -125,8 +125,10 @@ describe("parity with today's project page", () => {
     ["tab: Recordings", { tab: R, role: "tab", name: "Recordings" }],
     ["tab: Files", { tab: R, role: "tab", name: "Files" }],
     ["tab: Notes", { tab: R, role: "tab", name: M }],
-    ["tab: Screens", { tab: R, role: "tab", name: "Screens" }],
-    ["tab: AI notes", { tab: R, role: "tab", name: "Call notes" }],
+    // UX-09: the tabs are Recordings · Files · Memory & instructions · Ask · Members; Screens is a section of Files and
+    // the call notes one of Memory & instructions (their controls are found there, below).
+    ["tab: Screens", { reason: "UX-09: Screens is a section of the Files tab (button: Screen 1 · 1:00 below)" }],
+    ["tab: AI notes", { reason: "UX-09: Call notes is a section of the Memory & instructions tab (button: Open below)" }],
     ["button: Add files", { tab: "Files", role: "button", name: "Add files" }],
     ["button: Paste instructions", { tab: "Files", role: "button", name: "Paste instructions" }],
     ["button: Remove Proforma March.pdf", { tab: "Files", role: "button", name: "Remove Proforma March.pdf" }],
@@ -157,9 +159,9 @@ describe("parity with today's project page", () => {
     ["combobox: Kind", { tab: M, role: "combobox", name: /^Kind (?!of rule)/ }],
     ["textbox: Add to memory", { tab: M, role: "textbox", name: "Add a line" }],
     ["button: Add", { tab: M, role: "button", name: "Add to memory" }],
-    ["button: Open", { tab: "Call notes", role: "button", name: "Open Payment terms for the March shipment" }],
-    ["button: 0:3140% advance", { tab: "Call notes", role: "button", name: "0:3140% advance" }],
-    ["button: Screen 1 · 1:00", { tab: "Screens", role: "button", name: "Screen 1 · 1:00" }],
+    ["button: Open", { tab: M, role: "button", name: "Open Payment terms for the March shipment" }],
+    ["button: 0:3140% advance", { tab: M, role: "button", name: "0:3140% advance" }],
+    ["button: Screen 1 · 1:00", { tab: "Files", role: "button", name: "Screen 1 · 1:00" }],
     ["button: Retry", { tab: M, role: "button", name: "Try again", state: "failed" }],
   ];
 
@@ -365,7 +367,8 @@ describe("the new project page does what today's does", () => {
   it("a plan without AI notes: no Ask or call notes, the reason with its badge, the brief by hand", async () => {
     await show({ aiNotesInPlan: false });
     // The tabs that list things show their counts after the name (1 recording, 2 files).
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings1", "Files2", "Memory & instructions", "Screens"]);
+    // UX-09's tabs (Ask needs the plan's AI notes); Screens and the call notes are sections of Files and Memory now.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings1", "Files2", "Memory & instructions", "Members"]);
     await openTab("Memory & instructions");
     expect(screen.getByTestId("ai-not-in-plan")).toHaveTextContent("not in your workspace's plan");
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
@@ -375,14 +378,14 @@ describe("the new project page does what today's does", () => {
   it("the AI notes switch turns call notes off for the project", async () => {
     respond("client_update", { data: { id: "c1", name: "Qureshi Textiles", ai_notes: false } });
     const p = await show();
-    expect(screen.getByRole("tab", { name: "Call notes" })).toBeInTheDocument();
     await openTab("Memory & instructions");
+    expect(screen.getByRole("region", { name: "Call notes" })).toBeInTheDocument();
     expect(screen.getByTestId("ai-budget")).toHaveTextContent("AI this month");
     fireEvent.click(screen.getByRole("switch", { name: "AI notes" }));
     await act(flushAsync);
     expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { ai_notes: false } }]);
     expect(p.onProjectChanged).toHaveBeenCalledWith({ id: "c1", ai_notes: false });
-    expect(screen.queryByRole("tab", { name: "Call notes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Call notes" })).toBeNull();
   });
 
   it("recordings: its folders' recordings with Include its folders; a row can start a drag onto a project", async () => {
@@ -521,9 +524,104 @@ describe("a locked tab (parity DT-PRJ-012)", () => {
     resetEntitlementsForTests(makeEntitlements());
     try {
       await show();
-      expect(screen.getByRole("tab", { name: /^Screens Pro$/ })).toBeInTheDocument();
+      // Screens is a section of Files (UX-09): its title carries the plan.
+      await openTab("Files");
+      expect(screen.getByRole("heading", { name: /^Screens Pro$/ })).toBeInTheDocument();
     } finally {
       resetEntitlementsForTests(null);
     }
+  });
+});
+
+describe("a project's page in UX-09", () => {
+  beforeEach(() => {
+    respond("account_get", { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
+  });
+
+  it("its tabs are Recordings · Files · Memory & instructions · Ask · Members; Request files is a button in its header", async () => {
+    const onRequest = vi.fn();
+    await show({ onRequest });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings1", "Files2", "Memory & instructions", "Ask", "Members"]);
+    const header = document.querySelector<HTMLElement>("[data-v2=workspace] .el-page__head")!;
+    fireEvent.click(within(header).getByRole("button", { name: "Request files" }));
+    expect(onRequest).toHaveBeenCalled();
+  });
+
+  const link = (over: Record<string, unknown>) => ({ id: "l1", session_id: null, has_password: false, include_audio: true, expires_at: null, revoked_at: null, active: true,
+    view_count: 2, last_viewed_at: null, created_by: null, created_at: "2026-11-20T08:00:00Z", kind: "project", client_id: "c1", ...over });
+  const sentTo = (id: string, name: string | null, email: string) => ({ id, kind: "project", to: { name, email }, title: "Qureshi Textiles", note: null, sent_at: "2026-11-21T08:00:00Z", saved_at: null });
+  const memberRows = () => within(screen.getByRole("list", { name: "Members" })).getAllByRole("listitem")
+    .map((r) => [r.querySelector(".el-row__title")?.textContent, r.querySelector(".el-row__meta")?.textContent]);
+
+  it("Members: you, the teammates it was sent to, whoever its links let in; the links with their views; Share and Send to a teammate…", async () => {
+    respond("shares_of", { data: [
+      link({ id: "l1", audience: "people", people: ["sara@acme.pk", "bilal@qureshitextiles.pk"], view_count: 3 }),
+      link({ id: "l2", audience: "public" }),
+      link({ id: "l3", audience: "public", active: false, revoked_at: "2026-11-21T08:00:00Z" }),
+    ] });
+    respond("sent_of", { data: [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk"), sentTo("s2", null, "sara@acme.pk")] });
+    const onShare = vi.fn();
+    const onSend = vi.fn();
+    await show({ onShare, onSend });
+    await openTab("Members");
+    expect(callsOf("shares_of")).toContainEqual({ sessionId: null, clientId: "c1" });
+    expect(callsOf("sent_of")).toEqual([{ sessionId: null, clientId: "c1" }]);
+    expect(memberRows()).toEqual([
+      ["Ayesha Siddiqui (you)", "Created by you"],
+      ["Ana Siddiqui", "ana@qureshitextiles.pk · Sent to them · can open it until you stop sharing"],
+      // Sent and in a link: one row, both ways.
+      ["sara@acme.pk", "Sent to them · can open it until you stop sharing; Through a share link"],
+      ["bilal@qureshitextiles.pk", "Through a share link"],
+      ["Anyone with the link", "Through a share link"],
+    ]);
+    // The views are the links', never a person's.
+    const links = within(screen.getByRole("list", { name: "Share links" })).getAllByRole("listitem").map((r) => r.querySelector(".el-row__meta")?.textContent);
+    expect(links).toEqual(["3 views", "2 views"]);
+    expect(screen.getByText(/^Only you and these can open Qureshi Textiles/)).toBeInTheDocument();
+    // One name per action, as the header and the project menu say them.
+    fireEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Share" }));
+    const send = within(screen.getByRole("tabpanel")).getByRole("button", { name: "Send to a teammate…" });
+    expect(send).toHaveAttribute("title", "They can open it, read-only and kept current, until you stop sharing");
+    fireEvent.click(send);
+    expect([onShare, onSend].every((f) => f.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("Members of a project only sent to a teammate: they can open it, so it isn't called private", async () => {
+    respond("shares_of", { data: [] });
+    respond("sent_of", { data: [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk")] });
+    await show();
+    await openTab("Members");
+    expect(memberRows()).toHaveLength(2);
+    expect(screen.queryByText(/private/)).toBeNull();
+    expect(screen.getByText(/^Only you and these can open/)).toBeInTheDocument();
+  });
+
+  it("Members of a folder: the teammates the project it sits in was sent to can open it too", async () => {
+    respond("shares_of", { data: [] });
+    respondWith("sent_of", ({ clientId }) => ({ data: clientId === "c1" ? [sentTo("s1", "Ana Siddiqui", "ana@qureshitextiles.pk")] : [] }));
+    await show({ project: { id: "c1a", name: "March order", ai_notes: true }, parent: { id: "c1", name: "Qureshi Textiles" } });
+    await openTab("Members");
+    expect(callsOf("sent_of")).toEqual([{ sessionId: null, clientId: "c1a" }, { sessionId: null, clientId: "c1" }]);
+    expect(memberRows()[1]).toEqual(["Ana Siddiqui", "ana@qureshitextiles.pk · Sent with Qureshi Textiles · can open it until you stop sharing"]);
+  });
+
+  it("Members of a project shared with nobody: only you, and why", async () => {
+    respond("shares_of", { data: [] });
+    respond("sent_of", { data: [] });
+    await show();
+    await openTab("Members");
+    expect(memberRows()).toEqual([["Ayesha Siddiqui (you)", "Created by you"]]);
+    expect(screen.getByText(/a project is private until you share it/)).toBeInTheDocument();
+  });
+
+  it("Files has the screens kept in its meetings, and Memory & instructions the call notes", async () => {
+    respond("client_screens", { data: [{ ...makeScreen(1, 60_000), id: "s1-1", session_id: "bilal", session_title: "Kick-off", session_started_at: "2026-11-04T10:00:00Z" }], next_cursor: null });
+    respondWith("screen_image", ({ url }) => `data:image/webp;base64,${btoa(String(url))}`);
+    await show();
+    await openTab("Files");
+    expect(await screen.findByRole("button", { name: "Screen 1 · 1:00" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Screens" })).toBeInTheDocument();
+    await openTab("Memory & instructions");
+    expect(within(screen.getByRole("region", { name: "Call notes" })).getByRole("button", { name: "Open Payment terms for the March shipment" })).toBeInTheDocument();
   });
 });

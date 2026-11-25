@@ -1,6 +1,6 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ScreenMoment, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
+import type { ScreenMoment, ActivityGroup, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
 import { makeItem, makeScreen, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
@@ -178,6 +178,24 @@ export const ACTIVITY: ActivityItem[] = [
   { id: "a2", kind: "transcript_ready", title: "Transcript ready", body: "Weekly sync with Northwind", session_id: "r1", read: false, at: at(0, 9, 40) },
   { id: "a3", kind: "transcript_ready", title: "Transcript ready", body: "Invoice questions", session_id: "r2", read: true, at: at(2, 8) },
   { id: "a4", kind: "device_paired", title: "New device", body: "Pixel 9 was paired", session_id: null, read: true, at: at(5, 10) },
+];
+
+/**
+ * `&grouped=1` (UX-08, contract 2.0.0-r): three uploads that didn't finish (one of them twice), one that went up after all
+ * ("Uploaded", resolved), the group the server makes of them and its one Activity number.
+ */
+export const UPLOADS_FAILED: ActivityItem[] = [
+  { id: "g1", kind: "upload_failed", title: "Upload didn't finish", body: "WhatsApp call with Omar Khan", session_id: "r4", read: false, at: at(0, 10, 12), group: "upload_failed", resolved: false, repeat_count: 2 },
+  { id: "g2", kind: "upload_failed", title: "Upload didn't finish", body: "Voice note", session_id: "r3", read: false, at: at(0, 9, 55), group: "upload_failed", resolved: false, repeat_count: 1 },
+  { id: "g3", kind: "upload_failed", title: "Upload didn't finish", body: "Zoom call · Acme kick-off", session_id: "r2", read: true, at: at(0, 8, 20), group: "upload_failed", resolved: false, repeat_count: 1 },
+];
+export const ACTIVITY_GROUPED: ActivityItem[] = [
+  ...UPLOADS_FAILED,
+  ...ACTIVITY,
+  { id: "g4", kind: "upload_failed", title: "Uploaded", body: "Call with Sara", session_id: "r1", read: true, at: at(1, 18, 5), group: "upload_failed", resolved: true, repeat_count: 1 },
+];
+export const ACTIVITY_GROUPS: ActivityGroup[] = [
+  { group: "upload_failed", count: 3, unread: 2, session_ids: ["r4", "r3", "r2"], at: at(0, 10, 12) },
 ];
 
 /** Activity's "Skipped 3 short calls" (v1.5): restorable for 24 hours. */

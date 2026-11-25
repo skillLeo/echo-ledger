@@ -53,24 +53,80 @@ describe("the recording page (parity batch 2)", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("The current transcript stays until the new one is ready.");
   });
 
-  it("DT-REC-004: clicking the title renames in place; Enter saves, Esc cancels", async () => {
-    respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false } }));
-    await openRecording(item());
-    fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi" }));
-    const field = screen.getByRole("textbox", { name: "Recording title" });
-    fireEvent.change(field, { target: { value: "Ignored" } });
-    fireEvent.keyDown(field, { key: "Escape" });
+  it("DT-REC-004: pressing the title opens Rename (tooltip Rename, a button so Enter reaches it); Cancel keeps it, Save renames", async () => {
+    respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false, title_source: "own" } }));
+    await openRecording(item({ title_source: "own" }));
+    const title = () => within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Bilal Qureshi" });
+    expect(title()).toHaveAttribute("title", "Rename");
+    expect(title()).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(title());
+    let dialog = screen.getByRole("dialog", { name: "Rename" });
+    // The person's own title: the box starts with it.
+    expect(within(dialog).getByRole("textbox", { name: "Title" })).toHaveValue("Bilal Qureshi");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Title" }), { target: { value: "Ignored" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(callsOf("session_organise")).toEqual([]);
     // The keyboard is back on the title.
-    expect(screen.getByRole("button", { name: "Bilal Qureshi" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Recording title" }), { target: { value: "  Bilal · March shipment " } });
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "Recording title" }), { key: "Enter" });
+    expect(title()).toHaveFocus();
+    fireEvent.click(title());
+    dialog = screen.getByRole("dialog", { name: "Rename" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Title" }), { target: { value: "  Bilal · March shipment " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await act(flushAsync);
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: "Bilal · March shipment" } }]);
+    expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Bilal · March shipment");
-    expect(screen.getByRole("button", { name: "Bilal · March shipment" })).toHaveFocus();
+    // Saved: the keyboard is back on the title too.
+    expect(within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Bilal · March shipment" })).toHaveFocus();
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
+  });
+
+  it("DT-REC-004: Esc closes only the Rename dialog; the recording stays open, the keyboard on its title", async () => {
+    await openRecording(item({ title_source: "own" }));
+    const title = () => within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Bilal Qureshi" });
+    fireEvent.click(title());
+    const box = within(screen.getByRole("dialog", { name: "Rename" })).getByRole("textbox", { name: "Title" });
+    fireEvent.change(box, { target: { value: "Ignored" } });
+    fireEvent.keyDown(box, { key: "Escape" });
+    await act(flushAsync);
+    expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
+    expect(callsOf("session_organise")).toEqual([]);
+    // Still the recording's page, not the Library.
+    expect(title()).toBeInTheDocument();
+    expect(title()).toHaveFocus();
+  });
+
+  it("DT-REC-004: a mouse click on the title when something else had the keyboard (Back): closing Rename gives it to the title", async () => {
+    respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false, title_source: "own" } }));
+    await openRecording(item({ title_source: "own" }));
+    const title = (name: string) => within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name });
+    // A Mac doesn't focus a button it clicks: the keyboard stays where it was, here on Back.
+    screen.getByRole("button", { name: "Library" }).focus();
+    fireEvent.click(title("Bilal Qureshi"));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Rename" })).getByRole("button", { name: "Cancel" }));
+    await act(flushAsync);
+    expect(title("Bilal Qureshi")).toHaveFocus();
+    screen.getByRole("button", { name: "Library" }).focus();
+    fireEvent.click(title("Bilal Qureshi"));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Title" }), { target: { value: "Bilal · March shipment" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(title("Bilal · March shipment")).toHaveFocus();
+  });
+
+  it("DT-REC-004: a title that isn't the person's own (Call with …) opens an empty box with it as the hint; Save with nothing changes nothing", async () => {
+    respondWith("session_organise", (args) => ({ data: { ...item(), title: (args as { patch: { title: string } }).patch.title, title_auto: false, title_source: "own" } }));
+    await openRecording(item({ title: "Call with Bilal Qureshi", title_source: "person" }));
+    fireEvent.click(within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name: "Call with Bilal Qureshi" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    const box = within(dialog).getByRole("textbox", { name: "Title" });
+    expect(box).toHaveValue("");
+    expect(box).toHaveAttribute("placeholder", "Call with Bilal Qureshi");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("session_organise")).toEqual([]);
+    expect(screen.queryByRole("dialog", { name: "Rename" })).toBeNull();
   });
 });
 

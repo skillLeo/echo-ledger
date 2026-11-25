@@ -12,6 +12,7 @@ import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../lib/shell";
 import { NavShell } from "./NavShell";
 import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
+import { setProjectsAccount } from "./kept";
 import { keyboardPoint, useProjectMenu } from "./ProjectMenu";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
@@ -69,6 +70,8 @@ export type ShellProps = {
   banners?: ReactNode;
   /** How many things need the person (Activity's badge); none or 0 shows no badge. */
   activity?: number;
+  /** The badge's colour: red only when something failed (UX-08). */
+  activityTone?: "accent" | "danger";
   /** A recording is under way: Record says so and stops it. */
   recording?: boolean;
   /** Record now (or stop); without it (a viewer) Record opens the Record page. Its promise ends when the core answered. */
@@ -141,6 +144,11 @@ export type ShellProps = {
     placeRequest?: { place: Place; seq: number } | null;
     panels?: Partial<Record<Place, ReactNode>>;
     feet?: Partial<Record<Place, ReactNode>>;
+    /** The projects are read and there are none (UX-09): Projects has no panel. */
+    noProjects?: boolean;
+    /** The projects are being read (the panel shows shapes of rows), or couldn't be (offline). */
+    projectsLoading?: boolean;
+    projectsError?: string | null;
     onPlace?: (place: Place, again: boolean) => void;
     libraryCount?: number;
     liveDot?: boolean;
@@ -240,7 +248,7 @@ function ResizeEdge({ width, onWidth }: { width: number; onWidth: (width: number
 }
 
 /** A project in the sidebar's tree: its folder (`parent_id`, null at the top) and whether it is pinned. */
-export type SidebarProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean };
+export type SidebarProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean; archived?: boolean };
 
 /** Which projects' subfolders are folded in the sidebar, kept on this computer (classic's: a group stays as left). */
 export const FOLDS_KEY = "echoledger-v2-sidebar-folds";
@@ -259,31 +267,52 @@ function saveFolds(folds: ReadonlySet<string>) {
     // Kept for this session only.
   }
 }
+/** Sent when a project's folders fold or show, so every tree of them (Pinned, Projects, the drag targets) follows. */
+const FOLDS_EVENT = "echoledger:project-folds";
+/** One store of folds for every tree: a change starts from what is saved, never from one tree's own copy. */
+function useFolds(): [ReadonlySet<string>, (id: string) => void] {
+  const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  useEffect(() => {
+    const follow = (e: Event) => setFolds(new Set((e as CustomEvent<string[]>).detail));
+    window.addEventListener(FOLDS_EVENT, follow);
+    return () => window.removeEventListener(FOLDS_EVENT, follow);
+  }, []);
+  const fold = (id: string) => {
+    const saved = loadFolds();
+    // What is saved (another tree's change included), or this tree's own when nothing can be read.
+    const next = new Set(saved.size || folds.size === 0 ? saved : folds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    saveFolds(next);
+    window.dispatchEvent(new CustomEvent(FOLDS_EVENT, { detail: [...next] }));
+  };
+  return [folds, fold];
+}
 
-/** The projects as a tree: pinned first, then by name, each project's subfolders under it (foldable, remembered). */
-function ProjectTreeNav({ projects, current, onOpen, menus = true }: {
+/**
+ * The projects as a tree: pinned first, then by name (or the list's own order at its top level), each project's
+ * subfolders under it (foldable, remembered).
+ */
+function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Projects", order }: {
   projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void;
   /** Each project's menu (right-click, Shift+F10, the menu key); off where the tree only takes dropped recordings. */
   menus?: boolean;
+  /** The list's name (the Projects panel has Pinned, Projects and Archived). */
+  label?: string;
+  /** The top level's order (the Projects panel's sort); folders are pinned first, then by name. */
+  order?: (a: SidebarProject, b: SidebarProject) => number;
 }) {
-  const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  const [folds, fold] = useFolds();
   const menu = useProjectMenu();
   const ids = new Set(projects.map((p) => p.id));
   const children = (parent: string | null) => projects
     .filter((p) => (p.parent_id && ids.has(p.parent_id) ? p.parent_id : null) === parent)
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
-  const fold = (id: string) => setFolds((now) => {
-    const next = new Set(now);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    saveFolds(next);
-    return next;
-  });
+    .sort(parent === null && order ? order : (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
   const branch = (parent: string | null, depth: number): ReactNode => {
     const rows = children(parent);
     if (!rows.length) return null;
     return (
-      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? "Projects" : undefined} role={parent === null ? undefined : "group"}>
+      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label : undefined} role={parent === null ? undefined : "group"}>
         {rows.map((p) => {
           const kids = children(p.id).length > 0;
           const open = kids && !folds.has(p.id);
@@ -326,7 +355,7 @@ export function Shell(props: ShellProps) {
 }
 
 /** The three levels: Live and Ask are the shell's own pages, as in the sidebar; the rest are MainApp's tabs. */
-function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
+function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, activityTone, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onSearch,
   searchKeys, onHelp, projectTree, projectId = null, onProject, uploading, library, footStart, nav, children }: ShellProps) {
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   const [lastTab, setLastTab] = useState(tab);
@@ -363,15 +392,19 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
       {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} menus={false} />}
     </div>
   );
-  const projectsPanel = onProject && (
+  // The projects' sort and Recent are this account's (kept.ts).
+  useEffect(() => setProjectsAccount(nav?.layoutFor), [nav?.layoutFor]);
+  // UX-09: no Projects panel while there is no project (the page has one empty state saying how to start).
+  const projectsPanel = onProject && !nav?.noProjects && (
     <ProjectsPanel projects={projectTree ?? []} current={tab === "projects" ? projectId : null} allCurrent={tab === "projects" && !projectId}
-      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject} onRequest={onRequestLink}
-      tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
+      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject}
+      loading={!!nav?.projectsLoading} error={nav?.projectsError ?? null}
+      tree={(list, current, open, how) => <ProjectTreeNav projects={list} current={current} onOpen={open} label={how.label} order={how.order} />} />
   );
   return (
     <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
-      libraryCount={nav?.libraryCount} activityCount={activity} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
+      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
       recording={recording} onRecord={onRecord} onUpload={onUpload} onVoiceNote={onVoiceNote} callRecording={nav?.callRecording}
       onSearch={onSearch} searchKeys={searchKeys} me={me} account={nav?.account} uploading={uploading} notices={notices} banners={banners}>
