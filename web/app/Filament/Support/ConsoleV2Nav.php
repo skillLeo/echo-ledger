@@ -127,7 +127,7 @@ final class ConsoleV2Nav
         $onProject = $routes && request()->routeIs('filament.app.resources.clients.view');
 
         return array_map(fn (array $p): array => ['id' => $p['id'], 'name' => $p['name'], 'count' => $p['count'], 'url' => $p['url'], 'depth' => min(1, $p['depth']),
-            'active' => $onProject && $current === $p['id']], array_slice(Shell::projects(), 0, $limit));
+            'active' => $onProject && $current === $p['id'], 'pinned' => $p['pinned']], array_slice(Shell::projects(), 0, $limit));
     }
 
     /**

@@ -298,14 +298,25 @@ describe("speed", () => {
       date: { op: "is", values: ["this_month"] }, source: { op: "is", values: ["whatsapp", "zoom"] }, labels: { op: "is_not", values: ["l3"] },
       status: { op: "is", values: ["transcribed"] },
     };
-    const started = performance.now();
-    const { facts, names } = prepare(many, { now: NOW.getTime() });
-    const searched = facts.filter((f) => matchesSearch(f, searchWords("call budget")));
-    const shown = filterFacts(searched, spec, NOW.getTime());
-    const counts = facetCounts(searched, spec, names, NOW.getTime(), undefined, facts);
-    const took = performance.now() - started;
+    const once = () => {
+      const { facts, names } = prepare(many, { now: NOW.getTime() });
+      const searched = facts.filter((f) => matchesSearch(f, searchWords("call budget")));
+      return { shown: filterFacts(searched, spec, NOW.getTime()), counts: facetCounts(searched, spec, names, NOW.getTime(), undefined, facts) };
+    };
+    // D-215: the processor time this work takes, not the clock's. On a quiet computer the two are the same (the work
+    // is all here, nothing to wait for); on a busy one the clock also counts other programs' turns: one run took
+    // 240-590 ms by the clock under load and 25-85 ms of processor time. A first run compiles the code; the median of
+    // the next five is held to the same 200 ms.
+    const cpuMs = (run: () => unknown) => {
+      const before = process.cpuUsage();
+      run();
+      const used = process.cpuUsage(before);
+      return (used.user + used.system) / 1000;
+    };
+    const { shown, counts } = once();
+    const runs = Array.from({ length: 5 }, () => cpuMs(once)).sort((a, b) => a - b);
     expect(shown.length).toBeGreaterThan(0);
     expect(counts.source.length).toBe(apps.length);
-    expect(took).toBeLessThan(200);
+    expect(runs[2]).toBeLessThan(200);
   });
 });

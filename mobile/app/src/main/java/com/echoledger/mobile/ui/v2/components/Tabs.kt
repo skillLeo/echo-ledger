@@ -192,8 +192,10 @@ fun EchoBottomBar(
                     ) {
                         Icon(d.icon, null, Modifier.size(EchoTokens.Icon.lg), tint = if (selected) c.accentText else c.textSecondary)
                     }
+                    // A small gap at each side, so a long word (Nastaliq at large text) never touches the next tab's.
                     Text(
                         d.label,
+                        modifier = Modifier.padding(horizontal = EchoTokens.Space.s2),
                         style = labelStyle,
                         color = if (selected) c.textPrimary else c.textSecondary,
                         maxLines = 1,

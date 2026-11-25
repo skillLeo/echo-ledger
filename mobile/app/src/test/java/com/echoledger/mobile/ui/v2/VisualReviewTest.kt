@@ -37,7 +37,6 @@ import com.echoledger.mobile.core.LibraryViewChoice
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.data.LibraryItem
-import com.echoledger.mobile.privilege.AppCallCapture
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.ui.v2.activity.ActivityWords
 import com.echoledger.mobile.ui.v2.components.EchoIcons
@@ -57,7 +56,6 @@ import com.echoledger.mobile.ui.v2.library.V2LibraryContent
 import com.echoledger.mobile.ui.v2.shell.PersonAvatar
 import com.echoledger.mobile.ui.v2.shell.RecordSheetActions
 import com.echoledger.mobile.ui.v2.shell.RecordSheetState
-import com.echoledger.mobile.ui.v2.shell.V2RecordSheetBody
 import com.echoledger.mobile.ui.v2.shell.initialsOf
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -346,25 +344,17 @@ class VisualReviewTest {
         )
     }
 
-    // Point 8: Auto-record calls starts in the text column, after its icon.
+    // Point 8: Auto-record calls starts in the text column, after its icon (on the Live tab since v2.1 UX-15).
 
     @Test
-    fun autoRecordCallsLinesUpWithTheOtherRowsOfTheRecordSheet() {
-        val state = RecordSheetState(
-            AppCallCapture.BOTH_SIDES,
-            armed = false,
-            canArm = true,
-            liveAssist = false,
-            liveTranslate = false,
-            translateLocked = null,
-            game = false,
-            watch = false
-        )
-        val actions = RecordSheetActions({}, {}, {}, {}, {}, {}, {}, {})
-        show { Column { V2RecordSheetBody(state, actions, {}) } }
+    fun autoRecordCallsLinesUpWithTheOtherRowsOfTheLiveTab() {
+        val status = com.echoledger.mobile.ui.v2.live.LiveStatus(armed = false, canArm = true, calls = "Calls: ready", onArm = {})
+        show {
+            Column { com.echoledger.mobile.ui.v2.live.V2LiveTab(liveAssist = false, liveTranslate = false, onOpen = {}, status = status) }
+        }
         everyVariant { at ->
             val calls = bounds(compose.onNodeWithText(words("Auto-record calls", "کالز خود بخود ریکارڈ کریں"), useUnmergedTree = true))
-            val voice = bounds(compose.onNodeWithText(words("Voice & files", "آواز اور فائلیں"), useUnmergedTree = true))
+            val voice = bounds(compose.onNodeWithText(words("Voice note", "وائس نوٹ"), useUnmergedTree = true))
             if (language == EchoLanguage.Urdu) {
                 assertEquals("$at: right edges", voice.right, calls.right, 1f)
             } else {
@@ -480,17 +470,8 @@ class VisualReviewTest {
         val went = mutableListOf<String>()
         show {
             com.echoledger.mobile.ui.v2.shell.V2RecordSheet(
-                RecordSheetState(
-                    AppCallCapture.BOTH_SIDES,
-                    armed = false,
-                    canArm = true,
-                    liveAssist = true,
-                    liveTranslate = true,
-                    translateLocked = null,
-                    game = false,
-                    watch = false
-                ),
-                RecordSheetActions({}, {}, {}, {}, {}, {}, {}, {}, onWatchTranslate = { went += "watch" }),
+                RecordSheetState(liveAssist = true, liveTranslate = true, translateLocked = null),
+                RecordSheetActions({}, {}, {}, {}, {}, onTranslate = { went += "translate" }, onLocked = {}),
                 onDismiss = {}
             )
         }
@@ -498,11 +479,11 @@ class VisualReviewTest {
             language = l
             scale = 2f
             compose.waitForIdle()
-            val watch = compose.onNodeWithText(words("Watch translate", "ویڈیو کا ترجمہ"))
-            watch.performScrollTo()
-            watch.assertIsDisplayed()
+            val last = compose.onNodeWithText(words("Translate a game or video", "گیم یا ویڈیو کا ترجمہ"))
+            last.performScrollTo()
+            last.assertIsDisplayed()
         }
-        compose.onNodeWithText("ویڈیو کا ترجمہ").performClick()
-        assertEquals(listOf("watch"), went)
+        compose.onNodeWithText("گیم یا ویڈیو کا ترجمہ").performClick()
+        assertEquals(listOf("translate"), went)
     }
 }

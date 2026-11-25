@@ -4,7 +4,7 @@
 // toolbar, only while filters are on: one pill per section ("Source: WhatsApp, Zoom ×"), which opens to edit it with
 // "is" or "is not", then Clear all and Save as view.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { Button, Icon, Icons, SearchField, Segmented, useFocusTrap } from "../components";
+import { Button, Icon, Icons, ResizeEdge, SearchField, Segmented, useFocusTrap } from "../components";
 import { Layer, placeMenu, regionOf } from "../components/Menu";
 import {
   activeSections, clearSection, pillWords, SECTION_NAMES, SECTIONS, sectionOn, setDate, setNot, toggleValue,
@@ -14,6 +14,30 @@ import {
 /** A section shows a search box from this many options. */
 export const SEARCH_FROM = 8;
 const FOLDED_KEY = "echoledger-library-filter-folds";
+
+/** UX-03: the filters' width, set by their edge, from 280 to 420 px (320 usually), kept on this computer; let go below
+ * 160 px they close. */
+export const FILTERS_MIN = 280;
+export const FILTERS_MAX = 420;
+export const FILTERS_DEFAULT = 320;
+export const FILTERS_CLOSE_BELOW = 160;
+export const FILTERS_WIDTH_KEY = "echoledger-library-filters-width";
+export function loadFiltersWidth(): number | null {
+  try {
+    const saved = Number(window.localStorage.getItem(FILTERS_WIDTH_KEY));
+    return Number.isInteger(saved) && saved >= FILTERS_MIN && saved <= FILTERS_MAX ? saved : null;
+  } catch {
+    return null;
+  }
+}
+function saveFiltersWidth(width: number | null) {
+  try {
+    if (width === null) window.localStorage.removeItem(FILTERS_WIDTH_KEY);
+    else window.localStorage.setItem(FILTERS_WIDTH_KEY, String(width));
+  } catch {
+    // Kept for this session only.
+  }
+}
 
 function loadFolds(): Set<SectionKey> {
   try {
@@ -115,6 +139,11 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
   onTab?: (e: KeyboardEvent<HTMLElement>) => void;
 }) {
   const [folded, setFolded] = useState<Set<SectionKey>>(loadFolds);
+  const [width, setWidthNow] = useState<number | null>(loadFiltersWidth);
+  const setWidth = (w: number | null) => {
+    setWidthNow(w);
+    saveFiltersWidth(w);
+  };
   const fold = (s: SectionKey) => setFolded((now) => {
     const next = new Set(now);
     if (next.has(s)) next.delete(s);
@@ -137,7 +166,8 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
   const on = activeSections(spec).length;
   const body = (
     <aside ref={panel} className={`el-filter${drawer ? " el-filter--drawer" : ""}`} aria-label="Filters" onKeyDown={keyDown} data-testid="filter-panel"
-      role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined}>
+      role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined}
+      style={width ? { ["--el-filter-width" as string]: `${width}px` } : undefined}>
       <div className="el-filter__head">
         <h2 className="el-body-strong">Filters{on > 0 && <span className="el-filter__on el-caption"><span className="el-num">{on}</span></span>}</h2>
         <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters"
@@ -165,6 +195,9 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
       <div className="el-filter__foot">
         <Button className="el-filter__save" icon={Icons.PlusIcon} disabled={!canSave} onClick={onSaveView}>Save as view</Button>
       </div>
+      {/* At the page's end, so its edge is the start one; let go below 160 px the filters close. */}
+      <ResizeEdge label="Resize the filters" side="start" cssVar="--el-filter-width" width={width ?? FILTERS_DEFAULT}
+        min={FILTERS_MIN} max={FILTERS_MAX} closeBelow={FILTERS_CLOSE_BELOW} onWidth={setWidth} onReset={() => setWidth(null)} onClose={onClose} />
     </aside>
   );
   return body;

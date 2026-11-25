@@ -16,6 +16,7 @@ import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 import { ATTACH_NOTE, fileName, linkMessage, pasteNote, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
 import { PACKS } from "../../views/main/TranscriptTools";
 import { Button, Dialog, Icons, Select, TextField } from "../components";
+import { openSettingsSection } from "../../lib/entitlements";
 import type { MenuItem } from "../components/Menu";
 
 /**
@@ -265,12 +266,16 @@ export function LabelDialog({ ids, known, onClose, say }: { ids: readonly string
 
 /** Renames a recording; an empty title asks the server for its automatic one again. */
 export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryItem; onClose: () => void; say: Say; onRenamed?: (item: LibraryItem) => void }) {
-  const [title, setTitle] = useState(item.title ?? "");
+  // Only a title the person chose is theirs to edit (2.0.0-k): "Call with …", an automatic title or the app's name start
+  // the box empty, with that title shown as its placeholder. An older server (no title_source) keeps the title in the box.
+  const own = item.title_source === undefined || item.title_source === "own";
+  const [title, setTitle] = useState(own ? item.title ?? "" : "");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const save = async () => {
     const text = title.trim();
-    if (text === (item.title ?? "").trim()) {
+    // Unchanged, or left empty over a title the person didn't choose: nothing to save.
+    if (text === (own ? item.title ?? "" : "").trim()) {
       onClose();
       return;
     }
@@ -278,7 +283,7 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
     try {
       const answer = await api.organiseSession(item.id, { title: text || null });
       if (answer?.data) onRenamed?.(answer.data);
-      say(text ? "Renamed" : "The automatic title will be used");
+      say(text ? "Renamed" : "Back to the title EchoLedger gives it");
       onClose();
     } catch (e) {
       sayProblem(say, errorMessage(e));
@@ -290,11 +295,17 @@ export function RenameDialog({ item, onClose, say, onRenamed }: { item: LibraryI
       actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => void save()}>Save</Button></>}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <TextField ref={input} label="Title" maxLength={MAX_TITLE_CHARS} value={title} onChange={(e) => setTitle(e.target.value)}
-          onFocus={(e) => e.currentTarget.select()} hint="Leave it empty for an automatic title from what was said." />
+          placeholder={own ? undefined : item.title ?? undefined}
+          onFocus={(e) => e.currentTarget.select()}
+          hint={own ? "Leave it empty for the title EchoLedger gives it." : "Type a title of your own, or leave it empty to keep this one."} />
       </form>
     </Dialog>
   );
 }
+
+/** What the core says when the plan transcribes with the person's own key and none is added yet (`needs_transcription_key`);
+ * the same words as desktop/src-tauri/src/error.rs CODE_TEXT, which a test holds them to. */
+export const NEEDS_TRANSCRIPTION_KEY_TEXT = "This plan transcribes with your own Groq key. Add it in Settings › Transcription key.";
 
 /** Transcribe: the minutes it will use and the minutes left this month first, then it starts. */
 export function TranscribeDialog({ ids, onClose, say, of }: {
@@ -321,6 +332,7 @@ export function TranscribeDialog({ ids, onClose, say, of }: {
       setBusy(false);
     }
   };
+  const needsKey = error === NEEDS_TRANSCRIPTION_KEY_TEXT;
   const minutes = (n: number) => (n === 1 ? "1 minute" : `${n} minutes`);
   const first = of && of > ids.length ? `The first ${ids.length} of ${of} now. ` : "";
   const description = error
@@ -329,7 +341,10 @@ export function TranscribeDialog({ ids, onClose, say, of }: {
         + (over ? " That is more than is left, so nothing will start. Pick fewer recordings." : ""));
   return (
     <Dialog open title={ids.length === 1 ? "Transcribe this recording?" : `Transcribe ${recordingsWord(ids.length)}?`} description={description} onClose={onClose}
-      actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!estimate || over} loading={busy} loadingLabel="Starting…" onClick={() => void start()}>Transcribe</Button></>} />
+      actions={<><Button onClick={onClose}>Cancel</Button>{needsKey
+        // Nothing can start until a key is added: the way to add one, as classic's "Add my Groq key".
+        ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => { onClose(); openSettingsSection("transcription-key"); }}>Add my Groq key</Button>
+        : <Button variant="primary" disabled={!estimate || over} loading={busy} loadingLabel="Starting…" onClick={() => void start()}>Transcribe</Button>}</>} />
   );
 }
 

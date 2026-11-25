@@ -7,15 +7,19 @@ namespace App\Filament\Pages;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\ObjectMenus;
 use App\Models\CaptureSession;
 use App\Services\RetentionPolicy;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -44,7 +48,52 @@ class RecentlyDeleted extends Page implements HasTable
 
     public function content(Schema $schema): Schema
     {
-        return $schema->components([EmbeddedTable::make()]);
+        return $schema->components([EmbeddedTable::make(),
+            ...(ConsoleV2::any() ? [View::make('filament.v2.object-menus')->viewData(fn (): array => ['menus' => $this->objectMenus()])] : [])]);
+    }
+
+    /** UX-22 3b: Empty trash… on the page too (Trash's menu in the panel has it), asking first. */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('emptyTrash')->label(__('Empty trash…'))->color('danger')->icon(Heroicon::OutlinedTrash)->requiresConfirmation()
+                ->modalHeading(__('Empty trash?'))->modalDescription(__('Empty the trash? Its recordings can\'t be brought back.'))
+                ->modalSubmitActionLabel(__('Empty trash'))
+                ->visible(fn (): bool => ConsoleV2::any() && ! ConsoleAccess::readOnly() && app(RetentionPolicy::class)->bin((int) CurrentWorkspace::id())->isNotEmpty())
+                ->action(function (): void {
+                    $retention = app(RetentionPolicy::class);
+                    $bin = $retention->bin((int) CurrentWorkspace::id());
+                    foreach ($bin as $session) {
+                        $retention->deleteNow($session);
+                    }
+                    Notification::make()->title(trans_choice(':count recording erased|:count recordings erased', $bin->count(), ['count' => $bin->count()]))->success()->send();
+                }),
+        ];
+    }
+
+    /** UX-22 3b: a recording in Trash: Restore | Delete immediately…. */
+    public const OBJECT_ACTIONS = ['trashItem' => ['trash.restore', 'recording.deleteNow']];
+
+    /** @return array<string, mixed> */
+    public function objectMenus(): array
+    {
+        return ObjectMenus::data(self::OBJECT_ACTIONS);
+    }
+
+    /** A pick from a row's menu (filament.v2.context-menu-script): the row's own Restore or Delete now (asks first). */
+    public function objectAction(string $kind, string $action, string $id, ?string $value = null): void
+    {
+        if (! ObjectMenus::picked(self::OBJECT_ACTIONS, $kind, $action)) {
+            return;
+        }
+        $record = $this->getTable()->getQuery()->whereKey($id)->first();
+        if (! $record instanceof CaptureSession) {
+            return;
+        }
+        $this->mountAction($action === 'trash.restore' ? 'restore' : 'eraseNow', [], ['table' => true, 'recordKey' => (string) $record->getKey()]);
+        if ($action === 'trash.restore') {
+            $this->callMountedAction();
+        }
     }
 
     public function table(Table $table): Table
@@ -55,7 +104,9 @@ class RecentlyDeleted extends Page implements HasTable
             ->defaultSort('deleted_at', 'desc')
             ->description('Deleted recordings stay here for '.CaptureSession::binHours().' hours, then their audio and transcripts are erased for good.')
             ->columns([
-                TextColumn::make('title')->label('Title')->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48),
+                TextColumn::make('title')->label('Title')->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48)
+                    // UX-22 3b: the row's right-click menu (Restore | Delete immediately…), under the new design.
+                    ->extraAttributes(fn (CaptureSession $r): array => ConsoleV2::any() ? ['data-v2-object' => 'trashItem', 'data-v2-object-id' => (string) $r->getKey()] : []),
                 TextColumn::make('client.name')->label('Project')->placeholder('—'),
                 TextColumn::make('started_at')->label('Recorded')->dateTime('M j, Y · g:i A'),
                 TextColumn::make('deleted_at')->label('Deleted')->since(),

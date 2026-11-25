@@ -8,8 +8,10 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\SttProviderKey;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
@@ -24,16 +26,18 @@ use App\Filament\Support\WhatsAppActions;
 use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\User;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Library\LibraryFacets;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
 use App\Services\Titles\TitleSql;
+use App\Services\TranscribeLater;
 use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
-use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
 use App\Stt\LanguageRouter;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -526,8 +530,9 @@ final class CaptureSessionsTable
 
     /**
      * Transcribe… for the v2.0 selection (U9, parity plan 3): the minutes it will use and the minutes left this month
-     * first, then each recording that can be transcribed (its audio is here, it has no transcript or a failed one)
-     * starts as the recording page's Transcribe again starts one. Nothing starts when the month can't cover them all.
+     * first, then each recording that can be transcribed starts: an audio-only one through TranscribeLater, as the apps'
+     * Transcribe (contract 2.0.0-j), and one with a failed transcript (or none) as the recording page's Transcribe again.
+     * Nothing starts when the month can't cover them all, or when TranscribeLater refuses (a key, the budget, busy).
      */
     public static function transcribeBulkAction(string $name): BulkAction
     {
@@ -543,15 +548,33 @@ final class CaptureSessionsTable
                 abort_if(ConsoleAccess::readOnly(), 403);
                 $plan = self::transcribePlan($records);
                 if (! $plan['can']) {
-                    Notification::make()->title($plan['words'])->danger()->send();
+                    // The month can't cover them: the same sentence as when the server refuses a start for it.
+                    $over = $plan['ready'] !== [] && $plan['left'] !== null && $plan['minutes'] > $plan['left'];
+                    Notification::make()->title($over ? self::budgetWords($plan['minutes'], $plan['left']) : $plan['words'])->danger()->send();
 
                     return;
+                }
+                // The audio-only ones first, all or none (its key and budget checks): when it refuses, nothing starts.
+                $later = ['started' => [], 'skipped' => []];
+                if ($plan['later'] !== []) {
+                    $person = auth()->user();
+                    try {
+                        $later = app(TranscribeLater::class)->startManyFor($person instanceof User ? $person : throw new ApiError(403, 'not_allowed', 'Sign in again.'),
+                            (int) CurrentWorkspace::id(), array_map(fn (CaptureSession $r): string => (string) $r->getKey(), $plan['later']));
+                    } catch (Throwable $e) {
+                        if (! $e instanceof ApiError) {
+                            report($e);
+                        }
+                        self::transcribeRefused($e, count($plan['ready']))->send();
+
+                        return;
+                    }
                 }
                 // Each one on its own: one that can't start doesn't stop the others, and is counted. The starts go on the
                 // queue (never the upload's fast path, which would run up to 50 of them inside this one web request).
                 $started = 0;
                 $failed = 0;
-                foreach ($plan['ready'] as $record) {
+                foreach ($plan['restart'] as $record) {
                     try {
                         self::engineFor($record);
                         $id = (string) $record->getKey();
@@ -567,7 +590,11 @@ final class CaptureSessionsTable
                         $failed++;
                     }
                 }
-                $skipped = $records->count() - count($plan['ready']);
+                // TranscribeLater's not_started could not start; the rest it left out (started a moment ago, not theirs) is skipped.
+                $notStarted = count(array_filter($later['skipped'], fn (array $s): bool => $s['code'] === 'not_started'));
+                $started += count($later['started']);
+                $failed += $notStarted;
+                $skipped = $records->count() - count($plan['ready']) + count($later['skipped']) - $notStarted;
                 $rest = ($failed > 0 ? ' · '.trans_choice(':count could not start|:count could not start', $failed, ['count' => $failed]) : '')
                     .($skipped > 0 ? ' · '.trans_choice(':count skipped (already transcribed or no audio)|:count skipped (already transcribed or no audio)', $skipped, ['count' => $skipped]) : '');
                 $notice = Notification::make()->title(($started > 0
@@ -579,35 +606,59 @@ final class CaptureSessionsTable
     }
 
     /**
-     * What Transcribe… would do with a selection: the recordings that can be transcribed, their minutes (each
-     * recording's length rounded up), the minutes left this month (null: no limit), whether it may start, and the words
-     * the window says (the desktop's).
+     * What Transcribe… would do with a selection: the recordings that can be transcribed (`later`: audio only, started by
+     * TranscribeLater; `restart`: the others, `ready` both), their minutes, the minutes left this month (null: no limit;
+     * TranscribeLater's), whether it may start, and the words the window says (the desktop's).
      *
      * @param  Collection<int, CaptureSession>  $records
-     * @return array{ready: list<CaptureSession>, minutes: int, left: int|null, can: bool, words: string}
+     * @return array{ready: list<CaptureSession>, later: list<CaptureSession>, restart: list<CaptureSession>, minutes: int, left: int|null, can: bool, words: string}
      */
     public static function transcribePlan(Collection $records): array
     {
         // Too many is said before anything is loaded.
         if ($records->count() > self::MAX_TRANSCRIBE) {
-            return ['ready' => [], 'minutes' => 0, 'left' => null, 'can' => false, 'words' => __('Up to :max at a time: pick fewer recordings.', ['max' => self::MAX_TRANSCRIBE])];
+            return ['ready' => [], 'later' => [], 'restart' => [], 'minutes' => 0, 'left' => null, 'can' => false,
+                'words' => __('Up to :max at a time: pick fewer recordings.', ['max' => self::MAX_TRANSCRIBE])];
         }
         $records->loadMissing(['primaryRecording', 'finalTranscript', 'client']);
         // Only what the person may change starts; the rest is skipped like a transcribed one.
-        $ready = self::changeable($records)->filter(fn (CaptureSession $r): bool => $r->primaryRecording?->isReady() === true && ! $r->hasNoAudio()
-            && in_array($r->finalTranscript?->status, [null, TranscriptStatus::Failed], true))->values()->all();
-        // Worked out here for now. Once be/B7 brings POST /api/sessions/transcribe-estimate, use its shared estimate
-        // instead, as the apps will. Only what the job would charge counts against the month (not a recording that
-        // goes to the person's own key, nor an engine that costs nothing), as the usage ledger bills it: the length ×
-        // the recording's channels, rounded up.
-        $billed = fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) * max(1, (int) ($r->primaryRecording->channels ?? 1)) / 60000));
-        $charged = array_values(array_filter($ready, fn (CaptureSession $r): bool => self::charges($r)));
-        $minutes = array_sum(array_map($billed, $charged));
-        $length = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
+        $mine = self::changeable($records);
+        $person = auth()->user();
         $workspace = (int) CurrentWorkspace::id();
-        $limits = app(PlanLimits::class);
-        $limit = $limits->limit($workspace, 'monthly_minutes', (int) CurrentWorkspace::userId());
-        $left = $limit === null ? null : max(0, (int) floor((float) $limit - $limits->minutesUsed($workspace)));
+        // One check for both kinds, as TranscribeLater checks the audio-only ones: someone who may not change their own
+        // content here (a viewer, even with the whole console) starts nothing, a failed transcript included.
+        try {
+            $person instanceof User ? app(Workspaces::class)->assertMay($person, $workspace, 'ownContent') : throw new ApiError(403, 'not_allowed', 'Sign in again.');
+        } catch (ApiError) {
+            $mine = $mine->take(0);
+        }
+        $service = app(TranscribeLater::class);
+        // An audio-only recording: TranscribeLater's estimate says which it will start and their minutes (plan minutes,
+        // none on the person's own key or an on-device engine).
+        $audioOnly = $mine->filter(fn (CaptureSession $r): bool => $r->status === SessionStatus::AudioOnly);
+        $estimate = ['minutes' => 0, 'items' => []];
+        if ($audioOnly->isNotEmpty() && $person instanceof User) {
+            try {
+                $estimate = $service->estimateManyFor($person, $workspace, $audioOnly->map(fn (CaptureSession $r): string => (string) $r->getKey())->values()->all());
+            } catch (ApiError) {
+                // A viewer: none of them starts, as the start would refuse them too.
+            }
+        }
+        $listed = array_map(fn (array $item): string => (string) $item['id'], $estimate['items']);
+        // A failed transcript (or none, on a recording that is not audio only) is not TranscribeLater's, which starts only
+        // audio-only recordings: it is started again as the recording page's Transcribe again does.
+        $later = array_values(array_filter($audioOnly->all(), fn (CaptureSession $r): bool => in_array((string) $r->getKey(), $listed, true)));
+        $restart = $mine->filter(fn (CaptureSession $r): bool => $r->status !== SessionStatus::AudioOnly && $r->primaryRecording?->isReady() === true
+            && ! $r->hasNoAudio() && in_array($r->finalTranscript?->status, [null, TranscriptStatus::Failed], true))->values()->all();
+        $ready = $mine->filter(fn (CaptureSession $r): bool => in_array($r, $later, true) || in_array($r, $restart, true))->values()->all();
+        // Of a restart, only what the job would charge counts against the month (not a recording that goes to the
+        // person's own key, nor an engine that costs nothing), as the usage ledger bills it: the length × the
+        // recording's channels, rounded up.
+        $billed = fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) * max(1, (int) ($r->primaryRecording->channels ?? 1)) / 60000));
+        $charged = array_values(array_filter($restart, fn (CaptureSession $r): bool => self::charges($r)));
+        $minutes = (int) $estimate['minutes'] + array_sum(array_map($billed, $charged));
+        $length = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
+        $left = $person instanceof User ? $service->minutesLeft($workspace, (int) $person->id) : null;
         $count = fn (int $n): string => trans_choice('1 minute|:count minutes', $n, ['count' => $n]);
         $over = $left !== null && $minutes > $left;
         $none = $ready === [];
@@ -616,7 +667,38 @@ final class CaptureSessionsTable
                 : __('About :minutes of the :left left this month.', ['minutes' => $count($minutes), 'left' => $count($left)]))
                 .($over ? ' '.__('That is more than is left, so nothing will start. Pick fewer recordings.') : '');
 
-        return ['ready' => $ready, 'minutes' => $minutes, 'left' => $left, 'can' => ! $over && ! $none, 'words' => $words];
+        return ['ready' => $ready, 'later' => $later, 'restart' => $restart, 'minutes' => $minutes, 'left' => $left, 'can' => ! $over && ! $none, 'words' => $words];
+    }
+
+    /**
+     * The notice when TranscribeLater refuses Transcribe… and nothing starts: the console's words for its code, never the
+     * server's own message. A missing key leads to Settings › Transcription key; [$count] is what would have started.
+     */
+    public static function transcribeRefused(Throwable $e, int $count): Notification
+    {
+        $code = $e instanceof ApiError ? $e->apiCode() : null;
+        $extra = $e instanceof ApiError ? $e->extra() : [];
+        $words = match (true) {
+            $code === TranscriptErrorCode::NeedsTranscriptionKey->value => __('This plan transcribes with your own Groq key. Add it in Settings › Transcription key.'),
+            $code === 'budget_exceeded' && isset($extra['minutes_needed'], $extra['minutes_left']) => self::budgetWords((int) $extra['minutes_needed'], (int) $extra['minutes_left']),
+            in_array($code, ['rate_limited', 'server_busy'], true) => __('Another transcription is being started. Try again in a moment.'),
+            default => __('Nothing to transcribe').' · '.trans_choice(':count could not start|:count could not start', $count, ['count' => $count]),
+        };
+        $url = $code === TranscriptErrorCode::NeedsTranscriptionKey->value ? EditProfile::settingsUrl('transcription-key') : NoticeTargets::forError($e);
+
+        return Notification::make()->title($words)->url($url)->danger();
+    }
+
+    /** The desktop's sentence for minutes the month can't cover (budget_sentence, desktop/src-tauri/src/net/api.rs). */
+    private static function budgetWords(int $needed, int $left): string
+    {
+        $needs = trans_choice('1 minute|:count minutes', $needed, ['count' => $needed]);
+
+        return match ($left) {
+            0 => __('This needs :minutes and no minutes are left this month.', ['minutes' => $needs]),
+            1 => __('This needs :minutes, and 1 minute is left this month.', ['minutes' => $needs]),
+            default => __('This needs :minutes, and :left minutes are left this month.', ['minutes' => $needs, 'left' => $left]),
+        };
     }
 
     /** The engine a start would pick for [$record], as FinalTranscriptCoordinator::start picks it. */
