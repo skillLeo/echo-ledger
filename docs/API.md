@@ -2588,6 +2588,10 @@ recording is kept as audio only and the usual `needs_transcription_key` or `budg
 never spends minutes the plan does not have.
 
 ### Which rule wins
+Rules, the default's `dont_record` and short calls apply only to calls an app records automatically. A recording the
+person starts by hand (lead decision 28: the Record button, a widget, the menu bar) is their own act: it ends with the
+Ask me card, and nothing skips or deletes it.
+
 For a call, an app takes the first of these that has a rule, and uses its action:
 1. **The contact**: a rule for the other person's number (or, without a number, their name).
 2. **The contact's group**: `favourites`, then `saved_contacts`, then `unknown_numbers` (a number not in the phone's
