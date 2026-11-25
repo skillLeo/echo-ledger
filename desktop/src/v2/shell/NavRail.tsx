@@ -60,7 +60,7 @@ export function RailItem({ icon, label, current, onClick, count, countTone, dot,
         data-place={place} aria-keyshortcuts={keys} onClick={onClick} {...tipProps}>
         <span className="el-rail__icon">
           <Icon icon={icon} size="md" />
-          {count ? <span className={`el-rail__count el-num${countTone === "danger" ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(count)}</span>
+          {count ? <span className={`el-rail__count el-num${countTone === "danger" ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(count) ?? undefined} aria-hidden="true" />
             : dot ? <span className={`el-rail__dot${dotKind ? ` el-rail__dot--${dotKind}` : ""}`} aria-hidden="true" /> : null}
         </span>
         <span className="el-rail__label" aria-hidden="true">{label}</span>
@@ -135,7 +135,7 @@ export function RailMore({ places, current, icons, activityCount, activityTone, 
       <Menu label="More places" items={items} align="start"
         button={{ variant: "quiet", className: "el-rail__item", "aria-label": spoken, "aria-current": here ? "page" : undefined, ...tipProps,
           text: <><span className="el-rail__icon"><Icon icon={Icons.MoreIcon} size="md" />
-            {count ? <span className={`el-rail__count el-num${failed ? " el-rail__count--danger" : ""}`} aria-hidden="true">{railBadgeLabel(count)}</span>
+            {count ? <span className={`el-rail__count el-num${failed ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(count) ?? undefined} aria-hidden="true" />
               : dot ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" /> : null}</span>
             <span className="el-rail__label" aria-hidden="true">More</span></> }} />
       {tip}

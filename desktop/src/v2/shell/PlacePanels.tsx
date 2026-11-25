@@ -14,7 +14,7 @@ function Row({ icon, label, current, onClick, end, strong }: { icon?: IconType; 
       <button type="button" className="el-nav-item el-nav-item--row" aria-current={current ? "page" : undefined} onClick={onClick}>
         {icon && <Icon icon={icon} />}
         <span className="el-nav-item__label" dir="auto">{label}</span>
-        {end !== undefined && end !== null && <span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : " el-nav-item__count--quiet"}`}>{end}</span>}
+        {end !== undefined && end !== null && <>{" "}<span className={`el-nav-item__count el-caption el-num${strong ? " el-nav-item__count--strong" : " el-nav-item__count--quiet"}`}>{end}</span></>}
       </button>
     </li>
   );
