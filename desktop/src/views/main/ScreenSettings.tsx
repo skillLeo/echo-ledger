@@ -37,7 +37,7 @@ export function ScreenMomentsPage({ settings, patch, onExcluded }: { settings: S
     api.screensStatus().then(setStatus).catch(() => undefined);
   }, []);
   const locked = useLocked("screen_moments");
-  const tag = useLockedTag("screen_moments");
+  const tag = useLockedTag("screen_moments", "en");
   const blocked = status ? screensBlocked(status) : null;
   const apps = settings.screenExcludedApps;
   const on = settings.screenMoments && !locked && status?.inPlan !== false;

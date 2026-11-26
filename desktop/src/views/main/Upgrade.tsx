@@ -14,24 +14,35 @@ import { fillWidth } from "../../lib/motion";
 import { CheckIcon } from "../../components/ControlIcons";
 import { ActionRow, ConfirmDialog, InfoRow, LinkRow, Section, Tag, rowAttrs } from "./SettingsControls";
 import { confirmAction } from "../../lib/confirm";
-import { t, tc, wordsIn, type Lang } from "../../i18n";
+import { t, tc, useLanguage, wordsIn, type Lang } from "../../i18n";
 
 export { UpgradeSheet } from "./UpgradeFlow";
 
-/** The neutral tag for a paid feature the plan leaves out ("Pro"); a click opens the upgrade flow (or the open request). */
-export function PlanBadge({ feature, onOpen }: { feature: string; onOpen?: (feature: string) => void }) {
+/** The tag's word: the plan's name as it is ("Pro", Latin in every language), or "Paid" in `lang` when the answer names none. */
+const tagWord = (plan: OfferedPlan | null, lang?: Lang): string => (plan ? planName(plan) : wordsIn(lang).t("plan_context.paid"));
+
+/**
+ * The neutral tag for a paid feature the plan leaves out ("Pro"); a click opens the upgrade flow (or the open request).
+ * Its words (the feature's name, "Live Translate, in Pro", "Paid") are in `lang`, the window's by default (the new
+ * design: Live, a project's page, Settings); classic's screens pass "en". The plan's name stays as it is.
+ */
+export function PlanBadge({ feature, onOpen, lang }: { feature: string; onOpen?: (feature: string) => void; lang?: Lang }) {
+  useLanguage();
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
+  const { t } = wordsIn(lang);
   const plan = lowestPlan(e, feature);
-  const { name } = featureWords(e, feature);
+  const { name } = featureWords(e, feature, lang);
   const open = (ev: React.MouseEvent) => {
     ev.preventDefault();
     ev.stopPropagation();
     (onOpen ?? openForFeature)(feature);
   };
+  const label = plan ? t(":title, in :plan", { title: name, plan: planName(plan) }) : t(":title, in a paid plan", { title: name });
+  const title = plan ? t(":feature is in :plan", { feature: name, plan: planName(plan) }) : t(":feature is in a paid plan", { feature: name });
   return (
-    <button type="button" className="plan-badge" onClick={open} aria-label={`${name}, in ${plan ? planName(plan) : "a paid plan"}`} title={`${name} is in ${plan ? planName(plan) : "a paid plan"}`}>
-      {plan ? planName(plan) : "Paid"}
+    <button type="button" className="plan-badge" onClick={open} aria-label={label} title={title}>
+      {tagWord(plan, lang)}
     </button>
   );
 }
@@ -41,20 +52,23 @@ export function openForFeature(feature: string): void {
   openUpgradeSheet(feature);
 }
 
-/** The same tag as words only, inside something that is itself the button (a locked tab, a menu item, a palette row). */
-export function BadgeMark({ feature }: { feature: string }) {
+/**
+ * The same tag as words only, inside something that is itself the button (a locked tab, a menu item, a palette row), in
+ * `lang` as PlanBadge (classic's pass "en").
+ */
+export function BadgeMark({ feature, lang }: { feature: string; lang?: Lang }) {
+  useLanguage();
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
-  const plan = lowestPlan(e, feature);
-  return <span className="plan-badge static mark" aria-hidden="true">{plan ? planName(plan) : "Paid"}</span>;
+  return <span className="plan-badge static mark" aria-hidden="true">{tagWord(lowestPlan(e, feature), lang)}</span>;
 }
 
-/** The tag a locked row shows instead of its switch, and what a click on it does; none when the plan has it. */
-export function useLockedTag(feature: string): { tag: string; onOpen: () => void } | null {
+/** The tag a locked row shows instead of its switch, and what a click on it does; none when the plan has it. In `lang` as PlanBadge. */
+export function useLockedTag(feature: string, lang?: Lang): { tag: string; onOpen: () => void } | null {
+  useLanguage();
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
-  const plan = lowestPlan(e, feature);
-  return { tag: plan ? planName(plan) : "Paid", onOpen: () => openForFeature(feature) };
+  return { tag: tagWord(lowestPlan(e, feature), lang), onOpen: () => openForFeature(feature) };
 }
 
 /** Whether the plan leaves `feature` out (an older server: never). */
@@ -62,24 +76,27 @@ export function useLocked(feature: string): boolean {
   return isLocked(useEntitlements(), feature);
 }
 
-/** A paid feature's place when the plan leaves it out: its name, what it does, and the tag. */
+/** A paid feature's place when the plan leaves it out: its name, what it does, and the tag (classic's Record page: English). */
 export function LockedFeatureCard({ feature }: { feature: string }) {
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
-  const words = featureWords(e, feature);
+  const words = featureWords(e, feature, "en");
   return (
     <div className="card locked-feature" style={{ marginTop: 14 }} data-testid={`locked-${feature}`}>
-      <div className="row"><b>{words.name}</b><span className="spacer" /><PlanBadge feature={feature} /></div>
+      <div className="row"><b>{words.name}</b><span className="spacer" /><PlanBadge feature={feature} lang="en" /></div>
       {words.description && <p className="small muted">{words.description}</p>}
     </div>
   );
 }
 
-/** A locked feature's name with its tag, where the feature would be (the transcript's Show as views, say). */
-export function LockedChip({ feature, label }: { feature: string; label: string }) {
+/**
+ * A locked feature's name with its tag, where the feature would be (the transcript's Show as views, say). The caller
+ * gives the name in its words; the tag is in `lang` as PlanBadge (classic's pass "en").
+ */
+export function LockedChip({ feature, label, lang }: { feature: string; label: string; lang?: Lang }) {
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
-  return <span className="locked-chip small muted" data-testid={`locked-${feature}`}><span>{label}</span><PlanBadge feature={feature} /></span>;
+  return <span className="locked-chip small muted" data-testid={`locked-${feature}`}><span>{label}</span><PlanBadge feature={feature} lang={lang} /></span>;
 }
 
 // ---- Words and numbers of Plan & usage -------------------------------------------------------------------------------
@@ -346,7 +363,7 @@ function FeatureMatrix({ e }: { e: Entitlements }) {
           <tbody>
             {features.map((f) => (
               <tr key={f} data-testid={`feature-${f}`}>
-                <th scope="row">{featureWords(e, f).name}</th>
+                <th scope="row">{featureWords(e, f, "en").name}</th>
                 {columns.map((c) => <td key={c.key}>{c.has(f) ? <span role="img" aria-label="Included"><CheckIcon size={15} /></span> : <span className="sr-only">Not included</span>}</td>)}
               </tr>
             ))}

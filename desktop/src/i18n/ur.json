@@ -2418,5 +2418,21 @@
   "Start Live Assist for this call?": "اس کال کے لیے لائیو اسسٹ شروع کریں؟",
   "A practice session is running.": "مشق کا ایک سیشن چل رہا ہے۔",
   "End it and start this one": "اسے ختم کر کے یہ شروع کریں",
-  "The other session runs on another device. End it there, then start this one.": "دوسرا سیشن کسی اور ڈیوائس پر چل رہا ہے۔ اسے وہیں ختم کریں، پھر یہ شروع کریں۔"
+  "The other session runs on another device. End it there, then start this one.": "دوسرا سیشن کسی اور ڈیوائس پر چل رہا ہے۔ اسے وہیں ختم کریں، پھر یہ شروع کریں۔",
+  "plan_context.paid": "پیڈ",
+  ":title, in a paid plan": ":title، کسی پیڈ پلان میں",
+  "Record and upload": "ریکارڈ اور اپ لوڈ",
+  "Transcription on EchoLedger": "EchoLedger کی ٹرانسکرپشن",
+  "Roman Urdu, English and Urdu": "رومن اردو، انگریزی اور اردو",
+  "Roman Urdu, English and Urdu views": "رومن اردو، انگریزی اور اردو ویوز",
+  "Call notes, memory and Ask": "کال نوٹس، یادداشت اور پوچھیں",
+  "Live Translate is listening · :keys to show": "لائیو ترجمہ سن رہا ہے · :keys سے دکھائیں",
+  "Done (:keys)": "ہو گیا (:keys)",
+  "Screen moments of this project": "اس پروجیکٹ کے اسکرین کے لمحات",
+  "The desktop keeps what was on screen during :name's meetings.": ":name کی میٹنگز کے دوران اسکرین پر جو کچھ تھا، کمپیوٹر ایپ اسے محفوظ رکھتی ہے۔",
+  "Nothing on screen is kept for meetings filed under :name.": ":name میں رکھی گئی میٹنگز کی اسکرین سے کچھ محفوظ نہیں ہوتا۔",
+  "No screen moments yet": "ابھی اسکرین کے کوئی لمحات نہیں",
+  "When a meeting of :name is recorded on the desktop, what was on the shared screen shows here, next to its moment in the transcript.": "جب :name کی کوئی میٹنگ کمپیوٹر ایپ پر ریکارڈ ہو تو شیئر کی گئی اسکرین پر جو کچھ تھا وہ یہاں نظر آتا ہے، ٹرانسکرپٹ میں اپنے لمحے کے ساتھ۔",
+  "Show more": "مزید دکھائیں",
+  "The picture could not be loaded.": "تصویر لوڈ نہیں ہو سکی۔"
 }
