@@ -1,14 +1,13 @@
 # Finish checklist — v2.0 Clarity Redesign + Bug Bash
 
 The plan is docs/PLAN_V2_0.md (local only); the order is docs/ROADMAP.md (local only): v2.0 starts when v1.9.0 is
-tagged. Before that, only the docs-only V0 groundwork lane runs (when a builder slot is idle), and every bug from the
+tagged. Before that, only the docs-only V0 groundwork lane runs (when a build slot is free), and every bug from the
 v1.8/v1.9 sweeps that isn't fixed now is logged in [v2/audit/bugs.csv](v2/audit/bugs.csv). Each item is ticked only with
-its proof (test name, screenshot path or log), a reviewer approve and a HANDOFF line.
+its proof (test name, screenshot path or log), a review approval and a HANDOFF line.
 
 > **Status 2026-11-18 03:52 PKT (paused):**
 > - The parity sprint (PLAN_V2_PARITY) comes before every other v2.0 item. Desktop is 62% (372/603), phone 36% (103/285), and the web audit has just started.
 > - Classic stays the default for everyone, with v2 Opt-in on production.
-> - Full state and next steps: [RESUME_HERE.md](RESUME_HERE.md).
 
 ## Needs Hassam
 
@@ -73,7 +72,7 @@ its proof (test name, screenshot path or log), a reviewer approve and a HANDOFF 
 
 ## V3 — Rebuild module by module (one flag each)
 For each module: built only from library components and copy-deck strings; screen screenshot tests (light/dark, LTR/RTL,
-compact/regular, large text); end-to-end tests for its top 3 tasks; reviewer approve; flag on for Hassam; bug bash;
+compact/regular, large text); end-to-end tests for its top 3 tasks; review approve; flag on for Hassam; bug bash;
 staged rollout. **Done when (each):** the top tasks pass on every platform, no open S0/S1, at most 3 S2, screenshots
 approved (S), accessibility green.
 - [ ] 3.1 App shell and navigation (ui_v2.shell).
