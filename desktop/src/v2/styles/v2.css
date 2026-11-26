@@ -2391,7 +2391,7 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   flex: 0 1 clamp(var(--el-desktop-search-min-width), var(--el-desktop-search-preferred-width), var(--el-desktop-search-max-width));
   min-inline-size: var(--el-desktop-search-min-width);
 }
-/* No room for the field beside the whole title (and lead decision 18's narrow case: under the least width, 720 CSS px,
+/* No room for the field beside the whole title (and decision 18's narrow case: under the least width, 720 CSS px,
    zoomed in a small window): a ⌕ button at the row's end, and the title keeps every word, wrapping to a second line when
    it must (the row grows for it); never an ellipsis. The ⌕ button opens the field across the row, the title stepping
    aside only while it is open. */

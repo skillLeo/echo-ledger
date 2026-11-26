@@ -156,7 +156,7 @@ final class LibraryFilters
 
     /**
      * A `recording` session counts as waiting for the person's choice without an `ended_at` once it started this many
-     * hours ago (contract 2.0.0-z, lead decision 20): older apps never send `ended_at` when the call ends, and no call runs
+     * hours ago (contract 2.0.0-z, decision 20): older apps never send `ended_at` when the call ends, and no call runs
      * this long, so it is over and waiting (or forgotten), never still being recorded.
      */
     public const WAITING_FALLBACK_HOURS = 4;

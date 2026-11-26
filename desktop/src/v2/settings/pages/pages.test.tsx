@@ -683,7 +683,7 @@ describe("Keyboard shortcuts v2", () => {
 
   it("warns when a shortcut is one browsers use", async () => {
     await show("shortcuts");
-    // EL-UX (D3a review): who else uses it, never what it does there, so the app's name is the only value.
+    // The D3a wording review: who else uses it, never what it does there, so the app's name is the only value.
     // Start or stop saving (Ctrl+Shift+R) and Copy the last 2 minutes (Ctrl+Shift+C), both browsers' keys.
     const notes = screen.getAllByText("This shortcut is also used by browsers; EchoLedger takes it over.");
     expect(notes.map((note) => note.closest("[data-setting]")?.getAttribute("data-setting"))).toEqual(["shortcuts.global.toggle_saving", "shortcuts.global.copy_last2_min"]);
@@ -1179,7 +1179,7 @@ describe("parity with today's Settings pages, in every state", () => {
     // Since 2.0.0-l the account is changed in the app: the same rows and the same dialogs in both designs.
     { name: "Profile, changed in the app", section: "profile", account: NATIVE,
       today: () => <ProfilePage account={NATIVE} status={makeStatus()} run={run} />,
-      // UX-11 (lead decision 10): with the profile changed in the app, the new look has no way out to the website's.
+      // UX-11 (decision 10): with the profile changed in the app, the new look has no way out to the website's.
       otherSide: { "button: Edit profile, opens in browser": "UX-11: the profile is edited in the app; the website is only for billing" },
       steps: [{ name: "Change name", today: press("Change name") }, { name: "Change email", today: press("Change email") }, { name: "Remove picture", today: press("Remove picture") }],
       lines: ["Your teammates see your name and picture.", "This is the name your teammates see.", "Your initials show instead, everywhere."] },

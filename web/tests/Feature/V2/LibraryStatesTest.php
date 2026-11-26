@@ -54,7 +54,7 @@ function stateRecording(User $owner, string $state, int $hoursAgo, string $title
             'failed_session' => SessionStatus::Failed,
             default => SessionStatus::Completed,
         }]);
-    // Since 2.0.0-z (lead decision 20) a call waits for the choice once it is over: it keeps its ended_at. A call still
+    // Since 2.0.0-z (decision 20) a call waits for the choice once it is over: it keeps its ended_at. A call still
     // being recorded (no ended_at, started under 4 hours ago) is not waiting: tests/Feature/Api/WaitingCallsTest.php.
     match ($state) {
         'transcribed' => Fx::transcript($session, "Words of {$title}."),

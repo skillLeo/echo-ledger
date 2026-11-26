@@ -5,7 +5,7 @@
 // empty space goes first, then the field shrinks to its least width, then it becomes a ⌕ button at the end, which opens
 // the field across the row (the title stepping aside only while it is open). Beside the ⌕ button the title wraps to two
 // lines, or takes a line of its own under the controls, rather than lose a word: it is never cut, at any width. Under
-// the app's least width (720 CSS px: zoomed in a small window, lead decision 18's narrow case) the button says "Search"
+// the app's least width (720 CSS px: zoomed in a small window, decision 18's narrow case) the button says "Search"
 // (⌘F). The count always shows. Every empty part of the row, and the title, moves the window
 // (data-tauri-drag-region="deep": anything in it that can't be clicked); a double click does what the Mac's setting says
 // (lib/titleClick.ts). Buttons and the field never drag. A hairline shows under it only once the page has scrolled. The
@@ -27,7 +27,7 @@ export const EVERYTHING = "Search everything";
 /** Below this width the field's placeholder is the short word: its full words (and the scope's chip) stay its name. */
 export const SHORT_FIELD = 220;
 export const SHORT_WORDS = "Search";
-/** Under this page width (CSS px: the window's least width) the row is narrow (lead decision 18's narrow case). */
+/** Under this page width (CSS px: the window's least width) the row is narrow (decision 18's narrow case). */
 export const NARROW_BELOW = 720;
 const FIND_KEYS = MAC ? "⌘F" : "Ctrl+F";
 /** A shortcut inside words: left to right in every language (⌘K, never K⌘ after Urdu). */

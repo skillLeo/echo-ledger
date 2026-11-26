@@ -169,7 +169,7 @@ class AssistHttpMessagesTest {
     private fun NoClassic() = Box(
         Modifier.background(EchoV2.colors.bgSubtle).padding(EchoTokens.Space.s16)
     ) {
-        // English for the reviewer, left to right on an Urdu screen too.
+        // English for whoever reads the picture, left to right on an Urdu screen too.
         Text(
             "Classic: no screen. Live Assist is new in v2.",
             style = EchoV2.type.meta.copy(textDirection = TextDirection.Ltr),

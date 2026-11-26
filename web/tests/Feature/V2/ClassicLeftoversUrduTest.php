@@ -110,7 +110,7 @@ const LEFTOVER_ENGLISH = [
         'Failed uploads (1)', 'See why', '="Dismiss"', '="With the selected recordings"', '="recordings"', 'Library - EchoLedger',
         'Drop sound or video files here, or', 'choose files', 'each file becomes its own recording, titled from its name', 'Clear the list',
         'Auto (English / Urdu / Arabic)', 'Urdu (with English words)', 'Portuguese', '="More languages"', '="Files"']],
-    // (A brand name such as Zoom stays Latin in every language: LEAD DECISION 26.)
+    // (A brand name such as Zoom stays Latin in every language: decision 26.)
     'project-recordings' => [true, ['Nov 15', '9:00 AM', '="Nov 15, 2026 · 5:00 PM"', 'Last call Nov 17',
         '="Projects"', '="New project"']],
     'projects' => [true, ['Name', 'Ascending', 'Descending', 'Automatic', 'Pin to the top', 'Loading...', '1 result', 'Last call Nov 17']],

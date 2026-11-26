@@ -181,7 +181,7 @@ export const ACTIVITY: ActivityItem[] = [
 ];
 
 /**
- * `&actors=1` (contract 2.0.0-aa, lead decision 27): items about a person. The kinds that show a face: a teammate with a
+ * `&actors=1` (contract 2.0.0-aa, decision 27): items about a person. The kinds that show a face: a teammate with a
  * picture (PERSON_PHOTO) who sent a recording, and one without who asks to upgrade, in their colour; a receipt asked
  * for keeps its tile, whoever it is about.
  */

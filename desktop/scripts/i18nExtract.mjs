@@ -27,7 +27,7 @@ const shape = (s) => s.replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ":_");
 const webShapes = new Set(Object.keys(web).map(shape));
 
 /**
- * The classic pieces the new design still shows (EL-UX's sizing): the palette; the confirm window (ConfirmDialog, in
+ * The classic pieces the new design still shows (the UX sizing): the palette; the confirm window (ConfirmDialog, in
  * SettingsControls.tsx with classic Settings' rows, so counted with classic) and the sign-out text (signOutBody, in
  * SettingsView.tsx; its title and button are in MainApp.tsx).
  */

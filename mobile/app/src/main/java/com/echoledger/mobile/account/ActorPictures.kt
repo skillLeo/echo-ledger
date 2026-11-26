@@ -11,7 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 
 /**
- * People's pictures shared by every row that shows them (contract 2.0.0-aa, lead decision 27): one fetch and one
+ * People's pictures shared by every row that shows them (contract 2.0.0-aa, decision 27): one fetch and one
  * decoded picture per server, person and version, however many Activity items name them. Thirty shares from one
  * teammate ask once. The copy on disk is [AvatarCache]'s; bytes it holds that don't decode are forgotten and asked for
  * again. No picture (a 403 or 404, bytes that don't decode, no connection) is remembered too, so scrolling and

@@ -88,7 +88,7 @@ fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, 
     var items by remember { mutableStateOf<List<BinItemDto>?>(null) }
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
-    // A Trash the server could not give is not an empty one (EL-UX's audit): it says so, with Try again.
+    // A Trash the server could not give is not an empty one (the UX audit): it says so, with Try again.
     LaunchedEffect(reload) {
         vm.binOrError().onSuccess { items = it }
         failed = items == null

@@ -354,7 +354,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
                   <div className="el-plan-card__head"><span className="el-title-s">{planName(p)}</span>{planPrice(p) && <span className="el-secondary el-tabular">{planPrice(p)}</span>}</div>
                   <div className="el-plan-card__body">
                     {i > 0 && <Line className="el-secondary" text={t("Everything in :plan, plus:", { plan: planName(above[i - 1]) })} />}
-                    {/* The server's highlights stay its English (the lead's call): each line in its own words' direction. */}
+                    {/* The server's highlights stay its English (a product call): each line in its own words' direction. */}
                     <ul className="el-plan-card__lines">{planHighlights(e, p, below).map((l) => <li key={l} dir={isRtl() ? lineDir(l) : undefined}>{l}</li>)}</ul>
                   </div>
                   {!open && <div className="el-plan-card__actions"><Button onClick={() => flow(p.key)}>{t("Choose :plan", { plan: planName(p) })}</Button></div>}

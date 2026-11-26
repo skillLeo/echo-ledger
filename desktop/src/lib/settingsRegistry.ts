@@ -237,7 +237,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "share_privacy.hiding", title: "Live Translate", page: "share_privacy", kind: "choice", resettable: true,
     aliases: ["Other floating windows", "Hide live words", "Hide from screen sharing", "Hide EchoLedger from screen sharing"],
     options: opts(["all", "Hidden from screen shares", true], ["off", "Shown in screen shares"]),
-    // The help line (the call choice plan, lead decision): the OS has one flag for screen sharing and screenshots.
+    // The help line (a decision of the call choice plan): the OS has one flag for screen sharing and screenshots.
     description: "Also hidden from your own screenshots",
     keywords: ["live translate", "translation", "live words", "show during screen share", "screenshot", "screen capture"], ru: ["screen share mein chupao", "chupana", "tarjuma"], ur: ["اسکرین شیئر میں چھپائیں", "ترجمہ"] },
   { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge", "black box"], ru: ["haalat", "private"], ur: ["حالت", "نجی"] },

@@ -116,7 +116,7 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     // Half of a 1440 pt screen (the owner works in half screens).
     expect(main.minWidth).toBe(720);
     expect(main.minWidth).toBeLessThanOrEqual(1029);
-    // FIX-08 (lead decisions 4 and 11): 560 tall until the new rail fits at 520 (scripts/minSize.mjs measures both).
+    // FIX-08 (decisions 4 and 11): 560 tall until the new rail fits at 520 (scripts/minSize.mjs measures both).
     expect(main.minHeight).toBe(560);
   });
 

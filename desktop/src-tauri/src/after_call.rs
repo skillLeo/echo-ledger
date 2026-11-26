@@ -55,7 +55,7 @@ pub enum CallChoice {
 
 impl CallChoice {
     /// The "After each call" value that makes this choice every time ("Always do this?"). Delete has none: Don't record
-    /// calls from one tap is too much (lead decision); per-contact rules will cover it.
+    /// calls from one tap is too much (a product decision); per-contact rules will cover it.
     pub fn always(self) -> Option<AfterEachCall> {
         match self {
             CallChoice::Transcribe => Some(AfterEachCall::AlwaysTranscribe),
