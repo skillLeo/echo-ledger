@@ -2255,6 +2255,13 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   background: var(--el-role-text-primary); color: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-1);
   font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line);
 }
+/* Urdu: Nastaliq rises far above and falls below a 16 px line (D-260: the rail's tooltips lost their tops), so a tooltip
+   in Urdu takes urdu.caption (14/28), never smaller, as the other small text does, and more room on top, where a
+   Nastaliq line beside Latin (a key: "Ctrl+2") reaches highest (measured: scripts/tipNastaliq.mjs). English keeps 12/16. */
+:lang(ur) .el-tip {
+  font-size: var(--el-text-urdu-caption-size); line-height: var(--el-text-urdu-caption-line);
+  padding-block: var(--el-space-8) var(--el-space-4);
+}
 
 /* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
    52 px, start to end: ⊟ (while the panel is off the screen), ← →, the page's title 15 px semibold with its count in
