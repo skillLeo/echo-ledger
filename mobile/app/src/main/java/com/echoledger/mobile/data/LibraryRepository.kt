@@ -269,21 +269,17 @@ class LibraryRepository(
     /**
      * Puts the server's answer for one recording ([item]) in the Library now, before the next sync brings it; nothing
      * when signed out since [expected] (the generation taken before asking the server): the answer is the last person's.
+     * The answer is read outside this lock, so it may be older than a read or unread change made here: a row with such
+     * a change keeps its own read or unread, and the next sync brings the server's.
      */
     suspend fun upsertLocally(item: LibraryItem, expected: Int) = lock.withLock {
         synchronized(this) {
             if (expected != gen) return@withLock
             val current = _items.value
-            val updated = if (current.any { it.id == item.id }) {
-                current.map {
-                    if (it.id ==
-                        item.id
-                    ) {
-                        item
-                    } else {
-                        it
-                    }
-                }
+            val existing = current.firstOrNull { it.id == item.id }
+            val updated = if (existing != null) {
+                val kept = if (item.id in openedChanges) item.copy(opened = existing.opened) else item
+                current.map { if (it.id == item.id) kept else it }
             } else {
                 listOf(item) + current
             }

@@ -659,4 +659,28 @@ class LibraryRepositoryTest : AppTest() {
         repo.undoOpenedLocally("a", refused, gen)
         assertEquals("back to unread, as the server has it", false, a())
     }
+
+    /**
+     * One recording's answer is read outside the library's lock, so it may be older than a read or unread change made
+     * here: a row changed here keeps its own read or unread from it, and takes the rest. A row never changed here takes
+     * the answer whole.
+     */
+    @Test
+    fun `an answer for one recording keeps the read or unread changed here`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"), item("b")))))
+        repo.refresh()
+        val gen = repo.generation()
+        fun row(id: String) = repo.items.value.first { it.id == id }
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        // Read before the change landed: the old read state, and a new title.
+        repo.upsertLocally(row("a").copy(opened = true, title = "Renamed"), gen)
+        assertEquals("the rest of the answer is taken", "Renamed", row("a").title)
+        assertEquals("unread, as changed here", false, row("a").opened)
+        repo.upsertLocally(row("b").copy(opened = false, title = "Other"), gen)
+        assertEquals("never changed here: the answer whole", false, row("b").opened)
+        assertEquals("Other", row("b").title)
+    }
 }
