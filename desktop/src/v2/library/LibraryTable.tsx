@@ -1,21 +1,31 @@
 // The Library as a table (classic's "Show as: Table", parity.csv DT-LIB-045..056): the columns people choose (kept on
 // this computer), sections as header rows, a row that opens or (selecting) ticks its recording, its own ⋮ and a
 // right-click, the same as the list's rows.
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
-import type { LibraryItem } from "../../lib/ipc";
+import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from "react";
+import type { LibraryItem, ViewsSummary } from "../../lib/ipc";
+import { rowViewsLine } from "../../lib/progress";
 import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, rowDate } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
 import { sourceLabel } from "../../lib/libraryGroups";
-import { Badge, Icon, Icons } from "../components";
+import { Badge, Icon, Icons, PickBox } from "../components";
 import { RECOVERED_CHIP } from "../../lib/recovered";
 import type { MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
+import { groupTitle } from "./model";
+import { t } from "../../i18n";
 
 export type Layout = "list" | "table";
 export type Column = "date" | "length" | "app" | "project" | "status" | "labels" | "device";
+/** Each column's name, in the window's language. */
 export const COLUMN_NAMES: Record<Column, string> = {
-  date: "Date", length: "Length", app: "App", project: "Project", status: "Status", labels: "Labels", device: "Device",
+  get date() { return t("Date"); },
+  get length() { return t("Length"); },
+  get app() { return t("App"); },
+  get project() { return t("Project"); },
+  get status() { return t("Status"); },
+  get labels() { return t("Labels"); },
+  get device() { return t("Device"); },
 };
 export const COLUMNS = Object.keys(COLUMN_NAMES) as Column[];
 export const DEFAULT_COLUMNS: readonly Column[] = ["date", "length", "app", "project", "status"];
@@ -49,18 +59,38 @@ export function loadColumns(): Column[] {
 }
 export const saveColumns = (c: readonly Column[]) => write(COLUMNS_KEY, JSON.stringify(c));
 
-const STATUS_WORDS = { ready: "Ready", processing: "Transcribing", failed: "Failed", no_audio: "No audio" } as const;
-const DEVICE_WORDS: Record<string, string> = { phone: "Phone", desktop: "Computer", web: "Web" };
+function statusWords(state: ReturnType<typeof itemState>): string {
+  switch (state) {
+    case "ready": return t("Ready");
+    case "processing": return t("Transcribing");
+    case "failed": return t("Failed");
+    case "no_audio": return t("No audio");
+  }
+}
+function deviceWords(device: string): string {
+  switch (device) {
+    case "phone": return t("Phone");
+    case "desktop": return t("Computer");
+    case "web": return t("Web");
+    default: return "";
+  }
+}
 
-function cell(item: LibraryItem, column: Column): ReactNode {
+function cell(item: LibraryItem, column: Column, views: ViewsSummary | null): ReactNode {
   switch (column) {
     case "date": return rowDate(item.started_at);
     case "length": return <span className="el-num">{formatDuration(item.duration_ms)}</span>;
     case "app": return sourceLabel(item);
-    case "project": return item.client?.name ?? "Inbox";
-    case "status": return STATUS_WORDS[itemState(item)];
+    case "project": return item.client?.name ?? t("No project");
+    case "status": {
+      // A ready transcript whose default view is still written: "Converting to Roman Urdu… 60%" (U19).
+      const converting = itemState(item) === "ready" ? rowViewsLine(views) : null;
+      if (converting?.state === "making") return <span className="el-converting"><span className="el-spinner" aria-hidden="true" />{converting.text}</span>;
+      if (converting?.state === "failed") return <span className="el-converting el-converting--danger" data-testid="table-convert-failed"><Icon icon={Icons.ErrorIcon} size="sm" />{converting.text}</span>;
+      return statusWords(itemState(item));
+    }
     case "labels": return (item.labels ?? []).join(", ");
-    case "device": return item.device?.name ?? (item.source_device ? DEVICE_WORDS[item.source_device] : "");
+    case "device": return item.device?.name ?? (item.source_device ? deviceWords(item.source_device) : "");
   }
 }
 
@@ -72,7 +102,13 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions, recovered }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf, onPick, onPickAll }: {
+  /** A checkbox before each row that picks it (the Library: no Select button); Shift ticks the range. */
+  onPick?: (item: LibraryItem, e: MouseEvent<HTMLInputElement>) => void;
+  /** The header's box: every row shown picked, or none (mixed while some are). */
+  onPickAll?: () => void;
+  /** A row's views as known last (the Library asks while they are written); its own otherwise. */
+  viewsOf?: (item: LibraryItem) => ViewsSummary | null;
   /** Recordings recovered after a restart: their "Recovered" chip. */
   recovered?: ReadonlySet<string>;
   groups: readonly ItemGroup[];
@@ -83,17 +119,29 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
   picked: ReadonlySet<string>;
   onRow: (item: LibraryItem, e: MouseEvent<HTMLButtonElement>) => void;
   onRowMenu: (item: LibraryItem, e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>) => void;
+  /** A press that may become a drag onto a project or the Inbox (lib/dragMove.ts), as a list row. */
+  onRowPointerDown?: (item: LibraryItem, e: PointerEvent<HTMLButtonElement>) => void;
   rowActions: (item: LibraryItem) => ReactNode;
 }) {
-  const span = columns.length + 2;
+  const span = columns.length + 2 + (onPick ? 1 : 0);
   return (
     <div className="el-table-wrap">
-      <table className="el-table" aria-label="Recordings">
+      <table className="el-table" aria-label={t("Recordings")}>
         <thead>
           <tr>
-            <th scope="col">Recording</th>
+            {onPick && (
+              <th scope="col" className="el-table__pick">
+                {onPickAll ? (() => {
+                  const shown = groups.flatMap((g) => (collapsed.has(g.key) ? [] : g.items));
+                  const on = shown.filter((i) => picked.has(i.id)).length;
+                  const all = shown.length > 0 && on === shown.length;
+                  return <PickBox checked={all} mixed={on > 0} label={all ? t("Unselect all") : t("Select all")} keyshortcuts="Meta+A Control+A" onClick={onPickAll} />;
+                })() : <span className="el-visually-hidden">{t("Select")}</span>}
+              </th>
+            )}
+            <th scope="col">{t("Recording")}</th>
             {columns.map((c) => <th key={c} scope="col">{COLUMN_NAMES[c]}</th>)}
-            <th scope="col"><span className="el-visually-hidden">Actions</span></th>
+            <th scope="col"><span className="el-visually-hidden">{t("Actions")}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -102,8 +150,8 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
               <tr key={`g-${g.key}`} className="el-table__group">
                 <th colSpan={span} scope="rowgroup">
                   <button type="button" className="el-list-section__button" aria-expanded={!collapsed.has(g.key)} onClick={() => onFold(g.key)}
-                    aria-label={`${g.label} · ${g.items.length}`}>
-                    <Icon icon={Icons.ChevronDownIcon} />{g.label}<span className="el-list-section__count"> · <span className="el-num">{g.items.length}</span></span>
+                    aria-label={`${groupTitle(g)} · ${g.items.length}`}>
+                    <Icon icon={Icons.ChevronDownIcon} />{groupTitle(g)}<span className="el-list-section__count"> · <span className="el-num">{g.items.length}</span></span>
                   </button>
                 </th>
               </tr>
@@ -112,20 +160,25 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
               const name = recordingName(item.title);
               const on = picked.has(item.id);
               return (
-                <tr key={item.id} className={on ? "el-table__row el-table__row--picked" : "el-table__row"}
+                <tr key={item.id} className={`el-table__row${on ? " el-table__row--picked" : ""}${selecting ? " el-table__row--picking" : ""}`}
                   onContextMenu={(e) => { e.preventDefault(); onRowMenu(item, e); }}>
+                  {onPick && (
+                    <td className="el-table__pick">
+                      <PickBox checked={on} label={t("Select :name", { name })} onClick={(e) => onPick(item, e)} />
+                    </td>
+                  )}
                   <td>
                     <button type="button" className="el-table__open" data-row-id={item.id} aria-pressed={selecting ? on : undefined}
-                      aria-label={selecting ? `Select ${name}` : name} onClick={(e) => onRow(item, e)}
+                      aria-label={selecting ? t("Select :name", { name }) : name} onClick={(e) => onRow(item, e)} onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(item, e) : undefined}
                       onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); onRowMenu(item, e); } }}>
                       {selecting ? <span className={`el-row__tick${on ? " el-row__tick--on" : ""}`} aria-hidden="true">{on && <Icon icon={Icons.CheckIcon} />}</span>
                         : <SourceAvatar item={item} size="sm" />}
                       <span className="el-table__title" dir="auto">{name}</span>
-                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}
+                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">{t("Pinned")}</span></span>}
                     </button>
                     {recovered?.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
                   </td>
-                  {columns.map((c) => <td key={c} dir="auto">{cell(item, c)}</td>)}
+                  {columns.map((c) => <td key={c} dir="auto">{cell(item, c, viewsOf ? viewsOf(item) : item.transcript?.views ?? null)}</td>)}
                   <td className="el-table__actions">{selecting ? null : rowActions(item)}</td>
                 </tr>
               );

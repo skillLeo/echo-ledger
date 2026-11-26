@@ -8,7 +8,7 @@
             @svg('heroicon-o-exclamation-circle', 'el-waiting-chip-icon', ['aria-hidden' => 'true'])
             <span class="el-waiting-chip-label">{{ $label }}</span>
             <span class="el-waiting-chip-dot" aria-hidden="true">·</span>
-            <a href="{{ $url }}" class="el-waiting-chip-action el-stretch" wire:navigate>See why</a>
+            <a href="{{ $url }}" class="el-waiting-chip-action el-stretch" wire:navigate>{{ __('See why') }}</a>
         </x-notice>
     @endunless
 </x-filament-widgets::widget>

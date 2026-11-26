@@ -60,11 +60,11 @@ trait ManagesPlanPage
         return [
             'plan' => $plan,
             'free' => $free,
-            'priceLine' => $free ? 'Transcripts use your own free Groq key.' : UpgradeFlow::priceText($plan),
-            'untilLine' => $free ? null : ($expires !== null ? 'Paid until '.Formats::shortDate($expires, year: true) : 'No end date'),
-            'footer' => ! $free && $expires !== null ? 'Your plan stops on '.Formats::longDate($expires).'. There is nothing to cancel.' : null,
-            'trial' => $trial > 0 ? number_format($trial).' trial minutes left' : null,
-            'managed' => $owner !== null ? "{$workspace->name} is on {$plan->name}. Managed by {$owner->name}." : null,
+            'priceLine' => $free ? __('Transcripts use your own free Groq key.') : UpgradeFlow::priceText($plan),
+            'untilLine' => $free ? null : ($expires !== null ? __('Paid until :date', ['date' => UpgradeFlow::day($expires, year: true)]) : __('No end date')),
+            'footer' => ! $free && $expires !== null ? __('Your plan stops on :date. There is nothing to cancel.', ['date' => UpgradeFlow::longDay($expires)]) : null,
+            'trial' => $trial > 0 ? __(':minutes trial minutes left', ['minutes' => number_format($trial)]) : null,
+            'managed' => $owner !== null ? __(':workspace is on :plan. Managed by :owner.', ['workspace' => $workspace->name, 'plan' => $plan->name, 'owner' => $owner->name]) : null,
             'buyer' => $buyer && ! $context->flag('member'),
             'open' => $open !== null,
             'next' => $higher[0] ?? null,
@@ -73,7 +73,7 @@ trait ManagesPlanPage
             'request' => $showCard ? UpgradeFlow::card($request) : null,
             'requestUrl' => $request !== null ? UpgradeFlow::statusUrl($request) : null,
             'meters' => UpgradeFlow::meters($context),
-            'resetsFooter' => ($context->plan()->limit('monthly_minutes') ?? 1) > 0 ? "Minutes reset on the 1st of each month. Unused minutes don't carry over." : null,
+            'resetsFooter' => ($context->plan()->limit('monthly_minutes') ?? 1) > 0 ? __("Minutes reset on the 1st of each month. Unused minutes don't carry over.") : null,
             'included' => $this->included($plan),
             'usageUrl' => $buyer && Usage::canAccess() ? Usage::getUrl(panel: 'app') : null,
             'cards' => $context->flag('member') ? [] : $cards,
@@ -81,14 +81,14 @@ trait ManagesPlanPage
                 'features' => array_values(array_filter(Features::keys(), fn (string $f): bool => $p->allows($f))), 'plan' => $p], $matrixPlans),
             'features' => array_map(fn (string $key): array => ['key' => $key, 'name' => Features::all()[$key]['name'], 'has' => (bool) ($features[$key] ?? false)], Features::keys()),
             'history' => $history->map(fn (UpgradeRequest $r): array => [
-                'id' => $r->id, 'title' => UpgradeFlow::planName($r->plan).', 1 month', 'value' => UpgradeFlow::amount($r),
+                'id' => $r->id, 'title' => __(':plan, 1 month', ['plan' => UpgradeFlow::planName($r->plan)]), 'value' => UpgradeFlow::amount($r),
                 'line' => match (UpgradeFlow::stage($r)) {
-                    'approved' => 'Approved on '.Formats::shortDate($r->decided_at ?? $r->created_at, year: true),
-                    'declined' => 'Not approved on '.Formats::shortDate($r->decided_at ?? $r->created_at, year: true),
-                    'cancelled' => 'Cancelled on '.Formats::shortDate($r->decided_at ?? $r->created_at, year: true),
-                    'in_review' => 'In review since '.Formats::shortDate(UpgradeFlow::payment($r)['paid_at'] ?? $r->created_at),
-                    'needs_receipt' => 'Needs a new receipt',
-                    default => 'Waiting for payment since '.Formats::shortDate($r->created_at),
+                    'approved' => __('Approved on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'declined' => __('Not approved on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'cancelled' => __('Cancelled on :date', ['date' => UpgradeFlow::day($r->decided_at ?? $r->created_at, year: true)]),
+                    'in_review' => __('In review since :date', ['date' => UpgradeFlow::day(UpgradeFlow::payment($r)['paid_at'] ?? $r->created_at)]),
+                    'needs_receipt' => __('Needs a new receipt'),
+                    default => __('Waiting for payment since :date', ['date' => UpgradeFlow::day($r->created_at)]),
                 },
                 'url' => UpgradeFlow::statusUrl($r),
             ])->all(),
@@ -104,21 +104,21 @@ trait ManagesPlanPage
         $seats = $plan->limit('seats');
 
         return [
-            ['title' => 'Recordings kept', 'value' => $retention === null ? 'Until you delete them' : Formats::days((int) $retention)],
-            ['title' => 'Longest recording', 'value' => $file === null ? 'No limit' : Formats::fileLength((int) $file)],
-            ['title' => 'Uploads a day', 'value' => $uploads === null ? 'No limit' : 'Up to '.number_format((int) $uploads)],
-            ['title' => 'Team members', 'value' => $seats === null ? 'No limit' : ((int) $seats <= 1 ? 'Just you' : 'Up to '.number_format((int) $seats).' people')],
+            ['title' => __('settings_context.recordings_kept'), 'value' => $retention === null ? __('Until you delete them') : Formats::days((int) $retention)],
+            ['title' => __('Longest recording'), 'value' => $file === null ? __('No limit') : Formats::fileLength((int) $file)],
+            ['title' => __('Uploads a day'), 'value' => $uploads === null ? __('No limit') : __('Up to :count', ['count' => number_format((int) $uploads)])],
+            ['title' => __('Team members'), 'value' => $seats === null ? __('No limit') : ((int) $seats <= 1 ? __('Just you') : __('Up to :count people', ['count' => number_format((int) $seats)]))],
         ];
     }
 
     /** Payments › Promo code: one field; a good code opens the upgrade on its plan with the code applied. */
     public function promoCodeAction(): Action
     {
-        return Action::make('promoCode')->label('Promo code')
-            ->modalHeading('Promo code')->modalWidth('sm')
-            ->schema([TextInput::make('code')->label('Code')->required()->minLength(6)->maxLength(24)->autocomplete('off')
+        return Action::make('promoCode')->label(__('Promo code'))
+            ->modalHeading(__('Promo code'))->modalWidth('sm')
+            ->schema([TextInput::make('code')->label(__('Code'))->required()->minLength(6)->maxLength(24)->autocomplete('off')
                 ->extraInputAttributes(['style' => 'text-transform: uppercase', 'autocapitalize' => 'characters', 'spellcheck' => 'false'])])
-            ->modalSubmitActionLabel('Apply')
+            ->modalSubmitActionLabel(__('Apply'))
             ->action(function (array $data, Action $action): void {
                 $code = strtoupper(trim((string) ($data['code'] ?? '')));
                 try {
@@ -133,10 +133,19 @@ trait ManagesPlanPage
     public static function promoError(ApiError $e): string
     {
         return match ($e->apiCode()) {
-            'promo_other_plan' => $e->getMessage(),
-            'rate_limited' => 'Too many tries. Please try again in a minute.',
-            default => "We don't know this code. Check the spelling.",
+            'promo_other_plan' => self::otherPlanError($e),
+            'rate_limited' => __('Too many tries. Please try again in a minute.'),
+            default => __("We don't know this code. Check the spelling."),
         };
+    }
+
+    /** PromoCodes::otherPlan's "This code is for {plan}." in the console's language: the plan by the key it carries. */
+    private static function otherPlanError(ApiError $e): string
+    {
+        $key = $e->extra()['plan'] ?? null;
+        $name = is_string($key) ? Plan::query()->where('key', $key)->value('name') : null;
+
+        return is_string($name) ? __('This code is for :plan.', ['plan' => $name]) : $e->getMessage();
     }
 
     /** The request card's Dismiss (an approved or declined request). */
@@ -157,11 +166,11 @@ trait ManagesPlanPage
     /** Cancel request, from the request card while it waits for the payment. */
     public function cancelRequestAction(): Action
     {
-        return Action::make('cancelRequest')->label('Cancel request')->color('danger')
+        return Action::make('cancelRequest')->label(__('Cancel request'))->color('danger')
             ->requiresConfirmation()->modalIcon(null)
-            ->modalHeading('Cancel this request?')
-            ->modalDescription("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.")
-            ->modalCancelActionLabel('Keep request')->modalSubmitActionLabel('Cancel request')
+            ->modalHeading(__('Cancel this request?'))
+            ->modalDescription(__("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment."))
+            ->modalCancelActionLabel(__('Keep request'))->modalSubmitActionLabel(__('Cancel request'))
             ->action(function (): void {
                 $request = $this->context()->openRequest();
                 if ($request === null) {
@@ -170,12 +179,12 @@ trait ManagesPlanPage
                 try {
                     app(PaymentProofs::class)->cancel($request, $this->account());
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach ".Brand::name().'. Try again.')->danger()->send();
+                    Notification::make()->title($e->apiCode() === 'request_decided' ? __('This request has already been decided.') : __("Couldn't reach :brand. Try again.", ['brand' => Brand::name()]))->danger()->send();
 
                     throw new Halt;
                 }
                 SettingsContext::forget();
-                Notification::make()->title('Request cancelled')->success()->send();
+                Notification::make()->title(__('Request cancelled'))->success()->send();
             });
     }
 }

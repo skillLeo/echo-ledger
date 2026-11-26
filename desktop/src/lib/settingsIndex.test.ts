@@ -137,6 +137,16 @@ describe("golden queries", () => {
     expect(ids("aawaz").slice(0, 2)).toEqual(["mic", "voice"]);
   });
 
+  it("UX-07: \"zoom\" finds Appearance's Zoom first where zoom is on; without it, the meeting app's settings", () => {
+    const zoomOn = () => true;
+    const zoomOff = (e: { requires?: { zoom?: boolean } }) => !e.requires?.zoom;
+    expect(ids("zoom", zoomOn)[0]).toBe("appearance.zoom");
+    const without = ids("zoom", zoomOff);
+    expect(without).not.toContain("appearance.zoom");
+    expect(without[0]).toMatch(/zoom/);
+    expect(setting(without[0]).page).not.toBe("appearance");
+  });
+
   it("groq, whatsapp, font size, two-step", () => {
     expect(first("groq")).toBe("key");
     expect(ids("whatsapp").slice(0, 2)).toEqual(["calls.app.whatsapp", "calls.app.whatsapp_web"]);
@@ -171,7 +181,7 @@ describe("golden queries", () => {
   });
 
   it("values are never searched, and nonsense has no closest matches", () => {
-    expect(ids("on")).not.toContain("calls.auto");
+    expect(ids("on")).not.toContain("calls.ask_unknown");
     expect(ids("on")).not.toContain("captions.enabled");
     const answer = searchSettings("xyzzy");
     expect(answer.settings).toEqual([]);

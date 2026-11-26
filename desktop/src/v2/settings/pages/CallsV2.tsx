@@ -1,17 +1,20 @@
 // Settings › Calls & meetings in the new look, with today's data and rules (CaptureSettings.tsx): auto-record and
-// each call app, unknown apps, browser tabs on a Mac; what happens after a call and which short calls are skipped; the
+// each call app, unknown apps, browser tabs on a Mac; After each call (the call choice: four choices with their help
+// lines, and When to ask under Ask me) and which short calls are skipped; the
 // call sites (built-in rules, the person's own, never-record); and why a call wasn't recorded, read while on screen.
 import { useEffect, useState } from "react";
 import { api, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
 import { CALL_APPS, setting } from "../../../lib/settingsRegistry";
-import { SKIP_SHORTER_THAN } from "../../../lib/pending";
+import { skipShorterThan } from "../../../lib/pending";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../../lib/explainer";
 import { useWindowShown } from "../../../lib/visibility";
 import { sourceAppLabel } from "../../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../../lib/sites";
-import { AUTO_RECORD_APPS, afterCallHint, appRecords } from "../../../views/main/CaptureSettings";
+import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSettings";
+import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
-import { Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
+import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
+import { isRtl, lineDir, t, tc, withParts } from "../../../i18n";
 
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
@@ -25,33 +28,40 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
   const sites = settings.siteRules.filter((r) => !isNeverRule(r)).length;
   return (
     <>
-      <Group title="Record automatically">
-        <SwitchSetting id="calls.auto" on={settings.autoMode} onChange={(v) => void patch({ autoMode: v })} />
+      <Group title={CALL_WORDS.setting_title}>
+        <ChoiceSetting id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Group>
+      {afterEachCallOf(settings) === "ask" && (
+        <Group title={CALL_WORDS.when_title}>
+          <ChoiceSetting id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Group>
+      )}
+      {/* One setting: Don't record calls is the only switch for recording calls by themselves; the apps wait under it. */}
+      <Group title={t("Record automatically")} footer={!settings.autoMode ? <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p> : undefined}>
         {CALL_APPS.map(([app, name]) => {
           const on = appRecords(settings.autoRecordApps, app);
           return (
             <ListRow key={app} compact anchor={`calls.app.${app}`} icon={(p) => <Icons.SourceAppIcon app={app} {...p} />} iconStyle="plain" title={name}
-              control={<Toggle label={`Auto-record ${name}`} hideLabel checked={on} disabled={!settings.autoMode}
+              control={<Toggle label={t("Auto-record :name", { name })} hideLabel checked={on} disabled={!settings.autoMode}
                 onChange={() => void patch({ autoRecordApps: { [app]: !on } })} />} />
           );
         })}
         <SwitchSetting id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchSetting id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Group>
-      <Group title="After a call" footer={<><p>{afterCallHint(settings.afterCall, platform)}</p><p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p></>}>
-        <SelectSetting<Settings["afterCall"]> id="calls.after" value={settings.afterCall} onChange={(v) => void patch({ afterCall: v })} />
-        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
+      <Group footer={<p>{t("Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.")}</p>}>
+        <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan().map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
-      <Group title="Websites">
-        <LinkSetting id="calls.sites" value={sites === 1 ? "1 rule" : `${sites} rules`} onOpen={onSites} />
+      <Group title={t("Websites")}>
+        <LinkSetting id="calls.sites" value={tc(":count rule|:count rules", sites)} onOpen={onSites} />
       </Group>
       <WhyNotRecordedV2 />
       {!settings.consentAcknowledged && (
-        <div className="el-settings-v2__reset"><Button variant="quiet" onClick={onConsent}>Read the recording consent notice</Button></div>
+        <div className="el-settings-v2__reset"><Button variant="quiet" onClick={onConsent}>{t("Read the recording consent notice")}</Button></div>
       )}
-      <ResetDefaults page="Calls & meetings" onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"],
+      <ResetDefaults page={t("Calls & meetings")} onReset={() => void patch({
+        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
       })} />
     </>
@@ -84,20 +94,24 @@ function WhyNotRecordedV2() {
   }, [shown]);
   return (
     <section className="el-group" aria-labelledby="el-why-not">
-      <h2 className="el-caption el-body-strong el-group__title" id="el-why-not">Why a call wasn't recorded</h2>
+      <SectionTitle id="el-why-not">{t("Why a call wasn't recorded")}</SectionTitle>
       <Card>
         <div className="el-why" data-testid="why-not-recorded" aria-live="polite">
-          {users.length === 0 ? <p className="el-secondary">No app is using the microphone now.</p> : (
+          {users.length === 0 ? <p className="el-secondary">{t("No app is using the microphone now.")}</p> : (
             <ul className="el-why__list">
               {users.map((u, i) => (
-                <li key={`${u.name}-${i}`}><Status kind={TONE_KIND[micTone(u)]}><span className="el-body-strong" dir="auto">{micUserName(u)}</span>: {decisionText(u)}</Status></li>
+                // D-232: one line, the app's name in it as a value; it reads in the direction of what it says (lineDir of
+                // the decision, the line's own words: the name and the decision are values).
+                <li key={`${u.name}-${i}`} dir={isRtl() ? lineDir(decisionText(u)) : undefined}>
+                  <Status kind={TONE_KIND[micTone(u)]}>{withParts(t(":app: :decision", { decision: decisionText(u) }), { app: <span className="el-body-strong" dir="auto">{micUserName(u)}</span> })}</Status>
+                </li>
               ))}
             </ul>
           )}
-          {last && !users.some((u) => sameMicApp(u, last.user)) && <p className="el-secondary" data-testid="last-not-recorded" dir="auto">{lastNotRecordedLine(last)}</p>}
+          {last && !users.some((u) => sameMicApp(u, last.user)) && <p className="el-secondary" data-testid="last-not-recorded" dir={lineDir(lastNotRecordedLine(last))}>{lastNotRecordedLine(last)}</p>}
         </div>
       </Card>
-      <p className="el-group__note el-caption el-secondary">EchoLedger records a call when a call app uses your microphone and plays sound.</p>
+      <p className="el-group__note el-caption el-secondary">{t("EchoLedger records a call when a call app uses your microphone and plays sound.")}</p>
     </section>
   );
 }
@@ -118,31 +132,31 @@ export function CallSitesPageV2({ rules, onSave }: { rules: SiteRule[]; onSave: 
     const pattern = rulePattern(rule);
     return (
       <ListRow key={rule.id} compact iconStyle="plain" icon={icon(rule)} title={<span dir="ltr">{pattern}</span>} meta={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}
-        control={<Toggle label={isNeverRule(rule) ? `Never record ${pattern}` : `Record calls on ${pattern}`} hideLabel checked={on} onChange={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />} />
+        control={<Toggle label={isNeverRule(rule) ? t("Never record :pattern", { pattern }) : t("Record calls on :pattern", { pattern })} hideLabel checked={on} onChange={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />} />
     );
   };
   const userRow = (rule: SiteRule) => (
     <ListRow key={rule.id} compact iconStyle="plain" icon={icon(rule)} title={<span dir="ltr">{rulePattern(rule)}</span>} meta={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}
-      control={<Button size="sm" variant="quiet" aria-label={`Remove ${rulePattern(rule)}`} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>Remove</Button>} />
+      control={<Button size="sm" variant="quiet" aria-label={t("Remove :name", { name: rulePattern(rule) })} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>{t("Remove")}</Button>} />
   );
   return (
     <>
-      <section className="el-group" aria-label="Record calls on">
-        <h2 className="el-caption el-body-strong el-group__title">Record calls on</h2>
-        <Card><List label="Call sites" className="el-group__rows">{BUILTIN_SITE_RULES.filter((r) => !isNeverRule(r)).map(builtinRow)}{mine.filter((r) => !isNeverRule(r)).map(userRow)}</List></Card>
+      <section className="el-group" aria-label={t("Record calls on")}>
+        <SectionTitle>{t("Record calls on")}</SectionTitle>
+        <Card><List label={t("Call sites")} className="el-group__rows">{BUILTIN_SITE_RULES.filter((r) => !isNeverRule(r)).map(builtinRow)}{mine.filter((r) => !isNeverRule(r)).map(userRow)}</List></Card>
       </section>
-      <section className="el-group" aria-label="Never record">
-        <h2 className="el-caption el-body-strong el-group__title">Never record</h2>
-        <Card><List label="Never record" className="el-group__rows">{BUILTIN_SITE_RULES.filter(isNeverRule).map(builtinRow)}{mine.filter(isNeverRule).map(userRow)}</List></Card>
+      <section className="el-group" aria-label={t("Never record")}>
+        <SectionTitle>{t("Never record")}</SectionTitle>
+        <Card><List label={t("Never record")} className="el-group__rows">{BUILTIN_SITE_RULES.filter(isNeverRule).map(builtinRow)}{mine.filter(isNeverRule).map(userRow)}</List></Card>
       </section>
-      <Card label="Add a site">
+      <Card label={t("Add a site")}>
         <form className="el-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-          <h2 className="el-body-strong">Add a site</h2>
+          <SectionTitle className="el-body-strong">{t("Add a site")}</SectionTitle>
           <div className="el-settings-v2__pair">
-            <Select label="App" value={app} onChange={setApp} options={SITE_RULE_APPS.map(([value, label]) => ({ value, label }))} />
-            <TextField label="Address or title contains" value={text} dir="ltr" onChange={(e) => setText(e.target.value)} />
+            <Select label={t("App")} value={app} onChange={setApp} options={SITE_RULE_APPS.map(([value, label]) => ({ value, label }))} />
+            <TextField label={t("Address or title contains")} value={text} dir="ltr" onChange={(e) => setText(e.target.value)} />
           </div>
-          <div className="el-page__actions"><Button type="submit" disabled={!text.trim()}>Add</Button></div>
+          <div className="el-page__actions"><Button type="submit" disabled={!text.trim()}>{t("Add")}</Button></div>
         </form>
       </Card>
     </>

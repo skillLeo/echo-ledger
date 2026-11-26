@@ -82,3 +82,12 @@ it('keeps a project\'s page in English in English and in classic', function () {
         }
     }
 });
+
+// W-214: since B8 the translator isolates every :value in Urdu; the views' own isolation doubled it. A name inside a
+// translated sentence is isolated once, not twice.
+it('isolates a name inside a translated sentence once in Urdu (the translator does it, not the view too)', function () {
+    $html = projectPage($this, true, 'ur', 'project-recordings');
+    expect($html)->toContain("\u{2068}Qureshi Textiles\u{2069}")
+        ->not->toContain("\u{2068}\u{2068}Qureshi Textiles");
+    expect(projectPage($this, true, 'en', 'project-recordings'))->not->toContain("\u{2068}");
+});

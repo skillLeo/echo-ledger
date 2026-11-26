@@ -48,9 +48,9 @@ final class RecordingProgress
         }
         $uploading = $session->status === SessionStatus::Uploading;
         $transcribing = ! $uploading && ($final === null || in_array($final->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true));
-        // The views' state only when they are being made (a ready one is not read for every row of the list).
-        $views = $final?->status === TranscriptStatus::Completed && (($final->meta['views']['status'] ?? null) === 'making')
-            ? app(TranscriptViews::class)->state($final) : null;
+        // The views' state from what is stored (no lines are read for a row of the list). Since U19 a view about to be
+        // made counts as being made, so "Converting to Roman Urdu…" shows from the moment the transcript is there.
+        $views = $final?->status === TranscriptStatus::Completed ? TranscriptViews::rowSummary($final) : null;
         $improving = ! $uploading && ! $transcribing && $views !== null && $views['status'] === 'making';
         if (! $uploading && ! $transcribing && ! $improving) {
             return null;
@@ -71,11 +71,14 @@ final class RecordingProgress
             $transcribe['percent'] = $progress !== null && $progress['total'] > 1 ? (int) floor($progress['done'] * 100 / $progress['total']) : null;
         }
         $improveState = $improving ? 'active' : 'waiting';
-        $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? TranscriptViews::VIEWS[$view] : null, 'percent' => null];
+        $started = false;
+        $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? __(TranscriptViews::VIEWS[$view]) : null, 'percent' => null];
         if ($improving && $view !== null) {
             $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
             $improve['percent'] = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : 0;
-            $improve['detail'] = TranscriptViews::VIEWS[$view].'… '.$improve['percent'].'%';
+            $improve['detail'] = __(TranscriptViews::VIEWS[$view]).'… '.$improve['percent'].'%';
+            // Before the job has counted the lines (or started) there is no share to give yet.
+            $started = is_array($lines) && $lines['total'] > 0;
         }
         $steps = [$upload, $transcribe, $improve];
         $active = $uploading ? self::UPLOAD : ($transcribing ? self::TRANSCRIBE : self::IMPROVE);
@@ -84,12 +87,64 @@ final class RecordingProgress
         return [
             'active' => $active,
             'steps' => $steps,
+            // In the console's language (since W-213; English reads exactly as before).
             'summary' => match ($active) {
-                self::UPLOAD => 'Uploading '.$upload['percent'].'%',
-                self::TRANSCRIBE => 'Transcribing'.($current['detail'] !== null ? ' · '.$current['detail'] : ''),
-                default => $view !== null ? 'Improving '.TranscriptViews::VIEWS[$view].'… '.$current['percent'].'%' : 'Improving…',
+                self::UPLOAD => __('Uploading :percent%', ['percent' => $upload['percent']]),
+                self::TRANSCRIBE => __('Transcribing').($current['detail'] !== null ? ' · '.$current['detail'] : ''),
+                // Since U19 the words the person asked for: "Converting to Roman Urdu… 60%".
+                default => $view !== null ? self::converting($view, $started ? $current['percent'] : null) : __('Improving…'),
             },
         ];
+    }
+
+    /** "Converting to Roman Urdu… 60%", or without the share before the first lines are done. */
+    public static function converting(string $view, ?int $percent): string
+    {
+        $name = __(TranscriptViews::VIEWS[$view] ?? $view);
+
+        return $percent === null ? __('Converting to :view…', ['view' => $name]) : __('Converting to :view… :percent%', ['view' => $name, 'percent' => $percent]);
+    }
+
+    /**
+     * Since U19: the view [$session] opens in (Roman Urdu for Urdu and mixed calls) while it is converted, from the moment
+     * its transcript is there ("Converting to Roman Urdu… 60%", the share once the job counted the lines), or when it
+     * could not be made ("Couldn't convert to Roman Urdu": it failed, or went quiet for 20 minutes). Null otherwise,
+     * also while the transcript itself is still moving. What the Library rows and the recording page show.
+     *
+     * @return array{state: string, view: string, label: string, percent: int|null}|null
+     */
+    public static function conversion(CaptureSession $session): ?array
+    {
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+        $views = $final?->status === TranscriptStatus::Completed ? TranscriptViews::rowSummary($final) : null;
+        if ($views === null || ! isset(TranscriptViews::VIEWS[$views['default']]) || ! in_array($views['status'], ['making', 'failed'], true)) {
+            return null;
+        }
+        $view = $views['default'];
+        if ($views['status'] === 'failed') {
+            return ['state' => 'failed', 'view' => $view, 'label' => __('Couldn\'t convert to :view', ['view' => __(TranscriptViews::VIEWS[$view])]), 'percent' => null];
+        }
+        $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
+        $percent = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : null;
+
+        return ['state' => 'making', 'view' => $view, 'label' => self::converting($view, $percent), 'percent' => $percent];
+    }
+
+    /**
+     * The recording page's slim bar: "Converting to Roman Urdu… 60%" while the view it opens in is made, "Couldn't
+     * convert to Roman Urdu" (with Try again) when it could not be; null otherwise.
+     *
+     * @return array{label: string, percent: int, failed: bool}|null
+     */
+    public static function pageBar(CaptureSession $session): ?array
+    {
+        $bar = self::improvingBar($session);
+        if ($bar !== null) {
+            return [...$bar, 'failed' => false];
+        }
+        $conversion = self::conversion($session);
+
+        return $conversion !== null && $conversion['state'] === 'failed' ? ['label' => $conversion['label'], 'percent' => 0, 'failed' => true] : null;
     }
 
     /** "Upload", "Uploading" or "Uploaded" (and the same for Transcribe and Improve), as the phone and the desktop say it. */
@@ -105,7 +160,20 @@ final class RecordingProgress
     }
 
     /**
-     * "Improving Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
+     * A step's name as shown, in the console's language. "Transcribe" as a step (ٹرانسکرپشن) has its own key, apart
+     * from the Transcribe button (ٹرانسکرائب کریں); English reads "Transcribe" either way (W-213 visual).
+     */
+    public static function stageLabel(string $word): string
+    {
+        if ($word === self::WORDS[self::TRANSCRIBE][0]) {
+            return trans()->has('Transcribe (stage)') ? (string) __('Transcribe (stage)') : $word;
+        }
+
+        return (string) __($word);
+    }
+
+    /**
+     * "Converting to Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
      *
      * @return array{label: string, percent: int}|null
      */
@@ -146,7 +214,7 @@ final class RecordingProgress
         if ($progress === null) {
             return null;
         }
-        $parts = $progress['total'] > 1 ? 'part '.min($progress['total'], $progress['done'] + 1).' of '.$progress['total'] : null;
+        $parts = $progress['total'] > 1 ? __('part :n of :total', ['n' => min($progress['total'], $progress['done'] + 1), 'total' => $progress['total']]) : null;
         $left = self::timeLeft($progress['eta_seconds']);
         $detail = implode(' · ', array_filter([$parts, $left]));
 
@@ -160,9 +228,9 @@ final class RecordingProgress
             return null;
         }
         $seconds = max(0, $seconds);
-        $amount = $seconds < 60 ? intdiv(max(5, $seconds) + 4, 5) * 5 .' s' : intdiv($seconds + 30, 60).' min';
+        $amount = $seconds < 60 ? __(':n s', ['n' => intdiv(max(5, $seconds) + 4, 5) * 5]) : __(':n min', ['n' => intdiv($seconds + 30, 60)]);
 
-        return 'about '.$amount.' left';
+        return __('about :amount left', ['amount' => $amount]);
     }
 
     /**

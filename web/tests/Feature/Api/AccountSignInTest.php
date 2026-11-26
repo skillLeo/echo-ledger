@@ -138,8 +138,9 @@ describe('POST /api/auth/password', function () {
         $this->person->forceFill(['email_verified_at' => null])->save();
         $this->postJson('/api/auth/password', passwordBody())->assertForbidden()->assertJsonPath('code', 'email_not_verified');
 
+        // Since 2.0.0-l `deletion_scheduled` (was `not_allowed`), with the date; Keep my account is KeepMyAccountSignInTest.
         $this->person->forceFill(['email_verified_at' => now(), 'deletes_at' => now()->addDays(7)])->save();
-        $this->postJson('/api/auth/password', passwordBody())->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $this->postJson('/api/auth/password', passwordBody())->assertForbidden()->assertJsonPath('code', 'deletion_scheduled');
 
         $this->person->forceFill(['deletes_at' => null])->save();
         Plan::personal()->update(['max_devices' => 1]);
@@ -326,6 +327,8 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
             'browser_sign_in' => true,
             'code' => true,
             'server' => 'https://echoledger.test',
+            // Since 2.0.0-l: what a new password needs (Password::defaults()).
+            'password_rules' => ['min' => 12, 'letters' => true, 'numbers' => true],
         ]);
     });
 
@@ -340,6 +343,6 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
 
     it('needs no token and reads nothing of anyone', function () {
         $body = $this->getJson('/api/auth/options')->assertOk()->json();
-        expect(array_keys($body))->toBe(['password', 'google', 'sign_up', 'sign_up_url', 'reset_url', 'browser_sign_in', 'code', 'server']);
+        expect(array_keys($body))->toBe(['password', 'google', 'sign_up', 'sign_up_url', 'reset_url', 'browser_sign_in', 'code', 'server', 'password_rules']);
     });
 });

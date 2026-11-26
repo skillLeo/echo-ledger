@@ -1,34 +1,38 @@
-// The after-call card in the new look (ui_v2.after_call, v1.8 P1.1), by the tray: the app's icon, "Name · 4:12" and the
-// screens kept, Transcribe (the main action), Save audio, Delete; the name opens the recording to rename it or pick a
-// project; a thin line shows the time left, and with no answer the audio is saved, not transcribed (the core's
-// deadline). Delete goes through the one feedback system: a Toast with Undo.
-import { useEffect, useState } from "react";
-import { afterCallTitle, reviewDuration, secondsLeft } from "../../lib/controls";
-import type { PendingItem, SavedToast } from "../../lib/ipc";
-import { Button, Icons, Progress, Toast } from "../components";
-import { AFTER_CALL_SECONDS } from "./commands";
+// The after-call card in the new look (the call choice, docs/v2/copy/call-choice.md), next to the pill: the app's own
+// logo (as in the Library), the name or "Call" and "0:44 · just now"; Delete as a quiet text button and Transcribe as
+// the one filled button; an 8 s line, then "Close to keep audio only". The ×, Esc, a sideways drag or 8 s with no
+// choice save the audio only. A solid surface with radius 16 in the app's font; it slides in over 200 ms, and the line is
+// its only animation (both stop under Reduce motion). No sound. The name opens the recording to rename it or pick a
+// project.
+import { useMemo } from "react";
+import type { AfterEachCall, CallDone, CallGroup, PendingItem } from "../../lib/ipc";
+import { CALL_WORDS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, moreRows, progressStyle, useEscape, useSwipeAway, visibleRows } from "../../lib/callChoice";
+import { SourceAvatar } from "../library/SourceAvatar";
+import { Button, Icons } from "../components";
 
 export type AfterCallActions = {
+  /** A held row's Undo and Transcribe (the rest of a grouped card under the card). */
+  onRowUndo?: (id: string) => void;
+  onRowTranscribe?: (id: string) => void;
   onTranscribe: () => void;
+  /** The ×, Esc or a sideways drag: Save audio only. */
   onSaveAudio: () => void;
   onDelete: () => void;
   /** Opens the recording in the main window to rename it or pick a project. */
   onOpen: () => void;
 };
 
-/** "Omar · 4:12", "Voice note · 0:48". */
-export function cardTitle(item: Pick<PendingItem, "title" | "callerName" | "sourceApp" | "mode" | "durationMs">): string {
-  return `${afterCallTitle(item)} · ${reviewDuration(item.durationMs)}`;
+/** The app's own logo, as the Library's rows show it (the neutral glyph for an app without one). */
+function AppLogo({ app }: { app: string }) {
+  return <span className="el-aftercall__logo" aria-hidden="true"><SourceAvatar item={{ source_app: app, source_app_label: undefined, source_device: undefined }} size="md" /></span>;
 }
 
-/** The time-left line's words: what happens when it runs out. */
-export function timeLeftText(seconds: number): string {
-  const s = Math.ceil(seconds);
-  return s <= 0 ? "Saving the audio" : `Saves the audio in ${s} second${s === 1 ? "" : "s"}`;
-}
-
-export function AfterCallCard({ item, screens = 0, busy = false, error = null, actions, now: fixedNow }: {
+export function AfterCallCard({ item, hint = false, held = [], screens = 0, busy = false, error = null, actions, now = Date.now() }: {
   item: PendingItem;
+  /** The first card ever: where to change it. */
+  hint?: boolean;
+  /** The rest of a grouped card, kept under the card with their own Undo until it is answered. */
+  held?: CallDone[];
   /** Screen moments kept during the call (desktop). */
   screens?: number;
   busy?: boolean;
@@ -37,44 +41,117 @@ export function AfterCallCard({ item, screens = 0, busy = false, error = null, a
   /** For tests and screenshots: a fixed clock. */
   now?: number;
 }) {
-  const [now, setNow] = useState(() => fixedNow ?? Date.now());
-  useEffect(() => {
-    if (fixedNow !== undefined) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, [fixedNow]);
-  const left = secondsLeft(item.deadlineAt, fixedNow ?? now);
-  const title = cardTitle(item);
+  const name = cardName(item);
+  const meta = cardMeta(item.durationMs);
+  useEscape(!busy, actions.onSaveAudio);
+  const swipe = useSwipeAway(actions.onSaveAudio);
+  // Worked out once per deadline: the line runs on by itself from there (a new deadline, after Undo, starts it again).
+  const line = useMemo(() => progressStyle(item.deadlineAt, now), [item.deadlineAt]);
 
   return (
-    <section className="el-aftercall" data-hit aria-label={`After the call: ${title}`} data-testid="after-call-card">
+    <section className="el-aftercall" lang="en" data-hit aria-label={name} aria-describedby={`el-aftercall-close-${item.id}`} data-testid="after-call-card"
+      style={swipe.style} {...swipe.handlers}>
       <div className="el-aftercall__head">
-        <span className="el-row__leading el-row__leading--avatar" aria-hidden="true"><Icons.SourceAppIcon app={item.sourceApp} /></span>
+        <AppLogo app={item.sourceApp} />
         <button type="button" className="el-aftercall__name" onClick={actions.onOpen} title="Rename or choose a project"
-          aria-label={`${title}${screens > 0 ? `, ${screens} screens` : ""}. Rename or choose a project`}>
-          <span className="el-aftercall__title" dir="auto">{title}</span>
-          {screens > 0 && <span className="el-caption">{`${screens} screen${screens === 1 ? "" : "s"}`}</span>}
+          aria-label={`${name}, ${meta}${screens > 0 ? `, ${screens} screens` : ""}. Rename or choose a project`}>
+          <span className="el-aftercall__title" dir="auto">{name}</span>
+          <span className="el-caption el-secondary" dir="auto">{meta}{screens > 0 ? ` · ${screens} screen${screens === 1 ? "" : "s"}` : ""}</span>
         </button>
+        <Button variant="quiet" size="sm" icon={Icons.CloseIcon} className="el-aftercall__close" aria-label={CALL_WORDS.save_audio_only} title={CALL_WORDS.save_audio_only}
+          disabled={busy} onClick={actions.onSaveAudio} />
       </div>
       {error && <p className="el-field__error" role="alert">{error}</p>}
       <div className="el-aftercall__actions">
-        <Button variant="primary" size="sm" disabled={busy} onClick={actions.onTranscribe}>Transcribe</Button>
-        <Button size="sm" disabled={busy} onClick={actions.onSaveAudio}>Save audio</Button>
-        <Button size="sm" variant="quiet" icon={Icons.TrashIcon} disabled={busy} onClick={actions.onDelete}>Delete</Button>
+        <Button variant="quiet" size="sm" disabled={busy} onClick={actions.onDelete}>{CALL_WORDS.delete}</Button>
+        <Button variant="primary" size="sm" disabled={busy} onClick={actions.onTranscribe}>{CALL_WORDS.transcribe}</Button>
       </div>
-      {left !== null && (
-        <Progress label="Time to answer" value={Math.min(left, AFTER_CALL_SECONDS)} max={AFTER_CALL_SECONDS} valueText={timeLeftText(left)} />
+      <span className="el-aftercall__line" aria-hidden="true"><span key={item.deadlineAt ?? ""} style={line} /></span>
+      <p className="el-caption el-secondary el-aftercall__close-line" id={`el-aftercall-close-${item.id}`} dir="auto">{CALL_WORDS.card_close_desktop}</p>
+      {hint && <p className="el-caption el-secondary" data-testid="call-hint" dir="auto">{CALL_WORDS.card_first_hint}</p>}
+      {held.length > 0 && (
+        <div className="el-aftercall__held" data-testid="call-held">
+          <CallRows calls={held} busy={busy} onUndo={(id) => actions.onRowUndo?.(id)} onTranscribe={(id) => actions.onRowTranscribe?.(id)} />
+        </div>
       )}
     </section>
   );
 }
 
-/** "Deleted · Omar · 4:12" with Undo, while the core can still bring the files back. */
-export function DeletedToast({ item, onUndo, onClose }: { item: SavedToast; onUndo: () => void; onClose: () => void }) {
-  return <Toast message={`Deleted · ${cardTitle(item)}`} actionLabel="Undo" onAction={onUndo} onClose={onClose} duration={0} />;
+/** A grouped list's rows: every Delete with its Undo, always, and the newest others; the rest as "+N more". */
+function CallRows({ calls, busy, onUndo, onTranscribe }: { calls: CallDone[]; busy: boolean; onUndo: (id: string) => void; onTranscribe: (id: string) => void }) {
+  const { shown, more } = visibleRows(calls);
+  return (
+    <>
+      {shown.map((c) => (
+        <DoneLine key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
+      ))}
+      {more > 0 && <p className="el-caption el-secondary" data-testid="call-more" dir="auto">{moreRows(more)}</p>}
+    </>
+  );
 }
 
-/** "Saved · Omar · 4:12" with Undo (the call was kept by itself). */
-export function SavedToastV2({ item, onUndo, onClose }: { item: SavedToast; onUndo: () => void; onClose: () => void }) {
-  return <Toast message={`Saved · ${cardTitle(item)}`} actionLabel="Undo" onAction={onUndo} onClose={onClose} duration={0} />;
+/** What was done to one call, its name on a line of its own, and its Transcribe (audio only) and Undo. */
+function DoneLine({ done, busy, onUndo, onTranscribe, testId, named = false }: { done: CallDone; busy: boolean; onUndo: () => void; onTranscribe: () => void; testId?: string; named?: boolean }) {
+  return (
+    <div className="el-aftercall__done" data-testid={testId}>
+      <span className="el-aftercall__done-text">
+        <span className="el-body-strong" dir="auto">{doneText(done)}</span>
+        <span className="el-caption el-secondary el-aftercall__done-name" dir="auto">{cardName(done)}</span>
+      </span>
+      {done.kind === "audio" && <Button variant="quiet" size="sm" disabled={busy} onClick={onTranscribe}>{CALL_WORDS.transcribe}</Button>}
+      <Button variant="quiet" size="sm" disabled={busy} onClick={onUndo} aria-label={named ? `${CALL_WORDS.undo}: ${cardName(done)}` : undefined}>{CALL_WORDS.undo}</Button>
+    </div>
+  );
+}
+
+/** One confirmation with Undo for 5 s: "Transcribing…", "Saved as audio · Transcribe", "Deleted"; once, "Always do
+ * this? Transcribe every call" [Yes] under it. */
+export function CallDoneCard({ done, busy = false, error = null, onUndo, onTranscribe, onAlways }: {
+  done: CallDone;
+  busy?: boolean;
+  error?: string | null;
+  onUndo: () => void;
+  onTranscribe: () => void;
+  onAlways: (value: AfterEachCall) => void;
+}) {
+  const offer = done.offerAlways;
+  return (
+    <section className="el-aftercall el-aftercall--done" lang="en" data-hit role="status" aria-label={`${doneText(done)} ${cardName(done)}`} data-testid="call-done">
+      <DoneLine done={done} busy={busy} onUndo={onUndo} onTranscribe={onTranscribe} />
+      {offer && (
+        <div className="el-aftercall__done" data-testid="call-always">
+          <span className="el-caption el-secondary el-aftercall__done-text" dir="auto">{alwaysOffer(offer)}</span>
+          <Button variant="quiet" size="sm" disabled={busy} onClick={() => onAlways(offer)}>{CALL_WORDS.card_always_yes}</Button>
+        </div>
+      )}
+      {error && <p className="el-field__error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+/** Back-to-back calls in one card, never a stack: "3 calls saved as audio · Review", and each call (the newest three)
+ * with what happens to it and its Undo, so a choice made just before is never lost. */
+export function CallGroupCard({ group, busy = false, error = null, onReview, onClose, onUndo, onTranscribe }: {
+  group: CallGroup;
+  busy?: boolean;
+  error?: string | null;
+  onReview: () => void;
+  onClose: () => void;
+  onUndo: (id: string) => void;
+  onTranscribe: (id: string) => void;
+}) {
+  const calls = group.calls ?? [];
+  const headline = groupHeadline(calls);
+  return (
+    <section className="el-aftercall el-aftercall--done" lang="en" data-hit role="status" aria-label={headline} data-testid="call-group">
+      <div className="el-aftercall__done">
+        <span className="el-aftercall__done-text el-body-strong el-aftercall__headline" dir="auto">{headline}</span>
+        <Button variant="quiet" size="sm" disabled={busy} onClick={onReview}>{CALL_WORDS.grouped_review}</Button>
+        <Button variant="quiet" size="sm" icon={Icons.CloseIcon} aria-label="Close" title="Close" disabled={busy} onClick={onClose} />
+      </div>
+      <CallRows calls={calls} busy={busy} onUndo={onUndo} onTranscribe={onTranscribe} />
+      {error && <p className="el-field__error" role="alert">{error}</p>}
+    </section>
+  );
 }

@@ -6,13 +6,21 @@ namespace App\Filament\Auth\Settings;
 
 use App\Exceptions\ApiError;
 use App\Filament\Pages\AccountBeingDeleted;
+use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
+use App\Filament\Support\SettingsContext;
+use App\Filament\Support\Shell;
 use App\Filament\Support\UpgradeFlow;
 use App\Models\ConnectedApp;
 use App\Models\Device;
+use App\Models\User;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\Avatars;
+use App\Services\Accounts\EmailChange;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\PairingService;
@@ -21,7 +29,9 @@ use App\Support\Brand;
 use App\Support\Formats;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
+use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
@@ -29,6 +39,9 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -41,6 +54,15 @@ trait ManagesAccountPages
     {
         $name = $this->getNameFormComponent();
         $email = $this->getEmailFormComponent();
+        // Since the security review of 2.0.0-l: not an address reserved for another account's restore window, and not
+        // while this account's own window (or its lock after a restore) is open.
+        if ($email instanceof TextInput) {
+            $email->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                if (is_string($value) && Str::lower(trim($value)) !== Str::lower($this->account()->email) && EmailChange::isReserved($value, $this->account()->id)) {
+                    $fail(__('That address is not available. Use another one.'));
+                }
+            });
+        }
         foreach (['profile.name' => [$name, 'Name'], 'profile.email' => [$email, 'Email']] as $id => [$field, $label]) {
             if ($field instanceof TextInput) {
                 $field->label($label)->markAsRequired(false)->autofocus(false)
@@ -71,11 +93,102 @@ trait ManagesAccountPages
     {
         $context = $this->context();
         $workspace = $context->workspace();
+        $user = $this->account();
+        $name = filled($user->name) ? $user->name : Str::before((string) $user->email, '@');
 
         return [
             'team' => $context->flag('team_member') && $workspace !== null,
             'workspace' => $workspace !== null ? $workspace->name.($context->role() !== null ? ', '.$context->role()->label() : '') : null,
+            // BE-06 (contract 2.0.0-r §6): the photo, the initials' colour and the language, as the apps' profile has them.
+            'photo' => Avatars::of($user)['avatar_url'],
+            // DES-08: the new console draws it with the one avatar component (x-el.avatar) from the person.
+            'person' => $user,
+            'initials' => InitialsAvatarProvider::initials($name),
+            'color' => $user->avatarColor(),
+            'colors' => self::AVATAR_COLOR_NAMES,
+            'v2' => ConsoleV2::any(),
+            'appLanguages' => ConsoleV2::shell() ? ConsoleV2::LANGUAGES : null,
+            'appLanguage' => Shell::preferences($user)['app_language'],
         ];
+    }
+
+    /** The 8 initials' colours in the order the server keeps them (avatar_color 0 to 7; their names since 2.0.0-u). */
+    public const AVATAR_COLOR_NAMES = ['Teal', 'Blue', 'Cyan', 'Olive', 'Pink', 'Orange', 'Green', 'Slate'];
+
+    /** Profile › Colour: the initials' circle when there is no photo, the apps' too (PATCH /api/account's avatar_color). */
+    public function setAvatarColor(int $color): bool
+    {
+        if ($color < 0 || $color >= User::AVATAR_COLORS) {
+            return false;
+        }
+        $this->account()->forceFill(['avatar_color' => $color])->save();
+        SettingsContext::forget();
+
+        return true;
+    }
+
+    /** Profile › Change photo…: the apps' own checks (POST /api/account/avatar), a square picture kept at 128 and 512 px. */
+    public function changePhotoAction(): Action
+    {
+        return Action::make('changePhoto')->label(fn (): string => Avatars::of($this->account())['avatar_url'] !== null ? __('Change photo…') : __('Add photo…'))
+            ->modalHeading(__('Photo'))->modalDescription(__('JPEG, PNG or WebP, up to 5 MB. It is cut to a square and shown beside your name on every device.'))
+            ->modalSubmitActionLabel(__('Save'))->modalWidth('md')->color('gray')
+            ->schema([FileUpload::make('photo')->label(__('Picture'))->image()->storeFiles(false)->required()->maxSize(Avatars::MAX_BYTES / 1024)])
+            ->action(function (array $data): void {
+                $file = $data['photo'] ?? null;
+                if (! $file instanceof UploadedFile || ! $this->photoChangeAllowed()) {
+                    return;
+                }
+                try {
+                    app(Avatars::class)->store($this->account(), $file);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+                    return;
+                }
+                SettingsContext::forget();
+                Notification::make()->title(__('Photo changed'))->success()->send();
+            });
+    }
+
+    /** The apps' photo changes an hour per person (the `account-avatar` limit of POST and DELETE /api/account/avatar). */
+    public const PHOTO_CHANGES_AN_HOUR = 10;
+
+    /**
+     * One more photo change, within the apps' limit, which the console shares: the throttle's own key for the person
+     * (ThrottleRequests' named limiter: md5 of the limiter's name and its key, `account-avatar:u<id>`, AppServiceProvider).
+     * Over it, it says so and nothing changes.
+     */
+    private function photoChangeAllowed(): bool
+    {
+        $key = md5('account-avatar'.'account-avatar:u'.$this->account()->id);
+        if (RateLimiter::tooManyAttempts($key, self::PHOTO_CHANGES_AN_HOUR)) {
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+            Notification::make()->title(__('You have changed your photo :count times this hour. Try again in :minutes min.', ['count' => self::PHOTO_CHANGES_AN_HOUR, 'minutes' => $minutes]))
+                ->warning()->send();
+
+            return false;
+        }
+        RateLimiter::hit($key, 3600);
+
+        return true;
+    }
+
+    /** Profile › Remove photo: the initials come back (DELETE /api/account/avatar). */
+    public function removePhotoAction(): Action
+    {
+        return Action::make('removePhoto')->label(__('Remove photo'))->color('danger')->link()
+            ->visible(fn (): bool => Avatars::of($this->account())['avatar_url'] !== null)
+            ->requiresConfirmation()->modalIcon(null)->modalHeading(__('Remove your photo?'))
+            ->modalDescription(__('Your initials show in its place, on every device.'))->modalSubmitActionLabel(__('Remove'))
+            ->action(function (): void {
+                if (! $this->photoChangeAllowed()) {
+                    return;
+                }
+                app(Avatars::class)->remove($this->account());
+                SettingsContext::forget();
+                Notification::make()->title(__('Photo removed'))->success()->send();
+            });
     }
 
     /** @return array<string, mixed> Devices: every phone, computer and browser, the QR to sign one in, the connected apps */
@@ -108,9 +221,9 @@ trait ManagesAccountPages
     /** Devices › Sign in a device: a one-time QR and code (10 minutes). */
     public function signInDeviceAction(): Action
     {
-        return Action::make('signInDevice')->label('Sign in a device')
-            ->modalHeading('Sign in a phone or computer')
-            ->modalDescription('Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.')
+        return Action::make('signInDevice')->label(__('Sign in a device'))
+            ->modalHeading(__('Sign in a phone or computer'))
+            ->modalDescription(__('Scan the QR code in the :app app, or type the code. It works once and expires in 10 minutes.', ['app' => Brand::name()]))
             ->fillForm(function (PairingService $pairing): array {
                 try {
                     $code = $pairing->createCode($this->account());
@@ -121,8 +234,9 @@ trait ManagesAccountPages
 
                 return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
             })
-            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
-            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+            // The new frame's copy of the window's body has its words in the console's language (W-207, W-208).
+            ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('md');
     }
 
     /** A device's sheet: rename it, sign it out, sign it in again or remove it from the list. */
@@ -132,29 +246,29 @@ trait ManagesAccountPages
             ->modalHeading(fn (array $arguments): string => $this->ownDevice($arguments)->readableName())
             ->modalWidth('md')
             ->fillForm(fn (array $arguments): array => ['name' => $this->ownDevice($arguments)->readableName()])
-            ->schema([TextInput::make('name')->label('Name')->required()->maxLength(60)])
-            ->modalSubmitActionLabel('Save')
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(60)])
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (array $data, array $arguments): void {
                 $device = $this->ownDevice($arguments);
                 $device->forceFill(['name' => trim((string) $data['name']), 'name_chosen' => true])->save();
-                Notification::make()->title('Device renamed')->success()->send();
+                Notification::make()->title(__('Device renamed'))->success()->send();
             })
             ->extraModalFooterActions(fn (array $arguments): array => array_values(array_filter([
-                $this->ownDevice($arguments)->signed_out_at === null ? Action::make('signOutDevice')->label('Sign out')->color('danger')
-                    ->requiresConfirmation()->modalHeading('Sign out '.$this->ownDevice($arguments)->readableName().'?')
-                    ->modalDescription('It will need to sign in again.')->modalSubmitActionLabel('Sign out')->modalIcon(null)
+                $this->ownDevice($arguments)->signed_out_at === null ? Action::make('signOutDevice')->label(__('Sign out'))->color('danger')
+                    ->requiresConfirmation()->modalHeading(__('Sign out :name?', ['name' => $this->ownDevice($arguments)->readableName()]))
+                    ->modalDescription(__('It will need to sign in again.'))->modalSubmitActionLabel(__('Sign out'))->modalIcon(null)
                     ->action(function () use ($arguments): void {
                         $done = app(AccountSessions::class)->revokeDevice($this->account(), (string) $arguments['device']);
-                        Notification::make()->title($done ? 'Device signed out' : 'That device was already signed out')->success()->send();
+                        Notification::make()->title($done ? __('Device signed out') : __('That device was already signed out'))->success()->send();
                     })->cancelParentActions() : null,
-                $this->ownDevice($arguments)->status() !== Device::ACTIVE ? Action::make('reauthDevice')->label('Sign in again')->color('gray')
+                $this->ownDevice($arguments)->status() !== Device::ACTIVE ? Action::make('reauthDevice')->label(__('Sign in again'))->color('gray')
                     ->action(fn () => $this->replaceMountedAction('signInAgain', ['device' => $arguments['device']])) : null,
-                $this->ownDevice($arguments)->signed_out_at !== null ? Action::make('forgetDevice')->label('Remove from list')->color('danger')
-                    ->requiresConfirmation()->modalHeading('Remove '.$this->ownDevice($arguments)->readableName().' from the list?')
-                    ->modalDescription(null)->modalSubmitActionLabel('Remove')->modalIcon(null)
+                $this->ownDevice($arguments)->signed_out_at !== null ? Action::make('forgetDevice')->label(__('Remove from list'))->color('danger')
+                    ->requiresConfirmation()->modalHeading(__('Remove :name from the list?', ['name' => $this->ownDevice($arguments)->readableName()]))
+                    ->modalDescription(null)->modalSubmitActionLabel(__('Remove'))->modalIcon(null)
                     ->action(function () use ($arguments): void {
                         $done = app(AccountSessions::class)->removeDevice($this->account(), (string) $arguments['device']);
-                        Notification::make()->title($done ? 'Removed from the list' : 'That device was already removed')->success()->send();
+                        Notification::make()->title($done ? __('Removed from the list') : __('That device was already removed'))->success()->send();
                     })->cancelParentActions() : null,
             ])));
     }
@@ -163,8 +277,8 @@ trait ManagesAccountPages
     public function signInAgainAction(): Action
     {
         return Action::make('signInAgain')
-            ->modalHeading(fn (array $arguments): string => 'Sign in '.$this->ownDevice($arguments)->readableName().' again')
-            ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
+            ->modalHeading(fn (array $arguments): string => __('Sign in :name again', ['name' => $this->ownDevice($arguments)->readableName()]))
+            ->modalDescription(__('Open the :app app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.', ['app' => Brand::name()]))
             ->fillForm(function (array $arguments, PairingService $pairing): array {
                 try {
                     $code = $pairing->createBoundCode($this->account(), $this->ownDevice($arguments)->id);
@@ -175,8 +289,9 @@ trait ManagesAccountPages
 
                 return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
             })
-            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
-            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+            // The new frame's copy of the window's body has its words in the console's language (W-207, W-208).
+            ->schema([ViewField::make('pairing')->view(ConsoleV2::shell() ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Done'))->modalWidth('md');
     }
 
     /** @param  array<string, mixed>  $arguments */
@@ -188,13 +303,13 @@ trait ManagesAccountPages
     public function revokeDevice(string $id): void
     {
         $done = app(AccountSessions::class)->revokeDevice($this->account(), $id);
-        Notification::make()->title($done ? 'Device signed out' : 'That device was already signed out')->success()->send();
+        Notification::make()->title($done ? __('Device signed out') : __('That device was already signed out'))->success()->send();
     }
 
     public function removeDevice(string $id): void
     {
         $done = app(AccountSessions::class)->removeDevice($this->account(), $id);
-        Notification::make()->title($done ? 'Removed from the list' : 'That device was already removed')->success()->send();
+        Notification::make()->title($done ? __('Removed from the list') : __('That device was already removed'))->success()->send();
     }
 
     /** Devices › Connected apps › Disconnect, confirmed. */

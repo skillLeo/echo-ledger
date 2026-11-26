@@ -313,7 +313,8 @@ describe('the Activity item', function () {
         expect($items)->toHaveCount(1)
             ->and($items[0])->toMatchArray(['kind' => 'missed_recording', 'title' => 'Missed recording', 'body' => 'WhatsApp call · 5:12 · The helper was not connected',
                 'session_id' => null, 'read' => false, 'reason' => 'helper_not_armed', 'missed_recording_id' => $id])
-            ->and(array_keys($items[0]))->toBe(['id', 'kind', 'title', 'body', 'session_id', 'read', 'at', 'reason', 'missed_recording_id']);
+            // Since 2.0.0-r (BE-02) every item also has repeat_count, group and resolved; since 2.0.0-aa actor.
+            ->and(array_keys($items[0]))->toBe(['id', 'kind', 'title', 'body', 'session_id', 'read', 'at', 'repeat_count', 'group', 'resolved', 'reason', 'missed_recording_id', 'actor']);
     });
 
     it('says the call and the reason in plain words', function (array $change, string $body) {
@@ -339,7 +340,7 @@ describe('the Activity item', function () {
         $this->api($token)->postJson('/api/devices/missed-recordings', missedBody())->assertCreated();
 
         $paired = collect($this->api($token)->getJson('/api/activity')->assertOk()->json('data'))->firstWhere('kind', 'device_paired');
-        expect(array_keys($paired))->toBe(['id', 'kind', 'title', 'body', 'session_id', 'read', 'at']);
+        expect(array_keys($paired))->toBe(['id', 'kind', 'title', 'body', 'session_id', 'read', 'at', 'repeat_count', 'group', 'resolved', 'actor']);
     });
 
     it('goes to the device\'s person only', function () {

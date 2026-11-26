@@ -233,6 +233,17 @@ describe("Plan & usage", () => {
     await waitFor(() => expect(callsOf("upgrade_request_cancel")).toEqual([{ id: "01m70jccdjr5m148e49763r5w6" }]));
   });
 
+  it("D-230: near the uploads a day the meter says uploads; a team with no plan known says who manages it", () => {
+    const e = sampleEntitlements("pro");
+    e.limits.uploads_per_day = { limit: 200, used: 170 };
+    const view = page(e);
+    expect(screen.getByText(/You've used 85% of your daily uploads\./)).toBeInTheDocument();
+    view.unmount();
+    page({ ...sampleEntitlements("pro"), plan: null }, "member");
+    expect(screen.getByText("Acme's plan is managed by its owner.")).toBeInTheDocument();
+    expect(screen.queryByText(/is on Your/)).toBeNull();
+  });
+
   it("gives a team's members the plan's facts and no actions", () => {
     page(sampleEntitlements("pro"), "member");
     expect(screen.getByText("Acme is on Pro. Its owner manages the plan.")).toBeInTheDocument();

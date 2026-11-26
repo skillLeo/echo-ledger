@@ -284,3 +284,55 @@ describe("the app with ui_v2.settings", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 });
+
+describe("Help › Shortcuts and Settings › Keyboard shortcuts follow the layout", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+  });
+
+  it("with the three levels: ⌘1…⌘6, ⌥1…⌥9, ⌘\\ and ⌘[ / ⌘] in place of the sidebar's [; without, the [ stays", async () => {
+    const { windowKeys } = await import("../../views/main/HelpDialog");
+    const { appKeys } = await import("../../views/main/AppSettings");
+    for (const keys of [windowKeys("macos", true).map(([k]) => k), appKeys("macos", true).map(([k]) => k)]) {
+      expect(keys).not.toContain("[");
+      expect(keys).toEqual(expect.arrayContaining(["⌘1 … ⌘6", "⌥1 … ⌥9", "⌘\\", "⌘[ / ⌘]"]));
+    }
+    expect(appKeys("windows", true).map(([k]) => k)).toEqual(expect.arrayContaining(["Ctrl+1 … Ctrl+6", "Alt+1 … Alt+9", "Ctrl+\\", "Ctrl+[ / Ctrl+]"]));
+    expect(windowKeys("windows").map(([k]) => k)).toContain("[");
+    expect(appKeys("windows").map(([k]) => k)).toContain("[");
+    // Help's Shortcuts tab reads the layout's list.
+    render(<div className="el-root"><HelpV2 platform="macos" onBack={() => undefined} start={{ tab: "shortcuts", seq: 1 }} threeLevels /></div>);
+    await act(flushAsync);
+    const list = within(document.querySelector<HTMLElement>('dl[aria-label="In this window"]')!);
+    expect(list.queryByText("Collapse or expand the sidebar")).toBeNull();
+    expect(list.getByText("Hide or show the panel")).toBeInTheDocument();
+  });
+});
+
+describe("the older Help sheet (? when the new Help can't be reached) follows the layout too", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+  });
+
+  it("with the three levels it lists the panel's keys, not the sidebar's [", async () => {
+    const { HelpDialog } = await import("../../views/main/HelpDialog");
+    const { unmount } = render(<HelpDialog platform="windows" threeLevels onClose={() => undefined} onSettings={() => undefined} />);
+    await act(flushAsync);
+    expect(screen.queryByText("Collapse or expand the sidebar")).toBeNull();
+    expect(screen.getByText("Hide or show the panel")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+1 … Ctrl+6")).toBeInTheDocument();
+    unmount();
+    render(<HelpDialog platform="windows" onClose={() => undefined} onSettings={() => undefined} />);
+    await act(flushAsync);
+    expect(screen.getByText("Collapse or expand the sidebar")).toBeInTheDocument();
+  });
+
+  it("UX-07: with zoom on, Help › Keyboard shortcuts lists its keys (Ctrl + the wheel off a Mac); without it, not", async () => {
+    const { windowKeys } = await import("../../views/main/HelpDialog");
+    expect(windowKeys("macos", true, true)).toContainEqual(["⌘+ / ⌘− / ⌘0", "Zoom in, zoom out, or back to 100%"]);
+    expect(windowKeys("windows", true, true)).toContainEqual(["Ctrl++ / Ctrl+− / Ctrl+0", "Zoom in, zoom out, or back to 100% (Ctrl + the mouse wheel too)"]);
+    expect(windowKeys("windows", true).some(([, what]) => what.startsWith("Zoom"))).toBe(false);
+  });
+});

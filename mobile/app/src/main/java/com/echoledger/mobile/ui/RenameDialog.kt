@@ -9,26 +9,57 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.TextButton
 
-/** Rename a recording (since 1.4): from the Library's selection menu or by tapping the title on its page. Empty clears it. */
+/**
+ * Whether [item]'s title is one the person chose (2.0.0-k title_source "own"), and so theirs to edit in Rename. From a
+ * server that doesn't say, a title it wrote from what was said (title_auto) is not; any other is, as before.
+ */
+fun ownTitle(item: LibraryItem): Boolean = item.titleSource == "own" || (item.titleSource == null && !item.titleAuto)
+
+/**
+ * What Rename's box holds and when Save does something (U19, 2.0.0-k, as on the desktop). A title the person chose
+ * ([own]) is in the box, and emptying it gives back EchoLedger's; any other ("Call with …", an automatic title, the
+ * app's name) starts the box empty with that title as its placeholder, and leaving it empty saves nothing.
+ */
+class RenameBox(val current: String, val own: Boolean = true) {
+    var text by mutableStateOf(if (own) current else "")
+
+    /** Whether Save changes anything; when it doesn't, Save just closes (as on the desktop). */
+    val saves: Boolean get() = text.trim() != (if (own) current else "").trim()
+    val hint: String get() =
+        if (own) "Leave it empty for the title EchoLedger gives it." else "Type a title of your own, or leave it empty to keep this one."
+    val placeholder: String? get() = current.takeUnless { own || it.isBlank() }
+}
+
+/** Rename's title box (in [RenameDialog]). */
 @Composable
-fun RenameDialog(current: String, onRename: (String) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf(current) }
+fun RenameField(box: RenameBox, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = box.text,
+        onValueChange = { box.text = it.take(200) },
+        singleLine = true,
+        label = { Text("Title") },
+        placeholder = box.placeholder?.let { words -> { Text(words) } },
+        supportingText = { Text(box.hint) },
+        modifier = modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * Rename a recording (since 1.4): from the Library's selection menu or by tapping the title on its page. [own]: the
+ * title is one the person chose ([ownTitle]); see [RenameBox]. The dialog gives the box the focus when it opens.
+ */
+@Composable
+fun RenameDialog(current: String, onRename: (String) -> Unit, onDismiss: () -> Unit, own: Boolean = true) {
+    val box = remember { RenameBox(current, own) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rename") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(200) },
-                singleLine = true,
-                label = { Text("Title") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = { TextButton(onClick = { onRename(text.trim()) }, enabled = text.trim() != current.trim()) { Text("Save") } },
+        text = { RenameField(box) },
+        confirmButton = { TextButton(onClick = { if (box.saves) onRename(box.text.trim()) else onDismiss() }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

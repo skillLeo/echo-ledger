@@ -5,7 +5,12 @@ declare(strict_types=1);
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
+use App\Models\CallDeclinedOffer;
+use App\Models\CallRule;
+use App\Models\LabelList;
 use App\Models\MissedRecording;
+use App\Models\Passkey;
+use App\Models\SavedView;
 use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionLabel;
@@ -13,10 +18,12 @@ use App\Models\SessionMarker;
 use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
 use App\Services\InterfaceFlags;
+use App\Services\Library\SavedViews;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\Workspaces;
@@ -43,6 +50,7 @@ const ISO_API_BYPASS = [
     'api.auth.sign-up' => 'signing up (v1.6): the new account and its own new workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
+    'api.avatars.show' => 'signed, expiring, versioned URL of a profile picture, given only where the API already shows that person (since 2.0.0-l)',
     // Since v1.9 (L1): the Live Assist relay, HMAC-signed with the server's own secret, never a device token; it finds
     // a session by its id, which only a relay token the server minted for that session carries.
     'api.internal.assist.providers' => 'the relay: provider keys and the model catalog, no workspace data',
@@ -69,9 +77,11 @@ const ISO_WEB_BYPASS = [
     'request.files.complete' => 'public request link: the token is the only key',
     'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
     'site.home' => 'public landing page: no workspace data',
+    'health.php' => 'the web PHP\'s own health check for the deploy (W-INC-1124): ok or not, server-wide, no workspace data',
     'site.pricing' => 'public pricing page (v2.0): the plans on offer, server-wide, no workspace data',
     'legacy.profile' => 'the account page\'s old address (before v1.7): a redirect to Settings, no data',
     'legacy.security' => 'the security centre\'s old address (before v1.7): a redirect to Settings, no data',
+    'app.passkeys' => 'the desktop app\'s passkeys link (since 2.0.0-l): a redirect to Settings, no data',
     'legacy.console' => 'the app\'s old addresses under /admin (before v1.6): a redirect to the same path under /app, no data',
     'downloads' => 'public downloads page: the apps\' builds, server-wide, no workspace data',
     'downloads.android' => 'public update manifest of the phone app, server-wide',
@@ -94,6 +104,8 @@ const ISO_WEB_BYPASS = [
     'invitations.accept' => 'signed link of one invitation: the token and the invited address are the only keys',
     'account.delete' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',
+    'account.email.restore' => 'signed, expiring link mailed to the old address of one person\'s own email change (since 2.0.0-l)',
+    'account.email.restore.store' => 'signed, expiring link mailed to the old address of one person\'s own email change (since 2.0.0-l)',
     'account.export.download' => 'signed, expiring link of one person\'s own data export',
     'legal.terms' => 'public legal page: no workspace data',
     'sign-up' => 'a redirect to the sign-up or sign-in page, before any workspace',
@@ -141,6 +153,9 @@ function isoWorld(bool $sameWorkspace = false): array
     $transcript = Fx::transcript($session, 'BOBSECRETTRANSCRIPT spoken here');
     $marker = SessionMarker::query()->create(['capture_session_id' => $session->id, 'at_ms' => 1000, 'note' => 'BOBSECRETNOTE', 'source' => 'device']);
     SessionLabel::query()->create(['capture_session_id' => $session->id, 'label' => 'bobsecretlabel']);
+    // Since 2.0.0-p: Bob's saved view, its name and search his own.
+    $bobView = app(SavedViews::class)->create((int) $session->workspace_id, $bob->id, ['name' => 'BOB-SECRET-TITLE view', 'search' => 'BOBSECRETTRANSCRIPT',
+        'filters' => ['labels' => ['op' => 'is', 'values' => ['bobsecretlabel']]]])['view'];
     $screen = Screen::query()->create(['workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => 1000, 'width' => 1, 'height' => 1,
         'trigger' => 'manual', 'sha256' => str_repeat('b', 64), 'mime' => 'image/png', 'bytes' => 1, 'ocr_text' => 'BOBSECRETNOTE on the screen']);
     ['link' => $share, 'url' => $shareUrl] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
@@ -170,15 +185,24 @@ function isoWorld(bool $sameWorkspace = false): array
         'token_hash' => hash('sha256', 'bob-invitation'), 'invited_by' => $bob->id, 'expires_at' => now()->addDay()]);
     $bobLink = WorkspaceInviteLink::query()->create(['workspace_id' => $bobTeam->id, 'role' => 'member', 'token_hash' => hash('sha256', 'bob-link'),
         'created_by' => $bob->id, 'expires_at' => now()->addDay()]);
+    // Since 2.0.0-l: a passkey of Bob's (account and security from the apps).
+    $bobPasskey = Passkey::query()->create(['user_id' => $bob->id, 'name' => 'BOB-SECRET-DEVICE passkey', 'credential_id' => 'bob-credential', 'credential' => '{}']);
+    // Since 2.0.0-w: call rules on for everyone, and a rule of Bob's naming a person he calls.
+    app(InterfaceFlags::class)->set(InterfaceFlags::CALL_RULES, true, 0, [], []);
+    $bobRule = CallRule::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'match_key' => '+923009990001', 'number' => '+923009990001',
+        'name' => 'BOB-SECRET-CLIENT contact', 'action' => 'dont_record']);
+    // Since 2.0.0-x: an offer Bob turned down, naming the same person.
+    CallDeclinedOffer::query()->create(['user_id' => $bob->id, 'kind' => 'contact', 'number' => '+923009990001', 'name' => 'BOB-SECRET-CLIENT declined',
+        'match_key' => '+923009990001', 'declined_at' => now()]);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
+    return compact('bobRule', 'bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id, $b['bobPasskey']->id, $b['bobRule']->id];
 }
 
 /**
@@ -233,6 +257,14 @@ function isoApiCases(array $b): array
             fn (TestResponse $r): bool => $r->status() === 200 && $r->json('items') === [] && $r->json('minutes') === 0],
         // Since 2.0.0-i: the other side's label is no label of this person's, so nothing is coloured or re-synced.
         'api.labels.color' => ['PUT', '/api/labels/color', ['label' => 'bobsecretlabel', 'color' => '#000000'], 404],
+        // Since 2.0.0-m: the other side's label is no list of this person's: never listed, renamed, deleted or ordered.
+        'api.lists' => ['GET', '/api/lists', [], 'list'],
+        'api.lists.store' => ['POST', '/api/lists', ['name' => 'Alice list'], fn (TestResponse $r): bool => $r->status() === 201
+            && unscoped(fn (): bool => SessionLabel::query()->where('capture_session_id', $b['session']->id)->pluck('label')->all() === ['bobsecretlabel'])],
+        'api.lists.update' => ['PATCH', '/api/lists/bobsecretlabel', ['name' => 'hijacked'], 404],
+        'api.lists.destroy' => ['DELETE', '/api/lists/bobsecretlabel', [], 404],
+        'api.lists.order' => ['PUT', '/api/lists/order', ['keys' => ['bobsecretlabel']], fn (TestResponse $r): bool => $r->status() === 422
+            && unscoped(fn (): bool => LabelList::query()->where('user_id', $b['bob']->id)->doesntExist() || LabelList::query()->where('user_id', $b['bob']->id)->pluck('position')->all() === [0])],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
         'api.clients.update' => ['PATCH', "/api/clients/{$b['client']->id}", ['name' => 'hijacked'], 404],
         'api.clients.destroy' => ['DELETE', "/api/clients/{$b['client']->id}", [], 404],
@@ -249,6 +281,12 @@ function isoApiCases(array $b): array
         'api.clients.files.store' => ['POST', "/api/clients/{$b['client']->id}/files", ['text' => 'hijacked'], 404],
         'api.clients.files.destroy' => ['DELETE', "/api/clients/{$b['client']->id}/files/{$b['client']->id}", [], 404],
         'api.clients.ask' => ['POST', "/api/clients/{$b['client']->id}/ask", ['question' => 'What was agreed?'], 404],
+        // Since 2.0.0-o: the other side's recording is none of this person's to ask about. Ask across recordings has no
+        // id to try: without an AI key here it answers 409 (or 403 on a plan without AI notes) and the leak check below
+        // still reads the answer. What reaches the AI is covered by AskEverywhereTest ("never reads another workspace's,
+        // a teammate's, the person's other workspace's or a binned recording"), with a fake AI that keeps every passage.
+        'api.sessions.ask' => ['POST', "/api/sessions/{$s}/ask", ['question' => 'What was agreed?'], 404],
+        'api.ask' => ['POST', '/api/ask', ['question' => 'What was agreed?'], fn (TestResponse $r): bool => in_array($r->status(), [403, 409], true)],
         'api.sessions.notes' => ['GET', "/api/sessions/{$s}/notes", [], 404],
         'api.sessions.notes.make' => ['POST', "/api/sessions/{$s}/notes", [], 404],
         'api.transcripts.suggestions' => ['POST', "/api/transcripts/{$t}/suggestions/0", ['accept' => true], 404],
@@ -285,16 +323,42 @@ function isoApiCases(array $b): array
         'api.transcripts.restore' => ['POST', "/api/transcripts/{$t}/restore", ['revision_id' => 1], 404],
         'api.library' => ['GET', '/api/library?since=1970-01-01T00:00:00Z&limit=100&include_deleted=1', [], 'list'],
         'api.library.views' => ['GET', '/api/library/views', [], 'list'],
+        // Since 2.0.0-p: the filter counts (never Bob's projects, labels or recordings) and saved views (never his).
+        // The id Alice named comes back as she sent it (her filter, with no name and nothing counted), and nothing else of Bob's.
+        'api.library.facets' => ['GET', '/api/library/facets?filters='.urlencode((string) json_encode(['project' => ['op' => 'is', 'values' => [$b['client']->id]]])), [],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('total') === 0 && collect($r->json('sections.project'))->firstWhere('value', $b['client']->id) === ['value' => $b['client']->id, 'count' => 0, 'name' => null, 'color' => null, 'parent_id' => null],
+            [$b['client']->id]],
+        'api.views' => ['GET', '/api/views', [], 'list'],
+        'api.views.store' => ['POST', '/api/views', ['name' => 'Alice view'], fn (TestResponse $r): bool => $r->status() === 201
+            && unscoped(fn (): bool => SavedView::query()->withoutGlobalScopes()->where('user_id', $b['bob']->id)->pluck('name')->all() === ['BOB-SECRET-TITLE view'])],
+        'api.views.update' => ['PATCH', "/api/views/{$b['bobView']['id']}", ['name' => 'hijacked'], 404],
+        'api.views.destroy' => ['DELETE', "/api/views/{$b['bobView']['id']}", [], 404],
+        'api.views.order' => ['PUT', '/api/views/order', ['ids' => [$b['bobView']['id']]], fn (TestResponse $r): bool => $r->status() === 422],
         'api.bin' => ['GET', '/api/bin', [], 'list'],
         'api.storage' => ['GET', '/api/storage', [], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('recordings_count') === 1],
         'api.activity' => ['GET', '/api/activity', [], 'list'],
         'api.activity.read' => ['POST', '/api/activity/read', [], 'list'],
+        // Since 2.0.0-r: the badge counts the person's own only (tests/Feature/Api/BadgeTest.php).
+        'api.badge' => ['GET', '/api/badge', [], 'list'],
+        // Since 2.0.0-r: the Activity's groups, the person's own (tests/Feature/Api/ActivityDedupeTest.php).
+        'api.activity.groups' => ['GET', '/api/activity/groups', [], 'list'],
+        // Since 2.0.0-r: Retry all sets the person's own time only (tests/Feature/Api/UploadRetriesTest.php).
+        'api.activity.retry-all' => ['POST', '/api/activity/retry-all', ['group' => 'upload_failed'], fn (TestResponse $r): bool => $r->status() === 202
+            && unscoped(fn (): bool => User::query()->whereKey($b['bob']->id)->value('retry_requested_at') === null)],
         'api.sessions.export' => ['POST', '/api/sessions/export', ['ids' => [$s], 'format' => 'txt'],
             // Same answer as for unknown ids: nothing of the workspace matched.
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],
         'api.search' => ['GET', '/api/search?q=BOBSECRETTRANSCRIPT', [], 'list'],
         'api.sessions.show' => ['GET', "/api/sessions/{$s}", [], 404],
         'api.sessions.opened' => ['POST', "/api/sessions/{$s}/opened", [], 404],
+        'api.sessions.unopened' => ['DELETE', "/api/sessions/{$s}/opened", [], 404],
+        // Since 2.0.0-y: B's recording among many is listed back as not found, never marked, never an error.
+        'api.sessions.opened.many' => ['POST', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
+        'api.sessions.unopened.many' => ['DELETE', '/api/sessions/opened', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('done') === [] && $r->json('not_found') === [$s],
+            ['"not_found":["'.$s.'"]']],
         // Live Translate holds no workspace data; without a Soniox key it says so and leaks nothing of the other one.
         'api.live-translate.token' => ['POST', '/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'],
             fn (TestResponse $r): bool => $r->status() === 503 && $r->json('code') === 'provider_not_configured'],
@@ -321,6 +385,19 @@ function isoApiCases(array $b): array
         'api.account.ui' => ['PUT', '/api/account/ui', ['classic' => true], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('ui_classic') === true],
         // Since 2.0.0-g: the calling person's own design switch.
         'api.account.ui.show' => ['GET', '/api/account/ui', [], 'list'],
+        // Since 2.0.0-w: call rules are the calling person's own, account-wide. Bob's rule is never listed, changed or
+        // removed; a rule for the same number is the caller's own new one.
+        'api.call-rules' => ['GET', '/api/call-rules', [], 'list'],
+        'api.call-rules.settings' => ['PUT', '/api/call-rules/settings', ['after_call' => 'always_audio'], 'list'],
+        'api.call-rules.store' => ['POST', '/api/call-rules', ['kind' => 'contact', 'number' => '+923009990001', 'action' => 'always_audio'],
+            fn (TestResponse $r): bool => $r->status() === 201 && $r->json('action') === 'always_audio'],
+        'api.call-rules.update' => ['PATCH', "/api/call-rules/{$b['bobRule']->id}", ['action' => 'ask'], 404],
+        'api.call-rules.destroy' => ['DELETE', "/api/call-rules/{$b['bobRule']->id}", [], 404],
+        // Since 2.0.0-x: preferences and turned-down offers are the calling person's own; Bob's never show.
+        'api.call-rules.preferences' => ['PATCH', '/api/call-rules/preferences', ['hint_seen' => true], 'list'],
+        'api.call-rules.declined' => ['POST', '/api/call-rules/declined', ['kind' => 'source', 'source_app' => 'zoom'],
+            fn (TestResponse $r): bool => $r->status() === 201],
+        'api.call-rules.declined.forget' => ['DELETE', '/api/call-rules/declined', [], fn (TestResponse $r): bool => $r->status() === 204],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.
@@ -341,6 +418,30 @@ function isoApiCases(array $b): array
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
+        // Since 2.0.0-l (account and security from the apps): only the calling device's own person; Bob's device and
+        // passkey are the same 404 as unknown ids, and nothing here signs this device out.
+        'api.account.security' => ['GET', '/api/account/security', [], 'list'],
+        'api.account.update' => ['PATCH', '/api/account', ['name' => 'Alice Renamed'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('name') === 'Alice Renamed'],
+        'api.account.proof-code' => ['POST', '/api/account/proof-code', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'proof_code_not_needed'],
+        'api.account.avatar.store' => ['POST', '/api/account/avatar', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
+        'api.account.avatar.destroy' => ['DELETE', '/api/account/avatar', [], fn (TestResponse $r): bool => $r->status() === 204],
+        'api.account.email' => ['POST', '/api/account/email', ['email' => 'alice-new@example.test'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.email.confirm' => ['POST', '/api/account/email/confirm', ['code' => '000000'], fn (TestResponse $r): bool => $r->status() === 410 && $r->json('code') === 'expired'],
+        'api.account.email.cancel' => ['DELETE', '/api/account/email', [], fn (TestResponse $r): bool => $r->status() === 204],
+        'api.account.password' => ['PUT', '/api/account/password', ['current' => 'password', 'new' => 'short'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('error_codes.new.0.code') === 'too_short'],
+        'api.account.devices.rename' => ['PATCH', "/api/account/devices/{$b['device']->id}", ['name' => 'hijacked'], 404],
+        'api.account.devices.revoke' => ['DELETE', "/api/account/devices/{$b['device']->id}", [], 404],
+        'api.account.browsers.revoke' => ['DELETE', '/api/account/browsers/'.str_repeat('b', 32), [], 404],
+        'api.account.google.unlink' => ['DELETE', '/api/account/google', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        // Adding a way in needs proof first (the ceremony it opens is bound to it): nothing of B either way.
+        'api.account.passkeys.options' => ['POST', '/api/account/passkeys/options', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.passkeys.store' => ['POST', '/api/account/passkeys', ['ceremony' => 'not-a-ceremony', 'credential' => ['id' => 'x']], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_passkey'],
+        'api.account.passkeys.rename' => ['PATCH', "/api/account/passkeys/{$b['bobPasskey']->id}", ['name' => 'hijacked'], 404],
+        'api.account.passkeys.remove' => ['DELETE', "/api/account/passkeys/{$b['bobPasskey']->id}", ['password' => 'password'], 404],
+        'api.account.two-factor.begin' => ['POST', '/api/account/two-factor', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'already_enabled'],
+        'api.account.two-factor.confirm' => ['POST', '/api/account/two-factor/confirm', ['ceremony' => 'x', 'code' => '123456'], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'already_enabled'],
+        'api.account.two-factor.recovery-codes' => ['POST', '/api/account/two-factor/recovery-codes', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.two-factor.disable' => ['DELETE', '/api/account/two-factor', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'required_for_staff'],
         'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
         // Since v1.8 P6.3: inviting people; another workspace's invitation and link are the same 404 as unknown ids.
         'api.workspace.invitations' => ['GET', '/api/workspace/invitations', [], 'list'],

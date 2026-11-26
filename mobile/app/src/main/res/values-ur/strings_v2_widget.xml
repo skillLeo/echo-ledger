@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home-screen widget's words, in the app language. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="w2_pair">پیئر کرنے کے لیے EchoLedger کھولیں</string>
+    <string name="w2_recording">ریکارڈ ہو رہا ہے…</string>
+    <string name="w2_not_ready">تیار نہیں: ٹھیک کرنے کے لیے تھپتھپائیں</string>
+    <string name="w2_locked">لاک ہے</string>
+    <string name="w2_armed">کالز ریکارڈ کرنے کے لیے تیار</string>
+    <string name="w2_tap">ریکارڈ کرنے کے لیے تھپتھپائیں</string>
+    <string name="w2_stop">بند کریں</string>
+    <string name="w2_record">ریکارڈ کریں</string>
+    <string name="w2_calls_ready">کالز: تیار</string>
+    <string name="w2_calls_not_ready">کالز: تیار نہیں</string>
+    <string name="w2_calls_off">کالز: بند</string>
+    <string name="w2_failed">ٹرانسکرپشن نہیں ہو سکی</string>
+    <string name="w2_uploading_pct">اپ لوڈ ہو رہا ہے %1$d%%</string>
+    <plurals name="w2_to_review">
+        <item quantity="one">%1$d کا فیصلہ باقی</item>
+        <item quantity="other">%1$d کا فیصلہ باقی</item>
+    </plurals>
+</resources>

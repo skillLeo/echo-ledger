@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, languageLabel, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
 import {
-  DISCARD_QUESTION,
   bulkNotice,
+  deleteWaitingQuestion,
+  deletedNotice,
   discardAllQuestion,
+  discardQuestion,
   failedUploads,
   heldLine,
   heldUploads,
@@ -20,8 +22,17 @@ import {
   waitingSummary,
 } from "../../lib/pending";
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
-import { NO_TARGET, type Notify } from "../../lib/notice";
+import { NO_TARGET, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
+import { CALL_WORDS } from "../../lib/callChoice";
+import { wordsIn, type Lang } from "../../i18n";
+
+/** The closed language chip's words (D-038): the language's short name, "Auto" when none is chosen. */
+function shortLanguage(value: LanguageChoice | undefined): string {
+  // In English, as the rest of this classic list (the options' own labels follow the window's language since D4).
+  const found = [...MAIN_LANGUAGES, ...MORE_LANGUAGES].find((o) => o.value === (value ?? null));
+  return found ? languageLabel(found.value, "en") : "Auto";
+}
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -37,7 +48,7 @@ const HIGHLIGHT_MS = 4000;
 const asList = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
 const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: string | null) =>
-  [sourceAppLabel(sourceApp), formatWhen(startedAt), formatDuration(durationMs) || "0:00", extra].filter(Boolean).join(" · ");
+  [sourceAppLabel(sourceApp, "en"), formatWhen(startedAt), formatDuration(durationMs) || "0:00", extra].filter(Boolean).join(" · ");
 
 /**
  * The top of the Library list: recordings waiting for Keep / Discard (A2.5), imported files on their way up (with
@@ -47,12 +58,17 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
  * list. A recording whose chip still counts down is not listed. Since v1.5 recordings made while another account was
  * signed in here wait for that account, with Discard.
  */
+/** Where the notice after a call is transcribed or saved as audio leads: the Library, where it shows. */
+const IN_LIBRARY: NoticeTarget = { kind: "library", view: null };
+
 /**
  * The waiting recordings and the uploads of the top of the Library, with every command they take: one source for the
  * classic list below and the v2 Library's (v2/library/QueueV2.tsx). The lists come from the core and follow its
- * `pending:changed` / `uploads:changed` events.
+ * `pending:changed` / `uploads:changed` events. Its questions and notices are in `lang`: the window's language for the
+ * v2 Library (the default), English ("en") for the classic list, which keeps exactly the English it always had.
  */
-export function useLibraryQueue(notify: Notify) {
+export function useLibraryQueue(notify: Notify, lang?: Lang) {
+  const { t } = wordsIn(lang);
   const [all, setPending] = useState<PendingItem[]>([]);
   const pending = useMemo(() => waitingItems(all), [all]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -61,6 +77,9 @@ export function useLibraryQueue(notify: Notify) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [learn, setLearn] = useState<{ itemId: string; clientId: string; question: string; language: LanguageChoice } | null>(null);
 
+  // Each list has answered once (or failed to): until both have, what the queue shows is not known yet.
+  const [answered, setAnswered] = useState({ pending: false, uploads: false });
+  const answer = useCallback((list: "pending" | "uploads") => setAnswered((a) => (a[list] ? a : { ...a, [list]: true })), []);
   const pendingLoads = useRef(0);
   const reloadPending = useCallback(() => {
     pendingLoads.current++;
@@ -68,33 +87,43 @@ export function useLibraryQueue(notify: Notify) {
       (items) => {
         pendingLoads.current--;
         setPending(asList(items));
+        answer("pending");
       },
       () => {
         pendingLoads.current--;
+        answer("pending");
       },
     );
-  }, []);
+  }, [answer]);
   const reloadUploads = useCallback(() => {
-    api.uploadList().then((items) => setUploads(asList(items))).catch(() => undefined);
-  }, []);
+    api.uploadList().then((items) => setUploads(asList(items))).catch(() => undefined).finally(() => answer("uploads"));
+  }, [answer]);
 
   useEffect(() => {
     reloadPending();
     reloadUploads();
     const subs = [
-      listenTo("pending:changed", (items) => setPending(asList(items))),
-      listenTo("uploads:changed", (items) => setUploads(asList(items))),
+      listenTo("pending:changed", (items) => {
+        setPending(asList(items));
+        answer("pending");
+      }),
+      listenTo("uploads:changed", (items) => {
+        setUploads(asList(items));
+        answer("uploads");
+      }),
     ];
     return () => subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
   }, [reloadPending, reloadUploads]);
 
-  /** Runs one command for an item; on failure reports the core's message and re-reads both lists. */
-  const perform = async (id: string, fn: () => Promise<unknown>, ok?: string): Promise<boolean> => {
+  /**
+   * Runs one command for an item; on success says `ok` (where `target` leads: nowhere when none is given), on failure
+   * reports the core's message and re-reads both lists.
+   */
+  const perform = async (id: string, fn: () => Promise<unknown>, ok?: string, target?: NoticeTarget): Promise<boolean> => {
     setBusy(id);
     try {
       await fn();
-      // Kept calls go up and show in the Library; what was discarded is gone.
-      if (ok) notify(ok, false, ok.startsWith("Kept") ? { kind: "library", view: null } : NO_TARGET);
+      if (ok) notify(ok, false, target);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -112,16 +141,41 @@ export function useLibraryQueue(notify: Notify) {
   };
 
   const keep = async (item: PendingItem) => {
-    if (await perform(item.id, () => api.pendingKeep(item.id), "Kept")) drop(item.id);
+    // Calls being transcribed or saved as audio go up and show in the Library.
+    if (await perform(item.id, () => api.pendingKeep(item.id), t("Transcribing…"), IN_LIBRARY)) drop(item.id);
+  };
+
+  /** "Save audio only": kept and uploaded as audio, not transcribed; it can be transcribed later from the Library. */
+  const keepAudio = async (item: PendingItem) => {
+    if (await perform(item.id, () => api.pendingKeepAudio(item.id), t("Saved as audio"), IN_LIBRARY)) drop(item.id);
+  };
+
+  /** Delete and Delete all: gone from the list now, deleted only once "Deleted · Undo" has had its time; Undo puts them
+   * back in the list. */
+  const deleteLater = async (ids: string[]) => {
+    setBulkBusy(true);
+    try {
+      const count = await api.pendingDelete(ids);
+      setPending((list) => list.filter((i) => !ids.includes(i.id)));
+      notify(deletedNotice(count, lang), false, { kind: "action", run: () => {
+        api.pendingDeleteUndo(ids).then(() => reloadPending(), (e) => notify(errorMessage(e), true));
+      } });
+    } catch (e) {
+      notify(errorMessage(e), true);
+      reloadPending();
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const discard = async (item: PendingItem) => {
-    if (!(await confirmAction(DISCARD_QUESTION))) return;
-    if (await perform(item.id, () => api.pendingDiscard(item.id), "Discarded")) drop(item.id);
+    if (!(await confirmAction(deleteWaitingQuestion(1, lang)))) return;
+    await deleteLater([item.id]);
   };
 
-  /** Keep all / Discard all: one command per recording, in order; a failure is reported and the rest still run. */
-  const decideAll = async (verb: "Kept" | "Discarded", command: (id: string) => Promise<unknown>) => {
+  /** Transcribe all / Save audio only for all: one command per recording, in order; a failure is reported and the rest
+   * still run. */
+  const decideAll = async (verb: "Transcribing" | "Saved as audio", command: (id: string) => Promise<unknown>) => {
     const items = pending;
     setBulkBusy(true);
     let done = 0;
@@ -135,14 +189,16 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice(verb, done), false, verb === "Kept" ? { kind: "library", view: null } : NO_TARGET);
+    if (done > 0) notify(bulkNotice(verb, done, lang), false, IN_LIBRARY);
   };
 
-  const keepAll = () => decideAll("Kept", (id) => api.pendingKeep(id));
+  const keepAll = () => decideAll("Transcribing", (id) => api.pendingKeep(id));
+  const keepAudioAll = () => decideAll("Saved as audio", (id) => api.pendingKeepAudio(id));
 
   const discardAll = async () => {
-    if (!(await confirmAction(discardAllQuestion(pending.length)))) return;
-    return decideAll("Discarded", (id) => api.pendingDiscard(id));
+    const ids = pending.map((i) => i.id);
+    if (!(await confirmAction(deleteWaitingQuestion(ids.length, lang)))) return;
+    await deleteLater(ids);
   };
 
   /** A new title for a waiting recording; an unchanged one sends nothing, an empty one clears it. */
@@ -184,14 +240,15 @@ export function useLibraryQueue(notify: Notify) {
     replace(updated);
     if (!item.clientId) return;
     const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === item.clientId);
-    const question = client ? learnPrompt(client.name, client.language, language) : null;
+    const question = client ? learnPrompt(client.name, client.language, language, lang) : null;
     setLearn(question && client ? { itemId: item.id, clientId: client.id, question, language } : null);
   };
 
   const answerLearn = async (yes: boolean) => {
     const asked = learn;
     setLearn(null);
-    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), "Saved for this project");
+    // It leads to the Library, as it always has.
+    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), t("Saved for this project"), IN_LIBRARY);
   };
 
   const retry = async (item: UploadItem) => {
@@ -202,13 +259,13 @@ export function useLibraryQueue(notify: Notify) {
 
   const discardUpload = async (item: UploadItem) => {
     // An imported file is still on the computer where it came from, so only a recording made here is asked about.
-    if (!item.imported && !(await confirmAction(DISCARD_QUESTION))) return;
-    if (await perform(item.id, () => api.uploadDiscard(item.id), "Discarded")) setUploads((list) => list.filter((i) => i.id !== item.id));
+    if (!item.imported && !(await confirmAction(discardQuestion(lang)))) return;
+    if (await perform(item.id, () => api.uploadDiscard(item.id), t("Discarded"))) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   /** Every recording that waits for one account, after one confirmation. */
   const discardHeld = async (items: UploadItem[]) => {
-    if (!(await confirmAction(discardAllQuestion(items.length)))) return;
+    if (!(await confirmAction(discardAllQuestion(items.length, lang)))) return;
     setBulkBusy(true);
     let done = 0;
     try {
@@ -221,11 +278,11 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice("Discarded", done), false, NO_TARGET);
+    if (done > 0) notify(bulkNotice("Discarded", done, lang), false, NO_TARGET);
   };
 
   const cancelImport = async (item: UploadItem) => {
-    if (await perform(item.id, () => api.uploadDiscard(item.id), "Import cancelled")) setUploads((list) => list.filter((i) => i.id !== item.id));
+    if (await perform(item.id, () => api.uploadDiscard(item.id), t("Import cancelled"))) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   const failed = failedUploads(uploads);
@@ -233,14 +290,19 @@ export function useLibraryQueue(notify: Notify) {
   const importing = importingUploads(uploads);
   const held = heldUploads(uploads);
   return {
+    /** Both lists have answered once: what the queue shows is known. */
+    loaded: answered.pending && answered.uploads,
     pending, uploads, failed, verifying, importing, held, clients, busy, bulkBusy, learn, pendingLoads, reloadPending,
-    keep, discard, keepAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
+    keep, keepAudio, discard, keepAll, keepAudioAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
   };
 }
 
+/** The queue's lists and commands (useLibraryQueue), for a list drawn apart from where it is kept (the v2 Library). */
+export type LibraryQueueState = ReturnType<typeof useLibraryQueue>;
+
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
-  const q = useLibraryQueue(notify);
-  const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held } = q;
+  const q = useLibraryQueue(notify, "en");
+  const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held, keepAudio, keepAudioAll } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
@@ -322,9 +384,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     <div className="queue">
       {pending.length > 0 && (
         <section className="queue-section" aria-labelledby="queue-pending-title">
-          <div className="queue-slim" data-testid="waiting-line" title={waitingSummary(pending)}>
+          <div className="queue-slim" data-testid="waiting-line" title={waitingSummary(pending, undefined, "en")}>
             <HourglassIcon size={15} />
-            <h2 id="queue-pending-title" className="queue-slim-label">{waitingLine(pending)}</h2>
+            <h2 id="queue-pending-title" className="queue-slim-label">{waitingLine(pending, "en")}</h2>
             <span className="queue-slim-sep" aria-hidden="true">·</span>
             <button
               type="button"
@@ -339,11 +401,12 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           {open && (
             <div id="queue-pending-list" className="queue-list">
               <div className="queue-actions queue-bulk">
-                <button type="button" className="btn primary compact" disabled={bulkBusy} onClick={() => void keepAll()}>Keep all</button>
-                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Discard all</button>
+                <button type="button" className="btn primary compact" disabled={bulkBusy} onClick={() => void keepAll()}>Transcribe all</button>
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAudioAll()}>{CALL_WORDS.save_audio_all}</button>
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Delete all</button>
               </div>
               {pending.map((item) => {
-                const title = pendingTitle(item);
+                const title = pendingTitle(item, "en");
                 const isBusy = bulkBusy || busy === item.id;
                 const knownClient = !item.clientId || (clients ?? []).some((c) => c.id === item.clientId);
                 return (
@@ -369,7 +432,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                             autoFocus
                             maxLength={200}
                             value={renaming.text}
-                            placeholder={pendingTitle({ ...item, title: null })}
+                            placeholder={pendingTitle({ ...item, title: null }, "en")}
                             onChange={(e) => setRename({ id: item.id, text: e.target.value })}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") void saveRename();
@@ -384,6 +447,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       </div>
                     </div>
                     {item.firstLine && <div className="item-preview">{item.firstLine}</div>}
+                    {item.restoredDelete && <div className="item-preview queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</div>}
                     {learn?.itemId === item.id && (
                       <div className="queue-learn" role="group" aria-label="Remember the language">
                         <span className="small">{learn.question}</span>
@@ -407,20 +471,26 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       </select>
                     )}
                     <div className="queue-actions">
-                      <select className={`chip queue-language ${item.language ? "active" : ""}`} aria-label="Language" title="Language of the transcript" disabled={isBusy}
-                        value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                        {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                        <optgroup label="More languages">
-                          {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
-                        </optgroup>
-                      </select>
+                      {/* D-038: the closed chip says the short name ("Auto", not "Auto (English / Urdu / Ara…"). The native select
+                          lies transparent over it, keeping its name, its whole choice for a screen reader and its own list. */}
+                      <span className={`chip queue-language ${item.language ? "active" : ""}`} title="Language of the transcript">
+                        <span className="queue-language-label" aria-hidden="true">{shortLanguage(item.language)}</span>
+                        <select aria-label="Language" title="Language of the transcript" disabled={isBusy}
+                          value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
+                          <optgroup label="More languages">
+                            {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{languageLabel(o.value, "en")}</option>)}
+                          </optgroup>
+                        </select>
+                      </span>
                       <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Choose project</button>
                       <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
                     </div>
-                    {/* As on the phone's card: Discard on the left, Keep (the one primary action) on the right. */}
+                    {/* As on the after-call card: Delete on the left, Save audio only, Transcribe (the one primary action) on the right. */}
                     <div className="queue-actions decide">
-                      <button type="button" className="btn" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
-                      <button type="button" className="btn primary" disabled={isBusy} onClick={() => void keep(item)}>Keep</button>
+                      <button type="button" className="btn" disabled={isBusy} onClick={() => void discard(item)}>Delete</button>
+                      <button type="button" className="btn" disabled={isBusy} onClick={() => void keepAudio(item)}>{CALL_WORDS.save_audio_only}</button>
+                      <button type="button" className="btn primary" disabled={isBusy} onClick={() => void keep(item)}>Transcribe</button>
                     </div>
                   </div>
                 );
@@ -437,7 +507,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <span className="queue-count">{importing.length}</span>
           </div>
           {importing.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             const percent = item.state === "uploading" ? item.progress ?? 0 : 0;
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item importing" data-testid={`upload-${item.id}`}>
@@ -445,7 +515,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
                     <div className="queue-title" dir="auto">{title}</div>
-                    <div className="small muted queue-meta">{importProgressText(item)}</div>
+                    <div className="small muted queue-meta">{importProgressText(item, "en")}</div>
                   </div>
                   <button type="button" className="btn ghost compact" disabled={busy === item.id} onClick={() => void cancelImport(item)}>Cancel</button>
                 </div>
@@ -465,7 +535,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <span className="queue-count">{failed.length}</span>
           </div>
           {failed.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             const isBusy = busy === item.id;
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item failed" data-testid={`upload-${item.id}`}>
@@ -493,9 +563,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <h2 className="queue-label">Waiting for another account</h2>
             <span className="queue-count">{items.length}</span>
           </div>
-          <p className="small muted queue-note">{heldLine(account, items.length)}</p>
+          <p className="small muted queue-note">{heldLine(account, items.length, "en")}</p>
           {items.map((item) => {
-            const title = uploadTitle(item);
+            const title = uploadTitle(item, "en");
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item" data-testid={`upload-${item.id}`}>
                 <div className="row">
@@ -521,7 +591,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           <div className="row">
             <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
             <div className="item-main">
-              <div className="queue-title" dir="auto">{uploadTitle(item)}</div>
+              <div className="queue-title" dir="auto">{uploadTitle(item, "en")}</div>
               <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
             </div>
             <span className="queue-status"><span className="spinner" aria-hidden="true" />Checking upload…</span>

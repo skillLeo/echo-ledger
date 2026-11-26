@@ -1,8 +1,8 @@
 {
     "data": [
         {
-            "id": "01m7xxs2c4rgmnb55zfhfg0gf7",
-            "client_ref": "94390c26-015b-4c41-8fba-e076ed955cab",
+            "id": "01m82z8pxqarfgggytdxb39bwc",
+            "client_ref": "b0089a46-24bf-444c-8739-e37efa90b1a5",
             "deleted": false,
             "source_device": "web",
             "source_device_label": "Web",
@@ -14,19 +14,21 @@
             "filed_by": null,
             "title": "Voice note from Ali",
             "title_auto": false,
+            "title_source": "own",
             "caller": null,
-            "started_at": "2026-11-12T14:15:00+00:00",
-            "ended_at": "2026-11-12T14:15:07+00:00",
+            "started_at": "2026-11-14T14:15:00+00:00",
+            "ended_at": "2026-11-14T14:15:07+00:00",
             "duration_ms": 7350,
             "status": "completed",
             "language": null,
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m7xxs2qxx43yvvq129z4wq7w",
+                "final_transcript_id": "01m82z8pyyyfjvd6stzcbbesaq",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Speaker: Hey, just a reminder that the client meeting moved to three PM tomorrow.",
+                "preview_view": "original",
                 "final_language": "en",
                 "final_provider": "assemblyai",
                 "final_provider_label": "AssemblyAI",
@@ -53,13 +55,21 @@
             "opened": false,
             "important": false,
             "label_colors": {},
-            "expires_at": "2026-12-21T02:08:16+00:00",
+            "expires_at": "2026-12-23T01:10:30+00:00",
             "transcribe_estimate": null,
-            "updated_at": "2026-11-21T02:08:17+00:00"
+            "facets": {
+                "source": "voice_note",
+                "status": "transcribed",
+                "language": "en",
+                "kind": "voice_note",
+                "state": "transcribed"
+            },
+            "processing_since": "2026-11-23T01:10:30+00:00",
+            "updated_at": "2026-11-23T01:10:30+00:00"
         },
         {
-            "id": "01m7xxs1pps14x0b1pmbctdbj9",
-            "client_ref": "2ce96c96-b7e7-453e-961f-3f218ed9c3fa",
+            "id": "01m82z8pvh632r6cszrca4q84n",
+            "client_ref": "5e5cfa58-3b18-43f9-9d45-6e0404395765",
             "deleted": false,
             "source_device": "phone",
             "source_device_label": "Phone",
@@ -67,11 +77,11 @@
             "source_app": "whatsapp_business",
             "source_app_label": "WhatsApp Business",
             "device": {
-                "id": "01m7xxrxa7wkrcb1xej2mmtr8e",
+                "id": "01m82z8pc8f06f192sax017vf4",
                 "name": "Galaxy S25 Ultra"
             },
             "client": {
-                "id": "01m7xxrxa0wxd8kqqea9cmgb5y",
+                "id": "01m82z8pc2jqdshc5s38c7jvkj",
                 "name": "Acme Holdings",
                 "color": "#8B5CF6",
                 "avatar": null
@@ -79,19 +89,21 @@
             "filed_by": "user",
             "title": "WhatsApp Business call",
             "title_auto": false,
+            "title_source": "app",
             "caller": null,
-            "started_at": "2026-11-14T13:15:00+00:00",
-            "ended_at": "2026-11-14T13:15:09+00:00",
+            "started_at": "2026-11-16T13:15:00+00:00",
+            "ended_at": "2026-11-16T13:15:09+00:00",
             "duration_ms": 9195,
             "status": "completed",
             "language": null,
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m7xxs2c1rvpqtxzgebx16gew",
+                "final_transcript_id": "01m82z8pxnf0tvkz4fn1x7376a",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Client: Following up on the invoice for September.\nMe: Got it, I will forward it to finance today.",
+                "preview_view": "original",
                 "final_language": "en",
                 "final_provider": "assemblyai",
                 "final_provider_label": "AssemblyAI",
@@ -118,13 +130,21 @@
             "opened": false,
             "important": false,
             "label_colors": {},
-            "expires_at": "2026-12-21T02:08:16+00:00",
+            "expires_at": "2026-12-23T01:10:30+00:00",
             "transcribe_estimate": null,
-            "updated_at": "2026-11-21T02:08:16+00:00"
+            "facets": {
+                "source": "whatsapp_business",
+                "status": "transcribed",
+                "language": "en",
+                "kind": "call",
+                "state": "transcribed"
+            },
+            "processing_since": "2026-11-23T01:10:30+00:00",
+            "updated_at": "2026-11-23T01:10:30+00:00"
         },
         {
-            "id": "01m7xxs0r9xjvwpjvn7bx4yg2m",
-            "client_ref": "a7df2449-3dcf-42e1-843e-02ce58fb1af9",
+            "id": "01m82z8pqbtjb0f1s3s5q51sz8",
+            "client_ref": "4463e9a0-5c83-49fb-a3dd-168f52aa85d7",
             "deleted": false,
             "source_device": "desktop",
             "source_device_label": "Desktop",
@@ -132,26 +152,28 @@
             "source_app": "google_meet",
             "source_app_label": "Google Meet",
             "device": {
-                "id": "01m7xxrxb33pbkqw38gxraavsm",
+                "id": "01m82z8pcng7m77vn369nykh9r",
                 "name": "Work laptop"
             },
             "client": null,
             "filed_by": null,
             "title": "Weekly sync",
             "title_auto": false,
+            "title_source": "own",
             "caller": null,
-            "started_at": "2026-11-16T12:15:00+00:00",
-            "ended_at": "2026-11-16T12:15:16+00:00",
+            "started_at": "2026-11-18T12:15:00+00:00",
+            "ended_at": "2026-11-18T12:15:16+00:00",
             "duration_ms": 16555,
             "status": "completed",
             "language": null,
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m7xxs1pnkpndeppm0q6nwp3c",
+                "final_transcript_id": "01m82z8pvf6gn1gtrwxqvqtfh0",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Me: Quick status: the desktop overlay is ready for testing.\nClient: Nice. Is the click-through working on Windows 11?\nMe: It compiles and the hit-testing is un…",
+                "preview_view": "original",
                 "final_language": "en",
                 "final_provider": "assemblyai",
                 "final_provider_label": "AssemblyAI",
@@ -178,13 +200,21 @@
             "opened": false,
             "important": false,
             "label_colors": {},
-            "expires_at": "2026-12-21T02:08:15+00:00",
+            "expires_at": "2026-12-23T01:10:29+00:00",
             "transcribe_estimate": null,
-            "updated_at": "2026-11-21T02:08:16+00:00"
+            "facets": {
+                "source": "google_meet",
+                "status": "transcribed",
+                "language": "en",
+                "kind": "meeting",
+                "state": "transcribed"
+            },
+            "processing_since": "2026-11-23T01:10:29+00:00",
+            "updated_at": "2026-11-23T01:10:30+00:00"
         },
         {
-            "id": "01m7xxrz9bqbxgzsjrkwsmdymc",
-            "client_ref": "2dc80165-4e7c-4697-8f0c-1976424e2dd2",
+            "id": "01m82z8pj55br54nyjsjqztf8q",
+            "client_ref": "a19df5b0-cb97-4b02-ad24-8e8191b5dfb3",
             "deleted": false,
             "source_device": "desktop",
             "source_device_label": "Desktop",
@@ -192,11 +222,11 @@
             "source_app": "zoom",
             "source_app_label": "Zoom",
             "device": {
-                "id": "01m7xxrxb33pbkqw38gxraavsm",
+                "id": "01m82z8pcng7m77vn369nykh9r",
                 "name": "Work laptop"
             },
             "client": {
-                "id": "01m7xxrxa4g6n85tv4f46b795j",
+                "id": "01m82z8pc6hya0jq0gn9h5v7y6",
                 "name": "Nova Clinics",
                 "color": "#22D3EE",
                 "avatar": null
@@ -204,19 +234,21 @@
             "filed_by": "user",
             "title": "Telehealth rollout",
             "title_auto": false,
+            "title_source": "own",
             "caller": null,
-            "started_at": "2026-11-18T11:15:00+00:00",
-            "ended_at": "2026-11-18T11:15:18+00:00",
+            "started_at": "2026-11-20T11:15:00+00:00",
+            "ended_at": "2026-11-20T11:15:18+00:00",
             "duration_ms": 18875,
             "status": "completed",
             "language": null,
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m7xxs0r88gsc7qyrcejtw11s",
+                "final_transcript_id": "01m82z8pq9pg091ed1e31sd7jm",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Client: Dr. Rehaan here, can you hear me clearly?\nMe: Yes, perfectly. Shall we review the telehealth timeline?\nClient: Please. Nova Clinics wants two pilot sit…",
+                "preview_view": "original",
                 "final_language": "en",
                 "final_provider": "assemblyai",
                 "final_provider_label": "AssemblyAI",
@@ -243,13 +275,21 @@
             "opened": false,
             "important": false,
             "label_colors": {},
-            "expires_at": "2026-12-21T02:08:13+00:00",
+            "expires_at": "2026-12-23T01:10:29+00:00",
             "transcribe_estimate": null,
-            "updated_at": "2026-11-21T02:08:15+00:00"
+            "facets": {
+                "source": "zoom",
+                "status": "transcribed",
+                "language": "en",
+                "kind": "meeting",
+                "state": "transcribed"
+            },
+            "processing_since": "2026-11-23T01:10:29+00:00",
+            "updated_at": "2026-11-23T01:10:29+00:00"
         },
         {
-            "id": "01m7xxrxb5ghkccma0wa73pr5w",
-            "client_ref": "2b72303a-0923-4d16-81e6-176e8259b28f",
+            "id": "01m82z8pcr6e8dk1cj8t0b0s7t",
+            "client_ref": "52a6bd70-239e-4be9-a2f0-1b548e777fe2",
             "deleted": false,
             "source_device": "phone",
             "source_device_label": "Phone",
@@ -257,11 +297,11 @@
             "source_app": "whatsapp",
             "source_app_label": "WhatsApp",
             "device": {
-                "id": "01m7xxrxa7wkrcb1xej2mmtr8e",
+                "id": "01m82z8pc8f06f192sax017vf4",
                 "name": "Galaxy S25 Ultra"
             },
             "client": {
-                "id": "01m7xxrxa0wxd8kqqea9cmgb5y",
+                "id": "01m82z8pc2jqdshc5s38c7jvkj",
                 "name": "Acme Holdings",
                 "color": "#8B5CF6",
                 "avatar": null
@@ -269,19 +309,21 @@
             "filed_by": "user",
             "title": "Retainer check-in",
             "title_auto": false,
+            "title_source": "own",
             "caller": null,
-            "started_at": "2026-11-20T10:15:00+00:00",
-            "ended_at": "2026-11-20T10:15:19+00:00",
+            "started_at": "2026-11-22T10:15:00+00:00",
+            "ended_at": "2026-11-22T10:15:19+00:00",
             "duration_ms": 19375,
             "status": "completed",
             "language": null,
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m7xxrz96dkn245s6t018bqb8",
+                "final_transcript_id": "01m82z8pj2mezrmsg3tjsabev2",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
+                "preview_view": "original",
                 "final_language": "en",
                 "final_provider": "assemblyai",
                 "final_provider_label": "AssemblyAI",
@@ -308,11 +350,20 @@
             "opened": false,
             "important": false,
             "label_colors": {},
-            "expires_at": "2026-12-21T02:08:11+00:00",
+            "expires_at": "2026-12-23T01:10:29+00:00",
             "transcribe_estimate": null,
-            "updated_at": "2026-11-21T02:08:13+00:00"
+            "facets": {
+                "source": "whatsapp",
+                "status": "transcribed",
+                "language": "en",
+                "kind": "call",
+                "state": "transcribed"
+            },
+            "processing_since": "2026-11-23T01:10:29+00:00",
+            "updated_at": "2026-11-23T01:10:29+00:00"
         }
     ],
     "next_cursor": null,
-    "server_time": "2026-11-21T02:08:17+00:00"
+    "server_time": "2026-11-23T01:10:30+00:00",
+    "views_version": 0
 }

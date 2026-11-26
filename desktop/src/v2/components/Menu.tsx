@@ -1,6 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
-import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, ChevronEndIcon, MinusIcon, PlusIcon } from "./icons";
 
 /**
  * One action in a menu. `group` puts a small header above the first item of each group (Organise, Export, Danger);
@@ -22,6 +23,18 @@ export type MenuItem = {
   keepOpen?: boolean;
   /** A number on the end side (how many recordings a filter value has). */
   count?: number;
+  /** A hairline above this item, setting it and those after it apart without a header (Delete list…, New list…). */
+  separator?: boolean;
+  /** The command it sends (v2/actions/actions.json, UX-21): its words, keys and what it does come from there. */
+  action?: string;
+  /** One of its sub-menu's choices (a label, a project, a format, a sort order): its words are the choice's own, and its
+   * `action` is the sub-menu's (UX-22). */
+  choice?: string;
+  /**
+   * A row that steps a value (UX-07: "Zoom  [−] 100% [+]", as in Chrome's menu): its two buttons and the value between
+   * them. The menu stays open. From the keyboard, on the row: − and + (or ← and →, mirrored right to left) step it.
+   */
+  stepper?: { value: string; down: { label: string; onPick: () => void; disabled?: boolean }; up: { label: string; onPick: () => void; disabled?: boolean } };
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
@@ -43,16 +56,88 @@ type ListProps = {
   listRef?: Ref<HTMLUListElement>;
   /** A sub-menu shown in place under its item (its parent scrolls, so a flyout would be cut off). */
   inline?: boolean;
+  /**
+   * What opened it (a button's menu): the list then floats in its own layer above the app (the sidebar, a panel that
+   * clips, a dialog), under or over this element, aligned to its `align` edge (placeMenu).
+   */
+  anchor?: HTMLElement | null;
+  align?: "start" | "end";
+  /** A title line on top, not an item ("3 recordings", UX-22). */
+  title?: string;
+  /** Shown above the items, not one of them (the account menu's avatar, name, email and plan). */
+  header?: ReactNode;
 };
 
 /** The gap a menu keeps from the window's edges. */
 const EDGE = 8;
+/** The gap between a button and its menu. */
+const GAP = 4;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
 
-/** The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level. */
-function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
+type Box = { left: number; top: number; right: number; bottom: number };
+export type MenuPlace = { left: number; top: number; up: boolean; room?: number };
+
+/**
+ * Where a button's menu goes (pure; viewport coordinates). Under its button, or over it when it doesn't fit below and
+ * there is more room above (taller than its room, it scrolls). Aligned to the button's `align` edge (end: the menu's
+ * end under the button's end; in right to left the ends are on the left); when that would run out of `region` (the
+ * part of the window the button is in: the page beside the sidebar), the other edge; when neither fits, moved just far
+ * enough to stay inside. A menu wider than the region stays inside the window instead (it floats above the rest).
+ * Always EDGE from the window's edges.
+ */
+export function placeMenu({ anchor, size, region, view, align, rtl: rightToLeft }: {
+  anchor: Box; size: { width: number; height: number }; region: Box; view: { width: number; height: number }; align: "start" | "end"; rtl: boolean;
+}): MenuPlace {
+  const win = { left: EDGE, right: view.width - EDGE };
+  const inside = { left: Math.max(region.left, win.left), right: Math.min(region.right, win.right) };
+  const room = size.width <= inside.right - inside.left ? inside : win;
+  const startLeft = rightToLeft ? anchor.right - size.width : anchor.left;
+  const endLeft = rightToLeft ? anchor.left : anchor.right - size.width;
+  const fits = (left: number) => left >= room.left && left + size.width <= room.right;
+  const [first, second] = align === "end" ? [endLeft, startLeft] : [startLeft, endLeft];
+  const left = fits(first) ? first : fits(second) ? second : Math.max(room.left, Math.min(first, room.right - size.width));
+  const below = view.height - EDGE - (anchor.bottom + GAP);
+  const above = anchor.top - GAP - EDGE;
+  const up = size.height > below && above > below;
+  const space = Math.floor(up ? above : below);
+  const height = Math.min(size.height, space);
+  return {
+    left: Math.round(Math.max(win.left, left)),
+    top: Math.round(up ? anchor.top - GAP - height : anchor.bottom + GAP),
+    up,
+    room: size.height > space ? space : undefined,
+  };
+}
+
+/** The part of the window `el` is shown in: its nearest ancestor that clips (a scrolling panel, the sidebar). */
+export function regionOf(el: HTMLElement): Box {
+  for (let at = el.parentElement; at && at !== document.body; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (/auto|scroll|hidden|clip/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) return at.getBoundingClientRect();
+  }
+  return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+}
+
+/**
+ * A floating list's own layer, at the end of the page and above everything (the sidebar, a panel that clips, a
+ * dialog), in the language and direction of where it opened, with the v2 look.
+ */
+export function Layer({ from, children }: { from: Element | null; children: ReactNode }) {
+  const dir = from ? getComputedStyle(from).direction : undefined;
+  const lang = from?.closest("[lang]")?.getAttribute("lang") ?? undefined;
+  return createPortal(<div className="el-root el-embedded el-layer" dir={dir === "rtl" ? "rtl" : dir ? "ltr" : undefined} lang={lang}>{children}</div>, document.body);
+}
+
+/**
+ * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
+ * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
+ */
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end", title, header }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
+  const headerId = useId();
+  // A stepping row's description for assistive tools (its − and + buttons are the pointer's).
+  const stepHintId = useId();
   const own = useRef<HTMLUListElement | null>(null);
   const setRef = (el: HTMLUListElement | null) => {
     own.current = el;
@@ -64,9 +149,30 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
   // bottom. A button's menu with no room below opens upwards when there is more room above (a ⋮ on the last rows). A
   // list taller than its room scrolls inside it; its sub-menus then open in place under their item.
   const [fit, setFit] = useState<{ flip?: boolean; up?: boolean; shift?: number; room?: number }>({});
+  // A button's menu floats: placed from its button (placeMenu), and again when the window or a page under it moves.
+  const floating = !!anchor;
+  const [place, setPlace] = useState<MenuPlace | null>(null);
   useLayoutEffect(() => {
     const el = own.current;
-    if (!el || inline) return;
+    if (!el || !anchor) return;
+    const put = () => {
+      const box = el.getBoundingClientRect();
+      const size = { width: box.width, height: Math.max(box.height, el.scrollHeight) };
+      const next = placeMenu({ anchor: anchor.getBoundingClientRect(), size, region: regionOf(anchor), view: { width: window.innerWidth, height: window.innerHeight }, align, rtl: rtl(anchor) });
+      setPlace((now) => (now && now.left === next.left && now.top === next.top && now.up === next.up && now.room === next.room ? now : next));
+    };
+    put();
+    window.addEventListener("resize", put);
+    document.addEventListener("scroll", put, true);
+    return () => {
+      window.removeEventListener("resize", put);
+      document.removeEventListener("scroll", put, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
+  useLayoutEffect(() => {
+    const el = own.current;
+    if (!el || inline || floating) return;
     const box = el.getBoundingClientRect();
     if (!box.height) return;
     const bottom = window.innerHeight - EDGE;
@@ -95,10 +201,12 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     // Measured once, when the list opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const room = floating ? place?.room : fit.room;
   const fitted: CSSProperties = {
     ...style,
+    ...(floating ? { left: place?.left ?? 0, top: place?.top ?? 0 } : {}),
     ...(fit.shift ? { transform: `translateY(-${fit.shift}px)` } : {}),
-    ...(fit.room ? { maxBlockSize: `${fit.room}px`, overflowY: "auto" } : {}),
+    ...(room ? { maxBlockSize: `${room}px`, overflowY: "auto" } : {}),
   };
   useEffect(() => {
     if (sub !== null) return;
@@ -110,7 +218,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
   };
   const choose = (i: number) => {
     const item = items[i];
-    if (!item || item.disabled) return;
+    if (!item || item.disabled || item.stepper) return;
     if (item.items?.length) openSub(i);
     else if (item.keepOpen) item.onPick?.();
     else onPick(item);
@@ -121,6 +229,16 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     const last = items.length - 1;
     const forward = rtl(own.current) ? "ArrowLeft" : "ArrowRight";
     const backward = rtl(own.current) ? "ArrowRight" : "ArrowLeft";
+    // A stepping row: − and + (and ← →) step its value; the menu stays open.
+    const stepper = items[active]?.stepper;
+    if (stepper && sub === null) {
+      const step = e.key === "+" || e.key === "=" || e.key === forward ? stepper.up : e.key === "-" || e.key === "−" || e.key === backward ? stepper.down : null;
+      if (step) {
+        e.preventDefault();
+        if (!step.disabled) step.onPick();
+        return;
+      }
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (a >= last ? 0 : a + 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (a <= 0 ? last : a - 1)); }
     else if (e.key === "Home") { e.preventDefault(); setActive(0); }
@@ -129,38 +247,71 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     else if (e.key === forward) { e.preventDefault(); openSub(active); }
     else if (e.key === backward && className.includes("el-menu--sub")) { e.preventDefault(); onBack(); }
     else if (e.key === "Escape") { e.preventDefault(); onBack(); }
-    else if (e.key === "Tab") onLeave();
+    // Tab leaves the menu: it closes and focus goes back to what opened it. Tab then moves on from there (the browser's
+    // own step); Shift+Tab stays on it, so focus lands on the button, not on whatever is before it.
+    else if (e.key === "Tab") {
+      if (e.shiftKey) e.preventDefault();
+      onLeave();
+    }
   };
 
+  // When some items carry a tick, the others keep its column empty so every label starts in the same place.
+  const ticks = items.some((it) => it.checked !== undefined);
   const row = (item: MenuItem, i: number) => {
     const subOpen = sub === i;
     return (
-      <li key={`${item.group ?? ""}:${item.label}`} role="none" className="el-menu__item">
+      <Fragment key={`${item.group ?? ""}:${item.label}`}>
+      {item.separator && i > 0 && <li role="separator" className="el-menu__separator" />}
+      <li role="none" className="el-menu__item">
         <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+          aria-label={item.stepper ? `${item.label}, ${item.stepper.value}` : undefined} aria-describedby={item.stepper ? stepHintId : undefined}
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
+          data-action={item.action}
           data-active={i === active || undefined}
-          onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
+          onMouseEnter={() => { setActive(i); if (!room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
           {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
-            : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
-          <span className="el-menu__label">{item.label}</span>
+            : ticks && <span className="el-menu__check" aria-hidden="true" />}
+          {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
+          {/* An item's words keep their own order in a right-to-left window ("3 recordings…", not "…recordings 3"), set
+              apart in a <bdi>; the label itself follows the menu's side, so they sit by their icon. */}
+          <span className="el-menu__label"><bdi>{item.label}</bdi></span>
+          {item.stepper && (
+            <span className="el-menu__stepper">
+              {/* The row says its name and value ("Zoom, 110%") and how to change it; these two are for the pointer. */}
+              <span className="el-visually-hidden" id={stepHintId}>Press + or − to change</span>
+              {([["down", MinusIcon], ["up", PlusIcon]] as const).map(([which, glyph], k) => {
+                const step = item.stepper![which];
+                const button = (
+                  <button key={which} type="button" className="el-menu__step" tabIndex={-1} aria-hidden="true" title={step.label} disabled={step.disabled}
+                    onClick={(e) => { e.stopPropagation(); step.onPick(); }}><Icon icon={glyph} /></button>
+                );
+                return k === 0 ? [button, <span key="value" className="el-menu__step-value el-num" aria-hidden="true">{item.stepper!.value}</span>] : button;
+              })}
+            </span>
+          )}
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
-          {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
+          {/* A chord reads left to right in every language (⇧⌘L, never L⌘⇧ in a right-to-left menu). */}
+          {item.shortcut && <kbd className="el-menu__shortcut el-caption" dir="ltr" aria-hidden="true">{item.shortcut}</kbd>}
           {item.items && <Icon icon={ChevronEndIcon} directional />}
         </div>
         {subOpen && item.items && (
-          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
-            inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
+          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${room ? " el-menu--inline" : ""}`} initial={0}
+            inline={!!room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
         )}
       </li>
+      </Fragment>
     );
   };
 
-  return (
-    <ul className={`${className}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
-      onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={fit.up || undefined}>
+  const list = (
+    <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
+      aria-describedby={header ? headerId : undefined}
+      onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
+      {title && <li role="presentation" className="el-menu__title el-caption el-body-strong">{title}</li>}
+      {header && <li role="none" id={headerId} className="el-menu__header">{header}</li>}
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
         if (!group) return rows;
@@ -177,6 +328,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
       })}
     </ul>
   );
+  return floating ? <Layer from={anchor ?? null}>{list}</Layer> : list;
 }
 
 /** Consecutive items with the same `group` (none: ungrouped), as index ranges [from, to). */
@@ -199,13 +351,18 @@ function keyNames(shortcut: string): string {
  * A button that opens a list of actions (a project's menu, a recording's ⋮). The list is a menu: arrow keys, Home and
  * End move, Enter picks, Esc closes and gives focus back to the button; a press outside closes it.
  */
-export function Menu({ label, items: given, button, chip }: {
+export function Menu({ label, items: given, button, chip, header, align }: {
   label: string;
   /** The items, or a function that makes them when the menu opens (a row's ⋮ in a long list). */
   items: readonly MenuItem[] | (() => readonly MenuItem[]);
-  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: string };
+  /** The button's words: a string, or words in an element of their own (a count and its words as one piece). */
+  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: ReactNode };
   /** A filter chip opens it instead of a button: its words, and filled while the filter is on. */
   chip?: { text: string; on: boolean };
+  /** Above the items (see MenuList). */
+  header?: ReactNode;
+  /** Which edge of the button the list lines up with (default: a chip's start, a button's end). */
+  align?: "start" | "end";
 }) {
   const id = useId();
   // The items are made when the menu opens and kept while it is open.
@@ -213,16 +370,19 @@ export function Menu({ label, items: given, button, chip }: {
   const make = () => (typeof given === "function" ? given() : given);
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  // The list floats in a layer of its own (MenuList's anchor), outside the button's element.
+  const list = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      if (!root.current?.contains(e.target as Node) && !list.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [open]);
 
+  // Esc, and Tab too: the list floats elsewhere in the page, so focus goes back to the button (Tab then moves on from it).
   const close = () => {
     setOpen(false);
     opener.current?.focus();
@@ -250,22 +410,42 @@ export function Menu({ label, items: given, button, chip }: {
           {chip.text}<Icon icon={ChevronDownIcon} />
         </button>
       ) : (
-        <Button {...buttonProps} ref={opener} aria-label={text ? undefined : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
+        <Button {...buttonProps} ref={opener} aria-label={text ? buttonProps["aria-label"] : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
           onClick={press} onKeyDown={openerKey}>{text}</Button>
       )}
       {open && (
         <MenuList label={label} items={typeof given === "function" ? open.items : given} id={`${id}-menu`} className={chip ? "el-menu el-menu--start" : "el-menu el-menu--end"} initial={open.at}
-          onBack={close} onLeave={() => setOpen(false)} onPick={pick} />
+          anchor={root.current} align={align ?? (chip ? "start" : "end")} listRef={list} header={header}
+          onBack={close} onLeave={close} onPick={pick} />
       )}
     </div>
   );
 }
 
 /**
+ * Where a right-click menu goes (pure; viewport coordinates): its start corner at the pointer, so it opens to the
+ * pointer's end side (right in English, left in right to left, D-256), and its sub-menus keep opening on that same side.
+ * Moved just far enough to stay inside the window; the left is returned either way, since the list is placed by it.
+ */
+export function placeContextMenu({ at, size, view, rtl: rightToLeft }: {
+  at: { x: number; y: number }; size: { width: number; height: number }; view: { width: number; height: number }; rtl: boolean;
+}): { x: number; y: number } {
+  const left = rightToLeft ? at.x - size.width : at.x;
+  return {
+    x: Math.max(0, Math.min(left, view.width - size.width)),
+    y: Math.max(0, Math.min(at.y, view.height - size.height)),
+  };
+}
+
+/**
  * The same menu at the pointer (a right-click on a row) or under a focused row (Shift+F10, the context-menu key).
  * It stays inside the window; Esc, a press outside or a pick closes it, and focus goes back to where it was.
  */
-export function ContextMenu({ label, items, at, onClose }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void }) {
+export function ContextMenu({ label, items, at, onClose, title }: {
+  label: string; items: readonly MenuItem[]; at: { x: number; y: number }; onClose: () => void;
+  /** A title line on top, when several things are chosen ("3 recordings", UX-22). */
+  title?: string;
+}) {
   const list = useRef<HTMLUListElement | null>(null);
   const back = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
   const [place, setPlace] = useState(at);
@@ -273,10 +453,7 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
     const el = list.current;
     if (!el) return;
     const box = el.getBoundingClientRect();
-    setPlace({
-      x: Math.max(0, Math.min(at.x, window.innerWidth - box.width)),
-      y: Math.max(0, Math.min(at.y, window.innerHeight - box.height)),
-    });
+    setPlace(placeContextMenu({ at, size: box, view: { width: window.innerWidth, height: window.innerHeight }, rtl: rtl(el) }));
   }, [at]);
   useEffect(() => {
     const away = (e: PointerEvent) => {
@@ -290,15 +467,17 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
     back.current?.focus();
   };
   return (
-    <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
-      style={{ left: place.x, top: place.y }}
-      onBack={close} onLeave={onClose} onPick={(item) => { close(); item.onPick?.(); }} />
+    <Layer from={back.current}>
+      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list} title={title}
+        style={{ left: place.x, top: place.y }}
+        onBack={close} onLeave={close} onPick={(item) => { close(); item.onPick?.(); }} />
+    </Layer>
   );
 }
 
-/** Where a context menu opens for a keyboard user: under the start of the focused element. */
+/** Where a context menu opens for a keyboard user: under the start of the focused element (its right in right to left). */
 export function menuPointFor(el: Element): { x: number; y: number } {
   const box = el.getBoundingClientRect();
-  return { x: box.left + box.width / 4, y: box.bottom };
+  return { x: rtl(el) ? box.right - box.width / 4 : box.left + box.width / 4, y: box.bottom };
 }
 

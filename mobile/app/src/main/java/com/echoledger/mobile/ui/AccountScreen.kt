@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +57,23 @@ fun AccountScreen(vm: MainViewModel, onBack: () -> Unit) {
     var export by remember { mutableStateOf<AccountExportDto?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    // Since 2.0.0-l: profile, email, password, two-step, passkeys, browsers and devices, on the redesign's pages.
+    var signIn by remember { mutableStateOf(false) }
+    if (signIn) {
+        val settings by vm.settings.collectAsState()
+        androidx.activity.compose.BackHandler { signIn = false }
+        com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+            com.echoledger.mobile.ui.v2.account.AccountSecurityPage(
+                serverUrl = settings.serverUrl,
+                onBack = {
+                    signIn = false
+                    reload++
+                },
+                onSignedOut = { vm.unpair() }
+            )
+        }
+        return
+    }
     LaunchedEffect(reload) {
         account = vm.account()
         loaded = true
@@ -94,6 +112,17 @@ fun AccountScreen(vm: MainViewModel, onBack: () -> Unit) {
                         kind = BannerKind.Warning
                     )
                 }
+            }
+        }
+        if (a != null) {
+            com.echoledger.mobile.ui.design.SettingsSection(null) {
+                com.echoledger.mobile.ui.design.SettingsRow(
+                    Icons.Outlined.Shield,
+                    androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_set_page_account),
+                    summary = androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_acct_classic_sub),
+                    onClick = { signIn = true },
+                    trailing = { Chevron() }
+                )
             }
         }
         SectionHeader("Your data")

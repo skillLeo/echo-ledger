@@ -36,6 +36,9 @@ pub enum HideFor {
     Tomorrow,
     /// "Until I turn it off".
     UntilOff,
+    /// "Until I quit" (the menu bar's Live › Hide from Screen Shares): until Stop Hiding or EchoLedger quits; never
+    /// carried into the next launch (`Settings::from_value` drops it).
+    UntilQuit,
     /// "Custom…", in minutes (1 minute to 7 days).
     Custom { minutes: u32 },
 }
@@ -50,6 +53,8 @@ pub enum HideUntil {
     At { at_ms: i64 },
     /// Until the person shows it again.
     UntilOff,
+    /// Until the person shows it again or EchoLedger quits: the next launch starts with it shown.
+    UntilQuit,
 }
 
 /// The main window's hide, as kept in `settings.json` (`mainShareHide`).
@@ -103,6 +108,7 @@ pub fn hide_until(choice: HideFor, now: DateTime<Local>, call_detected: bool) ->
         HideFor::Hour1 => after(60),
         HideFor::Tomorrow => HideUntil::At { at_ms: tomorrow_morning(now).timestamp_millis() },
         HideFor::UntilOff => HideUntil::UntilOff,
+        HideFor::UntilQuit => HideUntil::UntilQuit,
         HideFor::Custom { minutes } if !(CUSTOM_MIN_MINUTES..=CUSTOM_MAX_MINUTES).contains(&minutes) => return Err(HideRefused::CustomOutOfRange),
         HideFor::Custom { minutes } => after(i64::from(minutes)),
     };
@@ -119,13 +125,18 @@ pub fn choices(call_detected: bool) -> Vec<&'static str> {
     out
 }
 
+/// A hide read at launch (pure): "until I quit" ended with the last run, so it is gone; any other is kept.
+pub fn at_launch(hide: Option<MainHide>) -> Option<MainHide> {
+    hide.filter(|h| h.until != HideUntil::UntilQuit)
+}
+
 /// Whether the main window is hidden at `now_ms` (pure): a time that has passed no longer hides it, even before the timer
 /// clears it; "until this call ends" hides until the timer sees the call is over.
 pub fn main_hidden(hide: Option<&MainHide>, now_ms: i64) -> bool {
     match hide.map(|h| h.until) {
         None => false,
         Some(HideUntil::At { at_ms }) => now_ms < at_ms,
-        Some(HideUntil::CallEnds | HideUntil::UntilOff) => true,
+        Some(HideUntil::CallEnds | HideUntil::UntilOff | HideUntil::UntilQuit) => true,
     }
 }
 
@@ -157,7 +168,7 @@ impl MainHideTimer {
                 }
                 over
             }
-            Some(HideUntil::UntilOff) | None => {
+            Some(HideUntil::UntilOff | HideUntil::UntilQuit) | None => {
                 self.call_gone_since = None;
                 false
             }
@@ -165,16 +176,17 @@ impl MainHideTimer {
     }
 }
 
-/// The tray's line while the main window is hidden (pure): "Hidden until 14:30 · Show now", "Hidden until you show it ·
-/// Show now", "Hidden until this call ends · Show now"; another day says which.
-pub fn tray_line(hide: &MainHide, now: DateTime<Local>) -> String {
-    format!("Hidden {} · Show now", until_words(hide, now))
+/// The menus' line while the main window is hidden (pure, greyed above Hide from Screen Shares › and its Stop Hiding):
+/// "Hidden from screen shares until 14:30", "… until you show it", "… until this call ends"; another day says which.
+pub fn menu_line(hide: &MainHide, now: DateTime<Local>) -> String {
+    format!("Hidden from screen shares {}", until_words(hide, now))
 }
 
 /// "until 14:30", "until tomorrow 08:00", "until Fri 21 Nov 14:30", "until you show it", "until this call ends" (pure).
 pub fn until_words(hide: &MainHide, now: DateTime<Local>) -> String {
     match hide.until {
         HideUntil::UntilOff => "until you show it".into(),
+        HideUntil::UntilQuit => "until you quit EchoLedger".into(),
         HideUntil::CallEnds => "until this call ends".into(),
         HideUntil::At { at_ms } => {
             let Some(at) = Local.timestamp_millis_opt(at_ms).single() else { return "for a while".into() };
@@ -395,17 +407,17 @@ mod tests {
     }
 
     #[test]
-    fn the_tray_says_until_when_with_show_now() {
+    fn the_menus_say_until_when() {
         let now = at(2026, 11, 18, 14, 0);
         let fifteen = hide_until(HideFor::Minutes15, now, false).unwrap();
-        assert_eq!(tray_line(&fifteen, now), "Hidden until 14:15 · Show now");
+        assert_eq!(menu_line(&fifteen, now), "Hidden from screen shares until 14:15");
         let half_past = MainHide { until: HideUntil::At { at_ms: at(2026, 11, 18, 14, 30).timestamp_millis() }, since_ms: 0 };
-        assert_eq!(tray_line(&half_past, now), "Hidden until 14:30 · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::UntilOff, now, false).unwrap(), now), "Hidden until you show it · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::CallEnds, now, true).unwrap(), now), "Hidden until this call ends · Show now");
-        assert_eq!(tray_line(&hide_until(HideFor::Tomorrow, now, false).unwrap(), now), "Hidden until tomorrow 08:00 · Show now");
+        assert_eq!(menu_line(&half_past, now), "Hidden from screen shares until 14:30");
+        assert_eq!(menu_line(&hide_until(HideFor::UntilOff, now, false).unwrap(), now), "Hidden from screen shares until you show it");
+        assert_eq!(menu_line(&hide_until(HideFor::CallEnds, now, true).unwrap(), now), "Hidden from screen shares until this call ends");
+        assert_eq!(menu_line(&hide_until(HideFor::Tomorrow, now, false).unwrap(), now), "Hidden from screen shares until tomorrow 08:00");
         let week = hide_until(HideFor::Custom { minutes: 3 * 24 * 60 }, now, false).unwrap();
-        assert_eq!(tray_line(&week, now), "Hidden until Sat 21 14:00 · Show now");
+        assert_eq!(menu_line(&week, now), "Hidden from screen shares until Sat 21 14:00");
     }
 
     /// The platform layer, as the system would answer.

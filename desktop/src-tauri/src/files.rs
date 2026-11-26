@@ -192,6 +192,18 @@ pub async fn pick_client_files(app: &AppHandle) -> Vec<PathBuf> {
     chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
 }
 
+/// The profile picture picker (2.0.0-l): one photo; `None` when cancelled.
+#[cfg(any(windows, target_os = "macos"))]
+pub async fn pick_avatar(app: &AppHandle) -> Option<PathBuf> {
+    let chosen = file_dialog(app, |dialog| dialog.set_title("Choose a profile picture").add_filter("Photos", &crate::my_account::AVATAR_EXTENSIONS).pick_file()).await;
+    chosen.flatten().map(|f| f.path().to_path_buf())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub async fn pick_avatar(_app: &AppHandle) -> Option<PathBuf> {
+    None
+}
+
 /// The receipt picker (v1.7): screenshots and PDFs of a bank transfer, several at once. Empty when cancelled.
 #[cfg(any(windows, target_os = "macos"))]
 pub async fn pick_receipts(app: &AppHandle) -> Vec<PathBuf> {

@@ -23,10 +23,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderShared
@@ -167,8 +167,8 @@ object ProjectTree {
  * the Library; [server] ones (imported files and what teammates sent) come from the server.
  */
 enum class SmartFolder(val key: String, val label: String, val icon: ImageVector, val server: Boolean = false) {
-    INBOX("inbox", "Inbox", Icons.Rounded.Inbox),
-    WHATSAPP("whatsapp", "WhatsApp", Icons.Rounded.Chat),
+    INBOX("inbox", "No project", Icons.Rounded.Inbox),
+    WHATSAPP("whatsapp", "WhatsApp", Icons.AutoMirrored.Rounded.Chat),
     WHATSAPP_BUSINESS("whatsapp_business", "WhatsApp Business", Icons.Rounded.Business),
     GOOGLE_MEET("google_meet", "Google Meet", Icons.Rounded.VideoCall),
     ZOOM("zoom", "Zoom", Icons.Rounded.VideoCall),
@@ -195,7 +195,7 @@ enum class SmartFolder(val key: String, val label: String, val icon: ImageVector
         fun of(key: String?): SmartFolder? = entries.firstOrNull { it.key == key }
 
         /**
-         * The folders the Projects tab lists, with their counts (the desktop's rule): the Inbox always, Shared with me
+         * The folders the Projects tab lists, with their counts (the desktop's rule): No project always, Shared with me
          * when the server has it, the others once they hold something. [server] are the server's counts (null: offline or
          * an older server), [local] this phone's own count of a folder it can work out.
          */
@@ -437,7 +437,7 @@ internal fun ProjectMenuDialogs(
             title = { Text("Delete ${project.name}?") },
             text = {
                 Text(
-                    "Its recordings go to the Inbox and its folders move up a level; nothing is lost. Its files, notes and filing rules are deleted."
+                    "Its recordings go to No project and its folders move up a level; nothing is lost. Its files, notes and filing rules are deleted."
                 )
             },
             confirmButton = {
@@ -602,7 +602,7 @@ internal fun ProjectNameDialog(title: String, initial: String, onDismiss: () -> 
 }
 
 /**
- * Pick a project (indented by level) or the top row ([topLabel]: "Inbox" for recordings, "Top level" for a project);
+ * Pick a project (indented by level) or the top row ([topLabel]: "No project" for recordings, "Top level" for a project);
  * [allow] greys out the ones it may not go to.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -611,7 +611,7 @@ internal fun ProjectPickerSheet(
     title: String,
     all: List<ClientDto>,
     allow: (String?) -> Boolean = { true },
-    topLabel: String = "Inbox",
+    topLabel: String = "No project",
     onDismiss: () -> Unit,
     onPick: (String?) -> Unit
 ) {
@@ -941,7 +941,7 @@ internal object FilingRuleText {
 }
 
 /**
- * Request files (since v1.5): links anyone can use to send voice notes and files into the Inbox or a project. Turn off
+ * Request files (since v1.5): links anyone can use to send voice notes and files into No project or a project. Turn off
  * asks first (since v1.8.1, bug P-005): the link stops working for everyone who has it.
  */
 @Composable
@@ -976,7 +976,7 @@ private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onB
         }
         item(key = "intro") {
             Text(
-                "Anyone with a request link can send you voice notes and audio (and files, for a project). They land in the Inbox or the project.",
+                "Anyone with a request link can send you voice notes and audio (and files, for a project). They land in No project or the project.",
                 style = type.bodyM,
                 color = Brand.Muted,
                 modifier = Modifier.padding(horizontal = Space.screen)
@@ -992,7 +992,7 @@ private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onB
                         "Goes to: " + (
                             projects.firstOrNull {
                                 it.id == projectId
-                            }?.name ?: "Inbox"
+                            }?.name ?: "No project"
                             ),
                         { picking = true },
                         kind = ButtonKind.Secondary
@@ -1074,7 +1074,7 @@ internal object RequestLinkText {
 
     fun meta(link: RequestLinkDto, projects: List<ClientDto>): String = listOfNotNull(
         if (link.revokedAt != null) "Off" else null,
-        projects.firstOrNull { it.id == link.clientId }?.name ?: "Inbox",
+        projects.firstOrNull { it.id == link.clientId }?.name ?: "No project",
         if (link.received == 1) "1 file received" else "${link.received} files received",
         link.expiresAt?.let { "until ${it.take(10)}" }
     ).joinToString(" · ")

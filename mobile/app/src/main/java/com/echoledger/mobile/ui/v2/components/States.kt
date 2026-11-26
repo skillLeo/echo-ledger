@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -28,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -117,7 +121,16 @@ enum class EchoBannerKind { Info, Warning, Error }
  * soft status fill, the icon, the sentence and one quiet action. No coloured edge.
  */
 @Composable
-fun EchoBanner(text: String, kind: EchoBannerKind, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: () -> Unit = {}) {
+fun EchoBanner(
+    text: String,
+    kind: EchoBannerKind,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {},
+    /** A banner that may be put away: its × (named [closeLabel] for TalkBack). */
+    onClose: (() -> Unit)? = null,
+    closeLabel: String? = null
+) {
     val c = EchoV2.colors
     val (fill, ink) = when (kind) {
         EchoBannerKind.Info -> c.bgSubtle to c.textSecondary
@@ -131,19 +144,51 @@ fun EchoBanner(text: String, kind: EchoBannerKind, modifier: Modifier = Modifier
         contentColor = c.textPrimary,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
     ) {
-        Row(
-            Modifier.padding(
-                start = EchoTokens.Space.s12,
-                end = EchoTokens.Space.s4,
-                top = EchoTokens.Space.s4,
-                bottom = EchoTokens.Space.s4
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-        ) {
-            Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = ink)
-            Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
-            if (actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+        val padding = Modifier.padding(
+            start = EchoTokens.Space.s12,
+            end = EchoTokens.Space.s4,
+            top = EchoTokens.Space.s4,
+            bottom = EchoTokens.Space.s4
+        )
+        val line: @Composable (Boolean) -> Unit = { withAction ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
+                Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = ink)
+                Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
+                if (withAction && actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+                if (onClose != null) EchoIconButton(EchoIcons.Close, closeLabel ?: "", onClose)
+            }
         }
+        if (actionLabel != null && largeText()) {
+            // At 150 % text and more the words keep the width (never one word a line beside Fix and ×): the action goes
+            // under them, at the end, as a page title's actions do.
+            Column(padding) {
+                line(false)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+                }
+            }
+        } else {
+            Box(padding) { line(true) }
+        }
+    }
+}
+
+/**
+ * A small progress ring (16 dp: the accent's arc on a hairline track) beside words that say what is on its way
+ * ("Converting to Roman Urdu… 60%"). It never loops (v2 has no looping indicators): the arc shows [percent] and moves as
+ * the server's measure does; before there is one it shows a short arc. Screen readers hear the words beside it.
+ */
+@Composable
+fun EchoProgressRing(percent: Int?, modifier: Modifier = Modifier, size: Dp = EchoTokens.Icon.sm) {
+    val track = EchoV2.colors.borderDefault
+    val arc = EchoV2.colors.accent
+    Canvas(modifier.size(size).clearAndSetSemantics {}) {
+        val stroke = EchoTokens.Border.strong.toPx()
+        val inset = stroke / 2
+        val box = androidx.compose.ui.geometry.Size(this.size.width - stroke, this.size.height - stroke)
+        val at = androidx.compose.ui.geometry.Offset(inset, inset)
+        drawArc(track, 0f, 360f, useCenter = false, topLeft = at, size = box, style = Stroke(stroke))
+        val sweep = 360f * ((percent ?: 12).coerceIn(4, 100) / 100f)
+        drawArc(arc, -90f, sweep, useCenter = false, topLeft = at, size = box, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }

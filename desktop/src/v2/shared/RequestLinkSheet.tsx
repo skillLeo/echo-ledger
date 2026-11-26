@@ -2,22 +2,24 @@
 // a link anyone can use, without an account, to send voice notes, audio and video (and, for a project, documents) into
 // a project or the Inbox. Title people see, Files go to, Stops working, At most … files of … MB each, then Make link;
 // the new link is shown once to copy. The links themselves, with what they received and Revoke, are in Shared › Request
-// links: "See your request links" closes the sheet and opens that tab, from wherever the sheet was opened.
+// links: "See your request links" closes the sheet and opens that tab, from wherever the sheet was opened. Its words are
+// in the account's language (useT); the title people see starts in it too.
 import { useState } from "react";
 import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
-import { EXPIRY_CHOICES, expiryTime, type ExpiryChoice } from "../../lib/sharing";
+import { expiryChoices, expiryTime, type ExpiryChoice } from "../../lib/sharing";
 import type { Notify } from "../../lib/notice";
+import { t, useT } from "../../i18n";
 import { Banner, Button, Icons, Select, Sheet, TextField } from "../components";
 
 /** A whole number from a field, or null when it is empty. */
 const count = (text: string): number | null => (text.trim() === "" ? null : Number.parseInt(text, 10));
 
-export const REQUEST_INTRO = "Anyone with a request link can send you voice notes, audio and video, without an account. They become recordings in the project you choose or the Inbox; a project also takes PDF, Word, text and images into its Files.";
+export const requestIntro = () => t("Anyone with a request link can send you voice notes, audio and video, without an account. They become recordings in the project you choose, or in no project; a project also takes PDF, Word, text and images into its Files.");
 
 export function RequestLinkSheet({ projects, projectId = null, notify, onMade, onShowLinks, onClose }: {
   projects: readonly ClientFolder[];
-  /** The project new links send into (null: the Inbox). */
+  /** The project new links send into (null: none). */
   projectId?: string | null;
   notify: Notify;
   /** A link was made (the Request links tab reads its list again). */
@@ -26,7 +28,8 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
   onShowLinks: () => void;
   onClose: () => void;
 }) {
-  const [title, setTitle] = useState("Send me your voice notes");
+  const { t } = useT();
+  const [title, setTitle] = useState(() => t("Send me your voice notes"));
   const [where, setWhere] = useState(projectId ?? "");
   const [expiry, setExpiry] = useState<ExpiryChoice>("week");
   const [day, setDay] = useState("");
@@ -58,41 +61,45 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
     if (!made) return;
     try {
       await navigator.clipboard.writeText(made);
-      notify("Link copied", false, { kind: "shared", tab: "requests" });
+      notify(t("Link copied"), false, { kind: "shared", tab: "requests" });
     } catch {
-      notify("Could not access the clipboard", true);
+      notify(t("Could not access the clipboard"), true);
     }
   };
-  const places = [{ value: "", label: "Inbox" }, ...visibleRows(projectTree(projects), "all").map(({ project }) => ({ value: project.id, label: projectLabel(projects, project.id) }))];
+  const places = [{ value: "", label: t("No project") }, ...visibleRows(projectTree(projects), "all").map(({ project }) => ({ value: project.id, label: projectLabel(projects, project.id) }))];
 
   return (
-    <Sheet open title="Request files" description={REQUEST_INTRO} onClose={onClose}
+    <Sheet open title={t("Request files")} description={requestIntro()} onClose={onClose}
       actions={<>
-        <Button disabled={busy} onClick={onClose}>Close</Button>
-        <Button variant="primary" disabled={!valid} loading={busy} loadingLabel="Making the link…" onClick={() => void make()}>Make link</Button>
+        {/* D-234: in the footer, so it is in view at any window height (the body scrolls under the head): a line of its
+            own at the start edge, the buttons together under it. */}
+        <span className="el-dialog__aside">
+          <Button variant="quiet" size="sm" icon={Icons.RequestFilesIcon} onClick={() => { onClose(); onShowLinks(); }}>{t("See your request links")}</Button>
+        </span>
+        <Button disabled={busy} onClick={onClose}>{t("Close")}</Button>
+        <Button variant="primary" disabled={!valid} loading={busy} loadingLabel={t("Making the link…")} onClick={() => void make()}>{t("Make link")}</Button>
       </>}>
       <div className="el-form el-form--flush">
-        <TextField label="Title people see" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Select label="Files go to" options={places} value={where} onChange={setWhere} />
+        <TextField label={t("Title people see")} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <Select label={t("Files go to")} options={places} value={where} onChange={setWhere} />
         <div className="el-form__row">
-          <Select label="Stops working" options={EXPIRY_CHOICES.map(([value, label]) => ({ value, label }))} value={expiry} onChange={(v) => setExpiry(v as ExpiryChoice)} />
-          {expiry === "date" && <TextField label="Day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />}
+          <Select label={t("Stops working")} options={expiryChoices().map(([value, label]) => ({ value, label }))} value={expiry} onChange={(v) => setExpiry(v as ExpiryChoice)} />
+          {expiry === "date" && <TextField label={t("Day")} type="date" value={day} onChange={(e) => setDay(e.target.value)} />}
         </div>
         <div className="el-form__row">
-          <TextField label="At most" hint="files, 1 to 100" type="number" min={1} max={100} value={maxFiles} onChange={(e) => setMaxFiles(e.target.value)}
-            error={filesOk ? undefined : "Choose from 1 to 100 files."} />
-          <TextField label="Largest file in MB" hint="MB each, 1 to 2048" type="number" min={1} max={2048} value={maxMb} onChange={(e) => setMaxMb(e.target.value)}
-            error={mbOk ? undefined : "Choose from 1 to 2048 MB."} />
+          <TextField label={t("At most")} hint={t("files, 1 to 100")} type="number" min={1} max={100} value={maxFiles} onChange={(e) => setMaxFiles(e.target.value)}
+            error={filesOk ? undefined : t("Choose from 1 to 100 files.")} />
+          <TextField label={t("Largest file in MB")} hint={t("MB each, 1 to 2048")} type="number" min={1} max={2048} value={maxMb} onChange={(e) => setMaxMb(e.target.value)}
+            error={mbOk ? undefined : t("Choose from 1 to 2048 MB.")} />
         </div>
         {error && <Banner tone="danger" icon={Icons.ErrorIcon}>{error}</Banner>}
         {made && (
           <div className="el-group" role="status">
-            <span className="el-secondary">Copy it now. It is shown only once.</span>
+            <span className="el-secondary">{t("Copy it now. It is shown only once.")}</span>
             <code className="el-code" dir="ltr">{made}</code>
-            <Button icon={Icons.CopyIcon} onClick={() => void copy()}>Copy link</Button>
+            <Button icon={Icons.CopyIcon} onClick={() => void copy()}>{t("Copy link")}</Button>
           </div>
         )}
-        <Button variant="quiet" size="sm" icon={Icons.InboxIcon} onClick={() => { onClose(); onShowLinks(); }}>See your request links</Button>
       </div>
     </Sheet>
   );

@@ -127,8 +127,8 @@ describe("the v2 Shared page", () => {
     // The ⋮ is in the row without hovering or focusing it, and the page's style keeps it on screen.
     for (const title of ["Call a", URDU, "Acme"]) expect(within(row(title)).getByRole("button", { name: `More for ${title}` })).toBeInTheDocument();
     expect(within(row("Call a")).queryByRole("button", { name: /^(Open|Save)/ })).toBeNull();
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "shared.css"), "utf8");
-    expect(css).toMatch(/\[data-v2=shared\] \.el-row__actions \{ opacity: 1;/);
+    // The design system's row options keep the ⋮ on screen and give the meta two lines (no page-only style).
+    for (const title of ["Call a", URDU, "Acme"]) expect(row(title)).toHaveClass("el-row--actions-always", "el-row--meta-2");
     expect(document.querySelector("[data-v2=shared]")).not.toBeNull();
     // The row is one native button (Enter on it presses it): it opens the recording read-only.
     expect(rowButton("Call a").tagName).toBe("BUTTON");
@@ -166,6 +166,11 @@ describe("the v2 Shared page", () => {
     expect(within(transcript).getByText("Hello, this is Sam.")).toBeInTheDocument();
     // Nothing that changes it: no editing, no Share, no Rename.
     expect(screen.queryByRole("button", { name: /^(Edit|Share|Rename)$/ })).toBeNull();
+    // DT-REC-038: none of the recording page's editing tools, its ⋮, or a title that renames.
+    for (const tool of ["Edit text", "Find and replace", "Speakers", "History", "Recording actions", "Send to WhatsApp…", "Notify me when ready"]) {
+      expect(screen.queryByRole("button", { name: tool }), tool).toBeNull();
+    }
+    expect(within(screen.getByRole("heading", { level: 1, name: "Call a" })).queryByRole("button")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Shared" }));
     expect(screen.getByRole("list", { name: "Shared with me" })).toBeInTheDocument();
   });
@@ -299,7 +304,7 @@ describe("the v2 Shared page", () => {
     expect(active).toHaveTextContent("Into Acme Ltd · 4 files received · Up to 20 files of 100 MB");
     expect(active).toHaveTextContent("Active");
     expect(active).toHaveTextContent("Never stops");
-    expect(row("Old drop")).toHaveTextContent("Into The Inbox · Nothing received yet");
+    expect(row("Old drop")).toHaveTextContent("Into no project · Nothing received yet");
     expect(row("Old drop")).toHaveTextContent("Revoked");
     expect(screen.getByText("Old drop")).toHaveAttribute("dir", "auto");
 
@@ -316,6 +321,20 @@ describe("the v2 Shared page", () => {
     await act(flushAsync);
     expect(callsOf("request_link_revoke")).toEqual([{ id: "r1" }]);
     expect(notify).toHaveBeenCalledWith("Request link revoked", false, undefined);
+  });
+
+  it("D-234: See your request links is in the sheet's footer, never in its scrolling body, on a line of its own", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "New request link" }));
+    const sheet = screen.getByRole("dialog", { name: "Request files" });
+    const link = within(sheet).getByRole("button", { name: "See your request links" });
+    expect(link.closest(".el-dialog__actions")).not.toBeNull();
+    expect(link.closest(".el-dialog__body")).toBeNull();
+    // First in the footer, a line of its own, so Close and Make link stay together under it.
+    const aside = link.closest(".el-dialog__aside")!;
+    expect(aside.parentElement?.firstElementChild).toBe(aside);
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toContain(".el-dialog__actions > .el-dialog__aside { flex-basis: 100%; display: flex; justify-content: flex-start; }");
   });
 
   it("New request link: title, files go to, stops working, limits, Make link, Copy; See your request links opens the tab, where Revoke is", async () => {
@@ -426,6 +445,26 @@ describe("a shared recording, open read-only", () => {
   }
   const player = () => screen.getByTestId("player") as HTMLAudioElement;
 
+  it("Cmd/Ctrl+F opens Find in a transcript, and with no transcript leaves the key to app search", async () => {
+    respond("transcript_detail", makeTranscript({ segments: [] }));
+    await openReader();
+    const empty = new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(empty);
+    await act(flushAsync);
+    expect(empty.defaultPrevented).toBe(false);
+    expect(screen.queryByRole("searchbox", { name: "Find in this transcript" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    respond("transcript_detail", makeTranscript({ segments: CALL_SEGMENTS }));
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    const full = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(full);
+    await act(flushAsync);
+    expect(full.defaultPrevented).toBe(true);
+    expect(screen.getByRole("searchbox", { name: "Find in this transcript" })).toBeInTheDocument();
+  });
+
   it("head: the source and device, the title, when it was recorded with its length and project, and Transcribed in", async () => {
     await openReader({ transcript: { final_status: "completed", final_transcript_id: "tr-s-a", live_available: false, preview: null, final_language: "ur" } as never });
     expect(screen.getByTestId("source-line")).toHaveTextContent("Zoom · Desktop");
@@ -518,24 +557,27 @@ describe("a shared recording, open read-only", () => {
     expect(screen.getByText("Playback link expired. Open the recording again.")).toBeInTheDocument();
   });
 
-  it("transcript: its kind line, and Copy ▾ with Copy text, Copy with timestamps and Copy for AI", async () => {
+  it("transcript: its kind line, and Copy: the text at once, its chevron with Copy with timestamps and Copy for AI", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
     const { notify } = await openReader();
     const bar = screen.getByRole("toolbar", { name: "Find and copy" });
     expect(bar).toHaveTextContent("Final transcript");
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
-    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy text", "Copy with timestamps", "Copy for AI"]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "Copy text" }));
     await act(flushAsync);
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Hello, this is Sam."));
+    expect(writeText).not.toHaveBeenLastCalledWith(expect.stringContaining("[0:"));
     expect(notify).toHaveBeenLastCalledWith("Copied", false, undefined);
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy with timestamps", "Copy for AI"]);
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy with timestamps" }));
     await act(flushAsync);
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("[0:12] Imran: Hi Sam, thanks for calling back."));
     expect(notify).toHaveBeenLastCalledWith("Copied with timestamps", false, undefined);
-    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "More copy options" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
     await act(flushAsync);
     expect(writeText).toHaveBeenLastCalledWith(expect.stringMatching(/^# Call a\n/));
@@ -625,6 +667,7 @@ describe("a shared recording, open read-only", () => {
     fireEvent.click(rowButton("Call a"));
     await act(flushAsync);
     expect(screen.getByText("No speech was detected in this recording.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Copy text" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More copy options" })).toBeDisabled();
   });
 });

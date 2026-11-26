@@ -72,6 +72,8 @@ export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void
 
 export default function AssistApp() {
   const fixture = import.meta.env.DEV && new URLSearchParams(location.search).has("assistfixture");
+  // Read once; the core's first config answer (ui:flags) still arrives when this card opened before it: from nothing
+  // to the card, never one look to another.
   const [ui, , readFor] = useUiFlags(true, "assist", false);
   const [state, dispatch, local] = useAssistCard(fixture);
   const [now, setNow] = useState(() => Date.now());

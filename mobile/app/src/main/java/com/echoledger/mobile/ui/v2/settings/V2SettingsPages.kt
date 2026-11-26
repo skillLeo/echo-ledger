@@ -51,10 +51,14 @@ import kotlinx.coroutines.launch
 
 /** A setting a search result jumped to: drawn on the accent's soft fill (static; nothing moves). */
 @Composable
-fun Modifier.highlightedIf(on: Boolean): Modifier = if (on) background(EchoV2.colors.accentSoft) else this
+fun Modifier.highlightedIf(on: Boolean): Modifier =
+    if (on) background(EchoV2.colors.accentSoft).semantics { this[Highlighted] = true } else this
+
+/** Marks the setting a search result lit (tests find it by this; TalkBack reads nothing new). */
+val Highlighted = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("Highlighted")
 
 /**
- * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Text size and App language (both
+ * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Library swipes, Text size and App language (both
  * applied across the v2 screens, their sheets, dialogs and menus included), and Switch back to classic while v2 is on.
  */
 @Composable
@@ -65,7 +69,9 @@ fun AppearancePage(
     onSwitchToClassic: (Boolean) -> Unit,
     highlight: String?,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Signed in: the language is the account's, so a choice goes to the server (every device), never "as on the phone". */
+    onAccountLanguage: (String) -> Unit = {}
 ) {
     val modes = listOf("system", "light", "dark")
     Column(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
@@ -102,6 +108,13 @@ fun AppearancePage(
                 supporting = stringResource(R.string.v2_set_phone_font_help),
                 modifier = Modifier.highlightedIf(highlight == "appearance.font")
             )
+            EchoSwitch(
+                checked = settings.librarySwipes,
+                onCheckedChange = { on -> update { it.copy(librarySwipes = on) } },
+                label = stringResource(R.string.v2_set_swipes),
+                supporting = stringResource(R.string.v2_set_swipes_help),
+                modifier = Modifier.highlightedIf(highlight == "appearance.swipes")
+            )
             Column(Modifier.highlightedIf(highlight == "appearance.textsize")) {
                 EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_textsize))
                 Text(
@@ -123,13 +136,16 @@ fun AppearancePage(
             }
             Column(Modifier.highlightedIf(highlight == "appearance.language")) {
                 EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_language))
-                listOf(
-                    "system" to R.string.v2_set_language_system,
+                // Signed in, the account's language (the same on every device): English or Urdu, never the phone's.
+                val signedIn = settings.paired
+                val shown = com.echoledger.mobile.ui.v2.shell.AppLook.choice(settings)
+                listOfNotNull(
+                    ("system" to R.string.v2_set_language_system).takeIf { !signedIn },
                     "en" to R.string.v2_set_language_en,
                     "ur" to R.string.v2_set_language_ur
                 ).forEach { (key, words) ->
-                    EchoRadio(selected = settings.appLanguage == key, onClick = {
-                        update { it.copy(appLanguage = key) }
+                    EchoRadio(selected = shown == key, onClick = {
+                        if (signedIn) onAccountLanguage(key) else update { it.copy(appLanguage = key) }
                     }, label = stringResource(words))
                 }
             }

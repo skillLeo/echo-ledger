@@ -47,9 +47,10 @@ import org.robolectric.Shadows.shadowOf
  * Privacy & security parity: today's App lock, Privacy & data and Storage pages and the v2 ones, each walked through the
  * same steps with their controls ("kind: name") collected after every step (ParityKit). App lock's walk is the whole
  * life of the lock: no screen lock (Open security settings, where the phone's PIN is set), coming back with one, turning
- * the lock on with the unlock refused and then given, Lock after, Hide content, the PIN removed and set again in the
- * phone's settings, turning the lock off (no unlock asked), and Reset to defaults asked and confirmed; there each
- * control must be on screen after exactly the same steps on both pages, shown and gone alike.
+ * the lock on with the unlock refused and then given, Lock after, the PIN removed and set again in the phone's settings,
+ * turning the lock off (no unlock asked), and Reset to defaults asked and confirmed; there each control must be on
+ * screen after exactly the same steps on both pages, shown and gone alike. Since 2.0.5 neither page has Hide content:
+ * that is Privacy & data's Block screenshots of EchoLedger, walked there.
  */
 class PrivacyPagesParityTest : ScreenTest() {
     private var page by mutableIntStateOf(0)
@@ -117,7 +118,6 @@ class PrivacyPagesParityTest : ScreenTest() {
         Refused,
         TurnedOn,
         OneMinute,
-        HideContent,
         ScreenLockRemoved,
         ScreenLockBack,
         TurnedOff,
@@ -157,11 +157,6 @@ class PrivacyPagesParityTest : ScreenTest() {
                 pumpUntil("one minute") { s().lockAfterMs == 60_000L }
             }
 
-            LockStep.HideContent -> {
-                toggle("Hide content in Recents and screenshots")
-                pumpUntil("hidden") { s().secureScreen }
-            }
-
             LockStep.ScreenLockRemoved -> {
                 app.simulateScreenLock(false)
                 comeBack()
@@ -182,7 +177,7 @@ class PrivacyPagesParityTest : ScreenTest() {
 
             LockStep.ResetDone -> {
                 press("Reset")
-                pumpUntil("reset") { s().lockAfterMs == AppSettings().lockAfterMs && !s().secureScreen }
+                pumpUntil("reset") { s().lockAfterMs == AppSettings().lockAfterMs }
             }
         }
         compose.waitForIdle()
@@ -202,7 +197,7 @@ class PrivacyPagesParityTest : ScreenTest() {
         val today = ParityKit.shownIn(compose, LockStep.entries, ::lockStep)
         // The v2 walk from the same start: no screen lock, the lock off, its choices at their defaults.
         app.simulateScreenLock(false)
-        vm.updateSettings { it.copy(appLockEnabled = false, lockAfterMs = AppSettings().lockAfterMs, secureScreen = false) }
+        vm.updateSettings { it.copy(appLockEnabled = false, lockAfterMs = AppSettings().lockAfterMs) }
         pumpUntil("start again") { !vm.settings.value.appLockEnabled }
         prompts = 0
         page = 1
@@ -215,7 +210,6 @@ class PrivacyPagesParityTest : ScreenTest() {
             "radio: Immediately" to "radio: Immediately",
             "radio: After 1 minute" to "radio: After 1 minute",
             "radio: After 5 minutes" to "radio: After 5 minutes",
-            "switch: Hide content in Recents and screenshots" to "switch: Hide content in Recents and screenshots",
             "switch: Hide recording titles on the widget" to "switch: Hide recording titles on the widget",
             "button: Reset to defaults" to "button: Reset to defaults",
             "button: Reset" to "button: Reset",
@@ -226,7 +220,7 @@ class PrivacyPagesParityTest : ScreenTest() {
         assertEquals(emptyList<String>(), ParityKit.presenceProblems(today, v2, where))
     }
 
-    private enum class PrivacyStep { Open, Understood, Shown }
+    private enum class PrivacyStep { Open, Understood, Blocked, Shown }
 
     @Test
     fun privacyAndData() {
@@ -247,25 +241,33 @@ class PrivacyPagesParityTest : ScreenTest() {
                     pumpUntil("understood") { vm.settings.value.consentAcknowledged }
                 }
 
+                PrivacyStep.Blocked -> {
+                    toggle("Block screenshots of EchoLedger")
+                    pumpUntil("blocked") { vm.settings.value.blockScreens }
+                }
+
                 PrivacyStep.Shown -> {
-                    press("Show")
-                    pumpUntil("show") { vm.settings.value.screenShareMode == "show" }
+                    toggle("Hide EchoLedger's live words from screenshots and screen shares")
+                    pumpUntil("live words shown") { !vm.settings.value.hideLiveWords }
                 }
             }
             compose.waitForIdle()
         }
         val today = ParityKit.shownIn(compose, PrivacyStep.entries, run)
         val d = AppSettings()
-        vm.updateSettings { it.copy(consentAcknowledged = d.consentAcknowledged, screenShareMode = d.screenShareMode) }
-        pumpUntil("defaults") { vm.settings.value.screenShareMode == d.screenShareMode }
+        vm.updateSettings {
+            it.copy(consentAcknowledged = d.consentAcknowledged, hideLiveWords = d.hideLiveWords, blockScreens = d.blockScreens)
+        }
+        pumpUntil("defaults") { vm.settings.value.hideLiveWords && !vm.settings.value.blockScreens }
         page = 1
         compose.waitForIdle()
         val v2 = ParityKit.shownIn(compose, PrivacyStep.entries, run)
         val where = mapOf(
             "button: Back" to "button: Back",
             "switch: I understand" to "switch: I understand",
-            "radio: Private (black box)" to "radio: Private (black box)",
-            "radio: Show" to "radio: Show",
+            "switch: Block screenshots of EchoLedger" to "switch: Block screenshots of EchoLedger",
+            "switch: Hide EchoLedger's live words from screenshots and screen shares" to
+                "switch: Hide EchoLedger's live words from screenshots and screen shares",
             "button: Export or delete my data" to "button: Export or delete my data"
         )
         val first = { m: Map<String, List<PrivacyStep>> -> m.mapValues { it.value.first() } }
@@ -343,11 +345,14 @@ class PrivacyPagesParityTest : ScreenTest() {
         compose.onNode(hasText("Recordings are deleted after 30 days unless kept.")).assertExists()
         vm.updateSettings { it.copy(trashKeepHours = 48) }
         waitFor("Deleted recordings can be restored for 48 hours.")
-        // Privacy & data's Export or delete my data opens Sign-in & security (its classic page for now).
+        // Privacy & data's Export or delete my data opens Your data (v2, under Sign-in & security) with the export lit.
         press("Back")
         press("Privacy & data")
         press("Export or delete my data")
-        compose.onNode(hasText("classic account")).assertExists()
+        waitFor("Export my data")
+        assertTrue(compose.onAllNodes(hasText("classic account")).fetchSemanticsNodes().isEmpty())
+        val lit = androidx.compose.ui.test.SemanticsMatcher.expectValue(com.echoledger.mobile.ui.v2.settings.Highlighted, true)
+        compose.onNode(lit and androidx.compose.ui.test.hasAnyDescendant(hasText("Export my data")), useUnmergedTree = true).assertExists()
     }
 
     private fun waitFor(words: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(words)).fetchSemanticsNodes().isNotEmpty() }

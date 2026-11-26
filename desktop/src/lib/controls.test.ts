@@ -9,6 +9,7 @@ import {
   isTwoChannel,
   meterLevel,
   missingShort,
+  otherSideNotRecorded,
   nextAnchor,
   reviewDuration,
   secondsLeft,
@@ -144,6 +145,11 @@ describe("missingShort", () => {
     expect(missingShort(undefined)).toBeNull();
     expect(missingShort([])).toBeNull();
     expect(missingShort([{ kind: "system_audio", sentence: "" }])).toMatch(/your voice only/);
+    // The core's 3-second check (2.0.6): the other side is not being recorded although it was let to.
+    const notRecorded = { kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const };
+    expect(missingShort([notRecorded])).toBe("The other side isn't being recorded");
+    expect(otherSideNotRecorded([notRecorded])).toEqual(notRecorded);
+    expect(otherSideNotRecorded([{ kind: "system_audio", sentence: "System audio is off for EchoLedger." }])).toBeNull();
     expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/recording the other side/);
     expect(missingShort([{ kind: "microphone", sentence: "" }, { kind: "system_audio", sentence: "" }])).toMatch(/Nothing is being recorded/);
     expect(missingShort([{ kind: "screen", sentence: "" }])).toBeNull();

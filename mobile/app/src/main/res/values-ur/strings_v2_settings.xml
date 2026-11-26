@@ -56,8 +56,7 @@
     <string name="v2_set_item_notifications_activity">سرگرمی کی اطلاعات</string>
     <string name="v2_set_item_notifications_quiet">خاموش اوقات</string>
     <string name="v2_set_item_lock_app">ایپ لاک</string>
-    <string name="v2_set_item_lock_hide">حالیہ ایپس میں چھپائیں</string>
-    <string name="v2_set_item_privacy_share">اسکرین شیئرنگ کے دوران</string>
+    <string name="v2_set_item_lock_hide">ویجیٹ پر عنوانات</string>
     <string name="v2_set_item_storage_space">استعمال شدہ جگہ</string>
     <string name="v2_set_item_storage_kept">ریکارڈنگز کب تک رکھی جاتی ہیں</string>
     <string name="v2_set_item_plan_usage">پلان اور استعمال</string>
@@ -86,6 +85,9 @@
     <string name="v2_set_value_raw_mic">خام مائیکروفون</string>
     <string name="v2_set_value_tap_to_start">شروع کرنے کے لیے ٹیپ کریں</string>
     <string name="v2_set_value_hold_to_talk">بولنے کے لیے دبائے رکھیں</string>
+    <string name="v2_set_value_keyboard_on">کی بورڈ آن</string>
+    <string name="v2_set_value_keyboard_off">کی بورڈ آف</string>
+    <string name="v2_set_language_not_saved">زبان نہیں بدلی جا سکی۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_set_value_added">شامل ہے</string>
     <string name="v2_set_value_not_added">شامل نہیں</string>
     <string name="v2_set_value_not_set_up">سیٹ اپ نہیں</string>
@@ -98,13 +100,14 @@
         <item quantity="other">%1$d ایپس</item>
     </plurals>
     <string name="v2_set_search_settings">ترتیبات تلاش کریں</string>
-    <string name="v2_set_no_settings_title">\"%1$s\" سے کوئی ترتیب نہیں ملی</string>
+    <string name="v2_set_no_settings_title">\"%1$s\" سے ترتیبات میں کچھ نہیں ملا</string>
     <string name="v2_set_no_settings_body">کوئی اور لفظ آزمائیں، جیسے زبان، لاک یا تھیم۔</string>
     <string name="v2_set_phone_font">فون کا فونٹ استعمال کریں</string>
     <string name="v2_set_phone_font_help">متن فون کی ترتیبات والے فونٹ میں نظر آئے گا</string>
     <string name="v2_set_activity_help">تیار ٹرانسکرپٹس، ناکام اپ لوڈز، نئی ڈیوائسز</string>
     <string name="v2_set_quiet_help">%1$s سے %2$s تک اطلاعات خاموشی سے آئیں گی</string>
     <string name="v2_set_sign_out">سائن آؤٹ</string>
+    <string name="v2_set_audio_kept">محفوظ آڈیو: %1$s · %2$s بعد خود بخود صاف ہو جاتی ہے</string>
     <string name="v2_set_sign_out_title">اس فون سے سائن آؤٹ کریں؟</string>
     <string name="v2_set_sign_out_body">جو ریکارڈنگز ابھی اپ لوڈ نہیں ہوئیں وہ دوبارہ سائن ان تک اسی فون پر رہیں گی۔</string>
     <string name="v2_set_theme">تھیم</string>

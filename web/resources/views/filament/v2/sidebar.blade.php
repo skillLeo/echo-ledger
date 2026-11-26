@@ -1,7 +1,9 @@
 {{--
-    The v2.0 sidebar (docs/PLAN_V2_PARITY.md section 2, docs/v2/IA.md): the brand, "Upload recording" at the top (the
-    web's Record), then Home, Library (All recordings, Shared, My links, Request links, Recently deleted), Projects (the first few
-    with their counts), Live and Ask; at the foot Activity with what needs you, Settings, Help and Collapse. Its edge
+    The v2.0 sidebar (docs/PLAN_V2_PARITY.md section 2, docs/v2/IA.md): the brand, "● Record ▾" at the top (since
+    2.0.0-p, docs/PLAN_LIBRARY_FILTERS.md: Record a voice note, and Import audio files in its menu), then Home, Library
+    (its places, My views and Labels: filament.v2.sidebar-library), Projects (the first few with their counts), Live and
+    Ask; at the foot Trash, Activity with what needs you, Settings, Help and Collapse. The web has no sync of its own
+    (it reads the server), so no "Synced" line. Its edge
     resizes it (drag, or the arrow keys), and its look is the person's Sidebar style (Light, Dark, Soft grey). It keeps
     Filament's sidebar contract (filamentSidebar, $store.sidebar), so on phones it is the drawer the menu button opens;
     folded on a computer it is a rail of icons with their names as tooltips.
@@ -13,7 +15,11 @@
     $modules = collect(ConsoleV2Nav::modules())->keyBy('key');
     $nav = $modules->except('settings')->values()->all();
     $settings = $modules->get('settings');
-    $library = ConsoleV2Nav::libraryPlaces();
+    // Since 2.0.0-p the new Library (ui_v2.library) brings its own places, My views, Labels, Trash at the foot and
+    // ● Record ▾; with the new frame alone the Library's level 2 and Upload recording stay as they were.
+    $newLibrary = \App\Filament\Support\ConsoleV2::library();
+    $library = $newLibrary ? [] : ConsoleV2Nav::libraryPlaces();
+    $trash = $newLibrary ? ConsoleV2Nav::trash() : null;
     $projects = ConsoleV2Nav::projects();
     $upload = ConsoleV2Nav::upload();
     $activity = ConsoleV2Nav::activity();
@@ -48,19 +54,54 @@
                 </button>
             </header>
 
-            @if ($upload !== null)
+            @if ($upload !== null && ! $newLibrary)
                 {{-- The web's Record (parity plan 2): a file from the computer, or a voice note recorded here. --}}
                 <a href="{{ $upload['url'] }}" @class(['v2-sb-record', 'is-on' => $upload['active']]) data-sidebar-upload
-                    x-bind:title="$el.closest('.v2-rail') ? @js($upload['label']) : null">
+                    x-bind:title="$el.closest('.v2-rail') ? @js(__('Upload recording')) : null">
                     <x-el.v2.icon name="record" />
-                    <span class="v2-sb-label">{{ $upload['label'] }}</span>
+                    <span class="v2-sb-label">{{ __('Upload recording') }}</span>
                 </a>
+            @elseif ($upload !== null)
+                {{-- ● Record ▾ (2.0.0-p): a voice note recorded here; the menu also imports audio files (on the Library its
+                     file picker, elsewhere the Upload page), and files dropped anywhere on the Library are imported too. --}}
+                <div class="v2-sb-split">
+                    <a href="{{ $upload['record'] }}" @class(['v2-sb-record', 'is-on' => $upload['active']]) data-sidebar-upload data-record
+                        x-bind:title="$el.closest('.v2-rail') ? @js($upload['label']) : null">
+                        <x-el.v2.icon name="record" />
+                        <span class="v2-sb-label">{{ $upload['label'] }}</span>
+                    </a>
+                    <x-filament::dropdown placement="bottom-end" wire:key="v2-sb-record-menu">
+                        <x-slot name="trigger">
+                            <button type="button" class="v2-sb-record-more" aria-label="{{ __('Record options') }}" data-record-menu>
+                                <x-el.v2.icon name="chevron-down" />
+                            </button>
+                        </x-slot>
+                        <x-filament::dropdown.list>
+                            <x-filament::dropdown.list.item tag="a" :href="$upload['record']" icon="heroicon-o-microphone" data-record-now>
+                                {{ __('Record a voice note') }}
+                            </x-filament::dropdown.list.item>
+                            <x-filament::dropdown.list.item tag="a" :href="$upload['url']" icon="heroicon-o-arrow-up-tray" data-import
+                                x-on:click="if (document.querySelector('.v2-library')) { $event.preventDefault(); close(); $dispatch('el-upload-pick') }">
+                                {{ __('Import audio files') }}
+                            </x-filament::dropdown.list.item>
+                        </x-filament::dropdown.list>
+                    </x-filament::dropdown>
+                </div>
             @endif
 
-            <nav class="v2-sb-nav" aria-label="{{ __('Main') }}">
+            {{-- The middle scrolls when the Library's places, views, labels and projects outgrow the window (2.0.0-p): "More"
+                 at its foot (and a way back at its top) says so and scrolls it; the foot stays in place. --}}
+            <nav class="v2-sb-nav" aria-label="{{ __('Main') }}" data-sidebar-scroll
+                x-data="{ above: false, below: false, measure() { const n = this.$el; this.above = n.scrollTop > 1; this.below = n.scrollTop + n.clientHeight < n.scrollHeight - 1 },
+                    page(dir) { this.$el.scrollBy({ top: dir * this.$el.clientHeight * 0.8, behavior: 'smooth' }) } }"
+                x-init="$nextTick(() => measure()); new ResizeObserver(() => measure()).observe($el); new ResizeObserver(() => measure()).observe($el.querySelector('.v2-sb-list'))"
+                x-on:scroll.passive="measure()" x-on:toggle.capture="$nextTick(() => measure())">
+                <button type="button" class="v2-sb-scroll is-up" x-show="above" x-cloak x-on:click="page(-1)" aria-label="{{ __('Show the top of the menu') }}" data-scroll-up>
+                    <x-el.v2.icon name="chevron-down" />
+                </button>
                 <ul class="v2-sb-list">
                     @foreach ($nav as $item)
-                        <li>
+                        <li @class(['v2-sb-folding' => $item['key'] === 'projects' && $newLibrary])>
                             @if ($item['url'] !== null)
                                 <a href="{{ $item['url'] }}" @class(['v2-sb-item', 'is-on' => $item['active']]) @if ($item['active']) aria-current="page" @endif
                                     x-bind:title="$el.closest('.v2-rail') ? @js($item['label']) : null" data-module="{{ $item['key'] }}">
@@ -74,7 +115,9 @@
                                     <span class="v2-sb-label">{{ $item['label'] }}</span>
                                 </span>
                             @endif
-                            @if ($item['key'] === 'library' && $library !== [])
+                            @if ($item['key'] === 'library' && $item['url'] !== null && $newLibrary)
+                                @include('filament.v2.sidebar-library')
+                            @elseif ($item['key'] === 'library' && $library !== [])
                                 <ul class="v2-sb-sub" aria-label="{{ __('Library') }}">
                                     @foreach ($library as $place)
                                         <li>
@@ -85,13 +128,33 @@
                                     @endforeach
                                 </ul>
                             @endif
-                            @if ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [])
+                            @if ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [] && $newLibrary)
+                                {{-- PROJECTS folds (2.0.0-p); each project opens its page, which lists its recordings. --}}
+                                <details class="v2-sb-fold v2-sb-fold-end" open data-projects-fold>
+                                    <summary class="v2-sb-fold-toggle" aria-label="{{ __('Show or hide the projects') }}" title="{{ __('Show or hide the projects') }}">
+                                        <x-el.v2.icon name="chevron-down" />
+                                    </summary>
+                                    <ul class="v2-sb-sub" aria-label="{{ __('Projects') }}">
+                                        @foreach ($projects as $project)
+                                            <li>
+                                                <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
+                                                    @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
+                                                    <span class="v2-sb-label" dir="auto"><bdi>{{ $project['name'] }}</bdi></span>
+                                                    @if ($project['count'] > 0)
+                                                        <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
+                                                    @endif
+                                                </a>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </details>
+                            @elseif ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [])
                                 <ul class="v2-sb-sub" aria-label="{{ __('Projects') }}">
                                     @foreach ($projects as $project)
                                         <li>
                                             <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
                                                 @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
-                                                <span class="v2-sb-label"><bdi>{{ $project['name'] }}</bdi></span>
+                                                <span class="v2-sb-label" dir="auto"><bdi>{{ $project['name'] }}</bdi></span>
                                                 @if ($project['count'] > 0)
                                                     <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
                                                 @endif
@@ -103,9 +166,19 @@
                         </li>
                     @endforeach
                 </ul>
+                <button type="button" class="v2-sb-scroll is-down" x-show="below" x-cloak x-on:click="page(1)" aria-label="{{ __('Show more of the menu') }}" data-scroll-down>
+                    <x-el.v2.icon name="chevron-down" /><span>{{ __('More') }}</span>
+                </button>
             </nav>
 
             <div class="v2-sb-foot">
+                @if ($trash !== null)
+                    <a href="{{ $trash['url'] }}" @class(['v2-sb-item', 'is-on' => $trash['active']]) @if ($trash['active']) aria-current="page" @endif
+                        x-bind:title="$el.closest('.v2-rail') ? @js($trash['label']) : null" data-place="trash">
+                        <x-el.v2.icon name="trash" :filled="$trash['active']" />
+                        <span class="v2-sb-label">{{ $trash['label'] }}</span>
+                    </a>
+                @endif
                 @if ($activity !== null)
                     <a href="{{ $activity['url'] }}" @class(['v2-sb-item', 'is-on' => $activity['active']]) @if ($activity['active']) aria-current="page" @endif
                         x-bind:title="$el.closest('.v2-rail') ? @js($activity['label']) : null" data-module="activity">

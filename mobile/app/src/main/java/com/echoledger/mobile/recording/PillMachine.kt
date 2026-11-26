@@ -28,7 +28,11 @@ data class PillState(
     /** Seconds (ticks) the open menu has gone without a touch. */
     val menuIdleTicks: Int = 0,
     /** Set after the first tap on Stop: seconds (ticks) since then; null when Stop is not waiting for its second tap. */
-    val stopArmedTicks: Int? = null
+    val stopArmedTicks: Int? = null,
+    /** An automatic call recording (since 2.0.5): the menu starts with Transcribe this call, Save audio only, Stop and delete. */
+    val call: Boolean = false,
+    /** What was chosen for this call on the pill ([com.echoledger.mobile.calls.CallChoice.Pick] wire); null: nothing yet. */
+    val choice: String? = null
 ) {
     enum class Mode { PILL, DOT, MENU, HIDDEN }
 
@@ -59,6 +63,9 @@ sealed interface PillEvent {
     data class Held(val held: Boolean) : PillEvent
     data class Warning(val text: String?) : PillEvent
     data class Paused(val paused: Boolean) : PillEvent
+
+    /** Transcribe this call or Save audio only on a call's pill (since 2.0.5): no question after the call. */
+    data class Choose(val pick: com.echoledger.mobile.calls.CallChoice.Pick) : PillEvent
 }
 
 sealed interface PillEffect {
@@ -69,6 +76,9 @@ sealed interface PillEffect {
     data object NextLanguage : PillEffect
     data object Stop : PillEffect
     data object Discard : PillEffect
+
+    /** Remember the call's choice for when it ends. */
+    data class Chose(val pick: com.echoledger.mobile.calls.CallChoice.Pick) : PillEffect
 }
 
 object PillMachine {
@@ -167,6 +177,12 @@ object PillMachine {
         is PillEvent.Warning -> s.copy(warning = e.text) to emptyList()
 
         is PillEvent.Paused -> (if (s.discarding) s else s.copy(paused = e.paused)) to emptyList()
+
+        // Stop and delete is Discard now; the other two close the menu and are kept for the call's end.
+        is PillEvent.Choose -> when {
+            !s.call || s.discarding || e.pick == com.echoledger.mobile.calls.CallChoice.Pick.DELETE -> s to emptyList()
+            else -> s.copy(choice = e.pick.wire, mode = PillState.Mode.PILL, stopArmedTicks = null) to listOf(PillEffect.Chose(e.pick))
+        }
     }
 
     /** "02:14", or "1:02:14" past an hour. */

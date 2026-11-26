@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\Accounts\SignInGuard;
+use App\Support\Api\AccountRules;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -46,6 +47,17 @@ final class AuditLog
         'mfa_disabled' => 'Two-step sign-in turned off',
         'passkey_added' => 'Passkey added',
         'passkey_removed' => 'Passkey removed',
+        // Since 2.0.0-l (docs/API.md "Account and security from the apps"): changes to the account from the apps and console.
+        'name_changed' => 'Name changed',
+        'email_change_requested' => 'Email change asked for',
+        'email_changed' => 'Email changed',
+        'email_change_cancelled' => 'Email change cancelled',
+        'email_change_blocked' => 'Email change blocked',
+        'email_change_reverted' => 'Email change undone from the original address',
+        'avatar_changed' => 'Profile picture changed',
+        'avatar_removed' => 'Profile picture removed',
+        'recovery_codes_regenerated' => 'Recovery codes made again',
+        'passkey_renamed' => 'Passkey renamed',
         'credentials_changed' => 'Provider credentials changed',
         // Since v1.5: accounts, sign-in from the apps, teams and the settings.
         'account_created' => 'Account made',
@@ -118,10 +130,14 @@ final class AuditLog
         'connector_disconnected' => 'App disconnected',
         'connector_token_reused' => 'App disconnected: used token came back',
         'connector_tool_call' => 'Read by a connected app',
+        // Since 2.0.0-m: the person's lists.
+        'list_created' => 'List made',
+        'list_renamed' => 'List renamed',
+        'list_deleted' => 'List deleted',
     ];
 
     /** Events whose summary names a recording or a project (its title): staff read the event's name instead. */
-    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed'];
+    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed', 'list_created', 'list_renamed', 'list_deleted'];
 
     /**
      * How the admin panel shows an event (since v1.6, P2.2): metadata only, so an event that names a recording or a
@@ -216,7 +232,7 @@ final class AuditLog
             }
         });
 
-        CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
+        CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->outsideTitle()));
         Device::created(fn (Device $d) => $d->signedInWith === null
             ? $log()->record('device_paired', $d->user_id, $d, "Device signed in with a code: {$d->name}")
             : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
@@ -225,7 +241,7 @@ final class AuditLog
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.
         $shared = fn (ShareLink $l): array => $l->client_id !== null
             ? [$l->client?->user_id, $l->client, 'project '.$l->client?->name]
-            : [$l->captureSession?->user_id, $l->captureSession, (string) $l->captureSession?->displayTitle()];
+            : [$l->captureSession?->user_id, $l->captureSession, (string) $l->captureSession?->outsideTitle()];
         ShareLink::created(function (ShareLink $l) use ($log, $shared): void {
             [$owner, $subject, $what] = $shared($l);
             $log()->record('share_created', $owner, $subject, 'Share link made for '.$what);
@@ -239,6 +255,10 @@ final class AuditLog
         User::updated(function (User $u) use ($log): void {
             if ($u->wasChanged('password')) {
                 $log()->record('password_changed', $u->id, $u);
+            }
+            // Since 2.0.0-l: a new address, by the console's link, an app's code or staff; never the address in full.
+            if ($u->wasChanged('email')) {
+                $log()->record('email_changed', $u->id, $u, 'Email changed to '.AccountRules::maskEmail($u->email));
             }
             if ($u->wasChanged('app_authentication_secret')) {
                 $log()->record($u->app_authentication_secret ? 'mfa_enabled' : 'mfa_disabled', $u->id, $u);

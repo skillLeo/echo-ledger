@@ -201,10 +201,10 @@ class ViewCustomer extends ViewRecord
     {
         return Action::make('openRecording')
             ->authorize(fn (): bool => StaffAccess::can('customers.support') && Customers::supportAccess($this->customer()))
-            ->modalHeading(fn (array $arguments): string => $this->supportSession($arguments)->displayTitle())
+            ->modalHeading(fn (array $arguments): string => $this->supportSession($arguments)->outsideTitle())
             ->mountUsing(function (array $arguments): void {
                 $session = $this->supportSession($arguments);
-                app(AuditLog::class)->record('support_content_viewed', $this->staff()->id, $session, 'Support opened "'.Str::limit($session->displayTitle(), 80, '…').'" of '.Str::limit($this->customer()->email, 100, ''), ['customer_id' => $this->customer()->id]);
+                app(AuditLog::class)->record('support_content_viewed', $this->staff()->id, $session, 'Support opened "'.Str::limit($session->outsideTitle(), 80, '…').'" of '.Str::limit($this->customer()->email, 100, ''), ['customer_id' => $this->customer()->id]);
             })
             ->modalContent(function (array $arguments): HtmlString {
                 $session = $this->supportSession($arguments);

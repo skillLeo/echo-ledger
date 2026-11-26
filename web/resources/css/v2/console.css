@@ -155,6 +155,7 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 
 .v2-avatar {
     display: inline-flex;
+    flex: none;
     align-items: center;
     justify-content: center;
     width: var(--el-layout-control-height);
@@ -164,12 +165,133 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
     color: var(--el-role-accent-text);
     font-size: var(--el-text-caption-size);
     font-weight: var(--el-text-body-strong-weight);
+    line-height: 1;
+    /* DES-08: a 1 px ring inside (8% black in light, 12% white in dark), drawn over a photo too, so neither a photo nor
+       a colour melts into the page. */
+    outline: var(--el-desktop-avatar-ring) solid var(--el-role-avatar-ring);
+    outline-offset: calc(-1 * var(--el-desktop-avatar-ring));
+    user-select: none;
 }
 
 .v2-avatar.is-large {
     width: var(--el-component-avatar-size);
     height: var(--el-component-avatar-size);
     font-size: var(--el-text-body-strong-size);
+}
+
+/* DES-08: in a list of people (Shared with me, Sent to, the workspace's people and invitations). */
+.v2-avatar.is-list {
+    width: var(--el-desktop-avatar-list);
+    height: var(--el-desktop-avatar-list);
+    font-size: var(--el-desktop-text-avatar-rail-size);
+}
+
+/* DES-08: Settings › Profile and the profile card. */
+.v2-avatar.is-xl {
+    width: calc(var(--el-space-8) * 7);
+    height: calc(var(--el-space-8) * 7);
+    font-size: var(--el-text-title-m-size);
+}
+
+/* UX-18: the rail's Account, 28 px with 12 px semibold initials (its target is 40 px: .v2-um-hit). */
+.v2-avatar.is-rail {
+    width: var(--el-desktop-avatar-rail);
+    height: var(--el-desktop-avatar-rail);
+    font-size: var(--el-desktop-text-avatar-rail-size);
+    font-weight: var(--el-desktop-text-avatar-rail-weight);
+}
+
+/* UX-18: Settings › Profile: the 96 px avatar with its camera badge (Add or Change photo) at its bottom end corner. */
+.v2-profile-avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+}
+
+.v2-profile-camera {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+    border: var(--el-space-2) solid var(--el-role-bg-surface);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-profile-camera:hover {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-profile-camera .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* UX-18: on Activity, the avatar of the person an item is about takes its kind's 52 px tile's place, centred in it
+   (10 px each side of the 32 px avatar), so every row's words start in line. */
+.el-row-btn > .v2-avatar.is-list {
+    margin-inline: calc(var(--el-space-8) + var(--el-space-2));
+}
+
+/* UX-18: Settings › Profile, 96 px. */
+.v2-avatar.is-profile {
+    width: var(--el-desktop-avatar-profile);
+    height: var(--el-desktop-avatar-profile);
+    font-size: var(--el-text-display-size);
+    font-weight: var(--el-text-display-weight);
+}
+
+/* BE-06: the person's initials on their colour (the background is set beside it), or their photo. */
+.v2-avatar.is-coloured {
+    color: var(--el-role-avatar-text);
+}
+
+/* DES-08: initials drawn from data-initials, inside a link whose text stays the person's name (the profile card). */
+.v2-avatar.is-coloured.is-drawn::before {
+    content: attr(data-initials);
+}
+
+.v2-avatar.is-photo {
+    object-fit: cover;
+}
+
+/* DES-08: a person in a list: the avatar beside the name and, under it, their email (x-el.person). */
+.v2-person {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+.v2-person-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.v2-person-name,
+.v2-person-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-person-name {
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-person-sub {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
 }
 
 @media (min-width: 1024px) {
@@ -481,9 +603,18 @@ body.el-resizing {
     }
 }
 
+/* Decision 18 (PLAN_V2_1_POLISH): the search at the bar's end, as the desktop's title row has it, 180 to 260 px (22 %
+   of the bar between, as the desktop's is of its window). With less room the empty space before it goes first, then it
+   shrinks to 180 px; below that it is the ⌕ button (header-fit, "Decision 18" below). */
 .v2-tb-search {
-    flex: 1;
-    max-width: calc(var(--el-space-64) * 8);
+    flex: 1 1 calc(var(--el-space-40) * 4.5);
+    min-inline-size: calc(var(--el-space-40) * 4.5);
+    max-inline-size: clamp(calc(var(--el-space-40) * 4.5), 22%, calc(var(--el-space-40) * 6.5));
+    margin-inline-start: auto;
+}
+
+.v2-tb > .el-workspace-switcher {
+    flex: none;
 }
 
 .v2-tb-spacer {
@@ -521,7 +652,7 @@ body.el-resizing {
     color: var(--el-role-accent-text);
 }
 
-/* the avatar menu */
+/* the account menu (UX-18): its header is who it is, not an item */
 .v2-um-head {
     display: flex;
     align-items: center;
@@ -530,8 +661,10 @@ body.el-resizing {
     border-radius: var(--el-radius-sm);
 }
 
-.v2-um-head:hover {
-    background-color: var(--el-role-bg-subtle);
+.v2-um-plan {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
 }
 
 .v2-um-text {
@@ -552,13 +685,61 @@ body.el-resizing {
     text-overflow: ellipsis;
 }
 
-.v2-um-theme {
+.v2-um-theme,
+.v2-um-zoom {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--el-space-8);
     padding: var(--el-space-8);
     font-size: var(--el-text-body-size);
+}
+
+/* Plan & billing says the problem the avatar's dot shows: the dot again, then the words, under the item's name. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-problem) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--el-space-2);
+}
+
+.v2-um-problem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    color: var(--el-role-danger-default);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-um-dot.is-inline {
+    position: static;
+    border: 0;
+}
+
+/* Theme's three items take the focus as the menu's items do (its arrows reach them). */
+.v2-um-theme [role='menuitemradio']:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(var(--el-focus-width) * -1);
+    background-color: var(--el-role-bg-surface);
+}
+
+/* An item's key ("Keyboard shortcuts  ?"), and the Zoom row's, at its end. */
+.v2-um .fi-dropdown-list-item-label:has(> .v2-um-key) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-12);
+}
+
+.v2-um-key kbd {
+    font: inherit;
+}
+
+.v2-um-key {
+    color: var(--el-role-text-secondary);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--el-text-caption-size);
+    white-space: nowrap;
 }
 
 /* the bottom bar on phone-width screens */
@@ -902,11 +1083,6 @@ button.v2-row:hover {
     font-variant-numeric: tabular-nums;
 }
 
-.v2-um .v2-chip {
-    min-height: var(--el-icon-lg);
-    font-size: var(--el-text-caption-size);
-}
-
 /* status: colour, icon and text together; one per row */
 .v2-status {
     display: inline-flex;
@@ -924,6 +1100,37 @@ button.v2-row:hover {
     height: var(--el-icon-sm);
 }
 
+/* Since U19: the small spinner of "Converting to Roman Urdu… 60%". */
+.v2-spinner {
+    flex: none;
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    border: var(--el-space-2) solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: var(--el-radius-full);
+    animation: v2-spin 0.8s linear infinite;
+}
+
+.v2-row-retry {
+    flex: none;
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    color: var(--el-role-accent-text);
+    text-decoration: underline;
+}
+
+@keyframes v2-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-spinner {
+        animation-duration: 2.4s;
+    }
+}
+
 .v2-status.is-warning {
     color: var(--el-role-warning-default);
 }
@@ -938,6 +1145,16 @@ button.v2-row:hover {
 
 .v2-status.is-neutral {
     color: var(--el-role-text-secondary);
+}
+
+/* Audio only and Waiting to upload: plain grey text, no icon (docs/PLAN_V2_1_POLISH.md section 1: no chip). */
+.v2-status.is-quiet {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-status.is-quiet .v2-icon {
+    display: none;
 }
 
 .v2-banner {
@@ -1158,6 +1375,78 @@ button.v2-row:hover {
     background-color: var(--el-role-bg-subtle);
 }
 
+/* UX-25 (PLAN_V2_1_POLISH, an owner request): the recording you came back from keeps a light grey tint for a minute
+   (filament.v2.keep-place), never the selection's colour; a little stronger in dark. */
+.v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 6%, transparent);
+}
+
+html.dark .v2-library .fi-ta-record.is-last-opened {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 9%, transparent);
+}
+
+/* Back to top: a small round ↑ at the bottom corner of a long list once it is more than a screen down; on a phone above
+   the bottom bar. It fades in and out. */
+.v2-back-top {
+    position: fixed;
+    inset-block-end: var(--el-space-16);
+    inset-inline-end: var(--el-space-16);
+    z-index: var(--el-layer-dock);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-40);
+    block-size: var(--el-space-40);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    box-shadow: var(--el-shadow-1);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--el-motion-base) var(--el-motion-ease-out), visibility var(--el-motion-base);
+}
+
+/* A 48 px place to touch around the 40 px button. */
+.v2-back-top::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--el-space-4));
+}
+
+.v2-back-top.is-shown {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.v2-back-top:hover {
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-back-top:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-width);
+}
+
+.v2-back-top .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+@media (max-width: 720px) {
+    .v2-back-top {
+        inset-block-end: calc(var(--el-component-list-row-height-mobile) + var(--el-space-16) + env(safe-area-inset-bottom));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-back-top {
+        transition: none;
+    }
+}
+
 .v2-lib-row {
     display: flex;
     align-items: center;
@@ -1266,6 +1555,35 @@ button.v2-row:hover {
 .v2-lib-waiting .v2-icon {
     width: var(--el-icon-sm);
     height: var(--el-icon-sm);
+}
+
+/*
+ * × on Home's needs-action line (U13): drawn at the chip's size, with its hit area still reaching the touch minimum.
+ * The words wrap beside it and × never sits alone on a line: it stays at the end edge, level with the first line.
+ */
+[data-needs-action]:has(> [data-dismiss]) {
+    position: relative;
+    padding-inline-end: calc(var(--el-component-chip-height) + var(--el-space-8));
+}
+
+[data-needs-action] > [data-dismiss] {
+    position: absolute;
+    inset-block-start: calc((1lh - var(--el-component-chip-height)) / 2);
+    inset-inline-end: 0;
+    width: var(--el-component-chip-height);
+    height: var(--el-component-chip-height);
+}
+
+[data-needs-action] > [data-dismiss]::after {
+    content: '';
+    position: absolute;
+    inset: calc((var(--el-component-chip-height) - var(--el-layout-control-touch-min)) / 2);
+}
+
+/* A widget that draws nothing (Home's line once closed) takes no place in the grid, so no gap is left behind. */
+.fi-wi-widget:not(:has(*)),
+.fi-grid-col:has(> .fi-sc-component > .fi-wi-widget:not(:has(*))) {
+    display: none;
 }
 
 /* A section's count after its name: "Pinned · 4 recordings". */
@@ -1679,6 +1997,12 @@ html .fi-body .el-player .el-chip {
     display: flex;
     align-items: center;
     gap: var(--el-space-12);
+}
+
+/* FIX-06: Previous and Next recording draw 44 px past their 24 px line: the title keeps clear of them, so its Rename
+   stays a whole target. */
+.v2-viewer-head[data-recording-nav] {
+    margin-block-end: var(--el-space-12);
 }
 
 .v2-viewer-head .v2-row-title {
@@ -2219,4 +2543,1744 @@ html[dir='rtl'] .v2-row-title {
 .v2-colour-picker input:focus-visible + .v2-label-dot {
     outline: var(--el-focus-width) solid var(--el-role-accent-focus);
     outline-offset: calc(var(--el-focus-offset) * 2);
+}
+
+/* ================================================================== 4b. the Library's filters and views (2.0.0-p)
+   docs/PLAN_LIBRARY_FILTERS.md: one toolbar row (the view's name, Search, Filters, Sort & display), the pills on a
+   second row only while filters are on, and the filter panel left of the list (280: seven of space-40), closed until
+   opened; under the panel breakpoint (the page's Alpine adds .is-drawer) it is a drawer over the list. Logical
+   properties throughout, so Urdu mirrors it. */
+
+/* Filament draws the group as a grid of columns: the panel's keeps its width, the list's takes the rest. */
+.v2-lib-shell > .fi-sc {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-16);
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col {
+    flex: none;
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-library) {
+    flex: 1 1 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-lib-panel[style*='display: none']) {
+    display: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    position: absolute;
+    inset: 0;
+    z-index: var(--el-layer-dialog);
+    pointer-events: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-panel,
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-scrim {
+    pointer-events: auto;
+}
+
+.v2-lib-panel {
+    position: sticky;
+    top: var(--el-space-16);
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    inline-size: calc(var(--el-space-40) * 7);
+    max-block-size: calc(100dvh - var(--el-space-64) - var(--el-space-32));
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+}
+
+/* Under --el-breakpoint-panel the panel is a drawer over the list (not over the sidebar), with a scrim on the list. */
+.v2-lib-shell {
+    position: relative;
+}
+
+.v2-lib-shell.is-drawer .v2-lib-panel {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-dialog);
+    box-shadow: var(--el-shadow-3);
+}
+
+.v2-lib-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--el-layer-dialog) - 1);
+    background-color: var(--el-role-bg-canvas);
+    opacity: 0.72;
+}
+
+.v2-lib-panel-head,
+.v2-lib-panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+    padding: var(--el-space-12) var(--el-space-16);
+}
+
+.v2-lib-panel-head {
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-foot {
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-title {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-lib-panel-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--el-space-4) var(--el-space-16) var(--el-space-16);
+}
+
+.v2-lib-sec {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    padding-block: var(--el-space-12);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-sec:last-child {
+    border-block-end: 0;
+}
+
+.v2-lib-sec.is-target {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+}
+
+.v2-lib-sec-title {
+    margin: 0;
+    font-size: var(--el-text-body-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-lib-op {
+    align-self: flex-start;
+}
+
+.v2-lib-find {
+    inline-size: 100%;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-lib-opts {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-lib-opts > li.is-child {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-lib-opt {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-block-size: var(--el-space-32);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-sm);
+    cursor: pointer;
+}
+
+.v2-lib-opt:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-opt input {
+    flex: none;
+    accent-color: var(--el-role-accent-default);
+}
+
+.v2-lib-opt-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-lib-opt-parts {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-lib-opt-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-range {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-lib-range input {
+    display: block;
+    inline-size: 100%;
+    margin-block-start: var(--el-space-4);
+    padding: var(--el-space-4) var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* The view's name at the start of the one toolbar row, where the page's heading was. */
+/* "Library / Unread": the breadcrumb that leads the toolbar row; Library goes back to All recordings. */
+.v2-lib-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    min-width: 0;
+    margin-inline-end: var(--el-space-8);
+}
+
+.v2-lib-crumbs nav {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-lib-crumb:hover,
+.v2-lib-crumb:focus-visible {
+    color: var(--el-role-text-primary);
+    text-decoration: underline;
+}
+
+.v2-lib-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The pills: a second row only while filters are on. */
+.v2-lib-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-8);
+    padding-block-end: var(--el-space-8);
+}
+
+.v2-pill {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    border: var(--el-border-hairline) solid var(--el-role-accent-default);
+    border-radius: var(--el-component-chip-radius);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-pill-main {
+    display: inline-flex;
+    gap: var(--el-space-4);
+    padding-inline: var(--el-space-12) var(--el-space-4);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-pill-key {
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-pill-values {
+    max-inline-size: calc(var(--el-space-64) * 4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-pill-x {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-4) var(--el-space-8);
+    color: inherit;
+}
+
+.v2-pill-x .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* The sidebar's Library: groups with a quiet heading, counts quiet but for Needs you and Unread. */
+.v2-sb-lib {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+}
+
+.v2-sb-lib .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-sb-subcount.is-strong {
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* MY VIEWS and LABELS: a quiet heading that folds its group, with + at its end. */
+.v2-sb-group {
+    position: relative;
+}
+
+.v2-sb-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12) var(--el-space-40);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-group > .v2-sb-add {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+}
+
+.v2-sb-view {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-sb-view > .v2-sb-subitem {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* A view's open ⋯ menu sits above the rows after it (they come later on the page, at the same level), so Rename, Move
+   and Delete are what a click there reaches, in the sidebar and in the panel or its flyout alike. */
+.v2-sb-view:focus-within,
+.v2-sb-view:has(.v2-sb-more[aria-expanded='true']) {
+    z-index: var(--el-layer-menu);
+}
+
+.v2-sb-view > .fi-dropdown,
+.v2-sb-view > .v2-sb-more {
+    position: absolute;
+    inset-inline-end: var(--el-space-4);
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.v2-sb-more {
+    opacity: 0;
+}
+
+.v2-sb-view:hover .v2-sb-subcount,
+.v2-sb-view:focus-within .v2-sb-subcount {
+    visibility: hidden;
+}
+
+.v2-sb-view:hover .v2-sb-more,
+.v2-sb-view:focus-within .v2-sb-more,
+.v2-sb-more[aria-expanded='true'] {
+    opacity: 1;
+}
+
+.v2-sb-empty {
+    padding: var(--el-space-4) var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-sb-caret {
+    margin-inline-start: auto;
+}
+
+.v2-sb-fold > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.v2-sb-fold > summary::-webkit-details-marker {
+    display: none;
+}
+
+.v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(90deg);
+}
+
+/* ● Record ▾: Record a voice note, and the menu with Import audio files; one accent button in two parts. */
+.v2-sb-split {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-2);
+    margin-inline: var(--el-space-4);
+}
+
+.v2-sb-split > .v2-sb-record {
+    flex: 1 1 auto;
+    margin-inline: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+
+.v2-sb-split > .fi-dropdown,
+.v2-sb-split > .fi-dropdown > .fi-dropdown-trigger {
+    display: flex;
+}
+
+.v2-sb-record-more {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-8);
+    border-start-end-radius: var(--el-radius-md);
+    border-end-end-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-sb-record-more:hover,
+.v2-sb-record-more[aria-expanded='true'] {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-sb-record-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb.v2-rail .v2-sb-record-more {
+    display: none;
+}
+
+/* The Library's sidebar places: the one you are on has a quiet fill, never a bold row among bold rows. */
+.v2-sb-lib .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-weight);
+}
+
+/* The new Library starts high: no header, the one toolbar row just under the top bar (2.0.0-p: the list within 120). */
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-header-main-ctn {
+    padding-block-start: var(--el-space-8);
+}
+
+/* The one toolbar row sits close to the list, and the first group's heading close to the toolbar. */
+.v2-lib-shell .v2-library .fi-ta-header-toolbar {
+    padding-block-end: var(--el-space-4);
+}
+
+.v2-lib-shell .v2-library .fi-ta-content > .fi-ta-group-header:first-child {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The search is as tall as the row's chips (32), so the row is one line of equal controls. */
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input-wrp {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input {
+    padding-block: var(--el-space-4);
+}
+
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-content > .fi-sc {
+    row-gap: 0;
+}
+
+/* The row's content may shrink to the list's width (beside the filter panel too), so a long snippet ends in "…" and the
+   time stays in view. */
+.v2-library .fi-ta-record-content-ctn > * {
+    min-width: 0;
+}
+
+/* The select box has its own place before the source's mark (2.0.0-p), so a click on the mark filters by it. */
+.v2-library .fi-ta-record > .fi-ta-record-checkbox {
+    inset-inline-start: var(--el-space-4);
+}
+
+.v2-library .v2-lib-row {
+    padding-inline-start: var(--el-space-32);
+}
+
+.v2-library .fi-ta-record:hover .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:checked) .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:focus-visible) .v2-row-tile,
+.v2-library .fi-ta-ctn:has(.fi-ta-record-checkbox:checked) .v2-row-tile {
+    visibility: visible;
+}
+
+button.v2-row-tile {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+}
+
+button.v2-row-tile:focus-visible,
+.v2-label-quick:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-label-quick {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--el-space-2);
+    border: 0;
+    border-radius: var(--el-radius-full);
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Compact density: one line less on each row. */
+:root[data-density='compact'] .v2-library .v2-lib-row {
+    min-height: auto;
+    padding-block: var(--el-space-4);
+}
+
+:root[data-density='compact'] .v2-library [data-snippet] {
+    display: none;
+}
+
+/* A menu's group names (Sort & display's View, Sort, Group by, Density; the selection's Organise, Export): quiet
+   headings, never items. */
+.fi-dropdown-header[data-menu-heading] {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The new Library's sidebar is denser (docs/PLAN_LIBRARY_FILTERS.md section 4: items 32 tall) so more of it shows. */
+.v2-sb:has(.v2-sb-lib) .v2-sb-item {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-sb-lib .v2-sb-sub,
+.v2-sb-folding .v2-sb-sub {
+    margin-block: var(--el-space-2);
+}
+
+.v2-sb-lib {
+    gap: var(--el-space-4);
+}
+
+/* PROJECTS folds with the arrow at the end of its row; the row itself still opens the Projects page. */
+.v2-sb-folding {
+    position: relative;
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle:hover {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(90deg);
+}
+
+.v2-sb.v2-rail .v2-sb-fold-toggle,
+.v2-sb.v2-rail .v2-sb-group,
+.v2-sb.v2-rail .v2-sb-scroll span {
+    display: none;
+}
+
+/* The scrolling middle says when there is more: "More" at its foot (and an arrow back at its top), on the sidebar's own
+   background, above what scrolls under it. */
+.v2-sb-inner,
+.v2-sb-nav {
+    background-color: inherit;
+}
+
+.v2-sb-nav {
+    position: relative;
+    /* The sticky "More" and back-to-top bars never cover the item the keyboard moved to. */
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-sb-scroll {
+    position: sticky;
+    z-index: var(--el-layer-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-4);
+    inline-size: 100%;
+    min-block-size: var(--el-space-24);
+    border: 0;
+    background-color: inherit;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    cursor: pointer;
+}
+
+.v2-sb-scroll:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-sb-scroll .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-scroll.is-down {
+    inset-block-end: 0;
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up {
+    inset-block-start: 0;
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up .v2-icon {
+    transform: rotate(180deg);
+}
+
+/* ================================================================== the three levels: rail, panel, page
+   docs/PLAN_NAV_3_LEVELS.md: the rail (72), the place's panel (260; folded, the rail alone), then the page. Filament's
+   sidebar is both: open, its width is the rail and the panel; folded, the rail. Under the flyout width the panel opens
+   over the page from a rail icon; on a phone the whole frame is the menu's drawer. Right to left it all mirrors. */
+:root:has(.v2-frame) {
+    --sidebar-width: calc(var(--el-space-24) * 3 + var(--el-space-20) * 13);
+    --collapsed-sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+:root:has(.v2-frame[data-place='home']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+.v2-frame {
+    overflow: visible;
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-frame-inner {
+    position: relative;
+    display: flex;
+    height: 100%;
+}
+
+.v2-rail {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: calc(var(--el-space-24) * 3);
+    padding-block: var(--el-space-12);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-rail-logo {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    margin-block-end: var(--el-space-8);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-rail-logo::before {
+    content: attr(data-initial);
+}
+
+.v2-rail-logo:hover,
+.v2-rail-logo.is-on {
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+/* ● Record: the round accent button, the only primary action; its menu on the small chevron at its corner. */
+.v2-rail-record {
+    position: relative;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    margin-block-end: var(--el-space-8);
+}
+
+.v2-rail-rec {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-rail-rec:hover .v2-rail-rec-dot,
+.v2-rail-rec.is-on .v2-rail-rec-dot {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-rail-record > .fi-dropdown {
+    position: absolute;
+    inset-block-start: var(--el-space-24);
+    inset-inline-end: calc(var(--el-space-8) * -1);
+}
+
+/* FIX-06: a 24 px target (WCAG 2.5.8). The 20 px circle (its ::before) stays where it was, at the target's top start
+   corner: the target grows out past Record, never over more of it, so Record keeps a whole 24 px of its own. */
+.v2-rail-rec-more {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-24);
+    height: var(--el-space-24);
+    padding-block-end: var(--el-space-4);
+    padding-inline-end: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-more::before {
+    position: absolute;
+    inset-block: 0 var(--el-space-4);
+    inset-inline: 0 var(--el-space-4);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    content: '';
+}
+
+.v2-rail-rec-more > .v2-icon {
+    position: relative;
+}
+
+/* FIX-06: its focus ring goes round the 20 px circle you see, not the 24 px target, so it is centred on the circle. */
+.v2-rail-rec-more:focus-visible {
+    outline: none;
+}
+
+.v2-rail-rec-more:focus-visible::before {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-rail-rec-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-rail-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-rail-list > li {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.v2-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    width: calc(var(--el-space-32) * 2);
+    padding-block: var(--el-space-8) var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-rail-item:hover {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* Selected: a soft accent tint, the icon and its name in the accent. */
+.v2-rail-item.is-on {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-rail-item.is-off {
+    color: var(--el-role-text-disabled);
+    cursor: not-allowed;
+}
+
+.v2-rail-icon {
+    position: relative;
+    display: inline-flex;
+}
+
+.v2-rail-icon .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+.v2-rail-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-rail-badge {
+    position: absolute;
+    inset-block-start: var(--el-space-2);
+    inset-inline-start: calc(50% + var(--el-space-4));
+    min-width: var(--el-icon-sm);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--el-text-caption-line);
+    text-align: center;
+}
+
+.v2-rail-dot {
+    position: absolute;
+    inset-block-start: calc(var(--el-space-2) * -1);
+    inset-inline-end: calc(var(--el-space-2) * -1);
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-warning-default);
+}
+
+.v2-rail-foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+}
+
+.v2-rail-avatar {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* W-230: Filament moves its sidebar with `translate`, and at rest (0) that still makes the sidebar the box a menu with
+   position: fixed is placed in. Right to left the frame is on the right, so the rail's menus (Account, Record) opened
+   a frame's width off the screen. At rest the frame has none; the phone's drawer still slides. */
+:root .fi-sidebar.v2-frame.fi-sidebar-open {
+    translate: none;
+}
+
+@media (min-width: 1024px) {
+    :root .fi-body.fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar.v2-frame:not(.fi-sidebar-open) {
+        translate: none;
+    }
+}
+
+/* UX-18: the account menu is 320 px wide (Filament sized a sidebar's user menu by the sidebar, the box it was placed
+   in before W-230). */
+:root .fi-sidebar .fi-user-menu.v2-um .fi-dropdown-panel {
+    width: calc(var(--el-space-40) * 8);
+    max-width: calc(100% - var(--el-space-24)) !important;
+}
+
+/* UX-18: the rail's Account, a rail item: a 28 px avatar in a 40 px target, "Account" under it; an 8% tint behind the
+   avatar on hover, a 2 px accent ring round it while its menu is open, and an 8 px dot only for an account problem. */
+.v2-um-trigger.is-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    width: calc(var(--el-space-32) * 2);
+    padding-block-end: var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+}
+
+.v2-um-trigger.is-rail:hover,
+.v2-um-trigger.is-rail[aria-expanded='true'] {
+    color: var(--el-role-text-primary);
+}
+
+.v2-um-hit {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-desktop-avatar-rail-hit);
+    height: var(--el-desktop-avatar-rail-hit);
+    border-radius: var(--el-radius-full);
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-um-trigger.is-rail:hover .v2-um-hit {
+    background-color: color-mix(in srgb, var(--el-role-text-primary) 8%, transparent);
+}
+
+.v2-um-trigger.is-rail[aria-expanded='true'] .v2-avatar {
+    outline: var(--el-focus-width) solid var(--el-role-accent-default);
+    outline-offset: 0;
+}
+
+/* The top bar's button (no rail): the avatar as it is, the dot on its corner. */
+.v2-um-hit.is-plain {
+    width: auto;
+    height: auto;
+}
+
+.v2-um-hit.is-plain .v2-um-dot {
+    inset-block-start: 0;
+    inset-inline-end: 0;
+}
+
+.v2-um-dot {
+    position: absolute;
+    inset-block-start: var(--el-space-4);
+    inset-inline-end: var(--el-space-4);
+    box-sizing: content-box;
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border: var(--el-space-2) solid var(--el-role-bg-subtle);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+}
+
+/* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
+.v2-panels {
+    flex: none;
+    width: calc(var(--el-space-20) * 13);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    min-height: 100%;
+    padding: var(--el-space-12) var(--el-space-8) var(--el-space-16);
+}
+
+.v2-panel[hidden] {
+    display: none;
+}
+
+.v2-panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-layout-control-height);
+    padding-inline: var(--el-space-8) 0;
+}
+
+.v2-panel-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.v2-panel-title a:hover {
+    text-decoration: underline;
+}
+
+.v2-panel-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    margin: 0;
+    padding-inline: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-panel .v2-sb-sub {
+    margin-block: 0;
+    padding-inline-start: 0;
+}
+
+.v2-panel .v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-24);
+}
+
+.v2-panel .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-panel .v2-sb-group-title {
+    padding-inline-start: var(--el-space-8);
+}
+
+.v2-panel-foot {
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-panel-find,
+.v2-panel-search input {
+    width: 100%;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-panel-find {
+    margin-block-end: var(--el-space-4);
+}
+
+.v2-panel-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-panel-search > .v2-icon {
+    position: absolute;
+    inset-inline-start: var(--el-space-8);
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+    pointer-events: none;
+}
+
+.v2-panel-search input {
+    padding-inline-start: var(--el-space-32);
+}
+
+@media (min-width: 1024px) {
+    /* Folded: the rail alone; under the flyout width the panel opens over the page from a rail icon (its ⊟ closes it). */
+    .v2-frame:not(.fi-sidebar-open) .v2-panels {
+        display: none;
+    }
+
+    .v2-frame .v2-frame-inner.is-flyout .v2-panels {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: calc(var(--el-space-24) * 3);
+        z-index: var(--el-layer-overlay);
+        display: block;
+        box-shadow: var(--el-shadow-3);
+    }
+}
+
+/* A page's inner list (Settings' groups of several pages): the group's pages, the open one as a card. */
+.v2-inner-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+}
+
+.v2-inner-list-title {
+    margin: 0 0 var(--el-space-4);
+    padding-inline: var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-inner-item {
+    display: flex;
+    align-items: center;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid transparent;
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-inner-item:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-inner-item.is-on {
+    border-color: var(--el-role-border-default);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* A page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): the Library's All · Calls · Meetings · Voice notes · Other
+   with their counts, Live Assist's Upcoming · Past reports · Practice. The open one is underlined. */
+.v2-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-16);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.v2-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-2);
+    border-block-end: var(--el-focus-width) solid transparent;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-tab:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-tab.is-on {
+    border-block-end-color: var(--el-role-text-primary);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-tab-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-lib-tabs {
+    margin-inline-end: var(--el-space-8);
+}
+
+/* The page's tabs under its heading (Live Assist). */
+.v2-page-tabs {
+    margin-block: var(--el-space-4) var(--el-space-8);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* With the three levels (docs/PLAN_NAV_3_LEVELS.md section 4): the filters come from the end side (the right; the left
+   in Urdu), 320 wide (eight of space-40); beside the list from --el-breakpoint-wide, over it below. */
+.v2-lib-shell.is-right > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    order: 2;
+}
+
+.v2-lib-shell.is-right .v2-lib-panel {
+    inline-size: calc(var(--el-space-40) * 8);
+}
+
+.v2-lib-shell.is-right.is-drawer .v2-lib-panel {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+}
+
+/* The breadcrumb keeps its words. */
+.v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    display: flex;
+    flex: none;
+}
+
+/* Settings › Appearance › Sidebar style for the rail and its panels: Soft grey (their own), Light, or Dark (the light
+   theme's frame drawn in its text colour; under the dark theme it is dark already). */
+.v2-frame[data-style='light'],
+.v2-frame[data-style='light'] .v2-rail,
+.v2-frame[data-style='light'] .v2-panels {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-frame[data-style='light'] .v2-rail-item:hover,
+.v2-frame[data-style='light'] .v2-sb-subitem:hover,
+.v2-frame[data-style='light'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'],
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panels {
+    border-inline-end-color: var(--el-role-text-primary);
+    background-color: var(--el-role-text-primary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-rec,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-group-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subcount {
+    color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item.is-on,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-text-secondary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-foot {
+    border-block-start-color: var(--el-role-text-secondary);
+}
+
+/* Setup & health is the rail's own place, with no panel: the rail alone, as on Home. */
+:root:has(.v2-frame[data-place='setup']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+/* The Library's count in its header under the wide width, where the table's own count folds away with its narrower
+   box, so it never depends on the table's foot (while the filters push the list, their panel's title says it). */
+.v2-lib-total {
+    display: none;
+    flex: none;
+    margin-inline-end: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 1440px) {
+    .v2-lib-shell.is-right .v2-lib-total {
+        display: block;
+    }
+}
+
+/* Settings' home: "Show groups" while the panel isn't beside the page (folded, or under the flyout width). */
+.el-set-show-groups {
+    margin-block-end: var(--el-space-16);
+    cursor: pointer;
+}
+
+:root:has(.v2-frame.fi-sidebar-open) .el-set-show-groups {
+    display: none;
+}
+
+/* The Projects overview: a card per project (its counts, its last activity, pinned), the tree being the panel's. */
+.v2-projects-overview .v2-project-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-12);
+    min-width: 0;
+}
+
+.v2-project-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+    min-width: 0;
+}
+
+.v2-project-card-name {
+    overflow: hidden;
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+    line-height: var(--el-text-body-strong-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-project-card-meta {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-body-line);
+}
+
+.v2-project-card-pin {
+    flex: none;
+    margin-inline-start: auto;
+    padding-inline: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    padding-inline: var(--el-space-8);
+}
+
+.v2-projects-overview .fi-ta-content-grid .fi-ta-record::after {
+    display: none;
+}
+
+/* The filter panel's title says how many the list holds (with the three levels; beside the list the toolbar has no
+   room for it), and the toolbar's count goes while the panel pushes the list. */
+.v2-lib-panel-total {
+    margin-inline-start: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-shell.is-right.is-pushing .v2-lib-total {
+    display: none;
+}
+
+/* ================================================================== Decision 18: the header makes room in order
+   (docs/PLAN_V2_1_POLISH.md, an owner request): the page title never loses its words, and no tab or toolbar label is cut
+   or wrapped. filament.v2.header-fit lays each step out, measures it and keeps the first that fits on the page's root
+   (resources/js/header-fit-core.cjs decides the order); these rules draw the steps. */
+
+/* The top bar's ⌕ button: the field itself, folded to a square (its words and ⌘K hidden); a click, ⌘K or the focus opens
+   it over the bar, from one side to the other, and it folds again as the focus leaves it. */
+:root[data-tb-search='button'] .fi-topbar.v2-tb {
+    position: relative;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) {
+    flex: none;
+    inline-size: var(--el-layout-control-height);
+    min-inline-size: 0;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:focus-within {
+    position: absolute;
+    inset-inline: var(--el-layout-page-padding-mobile);
+    inset-block-start: 50%;
+    z-index: var(--el-layer-sticky);
+    max-inline-size: none;
+    margin: 0;
+    translate: 0 -50%;
+}
+
+/* The Library's search folded the same way (on the toolbar row's first line), and open over that line. */
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    position: relative;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    flex: none;
+    inline-size: var(--el-component-chip-height);
+    min-inline-size: 0;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .v2-library .fi-ta-search-field > .fi-input-wrp:focus-within {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 0;
+    z-index: var(--el-layer-sticky);
+    max-inline-size: none;
+    margin: 0;
+}
+
+/* Folded, the field is a square ⌕: the glyph in the middle, the input over the whole square (a click opens it), its
+   words and ⌘K hidden. While the Library's search holds words it looks on, as a chip with a filter on does. */
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    position: relative;
+    overflow: hidden;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp {
+    block-size: var(--el-layout-control-height);
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) {
+    block-size: var(--el-component-chip-height);
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-prefix,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input-wrp-prefix {
+    position: absolute;
+    inset: 0;
+    justify-content: center;
+    padding: 0;
+    pointer-events: none;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-content-ctn,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input-wrp-content-ctn {
+    position: absolute;
+    inset: 0;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input {
+    inline-size: 100%;
+    block-size: 100%;
+    padding: 0;
+    color: transparent;
+    cursor: pointer;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input::placeholder,
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within) .fi-input::placeholder {
+    color: transparent;
+}
+
+:root[data-tb-search='button'] .v2-tb-search:not(:focus-within) .fi-input-wrp-suffix {
+    display: none;
+}
+
+:root[data-lib-search='button'] .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp:not(:focus-within):has(.fi-input:not(:placeholder-shown)) {
+    border-color: var(--el-role-accent-default);
+    background-color: var(--el-role-accent-soft);
+}
+
+/* The Library's toolbar row with the three levels: [Library / title  count] [tabs] [empty] [search] [Filters]
+   [Sort & display]. The title's words are whole; the tabs and the toolbar's buttons never shrink, the tabs' words never
+   wrap (.v2-tab); the search, as the top bar's, takes 180 to 260 px at the row's end, the empty space going first. The
+   count is the title's (inside its group), 24 px before the tabs on one line so it never reads as one of them. */
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    flex-wrap: wrap;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    margin-inline-end: 0;
+}
+
+.v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
+    margin-inline: var(--el-space-4) 0;
+}
+
+/* Every line of a title that takes more than one follows the row's direction (an English name in Urdu too). */
+.v2-lib-shell.is-right .v2-lib-title {
+    text-align: match-parent;
+    text-align: -webkit-match-parent;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    flex: none;
+    margin-inline-end: 0;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
+    flex: 1 1 calc(var(--el-space-40) * 4.5);
+    order: 0;
+    min-inline-size: calc(var(--el-space-40) * 4.5);
+    max-inline-size: clamp(calc(var(--el-space-40) * 4.5), 22%, calc(var(--el-space-40) * 6.5));
+    margin-inline-start: auto;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+    display: flex;
+    flex: none;
+    flex-wrap: nowrap;
+    order: 0;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+}
+
+.v2-lib-shell.is-right .v2-lib-tools .v2-chip {
+    position: relative;
+}
+
+/* One line, with every word: the tabs 24 px after the title, then the empty space, the search and the toolbar. The
+   markup has the search and the toolbar before the tabs, so that on two lines the keys go as the rows read; only this
+   one-line layout reorders them for the eye. */
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    order: 1;
+    margin-inline-start: var(--el-space-16);
+}
+
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .fi-ta-search-field > .fi-input-wrp {
+    order: 2;
+}
+
+:root:not([data-lib-lines='2']) .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+    order: 3;
+}
+
+.v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-break {
+    display: none;
+}
+
+/* Two lines, as the desktop's title row over its row 2, in the markup's order: [title  count] [empty] [search] [Filters]
+   [Sort & display], then the tabs on a row of their own, which nothing covers. The break (.v2-lib-break, after the
+   toolbar) is a whole line 8 px tall. */
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+    row-gap: 0;
+}
+
+:root[data-lib-lines='2'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-break {
+    display: block;
+    flex-basis: 100%;
+    block-size: var(--el-space-8);
+}
+
+/* On the title row the toolbar's labels go first: [Filters] and [Sort & display] keep their icons (and a filter count),
+   their words hidden for the eye only, so the buttons keep their names; the tooltips say them too. */
+:root[data-lib-labels='off'] .v2-lib-shell.is-right .v2-lib-tools .v2-chip-words {
+    position: absolute;
+    width: var(--el-border-hairline);
+    height: var(--el-border-hairline);
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Then the count goes under the title (both still the title's group, as wide as the wider of them). */
+:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--el-space-4);
+    row-gap: 0;
+}
+
+:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+/* Nastaliq's letters reach far below the line: in Urdu the count keeps a little air under the title. */
+html[lang='ur']:root[data-lib-count='under'] .v2-lib-shell.is-right .v2-lib-crumbs > .v2-lib-total {
+    margin-block-start: var(--el-space-4);
+}
+
+/* The tabs' row scrolls sideways only when the tabs alone do not fit it, as the list chips' row does: one line, no
+   scrollbar drawn and no fade (no gradients, DS rule 1); the tab cut at the edge shows there is more. A tab's focus ring
+   is drawn inside it, where the scroller cannot cut it. */
+:root[data-lib-tabs='scroll'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tabs {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+:root[data-lib-tabs='scroll'] .v2-lib-shell.is-right .v2-lib-tabs .v2-tab:focus-visible {
+    outline-offset: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
+}
+
+/* Only when even the ⌕ button leaves no room (a window under the console's least width, or a very long view name on a
+   phone) does the title take more lines: every word kept, a word longer than the line broken where it must. It takes
+   what the search and the toolbar leave (from nothing, so they stay on its line). */
+:root[data-lib-title='wraps'] .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    flex: 1 1 0;
+    min-inline-size: 0;
+}
+
+:root[data-lib-title='wraps'] .v2-lib-shell.is-right .v2-lib-title {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+/* UX-22 (PLAN_V2_1_POLISH 3b): a Library row's right-click menu (filament.v2.context-menu-script), the desktop's on
+   Windows: Windows 11's menu with 8 px corners, 32 px rows and 16 px glyphs, a hairline between groups, a greyed title
+   for several, light and dark from the tokens. In its own layer above the page, never wider or taller than the window. */
+.v2-ctx-layer {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-overlay);
+}
+
+.v2-ctx {
+    position: fixed;
+    min-inline-size: calc(var(--el-space-64) * 3.5);
+    max-inline-size: min(calc(var(--el-space-64) * 5), calc(100% - var(--el-space-16)));
+    max-block-size: calc(100% - var(--el-space-16));
+    overflow-y: auto;
+    padding: var(--el-space-4);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background: var(--el-role-bg-surface);
+    box-shadow: var(--el-shadow-2);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+    outline: none;
+}
+
+.v2-ctx.is-sub {
+    min-inline-size: calc(var(--el-space-64) * 3);
+}
+
+.v2-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-12);
+    min-block-size: var(--el-space-32);
+    padding-block: var(--el-space-4);
+    padding-inline: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-sm);
+    cursor: default;
+    user-select: none;
+}
+
+.v2-ctx-item:focus,
+.v2-ctx-item[aria-expanded='true'] {
+    outline: none;
+    background: var(--el-role-bg-subtle);
+}
+
+.v2-ctx-item:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-ctx-item.is-danger {
+    color: var(--el-role-danger-default);
+}
+
+.v2-ctx-icon,
+.v2-ctx-more {
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-icon-sm);
+    block-size: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-icon .v2-icon,
+.v2-ctx-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-ctx-item.is-danger .v2-ctx-icon {
+    color: inherit;
+}
+
+.v2-ctx-item[aria-checked='true'] .v2-ctx-icon {
+    color: var(--el-role-accent-text);
+}
+
+.v2-ctx-label {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.v2-ctx-more {
+    margin-inline-start: var(--el-space-16);
+}
+
+.v2-ctx-title {
+    padding: var(--el-space-4) var(--el-space-8);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-ctx-sep {
+    block-size: 0;
+    margin-block: var(--el-space-4);
+    margin-inline: calc(-1 * var(--el-space-4));
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* FIX-06: the workspace's mark draws its letters, so the button's words are its name and role only. */
+.el-tb-workspace-mark[data-initials]::before {
+    content: attr(data-initials);
+}
+
+/* FIX-06: the console's plain tables (the Workspace page's invitations and invite links, Usage's By person) set their
+   headings at 70 % opacity, under 4.5 to 1: in the new design their heading rows are marked (v2-plain-thead) and drawn
+   whole, in the secondary text colour (WCAG 1.4.3). The inline opacity is classic's, so it needs the !important. */
+.v2-plain-thead {
+    opacity: 1 !important;
+    color: var(--el-role-text-secondary);
 }

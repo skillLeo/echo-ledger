@@ -16,8 +16,8 @@ use desktop_lib::error::AppError;
 use desktop_lib::net::api::ApiClient;
 use desktop_lib::net::models::{SegmentDto, ServerConfig, UsageReport};
 use desktop_lib::net::uploader::{
-    AfterAttempt, DiscardQueue, PendingUpload, UNVERIFIABLE, UploadItem, UploadOutcome, UploadQueue,
-    UploadTiming, UsageQueue, after_attempt, delete_local_audio, drain_discards, drain_usage,
+    AfterAttempt, CallEnd, DiscardQueue, EndQueue, PendingUpload, UNVERIFIABLE, UploadItem, UploadOutcome, UploadQueue,
+    UploadTiming, UsageQueue, after_attempt, delete_local_audio, drain_discards, drain_ends, drain_usage,
     effective_ended_at, file_sha256, flac_stream_info, is_final_failure, missing_chunks, mime_for,
     plan_chunks, states, upload, upload_percent, upload_with,
 };
@@ -1880,6 +1880,17 @@ fn queue_entries_from_before_v1_1_load_as_queued() {
 }
 
 #[test]
+fn an_upload_row_names_its_recording_on_the_server_once_there_is_one() {
+    // UX-08: Activity's group of uploads that didn't finish lists recordings; the row says which one it is.
+    let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
+    assert!(serde_json::to_value(UploadItem::from(&item)).unwrap().get("sessionId").is_none(), "none yet: left out");
+    item.created_session_id = Some("01JBSESSION".into());
+    assert_eq!(serde_json::to_value(UploadItem::from(&item)).unwrap()["sessionId"], "01JBSESSION");
+    item.server_session_id = Some("01JBLIVE".into());
+    assert_eq!(UploadItem::from(&item).session_id.as_deref(), Some("01JBLIVE"), "the captions' session it finishes");
+}
+
+#[test]
 fn upload_items_for_the_ui_use_camel_case_and_a_stable_id() {
     let mut item = pending(Path::new("data/recordings/9a1d"), PathBuf::from("data/recordings/9a1d/recording.flac"));
     item.title = Some("Standup".into());
@@ -1974,6 +1985,113 @@ async fn the_discard_queue_deletes_sessions_and_treats_404_as_done() {
         queue.push(id.to_string());
     }
     assert_eq!(queue.items, ["S3", "S4"]);
+}
+
+// ---- The end of a call (contract 2.0.0-z) -------------------------------------------------------------------------
+
+fn end(id: &str) -> CallEnd {
+    CallEnd { session_id: id.into(), ended_at: "2026-11-26T09:40:12.345Z".into(), duration_ms: 125_000 }
+}
+
+#[tokio::test]
+async fn ends_of_calls_are_sent_and_404_409_422_drop_them_while_5xx_waits_for_the_next_cycle() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/sessions/E1", Reply::json(200, json!({"data": {"id": "E1"}})))
+            .fixed("PATCH", "/api/sessions/E2", Reply::json(409, json!({"error": "not_recording", "message": "This recording isn't being recorded."})))
+            .fixed("PATCH", "/api/sessions/E3", Reply::json(404, fixture("server/sessions_finish_404.json")))
+            .fixed("PATCH", "/api/sessions/E4", Reply::json(422, json!({"message": "The ended at field must be a valid date."})))
+            .fixed("PATCH", "/api/sessions/E5", Reply::json(503, json!({"message": "Service Unavailable"}))),
+    );
+    let ends: Vec<CallEnd> = ["E1", "E2", "E3", "E4", "E5", "E6"].iter().map(|id| end(id)).collect();
+    let drain = drain_ends(&api(&server), &ends).await;
+    assert_eq!(drain.done, ["E1", "E2", "E3", "E4"], "stored, or refused for good");
+    assert!(matches!(drain.stopped, Some(AppError::Server { status: 503, .. })), "{:?}", drain.stopped);
+    assert_eq!(server.requests().len(), 5, "E6 waits for the next cycle after E5 failed");
+    assert_eq!(server.requests()[0].json(), json!({"ended_at": "2026-11-26T09:40:12.345Z", "duration_ms": 125000}));
+
+    // What stays queued is what wasn't done; on disk as ends.json.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ends.json");
+    let mut queue = EndQueue { items: ends };
+    queue.items.retain(|e| !drain.done.contains(&e.session_id));
+    queue.save(&path).unwrap();
+    let left: Vec<String> = EndQueue::load(&path).items.into_iter().map(|e| e.session_id).collect();
+    assert_eq!(left, ["E5", "E6"]);
+}
+
+#[tokio::test]
+async fn an_end_refused_for_good_never_blocks_the_ends_behind_it() {
+    // A 403 (the role changed to viewer) or a 400 is dropped, as a usage report is; 429 and 408 wait like a 5xx.
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/sessions/F1", Reply::json(403, json!({"message": "This action is unauthorized."})))
+            .fixed("PATCH", "/api/sessions/F2", Reply::json(400, json!({"message": "Bad request."})))
+            .fixed("PATCH", "/api/sessions/F3", Reply::json(200, json!({"data": {"id": "F3"}})))
+            .fixed("PATCH", "/api/sessions/F4", Reply::json(429, json!({"message": "Too Many Attempts."}))),
+    );
+    let ends: Vec<CallEnd> = ["F1", "F2", "F3", "F4", "F5"].iter().map(|id| end(id)).collect();
+    let drain = drain_ends(&api(&server), &ends).await;
+    assert_eq!(drain.done, ["F1", "F2", "F3"]);
+    assert!(matches!(drain.stopped, Some(AppError::Server { status: 429, .. })), "{:?}", drain.stopped);
+    assert_eq!(server.requests().len(), 4, "F5 waits for the next cycle");
+}
+
+#[tokio::test]
+async fn an_older_server_answers_the_end_with_200_and_the_entry_goes() {
+    // Today's live server validates only the keys it knows and answers 200 with the item, storing nothing: no gate.
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/OLD", Reply::json(200, json!({"data": {"id": "OLD", "title": null}}))));
+    let drain = drain_ends(&api(&server), &[end("OLD")]).await;
+    assert_eq!(drain.done, ["OLD"]);
+    assert!(drain.stopped.is_none());
+}
+
+#[tokio::test]
+async fn an_unpaired_device_keeps_its_ends_of_calls() {
+    let server = MockServer::start(Router::new().fixed("PATCH", "/api/sessions/E1", Reply::json(401, json!({"message": "Unauthenticated."}))));
+    let drain = drain_ends(&api(&server), &[end("E1")]).await;
+    assert!(drain.done.is_empty());
+    assert!(matches!(drain.stopped, Some(AppError::NotPaired)));
+}
+
+#[test]
+fn the_end_queue_keeps_the_first_end_of_each_session() {
+    let mut queue = EndQueue::default();
+    queue.push(end("E1"));
+    queue.push(CallEnd { duration_ms: 1, ..end("E1") });
+    queue.push(end(""));
+    queue.push(end("E2"));
+    assert_eq!(queue.items.iter().map(|e| (e.session_id.as_str(), e.duration_ms)).collect::<Vec<_>>(), [("E1", 125_000), ("E2", 125_000)]);
+}
+
+// ---- Retry all (BE-03) --------------------------------------------------------------------------------------------
+
+#[test]
+fn retry_all_puts_back_every_failed_upload_of_this_account_and_nothing_else() {
+    use desktop_lib::owner::Owner;
+    let me = Owner::new("https://ledger.example.test", Some("ayesha@example.test"));
+    let other = Owner::new("https://ledger.example.test", Some("sara@example.test"));
+    let item = |name: &str, state: &str, owner: Option<&Owner>| PendingUpload {
+        dir: PathBuf::from(format!("/tmp/recordings/{name}")),
+        state: state.into(),
+        attempts: 4,
+        full_restarts: 1,
+        last_error: Some("The server could not verify this upload.".into()),
+        owner: owner.cloned(),
+        ..PendingUpload::default()
+    };
+    let mut queue = UploadQueue {
+        items: vec![item("a", "failed", None), item("b", "failed", Some(&me)), item("c", "uploading", None), item("d", "failed", Some(&other))],
+    };
+    assert_eq!(queue.retry_failed(Some(&me)), 2, "mine and the ones made before accounts; not Sara's, not one on its way");
+    let by = |id: &str| queue.items.iter().find(|i| i.id() == id).unwrap().clone();
+    for id in ["a", "b"] {
+        let i = by(id);
+        assert_eq!((i.state.as_str(), i.attempts, i.full_restarts, i.last_error.as_deref()), ("queued", 0, 0, None), "{id}: as its own Retry does");
+    }
+    assert_eq!(by("c").state, "uploading");
+    assert_eq!(by("d").state, "failed", "another account's stays as it is");
+    assert_eq!(queue.retry_failed(Some(&me)), 0, "nothing failed of mine: nothing to do");
 }
 
 // ---- Whose recording it is (v1.5) ------------------------------------------------------------------------------

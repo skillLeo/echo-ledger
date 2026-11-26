@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ask about a recording and across recordings, and each line's language (contract 2.0.0-o). values-ur/ has the same keys. -->
+<resources>
+    <string name="v2_ask_everywhere">All my recordings</string>
+    <string name="v2_ask_empty_body_all">Ask in your own words about all your recordings or one project. Answers say which recording they come from.</string>
+    <string name="v2_ask_nothing_yet">There is nothing transcribed to ask about yet. Ask again once a transcript is ready.</string>
+    <string name="v2_ask_recording_help">Ask about this recording: its transcript and its notes.</string>
+    <string name="v2_ask_recording_hint">What did they agree on?</string>
+    <string name="v2_rec_tab_ask">Ask</string>
+    <string name="v2_rec_ask">Ask</string>
+    <string name="v2_rec_lines_in">Lines in</string>
+    <string name="v2_rec_ask_locked">Ask is on a higher plan.</string>
+</resources>

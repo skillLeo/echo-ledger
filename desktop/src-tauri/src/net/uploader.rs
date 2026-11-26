@@ -224,6 +224,9 @@ pub struct UploadItem {
     pub progress: Option<u8>,
     /// The account it waits for, when it was made while another account was signed in here (v1.5).
     pub held_for: Option<String>,
+    /// Its recording on the server, once one was made (UX-08: Activity's group of uploads that didn't finish lists it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 impl From<&PendingUpload> for UploadItem {
@@ -240,6 +243,7 @@ impl From<&PendingUpload> for UploadItem {
             imported: p.imported,
             progress: p.progress,
             held_for: None,
+            session_id: p.server_session(),
         }
     }
 }
@@ -911,6 +915,20 @@ impl UploadQueue {
     pub fn failed(&self) -> usize {
         self.items.iter().filter(|i| i.is_failed()).count()
     }
+
+    /// Retry all (BE-03): every failed upload this account may send goes back to the queue, as its own Retry does (one
+    /// more automatic full restart allowed again). Another account's items stay as they are. Returns how many.
+    pub fn retry_failed(&mut self, current: Option<&crate::owner::Owner>) -> usize {
+        let mut n = 0;
+        for item in self.items.iter_mut().filter(|i| i.is_failed() && crate::owner::may_upload(i.owner.as_ref(), current)) {
+            item.state = states::QUEUED.into();
+            item.full_restarts = 0;
+            item.attempts = 0;
+            item.last_error = None;
+            n += 1;
+        }
+        n
+    }
 }
 
 /// Streaming usage reports waiting for `POST /api/usage` (`usage.json`).
@@ -965,6 +983,64 @@ impl DiscardQueue {
             self.items.push(session_id);
         }
     }
+}
+
+/// The end of a call to tell the server (contract 2.0.0-z): its open session, when the call ended (ISO 8601, UTC) and
+/// how long it lasted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallEnd {
+    pub session_id: String,
+    pub ended_at: String,
+    pub duration_ms: u64,
+}
+
+/// Ends of calls to send (`ends.json`), one per session: the server keeps the first, so the first queued stays.
+#[derive(Default, Serialize, Deserialize)]
+pub struct EndQueue {
+    #[serde(default)]
+    pub items: Vec<CallEnd>,
+}
+
+impl EndQueue {
+    pub fn load(path: &Path) -> Self {
+        load_json(path)
+    }
+
+    pub fn save(&self, path: &Path) -> AppResult<()> {
+        save_json(path, self)
+    }
+
+    pub fn push(&mut self, end: CallEnd) {
+        if !end.session_id.is_empty() && !self.items.iter().any(|e| e.session_id == end.session_id) {
+            self.items.push(end);
+        }
+    }
+}
+
+/// Result of sending queued ends of calls.
+#[derive(Debug, Default)]
+pub struct EndDrain {
+    /// Session ids to remove from the queue (stored, or refused for good).
+    pub done: Vec<String>,
+    pub stopped: Option<AppError>,
+}
+
+/// `PATCH /api/sessions/{id}` with each queued end, oldest first: `200` is done; a refusal for good (`404` gone, `409`
+/// `not_recording` already decided, `422`, a `403` after a role change…) drops it, as `drain_usage` does, so it never
+/// blocks the ends behind it; anything transient (or `NotPaired`) stops the drain so the rest waits for the next cycle.
+pub async fn drain_ends(api: &ApiClient, ends: &[CallEnd]) -> EndDrain {
+    let mut out = EndDrain::default();
+    for end in ends {
+        match api.end_call(&end.session_id, &end.ended_at, end.duration_ms).await {
+            Ok(()) => out.done.push(end.session_id.clone()),
+            Err(e) if e.is_permanent() && !matches!(e, AppError::NotPaired) => out.done.push(end.session_id.clone()),
+            Err(e) => {
+                out.stopped = Some(e);
+                break;
+            }
+        }
+    }
+    out
 }
 
 /// Result of sending queued usage reports.

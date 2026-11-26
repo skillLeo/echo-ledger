@@ -125,6 +125,16 @@ pub fn pill_origin(saved: Option<PillPosition>, areas: &[WorkArea], primary: Wor
         .unwrap_or_else(|| top_center(primary, size, margin))
 }
 
+/// Where the after-call window goes (the call choice, "next to the pill"): centred under the recording pill's visible
+/// part (`pill_visible` of its window's height) with `gap`, or above the pill when there is no room below, and kept
+/// inside the work area. `pill` and `pill_size` are the pill window's frame, `size` the after-call window's.
+pub fn beside_pill(area: WorkArea, pill: (i32, i32), pill_size: (u32, u32), pill_visible: u32, size: (u32, u32), gap: i32) -> (i32, i32) {
+    let x = pill.0 + (pill_size.0 as i32 - size.0 as i32) / 2;
+    let below = pill.1 + pill_visible.min(pill_size.1) as i32 + gap;
+    let y = if below + size.1 as i32 <= area.y + area.h as i32 { below } else { pill.1 - size.1 as i32 - gap };
+    clamp_into(area, (x, y), size)
+}
+
 /// A window's physical size on a display at scale `to`, from its size at scale `from` (pure). Per-monitor DPI on
 /// Windows keeps a window's logical size across monitors, so a pill 352 px wide at 100 % is 528 px at 150 %. Equal
 /// scales (a Mac's points, which are 1 on every display here) keep it.
@@ -266,6 +276,16 @@ pub const MAC_OVERLAY_BEHAVIOUR: usize = CAN_JOIN_ALL_SPACES | STATIONARY | IGNO
 
 /// `NSWindowStyleMaskNonactivatingPanel`: a click on the window never activates EchoLedger.
 pub const MAC_NONACTIVATING: usize = 1 << 7;
+
+/// The main window's buttons on a Mac and the `NSWindowStyleMask` bit each needs: close (`Closable`), minimise
+/// (`Miniaturizable`) and zoom (`Resizable`), all on a title bar (`Titled`).
+pub const MAC_MAIN_BUTTONS: [(&str, usize); 4] = [("title bar", 1 << 0), ("close", 1 << 1), ("minimise", 1 << 2), ("zoom", 1 << 3)];
+
+/// What a style lacks of the main window's buttons (pure), by name: none when it has its title bar, close, minimise and
+/// zoom buttons.
+pub fn mac_missing_buttons(style: usize) -> Vec<&'static str> {
+    MAC_MAIN_BUTTONS.iter().filter(|(_, bit)| style & bit == 0).map(|(name, _)| *name).collect()
+}
 
 /// An overlay's style on a Mac (pure): its own, plus non-activating. With the panel class (`macos::make_panel`), a click on
 /// the recording controls or the captions never brings EchoLedger (and its main window's Space) in front of the meeting,

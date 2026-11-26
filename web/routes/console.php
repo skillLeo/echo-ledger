@@ -31,6 +31,11 @@ Schedule::command('assist:relay-check')->everyFiveMinutes()->withoutOverlapping(
 
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 
+// W-INC-1124: the PHP extensions the server needs and a round trip through the recordings cipher. A failure writes one
+// critical log line, shows on the admin dashboard and emails the super admins once an hour (CheckServerHealth).
+// W-INC-1125: the web PHP too (--web, /health/php), the fix command in the email, and "fixed" when it passes again.
+Schedule::command('echoledger:health --report --web')->everyFiveMinutes()->withoutOverlapping(5);
+
 // Recordings left in "assembling" by a request or worker that died (docs/API.md "complete").
 Schedule::command('recordings:recover')->everyFiveMinutes()->withoutOverlapping(10);
 

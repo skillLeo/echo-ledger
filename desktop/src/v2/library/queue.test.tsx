@@ -1,11 +1,14 @@
-// The top of the v2 Library list (QueueV2): recordings waiting for Keep / Discard with Review, Keep all, Discard all,
+// The top of the v2 Library list (QueueV2): recordings waiting for Transcribe / Delete with Review, Transcribe all, Delete all,
 // Rename, Choose project, Language and Remember the language; Importing with Cancel; Uploads that need you with Retry /
 // Discard; Waiting for another account with Discard / Discard all N; Checking upload. The same core commands as classic.
+// Since PLAN_LIBRARY_FILTERS what needs the person (the calls waiting, the uploads that need them, the recordings waiting
+// for another account) is in the sidebar's Needs you, and what is on its way (imports, uploads being checked) in the
+// other views.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeUploadItem } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { LibraryV2 } from "./LibraryV2";
 
@@ -15,8 +18,9 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const NOW = new Date(2026, 9, 24, 12, 0);
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", language: null }, { id: "c2", name: "Northwind", language: null }] };
 const DISCARD = "Discard this recording? It can't be undone.";
+const DELETE = "Delete this recording? You can undo it for a few seconds.";
 
-async function show(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
+async function show(pending: PendingItem[] = [], uploads: UploadItem[] = [], view: "needs" | "all" = "needs") {
   respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
   respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
   respond("bin_list", { data: [] });
@@ -25,10 +29,15 @@ async function show(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("list_clients", CLIENTS);
   respond("pending_keep", undefined);
   respond("pending_discard", undefined);
+  respond("pending_delete", 1);
+  respond("pending_keep_audio", undefined);
   respond("upload_retry", undefined);
   respond("upload_discard", undefined);
-  render(<LibraryV2 />);
+  render(<LibraryV2 scopeRequest={{ scope: { kind: "view", view }, seq: 1 }} />);
   await act(flushAsync);
+  // Needs you opens the waiting calls' list; these tests start from its summary line.
+  const hide = screen.queryByRole("button", { name: "Hide" });
+  if (hide) fireEvent.click(hide);
 }
 
 const review = () => screen.getByRole("button", { name: /^(Review|Hide)$/ });
@@ -70,34 +79,62 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
   });
 
-  it("Keep keeps one with pending_keep; Discard asks first", async () => {
+  it("Transcribe sends one with pending_keep; Delete asks first", async () => {
     const confirm = answerConfirm().mockReturnValue(true);
     await show([makePendingItem("p1", { title: "Keep me" }), makePendingItem("p2", { title: "Drop me" })]);
     fireEvent.click(review());
-    fireEvent.click(within(rowOf("Keep me")).getByRole("button", { name: "Keep" }));
+    fireEvent.click(within(rowOf("Keep me")).getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]);
     expect(screen.queryByText("Keep me")).toBeNull();
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Kept");
-    fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing…");
+    fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "Delete" }));
     await act(flushAsync);
-    expect(confirm).toHaveBeenCalledWith(DISCARD);
-    expect(callsOf("pending_discard")).toEqual([{ id: "p2" }]);
+    expect(confirm).toHaveBeenCalledWith(DELETE);
+    expect(callsOf("pending_delete")).toEqual([{ ids: ["p2"] }]);
+    expect(callsOf("pending_discard"), "never the immediate delete").toEqual([]);
+    // The queue's "Deleted · Undo" is the toast's own Undo button, which brings the recording back.
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast.querySelector(".el-toast__message")).toHaveTextContent(/^Deleted$/);
     expect(screen.queryByTestId("library-queue")).toBeNull();
+    respond("pending_delete_undo", undefined);
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p2"] }]);
   });
 
-  it("Keep all keeps every one; Discard all asks once and discards nothing when cancelled", async () => {
+  it("Transcribe all sends every one; Delete all asks once and deletes nothing when cancelled", async () => {
     const confirm = answerConfirm().mockReturnValue(false);
     await show([makePendingItem("p1"), makePendingItem("p2")]);
     fireEvent.click(review());
-    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     await act(flushAsync);
-    expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
-    expect(callsOf("pending_discard")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? You can undo it for a few seconds.");
+    expect(callsOf("pending_delete")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
     await act(flushAsync);
     expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]);
     expect(screen.queryByTestId("library-queue")).toBeNull();
+  });
+
+  it("a recording whose Delete was still waiting when EchoLedger closed says so on its row, with all three choices", async () => {
+    await show([makePendingItem("p1", { title: "Came back", restoredDelete: true }), makePendingItem("p2", { title: "Plain" })]);
+    fireEvent.click(review());
+    expect(within(rowOf("Came back")).getByTestId("restored-delete")).toHaveTextContent("Deleted just before EchoLedger closed. Choose again.");
+    expect(within(rowOf("Plain")).queryByTestId("restored-delete")).toBeNull();
+    for (const name of ["Transcribe", "Save audio only", "Delete"]) expect(within(rowOf("Came back")).getByRole("button", { name })).toBeInTheDocument();
+  });
+
+  it("Save audio only, for one and for all, keeps the audio without a transcript", async () => {
+    await show([makePendingItem("p1", { title: "One" }), makePendingItem("p2", { title: "Two" }), makePendingItem("p3", { title: "Three" })]);
+    fireEvent.click(review());
+    fireEvent.click(within(rowOf("One")).getByRole("button", { name: "Save audio only" }));
+    await act(flushAsync);
+    expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Save all as audio only" }));
+    await act(flushAsync);
+    expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }, { id: "p2" }, { id: "p3" }]);
+    expect(callsOf("pending_keep")).toEqual([]);
   });
 
   it("Rename… saves the new title with pending_rename", async () => {
@@ -154,13 +191,13 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]);
   });
 
-  it("one primary per area: Keep all is the card's only filled button; each row's Keep is secondary", async () => {
+  it("one primary per area: Transcribe all is the card's only filled button; each row's Transcribe is secondary", async () => {
     await show([makePendingItem("p1"), makePendingItem("p2", { title: "Board call" })]);
     fireEvent.click(review());
     const card = screen.getByRole("region", { name: "Waiting recordings" });
     const primary = [...card.querySelectorAll("button.el-button--primary")].map((b) => b.textContent);
-    expect(primary).toEqual(["Keep all"]);
-    for (const keep of within(waiting()).getAllByRole("button", { name: "Keep" })) {
+    expect(primary).toEqual(["Transcribe all"]);
+    for (const keep of within(waiting()).getAllByRole("button", { name: "Transcribe" })) {
       expect(keep).toHaveClass("el-button--secondary");
       expect(keep).not.toHaveClass("el-button--primary");
     }
@@ -175,7 +212,7 @@ describe("waiting recordings at the top of the v2 Library", () => {
 
 describe("uploads at the top of the v2 Library", () => {
   it("Importing: each file with its progress and Cancel (no question: the file is still on the computer)", async () => {
-    await show([], [makeUploadItem("i1", { imported: true, title: "interview.m4a", state: "uploading", progress: 40 }), makeUploadItem("i2", { imported: true, title: "notes.mp3" })]);
+    await show([], [makeUploadItem("i1", { imported: true, title: "interview.m4a", state: "uploading", progress: 40 }), makeUploadItem("i2", { imported: true, title: "notes.mp3" })], "all");
     expect(screen.getByRole("heading", { name: "Importing · 2" })).toBeInTheDocument();
     expect(rowOf("interview.m4a")).toHaveTextContent("Uploading 40%");
     expect(rowOf("notes.mp3")).toHaveTextContent("Waiting to upload");
@@ -216,7 +253,7 @@ describe("uploads at the top of the v2 Library", () => {
   });
 
   it("Checking upload…: a recording the server is still checking, without actions", async () => {
-    await show([], [makeUploadItem("v1", { state: "verifying", title: "Checked call" })]);
+    await show([], [makeUploadItem("v1", { state: "verifying", title: "Checked call" })], "all");
     expect(rowOf("Checked call")).toHaveTextContent("Checking upload…");
     expect(within(rowOf("Checked call")).queryByRole("button")).toBeNull();
   });
@@ -228,68 +265,87 @@ describe("uploads at the top of the v2 Library", () => {
   });
 });
 
-describe("one Review for each thing at the top of the v2 Library (classic's Library has only its queue for these)", () => {
-  const top = (status = makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 })) =>
-    ({ status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() });
-  beforeEach(() => {
-    respond("ready_last", { ready: true, checkedAt: "2026-11-17T10:00:00Z", checks: [] });
-    respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos" });
-    respond("skipped_list", []);
-  });
-
-  it("while the queue shows the waiting calls and the uploads that need you, the banner above leaves them out", async () => {
-    const items = [makeItem("a", { title: "Zoom with Acme" }), makeItem("u", { title: "Ali", status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } })];
+describe("Needs you: what it lists and what it counts (PLAN_LIBRARY_FILTERS)", () => {
+  const items = [makeItem("a", { title: "Zoom with Acme" }), makeItem("f", { title: "Failed call", status: "failed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null } })];
+  const open = async (scope: "needs" | "all", pending: PendingItem[], uploads: UploadItem[] = []) => {
     respond("library_list", items);
     respond("library_refresh", items);
     respond("bin_list", { data: [] });
-    respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
-    respond("upload_list", [makeUploadItem("f1", { state: "failed", title: "Board call" })]);
-    render(<LibraryV2 top={top()} />);
+    respond("pending_list", pending);
+    respond("upload_list", uploads);
+    respond("list_clients", CLIENTS);
+    const view = render(<LibraryV2 scopeRequest={{ scope: { kind: "view", view: scope }, seq: 1 }} />);
+    await act(flushAsync);
+    return view;
+  };
+  const title = () => screen.getByRole("heading", { level: 1 });
+  const held = makeUploadItem("h1", { title: "Other account's call", heldFor: "bina@example.com" });
+
+  it("All shows neither the calls waiting nor the uploads that need you: they are Needs you's, which lists them with its own Review", async () => {
+    const view = await open("all", [makePendingItem("p1"), makePendingItem("p2")], [makeUploadItem("u1", { state: "failed", title: "Board call" })]);
+    expect(screen.queryByTestId("waiting-line")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Uploads that need you/ })).toBeNull();
+    view.rerender(<LibraryV2 scopeRequest={{ scope: { kind: "view", view: "needs" }, seq: 2 }} />);
     await act(flushAsync);
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
     expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
-    // The banner keeps only what the queue doesn't show; there is one Review button, the queue's.
-    const banner = screen.getByTestId("needs-action");
-    expect(banner).toHaveTextContent("1 recording isn't transcribed");
-    expect(banner).not.toHaveTextContent(/wait for your decision|didn't upload/);
-    expect(within(banner).queryByRole("button", { name: /^Review/ })).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(2);
-    fireEvent.click(within(banner).getByRole("button", { name: /^Review/ }));
-    expect(screen.queryByRole("menu")).toBeNull();
+    // The calls' list is open: Needs you is where they are decided.
+    expect(within(waiting()).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^(Review|Hide)$/ })).toHaveLength(1);
   });
 
-  it("with nothing in the queue, the banner still says what waits (the status counts it)", async () => {
-    respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
-    respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
+  it("counts what it lists: the calls waiting, the uploads that need you, the recordings waiting for another account, and the recordings that need you", async () => {
+    await open("needs", [makePendingItem("p1"), makePendingItem("p2")], [makeUploadItem("u1", { state: "failed", title: "Board call" }), held]);
+    expect(title()).toHaveTextContent(/^Needs you5$/);
+    expect(document.querySelectorAll("button[data-row-id]")).toHaveLength(1);
+    expect(document.querySelector("button[data-row-id=f]")).not.toBeNull();
+  });
+
+  it("nothing needs you: it says so", async () => {
+    respond("library_list", [items[0]]);
+    respond("library_refresh", [items[0]]);
     respond("bin_list", { data: [] });
     respond("pending_list", []);
     respond("upload_list", []);
-    render(<LibraryV2 top={top()} />);
+    render(<LibraryV2 scopeRequest={{ scope: { kind: "view", view: "needs" }, seq: 1 }} />);
     await act(flushAsync);
-    expect(screen.queryByTestId("library-queue")).toBeNull();
-    expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 1 more needs you");
-    fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Review" }));
-    expect(screen.getByRole("menuitem", { name: "2 calls wait for your decision" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Nothing needs you" })).toBeInTheDocument();
   });
 
-  it("Activity's Review opens the list once: Trash and back leaves it as the person left it", async () => {
+  it("the waiting list can be hidden there, and opens again", async () => {
+    await open("needs", [makePendingItem("p1")]);
+    fireEvent.click(review());
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+    expect(review()).toHaveTextContent("Review");
+    fireEvent.click(review());
+    expect(waiting()).toBeInTheDocument();
+  });
+
+  it("Activity's Review opens Needs you with the list open, once: Trash and back leaves it as the person left it", async () => {
     respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("bin_list", { data: [] });
     respond("pending_list", [makePendingItem("p1")]);
     respond("upload_list", []);
     respond("list_clients", CLIENTS);
-    render(<LibraryV2 reviewRequest={{ seq: 7 }} />);
+    const onScope = vi.fn();
+    // The app keeps one request object until the next Review (MainApp's state).
+    const request = { seq: 7 };
+    const view = render(<LibraryV2 reviewRequest={request} onScope={onScope} />);
     await act(flushAsync);
+    expect(onScope).toHaveBeenCalledWith({ kind: "view", view: "needs" });
     expect(waiting()).toBeInTheDocument();
     fireEvent.click(review());
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    view.rerender(<LibraryV2 reviewRequest={request} onScope={onScope} scopeRequest={{ scope: { kind: "trash" }, seq: 1 }} />);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    view.rerender(<LibraryV2 reviewRequest={request} onScope={onScope} scopeRequest={{ scope: { kind: "view", view: "all" }, seq: 2 }} />);
     await act(flushAsync);
+    expect(screen.queryByTestId("waiting-line")).toBeNull();
+    view.rerender(<LibraryV2 reviewRequest={request} onScope={onScope} scopeRequest={{ scope: { kind: "view", view: "needs" }, seq: 3 }} />);
+    await act(flushAsync);
+    // Needs you again from the sidebar: the list opens (it is what Needs you is for); Review's request isn't answered twice.
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
-    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
   });
 
   it("once nothing waits the list closes; the next call to arrive starts with the summary again", async () => {
@@ -297,9 +353,18 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     fireEvent.click(review());
     expect(waiting()).toBeInTheDocument();
     await act(() => emitEvent("pending:changed", []));
-    expect(screen.queryByTestId("library-queue")).toBeNull();
+    expect(screen.queryByTestId("waiting-line")).toBeNull();
     await act(() => emitEvent("pending:changed", [makePendingItem("p2")]));
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+  });
+
+  it("imports and uploads being checked are on their way, not something to do: they show in the other views, not in Needs you", async () => {
+    const view = await open("needs", [], [makeUploadItem("i1", { imported: true, title: "interview.m4a" }), makeUploadItem("v1", { state: "verifying", title: "Checked call" })]);
+    expect(screen.queryByText("interview.m4a")).toBeNull();
+    view.rerender(<LibraryV2 scopeRequest={{ scope: { kind: "view", view: "all" }, seq: 2 }} />);
+    await act(flushAsync);
+    expect(screen.getByText("interview.m4a")).toBeInTheDocument();
+    expect(screen.getByText("Checked call")).toBeInTheDocument();
   });
 });

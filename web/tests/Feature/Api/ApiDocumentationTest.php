@@ -91,7 +91,8 @@ const SERVED_BEFORE_DOCUMENTED = [
     'POST /api/assist/sessions/{}/live',
 ];
 
-// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served: nothing documented waits for the router.
+// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served, and since 2.0.0-r's BE-02, BE-03 and BE-04 those of
+// 2.0.0-r: nothing documented waits for the router.
 const NOT_SERVED_YET = [];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
@@ -135,11 +136,11 @@ it('names, in each heading, the ability the route actually enforces', function (
 it('states the documented throttles the limiters really apply', function () {
     $documented = [];
     foreach (documentedEndpoints() as $endpoint) {
-        if (preg_match('/\((\d+)\/min\/(IP|device)\)/', $endpoint['rest'], $m) === 1) {
+        if (preg_match('/\((\d+)\/min\/(IP|device|person)\)/', $endpoint['rest'], $m) === 1) {
             $documented[$endpoint['uri']] = [(int) $m[1], $m[2]];
         }
     }
-    $limiterFor = ['/api/devices/register' => 'pairing', '/api/stt/token' => 'stt-token', '/api/live-translate/token' => 'stt-token', '/api/search' => 'search', '/api/clients/{id}/ask' => 'ask'];
+    $limiterFor = ['/api/devices/register' => 'pairing', '/api/stt/token' => 'stt-token', '/api/live-translate/token' => 'stt-token', '/api/search' => 'search', '/api/clients/{id}/ask' => 'ask', '/api/sessions/{id}/ask' => 'ask', '/api/ask' => 'ask'];
 
     expect($documented)->not->toBeEmpty();
     foreach ($documented as $uri => [$perMinute, $by]) {
@@ -151,6 +152,17 @@ it('states the documented throttles the limiters really apply', function () {
         expect($limit->maxAttempts)->toBe($perMinute)->and($limit->decaySeconds)->toBe(60);
         if ($by === 'IP') {
             expect($limit->key)->toContain('203.0.113.9');
+        }
+        // Per person (since 2.0.0-o for Ask): two devices of one person share a count, another person has their own.
+        if ($by === 'person') {
+            $keyFor = function (int $userId) use ($uri, $limiterFor): string {
+                $device = (new Device)->forceFill(['id' => random_int(1, 1_000_000), 'user_id' => $userId]);
+                $request = Request::create($uri, 'POST', server: ['REMOTE_ADDR' => '203.0.113.9']);
+                $request->setUserResolver(fn () => $device);
+
+                return RateLimiter::limiter($limiterFor[$uri])($request)->key;
+            };
+            expect($keyFor(41))->toBe($keyFor(41))->not->toBe($keyFor(42))->not->toContain('203.0.113.9');
         }
     }
 });

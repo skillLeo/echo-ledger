@@ -76,8 +76,9 @@ final class LibraryBenchSeeder extends Seeder
             ['color' => '#2563eb', 'retention_days' => $i === 1 ? 14 : null],
         ))->pluck('id')->all();
         foreach (array_slice(self::LABELS, 0, 5) as $i => $label) {
-            DB::table('label_colors')->upsert([['workspace_id' => $workspaceId, 'user_id' => $user->id, 'label_key' => mb_strtolower($label),
-                'color' => ['#dc2626', '#16a34a', '#2563eb', '#ca8a04', '#db2777'][$i], 'created_at' => now(), 'updated_at' => now()]],
+            // Since 2.0.0-m a label's colour is its list's.
+            DB::table('label_lists')->upsert([['workspace_id' => $workspaceId, 'user_id' => $user->id, 'label_key' => mb_strtolower($label), 'name' => $label,
+                'color' => ['#dc2626', '#16a34a', '#2563eb', '#ca8a04', '#db2777'][$i], 'position' => $i, 'created_at' => now(), 'updated_at' => now()]],
                 ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
         }
 

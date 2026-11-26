@@ -2,9 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makePendingItem, makeSkippedItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeSkippedItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { Shell } from "../shell/Shell";
-import { ActivityV2 } from "./ActivityV2";
+import { ActivityV2, retryAllWords } from "./ActivityV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -43,15 +43,17 @@ describe("the v2 Activity page", () => {
     const { onItems } = await show(makeStatus({ pendingDecisions: 1 }));
     expect(screen.getByRole("heading", { level: 1, name: "Activity" })).toBeInTheDocument();
     expect(screen.getByText("2 things need you. Your other notifications follow, newest first.")).toBeInTheDocument();
+    // Its own direction: in Urdu the sentence keeps its full stop and number where English puts them.
+    expect(screen.getByText("2 things need you. Your other notifications follow, newest first.")).toHaveAttribute("dir", "auto");
     expect(onItems).toHaveBeenCalledWith(ITEMS);
   });
 
-  it("Needs action: Keep or discard? › Review opens the first waiting recording", async () => {
+  it("Needs action: Transcribe or delete? › Review opens the first waiting recording", async () => {
     respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
     const { onReview } = await show();
     const needs = screen.getByRole("list", { name: "Needs action" });
-    expect(within(needs).getByText("Keep or discard?")).toBeInTheDocument();
-    fireEvent.click(within(row("Keep or discard?")).getByRole("button", { name: "Review" }));
+    expect(within(needs).getByText("Transcribe or delete?")).toBeInTheDocument();
+    fireEvent.click(within(row("Transcribe or delete?")).getByRole("button", { name: "Review" }));
     expect(onReview).toHaveBeenCalledWith("p1");
   });
 
@@ -76,6 +78,79 @@ describe("the v2 Activity page", () => {
     expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }, { ids: null }]);
     expect(screen.queryByText("Unread")).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark all read" })).toBeNull();
+  });
+
+  it("D-233: a notification with nowhere to go isn't a button; unread, it has a quiet Mark read; being shown reads nothing", async () => {
+    respond("activity_list", { data: [
+      { id: "d1", kind: "device_paired", title: "Pixel 9 signed in", body: "A new device signed in to your account.", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "p1", kind: "server_problem", title: "Uploads are failing", body: "", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "r1", kind: "transcript_ready", title: "Transcript ready", body: "Acme kickoff", session_id: "s1", read: false, at: NOW.toISOString() },
+      { id: "d0", kind: "device_paired", title: "Laptop signed in", body: "", session_id: null, read: true, at: NOW.toISOString() },
+    ], unread_count: 3 });
+    const { onOpenRecording } = await show();
+    // The recording's row is a button that opens it; the others are plain rows, out of the Tab order.
+    expect(within(row("Transcript ready")).getByRole("button", { name: "Transcript ready" })).toBeInTheDocument();
+    expect(row("Pixel 9 signed in").querySelector(".el-row__hit")).toBeNull();
+    expect(row("Pixel 9 signed in")).not.toHaveClass("el-row--interactive");
+    expect(row("Laptop signed in").querySelector("button")).toBeNull();
+    // Shown, nothing is marked read.
+    expect(callsOf("activity_read")).toEqual([]);
+    // Mark read marks just that one, and goes.
+    fireEvent.click(within(row("Pixel 9 signed in")).getByRole("button", { name: "Mark read: Pixel 9 signed in" }));
+    await act(flushAsync);
+    expect(callsOf("activity_read")).toEqual([{ ids: ["d1"] }]);
+    expect(onOpenRecording).not.toHaveBeenCalled();
+    expect(row("Pixel 9 signed in")).not.toHaveTextContent("Unread");
+    expect(within(row("Pixel 9 signed in")).queryByRole("button")).toBeNull();
+    expect(within(row("Uploads are failing")).getByRole("button", { name: "Mark read: Uploads are failing" })).toBeInTheDocument();
+  });
+
+  it("an item's right-click menu (UX-22, 3b): Open · Mark as read | Retry for an upload that stopped; only what fits it", async () => {
+    respond("activity_list", { data: [...ITEMS,
+      { id: "n4", kind: "upload_failed", title: "Upload failed — retry", body: "Voice note", session_id: "s4", read: true, at: new Date(2026, 9, 28, 8, 0).toISOString() },
+      { id: "n5", kind: "budget_reached", title: "Minutes used up", body: "This month's minutes are used.", session_id: null, read: true, at: new Date(2026, 9, 28, 7, 0).toISOString() }], unread_count: 2 });
+    respond("activity_read", { unread_count: 1 });
+    const { onOpenRecording, onFailed } = await show();
+    const words = () => [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    const menuOn = (title: string) => fireEvent.contextMenu(screen.getAllByText(title)[0].closest(".el-row") ?? row(title), { clientX: 20, clientY: 30 });
+    // An upload that stopped: Retry, where failed uploads are retried.
+    menuOn("Upload failed — retry");
+    expect(words()).toEqual(["Open", "Retry"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Retry" }));
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    // A transcription that failed is tried again on its recording's page (Open), not in failed uploads; minutes used up
+    // have nothing to retry.
+    menuOn("Transcription failed");
+    expect(words()).toEqual(["Open", "Mark as read"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    menuOn("Minutes used up");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    fireEvent.contextMenu(row("Transcript ready"), { clientX: 20, clientY: 30 });
+    expect(words()).toEqual(["Open", "Mark as read"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark as read" }));
+    await act(flushAsync);
+    expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]);
+    fireEvent.contextMenu(row("Transcript ready"), { clientX: 20, clientY: 30 });
+    expect(words()).toEqual(["Open"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
+    await act(flushAsync);
+    expect(onOpenRecording).toHaveBeenCalledWith("s1");
+    // A read item with nothing to open: no menu at all.
+    fireEvent.contextMenu(row("Pixel 9 paired"), { clientX: 20, clientY: 30 });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("an upload that has since reached the server (resolved) offers no Retry: only Open", async () => {
+    respond("activity_list", { data: [
+      { id: "n6", kind: "upload_failed", title: "Uploaded", body: "Voice note", session_id: "s6", read: true, resolved: true, at: new Date(2026, 9, 28, 8, 0).toISOString() }], unread_count: 0 });
+    const { onFailed } = await show();
+    fireEvent.contextMenu(row("Uploaded"), { clientX: 20, clientY: 30 });
+    const words = [...screen.getByRole("menu").querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
+    expect(words).toEqual(["Open"]);
+    expect(screen.queryByRole("menuitem", { name: "Retry" })).toBeNull();
+    expect(onFailed).not.toHaveBeenCalled();
   });
 
   it("groups the rest by Today and Earlier, the time today and the day before; a recovered recording says Recovered", async () => {
@@ -111,6 +186,141 @@ describe("the v2 Activity page", () => {
     expect(callsOf("skipped_restore")).toEqual([{ id: "b" }]);
     expect(line).toHaveTextContent("Skipped 1 short call");
     expect(say).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.");
+  });
+
+  it("2.0.0-v: the server's own problem (super admins only) shows its words as they are, with the server's icon; fixed, it is done", async () => {
+    respond("activity_list", { data: [
+      { id: "s1", kind: "server_problem", title: "Uploads are failing: the server's PHP is missing sodium", body: "sudo apt install php8.3-sodium", session_id: null, read: false, at: NOW.toISOString() },
+      { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: NOW.toISOString(), resolved: true },
+    ], unread_count: 2 });
+    const { onItems } = await show();
+    const open = row("Uploads are failing: the server's PHP is missing sodium");
+    expect(open).toHaveTextContent("sudo apt install php8.3-sodium");
+    // The server's icon (Lucide server: its two racks' dots), not the bell or the generic error.
+    expect(open.querySelector('svg path[d="M6 6h.01"]')).not.toBeNull();
+    const fixed = row("Fixed: uploads work again");
+    expect(fixed.querySelector('svg path[d="M6 6h.01"]')).toBeNull();
+    expect(fixed.querySelector('svg path[d="m9 12 2 2 4-4"]'), "done: the ready check").not.toBeNull();
+    // Only the open one needs the person.
+    const counted = (onItems.mock.calls.at(-1)?.[0] ?? []) as { id: string }[];
+    expect(counted.map((i) => i.id)).toEqual(["s1", "s2"]);
+    expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
+  });
+
+  it("UX-08: uploads that didn't finish are one line with Retry all that opens to show each; a repeated item says how often", async () => {
+    const failed = (id: string, body: string, over = {}) =>
+      ({ id, kind: "upload_failed", title: "Upload didn't finish", body, session_id: `s-${id}`, read: false, at: NOW.toISOString(), group: "upload_failed", resolved: false, repeat_count: 1, ...over });
+    const three = [failed("u1", "WhatsApp call", { repeat_count: 2 }), failed("u2", "Voice note"), failed("u3", "Zoom call", { read: true })];
+    respond("activity_list", { data: [...three, ITEMS[0], { ...ITEMS[0], id: "n9", title: "Uploaded", kind: "upload_failed", group: "upload_failed", resolved: true, read: true }], unread_count: 3, retry_requested_at: null });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 3, unread: 2, session_ids: ["s-u1", "s-u2", "s-u3"], at: NOW.toISOString() }] });
+    respond("activity_group_list", { data: three });
+    respond("activity_retry_all", { retry_requested_at: NOW.toISOString(), count: 3, here: 2 });
+    // This computer's own line goes: the server's line counts every device's.
+    const { say } = await show(makeStatus({ failedUploads: 2 }));
+    const needs = within(screen.getByRole("list", { name: "Needs action" }));
+    expect(screen.queryByText("Uploads that need you")).toBeNull();
+    const line = row("3 recordings didn't finish uploading");
+    // Its items are inside it, not on their own; the one that reached the server since is done, in the day's list.
+    expect(needs.queryByText(/WhatsApp call/)).toBeNull();
+    expect(screen.queryAllByText("Upload didn't finish")).toHaveLength(0);
+    expect(row("Uploaded")).toBeInTheDocument();
+    expect(needs.getByText("Transcription failed")).toBeInTheDocument();
+    // Opens to show each one, the repeated one saying how often.
+    const opener = within(line).getByRole("button", { name: "3 recordings didn't finish uploading" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(opener);
+    await act(flushAsync);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    expect(callsOf("activity_group_list")).toEqual([{ group: "upload_failed", limit: 50 }]);
+    const group = within(screen.getByTestId("upload-group"));
+    expect(group.getAllByText("Upload didn't finish")).toHaveLength(3);
+    expect(group.getByText("WhatsApp call · 2 times")).toBeInTheDocument();
+    expect(group.getByText("Voice note")).toBeInTheDocument();
+    // Retry all: here and on the other devices, said so; the list is read again.
+    const before = callsOf("activity_list").length;
+    fireEvent.click(within(line).getByRole("button", { name: "Retry all" }));
+    await act(flushAsync);
+    expect(callsOf("activity_retry_all")).toEqual([{ group: "upload_failed" }]);
+    expect(say).toHaveBeenCalledWith("Trying again. Your other devices try theirs too.");
+    expect(callsOf("activity_list").length).toBeGreaterThan(before);
+    fireEvent.click(opener);
+    expect(screen.queryByTestId("upload-group")).toBeNull();
+  });
+
+  it("UX-08: one upload that didn't finish says Retry; offline Retry all says only this computer tried; with nothing to retry, the error", async () => {
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 1, unread: 1, session_ids: ["s-u1"], at: null }] });
+    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1, others: "offline" });
+    const { say } = await show();
+    const line = row("1 recording didn't finish uploading");
+    fireEvent.click(within(line).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenCalledWith("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    // The server answered, but not as it should (a 500, an older server): not called offline.
+    respond("activity_retry_all", { retry_requested_at: null, count: 1, here: 1, others: "failed" });
+    fireEvent.click(within(row("1 recording didn't finish uploading")).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenLastCalledWith("Trying again on this computer. Couldn't reach your other devices. Try again.");
+    // Nothing here and the server can't be reached: the error, in red.
+    fail("activity_retry_all", "The server is unreachable.");
+    fireEvent.click(within(row("1 recording didn't finish uploading")).getByRole("button", { name: "Retry" }));
+    await act(flushAsync);
+    expect(say).toHaveBeenLastCalledWith("The server is unreachable.", true);
+  });
+
+  it("retryAllWords: here and elsewhere, only elsewhere, or only here (offline only for a network error)", () => {
+    expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 2 })).toBe("Trying again. Your other devices try theirs too.");
+    expect(retryAllWords({ retry_requested_at: "2026-11-25T09:00:00Z", here: 0 })).toBe("Asked your other devices to try again.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1, others: "offline" })).toBe("Trying again on this computer. You're offline, so your other devices weren't asked.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1, others: "failed" })).toBe("Trying again on this computer. Couldn't reach your other devices. Try again.");
+    expect(retryAllWords({ retry_requested_at: null, here: 1 })).toBe("Trying again on this computer. Couldn't reach your other devices. Try again.");
+  });
+
+  it("UX-08: this computer's own failed uploads stay one Open away: inside the group when the server lists them, else on their own line", async () => {
+    respond("activity_list", { data: [ITEMS[0]], unread_count: 1 });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 2, unread: 2, session_ids: ["s-a", "s-b"], at: null }] });
+    respond("activity_group_list", { data: [] });
+    // Three failed here: one the server lists in the group, one it doesn't know (its audio is gone, no session), and one
+    // of another account (not this one's to open).
+    respond("upload_list", [
+      makeUploadItem("u1", { state: "failed", sessionId: "s-a" }),
+      makeUploadItem("u2", { state: "failed", sessionId: null }),
+      makeUploadItem("u3", { state: "failed", heldFor: "sara@example.test" }),
+      makeUploadItem("u4", { state: "queued" }),
+    ]);
+    const { onFailed } = await show(makeStatus({ failedUploads: 3 }));
+    const outside = row("Uploads that need you");
+    expect(outside).toHaveTextContent("1 recording did not finish uploading");
+    fireEvent.click(within(outside).getByRole("button", { name: "Open" }));
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(row("2 recordings didn't finish uploading")).getByRole("button", { name: "2 recordings didn't finish uploading" }));
+    await act(flushAsync);
+    const inside = within(screen.getByTestId("upload-group"));
+    const here = inside.getByText("1 is on this computer").closest("li") as HTMLElement;
+    expect(here).toHaveTextContent("Open them to retry or discard each one");
+    fireEvent.click(within(here).getByRole("button", { name: "Open" }));
+    expect(onFailed).toHaveBeenCalledTimes(2);
+  });
+
+  it("UX-08: when Retry all empties the group, focus goes to the Needs action heading, not the page's body", async () => {
+    respond("activity_list", { data: [ITEMS[0]], unread_count: 1 });
+    respond("activity_groups", { data: [{ group: "upload_failed", count: 2, unread: 0, session_ids: ["s-a", "s-b"], at: null }] });
+    respond("activity_retry_all", { retry_requested_at: NOW.toISOString(), count: 2, here: 2 });
+    await show();
+    const button = within(row("2 recordings didn't finish uploading")).getByRole("button", { name: "Retry all" });
+    button.focus();
+    // The uploads went up while Retry all was answered: the server has no group any more.
+    respond("activity_groups", { data: [] });
+    fireEvent.click(button);
+    await act(flushAsync);
+    expect(screen.queryByText("2 recordings didn't finish uploading")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Needs action" })).toHaveFocus();
+  });
+
+  it("the page's line says the rail's number when it has it (the server's, UX-08)", async () => {
+    const props = { onOpenRecording: vi.fn(), onReview: vi.fn(), onFailed: vi.fn() };
+    render(<div className="el-root"><ActivityV2 status={makeStatus()} needsYou={4} {...props} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText(/^4 things need you\./)).toBeInTheDocument();
   });
 
   it("loading, a load error with Retry, and All caught up", async () => {

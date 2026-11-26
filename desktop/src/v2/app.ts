@@ -1,6 +1,8 @@
 // The redesigned screens the app opens when their interface flag is on, loaded as one chunk on first use.
 export { Shell, shellStatus, moduleOf } from "./shell/Shell";
 export { LibraryV2 } from "./library/LibraryV2";
+export { LibraryNav, LibraryFoot } from "./library/LibraryNav";
+export { ActivityPanel, AskPanel, LivePanel, SettingsPanel } from "./shell/PlacePanels";
 export { AccountCard, StorageCard, ClassicSwitch } from "./settings/AccountCard";
 export { SettingsV2 } from "./settings/SettingsV2";
 export { SetupHealth } from "./setup/SetupHealth";
@@ -15,3 +17,7 @@ export { AfterCallNoticeV2 } from "./shell/AfterCallNotice";
 export { ActivityV2 } from "./activity/ActivityV2";
 export { SharedV2 } from "./shared/SharedV2";
 export { RequestLinkSheet } from "./shared/RequestLinkSheet";
+export { ImportSheetV2, DropHintV2 } from "./library/ImportSheetV2";
+export { ProjectsListV2, NameDialogV2 } from "./workspace/ProjectsListV2";
+export { AppToastV2 } from "./shell/AppToast";
+export { OnboardingV2 } from "./setup/OnboardingV2";

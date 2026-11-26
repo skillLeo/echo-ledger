@@ -7,11 +7,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -24,6 +28,7 @@ import com.echoledger.mobile.ui.v2.settings.CallsPage
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -113,8 +118,15 @@ class CallsPageParityTest : ScreenTest() {
     /** Today's control → the v2 control (kind and name). */
     private val where: Map<String, String> = buildMap {
         put("button: Back", "button: Back")
-        put("radio: Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s", "radio: Keep automatically")
-        put("radio: Ask me — a small after-call card to keep or discard it; kept after 10 s", "radio: Ask me")
+        // After each call and When to ask (2.0.5): the deck's words on both pages.
+        listOf(
+            "Ask me",
+            "Transcribe every call",
+            "Save audio only",
+            "Don't record calls",
+            "After the call (recommended)",
+            "At the start of the call"
+        ).forEach { put("radio: $it", "radio: $it") }
         put("radio: Never", "radio: Never")
         put("radio: 5 s", "radio: 5 seconds")
         put("radio: 10 s (default)", "radio: 10 seconds (default)")
@@ -229,5 +241,22 @@ class CallsPageParityTest : ScreenTest() {
                 vm.settings.value.decisionTimeoutChosen == d.decisionTimeoutChosen
         }
         assertEquals(listOf("com.example.voip"), vm.settings.value.extraCallApps)
+    }
+
+    /**
+     * P-054: with Auto-record off, every app's switch still read On under the "auto-record is off" note. While it's off
+     * they are dimmed and fixed (TalkBack hears "disabled"), as on the desktop; each choice stays for when it's on.
+     */
+    @Test
+    fun `while Auto-record is off the apps' switches are dimmed, and come back when it's on`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = false) } }
+        pumpUntil("Auto-record off") { !vm.settings.value.autoRecordArmed }
+        showNew()
+        compose.onNodeWithText("Auto-record is off: these apps are recorded only when you start a recording.").performScrollTo()
+        compose.onNode(hasText("WhatsApp") and isToggleable()).assertIsNotEnabled()
+
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
+        pumpUntil("Auto-record on") { vm.settings.value.autoRecordArmed }
+        compose.onNode(hasText("WhatsApp") and isToggleable()).assertIsEnabled()
     }
 }

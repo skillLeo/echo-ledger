@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Voice notes & dictation settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_vc_after_share">وائس نوٹ شیئر کرنے کے بعد</string>
+    <string name="v2_vc_after_share_help">جب آپ واٹس ایپ یا کسی اور ایپ سے وائس نوٹ یا آڈیو فائل EchoLedger پر شیئر کریں</string>
+    <string name="v2_vc_open">وائس نوٹ کھولیں (پہلے سے طے)</string>
+    <string name="v2_vc_stay">جس ایپ سے شیئر کیا اسی میں رہیں، اور تیار ہونے پر خاموشی سے بتائیں</string>
+    <string name="v2_vc_keyboard">وائس کی بورڈ</string>
+    <string name="v2_vc_keyboard_help">کسی بھی ایپ میں بول کر لکھیں: EchoLedger وائس کی بورڈ آن کریں، پھر کی بورڈ کے بٹن سے اسے چنیں۔ ڈکٹیشن کبھی ریکارڈنگ کے طور پر محفوظ نہیں ہوتی۔</string>
+    <string name="v2_vc_keyboard_on">وائس کی بورڈ آن کریں</string>
+    <string name="v2_vc_mic">مائیکروفون</string>
+    <string name="v2_vc_cleanup">متن صاف کریں</string>
+    <string name="v2_vc_cleanup_help">“اوں” ہٹاتا ہے، بڑے حروف اور فل اسٹاپ لگاتا ہے۔</string>
+    <string name="v2_vc_sounds">شروع اور بند ہونے کی آوازیں</string>
+    <string name="v2_vc_new_line">لائن توڑنے کے لیے “new line” یا “new paragraph” بولیں۔</string>
+    <string name="v2_vc_replacements">لغت اور متبادل</string>
+    <string name="v2_vc_replacements_help">ناموں کے ہجے درست کریں، یا چھوٹے لفظ کی جگہ لمبا لفظ رکھیں۔</string>
+    <string name="v2_vc_nothing">(کچھ نہیں)</string>
+    <string name="v2_vc_remove">ہٹائیں</string>
+    <string name="v2_vc_remove_named">%1$s ہٹائیں</string>
+    <string name="v2_vc_when_i_say">جب میں کہوں</string>
+    <string name="v2_vc_write">لکھیں</string>
+    <string name="v2_vc_add_replacement">متبادل شامل کریں</string>
+    <string name="v2_vc_snippets">وائس اسنیپٹس</string>
+    <string name="v2_vc_snippets_help">جملہ بولیں اور محفوظ متن لکھ دیا جائے، مثلاً “insert signature”۔</string>
+    <string name="v2_vc_phrase">جملہ</string>
+    <string name="v2_vc_text_to_insert">لکھا جانے والا متن</string>
+    <string name="v2_vc_add_snippet">اسنیپٹ شامل کریں</string>
+    <string name="v2_vc_recent">حالیہ ڈکٹیشنز</string>
+    <string name="v2_vc_recent_help">آخری %1$d، صرف اسی فون پر محفوظ۔</string>
+    <string name="v2_vc_recent_none">ابھی کچھ نہیں لکھوایا۔</string>
+    <string name="v2_vc_clear_history">ہسٹری صاف کریں</string>
+    <string name="v2_vc_clear_title">حالیہ ڈکٹیشنز صاف کریں؟</string>
+    <string name="v2_vc_clear_body">یہ صرف اسی فون پر محفوظ ہیں اور واپس نہیں لائی جا سکتیں۔</string>
+    <string name="v2_vc_clear">صاف کریں</string>
+    <string name="v2_vc_copy">کاپی</string>
+    <string name="v2_vc_copied">کاپی ہو گیا</string>
+    <string name="v2_vc_mic_name">ڈکٹیشن مائیکروفون</string>
+</resources>

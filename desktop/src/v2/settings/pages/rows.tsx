@@ -1,18 +1,23 @@
 // A Settings page in the new look: its frame (back, title, the setting asked for scrolled to and highlighted) and
 // the rows every page is built from. A row's title, description and options come from the settings registry
 // (lib/settingsRegistry.ts), the same words search, the phone and the console use.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { PanelToggle, usePageHistory } from "../../shell/NavRail";
+import { Children, cloneElement, createContext, Fragment, isValidElement, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, type Settings, type SettingsPatch } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
 import { confirmAction } from "../../../lib/confirm";
 import { highlightSetting } from "../../../views/main/SettingsControls";
-import { Button, Card, Icons, List, ListRow, Loading, Segmented, Select, SkeletonRow, Toggle } from "../../components";
+import { Button, Card, Icons, List, ListRow, Loading, Radio, Segmented, Select, SkeletonRow, Toggle } from "../../components";
+import { isRtl, lineDir, t } from "../../../i18n";
+
+/** On a Mac the way back's keys are ⌘[ (Alt+← and Ctrl+[ elsewhere). */
+const MAC_KEYS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 export type Patch = (p: SettingsPatch) => Promise<boolean>;
 
 /** The registry's options for a setting, as a select or segmented control takes them. */
-export const optionsOf = <T extends string = string>(id: string) => (setting(id).options ?? []).map((o) => ({ value: o.value as T, label: o.label }));
+export const optionsOf = <T extends string = string>(id: string) => (setting(id).options ?? []).map((o) => ({ value: o.value as T, label: o.label, ...(o.lang ? { lang: o.lang } : {}) }));
 
 /** This computer's settings, and a patch that saves through the app's runner (a notice when it fails). */
 export function useSettings(run: Run): { settings: Settings | null; patch: Patch; setSettings: (s: Settings) => void } {
@@ -33,32 +38,169 @@ export function useSettings(run: Run): { settings: Settings | null; patch: Patch
 }
 
 /**
- * One page: the way back, its title, its body. With `target`, the setting's row is scrolled to and highlighted once it
- * is on the page (the page may still be reading).
+ * Where a page goes once it is drawn: a setting scrolled to and highlighted (a search result), a row scrolled to and
+ * focused without a highlight (back from the sub-page it opens), a section of a group's page, or the page's top.
  */
-export function SettingsPage({ title, back, onBack, target, children }: {
+export type PageTarget = { id: string; seq: number; how?: "highlight" | "row" | "part" | "top" };
+
+/** The id a group's page gives a page's section, to scroll to it. */
+export const partId = (page: string) => `settings-part-${page}`;
+
+/** The box the page scrolls in (the nearest one that scrolls), to start it at its top. */
+function scroller(from: HTMLElement): HTMLElement | null {
+  for (let el = from.parentElement; el; el = el.parentElement) {
+    const { overflowY } = getComputedStyle(el);
+    if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) return el;
+  }
+  return null;
+}
+
+/**
+ * Goes to the target: the element it went to (kept in view after), or null while it isn't on the page yet. A section
+ * of a group's page has the keyboard on its title, as a highlighted setting has it on its row.
+ */
+function reveal(target: PageTarget, root: HTMLElement | null): HTMLElement | null {
+  const scope: ParentNode = root ?? document;
+  const find = (id: string) => scope.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+  switch (target.how ?? "highlight") {
+    case "highlight": return highlightSetting(target.id, scope) ? find(`setting-${target.id}`) : null;
+    case "top": {
+      const box = root ? scroller(root) : null;
+      if (box) box.scrollTop = 0;
+      return root;
+    }
+    case "part": {
+      const part = find(partId(target.id));
+      part?.scrollIntoView?.({ block: "start" });
+      const title = part?.querySelector<HTMLElement>(".el-settings-part__title") ?? part;
+      title?.focus?.({ preventScroll: true });
+      return part;
+    }
+    case "row": {
+      const row = find(`setting-${target.id}`);
+      row?.scrollIntoView?.({ block: "center" });
+      row?.focus?.({ preventScroll: true });
+      return row;
+    }
+  }
+}
+
+/** How long a setting gone to is kept in view while what is above it is still reading (a search's highlight lasts 8 s). */
+export const KEEP_IN_VIEW_MS = 8000;
+
+/**
+ * Keeps `el` where it was put while the page above it still changes size (a section reading, a list that polls): WebKit
+ * doesn't anchor the scroll. Until the person scrolls, clicks or presses a key, or the time is up.
+ */
+function keepInView(el: HTMLElement, root: HTMLElement, block: ScrollLogicalPosition): () => void {
+  if (typeof ResizeObserver === "undefined") return () => undefined;
+  const place = () => el.getBoundingClientRect().top;
+  let at = place();
+  const watch = new ResizeObserver(() => {
+    if (!el.isConnected) return stop();
+    if (Math.abs(place() - at) > 1) {
+      el.scrollIntoView?.({ block });
+      at = place();
+    }
+  });
+  watch.observe(root);
+  const stop = () => {
+    watch.disconnect();
+    window.clearTimeout(timer);
+    for (const e of ["wheel", "pointerdown", "keydown", "touchstart"]) window.removeEventListener(e, stop, true);
+  };
+  const timer = window.setTimeout(stop, KEEP_IN_VIEW_MS);
+  for (const e of ["wheel", "pointerdown", "keydown", "touchstart"]) window.addEventListener(e, stop, true);
+  return stop;
+}
+
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+
+/**
+ * One page: its way back (a sub-page's, to its group's page; none on a group's page, as the panel has the groups), its
+ * title, its body. With `target`, the page goes there once it is on the page (the page may still be reading), and keeps
+ * it in view while the sections above it settle. The way back also answers Esc, and ⌘[ (Alt+← on Windows) and the title
+ * row's ← through the shell's history.
+ */
+export function SettingsPage({ title, back, onBack, target, kind = "page", children }: {
   title: string;
-  back: string;
-  onBack: () => void;
-  target?: { id: string; seq: number } | null;
+  back?: string;
+  onBack?: () => void;
+  target?: PageTarget | null;
+  /** A group's page (UX-11): its pages as sections under the group's title. */
+  kind?: "page" | "group";
   children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!target) return;
     let tries = 0;
+    let stop = () => undefined as void;
     const timer = window.setInterval(() => {
-      if (highlightSetting(target.id, root.current ?? document) || ++tries > 40) window.clearInterval(timer);
+      const el = reveal(target, root.current);
+      if (el && root.current && target.how !== "top") stop = keepInView(el, root.current, target.how === "part" ? "start" : "center");
+      if (el || ++tries > 40) window.clearInterval(timer);
     }, 50);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      stop();
+    };
   }, [target]);
+  const goBack = back && onBack ? onBack : null;
+  // ⌘[ and the title row's ← (the shell's history); outside the shell the page answers ⌘[ itself.
+  const inShell = usePageHistory(goBack ? { back: goBack } : null);
+  const backRef = useRef(goBack);
+  backRef.current = goBack;
+  useEffect(() => {
+    if (!goBack) return;
+    const key = (e: KeyboardEvent) => {
+      const go = backRef.current;
+      if (!go || e.defaultPrevented || document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"]')) return;
+      const esc = e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target);
+      const bracket = !inShell && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key === "[" && !typing(e.target);
+      if (!esc && !bracket) return;
+      e.preventDefault();
+      go();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [!!goBack, inShell]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="el-page el-page--narrow el-settings-v2" data-v2="settings-page" ref={root}>
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{back}</Button>
-      <header className="el-page__head"><h1 className="el-title-l">{title}</h1></header>
+    <div className="el-page el-page--narrow el-settings-v2" data-v2={kind === "group" ? "settings-group" : "settings-page"} ref={root}>
+      {goBack && <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={goBack}
+        aria-keyshortcuts={MAC_KEYS ? "Escape Meta+[" : "Escape Alt+ArrowLeft Control+["}>{back}</Button>}
+      <header className="el-page__head"><PanelToggle /><h1 className="el-title-l">{title}</h1></header>
       {children}
     </div>
   );
+}
+
+/**
+ * The level of a page's section titles: 2 on a page of its own, 3 inside a group's page, where the page's title is the
+ * level-2 heading above them.
+ */
+const SectionLevelContext = createContext<2 | 3>(2);
+export const SectionLevel = SectionLevelContext.Provider;
+
+/** A section's title (DES-05): text only, a heading at the page's level, never clickable. */
+export function SectionTitle({ id, className = "el-caption el-body-strong el-group__title", children }: { id?: string; className?: string; children: ReactNode }) {
+  const Heading = useContext(SectionLevelContext) === 3 ? "h3" : "h2";
+  return <Heading className={className} id={id}>{children}</Heading>;
+}
+
+/**
+ * A footer's lines, each in the direction of its own words (lineDir) in a right-to-left window: the browsers' dir="auto"
+ * on the footer reads the first letter even inside a value's isolate ("Touch ID یا آپ کا PIN …"). A line that says its
+ * own dir keeps it; English is as it always was.
+ */
+function linesInTheirDirection(node: ReactNode): ReactNode {
+  if (!isRtl()) return node;
+  return Children.map(node, (child) => {
+    if (!isValidElement<{ children?: ReactNode; dir?: string }>(child)) return child;
+    if (child.type === Fragment) return linesInTheirDirection(child.props.children);
+    return child.type === "p" && child.props.dir === undefined ? cloneElement(child, { dir: lineDir(child.props.children) }) : child;
+  });
 }
 
 /** A group of rows in one card, with an optional heading and the lines under it. */
@@ -66,21 +208,21 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
   const id = useId();
   return (
     <section className="el-group" aria-labelledby={title ? id : undefined}>
-      {title && <h2 className="el-caption el-body-strong el-group__title" id={id}>{title}</h2>}
-      <Card><List label={title ?? "Settings"} className="el-group__rows">{children}</List></Card>
-      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{footer}</div>}
+      {title && <SectionTitle id={id}>{title}</SectionTitle>}
+      <Card><List label={title ?? t("Settings")} className="el-group__rows">{children}</List></Card>
+      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{linesInTheirDirection(footer)}</div>}
     </section>
   );
 }
 
 /** A page about plans on a server that has none (entitlements answered null): said once, instead of waiting forever. */
 export function NoPlans() {
-  return <Card><p className="el-no-plans el-secondary" role="status">Your server doesn't have plans yet.</p></Card>;
+  return <Card><p className="el-no-plans el-secondary" role="status">{t("Your server doesn't have plans yet.")}</p></Card>;
 }
 
 /** While the settings are read. */
 export function PageLoading() {
-  return <Loading label="Loading settings"><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
+  return <Loading label={t("Loading settings")}><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
 }
 
 export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; hint?: ReactNode }) {
@@ -91,31 +233,55 @@ export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string
   );
 }
 
-export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled }: {
+export function SelectSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange, disabled, meta }: {
   id: string;
   value: T;
   options?: { value: T; label: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** The row's subtitle when it depends on the choice (else the setting's description). */
+  meta?: string;
 }) {
   const s = setting(id);
   return (
-    <ListRow compact anchor={id} title={s.title} meta={s.description}
+    <ListRow compact anchor={id} title={s.title} meta={meta ?? s.description}
       control={<Select label={s.title} hideLabel value={value} options={options} disabled={disabled} onChange={(v) => onChange(v as T)} className="el-setting__select" />} />
+  );
+}
+
+/** One choice of a few, each on its own row with its help line under its name (After each call): radios, so the arrow
+ * keys move between them; the group's heading names it, and the group carries the name for screen readers. */
+export function ChoiceSetting<T extends string>({ id, value, options, onChange }: {
+  id: string;
+  value: T;
+  options: readonly { value: T; label: string; hint?: string }[];
+  onChange: (value: T) => void;
+}) {
+  const s = setting(id);
+  const name = useId();
+  return (
+    <li className="el-choice-setting" id={`setting-${id}`} data-setting={id} tabIndex={-1}>
+      <fieldset className="el-radio-group">
+        <legend className="el-visually-hidden">{s.title}</legend>
+        {options.map((o) => (
+          <Radio key={o.value} name={name} value={o.value} label={o.label} hint={o.hint} checked={o.value === value} onChange={() => onChange(o.value)} />
+        ))}
+      </fieldset>
+    </li>
   );
 }
 
 export function SegmentedSetting<T extends string>({ id, value, options = optionsOf<T>(id), onChange }: {
   id: string;
   value: T;
-  options?: { value: T; label: string }[];
+  options?: { value: T; label: string; lang?: string }[];
   onChange: (value: T) => void;
 }) {
   const s = setting(id);
   return <ListRow compact anchor={id} title={s.title} control={<Segmented label={s.title} value={value} options={options} onChange={onChange} />} />;
 }
 
-export function SliderSetting({ id, value, min, max, step, format, onChange }: {
+export function SliderSetting({ id, value, min, max, step, format, onChange, onRelease = false }: {
   id: string;
   value: number;
   min: number;
@@ -123,12 +289,50 @@ export function SliderSetting({ id, value, min, max, step, format, onChange }: {
   step: number;
   format: (v: number) => string;
   onChange: (v: number) => void;
+  /**
+   * Apply only once let go (the zoom, UX-07: the page would rescale under the pointer and the value jump): while it is
+   * dragged the row shows the value; the native change (a release, or an arrow key at once) applies it.
+   */
+  onRelease?: boolean;
 }) {
   const s = setting(id);
+  const [draft, setDraft] = useState<number | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const live = useRef(onChange);
+  live.current = onChange;
+  const now = useRef(value);
+  now.current = value;
+  // The value changed elsewhere (⌘+, the chip, Reset): the row shows it, not what a drag left.
+  useEffect(() => setDraft(null), [value]);
+  useEffect(() => {
+    const el = input.current;
+    if (!onRelease || !el) return;
+    const done = () => {
+      setDraft(null);
+      live.current(Number(el.value));
+    };
+    // A drag let go where it started fires no change: nothing to apply, so what it showed goes. Any other release is the
+    // change's (it follows), which applies it.
+    const letGo = () => {
+      if (Number(el.value) === now.current) setDraft(null);
+    };
+    const left = () => setDraft(null);
+    el.addEventListener("change", done);
+    el.addEventListener("pointerup", letGo);
+    el.addEventListener("pointercancel", letGo);
+    el.addEventListener("blur", left);
+    return () => {
+      el.removeEventListener("change", done);
+      el.removeEventListener("pointerup", letGo);
+      el.removeEventListener("pointercancel", letGo);
+      el.removeEventListener("blur", left);
+    };
+  }, [onRelease]);
+  const shown = draft ?? value;
   return (
-    <ListRow compact anchor={id} title={s.title} value={format(value)}
-      control={<input type="range" className="el-range" aria-label={s.title} aria-valuetext={format(value)} min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(Number(e.target.value))} />} />
+    <ListRow compact anchor={id} title={s.title} value={format(shown)}
+      control={<input ref={input} type="range" className="el-range" aria-label={s.title} aria-valuetext={format(shown)} min={min} max={max} step={step} value={shown}
+        onChange={(e) => (onRelease ? setDraft(Number(e.target.value)) : onChange(Number(e.target.value)))} />} />
   );
 }
 
@@ -137,12 +341,16 @@ export function LinkSetting({ id, value, onOpen, meta }: { id: string; value?: s
   return <ListRow compact anchor={id} title={s.title} meta={meta ?? s.description} value={value} chevron onClick={onOpen} />;
 }
 
-/** "Reset to defaults", after asking. */
+/**
+ * "Reset to defaults", after asking. In a group's page, among other pages' (UX-11), it names its own page ("Reset
+ * Keyboard shortcuts to defaults"), so no two say the same and none reads as the next section's.
+ */
 export function ResetDefaults({ page, onReset }: { page: string; onReset: () => void }) {
+  const named = useContext(SectionLevelContext) === 3;
   return (
     <div className="el-settings-v2__reset">
-      <Button variant="quiet" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: "Reset" }).then((yes) => { if (yes) onReset(); })}>
-        Reset to defaults
+      <Button variant="quiet" onClick={() => void confirmAction({ title: t("Reset :page to defaults?", { page }), confirm: t("Reset") }).then((yes) => { if (yes) onReset(); })}>
+        {named ? t("Reset :page to defaults", { page }) : t("Reset to defaults")}
       </Button>
     </div>
   );

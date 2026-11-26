@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Accounts;
 
+use App\Filament\Support\ConsoleV2;
+
 /**
  * Every setting of the console's Settings (since v1.7), in the order the pages show them: one entry per row, and one
  * per page the root list opens. The pages render their rows from these entries, and Settings search reads them, so a
@@ -113,6 +115,12 @@ final class SettingsRegistry
             $e('profile', 'Profile', 'profile', 'page', ['section' => 'Account', 'keywords' => ['name', 'email', 'account', 'me'], 'ru' => ['naam', 'mera account'], 'ur' => ['پروفائل', 'نام']]),
             $e('profile.name', 'Name', 'profile', 'action', ['keywords' => ['change name'], 'ru' => ['naam'], 'ur' => ['نام']]),
             $e('profile.email', 'Email', 'profile', 'action', ['keywords' => ['change email'], 'ru' => ['email'], 'ur' => ['ای میل']]),
+            // BE-06 (contract 2.0.0-r §6): the apps' profile in the console.
+            $e('profile.photo', 'Photo', 'profile', 'action', ['keywords' => ['picture', 'avatar', 'profile picture', 'photo'], 'ru' => ['tasveer', 'photo'], 'ur' => ['تصویر']]),
+            $e('profile.color', 'Colour', 'profile', 'choice', ['requires' => ['v2' => true], 'keywords' => ['color', 'colour', 'initials', 'avatar colour'],
+                'ru' => ['rang'], 'ur' => ['رنگ']]),
+            $e('profile.language', 'Language', 'profile', 'segmented', ['requires' => ['v2_shell' => true], 'keywords' => ['language', 'urdu', 'english', 'app language'],
+                'ru' => ['zuban', 'zaban', 'urdu', 'angrezi'], 'ur' => ['زبان', 'اردو', 'انگریزی']]),
             $e('profile.workspace', 'Workspace', 'profile', 'info', ['keywords' => ['team', 'role'], 'ru' => ['team'], 'ur' => ['ٹیم'], 'requires' => ['team_member' => true]]),
 
             $e('plan', 'Plan & usage', 'plan', 'page', ['section' => 'Account', 'keywords' => ['plan', 'package', 'subscription', 'billing', 'usage', 'limits', 'minutes'],
@@ -222,6 +230,21 @@ final class SettingsRegistry
     {
         $id = self::PAGES[$page] ?? null;
 
-        return $id !== null ? (string) (self::byId()[$id]['title'] ?? $page) : $page;
+        return $id !== null && isset(self::byId()[$id]) ? self::titleOf(self::byId()[$id]) : $page;
+    }
+
+    /** UX-18: the entries the new console names otherwise (the account menu's words); classic keeps their titles. */
+    public const V2_TITLES = ['plan' => 'Plan & billing'];
+
+    /**
+     * An entry's title as this console shows it: the new console's own name where it has one.
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    public static function titleOf(array $entry): string
+    {
+        $id = (string) ($entry['id'] ?? '');
+
+        return isset(self::V2_TITLES[$id]) && ConsoleV2::any() ? self::V2_TITLES[$id] : (string) $entry['title'];
     }
 }

@@ -28,6 +28,15 @@ function usageProvidersIn(string $text): array
     return array_values(array_filter(USAGE_PROVIDERS, fn (string $name): bool => preg_match('/\b'.preg_quote($name, '/').'\b/i', $text) === 1));
 }
 
+/**
+ * The workspace's owner, with a name and email of the test's own: a generated name can be a provider's ("Claude Mraz"),
+ * and the page's By person and the CSV's Person line rightly carry it, which read as a provider leaking.
+ */
+function usageOwner(): User
+{
+    return Fx::user(['name' => 'Bilal Qureshi', 'email' => 'bilal.'.Str::lower(Str::random(10)).'@example.com']);
+}
+
 /** One ledger row of [$user]'s current workspace, this month. */
 function providerlessUsageRow(User $user, array $attributes): UsageLedgerEntry
 {
@@ -63,7 +72,7 @@ beforeEach(function () {
 afterEach(fn () => Carbon::setTestNow());
 
 it('adds every engine up: minutes, the recordings any engine wrote, a recorded hour and the Double-check part', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
 
     $all = app(UsageReport::class)->forMonth($owner->current_workspace_id, '2026-10')['all'];
@@ -79,7 +88,7 @@ it('adds every engine up: minutes, the recordings any engine wrote, a recorded h
 });
 
 it('shows a workspace\'s owner the totals, and no provider or model, on the Usage page', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
     $this->actingAs($owner, 'web');
 
@@ -90,7 +99,7 @@ it('shows a workspace\'s owner the totals, and no provider or model, on the Usag
 });
 
 it('shows one cost on the Usage page, and names the Double-check part only when it is at least a cent', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
     // A use that does not count against the plan still cost something: the tile and Totals say the same.
     providerlessUsageRow($owner, ['provider' => 'groq', 'billable' => false, 'duration_ms' => 600_000, 'billed_ms' => 600_000, 'cost_usd' => 0.5]);
@@ -114,7 +123,7 @@ it('shows one cost on the Usage page, and names the Double-check part only when 
 });
 
 it('takes By person and Last six months from the same stored costs as the tile, whatever the admin\'s price table says', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
     // The admin panel's price table, far from what each use was priced at.
     app(UsageBreakdown::class)->savePrices(['groq' => ['final_hour' => 60.0, 'live_hour' => 60.0]]);
@@ -135,7 +144,7 @@ it('takes By person and Last six months from the same stored costs as the tile, 
 });
 
 it('downloads the owner\'s month one line per use, never per provider', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
     $this->actingAs($owner, 'web');
 
@@ -155,7 +164,7 @@ it('downloads the owner\'s month one line per use, never per provider', function
 });
 
 it('keeps the provider breakdown for the server\'s operator in the admin panel, and only there', function () {
-    $owner = Fx::user();
+    $owner = usageOwner();
     usageMonth($owner);
     $operator = Fx::superAdmin();
     usageMonth($operator);

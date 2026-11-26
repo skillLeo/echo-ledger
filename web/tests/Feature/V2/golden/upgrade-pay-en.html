@@ -1,0 +1,179 @@
+<title>
+            Pay for Pro
+             - 
+            EchoLedger
+        </title>
+<main
+                id="fi-main-content"
+                tabindex="-1"
+                class="fi-main fi-width-7xl"
+            >
+                
+
+                <div wire:snapshot="SNAPSHOT" wire:effects="{&quot;partials&quot;:[],&quot;scripts&quot;:{&quot;SCRIPT&quot;:&quot;            &lt;script&gt;\n                window.filamentErrorNotifications = JSON.parse(&#039;{\\u0022\\u0022:{\\u0022title\\u0022:\\u0022Error while loading page\\u0022,\\u0022body\\u0022:\\u0022There was an error while attempting to load this page. Please try again later.\\u0022,\\u0022isHidden\\u0022:false,\\u0022isDisabled\\u0022:false}}&#039;)            &lt;\/script&gt;\n            &quot;},&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionComponent&quot;:{&quot;as&quot;:&quot;actionComponent&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}},&quot;listeners&quot;:[&quot;refresh-page&quot;]}" wire:id="WIREID" wire:name="App\Filament\Pages\Upgrade\PayForPlan"
+    class="fi-page el-settings-page"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--><!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--><!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div class="fi-page-header-main-ctn">
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        <!--[if ENDBLOCK]><![endif]-->
+        <div class="fi-page-main">
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            <div class="fi-page-content">
+                
+
+                
+
+                
+
+                <div class="el-flow" data-flow="pay">
+        <a href="https://echoledger.test/app/settings/plan/requests/ULID" class="el-set-back"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+</svg> Pro request</a>
+        <h1 class="el-set-h1">Pay for Pro</h1>
+
+        <section class="el-set-section">
+            <div class="el-set-box el-amount" x-data="{ copied: false }">
+                <span class="el-copy-label">Amount</span>
+                <span class="el-amount-value">
+                    <span>Rs 2,999</span>
+                    <button type="button" class="el-copy-btn" x-on:click="navigator.clipboard?.writeText(&quot;2999&quot;); copied = true; setTimeout(() =&gt; copied = false, 2000); new FilamentNotification().title(&#039;Copied&#039;).success().send()" aria-label="Copy the amount">
+                        <span x-show="! copied"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/>
+</svg></span>
+                        <span x-show="copied" x-cloak><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+</svg></span>
+                    </button>
+                </span>
+                <p class="el-set-sub" style="margin-top:4px">Send exactly this amount. A different amount can slow down your upgrade.</p>
+            </div>
+        </section>
+
+        <!--[if BLOCK]><![endif]-->            <section class="el-set-section" >
+    <!--[if BLOCK]><![endif]-->        <h2 class="el-set-head">Pay to</h2>
+    <!--[if ENDBLOCK]><![endif]-->    <div class="el-set-box">
+        <!--[if BLOCK]><![endif]-->                    <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                        <span class="el-set-text">
+                            <span class="el-copy-label">Account title</span>
+                            <span class="el-copy-value">EXAMPLE PRIVATE LIMITED</span>
+                        </span>
+                        <!--[if BLOCK]><![endif]-->                            <button type="button" class="el-copy-btn" x-on:click="navigator.clipboard?.writeText(&quot;EXAMPLE PRIVATE LIMITED&quot;); copied = true; setTimeout(() =&gt; copied = false, 2000); new FilamentNotification().title(&#039;Copied&#039;).success().send()" aria-label="Copy account title">
+                                <span x-show="! copied"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/>
+</svg></span>
+                                <span x-show="copied" x-cloak><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+</svg></span>
+                            </button>
+                        <!--[if ENDBLOCK]><![endif]-->                    </div>
+                                    <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                        <span class="el-set-text">
+                            <span class="el-copy-label">Bank</span>
+                            <span class="el-copy-value">Example Bank</span>
+                        </span>
+                        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                    </div>
+                                    <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                        <span class="el-set-text">
+                            <span class="el-copy-label">Branch</span>
+                            <span class="el-copy-value">Main Branch (0001)</span>
+                        </span>
+                        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                    </div>
+                                    <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                        <span class="el-set-text">
+                            <span class="el-copy-label">Account number</span>
+                            <span class="el-copy-value is-mono">0123456789</span>
+                        </span>
+                        <!--[if BLOCK]><![endif]-->                            <button type="button" class="el-copy-btn" x-on:click="navigator.clipboard?.writeText(&quot;0123456789&quot;); copied = true; setTimeout(() =&gt; copied = false, 2000); new FilamentNotification().title(&#039;Copied&#039;).success().send()" aria-label="Copy Account number">
+                                <span x-show="! copied"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/>
+</svg></span>
+                                <span x-show="copied" x-cloak><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+</svg></span>
+                            </button>
+                        <!--[if ENDBLOCK]><![endif]-->                    </div>
+                                    <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                        <span class="el-set-text">
+                            <span class="el-copy-label">IBAN</span>
+                            <span class="el-copy-value is-mono">PK36 SCBL 0000 0011 2345 6702</span>
+                        </span>
+                        <!--[if BLOCK]><![endif]-->                            <button type="button" class="el-copy-btn" x-on:click="navigator.clipboard?.writeText(&quot;PK36SCBL0000001123456702&quot;); copied = true; setTimeout(() =&gt; copied = false, 2000); new FilamentNotification().title(&#039;Copied&#039;).success().send()" aria-label="Copy IBAN">
+                                <span x-show="! copied"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/>
+</svg></span>
+                                <span x-show="copied" x-cloak><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+</svg></span>
+                            </button>
+                        <!--[if ENDBLOCK]><![endif]-->                    </div>
+                <!--[if ENDBLOCK]><![endif]-->
+    </div>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    
+</section>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            <section class="el-set-section" >
+    <!--[if BLOCK]><![endif]-->        <h2 class="el-set-head">Reference</h2>
+    <!--[if ENDBLOCK]><![endif]-->    <div class="el-set-box">
+        <div class="el-set-row el-copy-row" x-data="{ copied: false }">
+                    <span class="el-set-text">
+                        <span class="el-copy-label">Reference</span>
+                        <span class="el-copy-value is-mono">REFERENCE</span>
+                    </span>
+                    <button type="button" class="el-copy-btn" x-on:click="navigator.clipboard?.writeText(&quot;REFERENCE&quot;); copied = true; setTimeout(() =&gt; copied = false, 2000); new FilamentNotification().title(&#039;Copied&#039;).success().send()" aria-label="Copy the reference">
+                        <span x-show="! copied"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/>
+</svg></span>
+                        <span x-show="copied" x-cloak><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+</svg></span>
+                    </button>
+                </div>
+    </div>
+    <!--[if BLOCK]><![endif]-->        <p class="el-set-foot">Put REFERENCE in the transfer&#039;s note.</p>
+    <!--[if ENDBLOCK]><![endif]-->    
+</section>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            <p class="el-prose" style="padding-inline:16px">Pay from any bank app, JazzCash, Easypaisa, NayaPay or SadaPay.</p>
+            <!--[if BLOCK]><![endif]-->                <p class="el-prose" style="padding-inline:16px">Your app shows the account title before you confirm. It should say EXAMPLE PRIVATE LIMITED. If it doesn't, stop and contact us.</p>
+            <!--[if ENDBLOCK]><![endif]-->        <!--[if ENDBLOCK]><![endif]-->
+        <div class="el-flow-bar">
+            <!--[if BLOCK]><![endif]-->                <span class="el-set-text"><span class="el-set-sub" style="font-size:14px;line-height:20px">Paid? Add a screenshot of the receipt so we can check it.</span></span>
+                <a href="https://echoledger.test/app/settings/plan/requests/ULID/receipt" class="el-btn el-btn-primary">Add payment receipt</a>
+                <a href="https://echoledger.test/app/settings/plan" class="el-btn el-btn-text" style="flex-basis:100%;justify-content:flex-start;padding-inline:0">I'll pay later</a>
+            <!--[if ENDBLOCK]><![endif]-->        </div>
+    </div>
+
+                
+
+                
+
+                
+            </div>
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: 'WIREID',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]-->
+    
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->                <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+
+                
+            </main>

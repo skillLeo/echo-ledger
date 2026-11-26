@@ -26,6 +26,17 @@ export interface TranscribeEstimate {
   items: { id: string; minutes: number }[];
 }
 export type AfterCall = "ask" | "always_transcribe" | "always_audio";
+/** "When to ask" under Ask me (the call choice): after the call (the card) or at the start (the banner by the pill). */
+export type AskWhen = "after" | "start";
+/** "After each call" as Settings shows it: `off` is Don't record calls (autoMode off; afterCall is kept under it). */
+export type AfterEachCall = "ask" | "always_transcribe" | "always_audio" | "off";
+/** The three choices of the card and the pill's menu (`delete` is "Stop and delete" on the pill). */
+export type CallChoice = "transcribe" | "audio" | "delete";
+/** The same choice made on the card this many times in a row ("Always do this?" after 3). */
+export interface CardStreak {
+  choice: CallChoice;
+  count: number;
+}
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
@@ -66,7 +77,12 @@ export interface AppStatus {
   elapsedMs: number;
   pillHidden: boolean;
   pendingDecisions: number;
+  /** Those the server doesn't know (no session was opened for them): the rail and the Dock add only these to the server's
+   * badge (UX-08). */
+  pendingDecisionsHere?: number;
   failedUploads: number;
+  /** The core's id for this sign-in, made at each sign-in (none while signed out; from a core before 2.0.0-p, none). */
+  signIn?: string | null;
   trayState: TrayState;
   budget: BudgetState;
   /** What the workspace's plan and the person's role allow (since v1.5). */
@@ -122,6 +138,8 @@ export interface AuthOptions {
   browserSignIn: boolean;
   /** Email codes are offered (since v1.6). */
   code: boolean;
+  /** What a new password needs (since 2.0.0-l); null from an older server. */
+  passwordRules?: { min: number; letters: boolean; numbers: boolean } | null;
 }
 
 /** "Email → Continue" (since v1.6): `older` is a server without the route (the v1.5 sign-in then). */
@@ -350,10 +368,55 @@ export interface Account {
   super_admin?: boolean;
   /** Every workspace of the person (v1.6 shell; empty when the server does not list them). */
   workspaces?: { id: unknown; name: string; role?: string | null; current?: boolean | null }[];
+  /** The person's picture (since 2.0.0-l): a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The colour of the initials' circle without a photo, 0–7 (since 2.0.0-r, BE-06); left out, one from the email. */
+  avatar_color?: number | null;
+  /** The interface language of the apps and the console, "en" or "ur" (since 2.0.0-r, BE-06): the same everywhere. */
+  language?: string | null;
+  /** The account has a password (one made with Google may not); null from a server before 2.0.0-l. */
+  has_password?: boolean | null;
+  /** An email change waiting for its code, and until when. */
+  pending_email?: string | null;
+  pending_email_expires_at?: string | null;
+  passkeys_available?: boolean | null;
 }
 
 /** Signed updates from the server (since v1.5). */
 export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
+/** The Mac menu bar the page draws (app_menu.rs app_menu_set; built by v2/actions/menuBar.ts). */
+export type NativeMenuBar = { menus: { title: string; role?: "window" | "help"; items: NativeBarEntry[] }[] };
+export type NativeBarEntry =
+  | {
+    kind: "item"; action: string; value?: string; label: string; accelerator: string | null; enabled: boolean; checked: boolean | null;
+    /** One of the core's own commands: what its look follows while there is no page (app_menu.rs CoreItem). */
+    core?: { when: string[]; state: string | null; off: string | null; on: string | null; check: string | null };
+  }
+  | { kind: "native"; action: string; native: string }
+  | { kind: "separator" }
+  | { kind: "submenu"; action?: string; label: string; enabled: boolean; items: NativeBarEntry[] };
+
+/** One line of a native menu (native_menu.rs): the action it sends (none: a line), its words, keys, tick. */
+export interface NativeMenuItem {
+  /** The action it sends; none: a hairline, or with a label a greyed title line ("3 Recordings"). */
+  action: string | null;
+  label?: string;
+  /** Tauri's accelerator ("CmdOrCtrl+Shift+N"). */
+  accelerator?: string | null;
+  enabled?: boolean;
+  checked?: boolean | null;
+  /** What it acts on, when that isn't the selection (the project right-clicked in the panel's tree): "action:<id>@<target>". */
+  target?: string | null;
+  /**
+   * A sub-menu's choice (UX-22): picked, it comes back as `<action>=<value>`. A target or value is an id we build (a
+   * project's, a label's, a sort key), never a display name; the core percent-encodes any "%", "=", "@" or "~" in it.
+   */
+  value?: string | null;
+  /** A sub-menu's items (one level). */
+  items?: NativeMenuItem[] | null;
+}
+
 export interface UpdateStatus {
   phase: UpdatePhase;
   /** This app's version. */
@@ -382,6 +445,7 @@ export interface Settings {
   deviceId: string | null;
   deviceName: string | null;
   installId: string | null; // since v1.6: sent with every sign-in, never exported
+  signInId: string | null; // since 2.0.0-p: made at each sign-in, forgotten at sign-out (AppStatus.signIn)
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
@@ -393,11 +457,21 @@ export interface Settings {
   sendDiagnostics: boolean; // Share Check results to the server, off until turned on
   overlayCorner: Corner;
   autostart: boolean;
+  menuBarIcon: boolean; // FIX-11: EchoLedger's icon in the Mac menu bar
+  menuBarTimer: boolean; // FIX-11: the recording's time beside it
+  dockBadge: boolean; // FIX-11: the Activity number on the Dock icon
+  closeQuits: boolean; // FIX-12: Windows' ✕ quits ("When I close the window")
+  closeTipShown: boolean; // FIX-12: the first ✕ said EchoLedger keeps running
+  trayTipShown: boolean; // FIX-12: the tray tip after install was shown
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
   afterCall: AfterCall;
   afterCallNotice: boolean;
+  askWhen: AskWhen; // "When to ask" under Ask me
+  cardHintSeen: boolean; // the card's first-time line was shown
+  cardStreak: CardStreak | null; // the same card choice in a row
+  alwaysOffered: boolean; // "Always do this?" was offered (once)
   skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
@@ -441,6 +515,65 @@ export interface ActivityItem {
   session_id: string | null;
   read: boolean;
   at: string | null;
+  /** The problem is over (2.0.0-r; a server_problem once the server's check passes: "Fixed: uploads work again"). */
+  resolved?: boolean;
+  /** How many times it happened to this recording (2.0.0-r; 1 for most): the server keeps one item per recording and kind. */
+  repeat_count?: number;
+  /** `upload_failed` for an upload that didn't finish (2.0.0-r), else null. */
+  group?: string | null;
+  /** The person it is about (contract 2.0.0-aa): their picture or initials take the kind's icon's place. Null, or no
+   * key from an older server, for every other item. */
+  actor?: ActivityActor | null;
+}
+
+/** A person the API shows beside something (since 2.0.0-l): Shared with me's `from`, an Activity item's `actor`. */
+export interface Person {
+  name?: string | null;
+  email?: string | null;
+  /** Their picture: a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The colour of the initials' circle without a photo, 0–7 (2.0.0-r); left out, one from the name. */
+  avatar_color?: number | null;
+}
+
+/** The person an Activity item is about (contract 2.0.0-aa): a recording's sender, the staff member who asked for a
+ * receipt, unusual use's person. */
+export interface ActivityActor extends Person {
+  id: number | string;
+  name: string | null;
+  avatar_url: string | null;
+  avatar_version: number | null;
+  avatar_color: number | null;
+}
+
+/** The one Activity number (2.0.0-r, `GET /api/badge`), the same on the phone and the web console. */
+export interface ActivityBadge {
+  count: number;
+  /** null at 0, the number up to 99, then "99+". */
+  label: string | null;
+  /** "danger" when one of the counted items is a failure. */
+  tone: "accent" | "danger";
+}
+
+/** A group of Activity items with at least one unresolved (2.0.0-r, `GET /api/activity/groups`). */
+export interface ActivityGroup {
+  group: string;
+  /** The group's unresolved items. */
+  count: number;
+  unread: number;
+  session_ids: string[];
+  /** The newest one's time. */
+  at: string | null;
+}
+
+/** Retry all's answer: when it was asked, how many the server knows of, and how many were retried on this computer.
+ * When the server couldn't be asked (`retry_requested_at` null), why: offline (a network error), or another failure. */
+export interface RetryAllAnswer {
+  retry_requested_at: string | null;
+  count: number;
+  here: number;
+  others?: "offline" | "failed";
 }
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
@@ -523,11 +656,16 @@ export interface SettingsPatch {
   shareOneWindow?: boolean;
   sendDiagnostics?: boolean;
   autostart?: boolean;
+  menuBarIcon?: boolean;
+  menuBarTimer?: boolean;
+  dockBadge?: boolean;
+  closeQuits?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
   consentAcknowledged?: boolean;
   overlayCorner?: Corner;
   afterCall?: AfterCall;
+  askWhen?: AskWhen;
   skipCallsShorterThanS?: number;
   askUnknownApps?: boolean;
   siteRules?: SiteRule[];
@@ -593,6 +731,9 @@ export type SettingsPane = PermissionKind | "automation" | "sound" | "software_u
 export interface MissingPermission {
   kind: PermissionKind;
   sentence: string;
+  /** A call's other side found not recorded by the recording itself (2.0.6): a tap held back (System Audio
+   * Recording). A long silence is the 30-second "not hearing the other side" warning (`capture:far_side`) instead. */
+  otherSide?: "permission";
 }
 
 export interface PermissionsStatus {
@@ -764,6 +905,40 @@ export interface NotRecordedMic {
   at: string;
 }
 
+/** One of the person's lists (contract 2.0.0-m): a label with its colour and place in the Library's row. */
+/** A saved view as the server keeps it (contract 2.0.0-p): a filter set, the search and how the list is shown. */
+export interface ServerView {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  search: string | null;
+  sort: string;
+  group: string;
+  density: string;
+  position: number;
+  client_ref?: string | null;
+}
+
+/** A view change the server refused for good (a 4xx: `views_limit`, `view_not_found`, `validation_failed`…), its
+ * message in the app's words; offline and passing trouble are errors instead (the change is sent again later). */
+export interface ViewRefusal {
+  status: number;
+  code: string | null;
+  message: string;
+}
+export type ViewAnswer<T> = T | { refused: ViewRefusal };
+
+export interface ListItem {
+  /** The name in lower case. */
+  key: string;
+  name: string;
+  /** "#rrggbb", or null (the neutral colour). */
+  color: string | null;
+  position: number;
+  /** The person's recordings in it, not in Trash. */
+  count: number;
+}
+
 export interface LibraryItem {
   id: string;
   deleted: boolean;
@@ -779,6 +954,9 @@ export interface LibraryItem {
   title?: string;
   /** The server named it from what was said (Phase 1C); false or missing for a title a person set. */
   title_auto?: boolean;
+  /** Where `title` came from (since 2.0.0-k): a person's own rename, the person called ("Call with …"), the automatic
+   * title, or the app's name for an untitled recording. Missing on older servers. */
+  title_source?: "own" | "person" | "auto" | "app";
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
@@ -788,6 +966,12 @@ export interface LibraryItem {
   /** Pinned to the top and recording labels (since v1.1, B15). */
   pinned?: boolean;
   labels?: string[];
+  /** The person's colour of each label that has one, label as spelt here => "#rrggbb" (since 2.0.0-i). */
+  label_colors?: Record<string, string>;
+  /** The person flagged it (since 2.0.0-i). */
+  important?: boolean;
+  /** The person has opened it (since v1.3): false is unread. */
+  opened?: boolean;
   /** Never deleted by retention (B17). */
   keep?: boolean;
   /** The recording's language (null = automatic) and its chip, "UR+EN" (since v1.1.2). */
@@ -816,9 +1000,21 @@ export interface LibraryItem {
     alternate_language?: string | null;
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     final_progress?: TranscriptProgress | null;
+    /**
+     * The views of the final transcript (since 2.0.0-n on a row): "making" from the moment the transcript is done until
+     * the default view is written (`progress` `{}` until the first lines are), "failed" when it stopped or went quiet.
+     */
+    views?: ViewsSummary | null;
   };
   /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
   filed_by?: "user" | "contact" | "rule" | null;
+  /** When it ended (Needs you's 24 hours are counted from it when no attempt is under way). */
+  ended_at?: string | null;
+  /** When its current upload or transcript attempt began (since 2.0.0-p): Needs you's 24 hours are counted from it. */
+  processing_since?: string | null;
+  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p), and
+   * its state in the glossary's words (`state`, since 2.0.0-r). */
+  facets?: { source?: string; status?: string; language?: string; kind?: string; state?: string } | null;
 }
 
 /**
@@ -847,6 +1043,12 @@ export interface ClientFolder {
   nested_session_count?: number;
   /** Screen moments are kept for its meetings (since v1.5, default on); missing on a server without them. */
   screens?: boolean;
+  /**
+   * Archived (UX-09: listed last in the Projects panel). No server sends it yet; the server piece is to come, as either
+   * of these.
+   */
+  archived?: boolean;
+  archived_at?: string | null;
 }
 
 /** The smart folders of the Library (since v1.5): views the server computes, never copies. */
@@ -886,7 +1088,7 @@ export interface ShareOptions {
 export interface SharedItem {
   id: string;
   kind: "session" | "project";
-  from: { name?: string | null; email?: string | null } | null;
+  from: Person | null;
   note: string | null;
   title: string | null;
   sent_at: string | null;
@@ -1033,7 +1235,11 @@ export interface SessionOrganisePatch {
   /** The recording's language, changed without re-transcribing it (null: automatic). */
   language?: TranscriptionLanguage | null;
 }
-export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
+
+/** Mark as read / unread for many (contract 2.0.0-y): the recordings marked, and every other id as it was sent. */
+export type OpenedMany = { done: string[]; not_found: string[] };
+
+export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "important" | "unimportant" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
   id: string;
@@ -1078,6 +1284,13 @@ export interface TranscriptProgress {
 
 /** Lines done of lines per view while the views are being made (`views.progress`, Phase 1C); `{}` otherwise. */
 export type ViewsProgress = Partial<Record<TranscriptView, { done: number; total: number }>>;
+
+/** A transcript's views as a Library row and the transcript detail carry them: their state, the view the apps open in, how far. */
+export interface ViewsSummary {
+  status: TranscriptViewsStatus;
+  default?: "original" | TranscriptView;
+  progress?: ViewsProgress;
+}
 
 export interface TranscriptDetail {
   id: string;
@@ -1281,6 +1494,8 @@ export interface PendingItem {
   callerName?: string | null;
   /** Screens kept for this recording on this computer (the after-call card's "3 screens"). */
   screens?: number;
+  /** Back in the waiting list because its Delete was still waiting when EchoLedger closed (restored_delete). */
+  restoredDelete?: boolean;
 }
 
 /** A kept recording in the upload queue. */
@@ -1295,6 +1510,8 @@ export interface UploadItem {
   attempts: number;
   /** A file brought in with Import or a drop: listed while it uploads; cancelling it loses nothing. */
   imported: boolean;
+  /** Its recording on the server once one was made (UX-08: an upload that didn't finish is then in Activity's group). */
+  sessionId?: string | null;
   /** Percent sent while `uploading`. */
   progress: number | null;
   /** The account it waits for: it was made while another account was signed in here (since v1.5). */
@@ -1332,6 +1549,10 @@ export interface RecordingState {
   deviceNote?: DeviceNote | null;
   /** Who the call is with, once its meeting window's title says; null until then. */
   callerName?: string | null;
+  /** Chosen on the pill's menu: what happens when the call ends (no card then). */
+  callChoice?: CallChoice | null;
+  /** "Recording this call · Don't record" beside the pill (its first 5 s, "At the start of the call"). */
+  startBanner?: boolean;
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
@@ -1437,8 +1658,10 @@ export interface ProjectScreensPage {
 /** Export → Meeting pack: the print page (Save as PDF in the browser) or a ZIP with the pictures. */
 export type MeetingPackFormat = "pdf" | "zip";
 
-/** "Saved · Call with Omar · 4:12 · Undo": a recording kept at once after a call; `until` is when the toast goes. */
-export interface SavedToast {
+/** "Transcribing…", "Saved as audio · Transcribe", "Deleted", each with Undo; `until` is when it goes and the choice is
+ * applied. `offerAlways`: "Always do this?" [Yes] sets After each call to it (offered once). */
+export interface CallDone {
+  kind: CallChoice;
   id: string;
   title: string | null;
   callerName: string | null;
@@ -1446,14 +1669,26 @@ export interface SavedToast {
   mode: "call" | "voice_note" | "mic_note";
   durationMs: number;
   until: string;
+  offerAlways: AfterEachCall | null;
 }
 
-/** What the after-call window shows: the Saved toast and the Ask-me chip (its item's `deadlineAt` is when it keeps). */
+/** "3 calls saved as audio · Review": back-to-back calls, never a stack of cards. Each call keeps what happens to it
+ * and its Undo (the newest last); the choices are applied when the card goes (`until`). */
+export interface CallGroup {
+  count: number;
+  until: string;
+  calls: CallDone[];
+}
+
+/** What the after-call window shows, one at a time: the card (its item's `deadlineAt` is when it saves the audio only),
+ * one confirmation, or the grouped card. `hint`: the card's first time ever. */
 export interface AfterCallState {
-  saved: SavedToast | null;
-  /** "Discarded · <title> · Undo" after the chip's Discard, while its files can still come back. */
-  discarded: SavedToast | null;
   ask: PendingItem | null;
+  hint: boolean;
+  /** The rest of a grouped card under a reopened card (Undo on one of its rows), each with its own Undo. */
+  held: CallDone[];
+  done: CallDone | null;
+  group: CallGroup | null;
 }
 
 /** A short or silent automatic call kept on this computer for 24 h (Activity's "Skipped 3 short calls"). Times are RFC 3339 UTC. */
@@ -1497,6 +1732,15 @@ export type CheckOutcome = "pass" | "fail" | "error";
 /** Why a Share Check ran. */
 export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call" | "retry";
 export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
+
+/** How Send to WhatsApp → Text and voice ended (F6): the share took it (`toWhatsApp`: WhatsApp was the target), the
+ *  share is open and its end not known (`opened`: nothing is claimed), the person closed the share, or wa.me opened with
+ *  the text and the voice saved at `path` (on the clipboard, to paste with `pasteKeys`, when `fileOnClipboard`). */
+export type WhatsAppVoiceOutcome =
+  | { kind: "shared"; toWhatsApp: boolean }
+  | { kind: "opened" }
+  | { kind: "cancelled" }
+  | { kind: "fallback"; path: string; fileOnClipboard: boolean; textCut: boolean; pasteKeys: string };
 /** What the guided test says of a meeting app on this Mac. */
 export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";
 
@@ -1553,14 +1797,14 @@ export interface ShareSeen {
 }
 
 /** Until when the main window is hidden from screen shares (v2.0). */
-export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" };
+export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" } | { kind: "until_quit" };
 export interface MainShareHide {
   until: HideUntil;
   sinceMs: number;
 }
 /** What the person picks under "Hide from screen shares". */
 export type HideFor =
-  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" }
+  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" } | { kind: "until_quit" }
   | { kind: "custom"; minutes: number };
 /** The two windows hidden from screen shares unless the person shows them, each on its own. */
 export type PinnedWindow = "card" | "captions";
@@ -1639,7 +1883,8 @@ export interface EventPayloads {
   "capture:far_side": FarSidePayload;
   "mac_check:progress": CheckProgress;
   "capture:test_level": [number, number];
-  "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
+  /** `permission`: the one that kept dictation from starting (the box offers its settings), else null. */
+  "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode; permission?: PermissionKind | null };
   "dictation:level": number;
   "lock:changed": LockStatus;
   "activity:updated": number;
@@ -1648,6 +1893,8 @@ export interface EventPayloads {
   /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
   "signin:other": string;
   "update:status": UpdateStatus;
+  /** A native menu's pick (native_menu.rs): the action id to run. */
+  "menu:action": string;
   "ready:changed": ReadyReport;
   "capture:one_sided": OneSided;
   /** Something about screen-share privacy changed: read `privacy_status` again (since v1.8.1). */
@@ -1660,7 +1907,7 @@ export type AppEvent = keyof EventPayloads;
 
 /** The server's public pages the app opens in the browser (since v1.5). */
 /** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
-export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile";
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile" | "app/settings/security/passkeys";
 /** The words the core uses while the server holds this computer's work (error.rs: MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT). */
 export const MAINTENANCE_TEXT = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
 export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";
@@ -1696,6 +1943,8 @@ export const api = {
   /** The floating windows to the display that isn't the main one (so the main one can be shared). */
   privacyMoveToOtherDisplay: () => invoke<void>("privacy_move_to_other_display"),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
+  /** Whether the main window draws its own title row (Windows with v21_win_titlebar, wintitle.rs). */
+  windowTitlebar: () => invoke<boolean>("window_titlebar"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),
   unpair: () => invoke<AppStatus>("unpair"),
@@ -1741,6 +1990,16 @@ export const api = {
   signOutEverywhere: () => invoke<AppStatus>("account_sign_out_everywhere"),
   /** When the account will be deleted (in 7 days). */
   deleteAccount: (password: string | null, otp: string | null) => invoke<string | null>("account_delete", { password, otp }),
+  /** One account change of 2.0.0-l, answered whole (lib/account.ts `call`). */
+  accountCall: (action: string, body: Record<string, unknown> | null, id: string | null) => invoke<unknown>("account_call", { action, id, body }),
+  /** Change picture…: the picker, then the upload; null when the person cancels the picker. */
+  chooseAvatar: () => invoke<unknown>("account_avatar_choose"),
+  /** A person's picture as a data: URL, kept on this computer by its version; null shows the initials. */
+  avatarImage: (url: string | null, version: number) => invoke<string | null>("account_avatar_image", { url, version }),
+  /** Save the recovery codes as a text file; null when the person cancels. */
+  saveRecoveryCodes: (codes: string[], email: string) => invoke<string | null>("account_recovery_codes_save", { codes, email }),
+  /** Copy codes: on the clipboard, left out of clipboard history and managers, and taken off it after a minute. */
+  copyRecoveryCodes: (codes: string[]) => invoke<void>("account_recovery_codes_copy", { codes }),
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),
@@ -1751,6 +2010,18 @@ export const api = {
   checkForUpdates: () => invoke<UpdateStatus>("update_check"),
   /** "Restart": installs the ready update and starts the new version. */
   installUpdate: () => invoke<void>("update_install"),
+  /** A double click on the title row (UX-20): zoom, minimize or nothing, as the Mac's setting says (lib/titleClick.ts). */
+  titleDoubleClick: () => invoke<void>("title_double_click"),
+  /** A menu drawn by the system (DES-02: Record's on a Mac) at x, y in the window; a pick comes back as `menu:action`. */
+  /** `menu`: a right-click menu's number (UX-22), which each of its picks carries as `~<menu>`. */
+  nativeMenuPopup: (items: NativeMenuItem[], x: number, y: number, menu?: number) => invoke<void>("native_menu_popup", { items, x, y, menu: menu ?? null }),
+  /**
+   * The Mac menu bar (FIX-05, v2/actions/menuBar.ts), drawn by the system; a pick comes back as `menu:action`. Null puts
+   * classic's own bar back (the new design's shell turned off).
+   */
+  /** The Dock icon's number (FIX-11): the page's Activity part; the core adds the calls waiting. */
+  dockActivitySet: (count: number) => invoke<void>("dock_activity_set", { count }),
+  appMenuSet: (bar: NativeMenuBar | null) => invoke<void>("app_menu_set", { bar }),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),
@@ -1820,6 +2091,35 @@ export const api = {
   /** Its recordings go to the Inbox and its subfolders up a level. */
   deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
+  /** The person opened this recording (since v1.3): no longer unread, on every device. */
+  markOpened: (id: string) => invoke<void>("session_opened", { id }),
+  /** Mark as unread (`DELETE /api/sessions/{id}/opened`, contract 2.0.0-t). */
+  markUnopened: (id: string) => invoke<void>("session_unopen", { id }),
+  /**
+   * Mark as read for many (`POST /api/sessions/opened`, contract 2.0.0-y), one request per 200 ids; null from an older
+   * server (mark them one by one then).
+   */
+  markOpenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_opened", { ids }),
+  /** Mark as unread for many (`DELETE /api/sessions/opened`, contract 2.0.0-y), as markOpenedMany. */
+  markUnopenedMany: (ids: string[]) => invoke<OpenedMany | null>("sessions_unopened", { ids }),
+  /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
+  lists: () => invoke<ListItem[] | null>("lists_get"),
+  /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */
+  createList: (name: string, color: string | null = null) => invoke<ListItem>("list_create", { name, color }),
+  /** Rename (every recording in it with it) and/or recolour. */
+  updateList: (key: string, change: { name?: string; color?: string }) => invoke<ListItem>("list_update", { key, name: change.name ?? null, color: change.color ?? null }),
+  /** The label comes off its recordings (they stay); how many changed. */
+  deleteList: (key: string) => invoke<number>("list_delete", { key }),
+  /** Every list's key once, in the new order. */
+  orderLists: (keys: string[]) => invoke<ListItem[]>("lists_order", { keys }),
+  /** My views (contract 2.0.0-p "Saved views"): null on a server without them. */
+  views: () => invoke<{ data: ServerView[]; views_version: number; limit?: number } | null>("views_get"),
+  createView: (view: Omit<ServerView, "id" | "position">) => invoke<ViewAnswer<{ data: ServerView; views_version: number }>>("view_create", { view }),
+  updateView: (id: string, patch: Partial<Omit<ServerView, "id" | "position">>) => invoke<ViewAnswer<{ data: ServerView; views_version: number }>>("view_update", { id, patch }),
+  deleteView: (id: string) => invoke<ViewAnswer<{ id: string; views_version: number }>>("view_delete", { id }),
+  orderViews: (ids: string[]) => invoke<ViewAnswer<{ data: ServerView[]; views_version: number }>>("views_order", { ids }),
+  /** The saved views' version the last library sync carried (null before one did, or from an older server). */
+  viewsVersion: () => invoke<number | null>("library_views_version"),
   libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),
   /** null: the server has no filing rules yet. */
   clientRules: (id: string) => invoke<{ data: FilingRule[] } | null>("client_rules", { id }),
@@ -1879,6 +2179,10 @@ export const api = {
   recordingState: () => invoke<RecordingState>("recording_state"),
   pendingList: () => invoke<PendingItem[]>("pending_list"),
   pendingKeep: (id: string) => invoke<void>("pending_keep", { id }),
+  /** The waiting list's Delete / Delete all: gone from the list now, the files only after "Deleted · Undo" (5 s). */
+  pendingDelete: (ids: string[]) => invoke<number>("pending_delete", { ids }),
+  /** Undo on the waiting list's "Deleted · Undo": the recordings are back in the list. */
+  pendingDeleteUndo: (ids: string[]) => invoke<number>("pending_delete_undo", { ids }),
   /** "Save audio": kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in "Not transcribed". */
   pendingKeepAudio: (id: string) => invoke<void>("pending_keep_audio", { id }),
   pendingDiscard: (id: string) => invoke<void>("pending_discard", { id }),
@@ -1891,13 +2195,27 @@ export const api = {
   setRecordingLanguage: (language: TranscriptionLanguage | null) => invoke<void>("set_recording_language", { language }),
   /** Opens a waiting recording in the main window (from the chip: with its title open); its chip stops counting. */
   pendingOpen: (id: string, rename: boolean) => invoke<void>("pending_open", { id, rename }),
-  /** What the after-call window shows now (the Saved toast and the Ask-me chip). */
+  /** What the after-call window shows now (the card, a confirmation or the grouped card). */
   afterCallState: () => invoke<AfterCallState>("after_call_state"),
+  /** The card's answer: Transcribe, Save audio only (its ×, Esc or a swipe) or Delete; applied after its 5 s Undo. */
+  callCardAnswer: (id: string, choice: CallChoice) => invoke<void>("call_card_answer", { id, choice }),
+  /** Undo on a confirmation: the call is back on its card. */
+  callUndo: (id: string) => invoke<void>("call_undo", { id }),
+  /** Transcribe on "Saved as audio". */
+  callDoneTranscribe: (id: string) => invoke<void>("call_done_transcribe", { id }),
+  /** "Always do this?" › Yes. */
+  callAlways: (id: string, value: AfterEachCall) => invoke<void>("call_always", { id, value }),
+  /** The grouped card: Review (opens the Library) or its ×. */
+  callGroupClose: (review: boolean) => invoke<void>("call_group_close", { review }),
+  /** The pill's menu or the start banner opened or closed: its window grows for it and gives the screen back after. */
+  pillExpanded: (expanded: boolean, warning = false) => invoke<void>("pill_expanded", { expanded, warning }),
+  /** The pill's menu during a call: Transcribe this call, Save audio only, or Stop and delete. */
+  callChoice: (choice: CallChoice) => invoke<AppStatus>("call_choice", { choice }),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
-  /** Discard on the after-call chip: the files stay until its Undo time is over. */
+  /** Delete on the after-call card (older windows): the files stay until its Undo time is over. */
   afterCallDiscard: (id: string) => invoke<void>("after_call_discard", { id }),
-  /** Undo on "Discarded": the recording is back on its chip. */
+  /** Undo on "Deleted": the call is back on its card. */
   afterCallDiscardUndo: (id: string) => invoke<void>("after_call_discard_undo", { id }),
   /** Short or silent automatic calls skipped in the last 24 h, newest first. */
   skippedList: () => invoke<SkippedItem[]>("skipped_list"),
@@ -1919,6 +2237,9 @@ export const api = {
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
+  /** "Try again" on "The other side isn't being recorded": opens the call's system side again; false when only quitting
+   * and reopening EchoLedger would. */
+  captureRetrySystem: () => invoke<boolean>("capture_retry_system"),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
   /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
   quitAndReopen: () => invoke<void>("quit_and_reopen"),
@@ -1995,6 +2316,9 @@ export const api = {
   saveAudioToDownloads: (id: string) => invoke<string>("save_audio_downloads", { id }),
   /** Send to WhatsApp (v1.6): opens wa.me with the text; true when it was too long and was cut (the core builds the address). */
   whatsappOpen: (text: string) => invoke<boolean>("whatsapp_open", { text }),
+  /** Send to WhatsApp → Text and voice (F6): the audio handed with the text to the system's share (WhatsApp's); without
+   *  it, or with `share` false, the audio in Downloads, wa.me with the text and the file on the clipboard. */
+  whatsappShareVoice: (id: string, text: string, share = true) => invoke<WhatsAppVoiceOutcome>("whatsapp_share_voice", { id, text, share }),
   /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
   transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
   makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),
@@ -2016,7 +2340,14 @@ export const api = {
   restoreSession: (id: string) => invoke<{ data: LibraryItem }>("session_restore", { id }),
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
-  activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number }>("activity_list", { limit }),
+  activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number; retry_requested_at?: string | null }>("activity_list", { limit }),
+  /** One group's items (2.0.0-r: "upload_failed"), newest first. */
+  activityGroupItems: (group: string, limit = 50) => invoke<{ data: ActivityItem[] }>("activity_group_list", { group, limit }),
+  activityGroups: () => invoke<{ data: ActivityGroup[] }>("activity_groups"),
+  /** Retry all (BE-03): this computer's failed uploads at once, and the person's other devices through the server. */
+  activityRetryAll: (group: string) => invoke<RetryAllAnswer>("activity_retry_all", { group }),
+  /** The one Activity number (2.0.0-r); null from a server older than it. */
+  badge: () => invoke<ActivityBadge | null>("badge_get"),
   exportSettings: () => invoke<string>("settings_export"),
   importSettings: (text: string) => invoke<Settings>("settings_import", { text }),
   markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),

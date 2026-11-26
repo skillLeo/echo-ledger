@@ -23,7 +23,7 @@ const LiveAssistClassic = lazy(() => import("../../v2/app").then((m) => ({ defau
  * The Bluetooth microphone a recording would use (v1.5), or null. Read when the page shows and again when a recording
  * starts (a headset may have been connected since); the choice follows Settings.
  */
-function useBluetoothMic(recordingRef: string | null): InputDevice | null {
+export function useBluetoothMic(recordingRef: string | null): InputDevice | null {
   const [devices, setDevices] = useState<InputDevice[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
   const shown = useWindowShown();
@@ -67,7 +67,7 @@ export function RecordView({ status, run, onImport, assistOn = false, projects =
         : null;
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
-  const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
+  const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp, "en")) : "";
   const bluetooth = useBluetoothMic(recording?.clientRef ?? null);
   // Discard asks first; it discards only the recording it asked about (another may have started meanwhile).
   const recordingNow = useRef(recording?.clientRef ?? null);

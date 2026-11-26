@@ -146,21 +146,14 @@ class TranscriptionPagesParityTest : ScreenTest() {
                 WordsPage(vm, settings, highlight = null, onBack = {})
             }
         )
-        // Today's rows are named only by their dot ("●" chosen, "○" not), so each dot stands for its rows.
+        // Today's project rows are radios named by their project (P-052), as v2's: each maps to its own.
         val where = mapOf(
             "button: Back" to "button: Back",
-            "button: ●  " to "radio: No project",
-            "button: ○  " to "radio: Acme Holdings"
+            "radio: No project" to "radio: No project",
+            "radio: Acme Holdings" to "radio: Acme Holdings",
+            "radio: Zed Logistics" to "radio: Zed Logistics"
         )
-        compare(
-            WordsStep.entries,
-            { compose.waitForIdle() },
-            where,
-            search,
-            mapOf(
-                "radio: Zed Logistics" to "the second unchosen project: today's rows are named only by their dot, so one ○ stands for both"
-            )
-        ) {}
+        compare(WordsStep.entries, { compose.waitForIdle() }, where, search, emptyMap()) {}
     }
 
     private enum class KeyStep { Open, Typed, Saved, Removing }

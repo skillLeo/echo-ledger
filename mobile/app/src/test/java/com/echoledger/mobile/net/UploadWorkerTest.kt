@@ -286,6 +286,87 @@ class UploadWorkerTest : AppTest() {
         assertNull("sent, so the phone's copy goes", recording())
     }
 
+    /**
+     * Review of FIX-03: a Delete taken back only because nobody could see its Undo leaves the call to the person on the
+     * phone, while the server follows their last choice, Delete: the copy an upload reached is deleted there as queued.
+     */
+    private fun takenBackNobodySaw(): com.echoledger.mobile.data.LocalRecording {
+        discardDuringUpload()
+        val back = runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id, leftToPerson = true) }!!
+        assertEquals("waiting on the phone", "pending_decision", back.state)
+        assertTrue("left to the person", back.restoredDelete && back.notDeletedYet)
+        assertTrue("a later keep brings the server's copy back first", back.restoreServerCopy)
+        assertEquals("the server's delete goes ahead", androidx.work.WorkInfo.State.ENQUEUED, discardWork().single().state)
+        assertTrue("the phone's file stays", app.graph.recordings.encryptedFile(id).exists())
+        assertEquals(serverSession, runServerDelete())
+        return back
+    }
+
+    @Test
+    fun `a take-back nobody saw deletes the server copy, and a Delete after it leaves nothing on either side`() {
+        takenBackNobodySaw()
+        runBlocking {
+            com.echoledger.mobile.calls.Decisions.discardLater(app, id)
+            com.echoledger.mobile.calls.Decisions.finishDiscard(app, id)
+        }
+        assertNull("gone from the phone", recording())
+        assertTrue(!app.graph.recordings.encryptedFile(id).exists())
+        assertEquals("and from the server, once", 1, server.requestsTo("DELETE", "/api/sessions/$serverSession").size)
+    }
+
+    @Test
+    fun `a take-back nobody saw deletes the server copy, and a keep after it restores it from the server's bin`() {
+        takenBackNobodySaw()
+        server.on("POST", "/api/sessions/$serverSession/restore", FakeServer.json(200, """{"data":{"id":"$serverSession"}}"""))
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+        runBlocking { com.echoledger.mobile.calls.Decisions.apply(app, id, keep = true, transcribe = false) }
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals("restored first", 1, server.requestsTo("POST", "/api/sessions/$serverSession/restore").size)
+        assertEquals("the same session, found by its reference", listOf(id, id), clientRefs())
+        assertNull("the server has it, so the phone's copy goes", recording())
+    }
+
+    @Test
+    fun `a take-back nobody saw deletes the server copy, and a keep after its bin expired sends the file fresh`() {
+        takenBackNobodySaw()
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(410, """{"message":"The undo period has ended.","code":"restore_expired"}""")
+        )
+        runBlocking { com.echoledger.mobile.calls.Decisions.apply(app, id, keep = true, transcribe = false) }
+        assertEquals(ListenableWorker.Result.success(), run())
+        val refs = clientRefs()
+        assertNotEquals("a new reference, so the server makes a new session", id, refs.last())
+        assertNull("sent, so the phone's copy goes", recording())
+    }
+
+    @Test
+    fun `a take-back nobody saw, then a keep before the server delete ran, finishes against the same session`() {
+        discardDuringUpload()
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id, leftToPerson = true) }!!
+        // Offline: the server's delete is still queued when the person keeps the call.
+        assertEquals(androidx.work.WorkInfo.State.ENQUEUED, discardWork().single().state)
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+        )
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+        runBlocking { com.echoledger.mobile.calls.Decisions.apply(app, id, keep = true, transcribe = false) }
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        assertTrue("the queued delete never ran", server.requestsTo("DELETE", "/api/sessions/$serverSession").isEmpty())
+        assertEquals(androidx.work.WorkInfo.State.CANCELLED, discardWork().single().state)
+        assertEquals(
+            "the restore tried once: not in the bin, the session still there",
+            1,
+            server.requestsTo("POST", "/api/sessions/$serverSession/restore").size
+        )
+        assertEquals("the same session, found by its reference", listOf(id, id), clientRefs())
+        assertNull("the server has it, so the phone's copy goes", recording())
+    }
+
     /** Undo after a delete that may have run (it started, so the phone can't know whether it landed). */
     private fun undoAfterAMaybeDelete() {
         discardDuringUpload()
@@ -764,6 +845,21 @@ class UploadWorkerTest : AppTest() {
         assertEquals(UploadWorker.ALREADY_THERE, recording()?.lastError)
         assertFalse(app.graph.recordings.encryptedFile(id).exists())
         assertTrue(chunks().isEmpty())
+    }
+
+    @Test
+    fun `Save audio sends transcribe false, Transcribe sends true, and a recording without a choice leaves it out`() {
+        // 2.0.0-j: absent means transcribe, as before.
+        for ((choice, sent) in listOf(false to "\"transcribe\":false", true to "\"transcribe\":true", null to null)) {
+            server.requests.clear()
+            app.graph.recordings.delete(id)
+            app.storeRecording(bytes = payload)
+            app.graph.recordings.update(id) { it.copy(transcribe = choice) }
+            server.on("POST", "/api/sessions", FakeServer.json(422, """{"message":"x"}"""))
+            run()
+            val body = server.requestsTo("POST", "/api/sessions").single().bodyText()
+            if (sent == null) assertFalse(body, body.contains("transcribe")) else assertTrue(body, body.contains(sent))
+        }
     }
 
     @Test

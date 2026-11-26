@@ -64,10 +64,11 @@ final class ConsoleV2Nav
     }
 
     /**
-     * "Upload recording" at the top of the sidebar (the web's Record, parity plan 2): the Upload page, where a voice
-     * note is recorded too. Null in a read-only console.
+     * "● Record ▾" at the top of the sidebar (since 2.0.0-p, docs/PLAN_LIBRARY_FILTERS.md; the web's Record, parity plan
+     * 2): Record a voice note here (`record`), and in its menu Import audio files (`url`, the Upload page; on the Library
+     * its file picker). Null in a read-only console.
      *
-     * @return array{label: string, url: string, active: bool}|null
+     * @return array{label: string, url: string, record: string, active: bool}|null
      */
     public static function upload(): ?array
     {
@@ -76,7 +77,23 @@ final class ConsoleV2Nav
         }
         $routes = request()->route()?->getName() !== null;
 
-        return ['label' => __('Upload recording'), 'url' => Upload::getUrl(), 'active' => $routes && request()->routeIs('filament.app.pages.upload')];
+        return ['label' => __('Record'), 'url' => Upload::getUrl(), 'record' => Upload::getUrl(['record' => 1]),
+            'active' => $routes && request()->routeIs('filament.app.pages.upload')];
+    }
+
+    /**
+     * Trash (Recently deleted) at the sidebar's foot (since 2.0.0-p), when the person can open it.
+     *
+     * @return array{label: string, url: string, active: bool}|null
+     */
+    public static function trash(): ?array
+    {
+        if (! RecentlyDeleted::canAccess()) {
+            return null;
+        }
+        $routes = request()->route()?->getName() !== null;
+
+        return ['label' => __('Trash'), 'url' => RecentlyDeleted::getUrl(), 'active' => $routes && request()->routeIs('filament.app.pages.recently-deleted')];
     }
 
     /**
@@ -110,7 +127,7 @@ final class ConsoleV2Nav
         $onProject = $routes && request()->routeIs('filament.app.resources.clients.view');
 
         return array_map(fn (array $p): array => ['id' => $p['id'], 'name' => $p['name'], 'count' => $p['count'], 'url' => $p['url'], 'depth' => min(1, $p['depth']),
-            'active' => $onProject && $current === $p['id']], array_slice(Shell::projects(), 0, $limit));
+            'active' => $onProject && $current === $p['id'], 'pinned' => $p['pinned']], array_slice(Shell::projects(), 0, $limit));
     }
 
     /**

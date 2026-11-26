@@ -485,7 +485,7 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
   the phone). Tap the title to rename it or pick a client. On the computer, **Discard** can be undone for a few
   seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. On the computer,
   if you do nothing, the card waits 12 seconds and then saves the audio without transcribing it (**Save audio**; the
-  card says **"Saved as audio"**). The call then waits in the Library's **Not transcribed**, where **Transcribe**
+  card says **"Saved as audio"**). The call then waits in the Library's **Audio only**, where **Transcribe**
   starts its transcript.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
@@ -590,12 +590,14 @@ WebM videos.
 **Where a recording is (computer, since v1.5).** Each recording goes through three steps: **Upload** (the percent sent),
 **Transcribing** (which part, and the time left, for example "Transcribing… part 2 of 3 · about 20 s left") and
 **Improving** (the Roman Urdu and other views). The Library row, the recording page and **Activity → In progress** say it
-the same way. The transcript shows as soon as it is ready, with a slim **Improving Roman Urdu… 60%** bar; the view swaps
-in where you are reading when it is made (unless you chose Original). **Notify me when ready** on the recording page
+the same way. The transcript shows as soon as it is ready, with a small spinner and **Converting to Roman Urdu… 60%**
+(about a minute); the view swaps in where you are reading when it is made (unless you chose Original). If it could not
+be made you see **Couldn't convert to Roman Urdu · Try again**, on the recording and on its Library row. **Notify me when ready** on the recording page
 sends a notification when the transcript is ready, even if Transcription notifications are off.
 
 **In the web console (since v1.6)** the Library row and the recording page say it with the same words: **Uploading
-40%**, **Transcribing · part 2 of 3 · about 20 s left**, **Improving Roman Urdu… 60%**. The recording page shows the
+40%**, **Transcribing · part 2 of 3 · about 20 s left**, **Converting to Roman Urdu… 60%** (with a small spinner, from
+the moment the transcript is there). The recording page shows the
 three steps (**Upload · Transcribe · Improve**, each named for where it is: Uploading, Uploaded…), that line and a bar,
 and updates by itself. **Notify me when ready** sends you one email for that recording when its transcript is ready (or
 if it could not be made), even if transcript emails are off in your profile; the bell shows it as always.
@@ -794,6 +796,12 @@ Arabic in Naskh. The views are
 written by AI (your administrator adds its key) and are labelled as views: the transcript itself never
 changes. If you edit the transcript, make the views again. To open transcripts in a view by default (for example always
 Roman Urdu), choose it in **Settings → Engine per language → Open transcripts as**; the original stays one tap away.
+
+**Urdu is Roman Urdu by default.** An Urdu or mixed call opens in Roman Urdu: the transcript in Urdu letters comes
+first, and converting it takes about a minute, shown with a small spinner and **Converting to Roman Urdu… 60%** on the
+recording and its Library row. Once it is in, **Copy text**, **Copy with timestamps**, **Copy for AI** (its header then
+says "Language: Roman Urdu"), WhatsApp text, **Share** and **Export** use Roman Urdu too; before that they use the words
+as transcribed. Its automatic title is in Roman Urdu as well; a title you gave it is never changed.
 
 ### Find the best engine for your calls (Accuracy Lab)
 

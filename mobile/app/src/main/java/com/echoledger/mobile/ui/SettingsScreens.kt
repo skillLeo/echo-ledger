@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -37,7 +39,6 @@ import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.FiberManualRecord
-import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardVoice
@@ -85,12 +86,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.BuildConfig
@@ -98,7 +106,6 @@ import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
 import com.echoledger.mobile.core.SettingsIndex
-import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
@@ -126,7 +133,7 @@ private fun pageIcon(id: String): ImageVector = when (id) {
     "account" -> Icons.Outlined.Shield
     "devices" -> Icons.Outlined.Devices
     "privacy" -> Icons.Outlined.PrivacyTip
-    "help" -> Icons.Outlined.HelpOutline
+    "help" -> Icons.AutoMirrored.Outlined.HelpOutline
     else -> Icons.Outlined.Info
 }
 
@@ -136,7 +143,7 @@ private fun pageValue(id: String, s: AppSettings): String? = when (id) {
 
     "captions" -> if (s.captionsEnabled) "On" else "Off"
 
-    "voice" -> if (s.dictationMode == "hold") "Hold to talk" else "Tap to start"
+    "voice" -> if (s.dictationMode == "push_to_talk") "Hold to talk" else "Tap to start"
 
     "language" -> s.transcriptionLanguage?.let { code ->
         com.echoledger.mobile.core.Languages.OPTIONS.firstOrNull { it.code == code }?.menu
@@ -363,63 +370,97 @@ private fun ProfileCard(
         listOfNotNull(name, email, if (signedIn) "${plan.displayName} plan" else null).joinToString(", ") +
             if (signedIn) ". Opens plan and usage." else ""
     com.echoledger.mobile.ui.design.SettingsSection(null) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.weight(1f).clickable(enabled = signedIn, onClickLabel = "Open plan and usage", onClick = onOpen)
-                    .semantics(mergeDescendants = true) { contentDescription = spoken }.padding(Space.s4),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                com.echoledger.mobile.ui.design.Avatar(name, size = 56.dp)
-                Column(Modifier.padding(start = Space.s3).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        name,
-                        style = type.titleM,
-                        color = c.text,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    email?.let {
+        // P-061: Upgrade sits beside the name and email while they fit whole there, else under them (a long email, a
+        // small phone, large text); a sibling of the card's tap target either way.
+        Layout(
+            content = {
+                Row(
+                    Modifier.clickable(enabled = signedIn, onClickLabel = "Open plan and usage", onClick = onOpen)
+                        .semantics(mergeDescendants = true) { contentDescription = spoken }.padding(Space.s4),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.echoledger.mobile.ui.design.Avatar(name, size = 56.dp)
+                    Column(Modifier.padding(start = Space.s3).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            it,
-                            style = type.body,
-                            color = c.textMuted,
+                            name,
+                            style = type.titleM,
+                            color = c.text,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                    }
-                    if (signedIn) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            com.echoledger.mobile.ui.design.PlanTag(plan.displayName)
-                            planLine?.let {
-                                Text(
-                                    it,
-                                    style = type.labelM.copy(fontWeight = FontWeight.Normal),
-                                    color = c.textMuted,
-                                    modifier = Modifier.padding(start = Space.s2),
-                                    maxLines = 1
-                                )
-                            }
+                        email?.let {
+                            Text(
+                                it,
+                                style = type.body,
+                                color = c.textMuted,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
-                        plan.membership()?.takeIf {
-                            plan.role != "owner" || plan.workspace?.equals("Personal", ignoreCase = true) == false
-                        }?.let {
-                            Text(it, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
+                        if (signedIn) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                                com.echoledger.mobile.ui.design.PlanTag(plan.displayName)
+                                planLine?.let {
+                                    Text(
+                                        it,
+                                        style = type.labelM.copy(fontWeight = FontWeight.Normal),
+                                        color = c.textMuted,
+                                        modifier = Modifier.padding(start = Space.s2),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            plan.membership()?.takeIf {
+                                plan.role != "owner" || plan.workspace?.equals("Personal", ignoreCase = true) == false
+                            }?.let {
+                                Text(it, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
+                            }
                         }
                     }
                 }
+                if (upgradeLabel != null) {
+                    com.echoledger.mobile.ui.design.EchoButton(
+                        upgradeLabel,
+                        onUpgrade,
+                        Modifier.padding(end = Space.s4),
+                        kind = if (filled) {
+                            com.echoledger.mobile.ui.design.ButtonKind.Primary
+                        } else {
+                            com.echoledger.mobile.ui.design.ButtonKind.Secondary
+                        }
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            measurePolicy = remember { ProfileCardLayout(textStart = Space.s4 + 56.dp + Space.s3, below = Space.s3) }
+        )
+    }
+}
+
+/**
+ * [ProfileCard]'s two parts: the card (avatar, name, email, plan) and Upgrade. Beside, as the Row they were: Upgrade at
+ * its own width and the card in the rest, both centred; that only while the card's words fit there whole. Otherwise
+ * the card takes the whole width and Upgrade goes under it, in line with the text ([textStart]), [below] above the edge.
+ */
+private class ProfileCardLayout(private val textStart: Dp, private val below: Dp) : MeasurePolicy {
+    override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
+        val card = measurables[0]
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else card.maxIntrinsicWidth(Constraints.Infinity)
+        val button = measurables.getOrNull(1)?.measure(loose.copy(maxWidth = width))
+        if (button == null || card.maxIntrinsicWidth(Constraints.Infinity) <= width - button.width) {
+            val room = (width - (button?.width ?: 0)).coerceAtLeast(0)
+            val words = card.measure(loose.copy(minWidth = room, maxWidth = room))
+            val height = maxOf(words.height, button?.height ?: 0).coerceAtLeast(constraints.minHeight)
+            return layout(width, height) {
+                words.placeRelative(0, Alignment.CenterVertically.align(words.height, height))
+                button?.placeRelative(room, Alignment.CenterVertically.align(button.height, height))
             }
-            if (upgradeLabel != null) {
-                com.echoledger.mobile.ui.design.EchoButton(
-                    upgradeLabel,
-                    onUpgrade,
-                    Modifier.padding(end = Space.s4),
-                    kind = if (filled) {
-                        com.echoledger.mobile.ui.design.ButtonKind.Primary
-                    } else {
-                        com.echoledger.mobile.ui.design.ButtonKind.Secondary
-                    }
-                )
-            }
+        }
+        val words = card.measure(loose.copy(minWidth = width, maxWidth = width))
+        return layout(width, words.height + button.height + below.roundToPx()) {
+            words.placeRelative(0, 0)
+            button.placeRelative(textStart.roundToPx(), words.height)
         }
     }
 }
@@ -837,10 +878,21 @@ private fun ClientKeytermsCard(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("Project keyterms", fontWeight = FontWeight.SemiBold)
         Text("Names and jargon of the selected project improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
-        (listOf(null) + clients).forEach { client ->
-            Row(Modifier.fillMaxWidth().clickable { vm.updateSettings { it.copy(clientId = client?.id) } }.padding(vertical = 6.dp)) {
-                Text(if (settings.clientId == client?.id) "●  " else "○  ", color = Brand.Violet)
-                Text(client?.name ?: "No project")
+        // P-052: radios TalkBack hears as such, with which one is chosen, each a full 48 dp row ("●"/"○" were text).
+        Column(Modifier.selectableGroup()) {
+            (listOf(null) + clients).forEach { client ->
+                val chosen = settings.clientId == client?.id
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                        selected = chosen,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(clientId = client?.id) } }
+                    ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = chosen, onClick = null)
+                    Text(client?.name ?: "No project", Modifier.padding(start = Space.s2))
+                }
             }
         }
     }
@@ -868,54 +920,36 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
 }
 
 /**
- * Settings → Privacy & data → During screen sharing (since v1.8.1; names from docs/DESIGN_SYSTEM.md "Screen-share
- * privacy names"): Private (black box), the default, stored as "hide" (the v1.8.1 "black_box" reads as Private too), or
- * Show. Android never says when a floating window is in a screen share, so the black box does not wait for a signal.
+ * Settings → Privacy & data (since 2.0.5, the owner's decision; words from docs/v2/copy/call-choice.md): Block
+ * screenshots of EchoLedger (the app's own screens, off by default) and Hide EchoLedger's live words from screenshots and
+ * screen shares (captions, Live Assist and Live Translate, on by default; the pill and the after-call card always show).
+ * They replace During screen sharing.
  */
 @Composable
 private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
-    val choices = listOf(
-        Triple(
-            ShareGuard.Mode.PRIVATE,
-            "Private (black box)",
-            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual."
-        ),
-        Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
-    )
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens_help),
+        settings.blockScreens
+    ) { v -> vm.updateSettings { it.copy(blockScreens = v) } }
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words_help),
+        settings.hideLiveWords
+    ) { v -> vm.updateSettings { it.copy(hideLiveWords = v) } }
+}
+
+/** One switch of Privacy & data with its words and line; TalkBack reads the words. */
+@Composable
+private fun ScreenSwitch(title: String, line: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     SectionCard {
-        Text("During screen sharing", fontWeight = FontWeight.SemiBold)
-        Text(
-            "EchoLedger's floating windows are the recording controls, captions, the after-call card and Live Translate.",
-            color = Brand.Muted,
-            fontSize = 13.sp
-        )
-        val current = ShareGuard.Mode.of(settings.screenShareMode)
-        Column(Modifier.selectableGroup()) {
-            choices.forEach { (mode, title, line) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .selectable(
-                            selected = current == mode,
-                            role = Role.RadioButton,
-                            onClick = { vm.updateSettings { it.copy(screenShareMode = mode.wire) } }
-                        )
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = current == mode, onClick = null)
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(title)
-                        Text(line, color = Brand.Muted, fontSize = 12.sp)
-                    }
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title)
+                Text(line, color = Brand.Muted, fontSize = 12.sp)
             }
+            Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.semantics { contentDescription = title })
         }
-        Text(
-            "Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless " +
-                "you choose Show.",
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
     }
 }
 
@@ -958,7 +992,8 @@ private fun AboutSection(vm: MainViewModel, settings: AppSettings) {
             color = Brand.Muted,
             fontSize = 12.sp
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // P-111: when both don't fit, Import settings goes under Export settings, never broken letter by letter.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { export.launch("EchoLedger settings ${LocalDate.now()}.json") }) { Text("Export settings") }
             OutlinedButton(onClick = { import.launch(arrayOf("application/json", "text/plain")) }) { Text("Import settings") }
         }

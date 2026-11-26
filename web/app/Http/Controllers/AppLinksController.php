@@ -16,7 +16,8 @@ final class AppLinksController extends Controller
     public function __invoke(): JsonResponse
     {
         return response()->json([[
-            'relation' => ['delegate_permission/common.handle_all_urls'],
+            // Since 2.0.0-l also get_login_creds: Credential Manager needs it for the phone's passkeys on this site.
+            'relation' => ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'],
             'target' => [
                 'namespace' => 'android_app',
                 'package_name' => (string) config('echoledger.android_app.package'),

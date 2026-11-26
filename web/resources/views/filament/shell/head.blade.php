@@ -116,6 +116,16 @@
             if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || window.elTyping(e.target)) return;
             if (document.querySelector('.fi-modal-open[aria-modal="true"]')) return;
             if (e.key === '[') {
+@if (\App\Filament\Support\ConsoleV2::frame())
+                // With the three levels [ is ⌘\'s twin: the place's panel, as that place remembers it (elV2Frame).
+                const frame = document.querySelector('.v2-frame-inner');
+                const data = frame && window.Alpine ? window.Alpine.$data(frame) : null;
+                if (data && typeof data.togglePanel === 'function') {
+                    e.preventDefault();
+                    data.togglePanel();
+                    return;
+                }
+@endif
                 const store = window.Alpine && window.Alpine.store('sidebar');
                 if (store && ! store.isMobile) {
                     e.preventDefault();

@@ -1,6 +1,6 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ScreenMoment, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
+import type { ScreenMoment, ActivityGroup, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
 import { makeItem, makeScreen, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
@@ -29,7 +29,7 @@ const ready = (id: string, preview: string) => ({
 
 export const ITEMS: LibraryItem[] = [
   makeItem("r1", { title: "Weekly sync with Northwind", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
-    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
+    client: client("c-north", "Northwind"), opened: false, started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
   // v1.5: an Urdu call a backup engine transcribed ("Backup engine — Re-transcribe?").
   makeItem("r2", { title: "Invoice questions", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", pinned: true,
     client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", language: "ur", language_chip: "UR",
@@ -44,7 +44,7 @@ export const ITEMS: LibraryItem[] = [
     transcript: { ...ready("r5", "Welcome everyone, thanks for joining the kick-off."), script_warning: "latin" } }),
   // v1.5: recordings in Acme's folders.
   makeItem("r8", { title: "March invoice follow-up", source_app: "whatsapp_business", source_app_label: "WhatsApp Business", source_device: "phone", source_device_label: "Phone",
-    client: client("c-acme-inv", "Invoices"), started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
+    client: client("c-acme-inv", "Invoices"), important: true, opened: false, started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
   makeItem("r9", { title: "Contract review", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-acme-con", "Contracts"), started_at: at(4, 14, 0), duration_ms: 1_920_000, status: "completed", transcript: ready("r9", "Clause seven needs a change.") }),
   makeItem("r6", { title: "Budget review with Acme", source_app: "google_meet", source_app_label: "Google Meet", source_device: "web", source_device_label: "Web",
@@ -178,6 +178,40 @@ export const ACTIVITY: ActivityItem[] = [
   { id: "a2", kind: "transcript_ready", title: "Transcript ready", body: "Weekly sync with Northwind", session_id: "r1", read: false, at: at(0, 9, 40) },
   { id: "a3", kind: "transcript_ready", title: "Transcript ready", body: "Invoice questions", session_id: "r2", read: true, at: at(2, 8) },
   { id: "a4", kind: "device_paired", title: "New device", body: "Pixel 9 was paired", session_id: null, read: true, at: at(5, 10) },
+];
+
+/**
+ * `&actors=1` (contract 2.0.0-aa, lead decision 27): items about a person. The kinds that show a face: a teammate with a
+ * picture (PERSON_PHOTO) who sent a recording, and one without who asks to upgrade, in their colour; a receipt asked
+ * for keeps its tile, whoever it is about.
+ */
+export const ACTIVITY_PEOPLE: ActivityItem[] = [
+  { id: "p1", kind: "shared_with_you", title: "Ayesha Khan sent you Budget review with Acme", body: "Please check the numbers before Monday", session_id: "r10", read: false, at: at(0, 11, 5),
+    actor: { id: 12, name: "Ayesha Khan", avatar_url: "https://ledger.example.com/api/avatars/12/1763700000?signature=fixture", avatar_version: 1763700000, avatar_color: 1 } },
+  { id: "p2", kind: "upgrade_requested", title: "Bilal Qureshi asked to upgrade to Pro", body: "A workspace member's request", session_id: null, read: false, at: at(0, 10, 50),
+    actor: { id: 7, name: "Bilal Qureshi", avatar_url: null, avatar_version: null, avatar_color: 4 } },
+  { id: "p3", kind: "upgrade_receipt_requested", title: "Sara Ahmed asked for your receipt", body: "Send it from Plan to finish the upgrade", session_id: null, read: false, at: at(0, 10, 40),
+    actor: { id: 9, name: "Sara Ahmed", avatar_url: null, avatar_version: null, avatar_color: 2 } },
+];
+/** The teammate's picture in the fixture: a drawn portrait, as the core hands the window a data: URL. */
+export const PERSON_PHOTO = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#c7a17a"/><circle cx="32" cy="26" r="12" fill="#f1d3b5"/><path d="M12 64c2-14 10-20 20-20s18 6 20 20z" fill="#3b5b7a"/><path d="M19 24c0-10 6-15 13-15s13 5 13 15c-3-5-8-7-13-7s-10 2-13 7z" fill="#2b1d14"/></svg>')}`;
+
+/**
+ * `&grouped=1` (UX-08, contract 2.0.0-r): three uploads that didn't finish (one of them twice), one that went up after all
+ * ("Uploaded", resolved), the group the server makes of them and its one Activity number.
+ */
+export const UPLOADS_FAILED: ActivityItem[] = [
+  { id: "g1", kind: "upload_failed", title: "Upload didn't finish", body: "WhatsApp call with Omar Khan", session_id: "r4", read: false, at: at(0, 10, 12), group: "upload_failed", resolved: false, repeat_count: 2 },
+  { id: "g2", kind: "upload_failed", title: "Upload didn't finish", body: "Voice note", session_id: "r3", read: false, at: at(0, 9, 55), group: "upload_failed", resolved: false, repeat_count: 1 },
+  { id: "g3", kind: "upload_failed", title: "Upload didn't finish", body: "Zoom call · Acme kick-off", session_id: "r2", read: true, at: at(0, 8, 20), group: "upload_failed", resolved: false, repeat_count: 1 },
+];
+export const ACTIVITY_GROUPED: ActivityItem[] = [
+  ...UPLOADS_FAILED,
+  ...ACTIVITY,
+  { id: "g4", kind: "upload_failed", title: "Uploaded", body: "Call with Sara", session_id: "r1", read: true, at: at(1, 18, 5), group: "upload_failed", resolved: true, repeat_count: 1 },
+];
+export const ACTIVITY_GROUPS: ActivityGroup[] = [
+  { group: "upload_failed", count: 3, unread: 2, session_ids: ["r4", "r3", "r2"], at: at(0, 10, 12) },
 ];
 
 /** Activity's "Skipped 3 short calls" (v1.5): restorable for 24 hours. */

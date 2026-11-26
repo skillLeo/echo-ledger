@@ -28,6 +28,8 @@
     <string name="v2_rec_keep">Keep forever</string>
     <string name="v2_rec_stop_keeping">Stop keeping</string>
     <string name="v2_rec_kept">Kept forever</string>
+    <string name="v2_rec_marked_important">Marked important</string>
+    <string name="v2_rec_unmarked_important">No longer important</string>
     <string name="v2_rec_not_kept">No longer kept forever</string>
     <string name="v2_rec_retranscribe">Change language &amp; re-transcribe</string>
     <string name="v2_rec_retranscribe_title">Re-transcribe as</string>
@@ -55,7 +57,8 @@
     <string name="v2_rec_export_pack_zip">Meeting pack (ZIP)</string>
     <string name="v2_rec_export_not_ready">Export opens once the transcript is ready.</string>
     <string name="v2_rec_copy">Copy</string>
-    <string name="v2_rec_copy_text">Copy text</string>
+    <string name="v2_rec_copy_main">Copy text without timestamps</string>
+    <string name="v2_rec_copy_more">More ways to copy</string>
     <string name="v2_rec_copy_with">Copy with timestamps</string>
     <string name="v2_rec_copy_without">Copy without timestamps</string>
     <string name="v2_rec_copy_ai">Copy for AI</string>
@@ -73,6 +76,13 @@
     <string name="v2_rec_wa_voice">Text and voice</string>
     <string name="v2_rec_wa_link">Link (works for 7 days)</string>
     <string name="v2_rec_wa_text_copied">The transcript is on the clipboard too, in case WhatsApp drops it.</string>
+    <string name="v2_rec_wa_saving">Saving the voice…</string>
+    <string name="v2_rec_wa_voice_failed">The voice could not be saved, so nothing was sent. Try again.</string>
+    <string name="v2_rec_wa_wait">Wait: the voice is still saving.</string>
+    <string name="v2_rec_wa_closed">Not sent: the share was closed before it was ready.</string>
+    <string name="v2_rec_wa_failed">Not sent: something went wrong. Try again.</string>
+    <string name="v2_rec_wa_not_opened">WhatsApp could not be opened, so nothing was sent.</string>
+    <string name="v2_rec_wa_chooser">Send</string>
     <string name="v2_rec_view_original">Original</string>
     <string name="v2_rec_view_roman">Roman Urdu</string>
     <string name="v2_rec_view_urdu">اردو</string>
@@ -109,6 +119,7 @@
     <string name="v2_rec_detail_device">Device</string>
     <string name="v2_rec_detail_created">Recorded</string>
     <string name="v2_rec_detail_labels">Labels</string>
+    <string name="v2_rec_detail_size">File size</string>
     <string name="v2_rec_detail_kept">Kept</string>
     <string name="v2_rec_detail_kept_forever">Forever</string>
     <string name="v2_rec_detail_kept_rules">By your plan\'s rules</string>
@@ -129,8 +140,10 @@
     <string name="v2_rec_left">about %1$s left</string>
     <string name="v2_rec_seconds">%1$d s</string>
     <string name="v2_rec_minutes">%1$d min</string>
-    <string name="v2_rec_improving_view">Improving %1$s…</string>
-    <string name="v2_rec_improving_view_pct">Improving %1$s… %2$d%%</string>
+    <string name="v2_rec_improving_view">Converting to %1$s…</string>
+    <string name="v2_rec_improving_view_pct">Converting to %1$s… %2$d%%</string>
+    <string name="v2_rec_convert_failed">Couldn\'t convert to %1$s · Try again</string>
+    <string name="v2_rec_convert_failed_page">Couldn\'t convert to %1$s.</string>
     <string name="v2_rec_failed_line">Transcription failed</string>
     <string name="v2_rec_notify">Notify me when ready</string>
     <string name="v2_rec_notify_set">You will get a notification when it is ready.</string>

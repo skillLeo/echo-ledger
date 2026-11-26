@@ -172,7 +172,7 @@ fun rowMeta(item: LibraryItem): String = listOfNotNull(
 
 /**
  * A library recording as a [RecordingRow]. Status shows only when it needs attention: a spinner while transcribing,
- * a red alert when it failed (the meta line says "Tap to retry"), mic-off for no audio.
+ * a red alert when it failed (the meta line says "Tap to see why"), mic-off for no audio.
  */
 @Composable
 fun LibraryItemRow(
@@ -189,11 +189,12 @@ fun LibraryItemRow(
     val c = LocalEchoColors.current
     val status = ItemStatus.of(item)
     val app = SourceApp.from(item.sourceApp)
-    // Since v1.5 (Phase 1C): Transcribing with the part and the time left, then Improving Roman Urdu… 60% while the
-    // views are made (the transcript opens already).
+    // Since v1.5 (Phase 1C): Transcribing with the part and the time left, then Converting to Roman Urdu… 60% while the
+    // default view is made (the transcript opens already).
     val stage = if (status == ItemStatus.PROCESSING || status == ItemStatus.READY) com.echoledger.mobile.core.RowProgress.of(item) else null
+    // P-043: a failed row says what a tap does (it opens the recording, which says why and offers Retry).
     val meta = when (status) {
-        ItemStatus.FAILED -> "Transcription failed · Tap to retry"
+        ItemStatus.FAILED -> "Transcription failed · Tap to see why"
         ItemStatus.NO_AUDIO -> "No audio"
         ItemStatus.PROCESSING -> listOf(stage?.text ?: "Transcribing", rowMeta(item)).filter { it.isNotEmpty() }.joinToString(" · ")
         ItemStatus.READY -> listOfNotNull(stage?.text, rowMeta(item).ifEmpty { null }).joinToString(" · ")
@@ -214,9 +215,13 @@ fun LibraryItemRow(
         metaColor = if (status == ItemStatus.FAILED) c.danger else c.textMuted,
         status = when (status) {
             ItemStatus.PROCESSING -> ({ Spinner(14.dp) })
+
             ItemStatus.FAILED -> ({ Icon(Icons.Rounded.ErrorOutline, null, tint = c.danger, modifier = Modifier.size(16.dp)) })
+
             ItemStatus.NO_AUDIO -> ({ Icon(Icons.Rounded.MicOff, null, tint = c.textMuted, modifier = Modifier.size(16.dp)) })
-            ItemStatus.READY -> if (stage != null) ({ Spinner(14.dp) }) else null
+
+            // Converting to Roman Urdu… spins; a view that could not be made says so without one.
+            ItemStatus.READY -> if (stage?.step == com.echoledger.mobile.core.RowProgress.Step.IMPROVING) ({ Spinner(14.dp) }) else null
         },
         badge = { DeviceBadge(SourceDevice.from(item.sourceDevice)) },
         stateLabel = status.label,

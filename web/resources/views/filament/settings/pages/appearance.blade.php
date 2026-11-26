@@ -10,7 +10,7 @@
         <span class="el-set-text"><span class="el-set-title" id="el-pref-theme">{{ __('Theme') }}</span></span>
         <span class="el-set-control" style="align-items:center;gap:8px">
             <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-theme">
+            <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-theme"{!! \App\Filament\Support\ConsoleV2::any() ? ' data-radio-keys' : '' !!}>
                 @foreach (['system' => 'System', 'light' => 'Light', 'dark' => 'Dark'] as $value => $label)
                     <button type="button" role="radio" x-bind:aria-checked="theme === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="theme === '{{ $value }}' ? 0 : -1"
                         x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>
@@ -25,7 +25,7 @@
             <span class="el-set-text"><span class="el-set-title" id="el-pref-{{ $key }}">{{ __($entry['title']) }}</span></span>
             <span class="el-set-control" style="align-items:center;gap:8px">
                 <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
-                <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-{{ $key }}">
+                <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-{{ $key }}"{!! \App\Filament\Support\ConsoleV2::any() ? ' data-radio-keys' : '' !!}>
                     @foreach ($options as $value => $label)
                         <button type="button" role="radio" x-bind:aria-checked="value === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="value === '{{ $value }}' ? 0 : -1"
                             x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>
@@ -52,5 +52,5 @@
         </button>
     </x-el.section>
 @endif
-<p class="el-set-foot">The theme is kept in this browser. The others follow your account.</p>
-<div class="el-btn-row"><button type="button" class="el-btn el-btn-text" wire:click="mountAction('resetPage')">Reset to defaults</button></div>
+<p class="el-set-foot">{{ __('The theme is kept in this browser. The others follow your account.') }}</p>
+<div class="el-btn-row"><button type="button" class="el-btn el-btn-text" wire:click="mountAction('resetPage')">{{ __('Reset to defaults') }}</button></div>

@@ -15,7 +15,7 @@ use crate::error::AppResult;
 use crate::net::api::ApiClient;
 use crate::net::models::UsageReport;
 use crate::net::sync::paths;
-use crate::net::uploader::{DiscardQueue, UploadQueue, UsageQueue};
+use crate::net::uploader::{CallEnd, DiscardQueue, EndQueue, UploadQueue, UsageQueue};
 use crate::pending::PendingStore;
 use crate::screens::store::ScreenStore;
 use crate::skipped::SkippedStore;
@@ -97,6 +97,9 @@ struct HeldWork {
     usage: Vec<UsageReport>,
     #[serde(default)]
     discards: Vec<String>,
+    /// Ends of calls to send (contract 2.0.0-z), one per session.
+    #[serde(default)]
+    ends: Vec<CallEnd>,
 }
 
 impl Held {
@@ -105,7 +108,7 @@ impl Held {
         let at = match self.accounts.iter().position(|w| w.owner == *owner) {
             Some(at) => at,
             None => {
-                self.accounts.push(HeldWork { owner: owner.clone(), usage: Vec::new(), discards: Vec::new() });
+                self.accounts.push(HeldWork { owner: owner.clone(), usage: Vec::new(), discards: Vec::new(), ends: Vec::new() });
                 self.accounts.len() - 1
             }
         };
@@ -143,13 +146,15 @@ fn stamp<'a>(owners: impl Iterator<Item = &'a mut Option<Owner>>, owner: &Owner)
 
 /// This computer is now signed in as `incoming` (the caller holds the queue lock). When that is someone else than
 /// `outgoing`, the account here until now, everything without an owner is stamped as `outgoing`'s and its usage
-/// reports and server deletions are set aside. Then `incoming`'s own set-aside work comes back, and `incoming` is
+/// reports, server deletions and ends of calls are set aside. Then `incoming`'s own set-aside work comes back, and `incoming` is
 /// remembered. True when the account changed.
 pub fn hand_over(data_dir: &Path, outgoing: Option<&Owner>, incoming: &Owner) -> AppResult<bool> {
     let usage_path = paths::usage(data_dir);
     let discards_path = paths::discards(data_dir);
+    let ends_path = paths::ends(data_dir);
     let mut usage = UsageQueue::load(&usage_path);
     let mut discards = DiscardQueue::load(&discards_path);
+    let mut ends = EndQueue::load(&ends_path);
     let mut held = Held::load(data_dir);
     let someone_else = outgoing.filter(|o| !o.may_upload_as(incoming));
     if let Some(outgoing) = someone_else {
@@ -171,13 +176,16 @@ pub fn hand_over(data_dir: &Path, outgoing: Option<&Owner>, incoming: &Owner) ->
         let screens = ScreenStore::in_dir(data_dir);
         screens.stamp(outgoing)?;
         screens.welcome_back(incoming, chrono::Utc::now())?;
-        if !usage.items.is_empty() || !discards.items.is_empty() {
+        if !usage.items.is_empty() || !discards.items.is_empty() || !ends.items.is_empty() {
             let work = held.bucket(outgoing);
             work.usage.append(&mut usage.items);
             for id in discards.items.drain(..) {
                 if !work.discards.contains(&id) {
                     work.discards.push(id);
                 }
+            }
+            for end in ends.items.drain(..) {
+                hold_one_end(work, end);
             }
         }
     }
@@ -186,9 +194,11 @@ pub fn hand_over(data_dir: &Path, outgoing: Option<&Owner>, incoming: &Owner) ->
     for work in mine {
         work.usage.into_iter().for_each(|r| usage.push(r));
         work.discards.into_iter().for_each(|id| discards.push(id));
+        work.ends.into_iter().for_each(|end| ends.push(end));
     }
     usage.save(&usage_path)?;
     discards.save(&discards_path)?;
+    ends.save(&ends_path)?;
     held.save(data_dir)?;
     incoming.save(data_dir)?;
     Ok(someone_else.is_some())
@@ -210,6 +220,27 @@ pub fn hold_discard(data_dir: &Path, owner: &Owner, session_id: &str) -> AppResu
         work.discards.push(session_id.to_string());
     }
     held.save(data_dir)
+}
+
+/// The end of a call of `owner`'s while another account is signed in here (contract 2.0.0-z): it waits with their other
+/// work instead of going with this account's token, which may not change their session. The caller holds the queue lock.
+pub fn hold_end(data_dir: &Path, owner: &Owner, end: CallEnd) -> AppResult<()> {
+    let ends_path = paths::ends(data_dir);
+    let mut ends = EndQueue::load(&ends_path);
+    if ends.items.iter().any(|e| e.session_id == end.session_id) {
+        ends.items.retain(|e| e.session_id != end.session_id);
+        ends.save(&ends_path)?;
+    }
+    let mut held = Held::load(data_dir);
+    hold_one_end(held.bucket(owner), end);
+    held.save(data_dir)
+}
+
+/// One end per session, the first kept (the server keeps the first).
+fn hold_one_end(work: &mut HeldWork, end: CallEnd) {
+    if !end.session_id.is_empty() && !work.ends.iter().any(|e| e.session_id == end.session_id) {
+        work.ends.push(end);
+    }
 }
 
 /// Who this computer is signed in as, read from the server when `account.json` does not say yet: an install from
@@ -364,6 +395,40 @@ mod tests {
         let back = DiscardQueue::load(&paths::discards(dir)).items;
         assert!(back.contains(&"A-OPEN".to_string()), "deleted once Ayesha is back: {back:?}");
         assert!(!back.contains(&"B-OWN".to_string()), "Sara's deletion waits for Sara");
+    }
+
+    #[test]
+    fn the_end_of_another_account_s_call_waits_for_that_account() {
+        // Contract 2.0.0-z: an end is sent with its account's token only, as a deletion is.
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path();
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
+        let b = Owner::new(SERVER, Some("sara@example.test"));
+        let end = |session: &str| CallEnd { session_id: session.into(), ended_at: "2026-11-25T09:42:10.000Z".into(), duration_ms: 2_530_000 };
+        let sessions = || EndQueue::load(&paths::ends(dir)).items.into_iter().map(|e| e.session_id).collect::<Vec<_>>();
+        let mut ends = EndQueue::default();
+        ends.push(end("A-QUEUED"));
+        ends.save(&paths::ends(dir)).unwrap();
+
+        // Sara signs in: Ayesha's queued end is set aside, not sent with Sara's token.
+        a.save(dir).unwrap();
+        assert!(hand_over(dir, Some(&a), &b).unwrap());
+        assert!(sessions().is_empty());
+        // A call Ayesha made that ended while Sara is signed in waits for Ayesha too; Sara's own goes now.
+        hold_end(dir, &a, end("A-LATER")).unwrap();
+        hold_end(dir, &a, end("A-LATER")).unwrap();
+        let mut ends = EndQueue::load(&paths::ends(dir));
+        ends.push(end("B-OWN"));
+        ends.save(&paths::ends(dir)).unwrap();
+        assert_eq!(sessions(), ["B-OWN"]);
+
+        // Ayesha back: both of hers come back once; Sara's waits for Sara.
+        assert!(hand_over(dir, Some(&b), &a).unwrap());
+        assert_eq!(sessions(), ["A-QUEUED", "A-LATER"]);
+        let held = Held::load(dir);
+        assert_eq!(held.accounts.len(), 1);
+        assert_eq!(held.accounts[0].owner, b);
+        assert_eq!(held.accounts[0].ends, [end("B-OWN")]);
     }
 
     #[test]

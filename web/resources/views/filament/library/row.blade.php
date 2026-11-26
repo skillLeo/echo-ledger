@@ -21,6 +21,11 @@
                 @include('filament.library.progress', ['progress' => $row['progress'], 'compact' => true])
             @elseif ($row['status'] !== null)
                 @include('filament.library.status', ['status' => $row['status']])
+            @elseif ($row['convert_failed'] !== null)
+                <span class="el-status el-status-danger" data-convert-failed>@svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true']){{ $row['convert_failed'] }}</span>
+                @unless (\App\Services\Workspaces\ConsoleAccess::readOnly())
+                    <button type="button" class="el-row-retry" x-on:click.stop="$wire.retryViews('{{ $row['id'] }}')" data-retry-views="{{ $row['id'] }}">{{ __('Try again') }}</button>
+                @endunless
             @endif
         </span>
         @if ($problem !== null)

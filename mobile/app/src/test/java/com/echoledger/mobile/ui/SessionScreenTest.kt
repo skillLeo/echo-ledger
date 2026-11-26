@@ -1,9 +1,13 @@
 package com.echoledger.mobile.ui
 
 import android.content.ClipboardManager
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
@@ -11,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -35,6 +40,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.robolectric.annotation.Config
 
 /** The transcript view for one recording: states, copy actions, navigation and deletion. */
 class SessionScreenTest : ScreenTest() {
@@ -105,6 +111,36 @@ class SessionScreenTest : ScreenTest() {
     }
 
     // ---- header and transcript ---------------------------------------------------------------------------------------------
+
+    /**
+     * P-046: the bar that takes over the title once the page head scrolls away shows the title the head shows. Here the
+     * title changes as the server's Roman Urdu title arrives with its view; a rename changes it the same way.
+     */
+    @Test
+    @Config(qualifiers = "w393dp-h640dp-mdpi") // short enough for the page head to scroll away
+    fun `the collapsed top bar shows the title the page head shows, after it changed`() {
+        romanView("making", viewsMaking, viewsReady)
+        val renamed = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Hisaab ki baat")
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(renamed))))
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "making", default = "roman"))))
+        awaitText("Converting to Roman Urdu")
+        pumpUntil("the new title", timeoutMs = 45_000) {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.onAllNodesWithText("Hisaab ki baat").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // The page head scrolls away; the bar is now the only place with the title.
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(2)
+        compose.waitForIdle()
+        val pageHead = SemanticsMatcher("the page head's title (tap to Rename)") {
+            it.config.getOrNull(SemanticsActions.OnClick)?.label == "Rename"
+        }
+        compose.onAllNodes(pageHead).assertCountEquals(0)
+
+        compose.onAllNodesWithText("Call with Acme").assertCountEquals(0)
+        compose.onNodeWithText("Hisaab ki baat").assertExists()
+    }
 
     @Test
     fun `call notes are offered on a project's recording only when the plan has AI notes`() {
@@ -283,14 +319,61 @@ class SessionScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a readable transcript shows Improving with its percent while the views are made`() {
+    fun `a readable transcript shows Converting to Roman Urdu with its percent while the views are made`() {
         serve()
         val ready = item()
         val views = RowViewsDto(status = "making", default = "roman", progress = mapOf("roman" to ProgressDto(done = 3, total = 5)))
         showSession(ready.copy(transcript = ready.transcript?.copy(views = views)))
 
-        awaitText("Improving Roman Urdu… 60%")
+        awaitText("Converting to Roman Urdu… 60%")
         compose.onAllNodesWithText("Notify me when ready").assertCountEquals(0)
+    }
+
+    private val viewsMaking =
+        """{"status":"making","available":["roman","english"],"default":"roman","progress":{"roman":{"done":1,"total":2}}}"""
+    private val viewsReady =
+        """{"status":"ready","available":["roman","english"],"default":"roman","roman":["Hello ji.","Shukriya call karne ka."],"english":null}"""
+
+    /** U19: a transcript whose default view is Roman Urdu ([status]); the views answer [answers] in turn, the last one after. */
+    private fun romanView(status: String, vararg answers: String) {
+        serve(
+            ServerFixtures.transcript().trimEnd().removeSuffix("}") +
+                ""","views":{"available":["roman","english"],"status":"$status","default":"roman"}}"""
+        )
+        var asked = 0
+        server.on("GET", "/api/transcripts/.+/views") { FakeServer.json(200, answers[minOf(asked++, answers.size - 1)]) }
+        server.on("POST", "/api/transcripts/.+/views", FakeServer.json(202, viewsMaking))
+    }
+
+    @Test
+    fun `an Urdu transcript says it is converting, then shows and copies Roman Urdu once it is ready`() {
+        romanView("making", viewsMaking, viewsReady)
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "making", default = "roman"))))
+        awaitText("Converting to Roman Urdu")
+        // The original words can be read meanwhile.
+        awaitText("Hi, thanks for calling.")
+        // The page asks again every 5 s (the test clock moves a second at a time) and swaps the lines once it is ready.
+        pumpUntil("the Roman Urdu lines", timeoutMs = 45_000) {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.onAllNodesWithText("Shukriya call karne ka.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText("Hi, thanks for calling.").assertCountEquals(0)
+        compose.onAllNodesWithText("Converting to Roman Urdu", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Copy text").performClick()
+        pumpUntil("the clipboard") { clipboardText()?.contains("Shukriya call karne ka.") == true }
+    }
+
+    @Test
+    fun `a Roman Urdu view that could not be made says so and Try again asks for it again`() {
+        romanView("failed", """{"status":"failed","available":["roman","english"],"default":"roman","error":"x"}""", viewsMaking)
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "failed", default = "roman"))))
+        awaitText("Couldn't convert to Roman Urdu.")
+        awaitText("Hi, thanks for calling.")
+        assertTrue(server.requestsTo("POST", "/api/transcripts/.+/views").isEmpty())
+        compose.onNodeWithText("Try again").performClick()
+        pumpUntil("asked again") { server.requestsTo("POST", "/api/transcripts/.+/views").isNotEmpty() }
     }
 
     @Test

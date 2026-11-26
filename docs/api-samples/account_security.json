@@ -1,0 +1,195 @@
+{
+    "password": true,
+    "google": {
+        "linked": false,
+        "email": null
+    },
+    "passkeys": [
+        {
+            "id": "01m7zdde4a5zgd2vs5yz77xwmn",
+            "name": "Sample phone",
+            "created_at": "2026-11-21T16:00:47+00:00",
+            "last_used_at": null
+        }
+    ],
+    "two_factor": {
+        "enabled": true,
+        "recovery_codes_left": 8
+    },
+    "browsers": [],
+    "devices": [
+        {
+            "id": "01m7zddd2mh3rdf2yjeh3w864v",
+            "name": "Sample phone",
+            "platform": "android",
+            "app_version": "1.5.0",
+            "last_seen_at": "2026-11-21T16:00:46+00:00",
+            "paired_at": "2026-11-21T16:00:46+00:00",
+            "current": true,
+            "status": "active",
+            "signed_out_at": null,
+            "workspace": {
+                "id": 1,
+                "name": "Personal"
+            }
+        },
+        {
+            "id": "01m7zddc7v12m6cg01k9mbxa2h",
+            "name": "Galaxy S25 Ultra",
+            "platform": "android",
+            "app_version": "1.0.0",
+            "last_seen_at": "2026-11-21T15:55:45+00:00",
+            "paired_at": "2026-11-21T16:00:45+00:00",
+            "current": false,
+            "status": "active",
+            "signed_out_at": null,
+            "workspace": {
+                "id": 1,
+                "name": "Personal"
+            }
+        },
+        {
+            "id": "01m7zddc8ke8r8ag0xffscdmk5",
+            "name": "Work laptop",
+            "platform": "windows",
+            "app_version": "1.0.0",
+            "last_seen_at": "2026-11-21T15:00:45+00:00",
+            "paired_at": "2026-11-21T16:00:45+00:00",
+            "current": false,
+            "status": "active",
+            "signed_out_at": null,
+            "workspace": {
+                "id": 1,
+                "name": "Personal"
+            }
+        }
+    ],
+    "events": [
+        {
+            "id": 17,
+            "event": "passkey_added",
+            "label": "Passkey added",
+            "summary": "Passkey added: Sample phone",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:47+00:00"
+        },
+        {
+            "id": 16,
+            "event": "recovery_codes_regenerated",
+            "label": "Recovery codes made again",
+            "summary": "Recovery codes made again",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 15,
+            "event": "mfa_enabled",
+            "label": "Two-step sign-in turned on",
+            "summary": "Two-step sign-in turned on",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 14,
+            "event": "email_changed",
+            "label": "Email changed",
+            "summary": "Email changed to s…@example.test",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 13,
+            "event": "email_change_requested",
+            "label": "Email change asked for",
+            "summary": "Email change asked for: s…@example.test",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 12,
+            "event": "avatar_changed",
+            "label": "Profile picture changed",
+            "summary": "Profile picture changed",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 11,
+            "event": "device_renamed",
+            "label": "Device renamed",
+            "summary": "Device renamed: Sample phone",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 10,
+            "event": "upgrade_requested",
+            "label": "Upgrade asked for",
+            "summary": "Asked for the Business plan (EL-RZ7S3M)",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 9,
+            "event": "promo_code_used",
+            "label": "Promo code used",
+            "summary": "Used the promo code TEAM25 (25 %) for Business",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 8,
+            "event": "transcription_key_set",
+            "label": "Own transcription key saved",
+            "summary": "Own Groq key saved (…1234)",
+            "actor": "device",
+            "device": "Sample phone",
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 7,
+            "event": "device_signed_in",
+            "label": "Device signed in",
+            "summary": "Signed in on Sample phone (Android) with a password",
+            "actor": "system",
+            "device": null,
+            "at": "2026-11-21T16:00:46+00:00"
+        },
+        {
+            "id": 6,
+            "event": "device_paired",
+            "label": "Device signed in with a code",
+            "summary": "Device signed in with a code: Work laptop",
+            "actor": "system",
+            "device": null,
+            "at": "2026-11-21T16:00:45+00:00"
+        },
+        {
+            "id": 5,
+            "event": "device_paired",
+            "label": "Device signed in with a code",
+            "summary": "Device signed in with a code: Galaxy S25 Ultra",
+            "actor": "system",
+            "device": null,
+            "at": "2026-11-21T16:00:45+00:00"
+        },
+        {
+            "id": 4,
+            "event": "mfa_disabled",
+            "label": "Two-step sign-in turned off",
+            "summary": "Two-step sign-in turned off",
+            "actor": "system",
+            "device": null,
+            "at": "2026-11-21T16:00:45+00:00"
+        }
+    ]
+}

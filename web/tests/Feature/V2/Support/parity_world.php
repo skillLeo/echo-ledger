@@ -109,6 +109,8 @@ const WEB_PARITY_SCOPES = [
     'switcher' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-workspace-switcher ")]',
     'player' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-player ")]',
     'rectabs' => '//*[contains(concat(" ", normalize-space(@class), " "), " v2-rec-tabs ")]',
+    // Since 2.0.0-p: the Library's filter panel (read as drawn open: the "panel" check).
+    'panel' => '//*[@data-filter-panel]',
 ];
 
 /** What a control's text is compared on: lower case, digits out, spaces as one. */
@@ -181,5 +183,6 @@ function webParityControls(string $html, string $scope = 'main'): array
 /** Whether the v2.0 frame drew the page (its top bar and sidebar), so a control found is the new design's. */
 function webParityIsV2(string $html): bool
 {
-    return str_contains($html, 'v2-tb') && str_contains($html, 'v2-sb-inner');
+    // The sidebar, or since docs/PLAN_NAV_3_LEVELS.md the rail and its panels (the frame with the new Library).
+    return str_contains($html, 'v2-tb') && (str_contains($html, 'v2-sb-inner') || str_contains($html, 'v2-frame-inner'));
 }

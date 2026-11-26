@@ -41,7 +41,7 @@ turn's `client_ref`; a token refresh never fails because captions are down.
 resume, `relay.url`, and pinning of the relay host.
 
 The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is frozen for
-the sprint: only the lead changes it, always with a bump. Its HTTP part moves into [API.md](API.md) when the L1 server
+the sprint: only its owner changes it, always with a bump. Its HTTP part moves into [API.md](API.md) when the L1 server
 work merges, and the API documentation test covers it from then on. Everything here is invisible to users until v1.9 ships, and nothing of it ships before
 Phase S is verified on real devices.
 

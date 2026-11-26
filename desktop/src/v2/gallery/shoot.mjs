@@ -6,6 +6,8 @@
 //                                                      (library-loading-light-en.png …)
 //   node src/v2/gallery/shoot.mjs --text=200 --out=DIR  the same at 200 % text, into DIR (for checking, not committed):
 //   the window keeps its 1280 x 800 pixels at twice the scale, as when the system text size grows.
+//   node src/v2/gallery/shoot.mjs --review=D14        a design review's pictures (cases.mjs REVIEWS), light and dark,
+//                                                      English and Urdu, into the review's folder (docs/v2/design-review/D14/)
 //   node src/v2/gallery/shoot.mjs --app               every v2 screen of the app itself (fixture mode, cases.mjs GATE3),
 //                                                      light English, light right to left and dark English, into
 //                                                      docs/v2/gate3/desktop/app/, and docs/v2/gate3/desktop/index.md
@@ -14,7 +16,7 @@ import { chromium } from "playwright";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CASES, GATE3 } from "./cases.mjs";
+import { CASES, GATE3, REVIEWS } from "./cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
@@ -24,7 +26,10 @@ const only = arg("screen");
 const statesMode = process.argv.includes("--states");
 const states = statesMode ? ["loading", "empty", "error"] : ["ready"];
 const appMode = process.argv.includes("--app");
-const dir = statesMode ? join(out, "states") : appMode ? join(out, "app") : out;
+const reviewId = arg("review");
+const review = reviewId ? REVIEWS[reviewId] : null;
+if (reviewId && !review) throw new Error(`no review "${reviewId}" in cases.mjs (there are: ${Object.keys(REVIEWS).join(", ")})`);
+const dir = review ? join(desktop, "..", review.dir) : statesMode ? join(out, "states") : appMode ? join(out, "app") : out;
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 /** The app's captures: light English, light right to left, dark English. */
 const APP_VARIANTS = [["light", "en"], ["light", "ur"], ["dark", "en"]];
@@ -52,6 +57,28 @@ async function shootApp(browser, base, [file, caseName, , focus]) {
     await page.close();
   }
   return result;
+}
+
+/** One design-review picture set: every width, light and dark, English and Urdu. */
+async function shootReview(browser, base, [file, caseName, widths]) {
+  const [, , path, langs, step] = CASES.find(([name]) => name === caseName);
+  const problems = [];
+  for (const width of widths ?? [1280]) for (const theme of ["light", "dark"]) for (const lang of langs) {
+    const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+    page.on("pageerror", (e) => problems.push(`${width}-${theme}-${lang}: ${e.message.split("\n")[0]}`));
+    await page.goto(`${base}${path}&theme=${theme}&lang=${lang}`);
+    await page.waitForSelector("[data-gallery-ready]");
+    await page.evaluate(() => document.fonts.ready);
+    try {
+      if (step) await step(page);
+    } catch (e) {
+      problems.push(`${width}-${theme}-${lang}: step failed: ${String(e.message).split("\n")[0]}`);
+    }
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(dir, `${file}${widths ? `-${width}` : ""}-${theme}-${lang}.png`) });
+    await page.close();
+  }
+  return problems;
 }
 
 /** docs/v2/gate3/desktop/index.md: one line per screen, with its pictures. */
@@ -105,6 +132,13 @@ const base = server.resolvedUrls.local[0];
 await mkdir(dir, { recursive: true });
 const browser = await chromium.launch();
 try {
+  if (review) {
+    for (const shot of review.shots) {
+      if (only && shot[0] !== only) continue;
+      const problems = await shootReview(browser, base, shot);
+      console.log(shot[0], problems.join("; "));
+    }
+  }
   if (appMode) {
     const results = [];
     for (const entry of GATE3) {
@@ -115,7 +149,7 @@ try {
     if (!only) await writeIndex(results);
   }
   // Plan & usage is in the gallery for its right-to-left meters; it has no loading, empty or error state of its own.
-  for (const screen of appMode ? [] : statesMode ? ["library", "recording", "settings"] : ["library", "recording", "settings", "plan"]) {
+  for (const screen of appMode || review ? [] : statesMode ? ["library", "recording", "settings"] : ["library", "recording", "settings", "plan"]) {
     if (only && screen !== only) continue;
     for (const state of states) for (const theme of ["light", "dark"]) {
       for (const lang of ["en", "ur"]) {

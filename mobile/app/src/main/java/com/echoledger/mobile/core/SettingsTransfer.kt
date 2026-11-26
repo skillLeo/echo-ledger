@@ -24,9 +24,12 @@ object SettingsTransfer {
     const val MAX_BYTES = 256 * 1024
 
     val PORTABLE: Set<String> = setOf(
+        // Library swipes on or off (Appearance) go to another phone with the rest of the preferences.
+        "librarySwipes",
         "autoRecordArmed",
         "widgetHideTitles",
         "screenShareMode",
+        "hideLiveWords",
         // Game and Watch translate (since v1.3): the choices travel; box spots are fractions of the screen.
         "liveTranslate",
         "captionsEnabled",
@@ -36,6 +39,8 @@ object SettingsTransfer {
         "decisionTimeoutChosen",
         "undecidedKeepHours",
         "afterCall",
+        "afterEachCall",
+        "whenToAsk",
         "skipCallsShorterThanS",
         "autoRecordApps",
         "extraCallApps",
@@ -74,6 +79,12 @@ object SettingsTransfer {
         // The Phone app's own recordings belong to this phone (since v1.8).
         "phoneAppImport",
         "deletePhoneAppCopy",
+        // The small after-call bar needs this phone's overlay permission (v2.1).
+        "afterCallBar",
+        // How often this phone opened the app and showed the Record hint (v2.1).
+        "appOpens",
+        "recordHintShows",
+        "recordHintDone",
         // Where the control pill sits belongs to this phone's screen.
         "pillEdge",
         "pillY",
@@ -81,6 +92,7 @@ object SettingsTransfer {
         "serverUrl",
         "pins",
         "deviceId",
+        "signIns",
         "deviceName",
         "clientId",
         "serverApiVersion",
@@ -92,6 +104,11 @@ object SettingsTransfer {
         "appLockEnabled",
         "lockAfterMs",
         "secureScreen",
+        "blockScreens",
+        "callChoiceHintShown",
+        "callChoiceStreak",
+        "callChoiceStreakCount",
+        "callChoiceAlwaysOffered",
         "settingsVersion",
         "onboardingDone",
         "themeMode",
@@ -99,6 +116,9 @@ object SettingsTransfer {
         "phoneFont",
         "textSize",
         "appLanguage",
+        // The account's own, read from the server on each phone.
+        "accountLanguage",
+        "avatarColor",
         "setupCardHidden",
         "recentSearches",
         // How this phone shows the Library, and what was opened on it (since v1.6).
@@ -149,7 +169,16 @@ object SettingsTransfer {
                 applied++
             }
         }
-        val settings = decode(merged) ?: return Result.Rejected(NOT_A_SETTINGS_FILE)
+        val decoded = decode(merged) ?: return Result.Rejected(NOT_A_SETTINGS_FILE)
+        // A file from before 2.0.5 carries the old choices only: they arrive as the store's migration reads them.
+        val settings = decoded.let {
+            val mode = (incoming["screenShareMode"] as? JsonPrimitive)?.contentOrNull
+            if (mode != null && "hideLiveWords" !in incoming) it.copy(hideLiveWords = mode != "show") else it
+        }.let {
+            val afterCall = (incoming["afterCall"] as? JsonPrimitive)?.contentOrNull
+            val old = afterCall?.takeIf { "afterEachCall" !in incoming }
+            if (old != null) it.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.fromOld(old)) else it
+        }
         val clean = settings.copy(
             captionStyle = settings.captionStyle.sanitized(),
             dictationReplacements = DictationText.cleanReplacements(settings.dictationReplacements),

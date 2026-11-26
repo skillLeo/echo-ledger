@@ -5,14 +5,17 @@ import { hasSourceLogo, SourceLogo } from "../../components/SourceLogos";
 import { sourceLabel } from "../../lib/libraryGroups";
 import { Icon, Icons } from "../components";
 import type { LibraryItem } from "../../lib/ipc";
+import { t } from "../../i18n";
 
-const DEVICE_WORDS: Record<string, string> = { phone: "on a phone", desktop: "on a computer", web: "on the web" };
-
-/** "WhatsApp, on a phone": the words the mark stands for. */
+/** "WhatsApp, on a phone": the words the mark stands for, in the window's language. */
 export function sourceWords(item: Pick<LibraryItem, "source_app" | "source_app_label" | "source_device">): string {
-  const device = item.source_device ? DEVICE_WORDS[item.source_device] : null;
-  const app = item.source_app === "voice_note" ? "Voice note" : sourceLabel(item);
-  return device ? `${app}, ${device}` : app;
+  const app = item.source_app === "voice_note" ? t("Voice note") : sourceLabel(item);
+  switch (item.source_device) {
+    case "phone": return t(":app, on a phone", { app });
+    case "desktop": return t(":app, on a computer", { app });
+    case "web": return t(":app, on the web", { app });
+    default: return app;
+  }
 }
 
 export function SourceAvatar({ item, size = "md" }: { item: Pick<LibraryItem, "source_app" | "source_app_label" | "source_device">; size?: "sm" | "md" }) {

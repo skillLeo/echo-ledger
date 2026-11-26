@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Audio only and Transcribe later on the v2 screens (contract 2.0.0-j). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_lib_audio_only">Audio only</string>
+    <string name="v2_tx_menu">Transcribe…</string>
+    <string name="v2_tx_go">Transcribe</string>
+    <string name="v2_tx_ok">OK</string>
+    <string name="v2_tx_none">None of them is waiting to be transcribed.</string>
+    <string name="v2_tx_uses_none">Uses none of your plan\'s minutes.</string>
+    <string name="v2_tx_budget">Not enough minutes left this month: %1$d needed, %2$d left. Nothing was started.</string>
+    <string name="v2_tx_budget_short">Not enough minutes left this month. Nothing was started.</string>
+    <string name="v2_tx_needs_key">On the Free plan, add your transcription key in Settings › Transcription key to transcribe.</string>
+    <string name="v2_tx_not_audio_only">It is already transcribed or still uploading.</string>
+    <string name="v2_tx_failed">It could not be transcribed. Try again.</string>
+    <string name="v2_tx_not_enough_title">Not enough minutes</string>
+    <string name="v2_tx_audio_only_title">Audio only</string>
+    <string name="v2_tx_audio_only_body">Kept as audio, not transcribed yet.</string>
+    <plurals name="v2_tx_uses">
+        <item quantity="one">Uses %1$d minute of your plan.</item>
+        <item quantity="other">Uses %1$d minutes of your plan.</item>
+    </plurals>
+    <plurals name="v2_tx_uses_left">
+        <item quantity="one">Uses %1$d minute of your plan · %2$d left this month.</item>
+        <item quantity="other">Uses %1$d minutes of your plan · %2$d left this month.</item>
+    </plurals>
+    <plurals name="v2_tx_started">
+        <item quantity="one">Transcribing %1$d recording.</item>
+        <item quantity="other">Transcribing %1$d recordings.</item>
+    </plurals>
+    <plurals name="v2_tx_skipped">
+        <item quantity="one">%1$d skipped: already transcribed or still uploading.</item>
+        <item quantity="other">%1$d skipped: already transcribed or still uploading.</item>
+    </plurals>
+    <plurals name="v2_tx_ask_title">
+        <item quantity="one">Transcribe %1$d recording?</item>
+        <item quantity="other">Transcribe %1$d recordings?</item>
+    </plurals>
+</resources>

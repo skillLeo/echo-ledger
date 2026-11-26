@@ -21,12 +21,12 @@ Gaps in the evidence:
 | S4 Polish | 14 | 0 | 0 | 14 |
 | **Total** | **74** | **25** | **1** | **48** |
 
-- **Fix now: 26 rows.** 25 are open, in 6 builder batches below. One is already fixed and merged: P-027, the "Send to WhatsApp" button squeezed into a one-letter column.
+- **Fix now: 26 rows.** 25 are open, in 6 fix batches below. One is already fixed and merged: P-027, the "Send to WhatsApp" button squeezed into a one-letter column.
 - **v2 backlog: 48 rows** (fix_now = no). No S2 is left in the backlog.
 - **By module:** Settings 24, Cross-cutting 13, Library 11, Recording page 10, Record 5, Floating windows 4, Projects 2, Plan 2, Notifications 1, Shell 1, Activity 1.
 - **By category:** Copy 24, Component state 10, Backend/Flow 9, Navigation/IA 8, Layout/Resize 6, Typography 4, Accessibility 4, Colour/Theme 3, RTL 3, Overlay/Window 2, Icon 1.
 
-## (b) Fix now: 25 open rows in 6 builder batches
+## (b) Fix now: 25 open rows in 6 fix batches
 
 Do Batch 1 first: an S0 is fixed before any release. Keep each fix small, because v2.0 rebuilds these screens.
 

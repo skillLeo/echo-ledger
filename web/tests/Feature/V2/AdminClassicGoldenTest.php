@@ -25,6 +25,9 @@ function classicAdmin(object $test): User
     // The saved copies were made with debug off, as in production. A shell that exports APP_DEBUG=true wins over
     // phpunit.xml and changes every page (Filament adds an error-notification script to the Livewire effects).
     expect(config('app.debug'))->toBeFalse('the saved pages need debug off: run the suite with APP_DEBUG unset');
+    // A server whose mail leaves it (W-INC-1125): the saved pages have no "mail isn't set up" callout, which the test
+    // env's array mailer would add. That callout's own tests are in RequiredExtensionsTest.
+    config(['mail.default' => 'smtp']);
     $admin = $test->makeAdmin(['name' => 'Ayesha Khan', 'email' => 'ayesha@example.test']);
     foreach ([['Bilal Qureshi', 'bilal@qureshi-textiles.example'], ['Sadia Hassan', 'sadia@zamzam-travels.example']] as [$name, $email]) {
         User::factory()->create(['name' => $name, 'email' => $email]);

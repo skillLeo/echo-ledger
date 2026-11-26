@@ -5,9 +5,10 @@
 //! The window asks with `ui_flags` (answered from the last config read, no request) and sets "Switch back to classic"
 //! with `ui_classic_set` (`PUT /api/account/ui`, which updates the cached config). Both answer
 //! `{"ui_flags": {"<name>": bool, …}, "ui_classic": bool}` (desktop/src/v2/flags.ts reads that shape), and `ui:flags`
-//! carries it whenever the cached flags change. The window reads them again on its next screen, never in the middle
-//! of a recording. The config is read at start, every minute while the app runs (so within a minute of a resume, well
-//! inside the contract's 15 minutes) and right after `ui_classic_set`.
+//! carries it whenever the cached flags change. A window that read before the first config answer (everything off)
+//! takes the first `ui:flags` at once, or when its recording ends; after that it reads them again on its next screen or
+//! when a recording ends, never in the middle of one. The config is read at start, every minute while the app runs
+//! (so within a minute of a resume, well inside the contract's 15 minutes) and right after `ui_classic_set`.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -16,7 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The flags this app knows, as the contract names them.
-pub const KNOWN: [&str; 12] = [
+pub const KNOWN: [&str; 16] = [
     "ui_v2.shell",
     "ui_v2.home",
     "ui_v2.library",
@@ -29,6 +30,14 @@ pub const KNOWN: [&str; 12] = [
     "ui_v2.admin",
     "ui_v2.website",
     "live_assist",
+    // UX-02 (PLAN_V2_1_POLISH): the panel docked from 1200 px, a flyout below (contract 2.0.0-r).
+    "v21_panel_flyout",
+    // UX-20 (PLAN_V2_1_POLISH): the main window's own title row on Windows (contract 2.0.0-s, wintitle.rs).
+    "v21_win_titlebar",
+    // UX-07 (PLAN_V2_1_POLISH): zoom like Chrome in the main window (contract 2.0.0-r).
+    "v21_zoom",
+    // Desktop Urdu: the window speaks the account's language (src/i18n). Without it here the window never heard it.
+    "v21_urdu",
 ];
 
 /// The event the window hears when the cached flags change.
@@ -139,6 +148,8 @@ pub fn announce(app: &AppHandle) {
     // `live_assist` turned off for this person: a session that runs ends.
     crate::assist::live::stop_unless_enabled(app, &flags);
     if let Some(flags) = state.ui_announced.changed(flags) {
+        // The main window's own title row on Windows follows its flag at once (wintitle.rs).
+        crate::wintitle::follow(app, &flags);
         // Turned on: the scheduled preps get their arming timers.
         if crate::assist::enabled(&flags) {
             crate::assist::live::rearm(app);
@@ -166,6 +177,13 @@ mod tests {
             assert!(UiFlags::read(raw.as_ref(), false).flags.values().all(|on| !on), "{raw:?}");
         }
         assert_eq!(UiFlags::default(), UiFlags::read(None, false));
+    }
+
+    #[test]
+    fn the_urdu_flag_reaches_the_window() {
+        // Desktop Urdu: the server's v21_urdu is on for the window only when this list knows it.
+        assert!(UiFlags::read(Some(&json!({"v21_urdu": true})), false).is_on("v21_urdu"));
+        assert!(!UiFlags::read(Some(&json!({"v21_urdu": false})), false).is_on("v21_urdu"));
     }
 
     #[test]

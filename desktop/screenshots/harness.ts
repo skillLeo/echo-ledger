@@ -12,7 +12,7 @@ import {
   makeItem,
   makePendingItem,
   makeRecordingState,
-  makeSavedToast,
+  makeCallDone,
   makeScreen,
   makeSettings,
   makeStatus,
@@ -158,12 +158,12 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
     case "recording_state":
       return makeRecordingState({ active: win === "pill", elapsedMs: 754_000, sourceApp: "google_meet", captions: true, levels: [0.55, 0.3], screens: screens ? { on: true, reason: null, count: 4 } : null });
     case "after_call_state":
-      // The toast stays for the picture (an hour); the chip line starts at 6 of its 10 seconds.
+      // One thing at a time (the call choice): the confirmation stays for the picture (an hour); the card's line starts
+      // at 6 of its 8 seconds.
       return win === "review"
-        ? makeAfterCallState({
-            saved: after === "ask" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
-            ask: after === "saved" ? null : makeChipItem("pend-1", { sourceApp: "google_meet", title: "Weekly sync with Northwind", durationMs: 1_845_000, deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
-          })
+        ? after === "saved"
+          ? makeAfterCallState({ done: makeCallDone({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }) })
+          : makeAfterCallState({ ask: makeChipItem("pend-1", { sourceApp: "google_meet", title: "Weekly sync with Northwind", durationMs: 1_845_000, deadlineAt: new Date(Date.now() + 6_000).toISOString() }) })
         : makeAfterCallState();
     case "subscribe_captions":
       channelId = (args?.onEvent as { id: number } | undefined)?.id ?? null;

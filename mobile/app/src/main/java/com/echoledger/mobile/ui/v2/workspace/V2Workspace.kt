@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -103,7 +104,7 @@ private val MENU = listOf(
  * - Memory & instructions: the AI notes switch and the month's AI use, the brief (Edit, Save brief, Write again),
  *   memory (open the call, pin, remove, add), the pasted instructions;
  * - Call notes (while AI notes are on) and Screens;
- * and Share, Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
+ * and Share (the v2 Share link sheet), Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
  */
 @Composable
 fun V2WorkspaceScreen(
@@ -177,60 +178,70 @@ fun V2WorkspaceScreen(
             EchoIconButton(EchoIcons.Share, stringResource(R.string.v2_ws_share), { sheet = "share" })
             EchoIconButton(EchoIcons.More, stringResource(R.string.v2_ws_menu), { menuOpen = true })
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Crumbs(path, onOpenProject)
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-            ) {
-                Text(recordingsCount(recordings.size), style = EchoV2.type.meta, color = c.textSecondary, modifier = Modifier.weight(1f))
-                EchoButton(stringResource(R.string.v2_ws_copy_ai), {
-                    scope.launch {
-                        vm.bundle(projectId)?.let { bundle ->
-                            context.getSystemService(ClipboardManager::class.java)
-                                ?.setPrimaryClip(ClipData.newPlainText(project.name, bundle))
-                            toasts.show(copied)
+        val pageScroll = rememberScrollState()
+        Box(Modifier.weight(1f)) {
+            Column(Modifier.fillMaxSize().verticalScroll(pageScroll)) {
+                Crumbs(path, onOpenProject)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+                ) {
+                    Text(
+                        recordingsCount(recordings.size),
+                        style = EchoV2.type.meta,
+                        color = c.textSecondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    EchoButton(stringResource(R.string.v2_ws_copy_ai), {
+                        scope.launch {
+                            vm.bundle(projectId)?.let { bundle ->
+                                context.getSystemService(ClipboardManager::class.java)
+                                    ?.setPrimaryClip(ClipData.newPlainText(project.name, bundle))
+                                toasts.show(copied)
+                            }
                         }
-                    }
-                }, kind = EchoButtonKind.Secondary)
-            }
-            EchoTabs(tabs.map { stringResource(it.label) }, tabs.indexOf(shown), onSelect = { tab = tabs[it] })
-            val w = workspace
-            when {
-                shown == WorkspaceTab.Recordings -> RecordingsTab(
-                    vm,
-                    project,
-                    folders,
-                    recordings,
-                    nested,
-                    { nested = it },
-                    onOpenProject,
-                    onOpenRecording
-                )
-
-                shown == WorkspaceTab.Screens -> ScreensTab(vm, project, nested) { list, i -> viewing = list to i }
-
-                shown == WorkspaceTab.Ask -> Column(Modifier.fillMaxWidth().height(EchoTokens.Space.s64 * ASK_UNITS)) {
-                    V2AskScreen(vm, onOpenAt, fixedProject = project)
+                    }, kind = EchoButtonKind.Secondary)
                 }
+                EchoTabs(tabs.map { stringResource(it.label) }, tabs.indexOf(shown), onSelect = { tab = tabs[it] })
+                val w = workspace
+                when {
+                    shown == WorkspaceTab.Recordings -> RecordingsTab(
+                        vm,
+                        project,
+                        folders,
+                        recordings,
+                        nested,
+                        { nested = it },
+                        onOpenProject,
+                        onOpenRecording
+                    )
 
-                w == null && failed -> EchoErrorState(
-                    stringResource(R.string.v2_ws_failed_title),
-                    stringResource(R.string.v2_ws_failed_body),
-                    actionLabel = stringResource(R.string.v2_ws_try_again),
-                    onAction = { reload++ }
-                )
+                    shown == WorkspaceTab.Screens -> ScreensTab(vm, project, nested) { list, i -> viewing = list to i }
 
-                w == null -> EchoSkeletonList(3, avatar = false)
+                    shown == WorkspaceTab.Ask -> Column(Modifier.fillMaxWidth().height(EchoTokens.Space.s64 * ASK_UNITS)) {
+                        V2AskScreen(vm, onOpenAt, fixedProject = project)
+                    }
 
-                shown == WorkspaceTab.Files -> FilesTab(vm, project, w, onChanged = { reload++ })
+                    w == null && failed -> EchoErrorState(
+                        stringResource(R.string.v2_ws_failed_title),
+                        stringResource(R.string.v2_ws_failed_body),
+                        actionLabel = stringResource(R.string.v2_ws_try_again),
+                        onAction = { reload++ }
+                    )
 
-                shown == WorkspaceTab.Memory -> MemoryTab(vm, project, w, aiNotesInPlan, onOpenAt, { workspace = it }, { reload++ })
+                    w == null -> EchoSkeletonList(3, avatar = false)
 
-                else -> NotesTab(project, w.notes, onOpenAt)
+                    shown == WorkspaceTab.Files -> FilesTab(vm, project, w, onChanged = { reload++ })
+
+                    shown == WorkspaceTab.Memory -> MemoryTab(vm, project, w, aiNotesInPlan, onOpenAt, { workspace = it }, { reload++ })
+
+                    else -> NotesTab(project, w.notes, onOpenAt)
+                }
+                Spacer(Modifier.height(EchoTokens.Space.s24))
             }
-            Spacer(Modifier.height(EchoTokens.Space.s24))
+            // Back to top (UX-25): a project's recordings can be a long page.
+            com.echoledger.mobile.ui.v2.components.EchoBackToTop(pageScroll, Modifier.align(Alignment.BottomEnd))
         }
     }
     if (menuOpen) {
@@ -247,7 +258,13 @@ fun V2WorkspaceScreen(
             }
         }
     }
-    sheet?.let { key -> ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject) }
+    sheet?.let { key ->
+        if (key == "share") {
+            com.echoledger.mobile.ui.v2.library.V2ShareLinkSheet(vm, sessionId = null, clientId = project.id, onDismiss = { sheet = null })
+        } else {
+            ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject)
+        }
+    }
 }
 
 private const val WORKING_POLL_MS = 5_000L
@@ -321,7 +338,7 @@ private fun RecordingsTab(
                 meta = row.meta,
                 titleEnd = row.time,
                 metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
+                leading = { com.echoledger.mobile.ui.v2.library.RowSourceLogo(row) },
                 tall = true,
                 onClick = { onOpenRecording(item) }
             )
@@ -967,10 +984,11 @@ private fun ScreensTab(vm: MainViewModel, project: ClientDto, nested: Boolean, o
 
 /** A project row on the Projects list: its avatar, name, recordings and folders. */
 @Composable
-fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit) {
+fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit, lastCall: String? = null) {
+    val last = lastCall?.let { stringResource(R.string.v2_ws_last_call, it) }
     EchoListRow(
         title = project.name,
-        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }).joinToString(", "),
+        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }, last).joinToString(", "),
         leading = { EchoAvatar(icon = EchoIcons.Folder) },
         onClick = onOpen
     )

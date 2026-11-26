@@ -1,13 +1,22 @@
-// Find in the v2 Library against classic (PLAN_V2_PARITY 3; docs/v2/audit/parity.csv DT-LIB-001..059): Views ▾ with
-// classic's smart views, the filter chips (ticks add up inside one, filters narrow each other), Clear all, Sort and
-// group remembered per view, sections with counts that fold, a header box that picks a section, Sync, "/" and the count.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// Find in the v2 Library (PLAN_LIBRARY_FILTERS; docs/v2/audit/parity.csv DT-LIB-001..059): one toolbar row (Search,
+// [Filters n], [Sort & display ▾]); the filters (F, Esc; remembered; from the end side, pushing the list from 1440 px, over it below) with its sections,
+// live counts (an option at 0 dimmed, still a choice), a search box in a long section and each section's Clear, the
+// list following 150 ms after the last tick; the pills row only while filters are on (edit with "is" or "is not",
+// × removes one, Clear all); a row's source logo or label dot as a quick filter; the keys; sections with counts that
+// fold; a section's box in selection; Sort, Group by and Density remembered on this computer.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
-import { applyFilters, chipLabel, filterOptions, sections, toggleFilter } from "./filters";
-import { LibraryV2 } from "./LibraryV2";
+import { sections } from "./filters";
+import { DRAWER_BELOW, FILTER_DEBOUNCE_MS, LibraryV2 } from "./LibraryV2";
+import { LibraryFoot } from "./LibraryNav";
+import { resetSyncClock } from "./syncClock";
+import { filterBySource } from "../../test/library";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -25,47 +34,40 @@ const ITEMS: LibraryItem[] = [
   makeItem("d", { title: "Dawood", source_app: "voice_note", source_app_label: "Voice note", source_device: "desktop", started_at: at(10, 9), duration_ms: 120_000, marker_count: 2, tags: ["Price"], status: "failed", transcript: { ...none, final_status: "failed" } }),
 ];
 
-const rows = () => [...screen.getByRole("list", { name: "Recordings" }).querySelectorAll<HTMLButtonElement>("button[data-row-id]")].map((b) => b.dataset.rowId);
-const chip = (name: RegExp) => screen.getByRole("button", { name });
-const tick = (chipName: RegExp, item: RegExp) => {
-  fireEvent.click(chip(chipName));
-  fireEvent.click(screen.getByRole("menuitemcheckbox", { name: item }));
+/** The rows shown (none when nothing matches). */
+const rows = () => [...(screen.queryByRole("list", { name: "Recordings" })?.querySelectorAll<HTMLButtonElement>("button[data-row-id]") ?? [])].map((b) => b.dataset.rowId);
+const headings = () => [...document.querySelectorAll(".el-list-section")].map((h) => h.textContent);
+const panel = () => within(screen.getByTestId("filter-panel"));
+const section = (name: string) => within(panel().getByRole("region", { name }));
+/** A section's options as shown: "WhatsApp2". */
+const options = (name: string) => section(name).queryAllByRole(name === "Date" ? "radio" : "checkbox").map((c) => c.closest("label")!.textContent);
+const option = (sectionName: string, label: RegExp) => section(sectionName).getByRole(sectionName === "Date" ? "radio" : "checkbox", { name: label });
+const pills = () => within(screen.getByRole("group", { name: "Filters on" }));
+const filtersButton = () => screen.getByRole("button", { name: /^Filters/ });
+/** The list follows the panel 150 ms after the last tick. */
+const followed = () => act(() => new Promise((r) => setTimeout(r, FILTER_DEBOUNCE_MS + 30)));
+const display = (name: string) => {
+  fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name }));
+};
+const setWidth = (width: number) => {
+  Object.defineProperty(window, "innerWidth", { value: width, configurable: true, writable: true });
+  window.dispatchEvent(new Event("resize"));
 };
 
-describe("the filter rules", () => {
-  it("ticks inside one filter add up; filters narrow each other", () => {
-    expect(applyFilters(ITEMS, { source: ["whatsapp", "zoom"] }).map((i) => i.id)).toEqual(["a", "b", "c"]);
-    expect(applyFilters(ITEMS, { source: ["whatsapp", "zoom"], project: ["none"] }).map((i) => i.id)).toEqual(["b"]);
-    // Classic's status groups: a recording not transcribed yet counts as Transcribing; failed ones need you.
-    expect(applyFilters(ITEMS, { status: ["Needs you"] }).map((i) => i.id)).toEqual(["d"]);
-    expect(applyFilters(ITEMS, { status: ["Needs you", "Transcribing"] }).map((i) => i.id)).toEqual(["c", "d"]);
-    expect(applyFilters(ITEMS, { label: ["q4"] }).map((i) => i.id)).toEqual(["a"]);
-    expect(applyFilters(ITEMS, { tag: ["price"], device: ["desktop"] }).map((i) => i.id)).toEqual(["d"]);
-  });
-
-  it("what each filter offers, with counts, the no-project kind last; a chip's words", () => {
-    expect(filterOptions(ITEMS, "source")).toEqual([
-      { value: "voice_note", label: "Voice notes", count: 1 }, { value: "whatsapp", label: "WhatsApp", count: 2 }, { value: "zoom", label: "Zoom", count: 1 },
+describe("the sections", () => {
+  it("Pinned first in every grouping, then the days or the groups; any sort", () => {
+    expect(sections(ITEMS, "date", "newest", {}, true, NOW).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([
+      ["Pinned", ["c"]], ["Today", ["a", "b"]], ["Earlier", ["d"]],
     ]);
-    expect(filterOptions(ITEMS, "project").map((o) => o.label)).toEqual(["Acme", "No project"]);
-    expect(filterOptions(ITEMS, "status").map((o) => o.label)).toEqual(["Needs you", "Transcribing", "Ready"]);
-    expect(filterOptions(ITEMS, "device").map((o) => [o.label, o.count])).toEqual([["Desktop", 2], ["Phone", 2]]);
-    const source = filterOptions(ITEMS, "source");
-    let f = toggleFilter({}, "source", "zoom");
-    expect(chipLabel(source, f, "source")).toBe("Source: Zoom");
-    f = toggleFilter(f, "source", "whatsapp");
-    expect(chipLabel(source, f, "source")).toBe("Source · 2");
-    expect(chipLabel(source, toggleFilter(f, "source", "zoom"), "source")).toBe("Source: WhatsApp");
-    // A ticked project this view doesn't offer keeps its name from when it was ticked; never its id.
-    expect(chipLabel([], { project: ["c1"] }, "project", { "project:c1": "Acme" })).toBe("Project: Acme");
-    expect(chipLabel([], { project: ["c1"] }, "project")).toBe("Project: 1 chosen");
-  });
-
-  it("labels and tags match whatever their case, offered once in the first spelling met (classic)", () => {
-    const mixed = [makeItem("x", { labels: ["Q4"] }), makeItem("y", { labels: ["q4", "VIP"] }), makeItem("z", { tags: ["price"] }), makeItem("w", { tags: ["Price"] })];
-    expect(filterOptions(mixed, "label")).toEqual([{ value: "q4", label: "Q4", count: 2 }, { value: "vip", label: "VIP", count: 1 }]);
-    expect(applyFilters(mixed, { label: ["q4"] }).map((i) => i.id)).toEqual(["x", "y"]);
-    expect(filterOptions(mixed, "tag")).toEqual([{ value: "price", label: "price", count: 2 }]);
+    // Only pinned ones shown already (Marked is Pinned): no Pinned section of their own.
+    expect(sections(ITEMS, "date", "newest", {}, false, NOW).map((g) => g.label)).toEqual(["Today", "Yesterday", "Earlier"]);
+    expect(sections(ITEMS, "app", "longest", {}, true, NOW).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([
+      ["Pinned", ["c"]], ["Voice notes", ["d"]], ["WhatsApp", ["a"]], ["Zoom", ["b"]],
+    ]);
+    // Ungrouped, the rest has a heading of its own under Pinned.
+    expect(sections(ITEMS, "none", "title", {}, true, NOW).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([["Pinned", ["c"]], ["Recordings", ["a", "b", "d"]]]);
+    expect(sections(ITEMS, "none", "opened", { d: 5, b: 9 }, false, NOW)[0].items.map((i) => i.id)).toEqual(["b", "d", "a", "c"]);
   });
 
   it("Name A–Z with Urdu and mixed-script titles: Latin first whatever the case, then Urdu in its own order", () => {
@@ -74,39 +76,55 @@ describe("the filter rules", () => {
       "Ahmad علی", "Ali", "ali 2", "Bilal", "Zeeshan", "آصف", "بلال", "علی",
     ]);
   });
-
-  it("sections: pinned first when grouped by date, then the days; any other group or sort", () => {
-    expect(sections(ITEMS, "date", "newest", {}, true, NOW).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([
-      ["Pinned", ["c"]], ["Today", ["a", "b"]], ["Earlier", ["d"]],
-    ]);
-    expect(sections(ITEMS, "date", "newest", {}, false, NOW).map((g) => g.label)).toEqual(["Today", "Yesterday", "Earlier"]);
-    expect(sections(ITEMS, "app", "longest", {}, true, NOW).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([
-      ["Voice notes", ["d"]], ["WhatsApp", ["a", "c"]], ["Zoom", ["b"]],
-    ]);
-    expect(sections(ITEMS, "none", "title", {}, true, NOW)).toEqual([{ key: "none", label: "", items: [ITEMS[0], ITEMS[1], ITEMS[2], ITEMS[3]] }]);
-    expect(sections(ITEMS, "none", "opened", { d: 5, b: 9 }, true, NOW)[0].items.map((i) => i.id)).toEqual(["b", "d", "a", "c"]);
-  });
 });
 
 describe("Find in the Library", () => {
   beforeEach(() => {
     resetTauriMock();
+    resetSyncClock();
     window.localStorage.clear();
+    setWidth(1440);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
     respond("library_list", ITEMS);
     respond("library_refresh", ITEMS);
+    respond("library_folder", []);
+    respond("bin_list", { data: [] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setWidth(1024);
   });
   const show = async () => {
-    render(<LibraryV2 />);
+    const view = render(<LibraryV2 />);
     await act(flushAsync);
+    return view;
   };
 
-  it("sections with counts that fold and unfold; the count of recordings under the title", async () => {
+  it("one toolbar row: the title with its count, Search, Filters and Sort & display; no pills while nothing is filtered", async () => {
     await show();
-    expect(screen.getByText("4 recordings from your phone, this computer and the web.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings\s*4$/);
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F /");
+    // The placeholder names the place, the key at its end (UX-20).
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings (⌘|Ctrl\+)F$/));
+    expect(filtersButton()).toHaveAttribute("aria-expanded", "false");
+    expect(filtersButton()).toHaveAttribute("aria-keyshortcuts", "F");
+    expect(screen.getByRole("button", { name: "Sort & display" })).toHaveAttribute("aria-haspopup", "menu");
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    // No Select button and no Sync button: a row's box starts a selection; the sidebar's "Synced" line syncs.
+    expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sync" })).toBeNull();
+    // Narrower, the search says less (its box is shorter).
+    act(() => setWidth(1100));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings (⌘|Ctrl\+)F$/));
+    act(() => setWidth(900));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search (⌘|Ctrl\+)F$/));
+  });
+
+  it("sections with counts that fold and unfold", async () => {
+    await show();
     const list = screen.getByRole("list", { name: "Recordings" });
-    expect([...list.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Pinned · 1", "Today · 2", "Earlier · 1"]);
+    expect(headings()).toEqual(["Pinned · 1", "Today · 2", "Earlier · 1"]);
     const today = within(list).getByRole("button", { name: "Today · 2" });
     expect(today).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(today);
@@ -115,90 +133,442 @@ describe("Find in the Library", () => {
     expect(rows()).toEqual(["c", "a", "b", "d"]);
   });
 
-  it("Views ▾ has classic's smart views with counts; a filled chip and Clear all", async () => {
-    await show();
-    fireEvent.click(chip(/^Views$/));
-    const menu = screen.getByRole("menu", { name: "Views" });
+  it("Sort & display ▾: List or Table, classic's sorts and groups, and Density; remembered on this computer", async () => {
+    const { unmount } = await show();
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+    const menu = screen.getByRole("menu", { name: "Sort & display" });
     expect(within(menu).getAllByRole("menuitemradio").map((m) => m.textContent)).toEqual([
-      "All recordings4", "Today2", "This week3", "Untranscribed2", "Waiting for decision0", "Pinned1", "Bookmarked1", "Failed1",
-    ]);
-    expect(within(menu).getByRole("menuitemradio", { name: /^All recordings/ })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Bookmarked/ }));
-    expect(rows()).toEqual(["d"]);
-    expect(chip(/^Bookmarked$/)).toHaveClass("el-chip--on");
-    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
-    expect(rows()).toHaveLength(4);
-    expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
-  });
-
-  it("filter chips: several ticks stay open in one menu, filters narrow each other, × clears one", async () => {
-    await show();
-    fireEvent.click(chip(/^Source$/));
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^WhatsApp/ }));
-    // The menu stays open for the next tick.
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^Zoom/ }));
-    expect(screen.getByRole("menuitemcheckbox", { name: /^Zoom/ })).toHaveAttribute("aria-checked", "true");
-    fireEvent.keyDown(screen.getByRole("menu", { name: "Source" }), { key: "Escape" });
-    expect(rows()).toEqual(["c", "a", "b"]);
-    expect(chip(/^Source · 2$/)).toHaveClass("el-chip--on");
-    tick(/^Project$/, /^No project/);
-    expect(rows()).toEqual(["b"]);
-    expect(screen.getByText("1 recording shown")).toBeInTheDocument();
-    tick(/^Recorded on$/, /^Phone/);
-    expect(screen.getByRole("region", { name: "No recordings match" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Clear Recorded on" }));
-    expect(rows()).toEqual(["b"]);
-    tick(/^Label$/, /^Q4/);
-    expect(screen.getByRole("region", { name: "No recordings match" })).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("region", { name: "No recordings match" })).getByRole("button", { name: "Clear filters" }));
-    expect(rows()).toHaveLength(4);
-    tick(/^Status$/, /^Needs you/);
-    expect(rows()).toEqual(["d"]);
-    fireEvent.keyDown(document.body, { key: "Escape" });
-    tick(/^Bookmark tag$/, /^Price/);
-    expect(rows()).toEqual(["d"]);
-    tick(/^Language$/, /^Automatic/);
-    expect(rows()).toEqual(["d"]);
-  });
-
-  it("Sort and group: classic's sorts and groups, remembered per view on this computer", async () => {
-    await show();
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
-    const menu = screen.getByRole("menu", { name: "Sort and group" });
-    expect(within(menu).getAllByRole("menuitemradio").map((m) => m.textContent)).toEqual([
-      "Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened", "Date", "Source", "Project", "Language", "Status", "Device", "None",
+      "List", "Table",
+      "Newest", "Oldest", "Longest", "Name A–Z", "Shortest", "Recently opened",
+      "Date", "Source", "Project", "None", "Language", "Status", "Device",
+      // Density, shared with Settings › Appearance (classic's View menu).
+      "Comfortable", "Compact",
     ]);
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Longest" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "None" }));
-    expect(rows()).toEqual(["b", "d", "a", "c"]);
-    expect(screen.getByRole("list", { name: "Recordings" }).querySelectorAll(".el-list-section")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Project" }));
-    expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Acme · 2", "No project · 2"]);
-    // Another view has its own; coming back finds this one.
-    fireEvent.click(chip(/^Views$/));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /^This week/ }));
-    expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Pinned · 1", "Today · 2"]);
-    fireEvent.click(chip(/^This week$/));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /^All recordings/ }));
-    expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Acme · 2", "No project · 2"]);
+    display("None");
+    expect(rows()).toEqual(["c", "b", "d", "a"]);
+    expect(headings()).toEqual(["Pinned · 1", "Recordings · 3"]);
+    display("Project");
+    expect(headings()).toEqual(["Pinned · 1", "Acme · 1", "No project · 2"]);
     expect(JSON.parse(window.localStorage.getItem("echoledger-library-view") ?? "{}").all).toEqual({ group: "project", sort: "longest" });
+    unmount();
+    await show();
+    expect(headings()).toEqual(["Pinned · 1", "Acme · 1", "No project · 2"]);
   });
 
-  it("in selection mode a section's box picks it, all or some, and clears it", async () => {
+  it("Recently opened puts the recordings opened here first", async () => {
+    respond("session_detail", { playback_url: null });
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
-    const box = screen.getByRole("checkbox", { name: "Select all in Today" });
-    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: "Dawood" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    display("Recently opened");
+    display("None");
+    // Pinned still comes first; then the one opened here.
+    expect(rows().slice(0, 2)).toEqual(["c", "d"]);
+  });
+
+  it("UX-03: the filters' edge sets their width, 280 to 420 px, kept on this computer; let go below 160 px they close", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    const edge = () => screen.getByRole("separator", { name: "Resize the filters" });
+    const aside = () => screen.getByTestId("filter-panel");
+    expect(edge()).toHaveAttribute("aria-valuenow", "320");
+    expect(edge()).toHaveAttribute("aria-valuemin", "280");
+    expect(edge()).toHaveAttribute("aria-valuemax", "420");
+    // At the page's end: its start edge, so dragging toward the page widens them.
+    fireEvent.pointerDown(edge(), { button: 0, clientX: 1000 });
+    fireEvent.pointerMove(edge(), { clientX: 940 });
+    fireEvent.pointerUp(edge(), { clientX: 940 });
+    expect(aside().style.getPropertyValue("--el-filter-width")).toBe("380px");
+    expect(window.localStorage.getItem("echoledger-library-filters-width")).toBe("380");
+    fireEvent.keyDown(edge(), { key: "ArrowRight", shiftKey: true });
+    expect(edge()).toHaveAttribute("aria-valuenow", "348");
+    // Let go well past the least width: they close, as Close filters does, and keep their width.
+    fireEvent.pointerDown(edge(), { button: 0, clientX: 1000 });
+    fireEvent.pointerMove(edge(), { clientX: 1200 });
+    fireEvent.pointerUp(edge(), { clientX: 1200 });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    fireEvent.click(filtersButton());
+    expect(edge()).toHaveAttribute("aria-valuenow", "348");
+    fireEvent.doubleClick(edge());
+    expect(aside().style.getPropertyValue("--el-filter-width")).toBe("");
+    expect(window.localStorage.getItem("echoledger-library-filters-width")).toBeNull();
+  });
+
+  it("[Filters] opens the panel and closes it; it stays as it was left", async () => {
+    const { unmount } = await show();
+    fireEvent.click(filtersButton());
+    expect(filtersButton()).toHaveAttribute("aria-expanded", "true");
+    expect(panel().getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(
+      ["Date", "Source", "Device", "Project", "Language", "Status", "Labels", "Marked", "Bookmarks"]);
+    // A column beside the list, not a dialog over it.
+    expect(screen.getByTestId("filter-panel")).not.toHaveAttribute("role", "dialog");
+    expect(panel().getByRole("button", { name: "Close filters" })).toHaveAttribute("aria-keyshortcuts", "Escape F");
+    unmount();
+    await show();
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    fireEvent.click(panel().getByRole("button", { name: "Close filters" }));
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    expect(window.localStorage.getItem("echoledger-library-filters-open")).toBe("0");
+  });
+
+  it("each section's options with live counts; a tick narrows the list 150 ms later and the other sections count what it keeps", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    expect(options("Date")).toEqual(["Any time", "Today2", "Last 7 days3", "This month4", "Custom"]);
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes1", "Zoom1"]);
+    expect(options("Device")).toEqual(["Phone2", "Desktop2"]);
+    expect(options("Project")).toEqual(["Acme2", "No project2"]);
+    expect(options("Language")).toEqual(["Urdu2", "English1", "Unknown1"]);
+    expect(options("Status")).toEqual(["Transcribed2", "Audio only1", "In progress0", "Failed1"]);
+    expect(options("Labels")).toEqual(["Q41"]);
+    expect(options("Marked")).toEqual(["Pinned1", "Important0", "Keep forever0"]);
+    expect(options("Bookmarks")).toEqual(["Any bookmark1", "Price1"]);
+    fireEvent.click(option("Source", /^WhatsApp/));
+    // The panel shows the tick at once; the list and the counts follow after the debounce.
+    expect(option("Source", /^WhatsApp/)).toBeChecked();
+    expect(rows()).toHaveLength(4);
+    await followed();
+    expect(rows()).toEqual(["c", "a"]);
+    expect(filtersButton()).toHaveTextContent("Filters1");
+    // Source still offers every source with its own count; the others count WhatsApp's two.
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes1", "Zoom1"]);
+    expect(options("Device")).toEqual(["Phone2", "Desktop0"]);
+    // Ticks inside a section add up; sections narrow each other.
+    fireEvent.click(option("Source", /^Zoom/));
+    await followed();
+    expect(rows()).toEqual(["c", "a", "b"]);
+    fireEvent.click(option("Project", /^No project/));
+    await followed();
+    expect(rows()).toEqual(["b"]);
+    expect(pills().getAllByRole("button", { name: /^Remove / }).map((b) => b.getAttribute("aria-label"))).toEqual(
+      ["Remove Source: WhatsApp, Zoom", "Remove Project: No project"]);
+  });
+
+  it("the page's tabs (All · Calls · Meetings · Voice notes) by Source; the panel's counts are counted inside the tab, so they match the list", async () => {
+    await show();
+    const tabs = () => within(screen.getByRole("tablist", { name: "Kinds of recording" }));
+    expect(tabs().getAllByRole("tab").map((t) => t.textContent)).toEqual(["All4", "Calls2", "Meetings1", "Voice notes1"]);
+    fireEvent.click(tabs().getByRole("tab", { name: /^Calls/ }));
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.click(filtersButton());
+    // Only the calls are counted: Zoom (a meeting) and the voice note are 0 here.
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes0", "Zoom0"]);
+    expect(options("Device")).toEqual(["Phone2", "Desktop0"]);
+    // An option's count is what the list shows with it.
+    expect(options("Status")).toEqual(["Transcribed1", "Audio only1", "In progress0", "Failed0"]);
+    fireEvent.click(option("Status", /^Audio only/));
+    await followed();
+    expect(rows()).toEqual(["c"]);
+    expect(tabs().getByRole("tab", { name: /^Calls/ })).toHaveTextContent("Calls1");
+    // Back to All: counted among everything again.
+    fireEvent.click(tabs().getByRole("tab", { name: /^All/ }));
+    expect(options("Source")).toEqual(["WhatsApp1", "Voice notes0", "Zoom0"]);
+    fireEvent.click(section("Status").getByRole("button", { name: "Clear Status" }));
+    await followed();
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes1", "Zoom1"]);
+  });
+
+  it("row 2: Other (an imported file, an app no kind names) shows only while it has recordings, and the tabs add up to All", async () => {
+    const facetime = makeItem("e", { title: "Eman", source_app: "facetime", source_app_label: "FaceTime", source_device: "desktop", started_at: at(18, 8), duration_ms: 90_000, transcript: done("three") });
+    respond("library_list", [...ITEMS, facetime]);
+    respond("library_refresh", [...ITEMS, facetime]);
+    await show();
+    const tabs = () => within(screen.getByRole("tablist", { name: "Kinds of recording" }));
+    // In row 2 (40 px), on its start side; Filters and Sort & display on its end.
+    expect(screen.getByRole("tablist", { name: "Kinds of recording" }).closest(".el-lib-row2")).toContainElement(filtersButton());
+    expect(tabs().getAllByRole("tab").map((t) => t.textContent)).toEqual(["All5", "Calls2", "Meetings1", "Voice notes1", "Other1"]);
+    fireEvent.click(tabs().getByRole("tab", { name: /^Other/ }));
+    expect(rows()).toEqual(["e"]);
+    expect(tabs().getByRole("tab", { name: /^Other/ })).toHaveAttribute("aria-selected", "true");
+    // A search that leaves Other empty keeps its tab while it is open, at 0.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "Ali" } });
+    await followed();
+    expect(tabs().getByRole("tab", { name: /^Other/ })).toHaveTextContent("Other0");
+    fireEvent.click(tabs().getByRole("tab", { name: /^All/ }));
+    expect(tabs().queryByRole("tab", { name: /^Other/ })).toBeNull();
+  });
+
+  it("an option at 0 is dimmed but can be ticked; each section's Clear; nothing matching says so with Clear filters", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    fireEvent.click(option("Source", /^WhatsApp/));
+    await followed();
+    const desktop = option("Device", /^Desktop/);
+    expect(desktop.closest("label")).toHaveClass("el-filter__option--none");
+    expect(desktop).toBeEnabled();
+    fireEvent.click(desktop);
+    await followed();
+    expect(screen.getByRole("region", { name: "No recordings match these filters" })).toBeInTheDocument();
+    fireEvent.click(section("Device").getByRole("button", { name: "Clear Device" }));
+    await followed();
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.click(option("Labels", /^Q4/));
+    fireEvent.click(option("Marked", /^Pinned/));
+    await followed();
+    fireEvent.click(within(screen.getByRole("region", { name: "No recordings match these filters" })).getByRole("button", { name: "Clear filters" }));
+    await followed();
+    expect(rows()).toHaveLength(4);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+  });
+
+  it("a long section has a search box of its own", async () => {
+    const apps = ["whatsapp", "zoom", "google_meet", "microsoft_teams", "voice_note", "phone_call", "telegram", "signal"];
+    const many = apps.map((app, i) => makeItem(`s${i}`, { source_app: app, started_at: at(18, 9) }));
+    respond("library_list", many);
+    respond("library_refresh", many);
+    await show();
+    fireEvent.click(filtersButton());
+    const find = section("Source").getByRole("searchbox", { name: "Search source" });
+    fireEvent.change(find, { target: { value: "te" } });
+    // Anywhere in the name, whatever the case.
+    expect(options("Source")).toEqual(["Teams1", "Telegram1", "Voice notes1"]);
+    fireEvent.change(find, { target: { value: "xyz" } });
+    expect(section("Source").getByText("No match")).toBeInTheDocument();
+    // Short sections have none.
+    expect(section("Device").queryByRole("searchbox")).toBeNull();
+  });
+
+  it("Date: one choice, Today, Last 7 days, This month or Custom with its two days; Any time clears it", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    fireEvent.click(option("Date", /^Today/));
+    await followed();
+    expect(rows()).toEqual(["a", "b"]);
+    fireEvent.click(option("Date", /^Custom/));
+    fireEvent.change(section("Date").getByLabelText("From"), { target: { value: "2026-11-09" } });
+    fireEvent.change(section("Date").getByLabelText("To"), { target: { value: "2026-11-11" } });
+    await followed();
+    expect(rows()).toEqual(["d"]);
+    expect(pills().getByRole("button", { name: /^Remove Date: / })).toBeInTheDocument();
+    fireEvent.click(option("Date", /^Any time/));
+    await followed();
+    expect(rows()).toHaveLength(4);
+  });
+
+  it("the pills: one per section in its words; a pill opens to edit it with is or is not; × removes it; Clear all", async () => {
+    await show();
+    fireEvent.click(filtersButton());
+    fireEvent.click(option("Source", /^WhatsApp/));
+    fireEvent.click(option("Status", /^Failed/));
+    await followed();
+    expect(rows()).toEqual([]);
+    const edit = pills().getByRole("button", { name: "Source: WhatsApp" });
+    fireEvent.click(edit);
+    const editor = within(screen.getByRole("dialog", { name: "Edit Source" }));
+    expect(editor.getByRole("radiogroup", { name: "Source is or is not" })).toBeInTheDocument();
+    fireEvent.click(editor.getByRole("radio", { name: "is not" }));
+    // A pill's change applies at once.
+    expect(rows()).toEqual(["d"]);
+    expect(pills().getByRole("button", { name: "Source is not: WhatsApp" })).toBeInTheDocument();
+    // Its choices with their counts: another tick from the pill.
+    fireEvent.click(editor.getByRole("checkbox", { name: /^Voice notes/ }));
+    expect(rows()).toEqual([]);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Edit Source" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Edit Source" })).toBeNull();
+    expect(pills().getByRole("button", { name: "Source is not: WhatsApp, Voice notes" })).toHaveFocus();
+    fireEvent.click(pills().getByRole("button", { name: "Remove Status: Failed" }));
+    expect(rows()).toEqual(["b"]);
+    fireEvent.click(pills().getByRole("button", { name: "Clear all" }));
+    expect(rows()).toHaveLength(4);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+  });
+
+  it("DT-LIB-022: Date › Today and Marked › Pinned narrow each other; ticks inside Marked add up", async () => {
+    const list = [
+      makeItem("tp", { title: "Today pinned", started_at: at(18, 10), pinned: true }),
+      makeItem("t", { title: "Today only", started_at: at(18, 9) }),
+      makeItem("p", { title: "Pinned last week", started_at: at(10, 9), pinned: true }),
+      makeItem("ti", { title: "Important today", started_at: at(18, 8), important: true }),
+    ];
+    respond("library_list", list);
+    respond("library_refresh", list);
+    await show();
+    expect(rows()).toEqual(["tp", "p", "t", "ti"]);
+    fireEvent.click(filtersButton());
+    fireEvent.click(option("Date", /^Today/));
+    await followed();
+    expect(rows()).toEqual(["tp", "t", "ti"]);
+    fireEvent.click(option("Marked", /^Pinned/));
+    await followed();
+    expect(rows()).toEqual(["tp"]);
+    fireEvent.click(option("Marked", /^Important/));
+    await followed();
+    expect(rows()).toEqual(["tp", "ti"]);
+    expect(pills().getByRole("button", { name: "Date: Today" })).toBeInTheDocument();
+    expect(pills().getByRole("button", { name: "Marked: Pinned, Important" })).toBeInTheDocument();
+    fireEvent.click(section("Marked").getByRole("button", { name: "Clear Marked" }));
+    await followed();
+    expect(rows()).toEqual(["tp", "t", "ti"]);
+  });
+
+  it("the search finds every word among the title, the transcript and the project with the folders above it", async () => {
+    respond("list_clients", { data: [{ id: "p0", name: "Holdings" }, { id: "c1", name: "Acme", parent_id: "p0" }] });
+    await show();
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    // Ali and Chand are in Acme, under Holdings.
+    fireEvent.change(search, { target: { value: "holdings" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.change(search, { target: { value: "acme" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.change(search, { target: { value: "two" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["b"]);
+    fireEvent.change(search, { target: { value: "dawood" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["d"]);
+    // The words in different places: Holdings (Ali's project's folder) and "one" (Ali's transcript).
+    fireEvent.change(search, { target: { value: "holdings one" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["a"]);
+  });
+
+  it("a row's label dot filters by it at once; its mark only says the app (Source is Filters', the tabs' and ⌘K's)", async () => {
+    await show();
+    // Since v2.1 the mark is no button: the row's checkbox takes its place on hover and focus (UX-06).
+    const list = screen.getByRole("list", { name: "Recordings" });
+    expect(within(list).queryByRole("button", { name: /^Show only (?!label )/ })).toBeNull();
+    expect(within(list).getAllByRole("img", { name: /^WhatsApp/ })[0].closest("button")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show only label Q4" }));
+    expect(rows()).toEqual(["a"]);
+    expect(pills().getByRole("button", { name: "Labels: Q4" })).toBeInTheDocument();
+    // Pressed again, it stays.
+    fireEvent.click(screen.getByRole("button", { name: "Show only label Q4" }));
+    expect(rows()).toEqual(["a"]);
+  });
+
+  it("Source from Filters › Source: the list keeps only that app, with its pill", async () => {
+    await show();
+    await filterBySource("WhatsApp");
+    expect(rows()).toEqual(["c", "a"]);
+    expect(pills().getByRole("button", { name: "Source: WhatsApp" })).toBeInTheDocument();
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+  });
+
+  it("keys: F opens and closes the filters, Esc closes them, ⌘F and / put the cursor in search; never while typing", async () => {
+    await show();
+    const row = screen.getByRole("button", { name: "Ali" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "f" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    fireEvent.keyDown(row, { key: "Escape" });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    fireEvent.keyDown(row, { key: "f" });
+    fireEvent.keyDown(row, { key: "F" });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(search).toHaveFocus();
+    // Typing an f in the search is a letter, not the panel.
+    fireEvent.keyDown(search, { key: "f" });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    search.blur();
+    row.focus();
+    fireEvent.keyDown(row, { key: "/" });
+    expect(search).toHaveFocus();
+  });
+
+  it("WCAG 2.1.4: F, /, J, K and X answer only while focus is in the Library, not anywhere in the window", async () => {
+    render(<><nav aria-label="Elsewhere"><button type="button">Somewhere else</button></nav><LibraryV2 /></>);
+    await act(flushAsync);
+    const elsewhere = screen.getByRole("button", { name: "Somewhere else" });
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    for (const target of [elsewhere, document.body]) {
+      if (target instanceof HTMLElement && target !== document.body) target.focus();
+      for (const key of ["f", "F", "/", "j", "k", "x"]) fireEvent.keyDown(target, { key });
+      expect(screen.queryByTestId("filter-panel")).toBeNull();
+      expect(search).not.toHaveFocus();
+      expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+      expect(document.activeElement?.closest("[data-row-id]")).toBeNull();
+    }
+    // ⌘F is not a one-letter key: it still finds the Library's search.
+    elsewhere.focus();
+    fireEvent.keyDown(elsewhere, { key: "f", metaKey: true });
+    expect(search).toHaveFocus();
+    // In the Library: J moves to a row, X ticks it, F opens the filters.
+    const title = screen.getByRole("heading", { level: 1 });
+    fireEvent.keyDown(title, { key: "j" });
+    expect(document.activeElement?.closest("[data-row-id]")).not.toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("heading", { level: 1 }), { key: "f" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+  });
+
+  it("D-244: right to left on a Mac the drawer's head keeps the window buttons' 80 points clear (its × beside them); full screen and Windows don't", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toContain('[data-platform="macos"][data-titlebar][dir="rtl"] .el-filter--drawer .el-filter__head {\n  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));\n}');
+    // The same room a Sheet keeps (D-227).
+    expect(css).toContain('[data-platform="macos"][data-titlebar][dir="rtl"] .el-sheet .el-dialog__head {\n  padding-inline-end: calc(var(--el-desktop-titlerow-keep-clear) / var(--el-zoom, 1) + var(--el-space-8));');
+  });
+
+  it("under 1440 px (the wide breakpoint token) the filters slide over the list from the end side and start closed; the scrim and Esc close it", async () => {
+    // The width is the token's: tokens.css --el-breakpoint-wide.
+    const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
+    expect(tokens).toContain(`--el-breakpoint-wide: ${DRAWER_BELOW}px;`);
+    window.localStorage.setItem("echoledger-library-filters-open", "1");
+    setWidth(1100);
+    await show();
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    fireEvent.click(filtersButton());
+    const drawer = screen.getByTestId("filter-panel");
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveClass("el-filter--drawer");
+    expect(document.querySelector(".el-filter-scrim")).not.toBeNull();
+    // Modal: it takes focus; Tab and Shift+Tab stay inside; ⌘F and F leave the list behind it alone.
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(drawer.contains(document.activeElement)).toBe(true);
+    const inside = within(drawer);
+    const close = inside.getByRole("button", { name: "Close filters" });
+    // F is a letter while the drawer has focus (it is modal): only Escape is said to close it.
+    expect(close).toHaveAttribute("aria-keyshortcuts", "Escape");
+    const save = inside.getByRole("button", { name: "Save as view" });
+    // The last stop is the drawer's edge (UX-03: it sets their width from the keyboard too).
+    const last = [...drawer.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].at(-1)!;
+    expect(last).toHaveAttribute("role", "separator");
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+    expect(save).toBeDisabled();
+    fireEvent.keyDown(last, { key: "f", metaKey: true });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: "f" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    // A press on the scrim closes it; focus goes back to what opened it.
+    fireEvent.mouseDown(document.querySelector(".el-filter-scrim")!);
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    filtersButton().focus();
+    fireEvent.click(filtersButton());
+    expect(screen.getByTestId("filter-panel").contains(document.activeElement)).toBe(true);
+    fireEvent.mouseDown(document.querySelector(".el-filter-scrim")!);
+    expect(filtersButton()).toHaveFocus();
+    fireEvent.click(filtersButton());
+    fireEvent.keyDown(screen.getByTestId("filter-panel"), { key: "Escape" });
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    // Wide again: a column beside the list.
+    fireEvent.click(filtersButton());
+    act(() => setWidth(1440));
+    expect(screen.getByTestId("filter-panel")).not.toHaveAttribute("role", "dialog");
+    expect(document.querySelector(".el-filter-scrim")).toBeNull();
+  });
+
+  it("in selection a section's box picks it, all or some, and clears it", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Ali" }));
+    expect((screen.getByRole("checkbox", { name: "Select all in Today" }) as HTMLInputElement).indeterminate).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all in Today" }));
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
     fireEvent.click(screen.getByRole("checkbox", { name: "Clear Today" }));
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("Select recordings");
-    fireEvent.click(screen.getByRole("button", { name: "Ali" }));
-    expect((screen.getByRole("checkbox", { name: "Select all in Today" }) as HTMLInputElement).indeterminate).toBe(true);
   });
 
-  it("a picked row a filter, the search or a folded section takes off screen leaves the selection: Delete, export and Copy for AI act on the rows shown", async () => {
+  it("with filters or a search on, Cmd+A, export, Copy for AI and Delete act only on the rows shown", async () => {
     respond("sessions_bulk", 2);
     respond("sessions_export", "/tmp/x.zip");
     const writeText = vi.fn(() => Promise.resolve());
@@ -206,11 +576,8 @@ describe("Find in the Library", () => {
     respond("session_detail", { playback_url: null });
     respond("transcript_detail", { id: "t", kind: "final", provider: "x", status: "completed", language: "en", text: null, segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1000, text: "Hello" }] });
     await show();
+    await filterBySource("WhatsApp");
     fireEvent.keyDown(document.body, { key: "a", metaKey: true });
-    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("4 selected");
-    // A filter hides Bina and Dawood: they leave the selection.
-    tick(/^Source$/, /^WhatsApp/);
-    fireEvent.keyDown(screen.getByRole("menu", { name: "Source" }), { key: "Escape" });
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
     fireEvent.click(screen.getByRole("button", { name: "Share or export" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Text (.txt)" }));
@@ -220,8 +587,11 @@ describe("Find in the Library", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
     await act(flushAsync);
     expect(callsOf("transcript_detail").map((c) => c.id)).toEqual(["tr-one"]);
-    // Search narrows further: only Ali stays picked; Delete takes only Ali.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+    // The search narrows further: Cmd+A takes only Ali; Delete takes only Ali.
     fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "Ali" } });
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
     respond("delete_session", null);
     fireEvent.click(within(screen.getByRole("toolbar", { name: "Selected recordings" })).getByRole("button", { name: "Delete" }));
@@ -236,6 +606,11 @@ describe("Find in the Library", () => {
     fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
     fireEvent.keyDown(document.body, { key: "a", metaKey: true });
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
+    // A folded section shows no box to pick it; unfolded, it does.
+    expect(screen.queryByRole("checkbox", { name: /Today/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    expect(screen.getByRole("checkbox", { name: "Select all in Today" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
     fireEvent.keyDown(document.body, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Chand" }), { metaKey: true });
     fireEvent.click(screen.getByRole("button", { name: "Dawood" }), { shiftKey: true });
@@ -245,14 +620,6 @@ describe("Find in the Library", () => {
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Move to Trash" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["c", "d"], action: "delete", clientId: null, label: null }]);
-    // A folded section shows no box to pick it.
-    // (Today is still folded from the start.)
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
-    expect(screen.queryByRole("checkbox", { name: /Today/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
-    expect(screen.getByRole("checkbox", { name: "Select all in Today" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
     // Folding a section with picked rows drops them from the selection.
     fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
     fireEvent.click(screen.getByRole("button", { name: "Ali" }), { metaKey: true });
@@ -260,28 +627,33 @@ describe("Find in the Library", () => {
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("Select recordings");
   });
 
-  it("Sync reads the list from the server again; \"/\" puts the cursor in search", async () => {
-    await show();
+  it("the sidebar's Synced line syncs now; the Library reads the list again when the core says it changed", async () => {
+    render(<><LibraryFoot trashCurrent={false} onTrash={() => undefined} onSync={() => void import("./syncClock").then((m) => m.syncLibrary())} /><LibraryV2 /></>);
+    await act(flushAsync);
+    const line = screen.getByTestId("sidebar-synced");
+    const said = screen.getByTestId("sidebar-synced-said");
+    expect(said).toHaveAttribute("role", "status");
+    expect(line).toHaveTextContent("Synced just now");
+    // The line is quiet; the Library's own syncs say nothing.
+    expect(line).not.toHaveAttribute("aria-live");
+    expect(said).toHaveTextContent("");
     const before = callsOf("library_refresh").length;
     respond("library_refresh", ITEMS.slice(0, 2));
-    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    respond("library_list", ITEMS.slice(0, 2));
+    fireEvent.click(line);
     await act(flushAsync);
     expect(callsOf("library_refresh").length).toBe(before + 1);
-    expect(rows()).toEqual(["a", "b"]);
-    fireEvent.keyDown(document.body, { key: "/" });
-    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveFocus();
-  });
-
-  it("Recently opened puts the recordings opened here first", async () => {
-    respond("session_detail", { playback_url: null });
-    await show();
-    fireEvent.click(screen.getByRole("button", { name: "Dawood" }));
+    // Pressed: how it went is said once.
+    expect(said).toHaveTextContent("Synced just now");
+    await emitEvent("library:updated", 2);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Recently opened" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "None" }));
-    expect(rows()[0]).toBe("d");
+    expect(rows()).toEqual(["a", "b"]);
+    // A sync that fails is said, pressed or not.
+    fail("library_refresh", "The server didn't answer.");
+    await act(async () => {
+      await import("./syncClock").then((m) => m.syncLibrary().catch(() => undefined));
+    });
+    await act(flushAsync);
+    expect(said).toHaveTextContent("Couldn't sync: The server didn't answer.");
   });
 });

@@ -28,6 +28,7 @@ object CallJournal {
         const val PHONE_CALLS_OFF = "phone calls are off"
         const val AUTO_RECORD_OFF_FOR = "auto-record is off for "
         const val RECORD_NOT_CHOSEN = "Record was not chosen"
+        const val CALLS_OFF = "After each call is Don't record calls"
 
         fun autoRecordOff(appLabel: String) = AUTO_RECORD_OFF_FOR + appLabel
     }

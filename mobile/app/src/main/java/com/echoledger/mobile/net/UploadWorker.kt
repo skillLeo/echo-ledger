@@ -46,6 +46,14 @@ import kotlinx.coroutines.withTimeout
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val id = inputData.getString(KEY_ID) ?: return Result.failure()
+        val result = send(id)
+        // One of back-to-back calls sent with Transcribe all that will never reach the server (v2.1): done, not ready,
+        // so their one notification never waits the hour for it.
+        if (result is Result.Failure) com.echoledger.mobile.notify.AfterCallNotice.groupMemberDone(applicationContext, id, ready = false)
+        return result
+    }
+
+    private suspend fun send(id: String): Result {
         val graph = (applicationContext as EchoLedgerApp).graph
         val rec = graph.recordings.get(id) ?: return Result.success()
         // Discarded after a call (since v1.8.1): nothing of it is sent, and its delete is the Discard's to make.
@@ -80,6 +88,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                     }
                     // The Phone app's copy of an imported call may now be offered for deletion (when the person chose it).
                     com.echoledger.mobile.calls.PhoneAppRecordings.uploaded(applicationContext, id)
+                    // Sent from its after-call notification (v2.1): that notification will say "Transcript ready".
+                    session?.let { com.echoledger.mobile.notify.AfterCallNotice.uploaded(applicationContext, id, it) }
                     runCatching { graph.library.refresh() }
                     WidgetStateStore.refresh(applicationContext)
                     Result.success()
@@ -132,7 +142,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             com.echoledger.mobile.core.NotifyCategory.UPLOADS.channelId
         )
             .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
-            .setContentTitle("Uploading a recording")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(applicationContext, "Uploading a recording"))
             .setSilent(true)
             .setOngoing(true)
             .build()
@@ -304,7 +314,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         markers = rec.markers,
                         pauses = rec.pauses,
                         languageMarks = rec.languageMarks,
-                        caller = callerOf(rec)
+                        caller = callerOf(rec),
+                        transcribe = rec.transcribe
                     )
                 )
             } catch (e: ApiException) {
@@ -330,7 +341,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         pauses = rec.pauses,
         languageMarks = rec.languageMarks,
         caller = callerOf(rec),
-        skipDuplicate = rec.skipDuplicate
+        skipDuplicate = rec.skipDuplicate,
+        transcribe = rec.transcribe
     )
 
     /** Caller names (since v1.2): who the call was with, when the phone saw it. */
@@ -516,6 +528,14 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
         fun enqueue(context: Context, recordingId: String) {
             WorkManager.getInstance(context).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.KEEP, request(recordingId))
+        }
+
+        /** Sends [recordingId] after [delayMs] instead of any upload waiting for it (the after-call card's Undo time). */
+        fun enqueueDelayed(context: Context, recordingId: String, delayMs: Long) {
+            val seconds = ((delayMs + 999) / 1000).coerceAtLeast(1)
+            WorkManager.getInstance(
+                context
+            ).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request(recordingId, seconds))
         }
 
         /** Runs the upload again after [delaySeconds] (a long `Retry-After`), after the current run ends. */

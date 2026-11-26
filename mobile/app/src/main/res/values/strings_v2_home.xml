@@ -26,8 +26,8 @@
     <string name="v2_home_failed_uploads_detail">They\'re safe on this phone.</string>
     <string name="v2_home_retry">Retry</string>
     <string name="v2_home_waiting_decision">Keep this call?</string>
-    <string name="v2_home_keep">Keep</string>
-    <string name="v2_home_discard">Discard</string>
+    <string name="v2_home_keep">Transcribe</string>
+    <string name="v2_home_discard">Delete</string>
     <string name="v2_home_discarded">Call discarded</string>
     <string name="v2_home_discarded_many">%1$d calls discarded</string>
     <string name="v2_home_already_deleted">That call was already deleted.</string>

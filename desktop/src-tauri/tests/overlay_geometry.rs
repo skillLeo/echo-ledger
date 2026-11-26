@@ -697,3 +697,21 @@ fn a_window_that_moved_since_the_last_check_is_not_rescued_that_round() {
     assert!(!settled(Some((100, 100)), (900, 100)), "moving: left alone mid-drag");
     assert!(settled(Some((900, 100)), (900, 100)), "still where it was let go: rescued if it is off screen");
 }
+
+#[test]
+fn the_after_call_card_sits_next_to_the_pill_and_never_off_screen() {
+    use desktop_lib::overlay::geometry::beside_pill;
+    let area = WorkArea { x: 0, y: 25, w: 1440, h: 875 };
+    // The pill top-centre (352 x 148 window, its pill the top 48 px): the card is centred under it.
+    let pill = ((1440 - 352) / 2, 37);
+    assert_eq!(beside_pill(area, pill, (352, 148), 48, (360, 240), 4), (pill.0 - 4, 37 + 48 + 4));
+    // Dragged to the bottom of the screen: above the pill instead.
+    let low = (400, 900 - 148);
+    assert_eq!(beside_pill(area, low, (352, 148), 48, (360, 240), 4), (396, 900 - 148 - 240 - 4));
+    // At the left edge: kept inside the work area.
+    assert_eq!(beside_pill(area, (0, 37), (352, 148), 48, (360, 240), 4).0, 0);
+    // On a display left of the primary (negative coordinates), at 150 %.
+    let left = WorkArea { x: -2880, y: 0, w: 2880, h: 1560 };
+    let at = beside_pill(left, (-2880 + 100, 18), (528, 222), 72, (540, 318), 6);
+    assert_eq!(at, (-2880 + 100 - 6, 18 + 72 + 6));
+}

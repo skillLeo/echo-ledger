@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { activitySubtitle, ActivityView } from "./ActivityCentre";
+import { forgetPersonPictures } from "../../v2/activity/ActorAvatar";
 import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsPage as NotificationsCard, notificationsValue } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -30,7 +34,7 @@ describe("activity page (B18)", () => {
     renderPage();
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).toHaveTextContent("Recovered"));
-    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveTextContent("Recovered");
+    expect(screen.getByText("Pixel 9 paired").closest("li")).not.toHaveTextContent("Recovered");
   });
 
   it("lists the notifications with the unread one marked, and hands the list to the badge", async () => {
@@ -39,7 +43,7 @@ describe("activity page (B18)", () => {
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
     expect(screen.getByText("Pixel 9 paired")).toBeInTheDocument();
     expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
-    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
+    expect(screen.getByText("Pixel 9 paired").closest(".activity-item")).not.toHaveClass("unread");
     // The badge gets the list in an effect after the list is shown (a slow runner sees the list first).
     await waitFor(() => expect(onItems).toHaveBeenCalledWith(ITEMS));
   });
@@ -51,6 +55,51 @@ describe("activity page (B18)", () => {
     expect(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByText("Activity")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("heading", { level: 1, name: "Activity" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark all read" })).toBeInTheDocument();
+  });
+
+  it("2.0.0-v: the server's own problem shows the server in the problem's red tile; fixed, it is done and needs nobody", async () => {
+    respond("activity_list", { data: [
+      { id: "s1", kind: "server_problem", title: "Uploads are failing: the server's PHP is missing sodium", body: "sudo apt install php8.3-sodium", session_id: null, read: false, at: "2026-10-28T09:00:00Z" },
+      { id: "s2", kind: "server_problem", title: "Fixed: uploads work again", body: "", session_id: null, read: false, at: "2026-10-28T09:05:00Z", resolved: true },
+    ], unread_count: 2 });
+    renderPage();
+    const open = (await screen.findByText("Uploads are failing: the server's PHP is missing sodium")).closest("li")!;
+    const tile = open.querySelector(".activity-tile")!;
+    expect(tile).toHaveClass("failed");
+    expect(tile.querySelector('path[d="M6 6h.01"]'), "the server's icon").not.toBeNull();
+    const fixed = screen.getByText("Fixed: uploads work again").closest("li")!.querySelector(".activity-tile")!;
+    expect(fixed).not.toHaveClass("failed");
+    expect(screen.getByText(/^1 thing needs you\./)).toBeInTheDocument();
+  });
+
+  it("2.0.0-aa: an item about a person shows their picture, else their initials in their colour, in the tile's place", async () => {
+    forgetPersonPictures();
+    const photo = "data:image/webp;base64,UklGRg==";
+    const sara = { id: 7, name: "Sara Khan", avatar_url: null, avatar_version: null, avatar_color: 5 };
+    respond("activity_list", { data: [
+      { id: "a1", kind: "shared_with_you", title: "Ana sent you Call with Omar", body: "for tomorrow", session_id: "s9", read: false, at: "2026-10-28T10:00:00Z",
+        actor: { id: 12, name: "Ana Malik", avatar_url: "https://ledger.example.test/api/avatars/12/1763700000?signature=x", avatar_version: 1763700000, avatar_color: 3 } },
+      { id: "a2", kind: "upgrade_requested", title: "Sara asked to upgrade to Pro", body: "", session_id: null, read: false, at: "2026-10-28T09:30:00Z", actor: sara },
+      // Lead decision 27: a receipt asked for and unusual use keep their tiles, whoever they are about.
+      { id: "a3", kind: "upgrade_receipt_requested", title: "Sara asked for your receipt", body: "", session_id: null, read: false, at: "2026-10-28T09:20:00Z", actor: sara },
+      { id: "a4", kind: "unusual_usage", title: "Unusual use on your account", body: "", session_id: null, read: false, at: "2026-10-28T09:10:00Z", actor: sara },
+      { ...ITEMS[0], actor: null },
+      ITEMS[1],
+    ], unread_count: 2 });
+    respondWith("account_avatar_image", (args) => ((args as { version: number }).version === 1763700000 ? photo : null));
+    renderPage();
+    const tile = (title: string) => screen.getByText(title).closest("li")!.querySelector(".activity-tile")!;
+    await waitFor(() => expect(tile("Ana sent you Call with Omar").querySelector("img")).toHaveAttribute("src", photo));
+    expect(tile("Ana sent you Call with Omar")).toHaveClass("person");
+    expect(tile("Sara asked to upgrade to Pro")).toHaveTextContent("SK");
+    expect(tile("Sara asked to upgrade to Pro")).toHaveAttribute("data-colour", "5");
+    expect(tile("Sara asked for your receipt")).not.toHaveClass("person");
+    expect(tile("Unusual use on your account")).not.toHaveClass("person");
+    expect(tile("Unusual use on your account")).toHaveClass("neutral");
+    // actor null, or no key (an older server): the kind's tile as before.
+    expect(tile("Transcript ready")).not.toHaveClass("person");
+    expect(tile("Pixel 9 paired")).not.toHaveClass("person");
+    expect(tile("Pixel 9 paired")).toHaveClass("neutral");
   });
 
   it("words the line for each case", () => {
@@ -71,6 +120,33 @@ describe("activity page (B18)", () => {
     await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread"));
   });
 
+  it("D-066: only a notification about a recording is a button; one with nowhere to go has Mark read while unread", async () => {
+    const mac = { id: "n4", kind: "device_paired", title: "Mac mini signed in", body: "It can now record.", session_id: null, read: false, at: "2026-10-28T08:00:00Z" };
+    respond("activity_list", { data: [...ITEMS, mac], unread_count: 2 });
+    respond("activity_read", { unread_count: 1 });
+    const { onOpenRecording } = renderPage();
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+    expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("activity-item");
+    // A new device opens nothing: its row isn't a button (no hover, not in the Tab order), read or not.
+    const paired = screen.getByText("Pixel 9 paired").closest("li")!;
+    const signedIn = screen.getByText("Mac mini signed in").closest("li")!;
+    expect(screen.getByText("Pixel 9 paired").closest("button")).toBeNull();
+    expect(screen.getByText("Mac mini signed in").closest("button")).toBeNull();
+    expect(within(paired).queryByRole("button")).toBeNull();
+    // Unread, it ends with a quiet Mark read that marks just that one.
+    fireEvent.click(within(signedIn).getByRole("button", { name: "Mark read: Mac mini signed in" }));
+    await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: ["n4"] }]));
+    await waitFor(() => expect(within(signedIn).queryByRole("button")).toBeNull());
+    expect(signedIn.querySelector(".activity-item")).not.toHaveClass("unread");
+    expect(onOpenRecording).not.toHaveBeenCalled();
+  });
+
+  it("D-066: a row with nowhere to go has no pointer and no hover", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    expect(css).toMatch(/\.activity-item\.static[^{]*\{[^}]*cursor: default/);
+    expect(css).toMatch(/\.activity-item\.static:hover[^{]*\{[^}]*background: transparent/);
+  });
+
   it("marks everything read", async () => {
     respondWith("activity_list", () => ({ data: ITEMS, unread_count: 1 }));
     respond("activity_read", { unread_count: 0 });
@@ -87,12 +163,12 @@ describe("activity page (B18)", () => {
     expect(await screen.findByText(/Nothing yet/)).toBeInTheDocument();
   });
 
-  it("puts what needs the person first: calls waiting for Keep or Discard and failed transcriptions", async () => {
+  it("puts what needs the person first: calls waiting to be transcribed or deleted and failed transcriptions", async () => {
     respond("pending_list", [makePendingItem("p1")]);
     respond("activity_list", { data: [{ id: "n3", kind: "transcript_failed", title: "Transcription failed", body: "Call with Omar", session_id: "s3", read: false, at: "2026-10-28T09:00:00Z" }, ...ITEMS], unread_count: 2 });
     const { onReview } = renderPage(makeStatus({ pendingDecisions: 1 }));
     const needs = await screen.findByRole("region", { name: "Needs action" });
-    expect(await within(needs).findByText("Keep or discard?")).toBeInTheDocument();
+    expect(await within(needs).findByText("Transcribe or delete?")).toBeInTheDocument();
     expect(within(needs).getByText("Transcription failed")).toBeInTheDocument();
     // The card says what waits once the core's list is in (the status only has the count).
     await waitFor(() => expect(within(needs).queryByText("1 waiting for your decision")).not.toBeInTheDocument());

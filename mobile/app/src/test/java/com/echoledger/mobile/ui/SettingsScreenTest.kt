@@ -8,10 +8,14 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -27,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.echoledger.mobile.MainActivity
@@ -231,7 +236,7 @@ class SettingsScreenTest : AppTest() {
     }
 
     @Test
-    fun `with the lock on the grace period and the hide content option are offered and saved`() {
+    fun `with the lock on the grace period is offered and saved, and hiding content has moved to Privacy and data`() {
         runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
         pumpUntil("settings") { vm.settings.value.appLockEnabled }
         launch(open = privacyGroup)
@@ -244,16 +249,13 @@ class SettingsScreenTest : AppTest() {
         pumpUntil("five minutes saved") { settings().lockAfterMs == 300_000L }
         compose.onNode(hasText("After 5 minutes") and isSelectable()).assertIsSelected()
 
-        compose.onNodeWithText("Hide content in Recents and screenshots").assertIsDisplayed()
-        // Screenshots are allowed by default: the option is off until the person turns it on.
-        compose.onAllNodes(isToggleable())[1].assertIsOff().performClick()
-        pumpUntil("hide content saved on") { settings().secureScreen }
-        compose.onAllNodes(isToggleable())[1].assertIsOn().performClick()
-        pumpUntil("hide content saved off again") { !settings().secureScreen }
+        // Since 2.0.5 the lock no longer has its own "hide content": that is Block screenshots of EchoLedger.
+        compose.onAllNodesWithText("Hide content in Recents and screenshots").assertCountEquals(0)
+        compose.onAllNodes(isToggleable()).assertCountEquals(1)
     }
 
     @Test
-    fun `with the lock off the grace period and the hide content option are not shown`() {
+    fun `with the lock off the grace period is not shown`() {
         launch(open = privacyGroup)
 
         compose.onAllNodesWithText("Lock after").assertCountEquals(0)
@@ -277,13 +279,13 @@ class SettingsScreenTest : AppTest() {
         compose.onAllNodesWithText("Hide recording titles on the widget").assertCountEquals(0)
     }
 
-    // ---- hiding content in Recents and screenshots (FLAG_SECURE) ------------------------------------------------------------------
+    // ---- Block screenshots of EchoLedger: content hidden in Recents and screenshots (FLAG_SECURE) ------------------------------
 
     private fun Window.secure() = attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
 
     @Test
-    fun `the main window is secure while the lock and hide content are on and not otherwise`() {
-        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true, secureScreen = true) } }
+    fun `the main window is secure while Block screenshots is on and not otherwise, with or without the lock`() {
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true, blockScreens = true) } }
         val controller = buildActivity(MainActivity::class.java).create()
         controller.get().simulateBiometrics(true)
         controller.start().postCreate(null).resume().visible()
@@ -291,14 +293,21 @@ class SettingsScreenTest : AppTest() {
 
         pumpUntil("FLAG_SECURE set") { window.secure() }
 
-        runBlocking { app.graph.settings.update { it.copy(secureScreen = false) } }
-        pumpUntil("FLAG_SECURE cleared when hide content is off") { !window.secure() }
+        runBlocking { app.graph.settings.update { it.copy(blockScreens = false) } }
+        pumpUntil("FLAG_SECURE cleared when Block screenshots is off, though the lock is on") { !window.secure() }
 
+        // The old lock-only switch, still in the settings file, blocks nothing on its own any more.
+        val shown = ViewModelProvider(controller.get())[MainViewModel::class.java]
         runBlocking { app.graph.settings.update { it.copy(secureScreen = true) } }
-        pumpUntil("FLAG_SECURE set again") { window.secure() }
+        pumpUntil("the old switch to reach the screen") {
+            (shown.settingsState.value as? SettingsState.Loaded)?.settings?.secureScreen ==
+                true
+        }
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertFalse("the lock's old hide content does not block screenshots", window.secure())
 
-        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = false) } }
-        pumpUntil("FLAG_SECURE cleared when the lock is off") { !window.secure() }
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = false, blockScreens = true) } }
+        pumpUntil("FLAG_SECURE set again with the lock off") { window.secure() }
     }
 
     @Test
@@ -313,12 +322,27 @@ class SettingsScreenTest : AppTest() {
     }
 
     @Test
-    fun `the share entry is kept out of Recents and screenshots while the lock hides content`() {
-        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true, secureScreen = true) } }
+    fun `the share entry is kept out of Recents and screenshots while Block screenshots is on`() {
+        runBlocking { app.graph.settings.update { it.copy(blockScreens = true) } }
 
         val share = buildActivity(ShareImportActivity::class.java, Intent(Intent.ACTION_SEND)).create().get()
 
         pumpUntil("FLAG_SECURE on the share entry") { share.window.secure() }
+        runBlocking { app.graph.settings.update { it.copy(blockScreens = false) } }
+        pumpUntil("FLAG_SECURE cleared on the share entry") { !share.window.secure() }
+    }
+
+    @Test
+    fun `the share entry allows screenshots by default, also with the lock on`() {
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
+        pumpUntil("settings") { vm.settings.value.appLockEnabled }
+
+        val share = buildActivity(ShareImportActivity::class.java, Intent(Intent.ACTION_SEND)).create().get()
+        // A flag set by hand is cleared by the next settings the entry hears: the lock alone blocks nothing.
+        share.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        runBlocking { app.graph.settings.update { it.copy(widgetHideTitles = true) } }
+
+        pumpUntil("the settings to clear FLAG_SECURE on the share entry") { !share.window.secure() }
     }
 
     // ---- other preferences ---------------------------------------------------------------------------------------------------
@@ -371,6 +395,27 @@ class SettingsScreenTest : AppTest() {
         pumpUntil("second client saved") { settings().clientId == "01JCLIENT0000000000000000B" }
         compose.onNodeWithText("No project").performClick()
         pumpUntil("client cleared") { settings().clientId == null }
+    }
+
+    /** P-052: the project picker was "●"/"○" drawn as text in 30 dp rows; TalkBack heard no radio and no chosen state. */
+    @Test
+    fun `the keyterms project picker is radios that say which one is chosen, each a full row`() {
+        pairAndSettle()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        val refresh = vm.refresh()
+        pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
+        launch(open = "Custom words")
+
+        val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+        compose.onNode(hasText("No project") and radio).assertIsSelected()
+        compose.onNode(hasText("Acme Holdings") and radio).assertIsNotSelected()
+        val row = compose.onNode(hasText("Acme Holdings") and radio).fetchSemanticsNode()
+        assertTrue("a 48 dp row: ${row.size}", row.size.height >= with(compose.density) { 48.dp.toPx() } - 1)
+        compose.onNode(hasText("Acme Holdings") and radio).performClick()
+        pumpUntil("chosen") { settings().clientId == "01JCLIENT0000000000000000A" }
+        compose.onNode(hasText("Acme Holdings") and radio).assertIsSelected()
+        compose.onNode(hasText("No project") and radio).assertIsNotSelected()
     }
 
     // ---- device card -----------------------------------------------------------------------------------------------------------

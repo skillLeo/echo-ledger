@@ -1,0 +1,83 @@
+{
+  "desktop": {
+    "$description": "DES-03 (PLAN_V2_1_POLISH): the desktop app's and the web console's base sizes, so 100% looks like the owner's 90-95% without a default zoom. Whole pixels only. The phone keeps Material sizes (not generated for it). UX-20 (title row), DES-01 (rail and badges), DES-02 (Record) and DES-08 (avatar) sizes too.",
+    "text": {
+      "body": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "14px", "lineHeight": "20px", "fontWeight": 400 }},
+      "secondary": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "13px", "lineHeight": "18px", "fontWeight": 400 }},
+      "small": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "12px", "lineHeight": "16px", "fontWeight": 400 }},
+      "page-title": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "18px", "lineHeight": "24px", "fontWeight": 600 }},
+      "panel-title": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "15px", "lineHeight": "20px", "fontWeight": 600 }},
+      "rail-label": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "11px", "lineHeight": "14px", "fontWeight": 500 }},
+      "row-title": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "15px", "lineHeight": "20px", "fontWeight": 600 }},
+      "badge": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "10px", "lineHeight": "16px", "fontWeight": 600 }},
+      "avatar-rail": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "12px", "lineHeight": "16px", "fontWeight": 600 }},
+      "avatar-menu": { "$type": "typography", "$value": { "fontFamily": "{font.family.sans }", "fontSize": "15px", "lineHeight": "20px", "fontWeight": 600 }}
+    },
+    "control": {
+      "height": { "$type": "dimension", "$value": "32px" },
+      "height-small": { "$type": "dimension", "$value": "28px" }
+    },
+    "panel-item": {
+      "height": { "$type": "dimension", "$value": "32px" }
+    },
+    "row": {
+      "height": { "$type": "dimension", "$value": "56px" },
+      "height-compact": { "$type": "dimension", "$value": "44px" }
+    },
+    "icon": {
+      "default": { "$type": "dimension", "$value": "16px" },
+      "rail": { "$type": "dimension", "$value": "20px" }
+    },
+    "titlerow": {
+      "height": { "$type": "dimension", "$value": "52px", "$description": "UX-20: the one title row on a Mac: the window's buttons in the rail's top cell, the panel's name, then the page's toolbar" },
+      "rail-top-fullscreen": { "$type": "dimension", "$value": "8px", "$description": "Full screen hides the window's buttons: the rail's top cell shrinks to this" },
+      "height-windows": { "$type": "dimension", "$value": "48px", "$description": "UX-20 on Windows (v21_win_titlebar): the window's own title row, in place of the system's title bar" },
+      "keep-clear": { "$type": "dimension", "$value": "80px", "$description": "Nothing that can be clicked within this of the window's left edge in the title row" },
+      "lights-left": { "$type": "dimension", "$value": "6px", "$description": "The Mac's three window buttons and 4 px round them, kept free of drag regions: trafficLightPosition x + 1 - 4" },
+      "lights-top": { "$type": "dimension", "$value": "16px", "$description": "trafficLightPosition y - 4 - 4" },
+      "lights-width": { "$type": "dimension", "$value": "60px", "$description": "Three 12 px lights 8 px apart (52) + 4 px each side" },
+      "lights-height": { "$type": "dimension", "$value": "20px", "$description": "A 12 px light + 4 px above and below" }
+    },
+    "search": {
+      "height": { "$type": "dimension", "$value": "28px" },
+      "min-width": { "$type": "dimension", "$value": "180px", "$description": "The field at the row's end shrinks to this; below it (with the least drag room) it becomes a search button" },
+      "max-width": { "$type": "dimension", "$value": "260px", "$description": "The field's width at the row's end, as Mail, Notes and Finder have it" },
+      "preferred-width": { "$type": "dimension", "$value": "22vw", "$description": "Between min-width and max-width, with the window" },
+      "drag-room": { "$type": "dimension", "$value": "16px", "$description": "The least free space kept between the title and the field for dragging the window" },
+      "results-width": { "$type": "dimension", "$value": "560px" }
+    },
+    "resize": {
+      "closing-opacity": { "$type": "number", "$value": 0.5, "$description": "UX-03: a panel dragged below its closing width fades to this; let go and it closes" }
+    },
+    "window-button": {
+      "width": { "$type": "dimension", "$value": "46px", "$description": "UX-20 on Windows: Minimize, Maximize and Close, as wide as the system's own, the row's height tall" },
+      "glyph": { "$type": "dimension", "$value": "12px", "$description": "Their glyphs" }
+    },
+    "rail": {
+      "width": { "$type": "dimension", "$value": "72px" },
+      "item-height": { "$type": "dimension", "$value": "56px" },
+      "pill-width": { "$type": "dimension", "$value": "48px", "$description": "The selected place: an accent-tint pill behind its icon" },
+      "pill-height": { "$type": "dimension", "$value": "28px" }
+    },
+    "record": {
+      "width": { "$type": "dimension", "$value": "56px", "$description": "DES-02: the Record split button, a joined pill" },
+      "height": { "$type": "dimension", "$value": "40px" },
+      "chevron": { "$type": "dimension", "$value": "16px" }
+    },
+    "badge": {
+      "height": { "$type": "dimension", "$value": "16px", "$description": "DES-01: the number badge (only Activity's), on the icon's top-right corner" },
+      "padding": { "$type": "dimension", "$value": "4px" },
+      "ring": { "$type": "dimension", "$value": "2px", "$description": "In the rail's background colour, so the badge looks cut out of the icon" },
+      "dot": { "$type": "dimension", "$value": "8px" },
+      "inset": { "$type": "dimension", "$value": "3px", "$description": "The badge's centre this far in from the icon's corner" }
+    },
+    "avatar": {
+      "rail": { "$type": "dimension", "$value": "28px", "$description": "DES-08: the avatar in the rail, inside a 40 px click area" },
+      "rail-hit": { "$type": "dimension", "$value": "40px" },
+      "list": { "$type": "dimension", "$value": "32px" },
+      "menu": { "$type": "dimension", "$value": "40px" },
+      "profile": { "$type": "dimension", "$value": "96px" },
+      "ring": { "$type": "dimension", "$value": "1px", "$description": "The inner ring every avatar has (role.avatar.ring)" }
+    }
+  }
+}

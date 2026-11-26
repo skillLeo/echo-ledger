@@ -1,12 +1,8 @@
-{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
-@php
-    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
-@endphp
 {{-- Ask: a short answer from the brief, memory, files and transcripts, with the moments and pages it comes from. --}}
 <div style="display: flex; flex-direction: column; gap: var(--space-5); max-width: 880px">
         @include('filament.clients.ai-locked')
     <form class="el-card" wire:submit="ask" style="display: flex; flex-direction: column; gap: var(--space-3)">
-        <label for="ask-question" class="el-card-title">{{ __('Ask about :project', ['project' => $iso($client->name)]) }} @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</label>
+        <label for="ask-question" class="el-card-title">{{ __('Ask about :project', ['project' => $client->name]) }} @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</label>
         <textarea id="ask-question" class="el-field-input" rows="3" wire:model="question" maxlength="500"
             placeholder="{{ __('What did we agree about the deadline?') }}" x-on:keydown.ctrl.enter.prevent="$wire.ask()" x-on:keydown.meta.enter.prevent="$wire.ask()"></textarea>
         @error('question')<p class="el-caption" role="alert" style="color: var(--danger)">{{ $message }}</p>@enderror
@@ -71,8 +67,8 @@
             </section>
         @else
             <div class="el-empty" style="padding-block: var(--space-6)">
-                <span class="el-empty-icon">@svg('heroicon-o-chat-bubble-left-ellipsis', ['aria-hidden' => 'true'])</span>
-                <p class="el-empty-title">{{ __('Ask anything about :project', ['project' => $iso($client->name)]) }}</p>
+                <span class="el-empty-icon">@svg(...\App\Filament\Support\RtlIcons::of('heroicon-o-chat-bubble-left-ellipsis', ['aria-hidden' => 'true']))</span>
+                <p class="el-empty-title">{{ __('Ask anything about :project', ['project' => $client->name]) }}</p>
                 <p class="el-empty-text">{{ __('Answers come from the brief, the memory, the files and the transcripts, with the moment or page they are from.') }}</p>
             </div>
         @endif

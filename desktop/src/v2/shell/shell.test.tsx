@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeSettings, makeStatus, makeTranscript } from "../../test/fixtures";
+import { LibraryV2 } from "../library/LibraryV2";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
@@ -14,6 +15,8 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 beforeEach(() => {
+  // A wide window: the place's panel shows beside the page (under 1100 px it is a flyout from the rail).
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
   resetTauriMock();
   resetEntitlementsForTests(null);
   window.localStorage.clear();
@@ -70,21 +73,105 @@ describe("the shell", () => {
     expect(screen.getByRole("menuitem", { name: "Record page" })).not.toHaveAttribute("aria-checked");
   });
 
-  it("Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had", () => {
+  it("Search (with its keys) as an icon at the end of the header, Record now and Import audio files in Record's menu, and Help & shortcuts at the foot", () => {
     const onSearch = vi.fn();
     const onUpload = vi.fn();
     const onHelp = vi.fn();
     render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onRecord={() => undefined} onSearch={onSearch} searchKeys="⌘K" onUpload={onUpload} onHelp={onHelp}><p /></Shell>);
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Record", "", "Search⌘K", "Library", "Projects", "Live", "Ask", "Activity", "Settings", "Help & shortcuts"]);
-    fireEvent.click(within(nav).getByRole("button", { name: /^Search/ }));
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["", "Record", "", "Library", "Projects", "Live", "Ask", "Activity", "Settings", "Help & shortcuts"]);
+    // The full-width Search row is gone: the icon sits right after the name.
+    expect(document.querySelector(".el-shell__search")).toBeNull();
+    const brand = nav.querySelector(".el-sidebar__brand")!;
+    expect(brand).toHaveTextContent("EchoLedger");
+    const search = within(nav).getByRole("button", { name: "Search" });
+    expect(brand.lastElementChild?.firstElementChild).toBe(search);
+    expect(search).toHaveAttribute("title", "Search · ⌘F");
+    expect(search).toHaveAttribute("aria-keyshortcuts", "Meta+F Meta+K");
+    fireEvent.click(search);
     expect(onSearch).toHaveBeenCalled();
-    expect(within(nav).getByRole("button", { name: /^Search/ })).toHaveAttribute("aria-keyshortcuts", "Meta+K");
     fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Upload files…" }));
+    // ● Record ▾ (PLAN_LIBRARY_FILTERS): Record now and Import audio files first (files can be dropped on the window too).
+    expect(screen.getAllByRole("menuitem").slice(0, 2).map((m) => m.textContent)).toEqual(["Record now", "Import audio files…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Import audio files…" }));
     expect(onUpload).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "Help & shortcuts" }));
     expect(onHelp).toHaveBeenCalled();
+  });
+
+  it("Search's tooltip says Ctrl+F on Windows; Cmd+F and Ctrl+F open search, never while typing in a field", () => {
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="Ctrl+K"><input aria-label="Name" /></Shell>);
+    const search = within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Search" });
+    expect(search).toHaveAttribute("title", "Search · Ctrl+F");
+    expect(search).toHaveAttribute("aria-keyshortcuts", "Control+F Control+K");
+    fireEvent.keyDown(document.body, { key: "f", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "F", metaKey: true });
+    expect(onSearch).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "f", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "f", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "f" });
+    expect(onSearch).toHaveBeenCalledTimes(2);
+  });
+
+  it("Cmd/Ctrl+F does not open search behind an open dialog or sheet", () => {
+    const onSearch = vi.fn();
+    const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><div aria-modal="true" /></Shell>);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(onSearch).not.toHaveBeenCalled();
+    rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(onSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("in the collapsed rail the Search icon stays: it is the brand's end, which the rail keeps at its top", () => {
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const end = nav.querySelector(".el-sidebar__brand > .el-sidebar__brand-end")!;
+    expect(nav.querySelector(".el-sidebar__brand-name")).toHaveTextContent("EchoLedger");
+    fireEvent.click(within(end as HTMLElement).getByRole("button", { name: "Search" }));
+    expect(onSearch).toHaveBeenCalled();
+  });
+
+  it("on an open recording Cmd+F stays Find in this transcript; the icon still opens app search", async () => {
+    const item = makeItem("s1", { title: "Kick-off", transcript: { final_status: "completed", final_transcript_id: "tr-1", live_available: false, preview: "Hello" } });
+    respond("library_list", [item]);
+    respond("library_refresh", [item]);
+    respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a", speaker_names: {} });
+    respond("transcript_detail", makeTranscript({ id: "tr-1" }));
+    respond("skipped_list", []);
+    Element.prototype.scrollIntoView = vi.fn();
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K">
+      <LibraryV2 openRequest={{ id: "s1", seq: 1 }} />
+    </Shell>);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(screen.getByRole("searchbox", { name: "Find in this transcript" })).toHaveFocus();
+    expect(onSearch).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Search" }));
+    expect(onSearch).toHaveBeenCalled();
+  });
+
+  it("on a recording with no transcript (nothing to find) Cmd+F opens app search", async () => {
+    const item = makeItem("s2", { title: "Voice note", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } });
+    respond("library_list", [item]);
+    respond("library_refresh", [item]);
+    respond("session_detail", { playback_url: "https://ledger.example.com/b.m4a", speaker_names: {} });
+    respond("skipped_list", []);
+    Element.prototype.scrollIntoView = vi.fn();
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K">
+      <LibraryV2 openRequest={{ id: "s2", seq: 1 }} />
+    </Shell>);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { name: "Voice note" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(screen.queryByRole("searchbox", { name: "Find in this transcript" })).toBeNull();
+    expect(onSearch).toHaveBeenCalledTimes(1);
   });
 
   it("the sub-lists: pinned projects under Projects and Shared's places under Library, each opening its page", () => {
@@ -119,7 +206,7 @@ describe("the shell", () => {
 
     it("Activity shows how many need you; none shows no badge", () => {
     const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={3}><p /></Shell>);
-    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity3");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity 3");
     rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={0}><p /></Shell>);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Activity" })).toHaveTextContent(/^Activity$/);
   });
@@ -197,13 +284,13 @@ describe("the shell", () => {
 });
 
 describe("the After a call notice in the new shell", () => {
-  it("says it once, with Always transcribe; closing keeps Ask me", async () => {
+  it("says it once, with Transcribe every call; closing keeps Ask me", async () => {
     const { AfterCallNoticeV2 } = await import("./AfterCallNotice");
     respond("after_call_notice_answer", makeStatus());
     const onStatus = vi.fn();
     const { rerender } = render(<AfterCallNoticeV2 text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
     expect(screen.getByTestId("after-call-notice-v2")).toHaveTextContent("After a call, EchoLedger now asks what to do.");
-    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe every call" }));
     await act(flushAsync);
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
     expect(onStatus).toHaveBeenCalled();
@@ -316,6 +403,25 @@ describe("the app with the flags", () => {
     expect(document.querySelector(".sidebar")).not.toBeNull();
   });
 
+  it("a window that read its flags before the core's first config answer switches to the new design when ui:flags comes, on the same page", async () => {
+    backend({});
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Library" });
+    await act(flushAsync);
+    expect(document.querySelector("[data-shell=v2]")).toBeNull();
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    const v2 = { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false,
+      ui_design: { choice: "v2", current: "v2", can_try: false, can_switch_back: true } };
+    respond("ui_flags", v2);
+    await emitEvent("ui:flags", v2);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("ui_v2.shell shows the new shell around today's pages", async () => {
     backend({ "ui_v2.shell": true });
     render(<MainApp />);
@@ -325,6 +431,41 @@ describe("the app with the flags", () => {
     expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, the super admin's account has Admin panel at the sidebar's foot (the website's admin page); any other has none (DT-NAV-036)", async () => {
+    const account = (superAdmin: boolean) => ({ name: "Ayesha", email: "ayesha@example.test", email_verified: true, two_factor: false, google: false, created_at: null,
+      workspace: null, deletes_at: null, super_admin: superAdmin });
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(true));
+    respond("server_page_open", null);
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(await within(nav).findByRole("button", { name: "Admin panel" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]);
+    cleanup();
+    resetTauriMock();
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(false));
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    expect(screen.queryByRole("button", { name: "Admin panel" })).toBeNull();
+  });
+
+  it("in the app, the ? key opens Help & shortcuts (DT-NAV-032)", async () => {
+    backend({ "ui_v2.shell": true });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.keyDown(document.body, { key: "?" });
+    await act(flushAsync);
+    expect(await screen.findByRole("dialog", { name: "Help & shortcuts" })).toBeInTheDocument();
   });
 
   it("in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls", async () => {
@@ -346,7 +487,8 @@ describe("the app with the flags", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Review" }));
     await act(flushAsync);
     await act(flushAsync);
-    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    // The Library on Needs you (the waiting calls' home, PLAN_LIBRARY_FILTERS), its list of waiting calls open.
+    expect(within(screen.getByTestId("nav-panel")).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
   });
 
@@ -431,11 +573,31 @@ describe("the app with the flags", () => {
     fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
     await act(flushAsync);
     const again = screen.getByRole("dialog", { name: "Command palette" });
+    expect(within(again).getByRole("combobox")).toHaveFocus();
     fireEvent.change(within(again).getByRole("combobox"), { target: { value: "x" } });
     expect(within(again).getByRole("status")).toHaveTextContent("Type one more letter to search recordings.");
     fireEvent.keyDown(again, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
   });
+
+  for (const [platform, key] of [["macos", { metaKey: true }], ["windows", { ctrlKey: true }]] as const) {
+    it(`in the app, ${platform === "macos" ? "Cmd" : "Ctrl"}+F opens search with the cursor in its field, as ${platform === "macos" ? "⌘K" : "Ctrl+K"} does`, async () => {
+      backend({ "ui_v2.shell": true });
+      respond("app_status", makeStatus({ platform }));
+      render(<MainApp />);
+      await act(flushAsync);
+      await act(flushAsync);
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      expect(within(nav).getByRole("button", { name: "Search" })).toHaveAttribute("title", platform === "macos" ? "Search · ⌘F" : "Search · Ctrl+F");
+      fireEvent.keyDown(document.body, { key: "f", ...key });
+      await act(flushAsync);
+      expect(within(screen.getByRole("dialog", { name: "Command palette" })).getByRole("combobox")).toHaveFocus();
+      fireEvent.keyDown(screen.getByRole("dialog", { name: "Command palette" }), { key: "Escape" });
+      fireEvent.keyDown(window, { key: "k", ...key });
+      await act(flushAsync);
+      expect(within(screen.getByRole("dialog", { name: "Command palette" })).getByRole("combobox")).toHaveFocus();
+    });
+  }
 
   it("the profile sits at the sidebar's foot and opens Settings; with only part of the new design on, classic Appearance offers the way back", async () => {
     backend({ "ui_v2.shell": true });

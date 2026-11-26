@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The call choice (before, during and after a call): word for word docs/v2/copy/call-choice.md. values/ is English,
+     values-ur/ Urdu: keep the keys the same (the deck's keys with cc_ in front). -->
+<resources>
+    <string name="cc_transcribe">ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_save_audio_only">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_delete">حذف کریں</string>
+    <string name="cc_dont_record">ریکارڈ نہ کریں</string>
+    <string name="cc_undo">واپس لیں</string>
+    <string name="cc_setting_title">ہر کال کے بعد</string>
+    <string name="cc_setting_ask">مجھ سے پوچھیں</string>
+    <string name="cc_setting_ask_help">ہر کال کے بعد ایک چھوٹا کارڈ۔</string>
+    <string name="cc_setting_transcribe">ہر کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_setting_transcribe_help">کوئی سوال نہیں۔</string>
+    <string name="cc_setting_audio">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_setting_audio_help">کوئی سوال نہیں۔ چاہیں تو بعد میں لائبریری سے ٹرانسکرپٹ بنائیں۔</string>
+    <string name="cc_setting_off">کالز ریکارڈ نہ کریں</string>
+    <string name="cc_setting_off_help">کالز ریکارڈ نہیں ہوں گی۔ پھر بھی پِل یا ریکارڈ سے کوئی کال ریکارڈ کر سکتے ہیں۔</string>
+    <string name="cc_when_title">کب پوچھیں</string>
+    <string name="cc_when_after">کال کے بعد (تجویز کردہ)</string>
+    <string name="cc_when_start">کال کے شروع میں</string>
+    <string name="cc_pill_transcribe">اس کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_pill_audio">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_pill_stop_delete">روکیں اور حذف کریں</string>
+    <string name="cc_start_banner">یہ کال ریکارڈ ہو رہی ہے</string>
+    <string name="cc_card_meta">%1$s · ابھی</string>
+    <string name="cc_card_swipe">صرف آڈیو رکھنے کے لیے ہٹا دیں</string>
+    <string name="cc_card_first_hint">آپ اسے ترتیبات › ہر کال کے بعد میں بدل سکتے ہیں۔</string>
+    <string name="cc_card_always">ہمیشہ یہی کریں؟</string>
+    <string name="cc_card_always_yes">ہاں</string>
+    <string name="cc_done_transcribing">ٹرانسکرپٹ بن رہا ہے…</string>
+    <string name="cc_done_audio">آڈیو محفوظ ہو گئی</string>
+    <string name="cc_done_deleted">حذف ہو گئی</string>
+    <string name="cc_grouped_audio">%1$d کالز کی آڈیو محفوظ ہو گئی</string>
+    <string name="cc_grouped_mixed">%1$d کالز</string>
+    <string name="cc_grouped_review">دیکھیں</string>
+    <string name="cc_save_audio_all">سب کی صرف آڈیو محفوظ کریں</string>
+    <string name="cc_quiet_saved">خاموش اوقات میں آڈیو محفوظ ہوئی</string>
+    <string name="cc_restored_delete">EchoLedger بند ہونے سے ذرا پہلے حذف کی گئی تھی۔ دوبارہ منتخب کریں۔</string>
+    <string name="cc_not_deleted_yet">ابھی حذف نہیں ہوئی۔ دوبارہ منتخب کریں۔</string>
+    <string name="cc_block_screens">EchoLedger کے اسکرین شاٹس روکیں</string>
+    <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس لے سکتے ہیں، سوائے ان اسکرینز کے جن پر کلیدیں یا ریکوری کوڈز ہوں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں اور حالیہ ایپس میں چھپی رہتی ہیں۔</string>
+    <string name="cc_hide_live_words">EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں</string>
+    <string name="cc_hide_live_words_help">آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔</string>
+    <string name="cc_ac_saved">%1$s · کال محفوظ ہو گئی</string>
+    <string name="cc_ac_hint">صرف آڈیو رکھنے کے لیے ہٹا دیں۔ اسے ترتیبات › ہر کال کے بعد میں بدلیں۔</string>
+    <string name="cc_ac_grouped">%1$d کالز محفوظ ہو گئیں</string>
+    <string name="cc_ac_transcribe_all">سب کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_ac_always_transcribe">ہمیشہ ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_ac_always_audio">ہمیشہ صرف آڈیو</string>
+    <string name="cc_ac_ready">ٹرانسکرپٹ تیار ہے</string>
+    <string name="cc_ac_bar_saved">%1$s · %2$s محفوظ</string>
+    <string name="cc_ac_bar">اسکرین پر ایک چھوٹی پٹی دکھائیں</string>
+    <string name="cc_ac_bar_help">نوٹیفکیشن کے ساتھ اسکرین کے اوپر 6 سیکنڈ کے لیے ایک چھوٹی لائن۔ دوسری ایپس کے اوپر دکھانے کی اجازت چاہیے۔</string>
+    <string name="cc_ac_setting_ask_help">ہر کال کے بعد ایک خاموش نوٹیفکیشن۔</string>
+    <plurals name="cc_ac_ready_many">
+        <item quantity="one">%1$d ٹرانسکرپٹ تیار ہے</item>
+        <item quantity="other">%1$d ٹرانسکرپٹ تیار ہیں</item>
+    </plurals>
+</resources>

@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
@@ -108,6 +111,7 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         alreadySome = stringResource(R.string.v2_home_some_already_deleted)
     )
     val shown = library.filter { !it.deleted }
+    val clients by vm.clients.collectAsState()
     V2ActivityContent(
         load = { vm.activity() },
         markRead = { vm.markActivityRead(it) },
@@ -119,7 +123,11 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         missed = missed,
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
+        onSaveAudio = { vm.decide(it.id, keep = true, transcribe = false) },
         onDiscard = { batch.discard(it.id) },
+        clients = clients,
+        onRename = { rec, title -> vm.setPendingTitle(rec.id, title) },
+        onProject = { rec, clientId -> vm.setPendingClient(rec.id, clientId) },
         // Classic's Retry: each upload that failed, sent again (retryPending only nudges the queued ones).
         onRetryUploads = { pending.filter { it.state == "failed" }.forEach { vm.retryUpload(it.id) } },
         onRestore = { vm.restoreSkipped(it) },
@@ -146,12 +154,20 @@ fun V2ActivityContent(
     onKeep: (LocalRecording) -> Unit,
     onDiscard: (LocalRecording) -> Unit,
     onRetryUploads: () -> Unit,
+    /** Save all as audio only (2.0.5, the copy deck's bulk choice): each waiting call kept without a transcript. */
+    onSaveAudio: (LocalRecording) -> Unit = onKeep,
     onRestore: (String) -> Unit,
     onMissedRead: (String) -> Unit,
     onMissedDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
     today: LocalDate = LocalDate.now(),
-    scrollToTop: Int = 0
+    scrollToTop: Int = 0,
+    /** The projects a waiting call can be filed under before Keep. */
+    clients: List<com.echoledger.mobile.data.ClientDto> = emptyList(),
+    /** A waiting call's title, typed before Keep (blank: the server names it). */
+    onRename: (LocalRecording, String) -> Unit = { _, _ -> },
+    /** A waiting call's project before Keep (null: no project). */
+    onProject: (LocalRecording, String?) -> Unit = { _, _ -> }
 ) {
     val c = EchoV2.colors
     val res = LocalContext.current.resources
@@ -236,130 +252,134 @@ fun V2ActivityContent(
                 }, kind = EchoButtonKind.Quiet)
             }
         }
-        LazyColumn(Modifier.weight(1f), state = list) {
-            when {
-                failed -> item(key = "failed") {
-                    EchoBanner(
-                        stringResource(R.string.v2_act_error),
-                        EchoBannerKind.Error,
-                        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-                        actionLabel = stringResource(R.string.v2_act_retry),
-                        onAction = {
-                            failed = false
-                            items = null
-                            attempt++
-                        }
-                    )
-                }
-
-                items == null -> item(key = "loading") { EchoSkeletonList(4) }
-
-                !needs && loaded.isEmpty() && local.isEmpty() && skipped.isEmpty() -> item(key = "empty") {
-                    EchoEmptyState(
-                        stringResource(R.string.v2_act_empty_title),
-                        stringResource(R.string.v2_act_empty_body),
-                        icon = EchoIcons.Bell
-                    )
-                }
-            }
-            if (needs) {
-                item(key = "h-needs") { EchoSectionHeader(stringResource(R.string.v2_act_needs)) }
-                if (waiting.size > 1) {
-                    item(key = "waiting-all") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
-                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
-                        ) {
-                            EchoButton(stringResource(R.string.v2_act_discard_all), {
-                                waiting.forEach(onDiscard)
-                            }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
-                            EchoButton(stringResource(R.string.v2_act_keep_all), {
-                                waiting.forEach(onKeep)
-                            }, kind = EchoButtonKind.Secondary)
-                        }
-                    }
-                }
-                items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard) }
-                if (failedUploads.isNotEmpty()) {
-                    item(key = "uploads") {
-                        EchoSettingRow(
-                            if (failedUploads.size == 1) {
-                                stringResource(R.string.v2_home_failed_upload_one)
-                            } else {
-                                stringResource(R.string.v2_home_failed_uploads, failedUploads.size)
-                            },
-                            subtitle = stringResource(R.string.v2_home_failed_uploads_detail),
-                            icon = EchoIcons.Error,
-                            trailing = {
-                                EchoButton(stringResource(R.string.v2_home_retry), onRetryUploads, kind = EchoButtonKind.Secondary)
+        Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), state = list) {
+                when {
+                    failed -> item(key = "failed") {
+                        EchoBanner(
+                            stringResource(R.string.v2_act_error),
+                            EchoBannerKind.Error,
+                            Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+                            actionLabel = stringResource(R.string.v2_act_retry),
+                            onAction = {
+                                failed = false
+                                items = null
+                                attempt++
                             }
                         )
                     }
+
+                    items == null -> item(key = "loading") { EchoSkeletonList(4) }
+
+                    !needs && loaded.isEmpty() && local.isEmpty() && skipped.isEmpty() -> item(key = "empty") {
+                        EchoEmptyState(
+                            stringResource(R.string.v2_act_empty_title),
+                            stringResource(R.string.v2_act_empty_body),
+                            icon = EchoIcons.Bell
+                        )
+                    }
                 }
-                items(localNeeds, key = { "m-" + it.ref }) { row ->
-                    Dismissible({ settleMissed(row, dismiss = true) }) {
-                        MissedRow(row, today, locale, onClick = { settleMissed(row, dismiss = false) }) {
-                            settleMissed(row, dismiss = false)
-                            actions.onFix(row.button)
+                if (needs) {
+                    item(key = "h-needs") { EchoSectionHeader(stringResource(R.string.v2_act_needs)) }
+                    if (waiting.size > 1) {
+                        item(key = "waiting-all") {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
+                                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
+                            ) {
+                                EchoButton(stringResource(R.string.v2_act_discard_all), {
+                                    waiting.forEach(onDiscard)
+                                }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
+                                EchoButton(stringResource(R.string.cc_save_audio_all), {
+                                    waiting.forEach(onSaveAudio)
+                                }, kind = EchoButtonKind.Secondary)
+                            }
                         }
                     }
-                }
-                items(problems, key = { "a-" + it.id }) { row ->
-                    Dismissible({ dismiss(row) }) { ActivityRow(row, today, locale) { open(row) } }
-                }
-                if (untranscribed > 0) {
-                    item(key = "untranscribed") {
-                        EchoSettingRow(
-                            if (untranscribed == 1) {
-                                stringResource(R.string.v2_home_untranscribed_one)
-                            } else {
-                                stringResource(R.string.v2_home_untranscribed, untranscribed)
-                            },
-                            icon = EchoIcons.Transcribe,
-                            onClick = actions.onOpenUntranscribed
-                        )
+                    items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard, clients, onRename, onProject) }
+                    if (failedUploads.isNotEmpty()) {
+                        item(key = "uploads") {
+                            EchoSettingRow(
+                                if (failedUploads.size == 1) {
+                                    stringResource(R.string.v2_home_failed_upload_one)
+                                } else {
+                                    stringResource(R.string.v2_home_failed_uploads, failedUploads.size)
+                                },
+                                subtitle = stringResource(R.string.v2_home_failed_uploads_detail),
+                                icon = EchoIcons.Error,
+                                trailing = {
+                                    EchoButton(stringResource(R.string.v2_home_retry), onRetryUploads, kind = EchoButtonKind.Secondary)
+                                }
+                            )
+                        }
                     }
-                }
-                if (failedTranscripts > 0) {
-                    item(key = "failed-transcripts") {
-                        EchoSettingRow(
-                            if (failedTranscripts == 1) {
-                                stringResource(R.string.v2_home_failed_transcript_one)
-                            } else {
-                                stringResource(R.string.v2_home_failed_transcripts, failedTranscripts)
-                            },
-                            icon = EchoIcons.Error,
-                            onClick = actions.onOpenUntranscribed
-                        )
-                    }
-                }
-            }
-            if (skipped.isNotEmpty()) item(key = "skipped") { SkippedLine(skipped, onRestore) }
-            later.groupBy { row ->
-                val at = if (row is MissedItem) {
-                    java.time.Instant.ofEpochMilli(row.startedAtMs).toString()
-                } else {
-                    (row as com.echoledger.mobile.data.ActivityItemDto).at
-                }
-                com.echoledger.mobile.ui.design.dateGroup(at, today) == "Today"
-            }.toSortedMap(compareBy { !it }).forEach { (isToday, rows) ->
-                item(key = "h-$isToday") {
-                    EchoSectionHeader(stringResource(if (isToday) R.string.v2_act_today else R.string.v2_act_earlier))
-                }
-                items(rows, key = {
-                    if (it is MissedItem) "m-" + it.ref else "a-" + (it as com.echoledger.mobile.data.ActivityItemDto).id
-                }) { row ->
-                    if (row is MissedItem) {
+                    items(localNeeds, key = { "m-" + it.ref }) { row ->
                         Dismissible({ settleMissed(row, dismiss = true) }) {
-                            MissedRow(row, today, locale, onClick = null) { actions.onFix(row.button) }
+                            MissedRow(row, today, locale, onClick = { settleMissed(row, dismiss = false) }) {
+                                settleMissed(row, dismiss = false)
+                                actions.onFix(row.button)
+                            }
                         }
-                    } else {
-                        val item = row as com.echoledger.mobile.data.ActivityItemDto
-                        Dismissible({ dismiss(item) }) { ActivityRow(item, today, locale) { open(item) } }
+                    }
+                    items(problems, key = { "a-" + it.id }) { row ->
+                        Dismissible({ dismiss(row) }) { ActivityRow(row, today, locale) { open(row) } }
+                    }
+                    if (untranscribed > 0) {
+                        item(key = "untranscribed") {
+                            EchoSettingRow(
+                                if (untranscribed == 1) {
+                                    stringResource(R.string.v2_home_untranscribed_one)
+                                } else {
+                                    stringResource(R.string.v2_home_untranscribed, untranscribed)
+                                },
+                                icon = EchoIcons.Transcribe,
+                                onClick = actions.onOpenUntranscribed
+                            )
+                        }
+                    }
+                    if (failedTranscripts > 0) {
+                        item(key = "failed-transcripts") {
+                            EchoSettingRow(
+                                if (failedTranscripts == 1) {
+                                    stringResource(R.string.v2_home_failed_transcript_one)
+                                } else {
+                                    stringResource(R.string.v2_home_failed_transcripts, failedTranscripts)
+                                },
+                                icon = EchoIcons.Error,
+                                onClick = actions.onOpenUntranscribed
+                            )
+                        }
                     }
                 }
+                if (skipped.isNotEmpty()) item(key = "skipped") { SkippedLine(skipped, onRestore) }
+                later.groupBy { row ->
+                    val at = if (row is MissedItem) {
+                        java.time.Instant.ofEpochMilli(row.startedAtMs).toString()
+                    } else {
+                        (row as com.echoledger.mobile.data.ActivityItemDto).at
+                    }
+                    com.echoledger.mobile.ui.design.dateGroup(at, today) == "Today"
+                }.toSortedMap(compareBy { !it }).forEach { (isToday, rows) ->
+                    item(key = "h-$isToday") {
+                        EchoSectionHeader(stringResource(if (isToday) R.string.v2_act_today else R.string.v2_act_earlier))
+                    }
+                    items(rows, key = {
+                        if (it is MissedItem) "m-" + it.ref else "a-" + (it as com.echoledger.mobile.data.ActivityItemDto).id
+                    }) { row ->
+                        if (row is MissedItem) {
+                            Dismissible({ settleMissed(row, dismiss = true) }) {
+                                MissedRow(row, today, locale, onClick = null) { actions.onFix(row.button) }
+                            }
+                        } else {
+                            val item = row as com.echoledger.mobile.data.ActivityItemDto
+                            Dismissible({ dismiss(item) }) { ActivityRow(item, today, locale) { open(item) } }
+                        }
+                    }
+                }
+                item { Box(Modifier.padding(bottom = EchoTokens.Space.s24)) }
             }
-            item { Box(Modifier.padding(bottom = EchoTokens.Space.s24)) }
+            // Back to top (UX-25).
+            com.echoledger.mobile.ui.v2.components.EchoBackToTop(list, Modifier.align(Alignment.BottomEnd))
         }
     }
 }
@@ -618,22 +638,94 @@ private fun SkippedLine(skipped: List<LocalRecording>, onRestore: (String) -> Un
     }
 }
 
-/** A call waiting for Keep or Discard: who and how long, then Discard and Keep (as Home had it). */
+/**
+ * A call waiting for Keep or Discard (classic's card): who and how long; a tap on it renames it (Rename), Project ▾ files
+ * it, then Discard and Keep. The title and project are kept on the phone and go with the upload.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WaitingCall(rec: LocalRecording, res: Resources, onKeep: (LocalRecording) -> Unit, onDiscard: (LocalRecording) -> Unit) {
+private fun WaitingCall(
+    rec: LocalRecording,
+    res: Resources,
+    onKeep: (LocalRecording) -> Unit,
+    onDiscard: (LocalRecording) -> Unit,
+    clients: List<com.echoledger.mobile.data.ClientDto>,
+    onRename: (LocalRecording, String) -> Unit,
+    onProject: (LocalRecording, String?) -> Unit
+) {
     val c = EchoV2.colors
+    var renaming by remember { mutableStateOf(false) }
+    var filing by remember { mutableStateOf(false) }
+    val project = clients.firstOrNull { it.id == rec.clientId }?.name
+    val title = afterCallTitle(res, rec)
+    if (renaming) {
+        var words by remember { mutableStateOf(rec.title.orEmpty()) }
+        com.echoledger.mobile.ui.v2.components.EchoBottomSheet(onDismiss = {
+            renaming = false
+        }, title = stringResource(R.string.v2_lib_rename)) {
+            Column(
+                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
+                verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+            ) {
+                com.echoledger.mobile.ui.v2.components.EchoTextField(
+                    words,
+                    { words = it.take(200) },
+                    stringResource(R.string.v2_lib_title),
+                    placeholder = title
+                )
+                EchoButton(stringResource(R.string.v2_lib_save), {
+                    renaming = false
+                    onRename(rec, words.trim())
+                }, Modifier.fillMaxWidth())
+            }
+        }
+    }
+    if (filing) {
+        com.echoledger.mobile.ui.v2.components.EchoBottomSheet(onDismiss = {
+            filing = false
+        }, title = stringResource(R.string.v2_lib_project)) {
+            com.echoledger.mobile.ui.v2.components.EchoRadio(rec.clientId == null, {
+                filing = false
+                onProject(rec, null)
+            }, stringResource(R.string.v2_lib_no_project))
+            clients.forEach { p ->
+                com.echoledger.mobile.ui.v2.components.EchoRadio(rec.clientId == p.id, {
+                    filing = false
+                    onProject(rec, p.id)
+                }, p.name)
+            }
+        }
+    }
     Column {
         EchoListRow(
-            title = afterCallTitle(res, rec),
-            meta = stringResource(R.string.v2_home_waiting_decision),
+            title = title,
+            // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
+            meta = listOfNotNull(
+                stringResource(com.echoledger.mobile.calls.CallChoice.chooseAgainWords(rec) ?: R.string.v2_home_waiting_decision),
+                project
+            ).joinToString(" · "),
             metaEnd = { Text(formatClock(rec.durationMs + 500), style = EchoV2.type.mono, color = c.textSecondary) },
             leading = { EchoAvatar(icon = LibraryModel.icon(SourceApp.from(rec.sourceApp))) },
-            tall = true
+            tall = true,
+            onClickLabel = stringResource(R.string.v2_lib_rename),
+            onClick = { renaming = true }
         )
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
         ) {
+            if (clients.isNotEmpty()) {
+                // TalkBack hears "Project: Acme Holdings" (or "Project" before one is chosen), not the name alone.
+                val projectWords =
+                    project?.let { stringResource(R.string.v2_act_project_named, it) } ?: stringResource(R.string.v2_lib_project)
+                EchoButton(
+                    project ?: stringResource(R.string.v2_lib_project),
+                    { filing = true },
+                    Modifier.semantics { contentDescription = projectWords },
+                    kind = EchoButtonKind.Quiet,
+                    icon = EchoIcons.Folder
+                )
+            }
             EchoButton(stringResource(R.string.v2_home_discard), { onDiscard(rec) }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
             EchoButton(stringResource(R.string.v2_home_keep), { onKeep(rec) }, kind = EchoButtonKind.Secondary)
         }

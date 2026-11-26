@@ -101,7 +101,7 @@ class HideCardsTileServiceTest : AppTest() {
     @Test
     fun `after a new process the tile shows Shown, because Hide lasts the session only`() {
         ShareGuard.restore(ShareGuardMemory(app))
-        ShareGuard.setMode(ShareGuard.Mode.SHOW)
+        ShareGuard.setHideLive(false)
         bind().apply {
             onStartListening()
             onClick()
@@ -115,7 +115,7 @@ class HideCardsTileServiceTest : AppTest() {
         tile.onStartListening()
         tile.shows(Tile.STATE_INACTIVE, "Shown")
         assertTrue(ShareGuard.textVisible.value)
-        assertEquals("the setting outlives the process", ShareGuard.Mode.SHOW, ShareGuard.mode.value)
+        assertEquals("the setting outlives the process", false, ShareGuard.hideLive.value)
         tile.onClick()
         tile.shows(Tile.STATE_ACTIVE, "Hidden")
     }

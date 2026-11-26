@@ -108,6 +108,38 @@ class LibraryScreenTest : ScreenTest() {
         client
     )
 
+    /** P-043: a failed transcription's row says what a tap does (it opens the recording, which says why and offers Retry). */
+    @Test
+    fun `a failed transcription's row says a tap shows why`() {
+        seed(item("f1", title = "Call f1", finalStatus = "failed"))
+        showLibrary()
+        compose.onNodeWithText("Transcription failed · Tap to see why", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Transcription failed · Tap to retry", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("Call f1").performClick()
+        assertEquals("f1", opened?.id)
+    }
+
+    /** EL-UX's audit: Recently deleted that the server could not give says so, not "Nothing deleted", and Try again asks again. */
+    @Test
+    fun `Recently deleted that could not be loaded says so, and Try again loads it`() {
+        seed(item("a1"))
+        server.on("GET", "/api/bin", FakeServer.json(500, """{"message":"Server Error"}"""))
+        showLibrary()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Recently deleted").performClick()
+
+        pumpUntil("the error") {
+            compose.onAllNodesWithText("Couldn't load Recently deleted. Check the internet connection.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText("Nothing deleted in the last 48 hours.").assertCountEquals(0)
+
+        server.on("GET", "/api/bin", FakeServer.json(200, """{"data":[]}"""))
+        compose.onNodeWithText("Try again").performClick()
+        pumpUntil("an empty bin, now that it loaded") {
+            compose.onAllNodesWithText("Nothing deleted in the last 48 hours.").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     // ---- empty and loading ---------------------------------------------------------------------------------------------
 
     @Test

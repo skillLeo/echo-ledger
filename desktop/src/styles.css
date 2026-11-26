@@ -11,6 +11,8 @@
 @font-face { font-family: "Noto Naskh Arabic"; src: url("./assets/fonts/noto-naskh-arabic-arabic.woff2") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
 .segments[lang="ur"] .seg-text, .segments[lang="ur"] .seg-edit { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 19px; line-height: 2; }
 .segments[lang="ar"] .seg-text, .segments[lang="ar"] .seg-edit { font-family: "Noto Naskh Arabic", var(--font-sans); font-size: 18px; line-height: 1.7; }
+/* The window in Urdu (src/i18n, v21_urdu): Urdu words in Nastaliq, the rest in Inter (the face's range is Arabic only). */
+:root:lang(ur) { font-family: "Noto Nastaliq Urdu", var(--font-sans); }
 
 :root {
   /* colour: Radix slate + indigo, dark */
@@ -82,6 +84,8 @@
   --radius-field: 12px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  /* Floating cards (the after-call card), as the new design's sheet radius. */
+  --radius-sheet: 16px;
   --radius-full: 999px;
   /* elevation: one shadow for sheets and floating controls; dark uses surface steps and a 1 px border instead */
   --shadow-1: none;
@@ -168,6 +172,26 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--bg); overflow: hidden; }
+
+/* FIX-10: an app, not a web page (every window; lib/nativeFeel.ts takes the web view's menu and keys).
+   - The window's own background follows the theme (no white flash behind the page; the window shows after its first
+     paint, tauri.conf.json visible: false). A floating window's transparent background, below, still wins.
+   - No rubber-band bounce of the whole window; a list that scrolls keeps its own.
+   - The arrow cursor on everything one presses, as native apps have; the hand only on a real link. !important inside
+     :where(), so a page's own cursor rule gives way, but a drag's grabbing cursor (also !important, more specific)
+     doesn't.
+   - UI text (buttons, menus, headers, the rail and sidebars, toasts) can't be selected; content (transcripts, notes,
+     what one types, a message's own words, to copy an error) can.
+   - Pictures, icons and links can't be dragged out of the window by accident.
+   - Focus rings for the keyboard only, never after a click. */
+html { background: var(--bg); }
+html, body { overscroll-behavior: none; }
+:where(button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="switch"], [role="checkbox"], [role="radio"], label, summary, select) { cursor: default !important; }
+a[href] { cursor: pointer; }
+:where(button, [role="button"], [role="tab"], [role="menu"], [role="menuitem"], label, nav, header, .el-rail, .el-panel__head, .el-toast, .el-page__head, .sidebar, .topbar) { -webkit-user-select: none; user-select: none; }
+:where(input, textarea, [contenteditable="true"], .el-toast__message) { -webkit-user-select: text; user-select: text; }
+:where(img, svg, a) { -webkit-user-drag: none; }
+:focus:not(:focus-visible) { outline: none; }
 html[data-window="overlay"] body, html[data-window="dictation"] body,
 html[data-window="pill"] body, html[data-window="review"] body, html[data-window="translate"] body,
 html[data-window="overlay"], html[data-window="dictation"],
@@ -200,6 +224,9 @@ html[data-material]:not([data-sidebar="dark"]):not([data-sidebar="grey"]) .sideb
    top bar is the rest of the title bar (it carries the drag region itself, so its buttons stay clickable). */
 .titlebar-drag { display: none; }
 html[data-platform="macos"] .titlebar-drag { display: block; position: fixed; top: 0; left: 0; width: var(--sidebar-w, 240px); height: 28px; z-index: 40; }
+/* Full screen (no data-titlebar, lib/titlebar.ts): the window cannot be dragged, so the strip goes and frees what was
+   under it (the new design's "Show the panel" button). It is transparent: nothing else changes. */
+html[data-platform="macos"]:not([data-titlebar]) .titlebar-drag { display: none; }
 html[data-platform="macos"] .sidebar { padding-top: 40px; }
 .brand { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-1) var(--space-2) var(--space-2); font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.3px; }
 /* The brand's mark (components/BrandMark.tsx, docs/design/brand): its own tile and indigo, so no background here. */
@@ -418,19 +445,23 @@ select.chip option { color: var(--text); background: var(--surface); }
    text takes its own direction from its first letter: an English line keeps its order ("Northwind · 42:10",
    "Transcribing…", "2 calls waiting", a full stop at its end) and an Urdu title stays right to left. It stays on the
    window's start side (match-parent; plain "start" would follow the text). Classic only: v2 (.el-root) has its own
-   rules. The alignment has no specificity, so an element's own alignment still wins; buttons keep theirs (centred). */
+   rules. The direction carries one class's weight (the only classic rules that set unicode-bidi are the titles' and
+   snippets' plaintext, the same value, and the times' isolate, raised below); the alignment has none, so an element's
+   own alignment still wins; buttons keep theirs (centred). -webkit-match-parent for WebKit. */
 :where([dir="rtl"] .app) :is(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div, button):not(.el-root, .el-root *) { unicode-bidi: plaintext; }
-:where([dir="rtl"] .app) :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *) { text-align: match-parent; }
+:where([dir="rtl"] .app :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *)) { text-align: -webkit-match-parent; text-align: match-parent; }
 /* Times read as in English in every window ("8:12 AM", "0:00 / 2:15"). */
 .item-time, .player-time, .seg-time, .app :is(.item-time, .player-time, .seg-time) { direction: ltr; unicode-bidi: isolate; }
 /* Chevrons that point along the reading direction turn round; disclosures (down/up) and the external-link icon don't. */
-[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg, .screen-step svg) { transform: scaleX(-1); }
+[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg) { transform: scaleX(-1); }
 /* A title that is cut gets its ellipsis at its own end. */
 .activity-title[dir="auto"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); }
 .item-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .item-preview { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding-left: 60px; }
+/* A waiting recording put back after a Delete that was still waiting when EchoLedger closed. */
+.item-preview.queue-restored { color: var(--warning); }
 /* App tiles: 44 px, radius 12, the app's colour at 12 %. */
 .avatar { position: relative; width: 44px; height: 44px; border-radius: var(--radius-field); display: grid; place-items: center; flex: none; --tile: var(--tile-voice); background: color-mix(in srgb, var(--tile) 13%, transparent); color: var(--tile); }
 .avatar.app-video { --tile: var(--tile-video); }
@@ -564,7 +595,16 @@ button.segment.active { background: var(--accent-soft); }
 .queue-rename { padding: 6px 10px; font-weight: 600; }
 .queue-client { height: 36px; padding: 0 var(--space-2); }
 .lang-chip { flex: none; align-self: center; padding: 1px 6px; border-radius: var(--radius-tag); border: 1px solid var(--border-strong); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); }
-.queue-language { height: 32px; width: auto; max-width: 190px; }
+/* D-038: the closed language chip shows the short name; the native select lies transparent over it (its list and its
+   name stay), with select.chip's arrow on the chip. */
+.chip.queue-language { position: relative; height: 32px; width: auto; max-width: 190px; padding-inline-end: 28px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+[dir="rtl"] .chip.queue-language { background-position: 10px 50%, 15px 50%; }
+.queue-language > select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.queue-language > select:disabled { cursor: default; }
+/* The list's own colours, as select.chip's (an .active chip's accent words would reach the list in WebView2). */
+.queue-language > select option { color: var(--text); background: var(--surface); }
+.queue-language:has(> select:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.queue-language:has(> select:disabled) { opacity: 0.5; cursor: default; }
 .queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 .queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-muted); flex: none; }
@@ -710,6 +750,11 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .overlay-idle .overlay-card { opacity: 0; pointer-events: none; }
 .caption-message { color: var(--danger); }
 .dictation-card { display: block; min-height: 64px; }
+/* A permission kept dictation from starting: the settings button (the pill's text button on the same glass) and the
+   close, at the end of the box's head and at full strength. */
+.dictation-actions { opacity: 1; align-items: center; }
+.overlay-action { height: 24px; padding: 0 var(--space-3); border-radius: 12px; border: 1px solid var(--glass-border); background: var(--glass-hover); color: var(--glass-text); font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.overlay-action:hover { background: var(--glass-press); }
 .listening { display: inline-flex; gap: 3px; align-items: flex-end; height: 12px; }
 /* The bars grow from the bottom by scaling, not by their height (a layout property never moves). */
 .listening span { width: 3px; height: 12px; background: var(--accent); border-radius: 2px; transform-origin: bottom; animation: bar 1s infinite ease-in-out; }
@@ -893,8 +938,8 @@ audio.player { display: none; }
 .activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .activity-item { display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left; background: transparent; border: 0; border-radius: var(--radius-field); padding: 10px var(--space-3); color: var(--text); cursor: pointer; font: inherit; transition: background-color var(--motion-fast) var(--ease-out); }
 .activity-item:hover { background: var(--surface-3); }
-.activity-item:disabled { cursor: default; }
-.activity-item:disabled:hover { background: transparent; }
+.activity-item:disabled, .activity-item.static { cursor: default; }
+.activity-item:disabled:hover, .activity-item.static:hover { background: transparent; }
 .activity-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .activity-title { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 15px; min-width: 0; }
 .activity-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -904,6 +949,16 @@ audio.player { display: none; }
 .activity-tile { width: 44px; height: 44px; border-radius: var(--radius-field); display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-text); }
 .activity-tile.failed { background: var(--danger-soft); color: var(--danger); }
 .activity-tile.neutral { background: var(--surface-2); color: var(--text-muted); }
+/* A person's item (contract 2.0.0-aa): their picture in the tile's place, else their initials on their colour. */
+.activity-tile.person { border-radius: 50%; overflow: hidden; color: var(--el-role-avatar-text); background: var(--el-role-avatar-0); font-size: var(--text-md); font-weight: 700; }
+.activity-tile.person > img { width: 100%; height: 100%; object-fit: cover; }
+.activity-tile.person[data-colour="1"] { background: var(--el-role-avatar-1); }
+.activity-tile.person[data-colour="2"] { background: var(--el-role-avatar-2); }
+.activity-tile.person[data-colour="3"] { background: var(--el-role-avatar-3); }
+.activity-tile.person[data-colour="4"] { background: var(--el-role-avatar-4); }
+.activity-tile.person[data-colour="5"] { background: var(--el-role-avatar-5); }
+.activity-tile.person[data-colour="6"] { background: var(--el-role-avatar-6); }
+.activity-tile.person[data-colour="7"] { background: var(--el-role-avatar-7); }
 .action-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--accent-soft); margin-bottom: var(--space-2); }
 .action-card > svg { flex: none; color: var(--accent-text); }
 .action-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -984,6 +1039,10 @@ audio.player { display: none; }
 .improving-track { height: 3px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
 .improving-track > div { height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; transition: transform var(--motion-base) var(--ease-out); }
 .improving-track > div.indeterminate { transform: scaleX(0.3); }
+.converting-line { display: inline-flex; align-items: center; gap: var(--space-1); }
+.converting-line .spinner { width: 12px; height: 12px; }
+.convert-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+.convert-failed > .small, .item-sub .convert-note { display: inline-flex; align-items: center; gap: var(--space-1); }
 .activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
 
 /* An automatic title (Phase 1C): a quiet note beside it. */
@@ -1315,9 +1374,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .key-steps li { counter-increment: key-step; position: relative; display: grid; gap: var(--space-1); justify-items: start; padding-left: 34px; min-height: 24px; }
 .key-steps li::before { content: counter(key-step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-text); display: grid; place-items: center; font-size: var(--text-xs); font-weight: 700; }
 .key-paste { width: 100%; gap: var(--space-2); }
-.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); }
+.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono); }
 .needs-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }
+/* Your account from the app (2.0.0-l, AccountFlows.tsx): the same flows in both designs. Logical sides only, for Urdu. */
+.account-form { display: grid; gap: var(--space-3); }
+.account-field { gap: var(--space-1); }
+.account-qr { display: block; margin-inline: auto; inline-size: 192px; block-size: 192px; image-rendering: pixelated; border-radius: var(--radius-field); }
+.account-key code, .account-codes code { font-family: var(--font-mono); letter-spacing: 0.04em; user-select: all; }
+.account-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); padding-inline-start: var(--space-5); margin: var(--space-2) 0; }
+.account-said { margin-block-start: var(--space-2); }
+.account-avatar, .account-initials { inline-size: 32px; block-size: 32px; border-radius: 50%; object-fit: cover; }
+.account-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-3); font-weight: 600; font-size: var(--text-sm); }
+.account-passkey .set-end { display: inline-flex; gap: var(--space-1); }
 /* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
 .consent-notice { display: grid; gap: var(--space-1); }
 .consent-notice p { margin: 0; }
@@ -1541,6 +1610,11 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-trail.disclosure.open { transform: rotate(-90deg); }
 .set-sub { display: block; font-size: var(--text-xs); line-height: 16px; color: var(--text-muted); }
 .set-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+/* A choice of a few with a help line each (After each call): one radio per row. */
+.set-choices { margin: 0; padding: 0; border: 0; min-width: 0; }
+.set-choices > .set-choice:first-of-type::before { display: none; }
+.set-choice { cursor: pointer; align-items: flex-start; }
+.set-choice input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .set-main .set-title { flex: none; }
 .set-two { min-height: 60px; }
 .set-danger .set-title { color: var(--danger); }
@@ -1580,7 +1654,12 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-meters .set-meter-pair { gap: var(--space-2); max-width: 70%; }
 .set-meters .meter { width: 96px; }
 .set-preview { display: grid; place-items: center; margin-bottom: var(--space-4); padding: var(--space-5); border-radius: var(--radius-md); background: #1c2024; }
-.caption-sample { display: grid; gap: 4px; padding: 10px 14px; border-radius: var(--radius-field); color: #edeef0; max-width: 420px; line-height: 1.4; }
+.caption-sample { padding: 10px 14px; border-radius: var(--radius-field); color: #edeef0; max-width: 420px; line-height: 1.4; }
+/* D-242: the newest lines, as the overlay shows them (lines x the line height, the newest at the bottom; the older ones
+   go out of view at the top, inside the card's padding). In Urdu the card sits on the right, as the overlay's. */
+.caption-sample-lines { display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(var(--caption-lines, 3) * 1.4em); overflow: hidden; }
+.caption-sample-lines > div { flex: none; }
+[dir="rtl"] .caption-sample { justify-self: right; }
 .caption-sample span { font-weight: 600; white-space: pre; }
 .set-swatches { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-left: auto; }
 .swatch { width: 24px; height: 24px; padding: 0; border-radius: var(--radius-full); border: 1px solid var(--border-strong); cursor: pointer; }
@@ -1606,7 +1685,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .nav-row.active { background: var(--accent-soft); }
 .nav-row.active .set-title { color: var(--accent-text); font-weight: 600; }
 .nav-row.active .set-icon { color: var(--accent-text); }
-.nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text); font-size: var(--text-xs); font-weight: 600; }
+/* Settings' search count only (D-002: a bare .nav-count here turned the sidebar's Activity badge grey). */
+.settings-root .nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text); font-size: var(--text-xs); font-weight: 600; }
 .settings-search { margin-bottom: var(--space-1); }
 .settings-single .settings-search { margin: var(--space-4) 0 0; }
 .set-search { width: 100%; min-width: 0; }
@@ -1751,7 +1831,7 @@ button.state-main:hover { background: var(--surface-3); }
 .menu-who-text > b, .menu-who-text > .small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-who-text .plan-chip { margin-top: 2px; }
 .menu-theme { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2); }
-.menu-theme .segmented > button { height: 26px; padding: 0 var(--space-2); }
+.menu-theme .segmented > button { height: 26px; min-height: 26px; padding: 0 var(--space-2); }
 .palette-field { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) 0 var(--space-5); border-bottom: 1px solid var(--border); color: var(--text-muted); }
 .palette-field .palette-input { border-bottom: 0; padding-left: 0; color: var(--text); }
 .palette-clear { flex: none; width: 28px; height: 28px; }
@@ -1760,6 +1840,8 @@ button.state-main:hover { background: var(--surface-3); }
 
 @container settings (max-width: 759px) {
   .profile-card { flex-wrap: wrap; }
+  /* D-229: the words at their own width, so Upgrade wraps under them instead of cutting the email short. */
+  .profile-body { flex: 1 1 auto; }
   .settings-single .set-end { max-width: 55%; }
 }
 .set-sub .btn.inline-link, .set-foot .btn.inline-link { background: transparent; color: var(--accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }

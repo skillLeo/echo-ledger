@@ -1,0 +1,5791 @@
+{
+  "about": [
+    "The shared cases of the Library's filters (contract 2.0.0-p, docs/API.md \"Library filters\"; since 2.0.0-q also \"The Library's kinds\", since 2.0.0-r each recording's state, \"The glossary's states\").",
+    "The server (web/tests/Feature/Api/LibraryFacetsFixtureTest.php), the desktop and the phone all read this file and must get these counts.",
+    "Each recording is a library item as the apps hold it (its facets are what the server sends) plus the stored fields the server derives them from.",
+    "The clock stands at `now`; dates are counted in `tz`. A recording that is `deleted` or still `recording` is never in the list or the counts; one still recording does count in Needs you once the call is over (since 2.0.0-z: `ended_at` set, or started more than 4 hours ago).",
+    "Each filter set's `expect.facets` gives, for each section, the count of each option with every other section's filter applied and not its own, in the panel's order.",
+    "Search: every word somewhere among the title, the transcript text and the project path (the project's name and the names of the folders above it), ignoring capitals; the words may be in different places. The title, the transcript and the project names are folded alike (docs/API.md: Urdu spelling variants made one).",
+    "Needs you's stuck: Status processing for more than 24 hours since `processing_since` (the start of the current upload or transcript attempt, as the library item carries it), else since `ended_at`, else `started_at`. `transcript_attempt_at` and `upload_attempt_at` are what the server stores it from.",
+    "`bookmarks` lists the tag of each bookmark (null for one without a tag): a library item's `marker_count` is how many and its `tags` the tags.",
+    "Since 2.0.0-q: each recording's `facets.kind` is its one kind (`call`, `meeting`, `voice_note` or `other`) from `facets.source`: imported files, `other` and any Source an app does not know are `other`. Each filter set's `expect.kinds` counts what its filters and its search keep by kind; they add up to its `total` (the Library's tabs add up to All)."
+  ],
+  "now": "2026-11-23T10:00:00+00:00",
+  "tz": "Asia/Karachi",
+  "projects": [
+    {
+      "id": "01JFXP00000000000000000001",
+      "name": "Acme",
+      "parent_id": null,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "01JFXP00000000000000000002",
+      "name": "Invoices",
+      "parent_id": "01JFXP00000000000000000001",
+      "color": "#26978f"
+    },
+    {
+      "id": "01JFXP00000000000000000004",
+      "name": "Empty project",
+      "parent_id": null,
+      "color": "#458cde"
+    },
+    {
+      "id": "01JFXP00000000000000000003",
+      "name": "Family",
+      "parent_id": null,
+      "color": "#d7609c"
+    },
+    {
+      "id": "01JFXP00000000000000000005",
+      "name": "كراچي آفس",
+      "parent_id": null,
+      "color": "#b3820f"
+    }
+  ],
+  "lists": [
+    {
+      "key": "clients",
+      "name": "Clients",
+      "color": "#e15f56",
+      "position": 0
+    },
+    {
+      "key": "invoice",
+      "name": "Invoice",
+      "color": "#2d9a63",
+      "position": 1
+    },
+    {
+      "key": "follow up",
+      "name": "Follow up",
+      "color": null,
+      "position": 2
+    },
+    {
+      "key": "someday",
+      "name": "Someday",
+      "color": "#b3820f",
+      "position": 3
+    }
+  ],
+  "recordings": [
+    {
+      "id": "01JFXR00000000000000000001",
+      "note": "WhatsApp call this morning, in Acme, labelled Clients, a Decision bookmark",
+      "title": "Acme budget call",
+      "text": "We went over the budget and the invoice for March.",
+      "started_at": "2026-11-23T04:00:00+00:00",
+      "ended_at": "2026-11-23T04:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000001",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [
+        "Clients"
+      ],
+      "pinned": false,
+      "important": true,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [
+        "Decision"
+      ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000002",
+      "note": "WhatsApp Web counts as WhatsApp; 01:30 in Karachi today, still yesterday in UTC",
+      "title": "Recording 2",
+      "text": null,
+      "started_at": "2026-11-22T20:30:00+00:00",
+      "ended_at": "2026-11-22T20:40:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp_web",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [
+        "clients"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": false,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000003",
+      "note": "WhatsApp Business, Invoices subfolder of Acme",
+      "title": "Invoice questions",
+      "text": "When is the invoice due",
+      "started_at": "2026-11-23T06:00:00+00:00",
+      "ended_at": "2026-11-23T06:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp_business",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000002",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "english",
+      "upload_failed": false,
+      "labels": [
+        "Invoice"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp_business",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000004",
+      "note": "18:59 UTC yesterday is 23:59 yesterday in Karachi: not today",
+      "title": "Weekly sync",
+      "text": null,
+      "started_at": "2026-11-22T18:59:00+00:00",
+      "ended_at": "2026-11-22T19:09:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000005",
+      "note": "Zoom this week, pinned, a bookmark without a tag",
+      "title": "Acme quarterly review",
+      "text": "Quarterly budget looks fine.",
+      "started_at": "2026-11-20T09:00:00+00:00",
+      "ended_at": "2026-11-20T09:10:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000001",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": true,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [
+        null
+      ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000006",
+      "note": "Google Meet, 6 days ago (first day of the last 7 in Karachi)",
+      "title": "Recording 6",
+      "text": null,
+      "started_at": "2026-11-16T19:30:00+00:00",
+      "ended_at": "2026-11-16T19:40:00+00:00",
+      "status": "completed",
+      "source_app": "google_meet",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en-US",
+      "upload_failed": false,
+      "labels": [
+        "Follow up"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "google_meet",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000007",
+      "note": "Google Meet, 7 days ago: outside the last 7 days",
+      "title": "Recording 7",
+      "text": null,
+      "started_at": "2026-11-16T18:30:00+00:00",
+      "ended_at": "2026-11-16T18:40:00+00:00",
+      "status": "completed",
+      "source_app": "google_meet",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "google_meet",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000008",
+      "note": "Teams, earlier this month, keep forever",
+      "title": "Recording 8",
+      "text": null,
+      "started_at": "2026-11-05T10:00:00+00:00",
+      "ended_at": "2026-11-05T10:10:00+00:00",
+      "status": "completed",
+      "source_app": "microsoft_teams",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000003",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": true,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "microsoft_teams",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000009",
+      "note": "SIM call, last month",
+      "title": "Call about rent",
+      "text": null,
+      "started_at": "2026-10-30T12:00:00+00:00",
+      "ended_at": "2026-10-30T12:10:00+00:00",
+      "status": "completed",
+      "source_app": "phone_call",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "hi",
+      "upload_failed": false,
+      "labels": [
+        "Follow up"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "phone_call",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000010",
+      "note": "31 Oct 19:30 UTC is 1 Nov in Karachi: this month",
+      "title": "Recording 10",
+      "text": null,
+      "started_at": "2026-10-31T19:30:00+00:00",
+      "ended_at": "2026-10-31T19:40:00+00:00",
+      "status": "completed",
+      "source_app": "phone_call",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000003",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "phone_call",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000011",
+      "note": "31 Oct 18:30 UTC is still October in Karachi",
+      "title": "Recording 11",
+      "text": null,
+      "started_at": "2026-10-31T18:30:00+00:00",
+      "ended_at": "2026-10-31T18:40:00+00:00",
+      "status": "completed",
+      "source_app": "telegram",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "telegram",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000012",
+      "note": "Signal, mixed-language code reads as Urdu; two bookmarks, Price and decision (capitals ignored)",
+      "title": "Recording 12",
+      "text": null,
+      "started_at": "2026-11-12T08:00:00+00:00",
+      "ended_at": "2026-11-12T08:10:00+00:00",
+      "status": "completed",
+      "source_app": "signal",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000001",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en+ur",
+      "upload_failed": false,
+      "labels": [
+        "Clients",
+        "Invoice"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [
+        "Price",
+        "decision"
+      ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "signal",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000013",
+      "note": "Voice note recorded on the phone",
+      "title": "Shopping list",
+      "text": "Milk, eggs and the invoice printout.",
+      "started_at": "2026-11-14T07:00:00+00:00",
+      "ended_at": "2026-11-14T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "voice_note",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "voice_note",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "voice_note",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000014",
+      "note": "A file imported on the desktop (voice note app): Source imported",
+      "title": "Recording 14",
+      "text": null,
+      "started_at": "2026-11-13T07:00:00+00:00",
+      "ended_at": "2026-11-13T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "voice_note",
+      "source_device": "desktop",
+      "origin": "imported",
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [
+        "Invoice"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "imported",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "other",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000015",
+      "note": "A file uploaded on the console with a WhatsApp name: still imported",
+      "title": "Recording 15",
+      "text": null,
+      "started_at": "2026-11-11T07:00:00+00:00",
+      "ended_at": "2026-11-11T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "web",
+      "origin": "imported",
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "imported",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "other",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000016",
+      "note": "Sent through a request link: imported",
+      "title": "Recording 16",
+      "text": null,
+      "started_at": "2026-11-10T07:00:00+00:00",
+      "ended_at": "2026-11-10T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "other",
+      "source_device": "web",
+      "origin": "requested",
+      "client_id": "01JFXP00000000000000000001",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ar-EG",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "imported",
+        "status": "transcribed",
+        "language": "ar",
+        "kind": "other",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000017",
+      "note": "A teammate's copy saved here: Source is its app",
+      "title": "Recording 17",
+      "text": null,
+      "started_at": "2026-11-09T07:00:00+00:00",
+      "ended_at": "2026-11-09T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": "saved",
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000018",
+      "note": "Audio only (Save audio): Not transcribed, chosen language Arabic",
+      "title": "Recording 18",
+      "text": null,
+      "started_at": "2026-11-21T07:00:00+00:00",
+      "ended_at": "2026-11-21T07:10:00+00:00",
+      "status": "audio_only",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": "ar",
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": true,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "not_transcribed",
+        "language": "ar",
+        "kind": "call",
+        "state": "audio_only"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000019",
+      "note": "Audio only, automatic language: Language unknown",
+      "title": "Recording 19",
+      "text": null,
+      "started_at": "2026-11-19T07:00:00+00:00",
+      "ended_at": "2026-11-19T07:10:00+00:00",
+      "status": "audio_only",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": false,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "not_transcribed",
+        "language": "unknown",
+        "kind": "call",
+        "state": "audio_only"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000020",
+      "note": "Kept without a transcript: Not transcribed",
+      "title": "Recording 20",
+      "text": null,
+      "started_at": "2026-11-18T07:00:00+00:00",
+      "ended_at": "2026-11-18T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "messenger",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": "fr",
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "messenger",
+        "status": "not_transcribed",
+        "language": "fr",
+        "kind": "call",
+        "state": "audio_only"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000021",
+      "note": "Session failed",
+      "title": "Recording 21",
+      "text": null,
+      "started_at": "2026-11-17T07:00:00+00:00",
+      "ended_at": "2026-11-17T07:10:00+00:00",
+      "status": "failed",
+      "source_app": "instagram",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [
+        "Clients"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "instagram",
+        "status": "failed",
+        "language": "unknown",
+        "kind": "call",
+        "state": "failed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000022",
+      "note": "An upload failed (the session still says uploading): failed, not stuck",
+      "title": "Recording 22",
+      "text": null,
+      "started_at": "2026-11-15T07:00:00+00:00",
+      "ended_at": "2026-11-15T07:10:00+00:00",
+      "status": "uploading",
+      "source_app": "skype",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": true,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "skype",
+        "status": "failed",
+        "language": "unknown",
+        "kind": "call",
+        "state": "failed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000023",
+      "note": "Transcript failed (no audio)",
+      "title": "Recording 23",
+      "text": null,
+      "started_at": "2026-11-22T07:00:00+00:00",
+      "ended_at": "2026-11-22T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "slack",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "failed",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": false,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "slack",
+        "status": "failed",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "failed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000024",
+      "note": "Uploading, ended 30 hours ago: stuck (Needs you)",
+      "title": "Recording 24",
+      "text": null,
+      "started_at": "2026-11-22T03:50:00+00:00",
+      "ended_at": "2026-11-22T04:00:00+00:00",
+      "status": "uploading",
+      "source_app": "discord",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "discord",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "waiting_to_upload"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000025",
+      "note": "Processing, ended 2 hours ago: processing, not stuck yet",
+      "title": "Recording 25",
+      "text": null,
+      "started_at": "2026-11-23T07:50:00+00:00",
+      "ended_at": "2026-11-23T08:00:00+00:00",
+      "status": "processing",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "transcribing"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000026",
+      "note": "Transcript waiting for its engine, ended 25 hours ago: stuck",
+      "title": "Recording 26",
+      "text": null,
+      "started_at": "2026-11-22T08:50:00+00:00",
+      "ended_at": "2026-11-22T09:00:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "pending",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [
+        "Invoice"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "call",
+        "state": "transcribing"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000027",
+      "note": "Transcript waiting for the device's own engine, ended 1 hour ago",
+      "title": "Recording 27",
+      "text": null,
+      "started_at": "2026-11-23T08:50:00+00:00",
+      "ended_at": "2026-11-23T09:00:00+00:00",
+      "status": "completed",
+      "source_app": "microsoft_teams",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "awaiting_device",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "microsoft_teams",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "transcribing"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000028",
+      "note": "Transcript finished though the session says processing: transcribed",
+      "title": "Recording 28",
+      "text": null,
+      "started_at": "2026-11-08T07:00:00+00:00",
+      "ended_at": "2026-11-08T07:10:00+00:00",
+      "status": "processing",
+      "source_app": "other",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "other",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "other",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000029",
+      "note": "Engine language not offered: falls back to the chosen language",
+      "title": "Recording 29",
+      "text": null,
+      "started_at": "2026-11-07T07:00:00+00:00",
+      "ended_at": "2026-11-07T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "other",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": "de",
+      "final_status": "completed",
+      "final_language": "xx",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "other",
+        "status": "transcribed",
+        "language": "de",
+        "kind": "other",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000030",
+      "note": "Engine language not offered, automatic: unknown",
+      "title": "Recording 30",
+      "text": null,
+      "started_at": "2026-11-06T07:00:00+00:00",
+      "ended_at": "2026-11-06T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "zz",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "unknown",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000031",
+      "note": "Pinned and important",
+      "title": "Recording 31",
+      "text": null,
+      "started_at": "2026-11-04T07:00:00+00:00",
+      "ended_at": "2026-11-04T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000001",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [
+        "CLIENTS"
+      ],
+      "pinned": true,
+      "important": true,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000032",
+      "note": "Pinned and keep forever, in no project",
+      "title": "Recording 32",
+      "text": null,
+      "started_at": "2026-11-03T07:00:00+00:00",
+      "ended_at": "2026-11-03T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "voice_note",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": true,
+      "important": false,
+      "keep": true,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "voice_note",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "voice_note",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000033",
+      "note": "Labelled with a label that has no list",
+      "title": "Recording 33",
+      "text": null,
+      "started_at": "2026-11-02T07:00:00+00:00",
+      "ended_at": "2026-11-02T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [
+        "Older label"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000034",
+      "note": "A label spelt like the Important chip: a label, never a list",
+      "title": "Recording 34",
+      "text": null,
+      "started_at": "2026-11-01T07:00:00+00:00",
+      "ended_at": "2026-11-01T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [
+        "Important"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000035",
+      "note": "September",
+      "title": "Recording 35",
+      "text": null,
+      "started_at": "2026-09-15T07:00:00+00:00",
+      "ended_at": "2026-09-15T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp_business",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000003",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp_business",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000036",
+      "note": "Last year",
+      "title": "Recording 36",
+      "text": null,
+      "started_at": "2025-12-25T07:00:00+00:00",
+      "ended_at": "2025-12-25T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "google_meet",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [
+        "Clients"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "google_meet",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000037",
+      "note": "Recorded on the console (web device), voice note",
+      "title": "Quick memo",
+      "text": null,
+      "started_at": "2026-11-23T05:00:00+00:00",
+      "ended_at": "2026-11-23T05:10:00+00:00",
+      "status": "completed",
+      "source_app": "voice_note",
+      "source_device": "web",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "voice_note",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "voice_note",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000038",
+      "note": "Ten minutes long, started tomorrow in Karachi (clock skew): not today",
+      "title": "Recording 38",
+      "text": null,
+      "started_at": "2026-11-23T19:30:00+00:00",
+      "ended_at": "2026-11-23T19:40:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000039",
+      "note": "In the Invoices subfolder, labelled Invoice and Clients",
+      "title": "Invoice for March",
+      "text": "The March invoice is paid.",
+      "started_at": "2026-11-21T12:00:00+00:00",
+      "ended_at": "2026-11-21T12:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000002",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [
+        "Invoice",
+        "Clients"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000040",
+      "note": "Unopened Zoom call with no project; a Follow-up bookmark",
+      "title": "Budget planning",
+      "text": "Next year's budget.",
+      "started_at": "2026-11-22T12:00:00+00:00",
+      "ended_at": "2026-11-22T12:10:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "en",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": false,
+      "deleted": false,
+      "bookmarks": [
+        "Follow-up"
+      ],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "transcribed",
+        "language": "en",
+        "kind": "meeting",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000041",
+      "note": "A call still waiting for Keep or Discard (5 minutes ago): Needs you, never in the list",
+      "title": "Recording 41",
+      "text": null,
+      "started_at": "2026-11-23T09:55:00+00:00",
+      "ended_at": "2026-11-23T09:59:00+00:00",
+      "status": "recording",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "call",
+        "state": "waiting"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000042",
+      "note": "A call waiting for its decision since yesterday: Needs you (waiting), never stuck",
+      "title": "Recording 42",
+      "text": null,
+      "started_at": "2026-11-22T06:00:00+00:00",
+      "ended_at": null,
+      "status": "recording",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "zoom",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "waiting"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000043",
+      "note": "In Trash: never counted",
+      "title": "Recording 43",
+      "text": null,
+      "started_at": "2026-11-23T03:00:00+00:00",
+      "ended_at": "2026-11-23T03:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [
+        "Clients"
+      ],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": true,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000044",
+      "note": "Its transcript failed a month ago and was retried an hour ago: on its way again, not stuck (the clock starts at the retry)",
+      "title": "Retried today",
+      "text": null,
+      "started_at": "2026-10-20T07:00:00+00:00",
+      "ended_at": "2026-10-20T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "zoom",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "pending",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": "2026-11-23T09:00:00+00:00",
+      "upload_attempt_at": null,
+      "processing_since": "2026-11-23T09:00:00+00:00",
+      "facets": {
+        "source": "zoom",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "transcribing"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000045",
+      "note": "Its upload failed last week and started again 2 hours ago: uploading, not stuck",
+      "title": "Recording 45",
+      "text": null,
+      "started_at": "2026-11-14T07:00:00+00:00",
+      "ended_at": "2026-11-14T07:10:00+00:00",
+      "status": "uploading",
+      "source_app": "phone_call",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": null,
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": "2026-11-23T08:00:00+00:00",
+      "processing_since": "2026-11-23T08:00:00+00:00",
+      "facets": {
+        "source": "phone_call",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "call",
+        "state": "waiting_to_upload"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000046",
+      "note": "Retried 25 hours ago and still being transcribed: stuck, counted from the retry (the upload began long before)",
+      "title": "Recording 46",
+      "text": null,
+      "started_at": "2026-11-01T07:00:00+00:00",
+      "ended_at": "2026-11-01T07:10:00+00:00",
+      "status": "completed",
+      "source_app": "google_meet",
+      "source_device": "desktop",
+      "origin": null,
+      "client_id": null,
+      "language": null,
+      "final_status": "processing",
+      "final_language": null,
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": "2026-11-22T09:00:00+00:00",
+      "upload_attempt_at": "2026-11-01T07:15:00+00:00",
+      "processing_since": "2026-11-22T09:00:00+00:00",
+      "facets": {
+        "source": "google_meet",
+        "status": "processing",
+        "language": "unknown",
+        "kind": "meeting",
+        "state": "transcribing"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000047",
+      "note": "In the project written with Arabic Kaf and Yeh: 'کراچی' in Urdu letters finds it",
+      "title": "Recording 47",
+      "text": null,
+      "started_at": "2026-11-02T09:00:00+00:00",
+      "ended_at": "2026-11-02T09:10:00+00:00",
+      "status": "completed",
+      "source_app": "phone_call",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000005",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "phone_call",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    },
+    {
+      "id": "01JFXR00000000000000000048",
+      "note": "An Urdu title written with Arabic Yeh and Kaf, in the project written with Arabic letters: 'قیمت' in Urdu letters finds it",
+      "title": "قيمت كی بات",
+      "text": null,
+      "started_at": "2026-11-03T09:00:00+00:00",
+      "ended_at": "2026-11-03T09:10:00+00:00",
+      "status": "completed",
+      "source_app": "whatsapp",
+      "source_device": "phone",
+      "origin": null,
+      "client_id": "01JFXP00000000000000000005",
+      "language": null,
+      "final_status": "completed",
+      "final_language": "ur",
+      "upload_failed": false,
+      "labels": [],
+      "pinned": false,
+      "important": false,
+      "keep": false,
+      "opened": true,
+      "deleted": false,
+      "bookmarks": [],
+      "transcript_attempt_at": null,
+      "upload_attempt_at": null,
+      "processing_since": null,
+      "facets": {
+        "source": "whatsapp",
+        "status": "transcribed",
+        "language": "ur",
+        "kind": "call",
+        "state": "transcribed"
+      }
+    }
+  ],
+  "needs_you": {
+    "count": 8,
+    "failed": 3,
+    "waiting": 2,
+    "stuck": 3,
+    "ids": {
+      "01JFXR00000000000000000021": "failed",
+      "01JFXR00000000000000000022": "failed",
+      "01JFXR00000000000000000023": "failed",
+      "01JFXR00000000000000000024": "stuck",
+      "01JFXR00000000000000000026": "stuck",
+      "01JFXR00000000000000000041": "waiting",
+      "01JFXR00000000000000000042": "waiting",
+      "01JFXR00000000000000000046": "stuck"
+    }
+  },
+  "library_counts": {
+    "all": 45,
+    "needs_you": 8,
+    "unread": 4,
+    "important": 3,
+    "not_transcribed": 3,
+    "audio_only": 2
+  },
+  "filter_sets": [
+    {
+      "name": "everything",
+      "note": "No filter and no search: every recording in the Library",
+      "filters": {},
+      "search": null,
+      "expect": {
+        "total": 45,
+        "kinds": {
+          "call": 23,
+          "meeting": 14,
+          "voice_note": 3,
+          "other": 5
+        },
+        "states": {
+          "transcribed": 32,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 6,
+            "last_7_days": 18,
+            "this_month": 40
+          },
+          "source": {
+            "whatsapp": 12,
+            "whatsapp_business": 2,
+            "google_meet": 4,
+            "zoom": 6,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 1,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 3,
+            "other": 2
+          },
+          "device": {
+            "phone": 27,
+            "desktop": 15,
+            "web": 3
+          },
+          "project": {
+            "none": 33,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 12,
+            "ur": 17,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 32,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 7,
+            "invoice": 5,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 3,
+            "important": 3,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 4,
+            "decision": 2,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "whatsapp_today",
+      "note": "Source is WhatsApp and Date is Today (in Karachi)",
+      "filters": {
+        "date": {
+          "op": "is",
+          "values": [
+            "today"
+          ]
+        },
+        "source": {
+          "op": "is",
+          "values": [
+            "whatsapp"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 6,
+            "this_month": 12
+          },
+          "source": {
+            "whatsapp": 2,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 1,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 1,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 2,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "not_whatsapp",
+      "note": "Source is not WhatsApp or WhatsApp Business",
+      "filters": {
+        "source": {
+          "op": "is_not",
+          "values": [
+            "whatsapp",
+            "whatsapp_business"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 31,
+        "kinds": {
+          "call": 9,
+          "meeting": 14,
+          "voice_note": 3,
+          "other": 5
+        },
+        "states": {
+          "transcribed": 21,
+          "audio_only": 1,
+          "transcribing": 4,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 3,
+            "last_7_days": 11,
+            "this_month": 27
+          },
+          "source": {
+            "whatsapp": 12,
+            "whatsapp_business": 2,
+            "google_meet": 4,
+            "zoom": 6,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 1,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 3,
+            "other": 2
+          },
+          "device": {
+            "phone": 14,
+            "desktop": 14,
+            "web": 3
+          },
+          "project": {
+            "none": 25,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 2,
+            "01JFXP00000000000000000005": 1
+          },
+          "language": {
+            "en": 9,
+            "ur": 10,
+            "ar": 1,
+            "fr": 1,
+            "de": 1,
+            "unknown": 9
+          },
+          "status": {
+            "transcribed": 21,
+            "not_transcribed": 1,
+            "processing": 6,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 3,
+            "invoice": 2,
+            "follow up": 2,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 0,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 1,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "project_acme",
+      "note": "Project is Acme: its Invoices subfolder too",
+      "filters": {
+        "project": {
+          "op": "is",
+          "values": [
+            "01JFXP00000000000000000001"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 7,
+        "kinds": {
+          "call": 5,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
+        "states": {
+          "transcribed": 7,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000031"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 4,
+            "this_month": 7
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 1,
+            "other": 0
+          },
+          "device": {
+            "phone": 5,
+            "desktop": 1,
+            "web": 1
+          },
+          "project": {
+            "none": 33,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 2,
+            "ur": 4,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 7,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 4,
+            "invoice": 3,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "project_none_or_family",
+      "note": "Project is No project or Family",
+      "filters": {
+        "project": {
+          "op": "is",
+          "values": [
+            "none",
+            "01JFXP00000000000000000003"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 36,
+        "kinds": {
+          "call": 16,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 4
+        },
+        "states": {
+          "transcribed": 23,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 4,
+            "last_7_days": 14,
+            "this_month": 31
+          },
+          "source": {
+            "whatsapp": 8,
+            "whatsapp_business": 1,
+            "google_meet": 4,
+            "zoom": 5,
+            "microsoft_teams": 2,
+            "phone_call": 3,
+            "telegram": 1,
+            "signal": 0,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 2,
+            "other": 2
+          },
+          "device": {
+            "phone": 20,
+            "desktop": 14,
+            "web": 2
+          },
+          "project": {
+            "none": 33,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 10,
+            "ur": 11,
+            "ar": 1,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 23,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 3,
+            "invoice": 2,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 1,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 0,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "project_not_acme",
+      "note": "Project is not Acme (nor its subfolder)",
+      "filters": {
+        "project": {
+          "op": "is_not",
+          "values": [
+            "01JFXP00000000000000000001"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 38,
+        "kinds": {
+          "call": 18,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 4
+        },
+        "states": {
+          "transcribed": 25,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 4,
+            "last_7_days": 14,
+            "this_month": 33
+          },
+          "source": {
+            "whatsapp": 9,
+            "whatsapp_business": 1,
+            "google_meet": 4,
+            "zoom": 5,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 0,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 2,
+            "other": 2
+          },
+          "device": {
+            "phone": 22,
+            "desktop": 14,
+            "web": 2
+          },
+          "project": {
+            "none": 33,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 10,
+            "ur": 13,
+            "ar": 1,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 25,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 3,
+            "invoice": 2,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 1,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 0,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "labels_clients_or_invoice",
+      "note": "Labels is Clients or Invoice (capitals ignored)",
+      "filters": {
+        "labels": {
+          "op": "is",
+          "values": [
+            "clients",
+            "invoice"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 10,
+        "kinds": {
+          "call": 8,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
+        "states": {
+          "transcribed": 8,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 1,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 3,
+            "last_7_days": 6,
+            "this_month": 9
+          },
+          "source": {
+            "whatsapp": 5,
+            "whatsapp_business": 1,
+            "google_meet": 1,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 1,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 1,
+            "other": 0
+          },
+          "device": {
+            "phone": 7,
+            "desktop": 3,
+            "web": 0
+          },
+          "project": {
+            "none": 5,
+            "01JFXP00000000000000000001": 5,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 3,
+            "ur": 5,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 2
+          },
+          "status": {
+            "transcribed": 8,
+            "not_transcribed": 0,
+            "processing": 1,
+            "failed": 1
+          },
+          "labels": {
+            "clients": 7,
+            "invoice": 5,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "labels_not_clients",
+      "note": "Labels is not Clients: recordings without that label, unlabelled ones too",
+      "filters": {
+        "labels": {
+          "op": "is_not",
+          "values": [
+            "clients"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 38,
+        "kinds": {
+          "call": 17,
+          "meeting": 13,
+          "voice_note": 3,
+          "other": 5
+        },
+        "states": {
+          "transcribed": 26,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 2,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035"
+        ],
+        "facets": {
+          "date": {
+            "today": 4,
+            "last_7_days": 14,
+            "this_month": 34
+          },
+          "source": {
+            "whatsapp": 8,
+            "whatsapp_business": 2,
+            "google_meet": 3,
+            "zoom": 6,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 0,
+            "messenger": 1,
+            "instagram": 0,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 3,
+            "other": 2
+          },
+          "device": {
+            "phone": 22,
+            "desktop": 13,
+            "web": 3
+          },
+          "project": {
+            "none": 30,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 1,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 11,
+            "ur": 12,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 11
+          },
+          "status": {
+            "transcribed": 26,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 2
+          },
+          "labels": {
+            "clients": 7,
+            "invoice": 5,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 1,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 0,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "marked_pinned_or_important",
+      "note": "Marked is Pinned or Important",
+      "filters": {
+        "marked": {
+          "op": "is",
+          "values": [
+            "pinned",
+            "important"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 5,
+        "kinds": {
+          "call": 3,
+          "meeting": 1,
+          "voice_note": 1,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 1,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000032"
+        ],
+        "facets": {
+          "date": {
+            "today": 1,
+            "last_7_days": 3,
+            "this_month": 5
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 4,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 2,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 3,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 4,
+            "not_transcribed": 1,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 3,
+            "important": 3,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "marked_not_pinned",
+      "note": "Marked is not Pinned",
+      "filters": {
+        "marked": {
+          "op": "is_not",
+          "values": [
+            "pinned"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 42,
+        "kinds": {
+          "call": 22,
+          "meeting": 13,
+          "voice_note": 2,
+          "other": 5
+        },
+        "states": {
+          "transcribed": 29,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 6,
+            "last_7_days": 17,
+            "this_month": 37
+          },
+          "source": {
+            "whatsapp": 11,
+            "whatsapp_business": 2,
+            "google_meet": 4,
+            "zoom": 5,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 1,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 2,
+            "imported": 3,
+            "other": 2
+          },
+          "device": {
+            "phone": 25,
+            "desktop": 14,
+            "web": 3
+          },
+          "project": {
+            "none": 32,
+            "01JFXP00000000000000000001": 5,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 11,
+            "ur": 15,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 29,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 6,
+            "invoice": 5,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 3,
+            "important": 3,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 2,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "status_failed",
+      "note": "Status is Failed",
+      "filters": {
+        "status": {
+          "op": "is",
+          "values": [
+            "failed"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 3,
+        "kinds": {
+          "call": 2,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000022"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 2,
+            "this_month": 3
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 3,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 3,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 0,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 3
+          },
+          "status": {
+            "transcribed": 32,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "bookmarks_any",
+      "note": "Bookmarks is Any bookmark",
+      "filters": {
+        "bookmarks": {
+          "op": "is",
+          "values": [
+            "any"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 4,
+        "kinds": {
+          "call": 2,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000012"
+        ],
+        "facets": {
+          "date": {
+            "today": 1,
+            "last_7_days": 3,
+            "this_month": 4
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 2,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 2,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 2,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 4,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 4,
+            "decision": 2,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "bookmarks_decision_or_price",
+      "note": "Bookmarks is Decision or Price (tags, capitals ignored)",
+      "filters": {
+        "bookmarks": {
+          "op": "is",
+          "values": [
+            "decision",
+            "price"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000012"
+        ],
+        "facets": {
+          "date": {
+            "today": 1,
+            "last_7_days": 1,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 2,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 4,
+            "decision": 2,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "bookmarks_not_any",
+      "note": "Bookmarks is not Any bookmark: recordings without one",
+      "filters": {
+        "bookmarks": {
+          "op": "is_not",
+          "values": [
+            "any"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 41,
+        "kinds": {
+          "call": 21,
+          "meeting": 12,
+          "voice_note": 3,
+          "other": 5
+        },
+        "states": {
+          "transcribed": 28,
+          "audio_only": 3,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000030",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000033",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000034",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 5,
+            "last_7_days": 15,
+            "this_month": 36
+          },
+          "source": {
+            "whatsapp": 11,
+            "whatsapp_business": 2,
+            "google_meet": 4,
+            "zoom": 4,
+            "microsoft_teams": 2,
+            "phone_call": 4,
+            "telegram": 1,
+            "signal": 0,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 3,
+            "imported": 3,
+            "other": 2
+          },
+          "device": {
+            "phone": 25,
+            "desktop": 13,
+            "web": 3
+          },
+          "project": {
+            "none": 32,
+            "01JFXP00000000000000000001": 4,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 10,
+            "ur": 15,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 28,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 5,
+            "invoice": 4,
+            "follow up": 2,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 2,
+            "keep_forever": 2
+          },
+          "bookmarks": {
+            "any": 4,
+            "decision": 2,
+            "follow-up": 1,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "status_not_transcribed_on_phone",
+      "note": "Status is not Transcribed, Device is Phone",
+      "filters": {
+        "device": {
+          "op": "is",
+          "values": [
+            "phone"
+          ]
+        },
+        "status": {
+          "op": "is_not",
+          "values": [
+            "transcribed"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 9,
+        "kinds": {
+          "call": 7,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 3,
+          "transcribing": 1,
+          "waiting_to_upload": 2,
+          "failed": 3,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000019",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000021",
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 7,
+            "this_month": 9
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 1,
+            "instagram": 1,
+            "skype": 1,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 9,
+            "desktop": 4,
+            "web": 0
+          },
+          "project": {
+            "none": 9,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 0,
+            "ar": 1,
+            "fr": 1,
+            "de": 0,
+            "unknown": 7
+          },
+          "status": {
+            "transcribed": 18,
+            "not_transcribed": 3,
+            "processing": 3,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "status_processing",
+      "note": "Status is Processing (stuck ones too)",
+      "filters": {
+        "status": {
+          "op": "is",
+          "values": [
+            "processing"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 7,
+        "kinds": {
+          "call": 2,
+          "meeting": 5,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 5,
+          "waiting_to_upload": 2,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000044"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 4,
+            "this_month": 6
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 1,
+            "zoom": 2,
+            "microsoft_teams": 1,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 1,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 3,
+            "desktop": 4,
+            "web": 0
+          },
+          "project": {
+            "none": 7,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 0,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 7
+          },
+          "status": {
+            "transcribed": 32,
+            "not_transcribed": 3,
+            "processing": 7,
+            "failed": 3
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "device_not_phone",
+      "note": "Device is not Phone",
+      "filters": {
+        "device": {
+          "op": "is_not",
+          "values": [
+            "phone"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 18,
+        "kinds": {
+          "call": 1,
+          "meeting": 12,
+          "voice_note": 1,
+          "other": 4
+        },
+        "states": {
+          "transcribed": 14,
+          "audio_only": 0,
+          "transcribing": 4,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000006",
+          "01JFXR00000000000000000007",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000017",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000046",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 4,
+            "last_7_days": 8,
+            "this_month": 16
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 4,
+            "zoom": 6,
+            "microsoft_teams": 2,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 3,
+            "other": 1
+          },
+          "device": {
+            "phone": 27,
+            "desktop": 15,
+            "web": 3
+          },
+          "project": {
+            "none": 15,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 1,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 9,
+            "ur": 3,
+            "ar": 1,
+            "fr": 0,
+            "de": 1,
+            "unknown": 4
+          },
+          "status": {
+            "transcribed": 14,
+            "not_transcribed": 0,
+            "processing": 4,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 1,
+            "follow up": 1,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 0,
+            "keep_forever": 1
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 0,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "language_urdu",
+      "note": "Language is Urdu",
+      "filters": {
+        "language": {
+          "op": "is",
+          "values": [
+            "ur"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 17,
+        "kinds": {
+          "call": 12,
+          "meeting": 0,
+          "voice_note": 3,
+          "other": 2
+        },
+        "states": {
+          "transcribed": 17,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000035"
+        ],
+        "facets": {
+          "date": {
+            "today": 3,
+            "last_7_days": 4,
+            "this_month": 14
+          },
+          "source": {
+            "whatsapp": 6,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 3,
+            "telegram": 1,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 3,
+            "imported": 1,
+            "other": 1
+          },
+          "device": {
+            "phone": 14,
+            "desktop": 1,
+            "web": 2
+          },
+          "project": {
+            "none": 9,
+            "01JFXP00000000000000000001": 4,
+            "01JFXP00000000000000000002": 1,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 2,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 12,
+            "ur": 17,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 17,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 5,
+            "invoice": 2,
+            "follow up": 1,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 2,
+            "keep_forever": 1
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "language_not_english_or_unknown",
+      "note": "Language is not English or Unknown",
+      "filters": {
+        "language": {
+          "op": "is_not",
+          "values": [
+            "en",
+            "unknown"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 21,
+        "kinds": {
+          "call": 14,
+          "meeting": 0,
+          "voice_note": 3,
+          "other": 4
+        },
+        "states": {
+          "transcribed": 19,
+          "audio_only": 2,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000020",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000028",
+          "01JFXR00000000000000000029",
+          "01JFXR00000000000000000031",
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000032",
+          "01JFXR00000000000000000047",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000035"
+        ],
+        "facets": {
+          "date": {
+            "today": 3,
+            "last_7_days": 6,
+            "this_month": 18
+          },
+          "source": {
+            "whatsapp": 7,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 3,
+            "telegram": 1,
+            "signal": 1,
+            "messenger": 1,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 3,
+            "imported": 2,
+            "other": 2
+          },
+          "device": {
+            "phone": 16,
+            "desktop": 2,
+            "web": 3
+          },
+          "project": {
+            "none": 12,
+            "01JFXP00000000000000000001": 5,
+            "01JFXP00000000000000000002": 1,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 2,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 12,
+            "ur": 17,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 19,
+            "not_transcribed": 2,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 5,
+            "invoice": 2,
+            "follow up": 1,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 3,
+            "keep_forever": 1
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "date_custom",
+      "note": "Date is 10 to 15 November (both days included)",
+      "filters": {
+        "date": {
+          "op": "is",
+          "values": [
+            "custom"
+          ],
+          "from": "2026-11-10",
+          "to": "2026-11-15"
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 7,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 3
+        },
+        "states": {
+          "transcribed": 5,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 1,
+          "failed": 1,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000022",
+          "01JFXR00000000000000000045",
+          "01JFXR00000000000000000013",
+          "01JFXR00000000000000000014",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000015",
+          "01JFXR00000000000000000016"
+        ],
+        "facets": {
+          "date": {
+            "today": 6,
+            "last_7_days": 18,
+            "this_month": 40
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 1,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 3,
+            "other": 0
+          },
+          "device": {
+            "phone": 4,
+            "desktop": 1,
+            "web": 2
+          },
+          "project": {
+            "none": 5,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 3,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 2
+          },
+          "status": {
+            "transcribed": 5,
+            "not_transcribed": 0,
+            "processing": 1,
+            "failed": 1
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 2,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "date_from_only",
+      "note": "Date is from 20 November (no end)",
+      "filters": {
+        "date": {
+          "op": "is",
+          "values": [
+            "custom"
+          ],
+          "from": "2026-11-20"
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 15,
+        "kinds": {
+          "call": 7,
+          "meeting": 7,
+          "voice_note": 1,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 9,
+          "audio_only": 1,
+          "transcribing": 3,
+          "waiting_to_upload": 1,
+          "failed": 1,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000038",
+          "01JFXR00000000000000000027",
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000037",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000026",
+          "01JFXR00000000000000000023",
+          "01JFXR00000000000000000024",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000018",
+          "01JFXR00000000000000000005"
+        ],
+        "facets": {
+          "date": {
+            "today": 6,
+            "last_7_days": 18,
+            "this_month": 40
+          },
+          "source": {
+            "whatsapp": 6,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 4,
+            "microsoft_teams": 1,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 1,
+            "discord": 1,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 8,
+            "desktop": 6,
+            "web": 1
+          },
+          "project": {
+            "none": 11,
+            "01JFXP00000000000000000001": 4,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 4,
+            "ur": 5,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 5
+          },
+          "status": {
+            "transcribed": 9,
+            "not_transcribed": 1,
+            "processing": 4,
+            "failed": 1
+          },
+          "labels": {
+            "clients": 3,
+            "invoice": 3,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 1,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "date_not_this_month",
+      "note": "Date is not This month",
+      "filters": {
+        "date": {
+          "op": "is_not",
+          "values": [
+            "this_month"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 5,
+        "kinds": {
+          "call": 3,
+          "meeting": 2,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000011",
+          "01JFXR00000000000000000009",
+          "01JFXR00000000000000000044",
+          "01JFXR00000000000000000035",
+          "01JFXR00000000000000000036"
+        ],
+        "facets": {
+          "date": {
+            "today": 6,
+            "last_7_days": 18,
+            "this_month": 40
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 1,
+            "google_meet": 1,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 1,
+            "telegram": 1,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 3,
+            "desktop": 2,
+            "web": 0
+          },
+          "project": {
+            "none": 4,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 1,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 3,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 1
+          },
+          "status": {
+            "transcribed": 4,
+            "not_transcribed": 0,
+            "processing": 1,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 0,
+            "follow up": 1,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "last_7_days_desktop_meetings",
+      "note": "Last 7 days, Desktop, Zoom or Google Meet",
+      "filters": {
+        "date": {
+          "op": "is",
+          "values": [
+            "last_7_days"
+          ]
+        },
+        "source": {
+          "op": "is",
+          "values": [
+            "zoom",
+            "google_meet"
+          ]
+        },
+        "device": {
+          "op": "is",
+          "values": [
+            "desktop"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 5,
+        "kinds": {
+          "call": 0,
+          "meeting": 5,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 1,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000025",
+          "01JFXR00000000000000000004",
+          "01JFXR00000000000000000040",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000006"
+        ],
+        "facets": {
+          "date": {
+            "today": 1,
+            "last_7_days": 5,
+            "this_month": 8
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 1,
+            "zoom": 4,
+            "microsoft_teams": 1,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 0,
+            "desktop": 5,
+            "web": 0
+          },
+          "project": {
+            "none": 4,
+            "01JFXP00000000000000000001": 1,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 4,
+            "ur": 0,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 1
+          },
+          "status": {
+            "transcribed": 4,
+            "not_transcribed": 0,
+            "processing": 1,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 1,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 0,
+            "follow-up": 1,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "whatsapp_clients_not_pinned",
+      "note": "Three sections at once: Source WhatsApp, Labels Clients, Marked is not Pinned",
+      "filters": {
+        "source": {
+          "op": "is",
+          "values": [
+            "whatsapp"
+          ]
+        },
+        "labels": {
+          "op": "is",
+          "values": [
+            "clients"
+          ]
+        },
+        "marked": {
+          "op": "is_not",
+          "values": [
+            "pinned"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 3,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000002",
+          "01JFXR00000000000000000039"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 3,
+            "this_month": 3
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 0,
+            "google_meet": 1,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 1,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 1,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 3,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 3,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 3,
+            "invoice": 2,
+            "follow up": 0,
+            "someday": 0,
+            "important": 1,
+            "older label": 1
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "device_web_selected_absent",
+      "note": "A value nobody has still shows (with 0) when the filters name it: Language is Spanish",
+      "filters": {
+        "language": {
+          "op": "is",
+          "values": [
+            "es"
+          ]
+        }
+      },
+      "search": null,
+      "expect": {
+        "total": 0,
+        "kinds": {
+          "call": 0,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 0,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 0
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 0,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 12,
+            "ur": 17,
+            "ar": 2,
+            "fr": 1,
+            "de": 1,
+            "es": 0,
+            "unknown": 12
+          },
+          "status": {
+            "transcribed": 0,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_invoice",
+      "note": "Search 'invoice' (titles and transcripts; the project Invoices' recordings say it too)",
+      "filters": {},
+      "search": "invoice",
+      "expect": {
+        "total": 4,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 4,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000013"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 3,
+            "this_month": 4
+          },
+          "source": {
+            "whatsapp": 2,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 4,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 3,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 4,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 2,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_budget_acme",
+      "note": "Search 'acme budget': each word in the title, the transcript or the project path, not necessarily the same one ('Acme quarterly review' says budget in its transcript)",
+      "filters": {},
+      "search": "acme budget",
+      "expect": {
+        "total": 2,
+        "kinds": {
+          "call": 1,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000005"
+        ],
+        "facets": {
+          "date": {
+            "today": 1,
+            "last_7_days": 2,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 2,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_project_folders",
+      "note": "Search 'acme': the recordings in Acme and in its folder Invoices (a folder above counts), and any title or transcript with the word",
+      "filters": {},
+      "search": "acme",
+      "expect": {
+        "total": 7,
+        "kinds": {
+          "call": 5,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 1
+        },
+        "states": {
+          "transcribed": 7,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000031"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 4,
+            "this_month": 7
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 1,
+            "other": 0
+          },
+          "device": {
+            "phone": 5,
+            "desktop": 1,
+            "web": 1
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 2,
+            "ur": 4,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 7,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 4,
+            "invoice": 3,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "search_mixed_places",
+      "note": "Search 'acme paid': 'acme' from the folder above Invoices, 'paid' from the transcript ('Invoice for March')",
+      "filters": {},
+      "search": "acme paid",
+      "expect": {
+        "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000039"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 1,
+            "this_month": 1
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 1,
+            "01JFXP00000000000000000002": 1,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 1,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_title_and_text",
+      "note": "Search 'shopping eggs': one word in the title, the other in the transcript",
+      "filters": {},
+      "search": "shopping eggs",
+      "expect": {
+        "total": 1,
+        "kinds": {
+          "call": 0,
+          "meeting": 0,
+          "voice_note": 1,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000013"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 1
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 1,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_family",
+      "note": "Search 'FAMILY': capitals ignored, the project Family's recordings",
+      "filters": {},
+      "search": "FAMILY",
+      "expect": {
+        "total": 3,
+        "kinds": {
+          "call": 2,
+          "meeting": 1,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000035"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 1,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 3,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 1
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_urdu_project",
+      "note": "Search 'کراچی' (Urdu Keheh and Farsi Yeh) finds the project written with Arabic Kaf and Yeh: project names are folded",
+      "filters": {},
+      "search": "کراچی",
+      "expect": {
+        "total": 2,
+        "kinds": {
+          "call": 2,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 2,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000048",
+          "01JFXR00000000000000000047"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 2
+          },
+          "language": {
+            "en": 0,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 2,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_urdu_title",
+      "note": "Search 'قیمت' (Farsi Yeh) finds the title written with Arabic Yeh: titles are folded too",
+      "filters": {},
+      "search": "قیمت",
+      "expect": {
+        "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000048"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 1
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 1
+          },
+          "language": {
+            "en": 0,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 1,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_urdu_title_and_project",
+      "note": "Search 'كي آفس' written with Arabic letters: 'كي' from the title and 'آفس' (Alef with Madda) from the project, both folded",
+      "filters": {},
+      "search": "كي آفس",
+      "expect": {
+        "total": 1,
+        "kinds": {
+          "call": 1,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 1,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000048"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 1
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 1
+          },
+          "language": {
+            "en": 0,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 1,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_invoice_in_acme",
+      "note": "Search 'invoice' with Project is Acme",
+      "filters": {
+        "project": {
+          "op": "is",
+          "values": [
+            "01JFXP00000000000000000001"
+          ]
+        }
+      },
+      "search": "invoice",
+      "expect": {
+        "total": 3,
+        "kinds": {
+          "call": 3,
+          "meeting": 0,
+          "voice_note": 0,
+          "other": 0
+        },
+        "states": {
+          "transcribed": 3,
+          "audio_only": 0,
+          "transcribing": 0,
+          "waiting_to_upload": 0,
+          "failed": 0,
+          "waiting": 0
+        },
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000039"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 3,
+            "this_month": 3
+          },
+          "source": {
+            "whatsapp": 2,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 3,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 3,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0,
+            "01JFXP00000000000000000005": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 3,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 2,
+            "invoice": 2,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 1,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    }
+  ]
+}

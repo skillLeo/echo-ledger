@@ -61,4 +61,27 @@ object ScreenAssets {
 
     /** Line index → the screens shown after that line (the core's rule, so the phone and Copy for AI agree). */
     fun byLine(segments: List<SegmentDto>, screens: List<ScreenDto>): Map<Int, List<ScreenDto>> = ScreenMoments.byLine(segments, screens)
+
+    /**
+     * Screens by the line they show after, once some lines are skipped: a skipped line's screens move to the last line
+     * shown before it, or to the first line shown when none is before it; none is lost while any line shows.
+     */
+    fun keptAfter(after: Map<Int, List<ScreenDto>>, all: List<Int>, kept: List<Int>): Map<Int, List<ScreenDto>> {
+        if (kept.isEmpty()) return emptyMap()
+        val keptSet = kept.toSet()
+        val out = linkedMapOf<Int, MutableList<ScreenDto>>()
+        var last: Int? = null
+        val leading = mutableListOf<ScreenDto>()
+        for (i in all) {
+            val screens = after[i].orEmpty()
+            if (i in keptSet) {
+                last = i
+                out.getOrPut(i) { mutableListOf() }.addAll(screens)
+            } else {
+                last?.let { out.getOrPut(it) { mutableListOf() }.addAll(screens) } ?: leading.addAll(screens)
+            }
+        }
+        if (leading.isNotEmpty()) out.getOrPut(kept.first()) { mutableListOf() }.addAll(0, leading)
+        return out
+    }
 }

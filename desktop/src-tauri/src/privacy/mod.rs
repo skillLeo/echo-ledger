@@ -2,8 +2,13 @@
 //! Each window is registered with its kind before it is built ([`prepare`] sets the flag on the builder, so it holds
 //! before the first show) and gets the flag again whenever a choice changes ([`apply_all`]). Since v2.0 ([`share`]):
 //! the main window is shown in screen shares unless the person hides it for a time they choose; the Live Assist card and
-//! the captions are hidden unless the person shows that one window, on that window; the other floating windows follow
-//! "Hide from screen shares" (`hideFromSharing`), which Settings' 10-minute demo lifts for them alone.
+//! the captions are hidden unless the person shows that one window, on that window; Live Translate (and any later
+//! floating window) follows "Hide from screen shares" (`hideFromSharing`), which Settings' 10-minute demo lifts for it.
+//! Since 2.0.14 (the capture policy, PLAN_V2_1_POLISH I-01/I-02) only the windows with live words are ever hidden: the
+//! recording controls, the after-call card and the dictation box are shown, like the main window, and so are the
+//! windows the system makes for EchoLedger (the menu bar's and the tray's menus, tooltips). [`KNOWN`] and
+//! [`protected`] are the table (docs/capture-matrix.md); nothing outside this module sets a capture flag (a test reads
+//! the sources for it).
 //!
 //! Scope (permanent): EchoLedger leaves its own windows out of screen shares and nothing else. It never renames its
 //! process, never leaves window lists, the Dock or task switchers, and does nothing about proctoring apps, lockdown
@@ -44,8 +49,12 @@ use crate::settings::{Settings, ShareHiding};
 pub enum Kind {
     /// The main window: shown in shares unless the person hid it ([`share::MainHide`]).
     Main,
-    /// Dictation, the pill, the after-call card, Live Translate, any later overlay: they follow `hideFromSharing`.
+    /// Live Translate and any later floating window: hidden unless `hideFromSharing` is off or the demo runs.
     Floating,
+    /// The recording controls (the pill) and the after-call card: always shown in screen shares and screenshots.
+    Controls,
+    /// The dictation box (the person's own words as they type them): always shown.
+    Dictation,
     /// The Live Assist answer card: hidden from shares unless the person showed it, on the card.
     Card,
     /// The live captions: hidden from shares unless the person showed them, on the captions.
@@ -67,9 +76,9 @@ pub const GUIDED_CARD: &str = "share-check-card";
 pub const KNOWN: [(&str, Kind); 10] = [
     (crate::lifecycle::MAIN, Kind::Main),
     (crate::overlay::OVERLAY, Kind::Captions),
-    (crate::overlay::DICTATION, Kind::Floating),
-    (crate::overlay::PILL, Kind::Floating),
-    (crate::overlay::REVIEW, Kind::Floating),
+    (crate::overlay::DICTATION, Kind::Dictation),
+    (crate::overlay::PILL, Kind::Controls),
+    (crate::overlay::REVIEW, Kind::Controls),
     (crate::translate::WINDOW, Kind::Floating),
     (ASSIST, Kind::Card),
     (CHECK_TEST, Kind::Test),
@@ -85,9 +94,9 @@ pub fn kind_for(label: &str) -> Kind {
 /// Every choice that decides whether a window is left out of screen shares, at one moment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Choice {
-    /// `hideFromSharing`: the other floating windows.
+    /// `hideFromSharing`: Live Translate and any later floating window.
     pub hiding: ShareHiding,
-    /// Settings' 10-minute demo: the other floating windows only.
+    /// Settings' 10-minute demo: those windows only.
     pub demo: bool,
     /// The person hid the main window, and its time has not come.
     pub main_hidden: bool,
@@ -247,15 +256,16 @@ pub fn window_name(label: &str) -> &'static str {
     }
 }
 
-/// Whether a window of `kind` is left out of screen shares (pure). The main window only while the person hides it; the
-/// Live Assist card and the captions always, unless the person showed that one window (no other choice, the demo
-/// included, ever shows them); the other floating windows by `hideFromSharing` and the demo. Live Translate follows the
-/// floating windows: its history (`git log -S create_translate_window`) shows the window was built unprotected with the
-/// same builder and no reason given, not as a choice, so it follows the setting like the others.
+/// Whether a window of `kind` is left out of screen shares and screenshots (pure): the capture policy. The main window
+/// only while the person hides it; the Live Assist card and the captions always, unless the person showed that one
+/// window (no other choice, the demo included, ever shows them); Live Translate by `hideFromSharing` and the demo (its
+/// history, `git log -S create_translate_window`, shows the window was built unprotected with no reason given, not as a
+/// choice, so it follows the setting). The recording controls, the after-call card and the dictation box never: they
+/// carry no one else's words, and the person must see them in their own screenshots and screen recordings.
 pub fn protected(kind: Kind, choice: &Choice) -> bool {
     match kind {
         Kind::Test => true,
-        Kind::Control => false,
+        Kind::Control | Kind::Controls | Kind::Dictation => false,
         Kind::Main => choice.main_hidden,
         Kind::Card => !choice.show_card,
         Kind::Captions => !choice.show_captions,
@@ -274,15 +284,17 @@ pub enum HideReason {
 }
 
 /// Whether a window of `kind` must be off the screen for these reasons (pure): "Hide EchoLedger windows" takes every
-/// one off; a whole-screen share the floating windows, the Live Assist card and the captions unless the person showed
-/// them in screen shares, and the main window only while the person hides it from screen shares and did not open it
-/// during the share (`main_asked`, see [`Privacy::person_opened`]). The Share Check's windows are never put away.
+/// one off; a whole-screen share the windows that should be hidden from it (Live Translate, the Live Assist card and the
+/// captions unless the person showed them in screen shares), and the main window only while the person hides it from
+/// screen shares and did not open it during the share (`main_asked`, see [`Privacy::person_opened`]). The recording
+/// controls, the after-call card and the dictation box are in the share anyway, so a share never takes them away. The
+/// Share Check's windows are never put away.
 pub fn away(kind: Kind, reasons: &BTreeSet<HideReason>, choice: &Choice, main_asked: bool) -> bool {
     let person = reasons.contains(&HideReason::Person);
     let share = reasons.contains(&HideReason::Share);
     match kind {
-        Kind::Floating => !reasons.is_empty(),
-        Kind::Card | Kind::Captions => person || (share && protected(kind, choice)),
+        Kind::Controls | Kind::Dictation => person,
+        Kind::Floating | Kind::Card | Kind::Captions => person || (share && protected(kind, choice)),
         Kind::Main => person || (share && choice.main_hidden && !main_asked),
         Kind::Test | Kind::Control => false,
     }
@@ -303,11 +315,32 @@ pub struct Opened {
     pub during_share: bool,
 }
 
-/// Whether the windows the system makes in EchoLedger's process are left out of screen share (pure): TextInputUI's
-/// `TUINSWindow` (the Caps Lock and input-language indicator next to the text cursor), a tooltip, a menu. They sit over
-/// EchoLedger's own windows, so they follow the floating windows.
-pub fn others_protected(choice: &Choice) -> bool {
-    protected(Kind::Floating, choice)
+/// Whether the windows the system makes in EchoLedger's process are left out of screen share (pure): the menu bar's
+/// menus and the tray's (the menu bar icon's menu), TextInputUI's `TUINSWindow` (the Caps Lock and input-language
+/// indicator next to the text cursor), a tooltip. None of them carries live words, and they sit over the windows that
+/// are shown (the main window's fields and menus, the recording controls), so since 2.0.14 they are shown: before, they
+/// followed the floating windows and the tray's menu was missing from the person's own screenshots (I-02).
+pub fn others_protected(_choice: &Choice) -> bool {
+    false
+}
+
+/// The capture policy as a table (pure; docs/capture-matrix.md): every window EchoLedger builds, by its name, and
+/// whether it is hidden from screen shares and screenshots with these choices.
+pub fn policy(choice: &Choice) -> Vec<(&'static str, bool)> {
+    KNOWN.iter().map(|(label, kind)| (window_name(label), protected(*kind, choice))).collect()
+}
+
+/// What is wrong with a window's read-back flag against the table, if anything (pure; the smoke test on a Mac and on
+/// Windows): `read` is what the system says now.
+pub fn policy_problem(label: &str, read: Option<share::Read>, choice: &Choice) -> Option<String> {
+    let hidden = protected(kind_for(label), choice);
+    let name = window_name(label);
+    match (read, hidden) {
+        (None, _) => Some(format!("{name}: its capture flag could not be read")),
+        (Some(share::Read::Shown), true) => Some(format!("{name}: in screen shares and screenshots, but the capture policy hides it")),
+        (Some(share::Read::Hidden | share::Read::BlackBox), false) => Some(format!("{name}: hidden from screen shares and screenshots, but the capture policy shows it")),
+        _ => None,
+    }
 }
 
 /// The command that puts a window away or back on Windows (pure; `ShowWindow`'s values): `SW_HIDE`, then `SW_SHOWNA`,
@@ -353,6 +386,9 @@ pub struct Privacy {
     held_back: Mutex<BTreeSet<String>>,
     /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
     bar_on_screen: AtomicBool,
+    /// The app's own questions on screen now (FIX-11's quit question), by their window: hidden from shares whatever the
+    /// settings, so the system windows' sealing (`seal_others`) leaves them as they are.
+    questions: Mutex<BTreeSet<usize>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -375,6 +411,19 @@ impl Privacy {
 
     pub fn kind_of(&self, label: &str) -> Option<Kind> {
         lock(&self.registry).get(label).copied()
+    }
+
+    /// A question of the app's own is up in this window (until [`Privacy::question_closed`]).
+    pub fn question_open(&self, window: usize) {
+        lock(&self.questions).insert(window);
+    }
+
+    pub fn question_closed(&self, window: usize) {
+        lock(&self.questions).remove(&window);
+    }
+
+    pub fn questions(&self) -> BTreeSet<usize> {
+        lock(&self.questions).clone()
     }
 
     pub fn registered(&self) -> Vec<(String, Kind)> {
@@ -747,10 +796,20 @@ pub fn mismatch_line(label: &str, read: String, wanted: u32) -> String {
     format!("The capture flag of the {} read {read} right after EchoLedger set 0x{wanted:x}.", window_name(label))
 }
 
+/// Windows, on the main thread: gives `label` the affinity the capture policy wants for it now, derived here from the
+/// table (`affinity_for`), never passed in, and reads it back; true when it reads as wanted. The one way code outside this
+/// module sets a window's flag (screen moments' shield of the main window).
+#[cfg(windows)]
+pub(crate) fn apply_policy<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    let Some(window) = app.get_webview_window(label) else { return false };
+    let (Ok(hwnd), Some(wanted)) = (window.hwnd(), affinity_for(app, label)) else { return false };
+    set_and_read_back(app, label, hwnd.0 as isize, wanted)
+}
+
 /// Windows, on the main thread: sets one window's affinity and reads it back; records the result and logs a mismatch.
 /// True when it reads as wanted.
 #[cfg(windows)]
-pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isize, wanted: u32) -> bool {
+fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isize, wanted: u32) -> bool {
     let readback = win::apply(&win::System, hwnd, wanted);
     if let win::Readback::Mismatch { read, .. } = readback {
         let read = read.map_or_else(|| "nothing".to_string(), |r| format!("0x{r:x}"));
@@ -767,7 +826,7 @@ pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isiz
 
 /// Windows: the affinity `label` should have now.
 #[cfg(windows)]
-pub fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> {
+fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> {
     use win::Affinity;
     let protect = wanted_for(app, label)?;
     let state = app.try_state::<crate::AppState>()?;
@@ -1063,6 +1122,36 @@ impl<R: Runtime> share::ShareFlag for SystemFlag<R> {
     }
 }
 
+/// What the system says of a window in screen shares now, read on the main thread (never call it there; the smoke test).
+pub fn read_flag<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<share::Read> {
+    share::ShareFlag::read_share_flag(&SystemFlag { app: app.clone() }, label)
+}
+
+/// macOS: what the window server says of window `number` in screen capture, `kCGWindowSharingState` from
+/// `CGWindowListCopyWindowInfo` (0 none, 1 read-only, 2 read-write); none when it does not list the window. The smoke
+/// test holds every window to the capture policy by this (FIX-01).
+#[cfg(target_os = "macos")]
+pub fn window_server_sharing(number: i64) -> Option<u64> {
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
+    use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowNumber, kCGWindowSharingState};
+    let id = u32::try_from(number).ok()?;
+    let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionIncludingWindow, id)?;
+    // SAFETY: the window-list keys are constants of CoreGraphics.
+    let (number_key, sharing_key): (&CFString, &CFString) = unsafe { (kCGWindowNumber, kCGWindowSharingState) };
+    let field = |dict: &CFDictionary, key: &CFString| -> Option<i64> {
+        // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
+        let value = unsafe { dict.value((key as *const CFString).cast()) } as *const CFType;
+        unsafe { value.as_ref() }.and_then(|v| v.downcast_ref::<CFNumber>()).and_then(CFNumber::as_i64)
+    };
+    (0..list.count()).find_map(|i| {
+        // SAFETY: the index is in range; each value of this array is a CFDictionary the array keeps alive.
+        let item = unsafe { list.value_at_index(i) } as *const CFType;
+        let dict = unsafe { item.as_ref() }.and_then(|t| t.downcast_ref::<CFDictionary>())?;
+        (field(dict, number_key) == Some(number)).then(|| field(dict, sharing_key)).flatten().and_then(|s| u64::try_from(s).ok())
+    })
+}
+
+
 /// On the main thread: what the system says of this window in screen shares (macOS `NSWindow.sharingType` none is
 /// hidden; Windows `GetWindowDisplayAffinity`: WDA_EXCLUDEFROMCAPTURE hidden, WDA_MONITOR a black box); none when the
 /// system did not say.
@@ -1187,6 +1276,31 @@ pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
+/// A question the app asks in a window of its own (FIX-11: "Stop the recording and quit?"): hidden from screen shares
+/// before it shows, whatever the settings, as a question about the person's recording is theirs alone, and kept so
+/// while it is up (`seal_others` leaves it; [`question_closed`] when it goes). Set here, as every window's flag is (I-02).
+#[cfg(target_os = "macos")]
+pub fn hide_question<R: Runtime>(app: &AppHandle<R>, window: &objc2_app_kit::NSWindow) {
+    if let Some(privacy) = app.try_state::<Privacy>() {
+        privacy.question_open(window as *const objc2_app_kit::NSWindow as usize);
+    }
+    window.setSharingType(objc2_app_kit::NSWindowSharingType::None);
+}
+
+/// The question's window went.
+#[cfg(target_os = "macos")]
+pub fn question_closed<R: Runtime>(app: &AppHandle<R>, window: &objc2_app_kit::NSWindow) {
+    if let Some(privacy) = app.try_state::<Privacy>() {
+        privacy.question_closed(window as *const objc2_app_kit::NSWindow as usize);
+    }
+}
+
+/// Whether the system windows' sealing sets this window's flag (pure): not one of EchoLedger's registered windows (the
+/// service sets theirs), nor a question of the app's own that is up (hidden whatever the settings).
+pub fn seals(window: usize, ours: &BTreeSet<usize>, questions: &BTreeSet<usize>) -> bool {
+    !ours.contains(&window) && !questions.contains(&window)
+}
+
 /// macOS: every NSWindow of this process that is not one of EchoLedger's registered windows (made by the system, see
 /// [`others_protected`]) gets the sharing type the floating windows have. Public NSApplication and NSWindow API only,
 /// and only this process's windows. Run whenever the setting or the demo changes, and every few seconds by the safety
@@ -1199,12 +1313,13 @@ pub fn seal_others<R: Runtime>(app: &AppHandle<R>) {
         use objc2_app_kit::{NSApplication, NSWindowSharingType};
         let (Some(privacy), Some(mtm)) = (handle.try_state::<Privacy>(), MainThreadMarker::new()) else { return };
         let ours: BTreeSet<usize> = privacy.registered().iter().filter_map(|(label, _)| handle.get_webview_window(label)?.ns_window().ok()).map(|p| p as usize).collect();
+        let questions = privacy.questions();
         let protect = others_protected(&choice_now(&handle));
         let sharing = if protect { NSWindowSharingType::None } else { NSWindowSharingType::ReadOnly };
         let windows = NSApplication::sharedApplication(mtm).windows();
         for i in 0..windows.count() {
             let window = windows.objectAtIndex(i);
-            if !ours.contains(&(objc2::rc::Retained::as_ptr(&window) as usize)) && window.sharingType() != sharing {
+            if seals(objc2::rc::Retained::as_ptr(&window) as usize, &ours, &questions) && window.sharingType() != sharing {
                 window.setSharingType(sharing);
             }
         }
@@ -1302,7 +1417,13 @@ mod tests {
         assert_eq!(privacy.kind_of(crate::overlay::OVERLAY), Some(Kind::Captions));
         assert_eq!(privacy.kind_of(crate::lifecycle::MAIN), Some(Kind::Main));
         for label in crate::overlay::WINDOWS {
-            let kind = if label == ASSIST { Kind::Card } else if label == crate::overlay::OVERLAY { Kind::Captions } else { Kind::Floating };
+            let kind = match label {
+                ASSIST => Kind::Card,
+                crate::overlay::OVERLAY => Kind::Captions,
+                crate::overlay::PILL | crate::overlay::REVIEW => Kind::Controls,
+                crate::overlay::DICTATION => Kind::Dictation,
+                other => panic!("{other} has no kind here"),
+            };
             assert_eq!(privacy.kind_of(label), Some(kind), "{label}");
             assert_eq!(kind_for(label), kind, "{label} is built with its kind");
         }
@@ -1323,6 +1444,8 @@ mod tests {
             assert!(protected(Kind::Card, &c) && protected(Kind::Captions, &c), "{hiding:?}: the card and the captions stay hidden");
             assert!(protected(Kind::Test, &c), "the test window is always protected");
             assert!(!protected(Kind::Control, &c), "the control never is");
+            assert!(!protected(Kind::Controls, &c) && !protected(Kind::Controls, &choice(hiding, true)), "{hiding:?}: the recording controls and the after-call card are always shown");
+            assert!(!protected(Kind::Dictation, &c) && !protected(Kind::Dictation, &choice(hiding, true)), "{hiding:?}: the dictation box is always shown");
         }
         let demo = Choice { demo: true, ..choice(All, true) };
         assert!(!protected(Kind::Floating, &demo), "the demo shows the other floating windows");
@@ -1593,14 +1716,16 @@ mod tests {
         let privacy = Privacy::new();
         let settings = Settings::default();
         let start = Instant::now();
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start, 0), Some(true));
+        assert_eq!(privacy.wants(crate::translate::WINDOW, &settings, start, 0), Some(true));
         privacy.set_demo(Some(Demo::starting(start, SystemTime::now(), DEMO)));
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start, 0), Some(false), "shown during the demo");
+        assert_eq!(privacy.wants(crate::translate::WINDOW, &settings, start, 0), Some(false), "shown during the demo");
+        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start, 0), Some(false), "the recording controls are shown anyway");
         assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + Duration::from_secs(9 * 60), 0), Some(false));
         assert_eq!(privacy.wants(ASSIST, &settings, start + Duration::from_secs(9 * 60), 0), Some(true), "never the card");
         assert!(privacy.demo_left(start + Duration::from_secs(60)).is_some_and(|d| d == Duration::from_secs(9 * 60)));
         // Ten minutes later the setting holds again, without anyone touching it.
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start + DEMO, 0), Some(true));
+        assert_eq!(privacy.wants(crate::translate::WINDOW, &settings, start + DEMO, 0), Some(true));
+        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start + DEMO, 0), Some(false));
         assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + DEMO, 0), Some(false), "the main window is shown unless the person hides it");
         assert_eq!(privacy.demo_left(start + DEMO), None);
         assert_eq!(DEMO, Duration::from_secs(600));
@@ -1622,7 +1747,17 @@ mod tests {
         let shown = Choice { show_card: true, show_captions: true, ..choice(ShareHiding::All, false) };
         assert!(!away(Kind::Card, &reasons(&[Share]), &shown, false) && !away(Kind::Captions, &reasons(&[Share]), &shown, false), "shown on purpose: they stay");
         assert!(away(Kind::Card, &reasons(&[Person]), &shown, false), "Hide EchoLedger windows still takes them");
-        for kind in [Kind::Main, Kind::Floating, Kind::Card, Kind::Captions, Kind::Test, Kind::Control] {
+        // The recording controls, the after-call card and the dictation box are in a share anyway: only the person's
+        // Hide EchoLedger windows takes them off.
+        for kind in [Kind::Controls, Kind::Dictation] {
+            for hiding in [ShareHiding::All, ShareHiding::Off] {
+                assert!(!away(kind, &reasons(&[Share]), &choice(hiding, true), false), "{kind:?} {hiding:?}: a share leaves it on screen");
+                assert!(away(kind, &reasons(&[Person]), &choice(hiding, false), false), "{kind:?}: Hide EchoLedger windows takes it");
+            }
+        }
+        // Live Translate shown in screen shares (the setting off) is not taken off by a share either.
+        assert!(!away(Kind::Floating, &reasons(&[Share]), &choice(ShareHiding::Off, false), false));
+        for kind in [Kind::Main, Kind::Floating, Kind::Controls, Kind::Dictation, Kind::Card, Kind::Captions, Kind::Test, Kind::Control] {
             assert!(!away(kind, &reasons(&[]), &choice(ShareHiding::All, true), false), "{kind:?}: nothing keeps it off");
         }
         assert!(!away(Kind::Test, &reasons(&[Person, Share]), &choice(ShareHiding::All, true), false), "the Share Check's windows are never put away");
@@ -1695,11 +1830,49 @@ mod tests {
     }
 
     #[test]
-    fn the_system_s_own_windows_follow_the_floating_windows() {
-        assert!(others_protected(&choice(ShareHiding::All, false)), "TUINSWindow is left out of screen share");
-        assert!(others_protected(&choice(ShareHiding::Floating, false)), "it sits over EchoLedger's text fields");
-        assert!(!others_protected(&choice(ShareHiding::Off, false)));
-        assert!(!others_protected(&Choice { demo: true, ..choice(ShareHiding::All, false) }), "the demo shows the floating windows");
+    fn the_system_s_own_windows_are_shown_the_tray_s_menu_among_them() {
+        // I-02: they followed the floating windows, so the tray's menu (and the menu bar's) left the person's own
+        // screenshots. They carry no live words and sit over the windows that are shown.
+        for hiding in [ShareHiding::All, ShareHiding::Floating, ShareHiding::Off] {
+            for main_hidden in [false, true] {
+                assert!(!others_protected(&choice(hiding, main_hidden)), "{hiding:?} {main_hidden}");
+            }
+        }
+        assert!(!others_protected(&Choice { demo: true, ..choice(ShareHiding::All, false) }));
+    }
+
+    /// The capture policy (PLAN_V2_1_POLISH "Screen-capture rules per window", docs/capture-matrix.md), window by window,
+    /// with the defaults: only the windows with live words are hidden.
+    #[test]
+    fn the_capture_policy_table() {
+        let defaults = choice(ShareHiding::All, false);
+        assert_eq!(policy(&defaults), vec![
+            ("main window", false),
+            ("captions", true),
+            ("dictation box", false),
+            ("recording controls", false),
+            ("after-call card", false),
+            ("Live Translate", true),
+            ("Live Assist card", true),
+            ("test window of the check", true),
+            ("green square of the check", false),
+            ("test card", true),
+        ]);
+        // "Hide from screen shares" off: Live Translate is shown; the card and the captions keep their own choice.
+        let off = policy(&choice(ShareHiding::Off, false));
+        assert!(off.contains(&("Live Translate", false)) && off.contains(&("captions", true)) && off.contains(&("Live Assist card", true)));
+        // The person hides the main window for a while: only it changes.
+        let main = policy(&choice(ShareHiding::All, true));
+        assert!(main.contains(&("main window", true)));
+        assert_eq!(main.iter().filter(|(_, hidden)| *hidden).count(), policy(&defaults).iter().filter(|(_, hidden)| *hidden).count() + 1);
+        // What the smoke test says of a window whose flag is not the table's.
+        assert_eq!(policy_problem(crate::overlay::PILL, Some(share::Read::Shown), &defaults), None);
+        assert_eq!(policy_problem(crate::overlay::PILL, Some(share::Read::Hidden), &defaults).unwrap(),
+            "recording controls: hidden from screen shares and screenshots, but the capture policy shows it");
+        assert_eq!(policy_problem(crate::overlay::OVERLAY, Some(share::Read::Shown), &defaults).unwrap(),
+            "captions: in screen shares and screenshots, but the capture policy hides it");
+        assert_eq!(policy_problem(crate::overlay::OVERLAY, Some(share::Read::BlackBox), &defaults), None, "a black box keeps the words out");
+        assert!(policy_problem(crate::lifecycle::MAIN, None, &defaults).unwrap().contains("could not be read"));
     }
 
     /// Every `.rs` file under `dir`.
@@ -1712,6 +1885,26 @@ mod tests {
                 out.push(path);
             }
         }
+    }
+
+    #[test]
+    fn the_system_windows_sealing_leaves_a_question_of_the_app_s_own_hidden_while_it_is_up() {
+        let ours: BTreeSet<usize> = [1].into();
+        let mut questions: BTreeSet<usize> = BTreeSet::new();
+        assert!(seals(7, &ours, &questions), "a system window: sealed as the floating windows are");
+        assert!(!seals(1, &ours, &questions), "EchoLedger's own: the service sets them");
+        let p = Privacy::new();
+        p.question_open(7);
+        questions = p.questions();
+        assert!(!seals(7, &ours, &questions), "the quit question stays hidden from shares while it is up");
+        p.question_closed(7);
+        assert!(seals(7, &ours, &p.questions()), "gone: its window is a system window again");
+        // seal_others asks `seals` with the questions; the quit question records itself and is let go when answered.
+        let code = include_str!("mod.rs").split("#[cfg(test)]").next().unwrap();
+        let seal = &code[code.find("pub fn seal_others<R: Runtime>").unwrap()..];
+        assert!(seal[..seal.find("\n}\n").unwrap()].contains("if seals(objc2::rc::Retained::as_ptr(&window) as usize, &ours, &questions)"));
+        let app_life = include_str!("../app_life.rs");
+        assert!(app_life.contains("crate::privacy::hide_question(app, &window);") && app_life.contains("crate::privacy::question_closed(app, &window);"));
     }
 
     #[test]
@@ -1732,6 +1925,11 @@ mod tests {
             for private in ["privacy::prepare(", "privacy::built(", "super::prepare(", "super::built(", ".content_protected("] {
                 let allowed = private == ".content_protected(" && file.ends_with("lifecycle.rs") && text.contains("|b| if shielded { b.content_protected(true) }");
                 assert!(allowed || !text.contains(private), "{}: {private} outside privacy::window", file.display());
+            }
+            // The capture policy is set in one place (I-02): no window's flag is set anywhere else, with any API.
+            let in_privacy = file.components().any(|c| c.as_os_str() == "privacy");
+            for setter in ["set_content_protected(", "setSharingType(", "setSharingType:", "SetWindowDisplayAffinity("] {
+                assert!(in_privacy || !text.contains(setter), "{}: {setter} outside the privacy service (src/privacy)", file.display());
             }
         }
         assert!(builders >= 4, "the main window, the overlays, the check's patches and its card: {builders}");

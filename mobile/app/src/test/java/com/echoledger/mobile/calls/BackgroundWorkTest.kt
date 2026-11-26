@@ -107,10 +107,23 @@ class BackgroundWorkTest : AppTest() {
 
         assertEquals(listOf("Record now", "Turn off"), notification.actions.map { it.title.toString() })
         assertEquals("Ready to record WhatsApp calls", shadowOf(notification).contentTitle.toString())
-        // Keep automatically is the default since v1.5: no question after the call.
-        assertEquals("Calls are recorded and kept automatically.", shadowOf(notification).contentText.toString())
-        val asking = Notifications.armed(app, askAfterCall = true)
-        assertEquals("Calls are recorded automatically; you decide after each call.", shadowOf(asking).contentText.toString())
+        // Ask me is the default since 2.0.5: the card after the call.
+        assertEquals("Calls are recorded automatically; you decide after each call.", shadowOf(notification).contentText.toString())
+        listOf(com.echoledger.mobile.calls.CallChoice.TRANSCRIBE, com.echoledger.mobile.calls.CallChoice.AUDIO).forEach {
+            val noQuestion = Notifications.armed(app, afterEachCall = it)
+            assertEquals(it, "Calls are recorded and kept automatically.", shadowOf(noQuestion).contentText.toString())
+        }
+    }
+
+    @Test
+    fun `with Don't record calls the armed notification says plainly that calls are not recorded`() {
+        listOf(true, false).forEach { ready ->
+            val off = Notifications.armed(app, ready = ready, afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF)
+            val words = "${shadowOf(off).contentTitle} ${shadowOf(off).contentText}"
+            assertEquals("Automatic call recording is off", shadowOf(off).contentTitle.toString())
+            assertEquals("After each call: Don't record calls.", shadowOf(off).contentText.toString())
+            assertTrue(words, listOf("Ready to record", "are recorded").none { it in words })
+        }
     }
 
     @Test
@@ -122,14 +135,14 @@ class BackgroundWorkTest : AppTest() {
             durationMs = 125_000,
             liveSegments = listOf(SegmentDto(2, "Client", 400, 1_200, "Thanks for calling back"))
         )
-        Notifications.showSaveDecision(app, rec, clientName = "Acme", decisionTimeout = "keep")
+        Notifications.showSaveDecision(app, rec, clientName = "Acme")
         val manager = shadowOf(app.getSystemService(NotificationManager::class.java))
 
         val posted = manager.allNotifications.single()
         assertEquals(Notifications.CHANNEL_DECISIONS, posted.channelId)
         assertEquals("Save this recording?", shadowOf(posted).contentTitle.toString())
         assertEquals("WhatsApp call · 2:05 · Acme", shadowOf(posted).contentText.toString())
-        assertEquals(listOf("Keep", "Discard"), posted.actions.map { it.title.toString() })
+        assertEquals(listOf("Transcribe", "Save audio only", "Delete"), posted.actions.map { it.title.toString() })
         assertEquals(10_000L, posted.timeoutAfter)
         assertTrue(
             posted.extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString().endsWith("Client: Thanks for calling back")
@@ -141,21 +154,21 @@ class BackgroundWorkTest : AppTest() {
     }
 
     @Test
-    fun `with Keep waiting the post-call question never times out`() {
+    fun `the post-call question goes after ten seconds, when the audio only is kept`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "rec-1", state = "pending_decision", sourceApp = "voice_note", durationMs = 42_000)
-        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "wait")
+        Notifications.showSaveDecision(app, rec, clientName = null)
 
         val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals("Voice note · 0:42", shadowOf(posted).contentText.toString())
-        assertEquals(0L, posted.timeoutAfter)
+        assertEquals(DecisionTimeoutWorker.WINDOW_SECONDS * 1000, posted.timeoutAfter)
     }
 
     @Test
     fun `without the notification permission the question stays in the app only`() {
         shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "rec-1", state = "pending_decision")
-        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
+        Notifications.showSaveDecision(app, rec, clientName = null)
 
         assertTrue(shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
     }
@@ -179,12 +192,13 @@ class BackgroundWorkTest : AppTest() {
     }
 
     @Test
-    fun `Keep from the notification queues the recording and schedules the upload`() {
+    fun `Save audio only from the notification queues the recording as audio and schedules the upload`() {
         val rec = app.storeRecording(id = "call-1", state = "pending_decision")
-        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
+        Notifications.showSaveDecision(app, rec, clientName = null)
 
-        app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_KEEP, "call-1"))
+        app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_KEEP, "call-1").putExtra(SaveDecisionReceiver.EXTRA_TRANSCRIBE, false))
         pumpUntil("the decision") { app.peekRecording("call-1")?.state == "queued" }
+        assertEquals(false, app.peekRecording("call-1")?.transcribe)
         // The receiver saves the decision, then queues the upload: wait until it has finished, not for the first step.
         awaitAppIdle()
 
@@ -198,17 +212,40 @@ class BackgroundWorkTest : AppTest() {
         WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
 
     @Test
-    fun `Discard from the notification says Discarded with Undo and deletes only when that is over (P-006)`() {
+    fun `the notification's Delete posts its Undo before the widget refreshes`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 272_000)
-        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
+        Notifications.showSaveDecision(app, rec, clientName = null)
+        // What the shade holds the moment the widget starts to refresh.
+        val atRefresh = java.util.concurrent.atomic.AtomicReference<List<String>>()
+        val usual = Decisions.refreshWidget
+        Decisions.refreshWidget = { context ->
+            atRefresh.compareAndSet(null, posted().map { shadowOf(it).contentTitle.toString() })
+            usual(context)
+        }
+        try {
+            app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
+            pumpUntil("the widget to refresh") { atRefresh.get() != null }
+            assertEquals("Deleted · Undo was already in the shade", listOf("Deleted · WhatsApp call · 4:32"), atRefresh.get())
+            val due = java.time.Instant.parse(app.peekRecording("call-1")!!.discardAt).toEpochMilli()
+            assertTrue("before the delete is due", System.currentTimeMillis() < due)
+        } finally {
+            Decisions.refreshWidget = usual
+        }
+    }
+
+    @Test
+    fun `Delete from the notification says Deleted with Undo and deletes only when that is over (P-006)`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val rec = app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 272_000)
+        Notifications.showSaveDecision(app, rec, clientName = null)
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
         pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
         assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
-        pumpUntil("Discarded in place of the question") { posted().any { shadowOf(it).contentTitle.startsWith("Discarded") } }
+        pumpUntil("Deleted in place of the question") { posted().any { shadowOf(it).contentTitle.startsWith("Deleted") } }
         val discarded = posted().single()
-        assertEquals("Discarded · WhatsApp call · 4:32", shadowOf(discarded).contentTitle.toString())
+        assertEquals("Deleted · WhatsApp call · 4:32", shadowOf(discarded).contentTitle.toString())
         assertEquals(listOf("Undo"), discarded.actions.map { it.title.toString() })
         assertEquals(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS, discarded.timeoutAfter)
 
@@ -220,7 +257,7 @@ class BackgroundWorkTest : AppTest() {
     }
 
     @Test
-    fun `Undo on Discarded asks again, and the call is kept after ten seconds as before`() {
+    fun `Undo on Deleted asks again, and the audio is kept after ten seconds without a choice`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         app.storeRecording(id = "call-1", state = "pending_decision")
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
@@ -241,12 +278,12 @@ class BackgroundWorkTest : AppTest() {
     fun `Undo on the Saved notification is a Discard with its own Undo, never a delete at once`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "call-1", state = "queued", durationMs = 272_000)
-        Notifications.savedWithUndo(app, rec, "WhatsApp call")
+        Notifications.savedWithUndo(app, rec)
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_UNDO, "call-1"))
         pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
-        pumpUntil("Discarded with Undo") { posted().any { shadowOf(it).contentTitle.toString() == "Discarded · WhatsApp call · 4:32" } }
+        pumpUntil("Deleted with Undo") { posted().any { shadowOf(it).contentTitle.toString() == "Deleted · WhatsApp call · 4:32" } }
     }
 
     @Test

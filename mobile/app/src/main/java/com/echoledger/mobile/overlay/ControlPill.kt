@@ -69,8 +69,8 @@ private val GLASS = Color(0xFF1E1F23)
 
 /**
  * A touchable overlay window that never takes the keyboard: the base of the recording controls and the captions. It
- * opens, moves and closes through [PrivateWindows], which keeps it a black box in a screen share unless During screen
- * sharing is Show.
+ * opens, moves and closes through [PrivateWindows]: the recording controls never carry FLAG_SECURE, the captions carry it
+ * while Hide EchoLedger's live words is on.
  */
 private abstract class OverlayWindow(protected val context: Context, kind: FloatingWindow) {
     protected val wm: WindowManager = context.getSystemService(WindowManager::class.java)
@@ -229,10 +229,10 @@ class ControlPill(
                     dragBy(amount.x, amount.y)
                 }
             }
-            val private = !ShareGuard.textVisible.collectAsState().value
+            // The pill always shows (2.0.5, the owner's decision): only the person's own Hide EchoLedger windows makes it a
+            // plain grey dot, no clock, language or buttons, until a tap shows the windows again.
+            val private = ShareGuard.hiddenByUser.collectAsState().value
             if (private && s.mode != PillState.Mode.HIDDEN) {
-                // Hidden, or in a screen share Android reports: a plain grey dot, no clock, language or buttons. A tap
-                // shows the windows the person hid; while Android reports a screen share they stay a dot until it ends.
                 PrivateDot(onShow = { ShareGuard.setHidden(false) }, modifier = drags)
                 return
             }
@@ -244,7 +244,9 @@ class ControlPill(
                         kotlinx.coroutines.delay(V2_TICK_MS)
                     }
                 }
-                com.echoledger.mobile.ui.v2.live.V2RecordingPill(s, now, title = null, onEvent = onEvent, modifier = drags)
+                com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(context)) {
+                    com.echoledger.mobile.ui.v2.live.V2RecordingPill(s, now, title = null, onEvent = onEvent, modifier = drags)
+                }
                 return
             }
             when (s.mode) {

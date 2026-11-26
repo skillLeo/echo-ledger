@@ -45,7 +45,7 @@ class FailedUploadsWidget extends Widget
             'count' => $count,
             // Closed, the line comes back when another recording fails (the ids that failed, not just how many).
             'state' => self::state(),
-            'label' => 'Failed uploads ('.number_format($count).')',
+            'label' => __('Failed uploads (:count)', ['count' => number_format($count)]),
             'url' => CaptureSessionResource::getUrl('index', ['tab' => 'failed']),
             'hidden' => $this->activeTab === 'failed',
         ];

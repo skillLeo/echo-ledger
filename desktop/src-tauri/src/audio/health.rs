@@ -53,6 +53,178 @@ impl FarSideMonitor {
     }
 }
 
+/// How soon after a call recording starts (or resumes, or tries the other side again) its system side must deliver.
+pub const SYSTEM_CHECK_AFTER_MS: u64 = 3_000;
+/// A sample this small or smaller is digital silence: below half of a 16-bit step.
+pub const DIGITAL_SILENCE: f32 = 1.0 / 65_536.0;
+
+/// What the other side of a running call recording (system audio) has done since it last (re)started: the facts the
+/// system-side check is made from. Times are milliseconds since that start.
+///
+/// Two things look alike in the files and must never be taken for each other (2.0.6):
+/// - A tap macOS does not let through (System Audio Recording not allowed for this copy, whatever its privacy call
+///   says) delivers buffers with no data at all (`mDataByteSize` 0): no frames, `empty_buffers` counting. That is the
+///   permission, and is said as one.
+/// - A tap that is let through but has nothing to hear (nothing playing, the other person muted or not there yet, you
+///   speaking first) delivers frames of exact zeros: `frames` counting, no `signal`. That is a quiet call, never the
+///   permission, and never said here: a long one is the 30-second "not hearing the other side" warning's
+///   ([`FarSideMonitor`], under the person's setting and only while another app plays sound, [`far_side_enabled`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SystemSide {
+    /// Since the call recording started, resumed or tried the other side again.
+    pub running_ms: u64,
+    /// Why the system side could not open (the tap, the aggregate device or the IOProc); the microphone records on.
+    pub failure: Option<String>,
+    /// System audio frames delivered since then (zero-valued ones too).
+    pub frames: u64,
+    /// IOProc calls since then whose tap buffer had no data.
+    pub empty_buffers: u64,
+    /// Some frames were more than digital silence: the other side was heard.
+    pub signal: bool,
+    /// The microphone heard sound since then.
+    pub mic_heard: bool,
+}
+
+/// Why the other side is not being recorded: System Audio Recording (or the device) holds it back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SystemProblem {
+    /// The system side could not open: the reason.
+    Failed(String),
+    /// It opened but its buffers carry no data at all: what macOS does when System Audio Recording is not allowed.
+    NoData,
+}
+
+impl SystemProblem {
+    /// The reason for the recording's notes, the log and Copy diagnostics.
+    pub fn reason(&self) -> String {
+        match self {
+            SystemProblem::Failed(why) => format!("the system audio tap did not open: {why}"),
+            SystemProblem::NoData => format!("the system audio tap delivered buffers with no audio data for {} s", SYSTEM_CHECK_AFTER_MS / 1_000),
+        }
+    }
+}
+
+/// Whether the other side of a call recording is not being recorded (pure): a tap that failed, at once; buffers with
+/// no data and no frames, from [`SYSTEM_CHECK_AFTER_MS`] on. Zero-valued frames, however long, are a quiet call, never
+/// this.
+pub fn system_side_problem(side: &SystemSide) -> Option<SystemProblem> {
+    if let Some(why) = &side.failure {
+        return Some(SystemProblem::Failed(why.clone()));
+    }
+    if side.running_ms < SYSTEM_CHECK_AFTER_MS || side.signal {
+        return None;
+    }
+    // No IOProc call at all is the device's matter (the supervisor reopens it and says so), not the permission's.
+    (side.frames == 0 && side.empty_buffers > 0).then_some(SystemProblem::NoData)
+}
+
+/// What the running call recording's check said last (`actions::check_system_side`): the problem shown, whether the
+/// other side was tried again since, and whether it was found recording.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SystemWatch {
+    pub problem: Option<SystemProblem>,
+    /// "Try again" was pressed since the warning first showed.
+    pub retried: bool,
+    /// The check after that try found it still missing: the warning says to quit and reopen.
+    pub after_retry: bool,
+    pub confirmed: bool,
+}
+
+/// What the check makes of one look (pure): what to keep and what to do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SystemVerdict {
+    /// Nothing new.
+    Same,
+    /// The other side is not being recorded (newly, for another reason, or still after a try).
+    Missing(SystemProblem),
+    /// The other side is heard (for the first time in this recording, or again): system audio works.
+    Recording,
+}
+
+impl SystemWatch {
+    /// Takes in one look at the system side (pure). A warning stays until the other side is heard: a resume or a try
+    /// again starts the counts afresh, and those first seconds (no problem known yet) never take it away.
+    pub fn look(&mut self, side: &SystemSide) -> SystemVerdict {
+        if side.signal {
+            let had = self.problem.take().is_some();
+            (self.retried, self.after_retry) = (false, false);
+            if had || !self.confirmed {
+                self.confirmed = true;
+                return SystemVerdict::Recording;
+            }
+            return SystemVerdict::Same;
+        }
+        let Some(now) = system_side_problem(side) else { return SystemVerdict::Same };
+        let reopen_turn = self.retried && !self.after_retry;
+        if reopen_turn {
+            self.after_retry = true;
+        }
+        if self.problem.as_ref() == Some(&now) && !reopen_turn {
+            return SystemVerdict::Same;
+        }
+        self.problem = Some(now.clone());
+        self.confirmed = false;
+        SystemVerdict::Missing(now)
+    }
+
+    /// "Try again" was pressed: the warning stays as it is until the next look says more.
+    pub fn retry(&mut self) {
+        self.retried = true;
+        self.after_retry = false;
+    }
+
+    /// The warning for the running recording: what kind and its words; none while the other side records.
+    pub fn warning(&self) -> Option<(crate::permissions::OtherSide, &'static str)> {
+        use crate::permissions::{OtherSide, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN};
+        self.problem.as_ref().map(|_| (OtherSide::Permission, if self.after_retry { SYSTEM_NOT_RECORDED_REOPEN } else { SYSTEM_NOT_RECORDED }))
+    }
+
+    /// Whether a verdict is still what the watch says (pure). What a verdict does runs beside the ticker, so a later look
+    /// may have changed it meanwhile: a "missing" from before the other side was heard must not show it again, and a
+    /// "recording" from before it went missing must not clear it.
+    pub fn still(&self, verdict: &SystemVerdict) -> bool {
+        match verdict {
+            SystemVerdict::Same => true,
+            SystemVerdict::Missing(problem) => self.problem.as_ref() == Some(problem),
+            SystemVerdict::Recording => self.problem.is_none() && self.confirmed,
+        }
+    }
+}
+
+/// How often whether another app plays sound is read at most (Core Audio's process list).
+pub const PLAYING_EVERY: Duration = Duration::from_secs(5);
+
+/// Whether another app plays sound, read at most every [`PLAYING_EVERY`] and kept between reads.
+#[derive(Clone, Debug, Default)]
+pub struct PlayingCache {
+    at: Option<Instant>,
+    playing: bool,
+}
+
+impl PlayingCache {
+    /// The answer, asking `read` only when the last one is [`PLAYING_EVERY`] old or there is none.
+    pub fn get(&mut self, now: Instant, read: impl FnOnce() -> bool) -> bool {
+        if self.at.is_none_or(|at| now.saturating_duration_since(at) >= PLAYING_EVERY) {
+            self.playing = read();
+            self.at = Some(now);
+        }
+        self.playing
+    }
+}
+
+/// Whether the 30-second "not hearing the other side" warning may be said now (pure): the person's setting, and on a
+/// Mac, once the other side has been silent that long, only while another app plays sound. A tap with nothing to hear
+/// gives zeros, so a call nobody speaks in (or nothing playing at all) is not the call's speaker or device. `playing`
+/// is asked only then.
+pub fn far_side_enabled(setting: bool, silent_ms: Option<u64>, mac: bool, playing: impl FnOnce() -> bool) -> bool {
+    setting && (!mac || !silent_ms.is_some_and(|ms| ms >= FAR_SIDE_SILENT_MS) || playing())
+}
+
+/// Whether a packet is more than digital silence.
+pub fn has_signal(samples: &[f32]) -> bool {
+    samples.iter().any(|s| s.abs() > DIGITAL_SILENCE)
+}
+
 /// Root-mean-square of a packet (0 for an empty one).
 pub fn rms(samples: &[f32]) -> f32 {
     if samples.is_empty() {

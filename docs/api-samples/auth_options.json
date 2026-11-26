@@ -3,8 +3,13 @@
     "google": false,
     "sign_up": false,
     "sign_up_url": null,
-    "reset_url": "https://echoledger.test/admin/password-reset/request",
+    "reset_url": "https://echoledger.test/app/password-reset/request",
     "browser_sign_in": true,
     "code": true,
-    "server": "https://echoledger.test"
+    "server": "https://echoledger.test",
+    "password_rules": {
+        "min": 12,
+        "letters": true,
+        "numbers": true
+    }
 }

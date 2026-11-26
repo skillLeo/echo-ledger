@@ -1,7 +1,7 @@
 {
     "session": {
-        "id": "01m7xxs3gyy5hpz6na8vwpm259",
-        "client_ref": "2321854c-aaa0-4954-9e26-097f6aef64e3",
+        "id": "01m82z8qebkj5htzgk9seh214z",
+        "client_ref": "de3a7761-c0c3-4bce-89cc-ceabebd15233",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,13 +9,14 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m7xxs2schde4frnzrx660bhs",
+            "id": "01m82z8pzq6avqrnhk9jpd5n6m",
             "name": "Sample phone"
         },
         "client": null,
         "filed_by": null,
         "title": "WhatsApp call",
         "title_auto": false,
+        "title_source": "app",
         "caller": null,
         "started_at": "2026-10-24T09:00:00+00:00",
         "ended_at": "2026-10-24T09:10:00+00:00",
@@ -29,6 +30,7 @@
             "live_available": false,
             "live_transcript_id": null,
             "preview": null,
+            "preview_view": "original",
             "final_language": null,
             "final_provider": null,
             "final_provider_label": null,
@@ -50,13 +52,21 @@
         "labels": [],
         "important": false,
         "label_colors": {},
-        "expires_at": "2026-12-21T02:08:17+00:00",
+        "expires_at": "2026-12-23T01:10:30+00:00",
         "transcribe_estimate": null,
-        "updated_at": "2026-11-21T02:08:17+00:00"
+        "facets": {
+            "source": "whatsapp",
+            "status": "processing",
+            "language": "unknown",
+            "kind": "call",
+            "state": "waiting_to_upload"
+        },
+        "processing_since": "2026-11-23T01:10:30+00:00",
+        "updated_at": "2026-11-23T01:10:30+00:00"
     },
     "recordings": [
         {
-            "id": "01m7xxs3hdtf3jqyg4qf28va5a",
+            "id": "01m82z8qetq1cgk60znrqh957m",
             "role": "primary",
             "upload": {
                 "chunk_size_bytes": 5242880,

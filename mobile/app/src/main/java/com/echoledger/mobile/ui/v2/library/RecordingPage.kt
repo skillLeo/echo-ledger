@@ -56,6 +56,9 @@ class RecordingPage internal constructor(
         }
     var bookmarks by mutableStateOf<List<SessionMarkerDto>>(emptyList())
     var speakerNames by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /** The primary recording file's size in bytes (Details), null until read. */
+    var fileBytes by mutableStateOf<Long?>(null)
     var pendingSeek by mutableStateOf<Long?>(null)
     var shownTitle by mutableStateOf(item.title)
     var version by mutableStateOf(TranscriptVersion.CURRENT)
@@ -148,6 +151,8 @@ fun rememberRecordingPage(vm: MainViewModel, item: LibraryItem, startAtMs: Long?
         p.playbackUrl = detail?.playbackUrl
         p.bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
         p.speakerNames = detail?.speakerNames.orEmpty()
+        p.fileBytes = detail?.recordings?.let { files -> (files.firstOrNull { it.role == "primary" } ?: files.firstOrNull())?.sizeBytes }
+            ?.takeIf { it > 0 }
     }
     // The recording's screens (meeting assets): read when the Library says it has any, or doesn't say.
     LaunchedEffect(item.id) { if (item.screenCount != 0) p.screens = vm.screens(item.id).sortedBy { it.atMs } }
@@ -174,16 +179,28 @@ fun rememberRecordingPage(vm: MainViewModel, item: LibraryItem, startAtMs: Long?
     // A view being written is asked for again until it is ready.
     LaunchedEffect(p.showAs, p.views?.status, p.transcript?.id) {
         val id = p.transcript?.id ?: return@LaunchedEffect
-        if (p.showAs != ShowAs.ORIGINAL && p.views?.status == "making") {
+        // Asked again until it is written, then the lines swap to it.
+        while (p.showAs != ShowAs.ORIGINAL && p.views?.status == "making") {
             delay(ShowAs.POLL_MS)
             p.views = vm.transcriptViews(id) ?: p.views
         }
     }
-    // Open in the default view (console setting) when it is made for this recording.
-    LaunchedEffect(p.transcript?.id) {
-        val summary = p.transcript?.views ?: return@LaunchedEffect
-        val default = ShowAs.of(summary.default)
-        if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) p.chooseView(default)
+    // Once a view it waited for is written, the server gives an automatic Urdu-script title in Roman Urdu: read it again.
+    var waitedForView by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(p.views?.status) {
+        when (p.views?.status) {
+            "making" -> waitedForView = true
+
+            "ready" -> if (waitedForView) {
+                waitedForView = false
+                val before = p.shownTitle
+                vm.refreshQuietly().join()
+                val now = vm.library.value.firstOrNull { it.id == p.item.id }?.title
+                if (now != null && p.shownTitle == before) p.shownTitle = now
+            }
+        }
     }
+    // Open in the default view (Roman Urdu for Urdu): at once when it is made, else as soon as it is (U19).
+    LaunchedEffect(p.transcript?.id) { ShowAs.autoView(p.transcript?.views)?.let { p.chooseView(it) } }
     return p
 }

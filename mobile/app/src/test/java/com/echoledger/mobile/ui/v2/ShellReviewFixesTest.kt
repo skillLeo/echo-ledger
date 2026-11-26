@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import com.echoledger.mobile.recording.LiveRecording
@@ -35,12 +37,9 @@ import com.echoledger.mobile.ui.v2.shell.CallsChip
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
 import com.echoledger.mobile.ui.v2.shell.EchoRecordButton
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
-import com.echoledger.mobile.ui.v2.shell.RecordSheetActions
-import com.echoledger.mobile.ui.v2.shell.RecordSheetState
 import com.echoledger.mobile.ui.v2.shell.RecordTapGuard
 import com.echoledger.mobile.ui.v2.shell.ShellStats
 import com.echoledger.mobile.ui.v2.shell.UiFlags
-import com.echoledger.mobile.ui.v2.shell.V2RecordSheetBody
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
@@ -236,8 +235,9 @@ class ShellReviewFixesTest : ScreenTest() {
         // The setup card says calls aren't recorded, so the banner is the failed upload.
         shell()
         rows()
-        pumpUntil("the banner") {
-            compose.onAllNodesWithText("1 recording didn't upload", substring = true).fetchSemanticsNodes().isNotEmpty()
+        // One line in the list since v2.1 (UX-14): "1 didn't upload · Retry".
+        pumpUntil("the line") {
+            compose.onAllNodesWithText("1 didn't upload", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNode(hasText("Retry") and hasClickAction()).performClick()
         pumpUntil("sent again") { app.graph.recordings.all().none { it.id == "r-failed" && it.state == "failed" } }
@@ -268,39 +268,33 @@ class ShellReviewFixesTest : ScreenTest() {
 
     // Major: Watch translate is reachable, with classic's "blocked" line.
 
+    // v2.1 UX-15: their state left the New sheet for the Live tab.
     @Test
-    fun theRecordSheetHasGameAndWatchTranslateWithWhyTheyWereRefused() {
+    fun theLiveTabHasGameAndWatchTranslateWithWhyTheyWereRefused() {
         val went = mutableListOf<String>()
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 Column {
-                    V2RecordSheetBody(
-                        RecordSheetState(
-                            com.echoledger.mobile.privilege.AppCallCapture.BOTH_SIDES,
+                    com.echoledger.mobile.ui.v2.live.V2LiveTab(
+                        liveAssist = false,
+                        liveTranslate = true,
+                        onOpen = { went += if (it == com.echoledger.mobile.ui.v2.live.LiveEntry.WatchTranslate) "watch" else "game" },
+                        status = com.echoledger.mobile.ui.v2.live.LiveStatus(
                             armed = false,
                             canArm = true,
-                            liveAssist = false,
-                            liveTranslate = true,
-                            translateLocked = null,
-                            game = true,
-                            watch = false,
-                            blocked = "Needs Soniox credit"
-                        ),
-                        RecordSheetActions(
-                            {}, {}, {}, {}, {}, {},
-                            onLiveTranslate = { went += "game" },
-                            onLocked = { went += "plans" },
-                            onWatchTranslate = { went += "watch" }
-                        ),
-                        onDismiss = {}
+                            calls = "Calls: ready",
+                            onArm = {},
+                            game = "Game: on",
+                            watch = "Needs Soniox credit"
+                        )
                     )
                 }
             }
         }
         compose.onNodeWithText("Game: on").assertExists()
         compose.onNodeWithText("Needs Soniox credit").assertExists()
-        compose.onNodeWithText("Watch translate").performClick()
-        compose.onNodeWithText("Game translate").performClick()
+        compose.onNodeWithText("Watch translate").performScrollTo().performClick()
+        compose.onNodeWithText("Game translate").performScrollTo().performClick()
         assertEquals(listOf("watch", "game"), went)
     }
 
@@ -310,7 +304,9 @@ class ShellReviewFixesTest : ScreenTest() {
         shell()
         compose.onNodeWithText("Live").performClick()
         compose.onNodeWithText("Watch translate").performClick()
-        compose.onNodeWithText("Classic WatchTranslate").assertExists()
+        // Watch translate's own page in the new design (parity.csv PH-OTH-030), not Game translate's.
+        compose.onNodeWithText("Video settings").performScrollTo().assertExists()
+        compose.onAllNodesWithText("Game settings").assertCountEquals(0)
     }
 
     // Major: Text size and App language keep the page, and reach sheets and dialogs.
@@ -320,14 +316,17 @@ class ShellReviewFixesTest : ScreenTest() {
         seed()
         shell()
         rows()
+        // The Library's avatar opens its menu (UX-14); Settings is in it.
         compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.onNodeWithText("Settings").performClick()
         compose.onNode(hasText("Appearance") and hasClickAction()).performClick()
         compose.onNodeWithText("Text size").assertExists()
         vm.updateSettings { it.copy(textSize = "larger") }
         pumpUntil("larger") { vm.settings.value.textSize == "larger" }
         compose.waitForIdle()
         compose.onNodeWithText("Text size").assertExists()
-        vm.updateSettings { it.copy(appLanguage = "ur") }
+        // Signed in, the account's language (BE-06).
+        vm.updateSettings { it.copy(appLanguage = "ur", accountLanguage = "ur") }
         pumpUntil("Urdu") { vm.settings.value.appLanguage == "ur" }
         compose.waitForIdle()
         // Still Appearance, now in Urdu; not back on Library.
@@ -345,7 +344,8 @@ class ShellReviewFixesTest : ScreenTest() {
     @Test
     fun theRecordSheetAndADialogUseTheAppLanguageAndTextSizeOnAnEnglishPhone() {
         seed()
-        vm.updateSettings { it.copy(appLanguage = "ur", textSize = "largest") }
+        // Signed in, the account's language (BE-06).
+        vm.updateSettings { it.copy(appLanguage = "ur", accountLanguage = "ur", textSize = "largest") }
         pumpUntil("set") { vm.settings.value.textSize == "largest" }
         shell()
         rows()
@@ -360,8 +360,9 @@ class ShellReviewFixesTest : ScreenTest() {
         compose.onNodeWithText(ur.getString(com.echoledger.mobile.R.string.v2_rs_record_now), useUnmergedTree = true).assertExists()
         androidx.test.espresso.Espresso.pressBack()
         compose.waitForIdle()
-        // And inside a menu's window: Library's ⋮.
-        compose.onNode(hasContentDescription(ur.getString(com.echoledger.mobile.R.string.v2_lib_more)) and hasClickAction()).performClick()
+        // And inside a menu's window: the Library avatar's menu (UX-14).
+        compose.onNode(hasContentDescription(ur.getString(com.echoledger.mobile.R.string.v2_account_and_settings)) and hasClickAction())
+            .performClick()
         val sync = compose.onNodeWithText(ur.getString(com.echoledger.mobile.R.string.v2_lib_sync), useUnmergedTree = true)
         sync.assertExists()
         assertEquals(phoneScale * 1.3f, sync.layout().layoutInput.density.fontScale, 0.001f)
@@ -423,8 +424,9 @@ class ShellReviewFixesTest : ScreenTest() {
         shell()
         rows()
         val avatar: Rect = compose.onNodeWithContentDescription("Account and settings").fetchSemanticsNode().boundsInRoot
-        val more: Rect = compose.onNode(hasContentDescription("More") and hasClickAction()).fetchSemanticsNode().boundsInRoot
-        assertTrue("avatar $avatar after ⋮ $more", avatar.left >= more.right - 0.5f)
+        // Since v2.1 (UX-14) no ⋮: the avatar comes after search.
+        val search: Rect = compose.onNode(hasContentDescription("Search recordings") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue("avatar $avatar after search $search", avatar.left >= search.right - 0.5f)
     }
 
     @Test
@@ -435,6 +437,7 @@ class ShellReviewFixesTest : ScreenTest() {
         shell()
         rows()
         compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.onNodeWithText("Settings").performClick()
         val words = "120 of 300 minutes used"
         pumpUntil("the bar") {
             compose.onAllNodes(hasText(words, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
