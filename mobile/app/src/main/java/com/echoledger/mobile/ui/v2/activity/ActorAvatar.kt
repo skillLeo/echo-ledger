@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,10 +33,11 @@ import com.echoledger.mobile.core.PersonInitials
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActorDto
 import com.echoledger.mobile.ui.v2.account.accountActions
-import com.echoledger.mobile.ui.v2.components.EchoAvatar
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.avatarFill
-import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.shell.LocalAvatarColour
+import com.echoledger.mobile.ui.v2.shell.PersonAvatar
+import com.echoledger.mobile.ui.v2.shell.personColour
 import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -54,23 +56,13 @@ object ActivityPeople {
     /** The person whose face [item] shows in its icon's place, or null (the kind's icon). */
     fun shownPerson(item: ActivityItemDto): ActorDto? = if (item.kind in KINDS) item.actor else null
 
-    /** Their colour (0-7): the server's `avatar_color`, else its own rule (the id modulo 8), else one seeded from the name. */
+    /**
+     * Their colour (0-7): the server's `avatar_color`, else its own rule (the id modulo 8), else the phone's one seed of
+     * the name ([personColour], the desktop's rule).
+     */
     fun colourOf(actor: ActorDto): Int = actor.avatarColor?.takeIf { it in 0..7 }
         ?: actor.id?.takeIf { it >= 0 }?.let { (it % 8).toInt() }
-        ?: seedColour(actor.name?.trim().orEmpty())
-
-    /** The desktop's seed (layout.tsx avatarColour): hash × 31 + each code point, lower case, 32 bits unsigned, mod 8. */
-    internal fun seedColour(seed: String): Int {
-        val text = seed.trim().lowercase(java.util.Locale.ROOT)
-        var hash = 0L
-        var i = 0
-        while (i < text.length) {
-            val point = text.codePointAt(i)
-            hash = (hash * 31 + point) and 0xFFFFFFFFL
-            i += Character.charCount(point)
-        }
-        return (hash % 8).toInt()
-    }
+        ?: personColour(actor.name.orEmpty())
 }
 
 /** What an actor's avatar draws, for tests (it is hidden from TalkBack: the row's title names them). */
@@ -124,9 +116,12 @@ fun ActorAvatar(actor: ActorDto, modifier: Modifier = Modifier, size: Dp = EchoT
     }
     when {
         shown != null -> Image(shown, contentDescription = null, tagged.size(size).clip(CircleShape), contentScale = ContentScale.Crop)
+
         classic -> ClassicInitials(initials, colour, tagged.size(size))
-        initials.isNotEmpty() -> EchoAvatar(tagged, initials = initials, fill = avatarFill(EchoV2.colors, colour))
-        else -> EchoAvatar(tagged, icon = EchoIcons.Person)
+
+        // The phone's one person avatar (PersonAvatar: the initials on the colour, the person icon with no name), in this
+        // person's colour: LocalAvatarColour is otherwise the signed-in person's, and every face would take it.
+        else -> CompositionLocalProvider(LocalAvatarColour provides colour) { PersonAvatar(initials, tagged) }
     }
 }
 
