@@ -1233,10 +1233,11 @@ button.el-step__head { cursor: pointer; }
 .el-screen-thumb__wait { position: absolute; inset: 0; block-size: auto; }
 .el-screen-thumb:hover .el-screen-thumb__picture { border-color: var(--el-role-border-strong); }
 .el-screen-thumb__label { color: var(--el-role-text-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Urdu: the label clips for its ellipsis, so Nastaliq takes the row text's room (D-262), given back by margins (D-267). */
+/* Urdu: the label clips for its ellipsis, so Nastaliq gets room above and below, given back by margins (D-267). Only
+   up and down: a thumbnail sits in a strip that scrolls sideways, where room past its ends would add a stray scroll. */
 :lang(ur) .el-screen-thumb__label {
-  padding: var(--el-space-12) var(--el-space-8) var(--el-space-4);
-  margin: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-8)) calc(-1 * var(--el-space-4));
+  padding-block: var(--el-space-12) var(--el-space-4);
+  margin-block: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-4));
 }
 /* A project's screens (D-267): each recording's thumbnails under its title, wrapping; the keep switch is a settings row. */
 .el-project-screens { display: grid; gap: var(--el-space-16); min-inline-size: 0; }
