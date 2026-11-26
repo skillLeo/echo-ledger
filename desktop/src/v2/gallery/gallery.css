@@ -66,3 +66,6 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 
 /* The lists page (screen=lists, D14): a recording's lists as their dots in the row's marks slot, up to three. */
 .g-lists-marks { display: inline-flex; align-items: center; gap: var(--el-space-4); }
+/* The D12 pages (screen=rows, screen=split). */
+.g-kit-card.g-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--el-space-16) var(--el-space-24); }
+.g-split-case[data-case="open"] { grid-column: 2; grid-row: 1 / span 4; }

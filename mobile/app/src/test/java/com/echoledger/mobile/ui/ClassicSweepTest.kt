@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /*
- * F2, the phone screen sweep (docs/team/FIXING.md): every classic screen of ScreenshotsTest again, in the conditions
+ * F2, the phone screen sweep: every classic screen of ScreenshotsTest again, in the conditions
  * people meet on real phones: a small phone with larger text, the phone in Urdu (right to left, with an Urdu
  * recording), and half of a split screen. Each screen fails when a text is cut off without "…" or a word is broken
  * across two lines; its picture is kept in build/sweep/<condition>/ for a look.

@@ -5,8 +5,21 @@
 // library, so they are instant and work offline; the server, the web console and the phone get the same numbers, and
 // all of them check the shared file web/tests/Fixtures/library-facets.json. Filters are kept in the contract's own
 // shape (a filter set), so a saved view goes to the server as it is. Pure, so the rules are tested without a window.
+// Every name the panel, the pills and the tabs show is read when it is asked for, in the window's language (desktop Urdu,
+// D1b): a value is always its id, never its words, so nothing here changes with the language but what is said.
 import type { LibraryItem } from "../../lib/ipc";
+import { calendarDayMonth, SOURCE_APP_LABELS } from "../../lib/format";
+import { languageLabel } from "../../lib/languages";
 import { isWaiting } from "../../lib/organise";
+import { t, wordsIn, type Lang } from "../../i18n";
+
+type Say = (text: string) => string;
+/** Names read when they are asked for: each key's getter says `name(key)` then, in the window's language. */
+function namesOf<K extends string>(keys: readonly K[], name: (key: K) => string): Record<K, string> {
+  const out = {} as Record<K, string>;
+  for (const key of keys) Object.defineProperty(out, key, { get: () => name(key), enumerable: true });
+  return out;
+}
 
 /**
  * The library views in the sidebar's LIBRARY section, in its order. Since v2.1 (docs/PLAN_V2_1_POLISH.md section 1) Not
@@ -15,9 +28,13 @@ import { isWaiting } from "../../lib/organise";
  */
 export type LibraryViewId = "all" | "needs" | "unread" | "important" | "audio_only";
 export const LIBRARY_VIEWS: readonly LibraryViewId[] = ["all", "needs", "unread", "important", "audio_only"];
-export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = {
-  all: "All recordings", needs: "Needs you", unread: "Unread", important: "Important", audio_only: "Audio only",
+const VIEW_NAMES: Record<LibraryViewId, (t: Say) => string> = {
+  all: (t) => t("All recordings"), needs: (t) => t("Needs you"), unread: (t) => t("Unread"), important: (t) => t("Important"), audio_only: (t) => t("Audio only"),
 };
+/** A library view's name in the window's language, or in English with `lang` "en" (what the server reserves). */
+export const libraryViewName = (view: LibraryViewId, lang?: Lang): string => VIEW_NAMES[view](wordsIn(lang).t);
+/** Each library view's name, in the window's language whenever it is read. */
+export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = namesOf(LIBRARY_VIEWS, (view) => libraryViewName(view));
 
 /**
  * The Library's page tabs (PLAN_NAV_3_LEVELS §4; contract 2.0.0-q "The Library's kinds"): All, Calls, Meetings, Voice
@@ -26,7 +43,13 @@ export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = {
  */
 export type LibraryTab = "all" | "calls" | "meetings" | "voice_notes" | "other";
 export const LIBRARY_TABS: readonly LibraryTab[] = ["all", "calls", "meetings", "voice_notes", "other"];
-export const LIBRARY_TAB_NAMES: Record<LibraryTab, string> = { all: "All", calls: "Calls", meetings: "Meetings", voice_notes: "Voice notes", other: "Other" };
+const TAB_NAMES: Record<LibraryTab, (t: Say) => string> = {
+  all: (t) => t("All"), calls: (t) => t("Calls"), meetings: (t) => t("Meetings"), voice_notes: (t) => t("Voice notes"), other: (t) => t("Other"),
+};
+/** A tab's name in the window's language, or in English with `lang` "en". */
+export const libraryTabName = (tab: LibraryTab, lang?: Lang): string => TAB_NAMES[tab](wordsIn(lang).t);
+/** Each tab's name, in the window's language whenever it is read. */
+export const LIBRARY_TAB_NAMES: Record<LibraryTab, string> = namesOf(LIBRARY_TABS, (tab) => libraryTabName(tab));
 
 /** A recording's kind (contract 2.0.0-q): one of four, from its Source; every Source no kind names is `other`. */
 export type Kind = "call" | "meeting" | "voice_note" | "other";
@@ -64,9 +87,17 @@ export const shownTabs = (counts: Record<LibraryTab, number>, open: LibraryTab):
 /** The filter sections, in the panel's (and the contract's) order. */
 export type SectionKey = "date" | "source" | "device" | "project" | "language" | "status" | "labels" | "marked" | "bookmarks";
 export const SECTIONS: readonly SectionKey[] = ["date", "source", "device", "project", "language", "status", "labels", "marked", "bookmarks"];
+/** Each section's name, in the window's language whenever it is read. */
 export const SECTION_NAMES: Record<SectionKey, string> = {
-  date: "Date", source: "Source", device: "Device", project: "Project", language: "Language", status: "Status", labels: "Labels", marked: "Marked",
-  bookmarks: "Bookmarks",
+  get date() { return t("Date"); },
+  get source() { return t("Source"); },
+  get device() { return t("Device"); },
+  get project() { return t("Project"); },
+  get language() { return t("Language"); },
+  get status() { return t("Status"); },
+  get labels() { return t("Labels"); },
+  get marked() { return t("Marked"); },
+  get bookmarks() { return t("Bookmarks"); },
 };
 
 /** One section's choice, as the contract writes it: any of `values` ("is"), or none of them ("is_not"). Date's `custom`
@@ -78,7 +109,12 @@ export type FilterSpec = Partial<Record<SectionKey, Clause>>;
 
 export type DatePreset = "today" | "last_7_days" | "this_month" | "custom";
 export const DATE_PRESETS: readonly DatePreset[] = ["today", "last_7_days", "this_month", "custom"];
-export const DATE_NAMES: Record<DatePreset, string> = { today: "Today", last_7_days: "Last 7 days", this_month: "This month", custom: "Custom" };
+export const DATE_NAMES: Record<DatePreset, string> = {
+  get today() { return t("Today"); },
+  get last_7_days() { return t("Last 7 days"); },
+  get this_month() { return t("This month"); },
+  get custom() { return t("library_context.date_custom"); },
+};
 
 /**
  * A recording's status, one of four (Status's options; `not_transcribed` is also the Audio only view). Since v2.1 they are
@@ -86,28 +122,53 @@ export const DATE_NAMES: Record<DatePreset, string> = { today: "Today", last_7_d
  * which holds uploads on their way as well as transcripts being written, In progress (the web console's names).
  */
 export type StatusValue = "transcribed" | "not_transcribed" | "processing" | "failed";
-export const STATUS_NAMES: Record<StatusValue, string> = { transcribed: "Transcribed", not_transcribed: "Audio only", processing: "In progress", failed: "Failed" };
+export const STATUS_NAMES: Record<StatusValue, string> = {
+  get transcribed() { return t("Transcribed"); },
+  get not_transcribed() { return t("Audio only"); },
+  get processing() { return t("In progress"); },
+  get failed() { return t("Failed"); },
+};
 const STATUS_ORDER: readonly StatusValue[] = ["transcribed", "not_transcribed", "processing", "failed"];
 
-export const MARKED_NAMES = { pinned: "Pinned", important: "Important", keep_forever: "Keep forever" } as const;
+export const MARKED_NAMES = {
+  get pinned() { return t("Pinned"); },
+  get important() { return t("Important"); },
+  get keep_forever() { return t("Keep forever"); },
+};
 const MARKED_ORDER = Object.keys(MARKED_NAMES) as (keyof typeof MARKED_NAMES)[];
 
-export const DEVICE_NAMES: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
+export const DEVICE_NAMES: Record<string, string> = {
+  get phone() { return t("Phone"); },
+  get desktop() { return t("Desktop"); },
+  get web() { return t("Web"); },
+};
 const DEVICE_ORDER = ["phone", "desktop", "web"];
 
-/** Source's options; today's smart folders (WhatsApp, Meet, Zoom, Teams, Voice notes, Imported…) are these. */
-const SOURCE_NAMES: Record<string, string> = {
-  whatsapp: "WhatsApp", whatsapp_business: "WhatsApp Business", google_meet: "Meet", zoom: "Zoom", microsoft_teams: "Teams", phone_call: "SIM calls",
-  telegram: "Telegram", signal: "Signal", messenger: "Messenger", instagram: "Instagram", skype: "Skype", slack: "Slack", discord: "Discord",
-  voice_note: "Voice notes", imported: "Imported", other: "Other",
-};
+/**
+ * Source's options; today's smart folders (WhatsApp, Meet, Zoom, Teams, Voice notes, Imported…) are these. An app is
+ * named by its own name in every language, as lib/format's sourceAppLabel names it on the rows, without its maker's
+ * name (Meet, Teams); the four that are words are said in the window's language.
+ */
+const SOURCE_APPS = ["whatsapp", "whatsapp_business", "google_meet", "zoom", "microsoft_teams", "telegram", "signal", "messenger", "instagram", "skype", "slack", "discord"];
+const SOURCE_KINDS = ["phone_call", "voice_note", "imported", "other"];
+const isSource = (value: string) => SOURCE_APPS.includes(value) || SOURCE_KINDS.includes(value);
+/** A Source value's name. */
+function sourceName(value: string): string {
+  switch (value) {
+    case "phone_call": return t("SIM calls");
+    case "voice_note": return t("Voice notes");
+    case "imported": return t("Imported");
+    case "other": return t("Other");
+    default: return (SOURCE_APP_LABELS[value] ?? value).replace(/^(Google|Microsoft) /, "");
+  }
+}
 const SOURCE_ALIASES: Record<string, string> = { whatsapp_web: "whatsapp" };
 
-/** Language's options: the offered codes, then Unknown. */
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: "English", ur: "Urdu", ar: "Arabic", fr: "French", de: "German", es: "Spanish", it: "Italian", pt: "Portuguese", nl: "Dutch", tr: "Turkish", ru: "Russian",
-  unknown: "Unknown",
-};
+/** Language's options: the offered codes (named as lib/languages names them), then Unknown. */
+const LANGUAGE_CODES = ["en", "ur", "ar", "fr", "de", "es", "it", "pt", "nl", "tr", "ru", "unknown"];
+const isLanguage = (code: string) => LANGUAGE_CODES.includes(code);
+/** A Language value's name. */
+const languageName = (code: string): string => (code === "unknown" ? t("Unknown") : languageLabel(code));
 
 /** A transcript on its way, or a recording still moving: Processing. */
 const UNDER_WAY = new Set(["pending", "submitted", "processing", "awaiting_device"]);
@@ -137,13 +198,13 @@ function languageCode(raw: string | null | undefined): string | null {
   if (s.includes("+")) return s.split("+").includes("ur") ? "ur" : languageCode(s.split("+")[0]);
   if (s === "hi" || s === "hindi") return "ur";
   const code = s.split(/[-_]/)[0];
-  return code !== "unknown" && LANGUAGE_NAMES[code] ? code : null;
+  return code !== "unknown" && isLanguage(code) ? code : null;
 }
 
 /** A recording's language: the server's when it sent one; else the final transcript's, else the one chosen, else Unknown. */
 export function languageOf(item: LibraryItem): string {
   const sent = facetsOf(item)?.language;
-  if (sent && LANGUAGE_NAMES[sent]) return sent;
+  if (sent && isLanguage(sent)) return sent;
   return languageCode(item.transcript?.final_language) ?? languageCode(item.language) ?? languageCode(item.language_chip) ?? "unknown";
 }
 
@@ -153,8 +214,8 @@ export function languageOf(item: LibraryItem): string {
  */
 export function sourceOf(item: LibraryItem, imported?: ReadonlySet<string>): { value: string; label: string } {
   const raw = facetsOf(item)?.source ?? (imported?.has(item.id) ? "imported" : item.source_app ? SOURCE_ALIASES[item.source_app] ?? item.source_app : "other");
-  const value = raw in SOURCE_NAMES ? raw : "other";
-  return { value, label: SOURCE_NAMES[value] };
+  const value = isSource(raw) ? raw : "other";
+  return { value, label: sourceName(value) };
 }
 
 /**
@@ -244,10 +305,11 @@ export function prepare(items: readonly LibraryItem[], context: Context = {}): {
     if (!names[section].has(value)) names[section].set(value, words);
     return value;
   };
+  // The app's own words are offered by their ids here and named when they are shown (optionName).
   for (const v of STATUS_ORDER) names.status.set(v, STATUS_NAMES[v]);
   for (const v of MARKED_ORDER) names.marked.set(v, MARKED_NAMES[v]);
-  names.bookmarks.set("any", "Any bookmark");
-  names.project.set("none", "No project");
+  names.bookmarks.set("any", ANY_BOOKMARK());
+  names.project.set("none", NO_PROJECT());
   for (const l of context.lists ?? []) names.labels.set(l.key, l.name);
   const parents = new Map<string, string | null>();
   for (const p of context.projects ?? []) {
@@ -277,9 +339,9 @@ export function prepare(items: readonly LibraryItem[], context: Context = {}): {
       item, day: Number.isFinite(time) ? dayOf(time) : "",
       values: {
         source: [name("source", source.value, source.label)],
-        device: item.source_device ? [name("device", item.source_device, DEVICE_NAMES[item.source_device] ?? item.source_device)] : [],
+        device: item.source_device ? [name("device", item.source_device, deviceName(item.source_device))] : [],
         project: item.client ? chain(name("project", item.client.id, item.client.name)) : ["none"],
-        language: [name("language", language, LANGUAGE_NAMES[language] ?? language)],
+        language: [name("language", language, languageName(language))],
         status: [statusOf(item)],
         // Labels and bookmark tags match whatever their capitals ("Q4" and "q4" are one), shown in the first spelling met.
         labels: [...new Set((item.labels ?? []).map((l) => name("labels", l.toLowerCase(), l)))],
@@ -432,9 +494,9 @@ export function facetCounts(facts: readonly Facts[], spec: FilterSpec, names: Na
 
   out.date = (["today", "last_7_days", "this_month"] as const).map((p) => {
     const range = dateRange(p, now, tz);
-    return { value: p, label: DATE_NAMES[p], count: facts.reduce((n, f, i) => n + Number(counted(i, "date") && inDays(f.day, range)), 0) };
+    return option(p, () => DATE_NAMES[p], facts.reduce((n, f, i) => n + Number(counted(i, "date") && inDays(f.day, range)), 0));
   });
-  out.date.push({ value: "custom", label: DATE_NAMES.custom, count: 0 });
+  out.date.push(option("custom", () => DATE_NAMES.custom, 0));
   for (const section of SECTIONS) {
     if (section === "date") continue;
     const counts = new Map<string, number>();
@@ -449,16 +511,38 @@ export function facetCounts(facts: readonly Facts[], spec: FilterSpec, names: Na
       if (counted(i, section)) for (const v of f.values[section]) counts.set(v, (counts.get(v) ?? 0) + 1);
     });
     for (const v of spec[section]?.values ?? []) offer(v);
-    out[section] = [...counts.entries()].map(([value, count]) => ({ value, label: optionName(section, value, names), count })).sort(order(section));
+    out[section] = [...counts.entries()].map(([value, count]) => option(value, () => optionName(section, value, names), count)).sort(order(section));
   }
   return out;
 }
 
-/** An option's words. */
+/** An option whose words are read when they are shown: in the window's language, even from counts worked out before. */
+const option = (value: string, label: () => string, count: number): FacetOption => ({ value, count, get label() { return label(); } });
+
+const ANY_BOOKMARK = () => t("Any bookmark");
+const NO_PROJECT = () => t("No project");
+const deviceName = (value: string): string => (DEVICE_ORDER.includes(value) ? DEVICE_NAMES[value] : value);
+
+/**
+ * The app's own words for a value, in the window's language (a status, a mark, Any bookmark, No project, a device, a
+ * Source or a language), or null for a name of the person's (a project, a label, a bookmark's tag).
+ */
+function ownName(section: ValueSection, value: string): string | null {
+  switch (section) {
+    case "status": return (STATUS_ORDER as readonly string[]).includes(value) ? STATUS_NAMES[value as StatusValue] : null;
+    case "marked": return (MARKED_ORDER as readonly string[]).includes(value) ? MARKED_NAMES[value as keyof typeof MARKED_NAMES] : null;
+    case "bookmarks": return value === "any" ? ANY_BOOKMARK() : null;
+    case "project": return value === "none" ? NO_PROJECT() : null;
+    case "device": return DEVICE_ORDER.includes(value) ? DEVICE_NAMES[value] : null;
+    case "source": return isSource(value) ? sourceName(value) : null;
+    case "language": return isLanguage(value) ? languageName(value) : null;
+    default: return null;
+  }
+}
+
+/** An option's words: the app's own in the window's language, else the name met (a project's, a label's). */
 function optionName(section: ValueSection, value: string, names: Names): string {
-  return names[section].get(value)
-    ?? (section === "language" ? LANGUAGE_NAMES[value] : section === "source" ? SOURCE_NAMES[value] : section === "device" ? DEVICE_NAMES[value] : undefined)
-    ?? value;
+  return ownName(section, value) ?? names[section].get(value) ?? value;
 }
 
 /** Most recordings first, ties A–Z; Status and Device keep their own order. */
@@ -495,17 +579,27 @@ export function clearSection(spec: FilterSpec, section: SectionKey): FilterSpec 
   return next;
 }
 
-/** A pill's words: "Source: WhatsApp, Zoom", "Source is not: WhatsApp", "Date: Last 7 days", "Date: 1 Nov – 15 Nov". */
+/**
+ * A pill's words, in the window's language: "Source: WhatsApp, Zoom", "Source is not: WhatsApp", "Date: Last 7 days",
+ * "Date: 1 Nov – 15 Nov". In Urdu the section and its values are each in their own isolate (t()), and a day is Urdu's.
+ */
 export function pillWords(spec: FilterSpec, section: SectionKey, names: Names): string {
   const c = spec[section]!;
-  const not = c.op === "is_not" ? " is not" : "";
-  if (section === "date") {
-    const preset = c.values[0] as DatePreset;
-    if (preset !== "custom") return `Date${not}: ${DATE_NAMES[preset] ?? preset}`;
-    const day = (s?: string) => (s ? new Date(`${s}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
-    return `Date${not}: ${c.from && c.to ? `${day(c.from)} – ${day(c.to)}` : c.from ? `from ${day(c.from)}` : `until ${day(c.to)}`}`;
-  }
-  return `${SECTION_NAMES[section]}${not}: ${c.values.map((v) => optionName(section, v, names)).join(", ")}`;
+  const values = section === "date" ? dateWords(c) : c.values.map((v) => optionName(section, v, names)).join(t("library_context.values_separator"));
+  const name = SECTION_NAMES[section];
+  return c.op === "is_not" ? t(":section is not: :values", { section: name, values }) : t(":section: :values", { section: name, values });
+}
+
+/**
+ * Date's choice in words: a preset's name, or Custom's days ("1 Nov – 15 Nov", "from 1 Nov", "until 15 Nov"), each day
+ * lib/format's (calendarDayMonth: in Urdu Urdu's month).
+ */
+function dateWords(c: Clause): string {
+  const preset = c.values[0] as DatePreset;
+  if (preset !== "custom") return DATE_PRESETS.includes(preset) ? DATE_NAMES[preset] : preset;
+  const day = (s?: string) => (s ? calendarDayMonth(s) : "");
+  if (c.from && c.to) return t(":from – :to", { from: day(c.from), to: day(c.to) });
+  return c.from ? t("from :date", { date: day(c.from) }) : t("until :date", { date: day(c.to) });
 }
 
 /** The recordings of a view (or a label) that pass the filters: the list before it is sorted and grouped. */

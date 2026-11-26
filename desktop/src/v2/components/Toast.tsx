@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "./Button";
 import { CloseIcon } from "./icons";
-import { lineDir } from "../../i18n";
+import { lineDir, t } from "../../i18n";
 
 /** The toast's time on screen from the token (--el-component-toast-duration), in milliseconds. */
 export function toastDuration(): number {
@@ -13,7 +13,7 @@ export function toastDuration(): number {
 }
 
 /** Where toasts appear: a polite live region, present before any toast so each one is announced. */
-export function ToastRegion({ children, inline, label = "Notifications" }: { children?: ReactNode; inline?: boolean; label?: string }) {
+export function ToastRegion({ children, inline, label = t("Notifications") }: { children?: ReactNode; inline?: boolean; label?: string }) {
   return (
     <div className={`el-toast-region${inline ? " el-toast-region--inline" : ""}`} role="status" aria-live="polite" aria-label={label}>
       {children}
@@ -85,7 +85,10 @@ const isMac = () => typeof navigator !== "undefined" && /mac/i.test(navigator.pl
  * a time. From the keyboard, F6 moves focus to it (and F6 again back to where it was), and an Undo toast's action also
  * runs with Cmd+Z (Ctrl+Z on Windows).
  */
-export function Toast({ message, actionLabel = "Undo", onAction, onClose, closeLabel = "Dismiss", duration, undo = actionLabel === "Undo", error = false }: ToastProps) {
+// D-257: the default words are the window's language; a caller's own win. An Undo toast is known by its words in either
+// language (in Urdu "Undo" reads واپس کریں, and Cmd+Z / Ctrl+Z still runs it).
+export function Toast({ message, actionLabel: given, onAction, onClose, closeLabel = t("Dismiss"), duration, undo = given === undefined || given === "Undo" || given === t("Undo"), error = false }: ToastProps) {
+  const actionLabel = given ?? t("Undo");
   const [held, setHeld] = useState(false);
   // Waiting for a problem elsewhere to close (it is not drawn, and its time doesn't run, until then).
   const [waitingNow, setWaiting] = useState(() => !!shown?.error && !error);

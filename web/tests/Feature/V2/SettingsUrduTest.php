@@ -160,7 +160,7 @@ it('words the Transcription key page in Urdu on Free, and keeps its English', fu
     Workspace::query()->whereKey($this->owner->current_workspace_id)->update(['plan_id' => Plan::query()->where('key', 'free')->value('id'), 'plan_expires_at' => null]);
     settingsUrduAs($this, 'ur');
     expect(settingsUrduHtml($this, '/app/settings/transcription-key'))
-        ->toContain('مفت پلان پر ٹرانسکرپٹس آپ کی اپنی مفت Groq کلید سے بنتے ہیں۔ اس میں تقریباً 2 منٹ لگتے ہیں۔')
+        ->toContain('Free پلان پر ٹرانسکرپٹس آپ کی اپنی مفت Groq کلید سے بنتے ہیں۔ اس میں تقریباً 2 منٹ لگتے ہیں۔')
         ->toContain('<label for="el-groq-key">Groq کلید</label>');
     Livewire::test(EditProfile::class, ['subpage' => 'transcription-key'])->set('groqKey', 'short')->call('saveGroqKey')
         ->assertSet('groqKeyError', 'پوری کلید پیسٹ کریں۔ یہ gsk_ سے شروع ہوتی ہے۔');

@@ -2,6 +2,7 @@ import type { IconType } from "./Button";
 import { LabelDot } from "./Label";
 import type { MenuItem } from "./Menu";
 import { AppearanceIcon, PlusIcon, RenameIcon, TrashIcon } from "./icons";
+import { t } from "../../i18n";
 
 const dots = new Map<string, IconType>();
 
@@ -94,9 +95,9 @@ export type DeleteListWords = { title: string; body: string; confirm: string; ca
  */
 export function deleteListWords(name: string, words?: { title?: (name: string) => string; body?: string; confirm?: string; cancel?: string }): DeleteListWords {
   return {
-    title: words?.title ? words.title(name) : `Delete ${name}?`,
+    title: words?.title ? words.title(name) : t("Delete :name?", { name }),
     body: words?.body ?? "Its recordings stay in your Library; only the list goes.",
-    confirm: words?.confirm ?? "Delete",
-    cancel: words?.cancel ?? "Cancel",
+    confirm: words?.confirm ?? t("Delete"),
+    cancel: words?.cancel ?? t("Cancel"),
   };
 }

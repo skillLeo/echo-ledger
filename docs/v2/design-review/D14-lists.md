@@ -1,7 +1,7 @@
 # D14: Lists (desktop, web, phone)
 
-Owner: EL-Design, 2026-11-21. Asked for by Hassam (P1): sort the Library into his own lists the way a chat app sorts chats, kept very simple. It's a familiar pattern drawn in our own look, with no other app's branding.
-**A list is an existing label with its per-person colour (contract 2.0.0-i).** There's no new concept and no new server model. EL-UX builds the screens; the shared parts below are mine.
+Owner: Design, 2026-11-21. Asked for by Hassam (P1): sort the Library into his own lists the way a chat app sorts chats, kept very simple. It's a familiar pattern drawn in our own look, with no other app's branding.
+**A list is an existing label with its per-person colour (contract 2.0.0-i).** There's no new concept and no new server model. The screens are built next; the shared parts below are mine.
 
 ## 1. The chip row (top of the Library, under the search)
 `All · Unread · Important · Clients · Home · Family · +`
@@ -36,11 +36,11 @@ Owner: EL-Design, 2026-11-21. Asked for by Hassam (P1): sort the Library into hi
 ## 5. Rename a recording by tapping its title
 On the recording page, tapping or clicking the title turns it into a text field in place, with the text selected. Enter or Done saves, and Esc or tapping away cancels. It's the same action as ⋮ › Rename. Long names wrap; nothing jumps.
 
-## 6. Shared components (EL-Design builds them; same names and options on every platform)
+## 6. Shared components (design builds them; same names and options on every platform)
 - **ListChip** { name, colour, selected, onClick, onMenu }: on top of LabelChip/EchoChip. Its menu opens on long-press or right-click.
 - **ColourPicker** { value, onChange, label }: the 8 colours as a radio group of 32 px dots inside 44 px targets. The selected dot has a 2 px ring in text-primary and a check. Each is named for screen readers ("Teal"), and the arrow keys move between them.
 - **AddToListMenu** { lists, checked, onToggle, onNew }: the Menu/Sheet with checkbox rows and "New list…".
 - **Reused:** Menu, Dialog/Sheet, Toast with Undo, and the D12 row marks.
 
-## 7. Pictures (for Hassam, then EL-UX builds)
+## 7. Pictures (for Hassam, then the screens are built)
 For desktop 1280 and 800, light and dark, EN and UR: the chip row with three lists, a list selected with its rows, the "+" dialog, the Add-to-list menu with two ticks, and the chip menu. Plus phone and web equivalents of the chip row, the sheet and the picker. They go in docs/v2/design-review/D14/.
