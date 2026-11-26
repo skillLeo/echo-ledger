@@ -67,7 +67,7 @@ describe("the palette's own commands in Urdu", () => {
     // While recording, and the classic design's words.
     const recording = paletteCommands(makeStatus({ recording: makeRecording(), captionsLive: true }), { go: vi.fn(), run: vi.fn() });
     expect(recording.filter((c) => ["stop", "pause", "mark", "captions"].includes(c.id)).map((c) => c.label))
-      .toEqual(["ریکارڈنگ بند کریں", "ریکارڈنگ روکیں", "یہ لمحہ بُک مارک کریں", "کیپشنز بند کریں"]);
+      .toEqual(["ریکارڈنگ بند کریں", "ریکارڈنگ روکیں", "یہ لمحہ بُک مارک کریں", "کیپشنز آف کریں"]);
     const classic = paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders, openFolder: vi.fn() });
     expect(classic.filter((c) => ["start", "record", "folder-inbox"].includes(c.id)).map((c) => stripIsolates(c.label)))
       .toEqual(["ابھی ریکارڈ کریں", "ان باکس پر جائیں", "ہوم پر جائیں"]);
