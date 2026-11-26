@@ -287,7 +287,7 @@ describe("a project's screens (ProjectScreens): the window's language on the new
   });
 
   it("on the new project page's Files tab, in Urdu: the switch, the screens, Show more and the viewer; no Latin but the names", async () => {
-    const WS: ClientWorkspace = { client: PROJECT, ai: { configured: true, spent_usd: 0, budget_usd: 5, client_spent_usd: 0 }, brief: null, memory: [], notes: [], files: [] };
+    const WS: ClientWorkspace = { client: { ...PROJECT, ai_notes: true }, ai: { configured: true, spent_usd: 0, budget_usd: 5, client_spent_usd: 0 }, brief: null, memory: [], notes: [], files: [] };
     respond("library_list", []);
     respond("client_workspace", { data: WS });
     respond("client_rules", { data: [] });
