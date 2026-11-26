@@ -1,7 +1,7 @@
 # W-201 classic: the wide tables fit the page
 
 The classic console's four wide tables scrolled sideways at 1024 and 1280 px and cut off their row actions. Classic now
-fits them: the row's actions are in one ⋮ menu (as in the new frame, W-201 by EL-UX), long titles wrap, dates keep
+fits them: the row's actions are in one ⋮ menu (as in the new frame, W-201), long titles wrap, dates keep
 classic's "Nov 17, 2026" with the hour on a second line, and the wide columns show only on a wide window (from 1280 px).
 Classic has no Columns menu: Filament draws that menu's labels with x-html, which the classic pages never contain
 (AdminXssTest, AdminTranscriptPlayerTest). Classic keeps its English words.
@@ -15,10 +15,10 @@ Classic has no Columns menu: Filament draws that menu's labels with x-html, whic
 
 ## Widths
 
-Measured with `web/tests/Feature/V2/Support/table-widths.mjs` (EL-UX's script) on a local server with the parity world
+Measured with `web/tests/Feature/V2/Support/table-widths.mjs` (the screens' script) on a local server with the parity world
 (`web/tests/Feature/V2/Support/parity_world.php`) in a scratch SQLite file, classic frame, light and dark (the same
 widths). "Needs" is the table's narrowest width (`width: min-content`); slack is the box's width minus that. Before is
-EL-UX's classic measurement (docs/v2/design-review/U7/layout-check.md, C2–C5).
+The classic measurement (docs/v2/design-review/U7/layout-check.md, C2–C5).
 
 | Table | Needs before | Needs at 1024 | Slack at 1024 | Needs at 1280 (wide columns shown) | Slack at 1280 | Scrolls sideways |
 |---|---|---|---|---|---|---|

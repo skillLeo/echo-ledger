@@ -27,7 +27,7 @@ lines.
   Projects 8, Shared 6, Activity 5, Help 5, Plan 5, Sign-in 3, Upload 1.
 - By platform: 123 desktop, 2 desktop-mac (D-113, D-120).
 
-## (b) Fix now: 29 open rows in 6 builder batches
+## (b) Fix now: 29 open rows in 6 fix batches
 
 Do Batch 1 first. D-105 is S0, and PLAN_V2_0 says an S0 is fixed before any release, so before v1.8.1 ships.
 Batches 1–4 apply the cross-cutting rules. Batches 5–6 go page by page.
@@ -84,7 +84,7 @@ below.
 ### Already in the batch in review (10 rows, no new work)
 - 661df909: D-113, the menu bar menu over full-screen apps (S1).
 - c2cd2044:
-  - D-003: the `.searchbox` clipping. Reviewer: the base rule's `min-width: 220px` was still there.
+  - D-003: the `.searchbox` clipping. Review: the base rule's `min-width: 220px` was still there.
   - D-004: the two searches became one (⌘K).
   - D-011: "Find a page" replaced the sidebar menu.
   - D-124: "Find a page" found only pages.
@@ -126,12 +126,12 @@ The table is sorted by how many bugs one fix closes. "Fix now" counts open rows 
 
 ## (d) Judgment calls
 
-- **The reviewer's two blockers are S2, fixed now.** D-001 (icons over names) and D-023 (folders 130 px apart) are
+- **The review's two blockers are S2, fixed now.** D-001 (icons over names) and D-023 (folders 130 px apart) are
   broken layouts. Neither is data loss, a privacy leak, a crash or a failed recording.
 - **Raised to S0 and S1.** In D-105, the "×" reads as close but deletes the recording folder at once
   (`pending.rs:421-432`). In D-072, Revoke is one click with no way back. Both follow the brief's rule that a one-click
   destructive action is data loss.
-- **All 17 `window.confirm` calls are S2, fixed now.** That includes the two the reviewer called minor (D-093, D-101).
+- **All 17 `window.confirm` calls are S2, fixed now.** That includes the two the review called minor (D-093, D-101).
   It is one defect, the webview's own dialog. One shared dialog fixes all 17, and a partial fix keeps the mix that
   D-085 complains about.
 - **Raised from minor to S2, fixed now.**

@@ -35,7 +35,7 @@ Live Translate) off the screen until it ends; the shown windows stay.
 - **The tray is a native menu**, not a window of EchoLedger's. It was still missing from screenshots: the privacy
   service gave every window the system makes for EchoLedger (the tray's and the menu bar's menus, tooltips) the floating
   windows' flag. Those windows are shown now (`privacy::others_protected`).
-- **Captions and the Live Assist card keep their stricter rule** (the lead, 2026-11-24): hidden unless shown from their
+- **Captions and the Live Assist card keep their stricter rule** (decided 2026-11-24): hidden unless shown from their
   own window, whatever the Screen-share privacy setting says. Nothing was migrated, and nothing can start showing live
   words for anyone who had set the setting to Off.
 - **Live Translate follows the same switch as before** (`hideFromSharing`), now its only window.
