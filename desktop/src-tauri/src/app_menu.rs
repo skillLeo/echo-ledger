@@ -482,7 +482,7 @@ mod mac {
             paused: recording && state.capture.is_paused(),
             captions: state.live.is_live(),
             pill_shown: recording && !state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
-            auto_record: settings.auto_mode,
+            auto_record: crate::call_rules::records_by_themselves(&state, &settings),
             hiding: crate::privacy::share::main_hidden(settings.main_share_hide.as_ref(), crate::privacy::now_ms()),
             windows_hidden: app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.hidden_for(crate::privacy::HideReason::Person)),
             can_record: state.viewer_refusal().is_none(),

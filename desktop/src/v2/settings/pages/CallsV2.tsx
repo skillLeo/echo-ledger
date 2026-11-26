@@ -12,7 +12,7 @@ import { sourceAppLabel } from "../../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../../lib/sites";
 import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSettings";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
-import { CALL_ACTIONS, RULE_SOURCES, accountAfterCall, cleanName, accountAfterEachCall, accountAskWhen, actionWords, ruleLine, ruleProblem, ruleSubject, startNotes, useCallRules } from "../../../lib/callRules";
+import { ACCOUNT_DEFAULTS, CALL_ACTIONS, RULE_SOURCES, accountAfterCall, cleanName, accountAfterEachCall, accountAskWhen, actionWords, confirmContactDontRecord, ruleLine, ruleProblem, ruleSubject, startNotes, useCallRules } from "../../../lib/callRules";
 import type { CallAction, CallRule } from "../../../lib/ipc";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
 import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SectionTitle, SelectSetting, SwitchSetting, type Patch } from "./rows";
@@ -57,7 +57,8 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent, onR
         </Group>
       )}
       {account && onRules && (
-        <Group title={t("Call rules")} footer={<p>{t("For a contact or an app, on every device of your account.")}</p>}>
+        // The row says "Call rules": the group needs no title of its own.
+        <Group footer={<p>{t("For a contact or an app, on every device of your account.")}</p>}>
           <LinkSetting id="calls.rules" value={String(account.rules.length)} onOpen={onRules} />
         </Group>
       )}
@@ -95,10 +96,14 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent, onR
       {!settings.consentAcknowledged && (
         <div className="el-settings-v2__reset"><Button variant="quiet" onClick={onConsent}>{t("Read the recording consent notice")}</Button></div>
       )}
-      <ResetDefaults page={t("Calls & meetings")} onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
-        skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
-      })} />
+      {/* While the account's rules are kept, its After each call, When to ask and Short calls are reset as well. */}
+      <ResetDefaults page={t("Calls & meetings")} onReset={() => {
+        void patch({
+          autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
+          skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
+        });
+        if (account) void saveAccount({ ...ACCOUNT_DEFAULTS });
+      }} />
     </>
   );
 }
@@ -204,12 +209,12 @@ export function CallSitesPageV2({ rules, onSave }: { rules: SiteRule[]; onSave: 
  * phone's: listed, read only. A contact's Don't record says what it does here, honestly (decision 25).
  */
 export function CallRulesPageV2() {
-  const { rules, set } = useCallRules();
+  const { rules, set, failed, reload } = useCallRules();
   const [problem, setProblem] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [nameAction, setNameAction] = useState<CallAction>("always_transcribe");
   const [app, setApp] = useState<string>(RULE_SOURCES[0]);
-  const [appAction, setAppAction] = useState<CallAction>("dont_record");
+  const [appAction, setAppAction] = useState<CallAction>("ask");
   const run = async (change: () => Promise<typeof rules>) => {
     setProblem(null);
     try {
@@ -221,15 +226,31 @@ export function CallRulesPageV2() {
       return false;
     }
   };
+  if (!rules && failed) {
+    return (
+      <div className="el-settings-v2__problem">
+        <p role="alert">{t("Your call rules can't be read now. Try again when you're online.")}</p>
+        <Button variant="quiet" onClick={reload}>{t("Try again")}</Button>
+      </div>
+    );
+  }
   if (!rules) return <p className="el-secondary">{t("Call rules are off for your account.")}</p>;
   const actionOptions = CALL_ACTIONS.map((a) => ({ value: a, label: actionWords(a) }));
+  // A contact's Don't record asks first, as the Library's "Always for <name>" does (decision 25).
+  const contactDontRecord = async (subject: string, action: CallAction, kind: CallRule["kind"]) => action !== "dont_record" || kind !== "contact" || confirmContactDontRecord(subject);
+  // The second line only says what the row's choice doesn't: a contact's Don't record here, a group's choice (it has
+  // no Select) and that it was set on the phone.
+  const lineOf = (rule: CallRule) => {
+    if (rule.kind === "group") return `${ruleLine(rule)} · ${t("Set on the phone")}`;
+    return rule.kind === "contact" && rule.action === "dont_record" ? ruleLine(rule) : undefined;
+  };
   const row = (rule: CallRule) => (
-    <ListRow key={rule.id} compact title={ruleSubject(rule)} meta={rule.kind === "group" ? `${ruleLine(rule)} · ${t("Set on the phone")}` : ruleLine(rule)}
+    <ListRow key={rule.id} compact title={ruleSubject(rule)} meta={lineOf(rule)}
       icon={rule.kind === "source" && rule.source_app ? (p) => <Icons.SourceAppIcon app={rule.source_app!} {...p} /> : Icons.UserIcon} iconStyle="plain"
       control={rule.kind === "group" ? undefined : (
         <span className="el-page__actions">
           <Select label={t("Choice for :name", { name: ruleSubject(rule) })} hideLabel value={rule.action} options={actionOptions}
-            onChange={(v) => void run(() => api.callRuleUpdate(rule.id, { action: v as CallAction }))} />
+            onChange={(v) => void contactDontRecord(ruleSubject(rule), v as CallAction, rule.kind).then((ok) => ok && run(() => api.callRuleUpdate(rule.id, { action: v as CallAction })))} />
           <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={t("Remove the rule for :name", { name: ruleSubject(rule) })}
             onClick={() => void run(() => api.callRuleDelete(rule.id))} />
         </span>
@@ -255,7 +276,9 @@ export function CallRulesPageV2() {
         <div className="el-call-rule-form">
           <TextField label={t("Name")} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
           <Select label={t("Choice")} value={nameAction} options={actionOptions} onChange={(v) => setNameAction(v as CallAction)} />
-          <Button disabled={!cleanName(name)} onClick={() => void run(() => api.callRuleSave({ kind: "contact", name: cleanName(name), action: nameAction })).then((ok) => { if (ok) setName(""); })}>{t("Add rule")}</Button>
+          <Button disabled={!cleanName(name)} onClick={() => void contactDontRecord(cleanName(name), nameAction, "contact")
+            .then((ok) => ok && run(() => api.callRuleSave({ kind: "contact", name: cleanName(name), action: nameAction })))
+            .then((ok) => { if (ok) setName(""); })}>{t("Add rule")}</Button>
         </div>
       </Group>
     </>

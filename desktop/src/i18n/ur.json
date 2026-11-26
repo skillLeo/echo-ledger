@@ -1793,7 +1793,7 @@
   "Not recorded: your call rules say not to record calls in it": "ریکارڈ نہیں ہوتی: آپ کے کال کے قواعد کے مطابق اس میں کالز ریکارڈ نہیں ہوتیں",
   "Call rules": "کال کے قواعد",
   "For a contact or an app, on every device of your account.": "کسی رابطے یا ایپ کے لیے، آپ کے اکاؤنٹ کی ہر ڈیوائس پر۔",
-  "Automatically recorded calls shorter than :seconds seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.": "خودکار ریکارڈ ہونے والی :seconds سیکنڈ سے چھوٹی کالز اور مسڈ کالز نہیں رکھی جاتیں۔ یہ آپ کے اکاؤنٹ کی سیٹنگ ہے، ہر ڈیوائس پر ایک جیسی؛ جب تک یہ آن ہے، اس کمپیوٹر پر “اس سے چھوٹی کالز چھوڑ دیں” کے اپنے سیکنڈ لاگو نہیں ہوتے۔",
+  "Automatically recorded calls shorter than :seconds seconds, and missed calls, aren't kept. This is your account's setting, the same on every device; this computer's own seconds don't apply while it is on.": "جو کالز خودکار ریکارڈ ہوں اور :seconds سیکنڈ سے چھوٹی ہوں، اور مسڈ کالز، نہیں رکھی جاتیں۔ یہ آپ کے اکاؤنٹ کی سیٹنگ ہے، ہر ڈیوائس پر ایک جیسی؛ جب تک یہ آن ہے، اس کمپیوٹر پر “اس سے چھوٹی کالز چھوڑ دیں” کے اپنے سیکنڈ لاگو نہیں ہوتے۔",
   "Don't keep short calls": "چھوٹی کالز نہ رکھیں",
   "Call rules are off for your account.": "آپ کے اکاؤنٹ کے لیے کال کے قواعد بند ہیں۔",
   "Set on the phone": "فون پر سیٹ کیا گیا",
@@ -1817,5 +1817,6 @@
   "Always for :name": "ہمیشہ :name کے لیے",
   "Don't record calls with :name?": ":name کے ساتھ کالز ریکارڈ نہ کریں؟",
   "On this computer the recording stops and is deleted as soon as :name is known, on every call from now on.": "اس کمپیوٹر پر اب سے ہر کال میں :name کا پتا چلتے ہی ریکارڈنگ رک کر حذف ہو جائے گی۔",
-  "For :name: :choice": ":name کے لیے: :choice"
+  "For :name: :choice": ":name کے لیے: :choice",
+  "Your call rules can't be read now. Try again when you're online.": "آپ کے کال کے قواعد ابھی پڑھے نہیں جا سکتے۔ آن لائن ہونے پر دوبارہ کوشش کریں۔"
 }

@@ -98,7 +98,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
     // While the account's call rules decide (2.0.0-w), calls record by themselves unless its After each call is Don't record.
     let auto_mode = crate::call_rules::records_by_themselves(&state, &settings);
-    let auto_locked = crate::call_rules::flag_on(&state) && state.lock.is_locked();
+    let auto_locked = crate::call_rules::kept(&state).is_some() && state.lock.is_locked();
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: auto_mode, auto_locked, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
@@ -144,14 +144,28 @@ pub fn status(app: &AppHandle) -> AppStatus {
 
 /// The answer to the After a call notice: Always transcribe (one tap), or closed (Ask me stays). Said once either way.
 #[tauri::command]
-pub fn after_call_notice_answer(app: AppHandle, always_transcribe: bool) -> AppResult<AppStatus> {
-    let settings = app.state::<AppState>().update_settings(|s| {
+pub async fn after_call_notice_answer(app: AppHandle, always_transcribe: bool) -> AppResult<AppStatus> {
+    let state = app.state::<AppState>();
+    // While the account's rules decide (2.0.0-w), Always transcribe is the account's After each call.
+    let account = always_transcribe && crate::call_rules::kept(&state).is_some();
+    if account {
+        crate::call_rules::set_after_call(&app, crate::call_rules::ALWAYS_TRANSCRIBE).await?;
+    }
+    let settings = state.update_settings(|s| {
         s.after_call_notice = false;
-        if always_transcribe {
+        if always_transcribe && !account {
             s.after_call = crate::settings::AfterCall::AlwaysTranscribe;
         }
     })?;
     let _ = app.emit("settings:changed", &settings);
+    Ok(status(&app))
+}
+
+/// "Auto-record calls & meetings" from the window (the Record and Live menus, Home): one way for every control, the
+/// tray's (the account's After each call while its rules are kept, this computer's own switch otherwise).
+#[tauri::command]
+pub async fn auto_record_set(app: AppHandle, on: bool) -> AppResult<AppStatus> {
+    crate::call_rules::set_auto_record(&app, on).await?;
     Ok(status(&app))
 }
 
@@ -2443,15 +2457,14 @@ pub async fn call_rule_save(app: AppHandle, rule: serde_json::Value) -> AppResul
 pub async fn call_rule_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<crate::net::models::CallRules> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.update_call_rule(&id, &patch).await {
-        Err(AppError::Server { status: 404, code: Some(code), .. }) if code == "rule_not_found" => {
-            reread_call_rules(&app).await;
+    use crate::call_rules::RuleChanged;
+    match call_rule_answer(&app, crate::call_rules::update_rule(&state.api()?, &id, &patch).await).await? {
+        RuleChanged::Gone(reread) => {
+            crate::call_rules::apply_reread(&app, reread);
             Err(AppError::msg(crate::call_rules::RULE_GONE_TEXT))
         }
-        answer => {
-            let saved = call_rule_answer(&app, answer).await?;
-            with_kept_rules(&app, |rules| crate::call_rules::with_rule(rules, saved)).await
-        }
+        RuleChanged::Saved(saved) => with_kept_rules(&app, |rules| crate::call_rules::with_rule(rules, saved)).await,
+        RuleChanged::Removed { .. } => Err(AppError::msg(crate::call_rules::RULE_GONE_TEXT)),
     }
 }
 
@@ -2460,16 +2473,10 @@ pub async fn call_rule_update(app: AppHandle, id: String, patch: serde_json::Val
 pub async fn call_rule_delete(app: AppHandle, id: String) -> AppResult<crate::net::models::CallRules> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.delete_call_rule(&id).await {
-        Err(AppError::Server { status: 404, code: Some(code), .. }) if code == "rule_not_found" => {
-            reread_call_rules(&app).await;
-            Ok(with_kept_rules(&app, |rules| crate::call_rules::without_rule(rules, &id)).await?)
-        }
-        answer => {
-            call_rule_answer(&app, answer).await?;
-            with_kept_rules(&app, |rules| crate::call_rules::without_rule(rules, &id)).await
-        }
+    if let crate::call_rules::RuleChanged::Removed { reread: Some(reread) } = call_rule_answer(&app, crate::call_rules::delete_rule(&state.api()?, &id).await).await? {
+        crate::call_rules::apply_reread(&app, reread);
     }
+    with_kept_rules(&app, |rules| crate::call_rules::without_rule(rules, &id)).await
 }
 
 /// A change's answer: in the app's words when it failed; a `404 not_found` (the flag turned off) forgets the kept rules
@@ -2485,28 +2492,23 @@ async fn call_rule_answer<T>(app: &AppHandle, answer: AppResult<T>) -> AppResult
     }
 }
 
-/// The kept rules changed by `change`, kept and returned (read first when none is kept yet).
+/// The kept rules changed by `change`, kept and returned (read first when none is kept yet). With none to change (the
+/// flag just turned off, or the read failed), nothing is kept: the flag off says so; otherwise the next config reads
+/// the whole answer.
 async fn with_kept_rules(app: &AppHandle, change: impl FnOnce(crate::net::models::CallRules) -> crate::net::models::CallRules) -> AppResult<crate::net::models::CallRules> {
     let state = app.state::<AppState>();
     if crate::call_rules::kept(&state).is_none() {
         crate::call_rules::sync(app).await;
     }
-    let rules = change(crate::call_rules::kept(&state).unwrap_or_default());
+    let Some(kept) = crate::call_rules::kept(&state) else {
+        if !crate::call_rules::flag_on(&state) {
+            return Err(AppError::msg(crate::call_rules::FLAG_OFF_TEXT));
+        }
+        return Ok(change(crate::net::models::CallRules::default()));
+    };
+    let rules = change(kept);
     crate::call_rules::keep(app, &rules)?;
     Ok(rules)
-}
-
-/// Reads the account's rules again now (another device changed them), whatever version is kept.
-async fn reread_call_rules(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let Ok(api) = state.api() else { return };
-    match api.call_rules().await {
-        Ok(rules) => {
-            let _ = crate::call_rules::keep(app, &rules);
-        }
-        Err(e) if crate::call_rules::flag_is_off(&e) => crate::call_rules::forget(app),
-        Err(_) => {}
-    }
 }
 
 /// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps

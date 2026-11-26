@@ -1270,27 +1270,67 @@ fn the_recorder_counts_what_the_other_side_delivered_and_whether_it_was_more_tha
 
 #[test]
 fn a_contact_s_dont_record_stops_and_deletes_with_nothing_queued_but_its_deletion() {
-    // Contract 2.0.0-w, lead decision 25: on the desktop a contact is known only once the call's window names it, so the
-    // recording stops then, captions and Live Translate with it, its folder goes, no upload and no end are queued, and
-    // its server session is deleted and erased from the Trash. One notice says "stopped and deleted".
+    // Contract 2.0.0-w, lead decisions 25 and 29: on the desktop a contact is known only once the call's window names
+    // it, so the recording stops then and what was written goes: its folder, and its server sessions, deleted and erased
+    // from the Trash. No decision, upload or end of the call is written.
+    use desktop_lib::call_rules;
+    use desktop_lib::net::sync::paths;
+    use desktop_lib::net::uploader::{EndQueue, PurgeSet, with_purges};
+    let data = tempfile::tempdir().unwrap();
+    let recording = |name: &str| {
+        let dir = paths::recordings(data.path()).join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        for file in ["mic.wav", "system.wav", "recording.flac"] {
+            std::fs::write(dir.join(file), vec![1u8; 4096]).unwrap();
+        }
+        dir
+    };
+    let lock = std::sync::Mutex::new(());
+    let dir = recording("rec-ahmed");
+    call_rules::drop_recording(data.path(), &dir, &["s-1".to_string(), "s-late".to_string()], &lock).unwrap();
+    assert!(!dir.exists());
+    assert!(std::fs::read_dir(paths::recordings(data.path())).unwrap().next().is_none(), "no marker is left either");
+    assert_eq!(DiscardQueue::load(&paths::discards(data.path())).items, ["s-1", "s-late"]);
+    let purges = PurgeSet::load(&paths::purges(data.path()));
+    assert!(purges.contains("s-1") && purges.contains("s-late"), "erased from the Trash too, never only deleted");
+    assert!(DecisionFiles::in_dir(data.path()).load().items.is_empty(), "nothing asks");
+    assert!(UploadQueue::load(&paths::uploads(data.path())).items.is_empty(), "nothing is uploaded");
+    let ends: EndQueue = std::fs::read(paths::ends(data.path())).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    assert!(ends.items.is_empty(), "no end of the call");
+
+    // Safe across a crash: the first step (marked, queued) comes before the recording stops, so a crash after it
+    // deletes the folder at the next start instead of offering it back.
+    let crashed = recording("rec-crashed");
+    call_rules::mark_dropped(data.path(), &crashed, &["s-2".to_string()], &lock).unwrap();
+    assert!(crashed.exists());
+    let start = desktop_lib::recovery::recover(data.path(), Utc::now() + chrono::Duration::minutes(5));
+    assert_eq!(start.removed, ["rec-crashed"]);
+    assert!(start.recovered.is_empty() && !crashed.exists());
+    assert!(DiscardQueue::load(&paths::discards(data.path())).items.contains(&"s-2".to_string()));
+    // A purge whose discard a crash kept out of the queue is deleted all the same.
+    let only_purge = PurgeSet::load(&paths::purges(data.path()));
+    assert_eq!(with_purges(vec!["s-1".into()], &only_purge), ["s-1", "s-late", "s-2"]);
+
+    // One neutral notice, the contact's name never in it (a system notification can show in a screen share); never
+    // "not recorded", as it was, for a moment.
+    assert!(call_rules::STOPPED_TEXT.starts_with("Stopped and deleted"));
+    assert!(!call_rules::STOPPED_TEXT.to_lowercase().contains("not recorded") && !call_rules::STOPPED_TEXT.contains(":name"));
+
+    // The steps that need the running app, in their order: marked and queued first; then Live Assist, Live Translate,
+    // the capture with its captions; what was written goes, with the one notice.
     let actions = include_str!("../src/actions.rs");
     let body = |start: &str| {
         let from = &actions[actions.find(start).unwrap_or_else(|| panic!("{start}"))..];
         from[..from.find("\n}\n").unwrap()].to_string()
     };
-    let caller = body("pub fn set_recording_caller(");
-    assert!(caller.contains("Policy::of(&state).stops_for_caller(&name, &info.source_app, auto)"), "{caller}");
-    assert!(caller.contains("stop_for_contact_rule(&app, info.client_ref, name)"));
     let stop = body("async fn stop_for_contact_rule(");
-    let order = ["crate::translate::stop(app);", "end_capture(app).await", "drop_for_rule(app,"];
+    let order = ["call_rules::mark_dropped(", "assist::live::end(app)", "crate::translate::stop(app);", "end_capture(app).await", "drop_for_rule(app,"];
     let at: Vec<usize> = order.iter().map(|step| stop.find(step).unwrap_or_else(|| panic!("{step}"))).collect();
-    assert!(at.windows(2).all(|w| w[0] < w[1]), "translate stops, then the capture (with its captions), then what was written goes");
-    for never in ["decide_finished(", "enqueue_upload", "queue_call_end", "note_call_end"] {
-        assert!(!stop.contains(never), "{never}: nothing is kept or sent");
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "{stop}");
+    for never in ["decide_finished(", "enqueue_upload", "queue_call_end", "note_call_end", "refusal::say"] {
+        assert!(!stop.contains(never), "{never}: nothing is kept or sent, and the notice is said once");
     }
     let drop = body("fn drop_for_rule(");
-    assert!(drop.contains("delete_recording_folder(dir)") && drop.contains("queue_erase(app, id)") && drop.contains("stopped_words(name)"));
-    assert!(!drop.contains("queue_discard(app"), "deleted and erased, never only to the Trash");
-    assert!(desktop_lib::call_rules::stopped_words(Some("Ahmed Khan")).starts_with("Stopped and deleted"));
-    assert!(!desktop_lib::call_rules::stopped_words(None).to_lowercase().contains("not recorded"));
+    assert_eq!(drop.matches("refusal::say(").count(), 1);
+    assert!(drop.contains("call_rules::drop_recording(") && drop.contains("STOPPED_TEXT"));
 }

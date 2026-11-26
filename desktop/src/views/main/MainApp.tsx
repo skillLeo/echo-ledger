@@ -959,7 +959,9 @@ export default function MainApp() {
   const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
   /** Auto-record calls on or off: Record's menu and the Live page's switch (UX-15). */
-  const toggleAutoRecord = () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on");
+  // One way for every control (the tray's, the core's auto_record_set): while the account's call rules are kept, its
+  // After each call; status.autoMode says whether calls record by themselves either way.
+  const toggleAutoRecord = () => void run(() => api.autoRecordSet(!status.autoMode), status.autoMode ? "Call recording is off" : "Call recording is on");
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
@@ -1346,12 +1348,12 @@ export default function MainApp() {
                     ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
                       language={urdu && account ? { value: accountLanguage(account) ?? lang, onChange: (l) => void changeLanguage(l), error: languageError } : undefined}
                       onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
-                    : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
+                    : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} callRules={ui.flags.call_rules} />} />
           </div>
         </Suspense>
       )}
       {/* Classic Settings offers the new design from its own Appearance page (docs/PLAN_V2_PARITY.md 0). */}
-      {tab === "settings" && !ui.flags["ui_v2.settings"] && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
+      {tab === "settings" && !ui.flags["ui_v2.settings"] && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} callRules={ui.flags.call_rules} />}
     </>
   );
   const overlays = (

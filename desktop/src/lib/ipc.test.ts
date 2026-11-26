@@ -19,6 +19,7 @@ describe("api wrappers", () => {
     ["settings", () => api.settings(), "get_settings", undefined],
     ["updateSettings", () => api.updateSettings({ autoMode: false }), "update_settings", { patch: { autoMode: false } }],
     ["updateSettings (clear client)", () => api.updateSettings({ clientId: null }), "update_settings", { patch: { clientId: null } }],
+    ["autoRecordSet", () => api.autoRecordSet(false), "auto_record_set", { on: false }],
     ["setShortcut", () => api.setShortcut("dictation", "CommandOrControl+Shift+D"), "set_shortcut", { action: "dictation", accelerator: "CommandOrControl+Shift+D" }],
     ["resetShortcuts", () => api.resetShortcuts(), "reset_shortcuts", undefined],
     ["toggleCaptions", () => api.toggleCaptions(), "toggle_captions", undefined],

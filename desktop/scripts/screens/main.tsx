@@ -116,7 +116,9 @@ const plan = makePlan({
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
 // `&untitled=1`: the opened recording has no title (D-031: it is called Recording everywhere).
-const LISTED = params.get("untitled") === "1" ? ITEMS.map((i) => (i.id === opened ? { ...i, title: null, title_auto: false } : i)) : ITEMS;
+const UNTITLED = params.get("untitled") === "1" ? ITEMS.map((i) => (i.id === opened ? { ...i, title: null, title_auto: false } : i)) : ITEMS;
+// `&callrules=1`: the first call's caller is known (its window named him), for "Always for <name>" (contract 2.0.0-w).
+const LISTED = params.get("callrules") === "1" ? UNTITLED.map((i) => (i.id === "r1" ? { ...i, caller: { name: "Bilal Qureshi", number: null, source: "window_title" } } : i)) : UNTITLED;
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
 // v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
 // minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).

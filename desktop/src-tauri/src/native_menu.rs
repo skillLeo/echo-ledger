@@ -308,7 +308,11 @@ async fn run_core(app: &AppHandle, step: CoreStep) -> crate::error::AppResult<()
         CoreStep::StopRecording => Ok(()),
         CoreStep::TogglePause => crate::actions::toggle_pause(app).await,
         CoreStep::ToggleCaptions => crate::actions::toggle_captions(app).await,
-        CoreStep::ToggleAutoRecord => state.update_settings(|s| s.auto_mode = !s.auto_mode).map(|_| ()),
+        // One way for every control (the tray's): the account's After each call while its rules are kept.
+        CoreStep::ToggleAutoRecord => {
+            let on = crate::call_rules::records_by_themselves(&state, &state.settings());
+            crate::call_rules::set_auto_record(app, !on).await
+        }
         CoreStep::HideFromShares(choice) => crate::privacy::hide_main(app, choice).map(|_| ()),
         CoreStep::StopHiding => crate::privacy::show_main_in_shares(app, None),
         CoreStep::HideWindows => {

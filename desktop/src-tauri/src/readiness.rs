@@ -292,7 +292,8 @@ pub fn gather(app: &AppHandle) -> ReadyInputs {
         permissions,
         mac_version,
         whole_system_note: crate::audio::platform::system_audio_note().map(str::to_string),
-        auto_mode: settings.auto_mode,
+        // The account's After each call while its rules are kept (2.0.0-w), else this computer's switch.
+        auto_mode: crate::call_rules::records_by_themselves(&state, &settings),
         apps_off,
         detection_alive: state.detect.looked_within(DETECTION_STALE),
         shortcuts_taken: state.shortcut_errors.lock().unwrap_or_else(|p| p.into_inner()).iter().map(|(action, _)| action.title()).collect(),
@@ -388,8 +389,21 @@ pub fn apply_fix(app: &AppHandle, action: FixAction) -> AppResult<()> {
         FixAction::OpenSoundSettings => open("sound"),
         FixAction::SoftwareUpdate => open("software_update"),
         FixAction::TurnOnAutoMode | FixAction::TurnOnApps => {
+            // While the account's rules are kept (2.0.0-w), "Turn on" is the account's After each call, the same way
+            // as every Auto-record control.
+            let account = crate::call_rules::kept(&state).is_some();
+            if account {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::call_rules::set_auto_record(&app, true).await {
+                        let _ = app.emit("app:error", e.to_string());
+                    }
+                });
+            }
             let settings = state.update_settings(|s| {
-                s.auto_mode = true;
+                if !account {
+                    s.auto_mode = true;
+                }
                 if action == FixAction::TurnOnApps {
                     s.auto_record_apps.clear();
                 }

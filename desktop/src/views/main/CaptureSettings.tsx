@@ -28,7 +28,7 @@ import { skipShorterThan } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
 import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
-import { accountAfterCall, accountAfterEachCall, accountAskWhen, ruleProblem, useCallRules } from "../../lib/callRules";
+import { ACCOUNT_DEFAULTS, accountAfterCall, accountAfterEachCall, accountAskWhen, ruleProblem, useCallRules } from "../../lib/callRules";
 import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
 import { t } from "../../i18n";
 
@@ -136,10 +136,14 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
       {!consentRead && (
         <div className="set-reset"><button type="button" className="btn text" onClick={onConsent}>Read the recording consent notice</button></div>
       )}
-      <ResetRow page="Calls & meetings" onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
-        skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
-      })} />
+      {/* While the account's rules are kept, its After each call, When to ask and Short calls are reset as well. */}
+      <ResetRow page="Calls & meetings" onReset={() => {
+        void patch({
+          autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
+          skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
+        });
+        if (account) void saveAccount({ ...ACCOUNT_DEFAULTS });
+      }} />
     </>
   );
 }

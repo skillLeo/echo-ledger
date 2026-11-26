@@ -6,22 +6,44 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type AfterEachCall, type CallAction, type CallRule, type CallRules, type Settings } from "./ipc";
 import { CALL_WORDS } from "./callChoice";
+import { confirmAction } from "./confirm";
 import { sourceAppLabel } from "./format";
 import { t } from "../i18n";
 
-/** The account's answer while the flag is on (null: off, or not read yet), kept up to date. */
-export function useCallRules(): { rules: CallRules | null; set: (rules: CallRules) => void } {
+/**
+ * The account's answer while the flag is on (null: off, or not read yet), kept up to date. `failed`: the flag is on
+ * but its answer couldn't be read (offline before any was kept), told apart from "off"; `reload` tries again.
+ */
+export function useCallRules(): { rules: CallRules | null; set: (rules: CallRules) => void; failed: boolean; reload: () => void } {
   const [rules, setRules] = useState<CallRules | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
-    api.callRules().then((r) => { if (live) setRules(r ?? null); }).catch(() => undefined);
-    const off = listenTo("call_rules:changed", (r) => { if (live) setRules(r ?? null); });
+    api.callRules().then((r) => { if (live) { setRules(r ?? null); setFailed(false); } }).catch(() => { if (live) setFailed(true); });
+    const off = listenTo("call_rules:changed", (r) => { if (live) { setRules(r ?? null); setFailed(false); } });
     return () => {
       live = false;
       void off.then((f) => f()).catch(() => undefined);
     };
-  }, []);
-  return { rules, set: setRules };
+  }, [round]);
+  return { rules, set: setRules, failed, reload: () => setRound((n) => n + 1) };
+}
+
+/** The account's After each call, When to ask and Short calls as Reset sets them: the settings' own defaults (Ask me,
+ * after the call, short calls not kept). */
+export const ACCOUNT_DEFAULTS = { after_call: "ask", ask_when: "after_call", short_calls: "dont_keep" } as const;
+
+/**
+ * Asks before a contact's rule becomes Don't record (decision 25's words), wherever it is set: the Library's "Always
+ * for <name>" and the Call rules page.
+ */
+export function confirmContactDontRecord(name: string): Promise<boolean> {
+  return confirmAction({
+    title: t("Don't record calls with :name?", { name }),
+    body: t("On this computer the recording stops and is deleted as soon as :name is known, on every call from now on.", { name }),
+    confirm: actionWords("dont_record"), tone: "danger",
+  });
 }
 
 /** The account's After each call as Settings shows it: Don't record is "Don't record calls"; never chosen is Ask me. */
@@ -74,7 +96,8 @@ export function ruleLine(rule: CallRule): string {
 
 /**
  * On this computer a Source's or the default's Don't record is decided when the call starts, before its caller is
- * known (EL-Backend's check, point 5): with a rule for a contact as well, the page says so, once per such app.
+ * known (docs/API.md, 2.0.0-w: "the desktop and the Play build stop and delete as soon as the contact is known"): with
+ * a rule for a contact as well, the page says so, once per such app.
  */
 export function startNotes(rules: CallRules): string[] {
   if (!rules.rules.some((r) => r.kind === "contact" && r.action !== "dont_record")) return [];

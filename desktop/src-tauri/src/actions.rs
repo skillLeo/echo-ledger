@@ -677,29 +677,40 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     decision.owner = take_recording_owner(&state, &client_ref);
     let output = &finished.output;
     // The account's call rules while the flag is on (2.0.0-w), else this computer's own settings.
-    let policy = crate::call_rules::Policy::of(&state);
-    // Short or silent automatic calls go quietly, unless the person chose for this one: before every rule.
+    // Rules apply to a call recorded by itself; one started by hand or from the "Record?" chip is the person's own
+    // (decisions 28 and 29): no rule, Don't record or short call deletes it, it asks after it, and its card counts
+    // for nothing toward "Always do this?".
+    let end = crate::call_rules::Policy::of(&state).end_of_call(
+        &settings,
+        &crate::call_rules::Ended {
+            caller_name: decision.caller_name(),
+            source_app: &decision.source_app,
+            is_call: mode == RecordingMode::Call,
+            auto,
+            rules_apply: rules_apply(&state, &client_ref, auto),
+            pill_chosen: pill.is_some(),
+        },
+    );
+    decision.auto = end.by_itself;
+    // A contact's Don't record (decision 29: the only one that deletes a recording once made): what was written goes,
+    // nothing is uploaded and nothing asks; a choice made on the pill during the call is the person's own and stands.
+    // Before the short calls, so such a call is never kept for 24 hours among the skipped.
+    if end.drops {
+        let sessions: Vec<String> = decision.server_session_id().map(str::to_string).into_iter().chain(late).collect();
+        drop_for_rule(app, &finished.output.dir, &client_ref, &sessions);
+        return Ok(());
+    }
+    // Short or silent automatic calls go quietly, unless the person chose for this one: before every other rule.
     if pill.is_none()
-        && let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, policy.short_call_seconds(&settings), output.speech_ms)
+        && let Some(reason) = crate::skipped::reason(end.by_itself, mode, output.duration_ms, end.short_call_seconds, output.speech_ms)
     {
         return skip_finished(app, decision, late, reason, now);
     }
     // A Live Assist session from a prep saves its call without the after-call card (docs/API_ASSIST.md `auto_saved`).
     let assist_saved = take_assist_saved(&state, &client_ref);
-    let after = policy.after(&settings, decision.caller_name(), &decision.source_app, auto);
-    // A rule said not to record this call (one that came while it ran): what was written goes, nothing is uploaded and
-    // nothing asks; a choice made on the pill during the call is the person's own and stands.
-    if pill.is_none() && mode == RecordingMode::Call && after == crate::call_rules::CallAfter::DontRecord {
-        let name = decision.caller_name().map(str::to_string);
-        drop_for_rule(app, &finished.output.dir, &client_ref, decision.server_session_id().map(str::to_string).into_iter().chain(late).collect(), name.as_deref());
-        return Ok(());
-    }
-    let setting = match after {
-        crate::call_rules::CallAfter::Choose(setting) => setting,
-        crate::call_rules::CallAfter::DontRecord => crate::settings::AfterCall::Ask,
-    };
     let quiet = crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, crate::notifications::local_minutes());
-    let outcome = crate::after_call::outcome(OutcomeInput { setting, ask_when: policy.ask_when(&settings), mode, pill, assist_saved, interactive, quiet });
+    let (setting, ask_when) = (end.setting, end.ask_when);
+    let outcome = crate::after_call::outcome(OutcomeInput { setting, ask_when, mode, pill, assist_saved, interactive, quiet });
     // The end of the call (contract 2.0.0-z), before the card shows: from then on every device shows it waiting. Its
     // session, or one opened while it stopped. Not for one kept at once (its upload's finish carries ended_at); a silent
     // or skipped one sent its DELETE above. Stop and delete has it too, for its Undo.
@@ -961,12 +972,19 @@ pub fn card_answer(app: &AppHandle, id: &str, choice: CallChoice) -> AppResult<(
         if choice == CallChoice::Delete { files.discard_later(id, at)? } else { files.choose(id, choice, at)? }
     };
     let mut offer = None;
-    if let Err(e) = state.update_settings(|s| {
-        let streak = crate::after_call::next_streak(s.card_streak, choice);
-        s.card_streak = Some(streak);
-        offer = crate::after_call::offers_always(streak, s.always_offered, s.after_each_call());
-        s.always_offered |= offer.is_some();
-    }) {
+    // While the account's rules decide (2.0.0-w), its After each call for this app, and a card of a call the person
+    // started counts for nothing (decision 28).
+    let policy = crate::call_rules::Policy::of(&state);
+    let counts = !policy.follows_account() || decision.auto;
+    let now_after = policy.after_each_call(&state.settings(), Some(&decision.source_app));
+    if counts
+        && let Err(e) = state.update_settings(|s| {
+            let streak = crate::after_call::next_streak(s.card_streak, choice);
+            s.card_streak = Some(streak);
+            offer = crate::after_call::offers_always(streak, s.always_offered, now_after);
+            s.always_offered |= offer.is_some();
+        })
+    {
         eprintln!("[echoledger] counting the card's answers: {e}");
     }
     let held = surfaces(&state).clear_card(id).unwrap_or_default();
@@ -1050,8 +1068,19 @@ pub fn call_undo(app: &AppHandle, id: &str) -> AppResult<()> {
 /// "Always do this?" › Yes on a confirmation: After each call becomes that choice (Don't record calls for Delete).
 pub fn call_always(app: &AppHandle, id: &str, value: crate::settings::AfterEachCall) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
-    let settings = state.update_settings(|s| s.set_after_each_call(value))?;
     surfaces(&state).drop_offer(id);
+    // While the account's rules decide (2.0.0-w), its After each call, the same on every device.
+    if crate::call_rules::kept(&state).is_some() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = crate::call_rules::set_after_call(&app, crate::call_rules::after_call_of(value)).await {
+                let _ = app.emit("app:error", e.to_string());
+            }
+            refresh_after_call(&app);
+        });
+        return Ok(());
+    }
+    let settings = state.update_settings(|s| s.set_after_each_call(value))?;
     let _ = app.emit("settings:changed", &settings);
     emit_status(app);
     refresh_after_call(app);
@@ -1448,53 +1477,67 @@ pub fn set_recording_caller(app: &AppHandle, name: String) {
             }
             *caller = Some((info.client_ref.clone(), crate::net::models::CallerDto { name: Some(name.clone()), number: None, source: Some("window_title".into()) }));
         }
-        // A "Don't record" for this contact (contract 2.0.0-w, lead decision 25): known only now, so the recording stops
-        // at once and what was written goes; only a call recorded by itself (decision 28).
-        let auto = state.auto_started.load(Ordering::SeqCst);
-        if crate::call_rules::Policy::of(&state).stops_for_caller(&name, &info.source_app, auto) {
+        // A "Don't record" for this contact (contract 2.0.0-w, decisions 25 and 29): known only now, so the recording
+        // stops at once and what was written goes; only a call recorded by itself (decision 28), and never one with a
+        // choice made on the pill (the person's own, as at the end of a call).
+        let apply = rules_apply(&state, &info.client_ref, state.auto_started.load(Ordering::SeqCst));
+        let chosen = call_choice_of(&state, &info.client_ref).is_some();
+        if crate::call_rules::Policy::of(&state).stops_for_caller(&name, apply, chosen) {
             let app = app.clone();
-            tauri::async_runtime::spawn(async move { stop_for_contact_rule(&app, info.client_ref, name).await });
+            tauri::async_runtime::spawn(async move { stop_for_contact_rule(&app, info.client_ref).await });
         }
     }
 }
 
-/// A contact's "Don't record" met during the call (decision 25): live captions and Live Translate stop at once, the
-/// recording stops, what was written goes, and nothing is uploaded; its server session (opened by captions) goes to the
-/// Trash and is erased from it. One notice says so, in those words: never "not recorded", as it was, for a moment.
-async fn stop_for_contact_rule(app: &AppHandle, client_ref: String, name: String) {
+/// Whether the call rules apply to the recording `client_ref`: recorded by itself, and not from the "Record?" chip.
+fn rules_apply(state: &crate::AppState, client_ref: &str, auto: bool) -> bool {
+    crate::call_rules::rules_apply(auto, state.chip_recording.lock().unwrap_or_else(|p| p.into_inner()).as_deref(), client_ref)
+}
+
+/// A contact's "Don't record" met during the call (decisions 25 and 29). Crash-safe, in this order: the folder is
+/// marked as leaving and its server session queued to be deleted and erased from the Trash; then Live Assist, Live
+/// Translate and captions end; the recording stops; its folder goes. Nothing is uploaded and nothing asks. One neutral
+/// notice says it was stopped and deleted: never "not recorded", as it was, for a moment.
+async fn stop_for_contact_rule(app: &AppHandle, client_ref: String) {
     let state = app.state::<crate::AppState>();
     if state.capture.info().is_none_or(|i| i.client_ref != client_ref) {
         return;
     }
+    let dir = paths::recordings(&state.data_dir).join(&client_ref);
+    let open = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).session_for(&client_ref);
+    if let Err(e) = crate::call_rules::mark_dropped(&state.data_dir, &dir, open.as_slice(), &state.queue_lock) {
+        eprintln!("[echoledger] marking a recording a call rule stops: {e}");
+    }
+    let _ = crate::assist::live::end(app).await;
     crate::translate::stop(app);
-    let ended = match end_capture(app).await {
-        Ok(Some(ended)) => ended,
-        Ok(None) => return,
+    let session = match end_capture(app).await {
+        Ok(Some((_, session, _))) => session,
+        Ok(None) => None,
+        // Stopped or not, what was written goes: the marker and the queue are there already.
         Err(e) => {
             eprintln!("[echoledger] stopping a recording for a call rule: {e}");
-            return;
+            None
         }
     };
-    let (finished, session, _provider) = ended;
     let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
     let _ = take_call_choice(&state, &client_ref);
-    drop_for_rule(app, &finished.output.dir, &client_ref, session.into_iter().chain(late).collect(), Some(&name));
+    let sessions: Vec<String> = session.into_iter().chain(late).collect();
+    drop_for_rule(app, &dir, &client_ref, &sessions);
     clear_captions(app);
     emit_status(app);
     emit_recording_state(app);
 }
 
-/// A recording a call rule said not to keep: its folder goes, its server sessions are deleted and erased from the
-/// Trash (queued, so offline they go later), and one notice says it was stopped and deleted.
-fn drop_for_rule(app: &AppHandle, dir: &std::path::Path, client_ref: &str, sessions: Vec<String>, name: Option<&str>) {
-    crate::recovery::delete_recording_folder(dir);
-    crate::screens::forget(app, client_ref);
-    for id in sessions {
-        if let Err(e) = queue_erase(app, id) {
-            eprintln!("[echoledger] queueing a call rule's deletion: {e}");
-        }
+/// A recording a contact's rule said not to keep: marked as leaving, its server sessions queued to be deleted and
+/// erased from the Trash (offline they go later), then its folder goes; one neutral notice.
+fn drop_for_rule(app: &AppHandle, dir: &std::path::Path, client_ref: &str, sessions: &[String]) {
+    let state = app.state::<crate::AppState>();
+    if let Err(e) = crate::call_rules::drop_recording(&state.data_dir, dir, sessions, &state.queue_lock) {
+        eprintln!("[echoledger] deleting a recording a call rule stopped: {e}");
     }
-    crate::refusal::say(app, &crate::call_rules::stopped_words(name), crate::refusal::Asked::Other);
+    crate::screens::forget(app, client_ref);
+    state.upload_notify.notify_one();
+    crate::refusal::say(app, crate::call_rules::STOPPED_TEXT, crate::refusal::Asked::Other);
 }
 
 /// The chip changes of a finished recording (cleared, so the next recording starts without marks).
@@ -1884,20 +1927,6 @@ pub fn queue_call_end(app: &AppHandle, end: CallEnd) -> AppResult<()> {
     Ok(())
 }
 
-/// Queues a server session for deletion and its erasing from the Trash (`purges.json`): a recording a call rule said not
-/// to keep leaves nothing on the server.
-pub fn queue_erase(app: &AppHandle, session_id: String) -> AppResult<()> {
-    let state = app.state::<crate::AppState>();
-    {
-        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        let path = paths::purges(&state.data_dir);
-        let mut purges = crate::net::uploader::PurgeSet::load(&path);
-        purges.add(&session_id);
-        purges.save(&path)?;
-    }
-    queue_discard(app, session_id)
-}
-
 /// Queues a server session for deletion (`discards.json`): a discarded recording whose session was opened.
 pub fn queue_discard(app: &AppHandle, session_id: String) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
@@ -2186,7 +2215,9 @@ async fn run_upload_cycle(app: &AppHandle) {
             .collect();
         (
             UsageQueue::load(&paths::usage(&data_dir)).items,
-            DiscardQueue::load(&paths::discards(&data_dir)).items,
+            // With the sessions a call rule's "Don't record" erases from the Trash (2.0.0-w), also one whose deletion a
+            // crash kept out of discards.json.
+            crate::net::uploader::with_purges(DiscardQueue::load(&paths::discards(&data_dir)).items, &crate::net::uploader::PurgeSet::load(&paths::purges(&data_dir))),
             EndQueue::load(&paths::ends(&data_dir)).items,
             uploads,
             waiting,
@@ -2534,11 +2565,6 @@ pub fn spawn_activity_poll(app: AppHandle) {
 
 /// Reads `GET /api/config` (never refused, v1.6 P2.7) so the window's update, announcement and maintenance banners
 /// and the upload hold follow the server within a minute, whether or not anything waits to upload.
-/// Reads the config again now (a call-rules route said the flag is off): the flags and the call rules follow.
-pub async fn refresh_config_now(app: &AppHandle) {
-    refresh_config(app).await;
-}
-
 async fn refresh_config(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     if !state.is_paired() {
@@ -2561,6 +2587,11 @@ async fn refresh_config(app: &AppHandle) {
             state.note_hold(&e);
         }
     }
+}
+
+/// Reads the config again now (a call-rules route said the flag is off): the flags and the call rules follow.
+pub async fn refresh_config_now(app: &AppHandle) {
+    refresh_config(app).await;
 }
 
 async fn poll_activity(app: &AppHandle) -> AppResult<()> {
@@ -2710,16 +2741,21 @@ mod call_rules_tests {
 
     #[test]
     fn a_call_follows_the_account_s_rules_while_the_flag_is_on() {
-        // Contract 2.0.0-w: short calls first (the server's 30 s), then the rule for this caller and Source, the
-        // account's When to ask; a rule's Don't record that came while it ran keeps nothing (a pill choice stands).
+        // Contract 2.0.0-w, decisions 28 and 29: the policy decides how the call ends (tests/call_rules.rs tests it);
+        // a contact's Don't record first, so such a call is never kept among the skipped; then short calls; then the
+        // card or what is kept, by the account's After each call and When to ask. A pill choice stands.
         let code = code();
         let decide = body(code, "fn decide_finished(");
-        let skip = decide.find("policy.short_call_seconds(&settings)").expect("short calls by the policy");
-        let after = decide.find("policy.after(&settings, decision.caller_name(), &decision.source_app, auto)").expect("the rule for this call");
-        let drop = decide.find("if pill.is_none() && mode == RecordingMode::Call && after == crate::call_rules::CallAfter::DontRecord {").expect("Don't record");
-        let outcome = decide.find("ask_when: policy.ask_when(&settings)").expect("the account's When to ask");
-        assert!(skip < after && after < drop && drop < outcome);
+        let end = decide.find("Policy::of(&state).end_of_call(").expect("the policy decides");
+        assert!(decide.contains("rules_apply: rules_apply(&state, &client_ref, auto),") && decide.contains("pill_chosen: pill.is_some(),"));
+        let drop = decide.find("if end.drops {").expect("a contact's Don't record");
+        let skip = decide.find("crate::skipped::reason(end.by_itself, mode, output.duration_ms, end.short_call_seconds,").expect("short calls by the policy");
+        let outcome = decide.find("OutcomeInput { setting, ask_when,").expect("the account's After each call and When to ask");
+        assert!(end < drop && drop < skip && skip < outcome);
+        assert!(decide.contains("decision.auto = end.by_itself;"), "a card of a call the person started counts for nothing");
         assert!(!decide.contains("settings.after_call") && !decide.contains("settings.skip_calls_shorter_than_s") && !decide.contains("ask_when: settings.ask_when"));
+        let caller = body(code, "pub fn set_recording_caller(");
+        assert!(caller.contains(".stops_for_caller(&name, apply, chosen)"), "the same rule during the call as at its end");
         let start = body(code, "pub async fn start_call_recording_with(");
         assert!(start.contains("policy.after_each_call(&settings, Some(source_app)), policy.ask_when(&settings), auto"), "the start banner");
         let recovery = body(code, "pub fn after_recovery(");

@@ -83,6 +83,9 @@ pub fn apply_app_switches(verdict: Verdict, apps: &HashMap<String, bool>) -> Ver
 pub fn apply_call_rules(verdict: Verdict, policy: &crate::call_rules::Policy) -> Verdict {
     match verdict {
         Verdict::Record(app) if policy.blocks_at_start(app.as_str()) => Verdict::Ignore(IgnoreReason::CallRule),
+        // Calls aren't recorded by themselves under the account's Don't record: no "Record?" chip either, as under this
+        // computer's own Don't record calls (lead decision 29).
+        Verdict::Ask if !policy.offers_unknown_apps() => Verdict::Ignore(IgnoreReason::CallRule),
         other => other,
     }
 }

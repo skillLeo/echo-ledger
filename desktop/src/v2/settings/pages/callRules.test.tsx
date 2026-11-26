@@ -11,6 +11,7 @@ import { makeSettings } from "../../../test/fixtures";
 import { CallRulesPageV2, CallsPageV2 } from "./CallsV2";
 import { CallsPage } from "../../../views/main/CaptureSettings";
 import { accountAfterEachCall, cleanName, contactRuleOf, ruleLine, startNotes } from "../../../lib/callRules";
+import { answerConfirmForTests } from "../../../lib/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../../test/tauri")).eventModule);
@@ -29,6 +30,7 @@ const flush = () => act(flushAsync);
 
 beforeEach(() => {
   resetTauriMock();
+  answerConfirmForTests(null);
   respond("mic_users", []);
   respond("last_not_recorded", null);
 });
@@ -65,12 +67,33 @@ describe("Settings › Calls with the account's call rules", () => {
     expect(callsOf("call_rules_settings_set").at(-1)).toEqual({ settings: { short_calls: "keep" } });
     fireEvent.click(screen.getByRole("button", { name: /Call rules/ }));
     expect(onRules).toHaveBeenCalled();
+    // "Call rules" once: the row's title, no group title above it.
+    expect(screen.getAllByText("Call rules")).toHaveLength(1);
     // The core says the rules changed (another device): the page follows.
     await act(async () => { await emitEvent("call_rules:changed", answer({ after_call: "always_transcribe" })); });
     expect(screen.getByRole("radio", { name: /Transcribe every call/ })).toBeChecked();
     // And the flag turned off: this computer's own again.
     await act(async () => { await emitEvent("call_rules:changed", null); });
     expect(screen.getByRole("radio", { name: /Ask me/ })).toBeChecked();
+  });
+
+  it("Reset puts the account's After each call, When to ask and Short calls back too, while its rules are kept", async () => {
+    respond("call_rules_get", ACCOUNT);
+    respondWith("call_rules_settings_set", (args) => answer((args as { settings: Partial<CallRules> }).settings));
+    answerConfirmForTests(() => true);
+    for (const page of ["new", "classic"] as const) {
+      const patch = vi.fn().mockResolvedValue(undefined);
+      const view = page === "new"
+        ? render(<CallsPageV2 settings={makeSettings()} patch={patch} platform="windows" onSites={vi.fn()} onConsent={vi.fn()} onRules={vi.fn()} />)
+        : render(<CallsPage settings={makeSettings()} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} onRules={vi.fn()} />);
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: /^Reset/ }));
+      await flush();
+      expect(patch).toHaveBeenCalledWith(expect.objectContaining({ autoMode: true, afterCall: "ask", askWhen: "after" }));
+      expect(callsOf("call_rules_settings_set").at(-1)).toEqual({ settings: { after_call: "ask", ask_when: "after_call", short_calls: "dont_keep" } });
+      view.unmount();
+    }
+    expect(callsOf("call_rules_settings_set")).toHaveLength(2);
   });
 
   it("a change that can't be saved says why, in the core's words", async () => {
@@ -107,6 +130,9 @@ describe("Settings › Calls › Call rules", () => {
     expect(rows.map((r) => r.querySelector(".el-row__title")?.textContent)).toEqual(["Sara Ahmed", "Ahmed Khan", "Favourites", "Zoom"]);
     expect(rows[1]).toHaveTextContent("Stops and deletes the recording as soon as Ahmed Khan is known");
     expect(rows[1]).not.toHaveTextContent(/nothing is recorded|not recorded/i);
+    // A second line only when it adds to the row's choice: none for Sara's Transcribe or Zoom's Don't record.
+    expect(rows[0].querySelector(".el-row__meta")).toBeNull();
+    expect(rows[3].querySelector(".el-row__meta")).toBeNull();
     expect(rows[2]).toHaveTextContent("Set on the phone");
     expect(within(rows[2]).queryByRole("button")).toBeNull();
     expect(within(rows[2]).queryByRole("combobox")).toBeNull();
@@ -123,8 +149,11 @@ describe("Settings › Calls › Call rules", () => {
     await flush();
     fireEvent.click(screen.getAllByRole("button", { name: "Add rule" })[0]);
     await flush();
-    expect(callsOf("call_rule_save")[0]).toEqual({ rule: { kind: "source", source_app: "zoom", action: "dont_record" } });
-    // A contact by name: its Don't record says so before it is added.
+    // For an app: Ask me unless another choice is picked.
+    expect(callsOf("call_rule_save")[0]).toEqual({ rule: { kind: "source", source_app: "zoom", action: "ask" } });
+    // A contact by name: its Don't record says so, and asks first as the Library does (No adds nothing).
+    const asked: string[] = [];
+    answerConfirmForTests((q) => { asked.push(q.body ?? ""); return asked.length > 1; });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "  Sara Ahmed " } });
     // The add forms' choices (the rows' say "Choice for …"): the app's, then the contact's.
     const contactChoice = screen.getAllByRole("combobox", { name: /^Choice (?!for )/ })[1];
@@ -133,6 +162,11 @@ describe("Settings › Calls › Call rules", () => {
     expect(screen.getByText("Stops and deletes the recording as soon as Sara Ahmed is known")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Add rule" })[1]);
     await flush();
+    expect(callsOf("call_rule_save")).toHaveLength(1);
+    expect(screen.getByLabelText("Name")).toHaveValue("  Sara Ahmed ");
+    fireEvent.click(screen.getAllByRole("button", { name: "Add rule" })[1]);
+    await flush();
+    expect(asked).toEqual(Array(2).fill("On this computer the recording stops and is deleted as soon as Sara Ahmed is known, on every call from now on."));
     expect(callsOf("call_rule_save")[1]).toEqual({ rule: { kind: "contact", name: "Sara Ahmed", action: "dont_record" } });
     expect(screen.getByLabelText("Name")).toHaveValue("");
     // Change Zoom's, then remove Ahmed's.
@@ -140,9 +174,53 @@ describe("Settings › Calls › Call rules", () => {
     fireEvent.click(screen.getByRole("option", { name: "Transcribe every call" }));
     await flush();
     expect(callsOf("call_rule_update")).toEqual([{ id: "s1", patch: { action: "always_transcribe" } }]);
+    expect(asked).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Remove the rule for Ahmed Khan" }));
     await flush();
     expect(callsOf("call_rule_delete")).toEqual([{ id: "c1" }]);
+  });
+
+  it("a contact's row changed to Don't record asks first; an app's doesn't", async () => {
+    const mine = [rule({ id: "c0", kind: "contact", name: "Sara Ahmed", action: "always_transcribe" }), rule({ id: "s2", kind: "source", source_app: "slack", action: "ask" })];
+    respond("call_rules_get", answer({ rules: mine }));
+    respondWith("call_rule_update", (args) => answer({ rules: mine.map((r) => (r.id === (args as { id: string }).id ? { ...r, ...(args as { patch: Partial<CallRule> }).patch } : r)) }));
+    let answerYes = false;
+    const asked: string[] = [];
+    answerConfirmForTests((q) => { asked.push(q.title); return answerYes; });
+    render(<CallRulesPageV2 />);
+    await flush();
+    const pick = async (row: RegExp, option: string) => {
+      fireEvent.click(screen.getByRole("combobox", { name: row }));
+      fireEvent.click(screen.getByRole("option", { name: option }));
+      await flush();
+    };
+    await pick(/^Choice for Sara Ahmed/, "Don't record");
+    expect(asked).toEqual(["Don't record calls with Sara Ahmed?"]);
+    expect(callsOf("call_rule_update")).toEqual([]);
+    answerYes = true;
+    await pick(/^Choice for Sara Ahmed/, "Don't record");
+    expect(callsOf("call_rule_update")).toEqual([{ id: "c0", patch: { action: "dont_record" } }]);
+    await pick(/^Choice for Slack/, "Don't record");
+    expect(asked).toHaveLength(2);
+    expect(callsOf("call_rule_update").at(-1)).toEqual({ id: "s2", patch: { action: "dont_record" } });
+  });
+
+  it("rules that can't be read are told apart from call rules being off, with Try again", async () => {
+    fail("call_rules_get", "This can't be saved now: EchoLedger can't reach the server. Try again when you're online.");
+    render(<CallRulesPageV2 />);
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("Your call rules can't be read now.");
+    expect(screen.queryByText("Call rules are off for your account.")).toBeNull();
+    respond("call_rules_get", ACCOUNT);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await flush();
+    expect(within(screen.getByRole("list", { name: "Call rules" })).getAllByRole("listitem")).toHaveLength(3);
+    // Off is off.
+    resetTauriMock();
+    respond("call_rules_get", null);
+    render(<CallRulesPageV2 />);
+    await flush();
+    expect(screen.getByText("Call rules are off for your account.")).toBeInTheDocument();
   });
 
   it("500 rules: the core's words, and nothing is added", async () => {

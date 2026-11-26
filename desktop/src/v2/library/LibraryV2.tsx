@@ -37,7 +37,7 @@ import {
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
 import { markOpenedMany, openedProgress } from "./opened";
-import { CALL_ACTIONS, actionWords, cleanName, contactRuleOf, useCallRules } from "../../lib/callRules";
+import { CALL_ACTIONS, actionWords, cleanName, confirmContactDontRecord, contactRuleOf, useCallRules } from "../../lib/callRules";
 import type { CallAction } from "../../lib/ipc";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
@@ -1001,14 +1001,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     };
   };
   const saveContactRule = async (name: string, action: CallAction) => {
-    if (action === "dont_record") {
-      const ok = await confirmAction({
-        title: t("Don't record calls with :name?", { name }),
-        body: t("On this computer the recording stops and is deleted as soon as :name is known, on every call from now on.", { name }),
-        confirm: actionWords("dont_record"), tone: "danger",
-      });
-      if (!ok) return;
-    }
+    if (action === "dont_record" && !(await confirmContactDontRecord(name))) return;
     try {
       setCallRules(await api.callRuleSave({ kind: "contact", name, action }));
       say(t("For :name: :choice", { name, choice: actionWords(action) }));

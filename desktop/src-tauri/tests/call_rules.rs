@@ -7,9 +7,9 @@ mod common;
 use serde_json::{Value, json};
 
 use common::{MockServer, Reply, Router};
-use desktop_lib::call_rules::{self, device_choice, flag_is_off, read_with_first_sync};
+use desktop_lib::call_rules::{self, CallAfter, Ended, Policy, Reread, RuleChanged, Synced, device_choice, flag_is_off, read_with_first_sync};
 use desktop_lib::net::api::ApiClient;
-use desktop_lib::net::models::{CallRules, ServerConfig};
+use desktop_lib::net::models::{CallRule, CallRules, ServerConfig};
 use desktop_lib::settings::{AfterCall, AskWhen, Settings};
 
 const TOKEN: &str = "7|eld_TOKEN_PLACEHOLDER";
@@ -152,15 +152,157 @@ async fn locked_the_tray_s_switch_changes_nothing_on_the_account() {
     call_rules::set_records_by_themselves(&api, false, true, Some("dont_record")).await.unwrap();
     let sent: Vec<Value> = server.requests_to("PUT", "/api/call-rules/settings").iter().map(|r| r.json()).collect();
     assert_eq!(sent, [json!({"after_call": "dont_record"}), json!({"after_call": "always_transcribe"}), json!({"after_call": "ask"}), json!({"after_call": "ask"})]);
-    // Every way in checks the lock first: the tray's toggle and each command the window and its menus use.
+    // Every way in checks the lock first: "Auto-record calls & meetings" (the tray, the Record and Live menus, Home, the
+    // Mac menu bar: one core function, lead decision 29), the card's "Always do this?", and each command the window and
+    // its menus use.
     let source = include_str!("../src/call_rules.rs");
-    let toggle = &source[source.find("pub async fn toggle_records_by_themselves(").unwrap()..];
-    let toggle = &toggle[..toggle.find("\n}\n").unwrap()];
-    assert!(toggle.find("ensure_unlocked(&state)?").unwrap() < toggle.find("set_records_by_themselves(").unwrap(), "{toggle}");
+    let body = |source: &'static str, start: &str| {
+        let from = &source[source.find(start).unwrap_or_else(|| panic!("{start}"))..];
+        &from[..from.find("\n}\n").unwrap()]
+    };
+    let auto = body(source, "pub async fn set_auto_record(");
+    assert!(auto.find("ensure_unlocked(&state)?").unwrap() < auto.find("set_records_by_themselves(").unwrap(), "{auto}");
+    assert!(body(source, "pub async fn toggle_records_by_themselves(").contains("set_auto_record(app, !now)"));
+    let after = body(source, "pub async fn set_after_call(");
+    assert!(after.find("ensure_unlocked(&state)?").unwrap() < after.find("put_call_rule_settings(").unwrap(), "{after}");
     let commands = include_str!("../src/commands.rs");
+    assert!(body(commands, "pub async fn auto_record_set(").contains("call_rules::set_auto_record(&app, on)"));
+    for (file, source, call) in [
+        ("tray.rs", include_str!("../src/tray.rs"), "toggle_records_by_themselves("),
+        ("native_menu.rs", include_str!("../src/native_menu.rs"), "set_auto_record("),
+        ("readiness.rs", include_str!("../src/readiness.rs"), "set_auto_record("),
+    ] {
+        assert!(source.contains(call), "{file}");
+    }
     for command in ["pub async fn call_rules_get(", "pub async fn call_rules_settings_set(", "pub async fn call_rule_save(", "pub async fn call_rule_update(", "pub async fn call_rule_delete("] {
         let body = &commands[commands.find(command).unwrap_or_else(|| panic!("{command}"))..];
         let body = &body[..body.find("\n}\n").unwrap()];
         assert!(body.contains("ensure_unlocked(&state)?"), "{command}");
     }
+}
+
+fn kept_rule(id: &str, kind: &str, name: Option<&str>, source_app: Option<&str>, action: &str) -> CallRule {
+    CallRule { id: id.into(), kind: kind.into(), name: name.map(str::to_string), source_app: source_app.map(str::to_string), action: action.into(), ..CallRule::default() }
+}
+
+#[test]
+fn only_a_contact_s_dont_record_deletes_a_recording_and_only_one_recorded_by_itself() {
+    // Lead decisions 25, 28 and 29, as the end of a call meets them.
+    let mine = Settings { auto_mode: true, after_call: AfterCall::AlwaysTranscribe, ask_when: AskWhen::After, skip_calls_shorter_than_s: 0, ..Settings::default() };
+    let account = |after_call: &str, rules: Vec<CallRule>| {
+        Policy::account(CallRules { after_call: Some(after_call.into()), ask_when: Some("at_start".into()), short_calls: Some("dont_keep".into()), rules, ..CallRules::default() })
+    };
+    let ahmed_off = kept_rule("c1", "contact", Some("Ahmed Khan"), None, "dont_record");
+    let ended = |caller: Option<&'static str>, auto: bool, chip: Option<&'static str>, pill: bool| Ended {
+        caller_name: caller,
+        source_app: "zoom",
+        is_call: true,
+        auto,
+        rules_apply: call_rules::rules_apply(auto, chip, "rec-1"),
+        pill_chosen: pill,
+    };
+
+    // Recorded by itself, and the window named Ahmed: it goes.
+    let rules = account("always_audio", vec![ahmed_off.clone()]);
+    let end = rules.end_of_call(&mine, &ended(Some("  ahmed   KHAN "), true, None, false));
+    assert!(end.drops);
+    // Started by hand, or from the "Record?" chip: the person's own. Nothing deletes it, short calls don't apply, it
+    // asks after it (no start banner was shown), and its card counts for nothing.
+    for end in [rules.end_of_call(&mine, &ended(Some("Ahmed Khan"), false, None, false)), rules.end_of_call(&mine, &ended(Some("Ahmed Khan"), true, Some("rec-1"), false))] {
+        assert!(!end.drops && !end.by_itself);
+        assert_eq!((end.setting, end.ask_when), (AfterCall::Ask, AskWhen::After));
+    }
+    // The chip of another recording changes nothing for this one.
+    assert!(rules.end_of_call(&mine, &ended(Some("Ahmed Khan"), true, Some("rec-0"), false)).drops);
+    // A choice made on the pill during the call stands.
+    assert!(!rules.end_of_call(&mine, &ended(Some("Ahmed Khan"), true, None, true)).drops);
+    assert!(!rules.stops_for_caller("Ahmed Khan", true, true));
+
+    // The default, or Zoom's rule, turned to Don't record during the call (the tray, Settings, the phone): decided at
+    // the start only, so the recording already made ends as Ask me, never deleted.
+    for changed in [account("dont_record", vec![]), account("ask", vec![kept_rule("s1", "source", None, Some("zoom"), "dont_record")])] {
+        let end = changed.end_of_call(&mine, &ended(Some("Sara"), true, None, false));
+        assert!(!end.drops && end.by_itself);
+        assert_eq!((end.setting, end.ask_when), (AfterCall::Ask, AskWhen::Start));
+        assert!(!changed.stops_for_caller("Sara", true, false));
+        assert_eq!(changed.after(&mine, None, "zoom", true), CallAfter::Choose(AfterCall::Ask));
+        assert!(changed.blocks_at_start("zoom"), "a call that starts now isn't recorded");
+    }
+    // No "Record?" chip for an app nobody knows under Don't record calls.
+    assert!(!account("dont_record", vec![]).offers_unknown_apps());
+
+    // The flag off: this computer's own settings, as before (a voice note never drops).
+    let own = Policy::default().end_of_call(&mine, &ended(Some("Ahmed Khan"), true, Some("rec-1"), false));
+    assert!(!own.drops && own.by_itself);
+    assert_eq!((own.setting, own.ask_when, own.short_call_seconds), (AfterCall::AlwaysTranscribe, AskWhen::After, 0));
+    let note = Ended { is_call: false, ..ended(Some("Ahmed Khan"), true, None, false) };
+    assert!(!rules.end_of_call(&mine, &note).drops);
+}
+
+#[tokio::test]
+async fn a_sync_reads_again_only_when_the_version_moved_and_the_flag_off_clears_what_is_kept() {
+    let mine = Settings::default();
+    let data = tempfile::tempdir().unwrap();
+    let server = MockServer::start(Router::new().fixed("GET", "/api/call-rules", Reply::json(200, sample(json!("always_audio")))));
+    let api = client(&server);
+
+    // Nothing kept: read.
+    let Synced::Read(rules) = call_rules::sync_with(&api, data.path(), "sign-in-a", Some(12), &mine).await else { panic!("read") };
+    assert_eq!(rules.version, Some(12));
+    call_rules::save(data.path(), "sign-in-a", &rules).unwrap();
+    // As new as the config says: nothing is read.
+    assert_eq!(call_rules::sync_with(&api, data.path(), "sign-in-a", Some(12), &mine).await, Synced::Kept);
+    assert_eq!(call_rules::sync_with(&api, data.path(), "sign-in-a", Some(11), &mine).await, Synced::Kept);
+    assert_eq!(server.requests_to("GET", "/api/call-rules").len(), 1);
+    // Newer: read again. Another sign-in never takes what this one kept.
+    assert!(matches!(call_rules::sync_with(&api, data.path(), "sign-in-a", Some(13), &mine).await, Synced::Read(_)));
+    assert!(matches!(call_rules::sync_with(&api, data.path(), "sign-in-b", Some(12), &mine).await, Synced::Read(_)));
+    assert_eq!(server.requests_to("GET", "/api/call-rules").len(), 3);
+
+    // Offline: what is kept stays.
+    let offline = ApiClient::new("http://127.0.0.1:9", &[], Some(TOKEN.to_string())).expect("local client");
+    assert_eq!(call_rules::sync_with(&offline, data.path(), "sign-in-a", Some(14), &mine).await, Synced::Wait);
+    assert!(call_rules::load(data.path(), "sign-in-a").is_some());
+
+    // The config says the flag is off: what was kept goes, once.
+    assert_eq!(call_rules::sync_with(&api, data.path(), "sign-in-a", None, &mine).await, Synced::Off { forgot: true });
+    assert!(call_rules::load(data.path(), "sign-in-a").is_none() && !call_rules::path(data.path()).exists());
+    assert_eq!(call_rules::sync_with(&api, data.path(), "sign-in-a", None, &mine).await, Synced::Off { forgot: false });
+    // The route answers 404 not_found: the same.
+    call_rules::save(data.path(), "sign-in-a", &rules).unwrap();
+    let off = MockServer::start(Router::new().fixed("GET", "/api/call-rules", Reply::json(404, json!({"code": "not_found", "message": "Not found."}))));
+    assert_eq!(call_rules::sync_with(&client(&off), data.path(), "sign-in-a", Some(13), &mine).await, Synced::Off { forgot: true });
+    assert!(call_rules::load(data.path(), "sign-in-a").is_none());
+}
+
+#[tokio::test]
+async fn a_rule_another_device_removed_is_read_again() {
+    let gone = Reply::json(404, json!({"message": "No such rule.", "code": "rule_not_found"}));
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/call-rules/gone", gone.clone())
+            .fixed("DELETE", "/api/call-rules/gone", gone)
+            .fixed("PATCH", "/api/call-rules/01JC9", Reply::json(200, rule("01JC9")))
+            .fixed("DELETE", "/api/call-rules/01JC9", Reply::empty(204))
+            .fixed("GET", "/api/call-rules", Reply::json(200, sample(json!("ask")))),
+    );
+    let api = client(&server);
+    // Changed while gone: the account's answer is read again, and the change says so.
+    let RuleChanged::Gone(Reread::Read(read)) = call_rules::update_rule(&api, "gone", &json!({"action": "ask"})).await.unwrap() else { panic!("read again") };
+    assert_eq!(read.version, Some(12));
+    // Removed while gone: done all the same, and read again.
+    assert!(matches!(call_rules::delete_rule(&api, "gone").await.unwrap(), RuleChanged::Removed { reread: Some(Reread::Read(_)) }));
+    let order: Vec<String> = server.requests().iter().map(|r| format!("{} {}", r.method, r.path())).collect();
+    assert_eq!(order, ["PATCH /api/call-rules/gone", "GET /api/call-rules", "DELETE /api/call-rules/gone", "GET /api/call-rules"]);
+    // There: saved or removed, nothing read again.
+    assert!(matches!(call_rules::update_rule(&api, "01JC9", &json!({"action": "ask"})).await.unwrap(), RuleChanged::Saved(r) if r.id == "01JC9"));
+    assert!(matches!(call_rules::delete_rule(&api, "01JC9").await.unwrap(), RuleChanged::Removed { reread: None }));
+    assert_eq!(server.requests_to("GET", "/api/call-rules").len(), 2);
+    // The flag off during it: the read again says so.
+    let off = MockServer::start(
+        Router::new()
+            .fixed("PATCH", "/api/call-rules/gone", Reply::json(404, json!({"message": "No such rule.", "code": "rule_not_found"})))
+            .fixed("GET", "/api/call-rules", Reply::json(404, json!({"code": "not_found", "message": "Not found."}))),
+    );
+    assert!(matches!(call_rules::update_rule(&client(&off), "gone", &json!({"action": "ask"})).await.unwrap(), RuleChanged::Gone(Reread::Off)));
 }

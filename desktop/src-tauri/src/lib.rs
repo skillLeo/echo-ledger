@@ -150,6 +150,9 @@ pub struct AppState {
     /// The account the running recording was made under, when another account signed in while it ran (its client
     /// reference and the account).
     pub recording_owner: Mutex<Option<(String, owner::Owner)>>,
+    /// The recording started from the "Record?" chip (its client_ref): the person's own act, so no call rule, Don't
+    /// record or short call deletes it (lead decisions 28 and 29); it still stops by itself.
+    pub chip_recording: Mutex<Option<String>>,
     /// The server said who this computer is signed in as (or that it has no accounts) this run.
     pub owner_checked: AtomicBool,
     /// Signed updates from the server (v1.5): the status, the one running job, the update ready to install.
@@ -236,6 +239,7 @@ impl AppState {
             browser_sign_in: Mutex::new(None),
             pending_sign_up: Mutex::new(None),
             recording_owner: Mutex::new(None),
+            chip_recording: Mutex::new(None),
             owner_checked: AtomicBool::new(false),
             updates: updates::Updates::default(),
             recording_missing: Mutex::new(Vec::new()),
@@ -821,6 +825,7 @@ pub fn run() {
             commands::session_opened,
             commands::session_unopen,
             commands::call_rules_get,
+            commands::auto_record_set,
             commands::call_rules_settings_set,
             commands::call_rule_save,
             commands::call_rule_update,

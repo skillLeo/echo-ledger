@@ -44,7 +44,8 @@ function echoSettings(base: Settings) {
   });
 }
 
-async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, section = null }: {
+async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, section = null, callRules = false }: {
+  callRules?: boolean;
   settings?: Partial<Settings>;
   status?: Partial<AppStatus>;
   account?: Account | null;
@@ -69,7 +70,7 @@ async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, 
   resetEntitlementsForTests(e);
   const helpers = makeRun();
   const onUnpaired = vi.fn();
-  const view = render(<SettingsView status={makeStatus({ serverUrl: "https://app.example.test", ...status })} run={helpers.run} onUnpaired={onUnpaired} section={section} />);
+  const view = render(<SettingsView status={makeStatus({ serverUrl: "https://app.example.test", ...status })} run={helpers.run} onUnpaired={onUnpaired} section={section} callRules={callRules} />);
   await screen.findAllByRole("heading", { level: 1 });
   await waitFor(() => expect(callsOf("account_get").length).toBeGreaterThan(0));
   return { ...helpers, onUnpaired, ...view };
@@ -81,6 +82,25 @@ const go = async (name: string) => {
   fireEvent.click(nav(name));
   await screen.findByRole("heading", { name, level: 1 });
 };
+
+describe("Call rules in the classic Settings (contract 2.0.0-w)", () => {
+  it("Calls & meetings opens its Call rules page while the flag is on; with it off there is none", async () => {
+    const rules = { after_call: "ask", ask_when: "after_call", short_calls: "dont_keep", short_call_seconds: 30, version: 3, updated_at: null, declined: [],
+      rules: [{ id: "s1", kind: "source", number: null, name: null, group: null, source_app: "zoom", action: "ask" }] };
+    respond("call_rules_get", rules);
+    respond("mic_users", []);
+    respond("last_not_recorded", null);
+    const on = await setup({ callRules: true, section: { id: "calls", seq: 1 } });
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("button", { name: /Call rules/ }));
+    await act(flushAsync);
+    expect(within(await screen.findByRole("list", { name: "Call rules" })).getAllByRole("listitem")).toHaveLength(1);
+    on.unmount();
+    await setup({ section: { id: "calls.rules", seq: 1 } });
+    await act(flushAsync);
+    expect(screen.queryByRole("list", { name: "Call rules" })).toBeNull();
+  });
+});
 
 describe("the Overview and who you are", () => {
   beforeEach(() => resetTauriMock());

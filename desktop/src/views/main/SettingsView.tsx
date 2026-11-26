@@ -129,8 +129,10 @@ function useWidth(ref: React.RefObject<HTMLElement | null>): number {
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 
-export function SettingsView({ status, run, onUnpaired, theme, onTheme, section = null, pageOnly = null }: {
+export function SettingsView({ status, run, onUnpaired, theme, onTheme, section = null, pageOnly = null, callRules = false }: {
   status: AppStatus;
+  /** The account's call rules are on (the call_rules flag): Calls & meetings has its Call rules page. */
+  callRules?: boolean;
   /** Settings in the new look (ui_v2.settings) keeps its own home and search: only the opened page is shown here, and
    * leaving a top page goes back to that home. */
   pageOnly?: { onHome: () => void } | null;
@@ -192,8 +194,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
 
   const role = roleOf(account, status);
   const workspace = account?.workspace?.name || status.plan.workspace || null;
-  const ctx: SettingsContext = { platform: status.platform, account, entitlements, role };
-  const available = useMemo(() => settingsAvailability(ctx), [ctx.platform, ctx.account, ctx.entitlements, ctx.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ctx: SettingsContext = { platform: status.platform, account, entitlements, role, callRules };
+  const available = useMemo(() => settingsAvailability(ctx), [ctx.platform, ctx.account, ctx.entitlements, ctx.role, ctx.callRules]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Opens a page, scrolled to `id` and highlighted; null is the Overview (or the list, below 760 px). */
   const open = useCallback((next: string | null, id: string | null = null) => {

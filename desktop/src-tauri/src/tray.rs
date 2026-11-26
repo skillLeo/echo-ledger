@@ -558,7 +558,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     "auto" => {
                         // While the account's call rules decide (2.0.0-w), the switch is the account's After each call:
                         // off is Don't record, on is Ask me; this computer's own switch otherwise.
-                        if crate::call_rules::flag_on(&app.state::<crate::AppState>()) {
+                        if crate::call_rules::kept(&app.state::<crate::AppState>()).is_some() {
                             crate::call_rules::toggle_records_by_themselves(&app).await
                         } else {
                             let state = app.state::<crate::AppState>();

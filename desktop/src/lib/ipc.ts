@@ -2379,6 +2379,9 @@ export const api = {
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
   activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number; retry_requested_at?: string | null }>("activity_list", { limit }),
+  /** "Auto-record calls & meetings" (every control of it): the account's After each call while its call rules are
+   * kept (Don't record, or back to its last choice that records), this computer's own switch otherwise. */
+  autoRecordSet: (on: boolean) => invoke<AppStatus>("auto_record_set", { on }),
   /** The account's call settings and rules (contract 2.0.0-w), kept for this sign-in; null while the flag is off. */
   callRules: () => invoke<CallRules | null>("call_rules_get"),
   /** After each call, When to ask and Short calls for the account (`PUT /api/call-rules/settings`). */

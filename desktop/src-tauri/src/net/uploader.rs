@@ -1131,6 +1131,16 @@ pub async fn drain_discards_erasing(api: &ApiClient, ids: &[String], purge: &Pur
     out
 }
 
+/// The sessions to delete: those queued, then any to erase from the Trash that a crash kept out of the queue.
+pub fn with_purges(mut discards: Vec<String>, purges: &PurgeSet) -> Vec<String> {
+    for id in &purges.items {
+        if !discards.contains(id) {
+            discards.push(id.clone());
+        }
+    }
+    discards
+}
+
 /// Sessions to erase from the Trash once deleted (`purges.json`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PurgeSet {

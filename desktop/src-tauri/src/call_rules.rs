@@ -57,13 +57,9 @@ pub struct Kept {
     pub last_recording_choice: Option<String>,
 }
 
-/// The one notice when a call rule stopped a recording (decision 25: never "not recorded", as it was, for a moment).
-pub fn stopped_words(name: Option<&str>) -> String {
-    match name.map(str::trim).filter(|n| !n.is_empty()) {
-        Some(name) => format!("Stopped and deleted the recording: your call rule for {name} says Don't record."),
-        None => "Stopped and deleted the recording: your call rules say Don't record for this call.".to_string(),
-    }
-}
+/// The one notice when a contact's rule stopped a recording (decision 25: "stopped and deleted", never "not recorded",
+/// as it was, for a moment). It names nobody: it may show in a screen share, and as a system notification.
+pub const STOPPED_TEXT: &str = "Stopped and deleted the recording: a call rule says Don't record for this contact.";
 
 /// The file's answer in memory, by its path: the detection reads it every second, the disk only when it changed.
 static MEMORY: std::sync::Mutex<Option<(PathBuf, Option<Kept>)>> = std::sync::Mutex::new(None);
@@ -142,6 +138,41 @@ pub fn resolve(rules: &CallRules, caller_name: Option<&str>, source_app: Option<
     if later_dont { DONT_RECORD.to_string() } else { default }
 }
 
+/// A recording a contact's rule says not to keep, its first step (crash-safe): its folder is marked as leaving (a crash
+/// from here on deletes it at the next start, never offers it back) and its server sessions are queued to be deleted
+/// and erased from the Trash (discards.json, then purges.json; the drain also takes a purge without its discard).
+pub fn mark_dropped(data_dir: &Path, dir: &Path, sessions: &[String], lock: &std::sync::Mutex<()>) -> AppResult<()> {
+    use crate::net::sync::paths;
+    use crate::net::uploader::{DiscardQueue, PurgeSet};
+    crate::recovery::mark_leaving(dir)?;
+    if sessions.is_empty() {
+        return Ok(());
+    }
+    let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let mut discards = DiscardQueue::load(&paths::discards(data_dir));
+    let mut purges = PurgeSet::load(&paths::purges(data_dir));
+    for id in sessions {
+        discards.push(id.clone());
+        purges.add(id);
+    }
+    discards.save(&paths::discards(data_dir))?;
+    purges.save(&paths::purges(data_dir))?;
+    Ok(())
+}
+
+/// A recording a contact's rule says not to keep, on disk: marked and queued ([`mark_dropped`]), then its folder goes.
+pub fn drop_recording(data_dir: &Path, dir: &Path, sessions: &[String], lock: &std::sync::Mutex<()>) -> AppResult<()> {
+    let marked = mark_dropped(data_dir, dir, sessions, lock);
+    crate::recovery::delete_recording_folder(dir);
+    marked
+}
+
+/// The rule for a contact by name (pure): only one without a number, as the desktop knows no numbers.
+pub fn contact_rule<'a>(rules: &'a CallRules, caller_name: &str) -> Option<&'a CallRule> {
+    let key = name_key(caller_name)?;
+    rules.rules.iter().find(|r| r.kind == "contact" && r.number.as_deref().is_none_or(str::is_empty) && r.name.as_deref().and_then(name_key).as_deref() == Some(key.as_str()))
+}
+
 /// What a call follows (pure): while the account's rules are kept (the flag on), the account's settings and rules; else
 /// this computer's own settings, as before. Rules apply only to calls recorded by themselves (lead decision 28): a
 /// recording started by hand is the person's own act, and asks.
@@ -205,14 +236,18 @@ impl Policy {
     }
 
     /// What a call does once it ends: by the rules for one recorded by itself (with its caller's name, when known, and
-    /// its Source); a call started by hand asks unless this computer's own choice says otherwise.
-    pub fn after(&self, settings: &Settings, caller_name: Option<&str>, source_app: &str, auto: bool) -> CallAfter {
+    /// its Source); a call started by hand, or from the "Record?" chip, asks (decision 28). Once recording, only a
+    /// matched contact's Don't record deletes it (lead decision 29): a Source's or the default's is decided when the call
+    /// starts, so one that came during the call (the tray, Settings, the phone) leaves it to end as Ask me.
+    pub fn after(&self, settings: &Settings, caller_name: Option<&str>, source_app: &str, rules_apply: bool) -> CallAfter {
         let Some(rules) = &self.account else { return CallAfter::Choose(settings.after_call) };
-        if !auto {
+        if !rules_apply {
             return CallAfter::Choose(AfterCall::Ask);
         }
+        if caller_name.and_then(|n| contact_rule(rules, n)).is_some_and(|r| r.action == DONT_RECORD) {
+            return CallAfter::DontRecord;
+        }
         match resolve(rules, caller_name, Some(source_app)).as_str() {
-            DONT_RECORD => CallAfter::DontRecord,
             ALWAYS_TRANSCRIBE => CallAfter::Choose(AfterCall::AlwaysTranscribe),
             ALWAYS_AUDIO => CallAfter::Choose(AfterCall::AlwaysAudio),
             _ => CallAfter::Choose(AfterCall::Ask),
@@ -230,11 +265,72 @@ impl Policy {
         }
     }
 
-    /// Whether the contact a recording turned out to be with isn't to be recorded: a call recorded by itself whose
-    /// caller's name meets a `dont_record` (decision 25: it stops, and what was written goes).
-    pub fn stops_for_caller(&self, caller_name: &str, source_app: &str, auto: bool) -> bool {
-        auto && self.account.as_ref().is_some_and(|r| resolve(r, Some(caller_name), Some(source_app)) == DONT_RECORD)
+    /// Whether the contact a recording turned out to be with isn't to be recorded: a call the rules apply to
+    /// ([`rules_apply`]) whose caller's name has a contact rule Don't record (decisions 25 and 29: it stops, and what was
+    /// written goes), unless a choice was made on the pill during the call (the person's own, which stands). The one
+    /// rule for both, during the call and at its end.
+    pub fn stops_for_caller(&self, caller_name: &str, rules_apply: bool, pill_chosen: bool) -> bool {
+        !pill_chosen && rules_apply && self.account.as_ref().and_then(|r| contact_rule(r, caller_name)).is_some_and(|r| r.action == DONT_RECORD)
     }
+
+    /// How a finished recording ends by the policy (pure; decisions 25, 28 and 29).
+    pub fn end_of_call(&self, settings: &Settings, ended: &Ended) -> EndOfCall {
+        let after = self.after(settings, ended.caller_name, ended.source_app, ended.rules_apply);
+        EndOfCall {
+            drops: ended.is_call && ended.caller_name.is_some_and(|n| self.stops_for_caller(n, ended.rules_apply, ended.pill_chosen)),
+            by_itself: if self.follows_account() { ended.rules_apply } else { ended.auto },
+            short_call_seconds: self.short_call_seconds(settings),
+            setting: match after {
+                CallAfter::Choose(setting) => setting,
+                CallAfter::DontRecord => AfterCall::Ask,
+            },
+            // A call the person started asks after it, the card: no start banner was shown for it.
+            ask_when: if self.follows_account() && !ended.rules_apply { AskWhen::After } else { self.ask_when(settings) },
+        }
+    }
+
+    /// Whether the "Record?" chip may offer an app nobody knows: not while the account's default is Don't record
+    /// (calls aren't recorded by themselves then).
+    pub fn offers_unknown_apps(&self) -> bool {
+        self.account.as_ref().is_none_or(|r| r.after_call.as_deref() != Some(DONT_RECORD))
+    }
+}
+
+/// Whether the call rules apply to a recording (pure; lead decisions 28 and 29): one recorded by itself (`auto`), and not
+/// the one the "Record?" chip started (`chip`), which the person asked for.
+pub fn rules_apply(auto: bool, chip: Option<&str>, client_ref: &str) -> bool {
+    auto && chip != Some(client_ref)
+}
+
+/// A finished recording, for [`Policy::end_of_call`].
+#[derive(Clone, Copy, Debug)]
+pub struct Ended<'a> {
+    pub caller_name: Option<&'a str>,
+    pub source_app: &'a str,
+    /// A call (not a voice note).
+    pub is_call: bool,
+    /// Started by itself (not by hand).
+    pub auto: bool,
+    /// The rules apply to it ([`rules_apply`]).
+    pub rules_apply: bool,
+    /// A choice was made on the pill during the call.
+    pub pill_chosen: bool,
+}
+
+/// How a finished recording ends by the policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndOfCall {
+    /// A contact's Don't record: what was written goes, nothing is uploaded and nothing asks.
+    pub drops: bool,
+    /// Recorded by itself as the rules see it: short and silent calls are skipped, and its card's answer counts toward
+    /// "Always do this?". Under the account, one started by hand or from the chip is the person's own (decision 28).
+    pub by_itself: bool,
+    /// Calls shorter than this aren't kept (0: all are).
+    pub short_call_seconds: u32,
+    /// After each call for it.
+    pub setting: AfterCall,
+    /// When to ask under Ask me.
+    pub ask_when: AskWhen,
 }
 
 /// This computer's own choice, as the first sync sends it when the account has none (pure): Don't record while calls
@@ -299,6 +395,71 @@ pub fn flag_is_off(e: &AppError) -> bool {
     matches!(e, AppError::Server { status: 404, code, .. } if code.as_deref().is_none_or(|c| c == "not_found"))
 }
 
+/// Whether an answer says the rule is no longer there (`404 rule_not_found`: another device removed it).
+pub fn rule_gone(e: &AppError) -> bool {
+    matches!(e, AppError::Server { status: 404, code: Some(code), .. } if code == "rule_not_found")
+}
+
+/// The account's answer read again after a rule turned out to be gone.
+#[derive(Debug)]
+pub enum Reread {
+    Read(CallRules),
+    /// `404 not_found`: the flag is off now.
+    Off,
+    /// Offline or the server busy: what is kept stays until the next config.
+    Failed,
+}
+
+/// A change to one rule as the server answered it.
+#[derive(Debug)]
+pub enum RuleChanged {
+    /// Saved (`PATCH`): the rule as the server has it.
+    Saved(CallRule),
+    /// Removed (`DELETE`); one already gone counts as removed, and the account's answer was read again (`reread`).
+    Removed { reread: Option<Reread> },
+    /// Another device removed it while it was being changed: the account's answer, read again.
+    Gone(Reread),
+}
+
+async fn reread(api: &crate::net::api::ApiClient) -> Reread {
+    match api.call_rules().await {
+        Ok(rules) => Reread::Read(rules),
+        Err(e) if flag_is_off(&e) => Reread::Off,
+        Err(_) => Reread::Failed,
+    }
+}
+
+/// `PATCH /api/call-rules/{id}`; one another device removed is read again (`rule_not_found`).
+pub async fn update_rule(api: &crate::net::api::ApiClient, id: &str, patch: &serde_json::Value) -> AppResult<RuleChanged> {
+    match api.update_call_rule(id, patch).await {
+        Ok(rule) => Ok(RuleChanged::Saved(rule)),
+        Err(e) if rule_gone(&e) => Ok(RuleChanged::Gone(reread(api).await)),
+        Err(e) => Err(e),
+    }
+}
+
+/// `DELETE /api/call-rules/{id}`; one already gone counts as removed, and the rules are read again.
+pub async fn delete_rule(api: &crate::net::api::ApiClient, id: &str) -> AppResult<RuleChanged> {
+    match api.delete_call_rule(id).await {
+        Ok(()) => Ok(RuleChanged::Removed { reread: None }),
+        Err(e) if rule_gone(&e) => Ok(RuleChanged::Removed { reread: Some(reread(api).await) }),
+        Err(e) => Err(e),
+    }
+}
+
+/// Keeps, or forgets, what a read again found.
+pub fn apply_reread(app: &AppHandle, reread: Reread) {
+    match reread {
+        Reread::Read(rules) => {
+            if let Err(e) = keep(app, &rules) {
+                eprintln!("[echoledger] keeping the call rules: {e}");
+            }
+        }
+        Reread::Off => forget(app),
+        Reread::Failed => {}
+    }
+}
+
 /// A change's failure in the app's words: offline, too many changes, the flag turned off; the rest as the server said
 /// it (`409 too_many_rules`, `422` with its field errors).
 pub fn change_error(e: AppError) -> AppError {
@@ -310,9 +471,15 @@ pub fn change_error(e: AppError) -> AppError {
     }
 }
 
-/// Whether the person's flag is on, from the last config.
+/// Whether the person's flag is on: from the last config, or, before the first one is read (at start, or all along
+/// while the server can't be reached), from what was kept, which goes only when a config says off or a route answers
+/// `404 not_found`.
 pub fn flag_on(state: &crate::AppState) -> bool {
-    crate::ui_flags::cached(state).is_on(FLAG)
+    let known = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|c| c.ui().is_on(FLAG));
+    match known {
+        Some(on) => on,
+        None => state.sign_in_id().is_some_and(|s| load(&state.data_dir, &s).is_some()),
+    }
 }
 
 /// The `version` the last config says, or none (the flag off, or an older server).
@@ -329,12 +496,13 @@ pub fn kept(state: &crate::AppState) -> Option<CallRules> {
     load(&state.data_dir, &state.sign_in_id()?)
 }
 
-/// Keeps `rules` for this sign-in and tells the window.
+/// Keeps `rules` for this sign-in and tells the window; the status follows (the tray's and the menus' ticks).
 pub fn keep(app: &AppHandle, rules: &CallRules) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let Some(sign_in) = state.sign_in_id() else { return Ok(()) };
     save(&state.data_dir, &sign_in, rules)?;
     let _ = app.emit(EVENT, rules);
+    crate::actions::emit_status(app);
     Ok(())
 }
 
@@ -343,8 +511,14 @@ pub fn forget(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     if path(&state.data_dir).exists() {
         clear(&state.data_dir);
-        let _ = app.emit(EVENT, serde_json::Value::Null);
+        forgotten(app);
     }
+}
+
+/// Tells the window and the status that nothing is kept any more.
+fn forgotten(app: &AppHandle) {
+    let _ = app.emit(EVENT, serde_json::Value::Null);
+    crate::actions::emit_status(app);
 }
 
 /// Whether calls record by themselves now: the account's After each call isn't Don't record (flag on), else this
@@ -361,20 +535,58 @@ pub fn records_by_themselves(state: &crate::AppState, settings: &Settings) -> bo
 /// are changed only by someone who unlocked EchoLedger, as every command does), and the tray shows the item greyed.
 pub async fn toggle_records_by_themselves(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
-    crate::commands::ensure_unlocked(&state)?;
     let now = records_by_themselves(&state, &state.settings());
-    // On again: the account's last choice that records (Transcribe every call stays so), else Ask me.
-    let back = state.sign_in_id().and_then(|s| last_recording_choice(&state.data_dir, &s));
-    let answer = set_records_by_themselves(&state.api()?, state.lock.is_locked(), !now, back.as_deref()).await;
-    match answer {
-        Ok(rules) => {
-            keep(app, &rules)?;
-            crate::actions::emit_status(app);
-            Ok(())
-        }
+    set_auto_record(app, !now).await
+}
+
+/// The account's value for a choice of "After each call".
+pub fn after_call_of(value: AfterEachCall) -> &'static str {
+    match value {
+        AfterEachCall::Ask => ASK,
+        AfterEachCall::AlwaysTranscribe => ALWAYS_TRANSCRIBE,
+        AfterEachCall::AlwaysAudio => ALWAYS_AUDIO,
+        AfterEachCall::Off => DONT_RECORD,
+    }
+}
+
+/// Sets the account's After each call (the card's "Always do this?", the one-time notice): checked for the lock as
+/// every change is, the answer kept and the status following.
+pub async fn set_after_call(app: &AppHandle, after_call: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    crate::commands::ensure_unlocked(&state)?;
+    match state.api()?.put_call_rule_settings(&json!({ "after_call": after_call })).await {
+        Ok(rules) => keep(app, &rules),
         Err(e) => {
             if flag_is_off(&e) {
                 forget(app);
+                crate::actions::refresh_config_now(app).await;
+            }
+            Err(change_error(e))
+        }
+    }
+}
+
+/// "Auto-record calls & meetings", every control of it (the tray, the Record and Live menus, Home, the Mac menu bar):
+/// while the account's rules are kept, its After each call (Don't record, or back to its last choice that records,
+/// else Ask me), refused while locked; otherwise this computer's own switch, as before.
+pub async fn set_auto_record(app: &AppHandle, on: bool) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if kept(&state).is_none() {
+        // This computer's own switch, exactly as before the call rules.
+        state.update_settings(|s| s.auto_mode = on)?;
+        crate::actions::emit_status(app);
+        return Ok(());
+    }
+    crate::commands::ensure_unlocked(&state)?;
+    // On again: the account's last choice that records (Transcribe every call stays so), else Ask me.
+    let back = state.sign_in_id().and_then(|s| last_recording_choice(&state.data_dir, &s));
+    let answer = set_records_by_themselves(&state.api()?, state.lock.is_locked(), on, back.as_deref()).await;
+    match answer {
+        Ok(rules) => keep(app, &rules),
+        Err(e) => {
+            if flag_is_off(&e) {
+                forget(app);
+                crate::actions::refresh_config_now(app).await;
             }
             Err(change_error(e))
         }
@@ -396,23 +608,50 @@ pub async fn set_records_by_themselves(api: &crate::net::api::ApiClient, locked:
 /// when the answer just read still has none.
 pub async fn sync(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    let Some(version) = config_version(&state).filter(|_| flag_on(&state)) else {
-        forget(app);
-        return;
-    };
     let Some(sign_in) = state.sign_in_id() else { return };
-    if load(&state.data_dir, &sign_in).is_some_and(|k| k.version.unwrap_or(0) >= version) {
-        return;
-    }
     let Ok(api) = state.api() else { return };
-    let rules = match read_with_first_sync(&api, &state.settings()).await {
-        Ok(rules) => rules,
-        Err(e) if flag_is_off(&e) => return forget(app),
-        // Offline or the server busy: read again at the next config; nothing is sent from memory meanwhile.
-        Err(_) => return,
+    let version = config_version(&state).filter(|_| crate::ui_flags::cached(&state).is_on(FLAG));
+    match sync_with(&api, &state.data_dir, &sign_in, version, &state.settings()).await {
+        Synced::Off { forgot: true } => forgotten(app),
+        Synced::Read(rules) => {
+            if let Err(e) = keep(app, &rules) {
+                eprintln!("[echoledger] keeping the call rules: {e}");
+            }
+        }
+        Synced::Off { forgot: false } | Synced::Kept | Synced::Wait => {}
+    }
+}
+
+/// What a sync came to.
+#[derive(Debug, PartialEq)]
+pub enum Synced {
+    /// The flag is off (the config says so, or the route is not there): what was kept is gone (`forgot`: there was
+    /// some, and the window and status are to follow).
+    Off { forgot: bool },
+    /// The kept answer is as new as the config says.
+    Kept,
+    /// A newer answer, to keep.
+    Read(CallRules),
+    /// Offline or the server busy: read again at the next config; nothing sent from memory meanwhile.
+    Wait,
+}
+
+/// One sync for `sign_in` (`version`: the config's, none while the flag is off). With the flag off, what was kept goes
+/// here, so this computer's own settings apply from now on.
+pub async fn sync_with(api: &crate::net::api::ApiClient, data_dir: &Path, sign_in: &str, version: Option<u64>, settings: &Settings) -> Synced {
+    let off = || {
+        let forgot = path(data_dir).exists();
+        clear(data_dir);
+        Synced::Off { forgot }
     };
-    if let Err(e) = keep(app, &rules) {
-        eprintln!("[echoledger] keeping the call rules: {e}");
+    let Some(version) = version else { return off() };
+    if load(data_dir, sign_in).is_some_and(|k| k.version.unwrap_or(0) >= version) {
+        return Synced::Kept;
+    }
+    match read_with_first_sync(api, settings).await {
+        Ok(rules) => Synced::Read(rules),
+        Err(e) if flag_is_off(&e) => off(),
+        Err(_) => Synced::Wait,
     }
 }
 
@@ -553,10 +792,22 @@ mod tests {
         assert!(account.blocks_at_start("zoom") && !account.blocks_at_start("google_meet"));
         assert_eq!(account.after(&mine, None, "google_meet", true), CallAfter::Choose(AfterCall::AlwaysTranscribe));
         assert_eq!(account.after(&mine, Some("Ahmed Khan"), "google_meet", true), CallAfter::DontRecord);
-        assert!(account.stops_for_caller("ahmed khan", "google_meet", true));
+        assert!(account.stops_for_caller("ahmed khan", true, false));
+        assert!(!account.stops_for_caller("ahmed khan", true, true), "a choice made on the pill stands");
+        // Once recording, only a contact's Don't record deletes it (lead decision 29): Zoom's, decided when the call
+        // starts, leaves a Zoom call that is already recording (the rule came during it) to end as Ask me.
+        assert_eq!(account.after(&mine, Some("Sara"), "zoom", true), CallAfter::Choose(AfterCall::Ask));
+        assert_eq!(account.after(&mine, None, "zoom", true), CallAfter::Choose(AfterCall::Ask));
+        assert!(!account.stops_for_caller("Sara", true, false));
+        // Nor the default's.
+        let off = Policy::account(CallRules { after_call: Some(DONT_RECORD.into()), ..CallRules::default() });
+        assert_eq!(off.after(&mine, Some("Sara"), "zoom", true), CallAfter::Choose(AfterCall::Ask));
+        assert!(off.blocks_at_start("zoom"), "decided when the call starts");
         // Started by hand (lead decision 28): the person's own act asks, and no rule stops it.
         assert_eq!(account.after(&mine, Some("Ahmed Khan"), "zoom", false), CallAfter::Choose(AfterCall::Ask));
-        assert!(!account.stops_for_caller("Ahmed Khan", "google_meet", false));
+        assert!(!account.stops_for_caller("Ahmed Khan", false, false));
+        // The "Record?" chip offers no app nobody knows while the default is Don't record (decision 29).
+        assert!(!off.offers_unknown_apps() && account.offers_unknown_apps() && own.offers_unknown_apps());
         let keep = Policy::account(CallRules { short_calls: Some("keep".into()), ..CallRules::default() });
         assert_eq!(keep.short_call_seconds(&mine), 0);
         assert_eq!(account.after_each_call(&mine, Some("zoom")), AfterEachCall::Off);

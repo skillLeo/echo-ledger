@@ -400,6 +400,10 @@ pub async fn answer_ask(app: &AppHandle, id: &str, answer: &str) -> AppResult<()
                 lock(&state.detect.call).adopt(t.root_pid);
             }
             crate::actions::start_call_recording(app, SourceApp::Other.as_str(), true).await?;
+            // Asked for by the person (decision 28): the call rules never delete it.
+            if let Some(info) = state.capture.info() {
+                *state.chip_recording.lock().unwrap_or_else(|p| p.into_inner()) = Some(info.client_ref);
+            }
         }
         ("ignore", Some(t)) => lock(&state.detect.ask).suppress(t.root_pid),
         ("always_ignore", Some(t)) => {
