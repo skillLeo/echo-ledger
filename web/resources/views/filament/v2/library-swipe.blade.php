@@ -43,7 +43,7 @@
                 drag.swiping = true;
                 drag.row.style.transition = 'none';
                 drag.row.style.transform = 'translateX(' + drag.dx + 'px)';
-                // The layer under the row says what letting go does (EL-Design's CSS draws it).
+                // The layer under the row says what letting go does (the design's CSS draws it).
                 const pin = drag.row.querySelector('.v2-row-pin');
                 core.paint(record(drag.row), core.reveal(drag.dx, document.documentElement.dir === 'rtl'), pin && pin.getAttribute('aria-pressed') === 'true', words);
             }

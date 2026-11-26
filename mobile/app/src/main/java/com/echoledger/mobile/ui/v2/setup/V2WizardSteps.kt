@@ -61,7 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Which design the first-run wizard's steps after sign-in use (the lead's decision, the same as the desktop's): before
+ * Which design the first-run wizard's steps after sign-in use (a product decision, the same as the desktop's): before
  * sign-in the flags cannot be read, so the wizard is classic's; once signed in, the server's flags are read, and when
  * they say the new design the remaining steps use it. The answer is waited for at most [WAIT_MS]; no answer is classic.
  */

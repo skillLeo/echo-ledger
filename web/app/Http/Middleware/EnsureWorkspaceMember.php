@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Console requests (panel, Livewire updates, media and export routes): a signed-in user who is a super admin or a
  * member of a workspace. Repairs `current_workspace_id` to a workspace the user still belongs to, so the workspace
- * scope never acts for one they were removed from (docs/HANDOFF.md "B20 design").
+ * scope never acts for one they were removed from (docs/ARCHITECTURE.md "Workspaces in detail").
  *
  * Two-factor sign-in is optional; when a user has enabled it, the Filament login already asked for the code before
  * this session existed, so it is not checked again here.

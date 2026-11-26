@@ -31,7 +31,7 @@ import org.junit.Test
 import org.robolectric.Shadows.shadowOf
 
 /**
- * The first-run wizard and the new design (parity.csv PH-OTH-039, the lead's decision): before sign-in it is classic's;
+ * The first-run wizard and the new design (parity.csv PH-OTH-039, a product decision): before sign-in it is classic's;
  * once signed in, the server's flags are read and, when they say the new design, the steps left (the test and Done) use
  * it; no answer within a few seconds is classic; a skipped sign-in stays classic and asks nothing.
  */

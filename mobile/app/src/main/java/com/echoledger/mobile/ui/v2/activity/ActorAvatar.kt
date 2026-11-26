@@ -42,7 +42,7 @@ import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
- * Who an Activity item is about (contract 2.0.0-aa, UX-18, lead decision 27), the phone's half of the desktop's
+ * Who an Activity item is about (contract 2.0.0-aa, UX-18, decision 27), the phone's half of the desktop's
  * lib/activityPerson.ts: whose face takes the kind's icon's place, and in which colour.
  */
 object ActivityPeople {

@@ -153,7 +153,7 @@ it('draws a recording\'s Send and WhatsApp mirrored inside Filament\'s own icon 
     $ur = $page('ur');
     expect(preg_match_all($inFilamentIcon, $ur))->toBeGreaterThanOrEqual(2)
         ->and($ur)->toMatch($item('ساتھی کو بھیجیں'))
-        // The bare brand name stays Latin in every language (LEAD DECISION 26).
+        // The bare brand name stays Latin in every language (decision 26).
         ->and($ur)->toMatch($item('WhatsApp'))
         // The app's own mark on the meta line never mirrors (D4 §7).
         ->and($ur)->toMatch('~<span class="v2-rec-meta">\s*<svg class="v2-icon" viewBox~');

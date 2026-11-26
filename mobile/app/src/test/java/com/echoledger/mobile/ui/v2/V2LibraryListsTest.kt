@@ -48,7 +48,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Lists in the v2 Library (D14 on contract 2.0.0-m; lists are labels, PLAN_LIBRARY_FILTERS's lead decisions): the
+ * Lists in the v2 Library (D14 on contract 2.0.0-m; lists are labels, PLAN_LIBRARY_FILTERS's decisions): the
  * title menu's Views (All recordings, Unread, Important) and Labels (the person's lists, + New label), choosing one at a
  * time, an empty one's words, making a label in two steps (the payload with its hex colour), each label's ⋮ (Rename
  * with the name checks, Change colour, Move up / Move down, Delete after asking), Add to list from the selection with

@@ -230,6 +230,7 @@ Hardware-dependent behaviour (audio capture, overlays, widgets, code signing) is
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | How to install, pair and use EchoLedger, in plain language |
 | [`docs/API.md`](docs/API.md) | REST API contract shared by all clients |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data model, sync model, audio pipeline, security design |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Performance budgets, how they are measured, and the results |
 | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Configuring and switching speech-to-text providers |
 | [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Product requirements and scope |
 | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) | One ordered checklist for real-device verification (1–2 hours) |

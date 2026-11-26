@@ -1,4 +1,4 @@
-// Contract 2.0.0-aa (UX-18) and lead decision 27: an Activity item about a person shows them in the icon's place, for
+// Contract 2.0.0-aa (UX-18) and decision 27: an Activity item about a person shows them in the icon's place, for
 // the kinds that show a face (a recording sent to you, an upgrade asked for), as the web console does: their picture,
 // kept here by its version (api.avatarImage, asked once per picture for the whole window), else their initials in
 // their colour. Every other kind keeps its icon, whoever it is about; with `actor` null, no key (an older server) or

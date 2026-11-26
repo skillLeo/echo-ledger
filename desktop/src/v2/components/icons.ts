@@ -96,7 +96,7 @@ export { LucideMinusIcon as MinusIcon, LucideZoomInIcon as ZoomIcon } from "../.
 
 /**
  * The glyphs that point a way or read as text, mirrored in a right-to-left window like every chevron and arrow (D-231;
- * the lead's decision on all three platforms): sort, sign out, send, Ask's speech bubble and help's "?" (Urdu writes ؟
+ * decided for all three platforms): sort, sign out, send, Ask's speech bubble and help's "?" (Urdu writes ؟
  * the other way round). Icon() gives them .el-icon--directional wherever they are drawn. The media player's skip back
  * and forward never are: time runs left to right in every language.
  */

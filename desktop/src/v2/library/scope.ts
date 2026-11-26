@@ -39,7 +39,7 @@ export function scopeName(scope: LibraryScope, names: { saved?: (id: string) => 
 
 /**
  * Where a request from before the redesign goes (Home's "isn't transcribed", a notice, the palette, Activity): today's
- * saved views and smart folders, as their new homes say (PLAN_LIBRARY_FILTERS §6 and its lead decisions).
+ * saved views and smart folders, as their new homes say (PLAN_LIBRARY_FILTERS §6 and its decisions).
  */
 export function fromOldView(view: SavedView): { scope: LibraryScope; filters: FilterSpec } {
   switch (view) {

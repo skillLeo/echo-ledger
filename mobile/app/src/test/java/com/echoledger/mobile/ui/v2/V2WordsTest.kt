@@ -176,7 +176,7 @@ class V2WordsTest {
     }
 
     /**
-     * EL-UX's audit: the sentences of core.Problems (can't reach, the server's problem, the certificate, sign in first)
+     * The UX audit: the sentences of core.Problems (can't reach, the server's problem, the certificate, sign in first)
      * come from that mapper, not from a literal in the view model, so the check above never saw them; they showed in
      * English on Urdu screens. Each one has a key and reads in Urdu.
      */
