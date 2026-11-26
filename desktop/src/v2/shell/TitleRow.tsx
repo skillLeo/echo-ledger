@@ -266,7 +266,10 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
                 </button>
               </span>
             )}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? shortWords : search.placeholder} value={draft} dir="auto"
+            {/* Empty, the field reads as the window does, so its placeholder starts right after the chip (in Urdu too: on
+                its own an empty field's "auto" is left to right); typed, as what was typed. */}
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? shortWords : search.placeholder} value={draft}
+              dir={draft || !isRtl() ? "auto" : "rtl"}
               aria-keyshortcuts="Meta+F Control+F"
               onChange={(e) => {
                 type(e.target.value);

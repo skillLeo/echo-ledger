@@ -130,7 +130,15 @@ describe("the title row in Urdu", () => {
     const scope = row().querySelector(".el-titlerow__scope span")!;
     expect(scope.textContent).toBe(`${iso("Clients")} میں`);
     expect(scope).toHaveAttribute("dir", "rtl");
-    expect(within(row()).getByRole("button", { name: "اس کی جگہ ہر جگہ تلاش کریں" })).toBeInTheDocument();
+    expect(within(row()).getByRole("button", { name: "اس کے بجائے ہر جگہ تلاش کریں" })).toBeInTheDocument();
+    // Empty, the field reads right to left, so its placeholder starts right after the chip; typed, as what is typed.
+    expect(within(row()).getByRole("searchbox")).toHaveAttribute("dir", "rtl");
+  });
+
+  it("the field typed in reads as what was typed (dir auto), in Urdu too", async () => {
+    await urdu();
+    render(<TitleRow {...base} title={{ title: "Clients", count: 3, search: { placeholder: "ریکارڈنگز میں تلاش کریں", scope: "Clients", query: "invoice", setQuery: () => undefined } }} />);
+    expect(within(row()).getByRole("searchbox")).toHaveAttribute("dir", "auto");
   });
 
   it("English as before: In: Clients, Back (⌘[ or Alt+←), Search everything", () => {
@@ -138,6 +146,7 @@ describe("the title row in Urdu", () => {
     fireEvent.focus(within(row()).getByRole("searchbox"));
     expect(row().querySelector(".el-titlerow__scope span")).toHaveTextContent(/^In: Clients$/);
     expect(row().querySelector(".el-titlerow__scope span")).toHaveAttribute("dir", "auto");
+    expect(within(row()).getByRole("searchbox")).toHaveAttribute("dir", "auto");
     expect(within(row()).getByRole("button", { name: "Back" }).getAttribute("title")).toMatch(/^Back \((⌘\[|Alt\+←)\)$/);
   });
 });
@@ -203,10 +212,10 @@ describe("the sidebar shell (without the Library's sections) in Urdu", () => {
     expect(within(menu).getByRole("menuitem", { name: "براؤزر میں بدلیں یا سنبھالیں" })).toBeInTheDocument();
     fireEvent.keyDown(menu, { key: "Escape" });
     fireEvent.click(within(nav).getByRole("button", { name: "لائیو" }));
-    expect(screen.getByRole("main", { name: "لائیو" })).toHaveTextContent("لائیو کا صفحہ جلد آ رہا ہے");
+    expect(screen.getByRole("main", { name: "لائیو" })).toHaveTextContent("“لائیو” کا صفحہ جلد آ رہا ہے");
     expect(screen.getByRole("button", { name: "ریکارڈ کا صفحہ کھولیں" })).toBeInTheDocument();
     fireEvent.click(within(nav).getByRole("button", { name: "پوچھیں" }));
-    expect(screen.getByRole("main", { name: "پوچھیں" })).toHaveTextContent("پوچھیں کا صفحہ جلد آ رہا ہے");
+    expect(screen.getByRole("main", { name: "پوچھیں" })).toHaveTextContent("“پوچھیں” کا صفحہ جلد آ رہا ہے");
     expect(screen.getByRole("button", { name: "پروجیکٹس کھولیں" })).toBeInTheDocument();
   });
 
