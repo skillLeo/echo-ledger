@@ -53,7 +53,7 @@ class OpenedWordsTest {
         assertEquals(serverDown, openedWords(en, stopped(down), read = true))
         for (failure in listOf(refused, down, older)) {
             assertFalse("${failure.status}", openedWords(en, stopped(failure), read = false).contains("connection"))
-            assertFalse("${failure.status}", classicOpenedWords(stopped(failure), read = false).contains("connection"))
+            assertFalse("${failure.status}", classicOpenedWords(en, stopped(failure), read = false).contains("connection"))
         }
     }
 
@@ -71,10 +71,10 @@ class OpenedWordsTest {
             "Mark as read needs a newer EchoLedger server. Ask the person who runs it to update.",
             openedProblem(en, older, read = true)
         )
-        assertEquals(unread, classicOpenedWords(none, read = false))
+        assertEquals(unread, classicOpenedWords(en, none, read = false))
         assertEquals(
-            "Stopped: 3 of 10 marked as read. Can't reach the server. Check the connection and try again.",
-            classicOpenedWords(stopped(offline), read = true)
+            "Stopped: 3 of 10 marked. Can't reach the server. Check the connection and try again.",
+            classicOpenedWords(en, stopped(offline), read = true)
         )
     }
 
@@ -90,5 +90,7 @@ class OpenedWordsTest {
         val words = openedWords(ur, stopped(offline), read = true)
         assertEquals("رک گیا: 10 میں سے 3 ہو گئیں۔ " + ur.getString(R.string.v2_vm_offline_check), words)
         assertFalse(words, words.contains("connection"))
+        // Classic says the same, from the same strings.
+        assertEquals(words, classicOpenedWords(ur, stopped(offline), read = true))
     }
 }
