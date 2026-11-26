@@ -97,4 +97,11 @@ export const CONVERTED: readonly string[] = [
   "v2/shell/Zoom.tsx",
   "v2/shell/WindowButtons.tsx",
   "v2/shell/PlacePanels.tsx",
+  // D-261: the Record page and Live (the Record section, Live Assist's sessions and Live Translate's panel). What the
+  // core says (a permission's or a device's note, an upload's error, an app's name) is shown as it comes.
+  "v2/home/HomeV2.tsx",
+  "v2/home/RecordSection.tsx",
+  "v2/live/LiveV2.tsx",
+  "v2/live/LiveAssistSection.tsx",
+  "v2/live/LiveTranslateV2.tsx",
 ];
