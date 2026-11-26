@@ -36,9 +36,11 @@ import com.echoledger.mobile.update.UpdatePrefs
 import com.echoledger.mobile.update.UpdateStatus
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
+import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -1506,6 +1508,109 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { graph.api()?.markOpened(item.id) }
         }
     }
+
+    /**
+     * Mark as read or Mark as unread for one recording (its menu, contract 2.0.0-t): the dot goes or comes back here at
+     * once, and the server is told. Unlike opening it, this is not an opening for Sort by Recently opened. When the
+     * server doesn't take it (no connection, a refusal, an older server's 405) the row goes back as it was and the
+     * failure is the result, for its words; a recording gone from the server brings a sync. It runs in the view
+     * model's scope, so leaving the page doesn't cut it short.
+     */
+    suspend fun markReadAs(item: LibraryItem, read: Boolean): Result<Unit> {
+        if ((item.opened != false) == read) return Result.success(Unit)
+        val gen = graph.library.generation()
+        return viewModelScope.async(Dispatchers.IO) {
+            graph.library.setOpenedLocally(listOf(item.id), read, gen)
+            val failure = try {
+                val api = graph.api() ?: throw NotPairedException()
+                if (read) api.markOpened(item.id) else api.markUnopened(item.id)
+                null
+            } catch (e: ApiException) {
+                e
+            } catch (e: IOException) {
+                // No connection, or not signed in any more (a NotPairedException is one too).
+                e
+            }
+            if (failure == null) return@async Result.success(Unit)
+            graph.library.setOpenedLocally(listOf(item.id), !read, gen)
+            if ((failure as? ApiException)?.status == 404) runCatching { graph.library.refresh() }
+            Result.failure(failure)
+        }.await()
+    }
+
+    /**
+     * What marking many read or unread did (contract 2.0.0-y). [done] changed, here and on the server; [notFound] are gone
+     * from the server (a sync follows, and they leave the list); [left] were not done: the run stopped ([failure]: a
+     * refusal or no connection), or it reached [Organise.MAX_BULK] one at a time on an older server ([capped]).
+     */
+    data class OpenedRun(val done: Set<String>, val notFound: Set<String>, val left: List<String>, val failure: Throwable? = null) {
+        val total: Int get() = done.size + notFound.size + left.size
+        val capped: Boolean get() = left.isNotEmpty() && failure == null
+    }
+
+    /**
+     * Marks [ids] read ([opened]) or unread (contract 2.0.0-y), on the server and here: one request per [Organise.MAX_BULK].
+     * Only a server without the route (405, 404, 403 for the DELETE, or a 2xx with no `done`) is asked one recording at a
+     * time, and at most [Organise.MAX_BULK] of them in the whole run (the device's request limit); a server error, 429 or
+     * no connection stops the run instead, keeping what was done. Only the ones the server did change here; gone ones
+     * bring a sync. It runs in the view model's scope: leaving or turning the screen doesn't cut a run short, and what
+     * it did still changes here.
+     */
+    suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun = viewModelScope.async(Dispatchers.IO) {
+        val all = ids.distinct()
+        val api = graph.api() ?: return@async OpenedRun(emptySet(), emptySet(), all, NotPairedException())
+        val gen = graph.library.generation()
+        val done = LinkedHashSet<String>()
+        val gone = LinkedHashSet<String>()
+        var oneByOne = false
+        var asked = 0
+        var failure: Throwable? = null
+        fun olderServer(status: Int) = status == 405 || status == 404 || (!opened && status == 403)
+        run@ for (chunk in all.chunked(Organise.MAX_BULK)) {
+            if (!oneByOne) {
+                val answer = try {
+                    if (opened) api.markOpenedMany(chunk) else api.markUnopenedMany(chunk)
+                } catch (e: ApiException) {
+                    if (!olderServer(e.status)) {
+                        failure = e
+                        break@run
+                    }
+                    null
+                } catch (e: IOException) {
+                    failure = e
+                    break@run
+                }
+                val did = answer?.done
+                if (did != null) {
+                    done += did.filter { it in chunk }
+                    gone += answer.notFound.filter { it in chunk }
+                    graph.library.setOpenedLocally(did, opened, gen)
+                    continue@run
+                }
+                oneByOne = true
+            }
+            for (id in chunk) {
+                if (asked >= Organise.MAX_BULK) break@run
+                asked++
+                try {
+                    if (opened) api.markOpened(id) else api.markUnopened(id)
+                    done += id
+                } catch (e: ApiException) {
+                    if (e.status != 404) {
+                        failure = e
+                        break@run
+                    }
+                    gone += id
+                } catch (e: IOException) {
+                    failure = e
+                    break@run
+                }
+            }
+        }
+        if (oneByOne) graph.library.setOpenedLocally(done, opened, gen)
+        if (gone.isNotEmpty()) runCatching { graph.library.refresh() }
+        OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
+    }.await()
 
     /**
      * Looks for missed recordings now (since v1.8; the app opened, at most every 10 minutes and only where something can

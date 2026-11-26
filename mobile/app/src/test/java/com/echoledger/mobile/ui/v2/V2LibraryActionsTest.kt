@@ -1,7 +1,10 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -35,6 +38,9 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,7 +84,11 @@ class V2LibraryActionsTest : ScreenTest() {
                             onAccount = {},
                             onOpenAt = { item, ms -> openedAt = item.id to ms }
                         )
-                        com.echoledger.mobile.ui.v2.components.EchoToastHost(toasts)
+                        // Where the app's shell puts it, so a toast never covers the top bar here either.
+                        com.echoledger.mobile.ui.v2.components.EchoToastHost(
+                            toasts,
+                            androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                        )
                     }
                 }
             }
@@ -388,5 +398,99 @@ class V2LibraryActionsTest : ScreenTest() {
         compose.onNodeWithText("No recordings match these filters").assertExists()
         click("Clear filters")
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+    }
+
+    // ---- Mark as read and unread (contract 2.0.0-y) -----------------------------------------------------------------
+
+    private fun unread(id: String, title: String) =
+        ServerFixtures.libraryItem(id, title = title).replace("\"updated_at\"", "\"opened\":false,\"updated_at\"")
+
+    private fun idsOf(request: mockwebserver3.RecordedRequest) =
+        com.echoledger.mobile.data.ApiJson.parseToJsonElement(request.bodyText()).jsonObject.getValue("ids").jsonArray.map {
+            it.jsonPrimitive.content
+        }
+
+    /** A 2.0.0-y server: every id asked is done. */
+    private fun doneAll(request: mockwebserver3.RecordedRequest) =
+        FakeServer.json(200, """{"done":[${idsOf(request).joinToString(",") { "\"$it\"" }}],"not_found":[]}""")
+
+    private fun said(words: String) = pumpUntil(words) { compose.onAllNodesWithText(words).fetchSemanticsNodes().isNotEmpty() }
+
+    /** Opens the title's menu and Unread's own ⋮. */
+    private fun unreadsMenu() {
+        val title = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.DropdownList) and
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+        compose.onNode(title).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasContentDescription("Unread options")).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun markAsReadAndAsUnreadForTheSelectionInOneRequest() {
+        seed(listOf(unread("01JA", "Caller 001"), ServerFixtures.libraryItem("01JB", title = "Caller 002")))
+        server.on("POST", "/api/sessions/opened") { doneAll(it) }
+        server.on("DELETE", "/api/sessions/opened") { doneAll(it) }
+        select("Caller 001")
+        compose.onNodeWithText("Caller 002", substring = true).performClick()
+        compose.onNodeWithText("2 selected").assertExists()
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Mark as read")
+        said("2 recordings marked as read")
+        assertEquals(listOf(listOf("01JA", "01JB")), server.requestsTo("POST", "/api/sessions/opened").map { idsOf(it).sorted() })
+        compose.onNodeWithText("2 selected").assertDoesNotExist()
+        assertEquals(true, app.graph.library.items.value.first { it.id == "01JA" }.opened)
+        compose.mainClock.advanceTimeBy(6_000) // the first toast's time runs out, so the next one shows
+        select("Caller 001")
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Mark as unread")
+        said("1 recording marked as unread")
+        assertEquals(listOf("01JA"), idsOf(server.requestsTo("DELETE", "/api/sessions/opened").single()))
+        assertEquals(false, app.graph.library.items.value.first { it.id == "01JA" }.opened)
+    }
+
+    /** Review of 2.0.0-y: only what was done leaves the selection; a tick made while it ran stays. */
+    @Test
+    fun aTickMadeWhileMarkingRunsStaysSelected() {
+        seed(listOf(unread("01JA", "Caller 001"), unread("01JB", "Caller 002"), unread("01JC", "Caller 003")))
+        val gate = server.hold()
+        server.on("POST", "/api/sessions/opened") {
+            gate.await(30)
+            doneAll(it)
+        }
+        select("Caller 001")
+        compose.onNodeWithText("Caller 002", substring = true).performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Mark as read")
+        pumpUntil("on its way") { server.requestsTo("POST", "/api/sessions/opened").isNotEmpty() }
+        compose.onNodeWithText("Caller 003", substring = true).performClick()
+        compose.onNodeWithText("3 selected").assertExists()
+        gate.open()
+        said("2 recordings marked as read")
+        compose.onNodeWithText("1 selected").assertExists()
+        assertEquals(listOf("01JA", "01JB"), idsOf(server.requestsTo("POST", "/api/sessions/opened").single()).sorted())
+    }
+
+    @Test
+    fun unreadsMarkAllAsReadSends450InThreeRequests() {
+        seed((1..450).map { unread("01K%03d".format(it), "Caller %03d".format(it)) })
+        server.on("POST", "/api/sessions/opened") { doneAll(it) }
+        unreadsMenu()
+        click("Mark all as read")
+        said("450 recordings marked as read")
+        assertEquals(listOf(200, 200, 50), server.requestsTo("POST", "/api/sessions/opened").map { idsOf(it).size })
+        assertTrue(app.graph.library.items.value.all { it.opened == true })
+    }
+
+    @Test
+    fun onAnOlderServerMarkAllAsReadStopsAt200AndSaysToDoItAgain() {
+        seed((1..450).map { unread("01K%03d".format(it), "Caller %03d".format(it)) })
+        server.on("POST", "/api/sessions/opened", FakeServer.json(405, """{"message":"Not allowed","code":"method_not_allowed"}"""))
+        server.on("POST", "/api/sessions/01K\\d+/opened", FakeServer.empty(204))
+        unreadsMenu()
+        click("Mark all as read")
+        said("200 of 450 marked. Do it again for the rest.")
+        assertEquals(200, server.requestsTo("POST", "/api/sessions/01K\\d+/opened").size)
     }
 }

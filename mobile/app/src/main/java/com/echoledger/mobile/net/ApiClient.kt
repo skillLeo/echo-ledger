@@ -1257,6 +1257,29 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id/opened").post(ByteArray(0).toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
     }
 
+    /** `DELETE /api/sessions/{id}/opened` (2.0.0-t): unread again for this user (the dot comes back everywhere). */
+    suspend fun markUnopened(id: String) {
+        call(request("sessions/$id/opened").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /**
+     * `POST /api/sessions/opened` (2.0.0-y): [ids] (1 to 200) read for this user; the answer says which it did and which it
+     * can't find. An older server answers 405, or a 2xx with no `done` ([com.echoledger.mobile.data.OpenedAnswer.done] null).
+     */
+    suspend fun markOpenedMany(ids: List<String>): com.echoledger.mobile.data.OpenedAnswer =
+        call(request("sessions/opened").post(idsBody(ids)).build(), com.echoledger.mobile.data.OpenedAnswer.serializer(), allowEmpty = true)
+            ?: com.echoledger.mobile.data.OpenedAnswer()
+
+    /**
+     * `DELETE /api/sessions/opened` (2.0.0-y): [ids] (1 to 200) unread again. An older server takes it for a recording with
+     * the id "opened" and deletes nothing: 404, or 403 for someone who may not record.
+     */
+    suspend fun markUnopenedMany(ids: List<String>): com.echoledger.mobile.data.OpenedAnswer = call(
+        request("sessions/opened").delete(idsBody(ids)).build(),
+        com.echoledger.mobile.data.OpenedAnswer.serializer(),
+        allowEmpty = true
+    ) ?: com.echoledger.mobile.data.OpenedAnswer()
+
     /** `DELETE /api/bin/{id}` (since v1.1): erase now instead of after 48 hours. */
     suspend fun eraseFromBin(id: String) {
         call(request("bin/$id").delete().build(), null as KSerializer<Unit>?)

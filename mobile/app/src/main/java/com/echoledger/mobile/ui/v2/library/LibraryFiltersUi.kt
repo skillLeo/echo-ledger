@@ -427,7 +427,9 @@ class LibraryMenuActions(
     val onDeleteLabel: (ListDto) -> Unit,
     val onSharedWithMe: () -> Unit,
     val onRequests: () -> Unit,
-    val onTrash: () -> Unit
+    val onTrash: () -> Unit,
+    /** Unread's own ⋮ › Mark all as read (contract 2.0.0-y), while it has some. */
+    val onMarkAllRead: (() -> Unit)? = null
 )
 
 /**
@@ -444,7 +446,22 @@ fun LibraryMenuSheet(data: LibraryMenuData, actions: LibraryMenuActions, onDismi
             EchoSectionHeader(stringResource(R.string.v2_lf_views))
             LibraryPlace.entries.forEach { p ->
                 val bold = p == LibraryPlace.NEEDS_YOU || p == LibraryPlace.UNREAD
-                MenuRow(placeIcon(p), placeName(p), data.counts[p], bold, data.target == LibraryTarget.Place(p)) {
+                val markAll = actions.onMarkAllRead?.takeIf { p == LibraryPlace.UNREAD && (data.counts[p] ?: 0) > 0 }
+                MenuRow(
+                    placeIcon(p),
+                    placeName(p),
+                    data.counts[p],
+                    bold,
+                    data.target == LibraryTarget.Place(p),
+                    menu = markAll?.let { run ->
+                        {
+                            ItemMenu(
+                                stringResource(R.string.v2_lf_item_options, placeName(p)),
+                                listOf(stringResource(R.string.v2_lib_mark_all_read) to run)
+                            )
+                        }
+                    }
+                ) {
                     actions.onChoose(LibraryTarget.Place(p))
                 }
             }
@@ -597,9 +614,9 @@ private fun MenuRow(
     }
 }
 
-/** A row's ⋮ and its menu: [items], then after a hairline [danger] in red. */
+/** A row's ⋮ and its menu: [items], then after a hairline [danger] in red, when there is one. */
 @Composable
-private fun ItemMenu(label: String, items: List<Pair<String, () -> Unit>>, danger: Pair<String, () -> Unit>) {
+private fun ItemMenu(label: String, items: List<Pair<String, () -> Unit>>, danger: Pair<String, () -> Unit>? = null) {
     var open by remember { mutableStateOf(false) }
     val c = EchoV2.colors
     Box {
@@ -614,11 +631,13 @@ private fun ItemMenu(label: String, items: List<Pair<String, () -> Unit>>, dange
                             run()
                         })
                     }
-                    HorizontalDivider(thickness = EchoTokens.Border.hairline, color = c.borderDefault)
-                    DropdownMenuItem(text = { Text(danger.first, style = EchoV2.type.body, color = c.danger) }, onClick = {
-                        open = false
-                        danger.second()
-                    })
+                    danger?.let { (words, run) ->
+                        HorizontalDivider(thickness = EchoTokens.Border.hairline, color = c.borderDefault)
+                        DropdownMenuItem(text = { Text(words, style = EchoV2.type.body, color = c.danger) }, onClick = {
+                            open = false
+                            run()
+                        })
+                    }
                 }
             }
         }

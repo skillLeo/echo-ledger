@@ -223,6 +223,17 @@ private fun V2RecordingPage(
             }
         }
 
+        override fun read(on: Boolean) {
+            scope.launch {
+                // "Marked as …" only once the server took it; otherwise the row is back as it was and the words say why.
+                val failure = vm.markReadAs(item, on).exceptionOrNull()
+                say(
+                    failure?.let { openedProblem(res, it, on) }
+                        ?: res.getString(if (on) R.string.v2_lib_marked_read_one else R.string.v2_lib_marked_unread_one)
+                )
+            }
+        }
+
         override fun keep(on: Boolean) {
             scope.launch {
                 if (vm.organise(item.id, keep = on)) say(res.getString(if (on) R.string.v2_rec_kept else R.string.v2_rec_not_kept))

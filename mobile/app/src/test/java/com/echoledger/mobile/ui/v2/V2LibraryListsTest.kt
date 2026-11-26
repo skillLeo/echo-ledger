@@ -389,11 +389,15 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun eachLabelsMenuIsNamedForItAndAFixedViewHasNone() {
+    fun eachLabelsMenuIsNamedForItAndAFixedViewHasNoneButUnreadsMarkAllAsRead() {
         seed()
         menu()
         listOf("Clients", "Home", "Family").forEach { compose.onNode(hasContentDescription("$it options")).assertExists() }
         compose.onAllNodes(hasContentDescription("All recordings options")).assertCountEquals(0)
-        compose.onAllNodes(hasContentDescription("Unread options")).assertCountEquals(0)
+        // Contract 2.0.0-y: Unread's own menu holds Mark all as read, and nothing a label has.
+        compose.onNode(hasContentDescription("Unread options")).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Mark all as read").assertExists()
+        listOf("Rename…", "Change colour…").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
     }
 }
