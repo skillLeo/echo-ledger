@@ -1,11 +1,12 @@
 // Desktop Urdu, D-255, in the screens fixture (v2 flags and v21_urdu on, the account's language Urdu: "&applang=ur",
-// 1280 × 800), on a Mac and on Windows, light: the shell's last English, now Urdu. The Projects panel (from the rail's
+// 1280 × 800), on a Mac and on Windows, in the light and the dark theme: the shell's last English, now Urdu. The Projects panel (from the rail's
 // Projects); the title row with the Library's search open ("In:" its scope, History's Back and Forward); and the
 // sidebar shell without the Library's sections (ui_v2.library off: its places, groups, foot, workspace and status
 // line). The app's navigation is found by data-nav="main", its name being the window's language (مرکزی). It checks that
 // the window reads right to left and that each scene shows its Urdu, that the open search's field (its placeholder too)
-// never runs under the scope's chip, in Urdu and in English, and saves
-// docs/design/screens/desktop/urdu-d255/<platform>-<step>.png; the run fails when a check doesn't hold.
+// never runs under the scope's chip and its placeholder isn't cut, in Urdu and in English, and saves
+// docs/design/screens/desktop/urdu-d255/<platform>-<step>.png (light) and <platform>-<step>-dark.png; the run fails
+// when a check doesn't hold.
 //   node scripts/urduD255.mjs
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -40,7 +41,8 @@ const fieldClear = (page) => page.evaluate(() => {
   const style = getComputedStyle(field);
   const ctx = document.createElement("canvas").getContext("2d");
   ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-  const width = Math.min(ctx.measureText(field.value || field.placeholder).width, field.clientWidth);
+  const wide = ctx.measureText(field.value || field.placeholder).width;
+  const width = Math.min(wide, field.clientWidth);
   const rtl = style.direction === "rtl";
   const words = rtl ? { left: f.right - width, right: f.right } : { left: f.left, right: f.left + width };
   const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5;
@@ -50,17 +52,19 @@ const fieldClear = (page) => page.evaluate(() => {
   if (overlaps(c, f)) return `the field (${Math.round(f.left)}–${Math.round(f.right)}) overlaps the chip (${Math.round(c.left)}–${Math.round(c.right)})`;
   if (overlaps(c, words)) return "the placeholder runs under the chip";
   if (chipSide !== startSide) return `the words start on the ${startSide}, away from the chip (${chipSide})`;
+  if (!field.value && wide > field.clientWidth + 0.5) return `the placeholder “${field.placeholder}” (${Math.round(wide)} px) is cut at ${field.clientWidth} px`;
   return null;
 });
 
 try {
-  for (const platform of ["macos", "windows"]) {
+  for (const [platform, theme] of [["macos", "light"], ["macos", "dark"], ["windows", "light"], ["windows", "dark"]]) {
     const where = platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1";
+    const name = `${platform}${theme === "dark" ? " (dark)" : ""}`;
     const open = async (flags) => {
-      const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "light", reducedMotion: "reduce" });
+      const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
       page.setDefaultTimeout(120_000);
       await page.addInitScript((mac) => Object.defineProperty(navigator, "platform", { value: mac ? "MacIntel" : "Win32", configurable: true }), platform === "macos");
-      await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${flags},v21_urdu${where}&theme=light&applang=ur`);
+      await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${flags},v21_urdu${where}&theme=${theme}&applang=ur`);
       await page.locator('nav[data-nav="main"]').waitFor();
       await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
       await page.waitForTimeout(1000);
@@ -68,14 +72,14 @@ try {
     };
     const shot = async (page, step, words) => {
       await page.waitForTimeout(500);
-      await page.screenshot({ path: join(out, `${platform}-${step}.png`) });
+      await page.screenshot({ path: join(out, `${platform}-${step}${theme === "dark" ? "-dark" : ""}.png`) });
       const at = await root(page);
       const named = await page.locator('nav[data-nav="main"]').getAttribute("aria-label");
       const speaks = await page.getByText(words, { exact: false }).first().isVisible().catch(() => false);
-      console.log(`${platform}: ${step}; <html> ${at}; nav "${named}"; ${speaks ? "in Urdu" : "NOT in Urdu"}`);
-      if (at !== "ur/rtl") problems.push(`${platform}: ${step} is ${at}, not ur/rtl`);
-      if (named !== "مرکزی") problems.push(`${platform}: ${step}'s navigation is named "${named}"`);
-      if (!speaks) problems.push(`${platform}: ${step} doesn't show “${words}”`);
+      console.log(`${name}: ${step}; <html> ${at}; nav "${named}"; ${speaks ? "in Urdu" : "NOT in Urdu"}`);
+      if (at !== "ur/rtl") problems.push(`${name}: ${step} is ${at}, not ur/rtl`);
+      if (named !== "مرکزی") problems.push(`${name}: ${step}'s navigation is named "${named}"`);
+      if (!speaks) problems.push(`${name}: ${step} doesn't show “${words}”`);
     };
 
     // The three levels: the Projects panel, from the rail.
@@ -94,23 +98,25 @@ try {
     await page.waitForTimeout(400);
     await shot(page, "title-row", "میں");
     const clear = await fieldClear(page);
-    console.log(`${platform}: title-row's field and chip: ${clear ?? "clear"}`);
-    if (clear) problems.push(`${platform}: title-row: ${clear}`);
+    console.log(`${name}: title-row's field and chip: ${clear ?? "clear"}`);
+    if (clear) problems.push(`${name}: title-row: ${clear}`);
     await page.close();
 
-    // The same in English (no picture): the field after its chip, its words from the chip's side.
-    page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "light", reducedMotion: "reduce" });
-    page.setDefaultTimeout(120_000);
-    await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS}${where}&theme=light`);
-    await page.locator('nav[data-nav="main"]').waitFor();
-    await page.waitForTimeout(1000);
-    if (await page.locator(".el-page__back").count()) await page.locator(".el-page__back").first().click();
-    await page.locator(".el-titlerow__field").first().click();
-    await page.waitForTimeout(400);
-    const english = await fieldClear(page);
-    console.log(`${platform}: title-row in English, field and chip: ${english ?? "clear"}`);
-    if (english) problems.push(`${platform}: title-row in English: ${english}`);
-    await page.close();
+    // The same in English (no picture, light only): the field after its chip, its words from the chip's side, whole.
+    if (theme === "light") {
+      page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "light", reducedMotion: "reduce" });
+      page.setDefaultTimeout(120_000);
+      await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS}${where}&theme=light`);
+      await page.locator('nav[data-nav="main"]').waitFor();
+      await page.waitForTimeout(1000);
+      if (await page.locator(".el-page__back").count()) await page.locator(".el-page__back").first().click();
+      await page.locator(".el-titlerow__field").first().click();
+      await page.waitForTimeout(400);
+      const english = await fieldClear(page);
+      console.log(`${name}: title-row in English, field and chip: ${english ?? "clear"}`);
+      if (english) problems.push(`${name}: title-row in English: ${english}`);
+      await page.close();
+    }
 
     // The sidebar shell (no Library sections).
     page = await open(SIDEBAR_FLAGS);

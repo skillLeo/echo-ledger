@@ -123,8 +123,9 @@ const HELP_GROUP = (() => {
   return { title: group.title, entry: entryOf(group) };
 })();
 /**
- * The Library's places whose name is a page's in the palette but reads otherwise in the catalogue (ur.json's "Waiting"
- * and "No project" are a state and an empty project field): a key of their own (context.ts).
+ * The Library's places whose name is a page's in the palette and the sidebar but reads otherwise in the catalogue
+ * (ur.json's "Waiting" and "No project" are a state and an empty project field): a key of their own (context.ts), so a
+ * place has one name in both.
  */
 const PLACE_KEYS: Readonly<Record<string, string>> = { waiting: "palette_context.waiting", inbox: "palette_context.no_project" };
 
@@ -1499,7 +1500,7 @@ export default function MainApp() {
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
-              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: t(placeWords(p)) }))
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: t(PLACE_KEYS[p.key] ?? placeWords(p)) }))
                 .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
               current: libraryFolder ?? libraryView ?? null,
               open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },

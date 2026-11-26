@@ -95,7 +95,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
     api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : []), () => undefined);
   }, [attempt]);
 
-  const strip = shellStatus(status);
+  // The strip's buttons are this page's English (not converted yet): its status line says the same language.
+  const strip = shellStatus(status, "en");
   const kinds = permissionKinds(status.platform);
   const permissionsOk = permissions ? kinds.every((k) => accessOf(permissions, k) === "allowed") : null;
   const live = (items ?? []).filter((i) => !i.deleted);

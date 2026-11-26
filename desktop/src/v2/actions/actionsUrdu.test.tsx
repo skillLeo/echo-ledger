@@ -359,7 +359,7 @@ describe("the Mac menu bar in Urdu", () => {
   });
 });
 
-describe("screens still in English open English menus in an Urdu window", () => {
+describe("a screen's own menus in an Urdu window: English where the screen still is, Urdu where it is converted", () => {
   const offs: (() => void)[] = [];
   afterEach(() => {
     offs.splice(0).forEach((off) => off());
@@ -398,21 +398,27 @@ describe("screens still in English open English menus in an Urdu window", () => 
     return <><button type="button" onClick={() => openAt({ id: "m", name: "Mehran Foods" }, { x: 40, y: 100 })}>Mehran Foods</button>{view}</>;
   }
 
-  it("a project's menu in the panel (English, not yet in Urdu): English, on Windows and on a Mac (its & written && for the core)", async () => {
+  it("a project's menu in the panel: in Urdu as the panel is, on Windows and on a Mac; English as before (its & written && for the core)", async () => {
     offs.push(...PROJECT_MENU.filter((id) => id !== "-").map((id) => registerAction(id, () => undefined)));
     await urdu();
     render(<Projects />);
     fireEvent.click(screen.getByRole("button", { name: "Mehran Foods" }));
-    const menu = screen.getByRole("menu", { name: "Mehran Foods" });
-    expect(words(menu)).toEqual(["Open", "Pin", "Rename…", "Instructions & memory…", "Request files…", "Members…", "Archive", "Delete project…"]);
-    expect(menu.textContent).not.toMatch(URDU_OR_ISOLATE);
+    const urduWords = ["کھولیں", "پن کریں", "نام بدلیں…", "ہدایات اور یادداشت…", "فائلیں منگوائیں…", "ممبرز…", "آرکائیو کریں", "پروجیکٹ حذف کریں…"];
+    expect(words(screen.getByRole("menu", { name: "Mehran Foods" }))).toEqual(urduWords);
     cleanup();
     setPlatform("MacIntel");
     respond("native_menu_popup", null);
     render(<Projects />);
     fireEvent.click(screen.getByRole("button", { name: "Mehran Foods" }));
     await act(flushAsync);
-    expect(popupWords()).toEqual(["Open", "Pin", "—", "Rename…", "Instructions && Memory…", "Request Files…", "Members…", "—", "Archive", "—", "Delete Project…"]);
+    expect(popupWords()).toEqual(["کھولیں", "پن کریں", "—", "نام بدلیں…", "ہدایات اور یادداشت…", "فائلیں منگوائیں…", "ممبرز…", "—", "آرکائیو کریں", "—", "پروجیکٹ حذف کریں…"]);
+    cleanup();
+    // English: as before, the Mac's Title Case and its & written && for the core.
+    await act(() => setLanguage("en", { root: false }));
+    render(<Projects />);
+    fireEvent.click(screen.getByRole("button", { name: "Mehran Foods" }));
+    await act(flushAsync);
+    expect(popupWords(1)).toEqual(["Open", "Pin", "—", "Rename…", "Instructions && Memory…", "Request Files…", "Members…", "—", "Archive", "—", "Delete Project…"]);
   });
 });
 

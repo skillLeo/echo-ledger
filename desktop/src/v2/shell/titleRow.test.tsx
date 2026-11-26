@@ -183,6 +183,42 @@ describe("the title row (UX-20)", () => {
     }
   });
 
+  it("beside the scope's chip, a placeholder that would be cut says \"Search\"; with room, and without the chip, its full words", () => {
+    // The field's own room is less than its box's once the chip shows ("ریکارڈنگز میں تلاش کریں" was cut to
+    // "ریکارڈنگز میں ت"): its words are measured in its font against that room. Its name keeps the full words.
+    const Real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { observe() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    const context = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue({ font: "", measureText: (words: string) => ({ width: words.length * 8 }) } as unknown as CanvasRenderingContext2D);
+    let room = 100;
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() {
+      return this.classList?.contains("el-titlerow") ? 900 : this.classList?.contains("el-titlerow__middle") ? 400
+        : this.classList?.contains("el-titlerow__field") ? room : 0;
+    } });
+    try {
+      const props = { ...base, place: "library" as const, title: { title: "All recordings", count: 253, search: { query: "", setQuery: () => undefined, placeholder: "Search recordings", scope: "All recordings" } } };
+      const view = render(<TitleRow {...props} />);
+      const field = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      expect(field).toHaveAttribute("placeholder", "Search recordings");
+      act(() => field.focus());
+      expect(row().querySelector(".el-titlerow__scope")).not.toBeNull();
+      expect(field).toHaveAttribute("placeholder", "Search");
+      act(() => field.blur());
+      expect(field).toHaveAttribute("placeholder", "Search recordings");
+      view.unmount();
+      room = 300;
+      render(<TitleRow {...props} />);
+      const roomy = within(row()).getByRole("searchbox", { name: "Search recordings" });
+      act(() => roomy.focus());
+      expect(roomy).toHaveAttribute("placeholder", "Search recordings");
+    } finally {
+      context.mockRestore();
+      globalThis.ResizeObserver = Real;
+      if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    }
+  });
+
   it("the drag regions stay: the row drags (deep), the field never does", () => {
     render(<TitleRow {...base} place="library" title={{ title: "All recordings", count: 253, search: { query: "", setQuery: () => undefined, placeholder: "Search recordings", scope: "All recordings" } }} />);
     expect(row()).toHaveAttribute("data-tauri-drag-region", "deep");

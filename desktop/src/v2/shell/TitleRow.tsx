@@ -63,6 +63,21 @@ function titleBelow(row: HTMLElement, name: HTMLElement, inner: number): boolean
  * The width ⊟, ← → and the title with its count take on one line, its words whole, whatever the row draws now (the title
  * wrapped, on a line of its own, or aside while the field is open across the row): laid out so for a moment.
  */
+let measurer: CanvasRenderingContext2D | null | undefined;
+/**
+ * Whether `words` in the field's own font are wider than the room inside it: beside the scope's chip that room is less
+ * than the box's (Urdu's "ریکارڈنگز میں تلاش کریں" was cut to "ریکارڈنگز میں ت"). Never without a layout (a test).
+ */
+function wordsCut(input: HTMLInputElement, words: string): boolean {
+  const room = input.clientWidth;
+  if (!room || !words) return false;
+  measurer ??= document.createElement("canvas").getContext("2d");
+  if (!measurer) return false;
+  const style = getComputedStyle(input);
+  measurer.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  return measurer.measureText(words).width > room;
+}
+
 function oneLine(start: HTMLElement): number {
   const title = start.querySelector<HTMLElement>(".el-titlerow__title");
   const name = start.querySelector<HTMLElement>(".el-titlerow__name");
@@ -200,6 +215,19 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
   }, [open]);
   // Words typed stay in sight: the field stays while it has them, even when the window narrows meanwhile.
   const fieldShown = !tight || (!!search && (open || !!draft));
+  // With the chip beside it, the field's placeholder is the short word when its full words would be cut (its name keeps
+  // them), as a short field's is; measured again as the field's room changes.
+  const [crowded, setCrowded] = useState(false);
+  const fullWords = search?.placeholder ?? "";
+  useLayoutEffect(() => {
+    const input = field.current;
+    if (!input || !shownScope || typeof ResizeObserver === "undefined") return setCrowded(false);
+    const measure = () => setCrowded(wordsCut(input, fullWords));
+    const watch = new ResizeObserver(measure);
+    watch.observe(input);
+    measure();
+    return () => watch.disconnect();
+  }, [shownScope, fullWords, fieldShown]);
   useEffect(() => {
     if (!findSeq) return;
     if (search) {
@@ -268,7 +296,7 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
             )}
             {/* Empty, the field reads as the window does, so its placeholder starts right after the chip (in Urdu too: on
                 its own an empty field's "auto" is left to right); typed, as what was typed. */}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? shortWords : search.placeholder} value={draft}
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short || crowded ? shortWords : search.placeholder} value={draft}
               dir={draft || !isRtl() ? "auto" : "rtl"}
               aria-keyshortcuts="Meta+F Control+F"
               onChange={(e) => {

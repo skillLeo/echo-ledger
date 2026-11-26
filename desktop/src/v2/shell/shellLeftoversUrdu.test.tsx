@@ -17,6 +17,8 @@ import { Shell, searchHint } from "./Shell";
 import { TitleRow, type TitleRowProps } from "./TitleRow";
 import { shellChip, shellStatus } from "./status";
 import { ActivityPanel, AskPanel, LivePanel } from "./PlacePanels";
+import { HomeV2 } from "../home/HomeV2";
+import { LiveV2 } from "../live/LiveV2";
 import { zoomStepper } from "./Zoom";
 import { resetProjectSortForTests } from "./projectSort";
 import { setProjectsAccount } from "./kept";
@@ -162,6 +164,26 @@ describe("the status line in Urdu", () => {
     expect(shellStatus({ recording: {}, elapsedMs: 134_000 }).text).toBe(`ریکارڈنگ ${iso("02:14")}`);
     expect(shellChip(recording, () => "Zoom")).toEqual({ kind: "recording", text: `ریکارڈنگ · ${iso("Zoom")}`, time: "02:14" });
     expect(stripIsolates(shellChip({ ...recording, paused: true, recording: { mode: "mic_note", sourceApp: "x" } }, () => "x").text)).toBe("رکی ہوئی · وائس نوٹ");
+    // Asked for in English (a page whose buttons are still English): English in an Urdu window too.
+    expect(shellStatus({ recording: null, elapsedMs: 0, callsReady: false }, "en")).toEqual({ kind: "setup", text: "Needs setup" });
+    expect(shellStatus({ recording: {}, elapsedMs: 134_000 }, "en").text).toBe("Recording 02:14");
+  });
+
+  it("Home's and Live's Record strip stay in one language, English beside their English buttons, until those pages are converted", async () => {
+    await urdu();
+    const home = render(<HomeV2 status={makeStatus({ platform: "macos", callsReady: false })} onRecord={vi.fn()} onStop={vi.fn()} onSetup={vi.fn()}
+      onReadyCheck={vi.fn()} onOpenRecording={vi.fn()} onLibrary={vi.fn()} onAction={vi.fn()} onPlan={vi.fn()} />);
+    await act(flushAsync);
+    const strip = screen.getByRole("region", { name: "Status" });
+    expect(strip).toHaveTextContent("Needs setup");
+    expect(within(strip).getByRole("button", { name: "Fix setup" })).toBeInTheDocument();
+    home.unmount();
+    render(<LiveV2 status={makeStatus({ callsReady: true })} assistOn={false} projects={[]} onRecord={vi.fn()} onVoiceNote={vi.fn()} onCaptions={vi.fn()}
+      onSettings={vi.fn()} run={(fn) => fn()} />);
+    await act(flushAsync);
+    const record = screen.getByRole("region", { name: "Record" });
+    expect(record).toHaveTextContent("Ready to record");
+    expect(record.textContent).not.toMatch(/[\u0600-\u06FF]/);
   });
 });
 
@@ -171,7 +193,7 @@ describe("the sidebar shell (without the Library's sections) in Urdu", () => {
     <Shell tab="library" onGo={vi.fn()} status={{ kind: "ready", text: "ریکارڈ کے لیے تیار" }} onRecord={vi.fn()} onSearch={vi.fn()} searchKeys="Ctrl+K" onHelp={vi.fn()}
       onAdmin={vi.fn()} rail={false} onRail={vi.fn()} width={240} onWidth={vi.fn()} workspace={workspace}
       me={{ name: "Ayesha Khan", email: "ayesha@example.test", plan: "Pro" }} onProject={vi.fn()} pinnedProjects={[{ id: "p1", name: "Acme" }]}
-      places={{ places: [{ key: "inbox", label: "کوئی پروجیکٹ نہیں", count: 3, drop: true }], current: null, open: vi.fn() }}
+      places={{ places: [{ key: "inbox", label: "بغیر پروجیکٹ کی ریکارڈنگز", count: 3, drop: true }], current: null, open: vi.fn() }}
       shared={{ tabs: [["with-me", "With me"], ["links", "My links"]], current: null, open: vi.fn() }}><p>page</p></Shell>);
 
   it("its name (مرکزی, data-nav=\"main\"), places, groups, buttons and tooltips in Urdu; names of people and projects as they are", async () => {
@@ -189,7 +211,7 @@ describe("the sidebar shell (without the Library's sections) in Urdu", () => {
       expect(within(nav).getAllByRole("button", { name }).length, name).toBeGreaterThan(0);
     }
     expect(within(nav).getByRole("list", { name: "لائبریری کے حصے" })).toBeInTheDocument();
-    expect(stripIsolates(within(nav).getByRole("button", { name: /^کوئی پروجیکٹ نہیں/ }).getAttribute("aria-label") ?? "")).toBe("کوئی پروجیکٹ نہیں، 3");
+    expect(stripIsolates(within(nav).getByRole("button", { name: /^بغیر پروجیکٹ کی ریکارڈنگز/ }).getAttribute("aria-label") ?? "")).toBe("بغیر پروجیکٹ کی ریکارڈنگز، 3");
     expect(within(within(nav).getByRole("list", { name: "شیئر شدہ" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["میرے ساتھ شیئر شدہ", "میرے لنکس"]);
     expect(within(nav).getByRole("list", { name: "پن شدہ پروجیکٹس" })).toHaveTextContent("Acme");
     const collapse = within(nav).getByRole("button", { name: "سائیڈ بار چھوٹا کریں" });
@@ -289,5 +311,30 @@ describe("what MainApp gives the shell, in Urdu", () => {
     const menu = screen.getByRole("menu");
     const items = [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent);
     expect(items).toEqual(expect.arrayContaining(["اکاؤنٹ", "پلان اور استعمال", "تھیم", "سائن آؤٹ"]));
+  }, 30_000);
+
+  it("the sidebar's places by the names ⌘K gives them (one place, one name): منتظر ریکارڈنگز, بغیر پروجیکٹ کی ریکارڈنگز", async () => {
+    respond("app_status", makeStatus({ platform: "windows", pendingDecisions: 2, callsReady: true }));
+    respond("get_settings", makeSettings());
+    respond("library_list", []);
+    respond("library_views", { views: { waiting: 2, pinned: 0, failed: 0 }, labels: [], folders: { inbox: 3, shared: 0 } });
+    respond("library_refresh", []);
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respond("bin_list", { data: [] });
+    respond("account_get", { name: "Ayesha Khan", email: "ayesha@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null, language: "ur" });
+    respond("projects_list", { data: [] });
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, v21_urdu: true }, ui_classic: false });
+    resetEntitlementsForTests(makeEntitlements());
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+    render(<MainApp />);
+    for (let i = 0; i < 6; i++) await act(flushAsync);
+    await waitFor(() => expect(document.querySelector('nav[data-nav="main"]')).not.toBeNull(), { timeout: 15_000 });
+    for (let i = 0; i < 4; i++) await act(flushAsync);
+    const places = within(screen.getByRole("navigation", { name: "مرکزی" })).getByRole("list", { name: "لائبریری کے حصے" });
+    const names = within(places).getAllByRole("button").map((b) => stripIsolates(b.textContent ?? ""));
+    expect(names.some((n) => n.startsWith("منتظر ریکارڈنگز"))).toBe(true);
+    expect(names.some((n) => n.startsWith("بغیر پروجیکٹ کی ریکارڈنگز"))).toBe(true);
+    expect(names.filter((n) => n.startsWith("انتظار") || n.startsWith("کوئی پروجیکٹ نہیں"))).toEqual([]);
   }, 30_000);
 });
