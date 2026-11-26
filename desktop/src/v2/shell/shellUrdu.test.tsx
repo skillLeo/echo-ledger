@@ -56,7 +56,7 @@ describe("the palette's own commands in Urdu", () => {
     expect(list.map((c) => c.name)).toEqual(english.map((c) => c.label));
     const said = Object.fromEntries(list.map((c) => [c.id, stripIsolates(c.label)]));
     expect(said).toMatchObject({
-      start: "ریکارڈ", captions: "کیپشنز آن کریں", voice: "ابھی چلتا ہوا وائس نوٹ محفوظ کریں", mic_note: "وائس نوٹ ریکارڈ کریں",
+      start: "ریکارڈ کریں", captions: "کیپشنز آن کریں", voice: "ابھی چلتا ہوا وائس نوٹ محفوظ کریں", mic_note: "وائس نوٹ ریکارڈ کریں",
       "live-translate": "لائیو ترجمہ", copy: "کیپشنز کے آخری 2 منٹ کاپی کریں", upload: "فائلیں اپ لوڈ کریں", invite: "لوگوں کو ورک اسپیس میں دعوت دیں",
       sync: "لائبریری سنک کریں", library: "لائبریری پر جائیں", "folder-inbox": "بغیر پروجیکٹ کی ریکارڈنگز دکھائیں",
       "folder-whatsapp": "WhatsApp کی ریکارڈنگز دکھائیں", "folder-phone": "سم کالز دکھائیں", "folder-shared": "میرے ساتھ شیئر شدہ پر جائیں",
@@ -100,16 +100,19 @@ describe("the palette's own commands in Urdu", () => {
     expect(onGo).toHaveBeenCalledWith("activity");
   });
 
-  it("a locked command's hidden line: the feature in its plan, the plan's name Latin", async () => {
+  it("a locked command's hidden line: the feature in its plan, its name in Urdu where the catalogue has it, the plan's name Latin", async () => {
     expect([lockedWords("Team workspace", "Ultra"), lockedWords("Team workspace", null)]).toEqual([", Team workspace is in Ultra", ", Team workspace is in a paid plan"]);
     await urdu();
-    expect(lockedWords("Team workspace", "Ultra")).toBe(`، ${iso("Team workspace")}، ${iso("Ultra")} میں ہے`);
-    expect(stripIsolates(lockedWords("Team workspace", null))).toBe("، Team workspace، کسی پیڈ پلان میں ہے");
+    expect(lockedWords("Team workspace", "Ultra")).toBe(`، ${iso("ٹیم ورک اسپیس")}، ${iso("Ultra")} میں ہے`);
+    expect(stripIsolates(lockedWords("Team workspace", null))).toBe("، ٹیم ورک اسپیس، کسی پیڈ پلان میں ہے");
+    expect(stripIsolates(lockedWords("Live Translate", "Pro"))).toBe("، لائیو ترجمہ، Pro میں ہے");
+    // A name the catalogue doesn't have stays as the server wrote it.
+    expect(stripIsolates(lockedWords("Team rooms", "Ultra"))).toBe("، Team rooms، Ultra میں ہے");
     resetEntitlementsForTests(sampleEntitlements("free"));
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={{ invite: vi.fn() }} />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "invite" } });
     const row = screen.getByRole("option", { name: /لوگوں کو ورک اسپیس میں دعوت دیں/ });
-    expect(stripIsolates(row.querySelector(".sr-only")?.textContent ?? "")).toBe("، Team workspace، Ultra میں ہے");
+    expect(stripIsolates(row.querySelector(".sr-only")?.textContent ?? "")).toBe("، ٹیم ورک اسپیس، Ultra میں ہے");
   });
 });
 

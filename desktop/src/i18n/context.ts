@@ -39,4 +39,7 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   "palette_context.upload": "Upload",
   "palette_context.waiting": "Waiting",
   "palette_context.no_project": "No project",
+  // The new design's Record command: the verb (ریکارڈ کریں), where the rail's Record is the place (ur.json's "Record",
+  // ریکارڈ).
+  "palette_context.record": "Record",
 };
