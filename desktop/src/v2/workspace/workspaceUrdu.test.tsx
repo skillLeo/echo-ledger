@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ClientFile, ClientFolder, ClientWorkspace, MemoryLine } from "../../lib/ipc";
+import type { CallNotes, ClientFile, ClientFolder, ClientWorkspace, MemoryLine } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeItem } from "../../test/fixtures";
 import { answerConfirmForTests, type ConfirmQuestion } from "../../lib/confirm";
@@ -19,6 +19,7 @@ import { NO_AI_NOTES, noAiNotes } from "../../lib/plan";
 import { rowDate } from "../../lib/format";
 import { budgetLine } from "../../views/main/ClientWorkspace";
 import { clientSummary } from "../../views/main/ClientAvatar";
+import { NotesSections } from "../../views/main/CallNotes";
 import { FSI, PDI, resetLanguageForTests, setLanguage, stripIsolates } from "../../i18n";
 import { textsIn } from "../../i18n/rawText";
 import ur from "../../i18n/ur.json";
@@ -74,6 +75,23 @@ const ACCOUNT = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", e
 const link = (over: Record<string, unknown>) => ({ id: "l1", session_id: null, has_password: false, include_audio: true, expires_at: null, revoked_at: null, active: true,
   view_count: 2, last_viewed_at: null, created_by: null, created_at: "2026-11-20T08:00:00Z", kind: "project", client_id: "c1", ...over });
 const sentTo = (id: string, name: string | null, email: string) => ({ id, kind: "project", to: { name, email }, title: "Qureshi Textiles", note: null, sent_at: "2026-11-21T08:00:00Z", saved_at: null });
+/** A written call note: the server's sections (docs/API.md "Call notes"), a change of each kind, a line to verify, and a section the app doesn't know. */
+const WRITTEN: CallNotes = {
+  id: "n3", session_id: "bilal", status: "ready", error: null, language: "en", created_at: at(26, 10),
+  session: { id: "bilal", title: "Payment terms for the March shipment", started_at: at(26, 9), duration_ms: 1_104_000 },
+  sections: [
+    { key: "asked_for", heading: "Asked for", items: [{ text: "Samples of the lawn print", verify: true, lines: [2], at_ms: 31_000 }] },
+    { key: "changes", heading: "Changes", items: [
+      { text: "Delivery moved to the 25th", verify: false, lines: [3], at_ms: 64_000, kind: "modify" },
+      { text: "Insurance by the buyer", verify: false, lines: [4], at_ms: null, kind: "add" },
+      { text: "Air freight", verify: false, lines: [5], at_ms: 90_000, kind: "remove" },
+    ] },
+    { key: "numbers", heading: "Deadlines, prices, numbers", items: [{ text: "Rs 420 a metre", verify: false, lines: [6], at_ms: 95_000 }] },
+    { key: "my_actions", heading: "My action items", items: [{ text: "Send the proforma by Monday", verify: false, lines: [7], at_ms: 97_000 }] },
+    { key: "risks", heading: "Risks", items: [{ text: "Port strike", verify: false, lines: [8], at_ms: 99_000 }] },
+  ],
+};
+const WRITTEN_TEXTS = WRITTEN.sections.flatMap((s) => s.items.map((i) => i.text));
 
 /** The names and the data the page shows as they are: never translated (longest first, so a name inside another goes with it). */
 const KEPT = [
@@ -81,6 +99,7 @@ const KEPT = [
   "Ship 40,000 metres of cotton lawn in March.", "Packing done by 21 March", "40% advance", "40% in advance, the balance against the bill of lading",
   "Which bank opens the LC?", "Delivery moved to the 25th", "Qureshi", "Ayesha Siddiqui", "ayesha@qureshitextiles.pk", "Ana Siddiqui",
   "ana@qureshitextiles.pk", "sara@acme.pk", "bilal@qureshitextiles.pk", "EchoLedger", "Zoom", "PDF", "Word", "Markdown", "KB", "Pro",
+  ...WRITTEN_TEXTS,
 ].sort((a, b) => b.length - a.length);
 /**
  * Shared controls this page shows that are still in English (another part's, listed in the report): the Back to top
@@ -378,6 +397,45 @@ describe("a project's page in Urdu", () => {
     expect(screen.getByRole("region", { name: "ہدایات" })).toHaveTextContent("انہیں فائلیں میں ہدایات پیسٹ کریں سے شامل کریں۔");
     expect(screen.queryByRole("region", { name: "کال نوٹس" })).toBeNull();
     expect(latinWords(wordsOf(panel()))).toEqual([]);
+  });
+
+  it("Memory & instructions: a written call note's sections, its changes' kinds, verify and each line's moment, in Urdu", async () => {
+    respond("client_workspace", { data: { ...WS, notes: [WRITTEN] } });
+    await urdu();
+    await show();
+    await openTab("یادداشت اور ہدایات");
+    const notes = screen.getByRole("region", { name: "کال نوٹس" });
+    // A section the catalogue doesn't know keeps the server's heading.
+    expect([...notes.querySelectorAll("h4")].map((h) => h.textContent)).toEqual(["کیا مانگا گیا", "تبدیلیاں", "آخری تاریخیں، قیمتیں، اعداد", "میرے کام", "Risks"]);
+    expect([...notes.querySelectorAll(".change-kind")].map((k) => k.textContent)).toEqual(["ترمیم", "اضافہ", "حذف"]);
+    const verify = notes.querySelector(".verify-tag")!;
+    expect(verify.textContent).toBe("تصدیق کریں");
+    expect(verify).toHaveAttribute("title", "یہاں ٹرانسکرپٹ واضح نہیں تھا: اس پر بھروسا کرنے سے پہلے اسے جانچ لیں");
+    expect(notes.querySelector(".note-line")).toHaveAttribute("title", `${iso("0:31")} سے چلائیں`);
+    expect(latinWords(wordsOf(notes)).filter((w) => w !== "Risks")).toEqual([]);
+  });
+
+  it("NotesSections in English as before, in the window's language, and in English for classic's pages (lang \"en\") in an Urdu window", async () => {
+    const english = () => {
+      const { unmount, container } = render(<NotesSections notes={WRITTEN} onOpen={vi.fn()} lang="en" />);
+      const said = [...container.querySelectorAll("h4, .change-kind, .verify-tag")].map((e) => e.textContent);
+      const titles = [...container.querySelectorAll("[title]")].map((e) => e.getAttribute("title"));
+      unmount();
+      return { said, titles };
+    };
+    const before = {
+      said: ["Asked for", "verify", "Changes", "Change", "Add", "Remove", "Deadlines, prices, numbers", "My action items", "Risks"],
+      titles: ["Play from 0:31", "The transcript was unclear here: check it before you rely on it", "Play from 1:04", "Play from 1:30", "Play from 1:35", "Play from 1:37", "Play from 1:39"],
+    };
+    expect(english()).toEqual(before);
+    // The window's language by default: English in an English window, the same words.
+    const { container, unmount } = render(<NotesSections notes={WRITTEN} onOpen={vi.fn()} />);
+    expect([...container.querySelectorAll("h4, .change-kind, .verify-tag")].map((e) => e.textContent)).toEqual(before.said);
+    await urdu();
+    expect([...container.querySelectorAll("h4, .change-kind, .verify-tag")].map((e) => e.textContent))
+      .toEqual(["کیا مانگا گیا", "تصدیق کریں", "تبدیلیاں", "ترمیم", "اضافہ", "حذف", "آخری تاریخیں، قیمتیں، اعداد", "میرے کام", "Risks"]);
+    unmount();
+    expect(english()).toEqual(before);
   });
 
   it("a workspace that didn't load says so with Try again", async () => {

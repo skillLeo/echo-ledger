@@ -367,7 +367,7 @@ function AiNotes({ ws, clientName, onOpenRecording }: { ws: Workspace; clientNam
           </div>
           {note.status === "pending" && <div className="row small muted" role="status"><span className="spinner" aria-hidden="true" />Writing the notes…</div>}
           {(note.status === "failed" || note.status === "skipped") && <p className="small muted">{note.error ?? "No notes were written for this call."}</p>}
-          {note.status === "ready" && <NotesSections notes={note} onOpen={(ms) => onOpenRecording(note.session_id, ms)} />}
+          {note.status === "ready" && <NotesSections notes={note} onOpen={(ms) => onOpenRecording(note.session_id, ms)} lang="en" />}
         </div>
       ))}
     </section>

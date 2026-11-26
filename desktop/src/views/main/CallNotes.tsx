@@ -7,30 +7,42 @@ import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { AlertIcon, SparkleIcon } from "../../components/Icons";
 import type { Notify } from "../../lib/notice";
+import { useLanguage, wordsIn, type Lang } from "../../i18n";
 
-const CHANGE_KIND: Record<NonNullable<NoteItem["kind"]>, string> = { add: "Add", remove: "Remove", modify: "Change" };
+/** A change's kind, in `lang`: what was added, removed or changed (nouns in Urdu: اضافہ, حذف, ترمیم). */
+const changeKind = (kind: NonNullable<NoteItem["kind"]>, lang?: Lang): string => {
+  const { t } = wordsIn(lang);
+  return kind === "add" ? t("notes_context.change_add") : kind === "remove" ? t("notes_context.change_remove") : t("notes_context.change_modify");
+};
 
 /** Pending notes are written on the server's queue; the page asks again until they are done. */
 export const notesWorking = (notes: CallNotes | null | undefined): boolean => notes?.status === "pending";
 
-/** The sections of a set of notes; each line is a button when it has a moment to open. */
-export function NotesSections({ notes, onOpen }: { notes: CallNotes; onOpen?: (ms: number) => void }) {
+/**
+ * The sections of a set of notes; each line is a button when it has a moment to open. Its words are in `lang`, the
+ * window's by default (the new design's project page); this file's classic pages pass "en". The server's headings
+ * (docs/API.md "Call notes": Asked for, Decisions…) are said in that language as the web's __($heading) does; one the
+ * catalogue doesn't know stays as the server wrote it.
+ */
+export function NotesSections({ notes, onOpen, lang }: { notes: CallNotes; onOpen?: (ms: number) => void; lang?: Lang }) {
+  useLanguage();
+  const { t } = wordsIn(lang);
   return (
     <>
       {notes.sections.map((section) => (
         <div key={section.key} className="notes-group">
-          <h4>{section.heading}</h4>
+          <h4>{section.heading ? t(section.heading) : section.heading}</h4>
           <ul className="notes-list">
             {section.items.map((item, i) => {
               const canOpen = !!onOpen && item.at_ms !== null && item.at_ms !== undefined;
               return (
                 <li key={i}>
                   <button type="button" className="note-line" disabled={!canOpen} onClick={() => canOpen && onOpen!(item.at_ms!)}
-                    title={canOpen ? `Play from ${timestamp(item.at_ms!)}` : undefined}>
+                    title={canOpen ? t("Play from :time", { time: timestamp(item.at_ms!) }) : undefined}>
                     <span className="note-time">{item.at_ms !== null && item.at_ms !== undefined ? timestamp(item.at_ms) : ""}</span>
-                    {item.kind && <span className="change-kind">{CHANGE_KIND[item.kind]}</span>}
+                    {item.kind && <span className="change-kind">{changeKind(item.kind, lang)}</span>}
                     <span className="note-text" dir="auto">{item.text}</span>
-                    {item.verify && <span className="verify-tag" title="The transcript was unclear here: check it before you rely on it">verify</span>}
+                    {item.verify && <span className="verify-tag" title={t("The transcript was unclear here: check it before you rely on it")}>{t("verify")}</span>}
                   </button>
                 </li>
               );
@@ -143,7 +155,7 @@ export function CallNotesSection({ sessionId, clientName, onSeek, notify }: {
       {notes && notes.status === "ready" && (
         notes.sections.length === 0
           ? <p className="small muted">Nothing to note from this call.</p>
-          : <NotesSections notes={notes} onOpen={onSeek} />
+          : <NotesSections notes={notes} onOpen={onSeek} lang="en" />
       )}
     </section>
   );

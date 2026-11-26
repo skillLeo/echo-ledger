@@ -2309,5 +2309,22 @@
   ":count folder moved up|:count folders moved up": ":count فولڈر ایک سطح اوپر چلا گیا|:count فولڈرز ایک سطح اوپر چلے گئے",
   "New folder inside": "اندر نیا فولڈر",
   "Move…": "منتقل کریں…",
-  "Share link…": "شیئر لنک…"
+  "Share link…": "شیئر لنک…",
+  "The answer couldn't be made. Check the internet connection and try again.": "جواب نہیں بن سکا۔ انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+  "The answer couldn't be made. Try again.": "جواب نہیں بن سکا۔ دوبارہ کوشش کریں۔",
+  "Page :page": "صفحہ :page",
+  "Answer ready": "جواب تیار ہے",
+  "Ask needs AI set up on the server. Ask the person who runs the console to set it up.": "پوچھیں کے لیے سرور پر اے آئی سیٹ اپ ہونا ضروری ہے۔ کنسول چلانے والے سے اسے سیٹ اپ کرنے کو کہیں۔",
+  "Copy answer": "جواب کاپی کریں",
+  "Clear the answer": "جواب ہٹائیں",
+  "Asked for": "کیا مانگا گیا",
+  "New, not in the brief": "نیا، بریف میں نہیں",
+  "To confirm with the client": "کلائنٹ سے تصدیق کرنی ہے",
+  "Deadlines, prices, numbers": "آخری تاریخیں، قیمتیں، اعداد",
+  "My action items": "میرے کام",
+  "verify": "تصدیق کریں",
+  "The transcript was unclear here: check it before you rely on it": "یہاں ٹرانسکرپٹ واضح نہیں تھا: اس پر بھروسا کرنے سے پہلے اسے جانچ لیں",
+  "notes_context.change_add": "اضافہ",
+  "notes_context.change_remove": "حذف",
+  "notes_context.change_modify": "ترمیم"
 }
