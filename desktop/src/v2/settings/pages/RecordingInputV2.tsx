@@ -9,7 +9,7 @@ import { setting } from "../../../lib/settingsRegistry";
 import { PERMISSION_TEXT, testVerdict } from "../../../views/main/CaptureSettings";
 import { MONTHLY_NOTE, TARGET_HINT, WINDOWS_WHOLE_SCREEN, comparableApp, screensBlocked } from "../../../views/main/ScreenSettings";
 import { PlanBadge, useLocked, useLockedTag } from "../../../views/main/Upgrade";
-import { Button, Card, EmptyState, Icons, List, ListRow, TextField } from "../../components";
+import { Button, Card, EmptyState, Icon, Icons, List, ListRow, TextField } from "../../components";
 import { Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
 import { t, tc } from "../../../i18n";
 
@@ -125,23 +125,29 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
     setAsked(!granted);
     setStatus((s) => (s ? { ...s, permission: granted } : s));
   };
-  const notes = [
-    blocked,
-    // The switch row says what screen moments are; the plan's row in its place doesn't, so the line goes here.
-    locked ? setting("screen.enabled").description : null,
+  // UX-10: each row keeps its one line (the setting's own); the longer explanation and each platform's notes are under "Learn more" (on the page,
+  // closed). What needs the person (the server, the plan or this computer holding them back, and macOS's permission
+  // after a refusal) stays in view.
+  const more = [
+    t("During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at this page”, so the transcript knows what was on screen. Screens are stored encrypted on this computer until they reach your server, and deleted here once they did."),
     on ? TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? ` ${t(WINDOWS_WHOLE_SCREEN.trim())}` : "") : null,
     on && status?.platform === "windows" ? (status.borderless
       ? t("Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings.")
       : t("Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it.")) : null,
-    on && status?.platform === "macos" ? (status.permission ? t(MONTHLY_NOTE) : asked
-      ? t("Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again.")
+    // Allowed: the monthly question; refused: only what to do (in view, below the rows); not asked yet: both.
+    on && status?.platform === "macos" ? (status.permission ? t(MONTHLY_NOTE) : asked ? null
       : `${t("macOS asks once for the Screen Recording permission.")} ${t(MONTHLY_NOTE)}`) : null,
+  ].filter(Boolean) as string[];
+  const notes = [
+    blocked,
+    // The switch row says what screen moments are; the plan's row in its place doesn't, so the line goes here.
+    locked ? setting("screen.enabled").description : null,
+    on && status?.platform === "macos" && !status.permission && asked
+      ? t("Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again.") : null,
   ].filter(Boolean) as string[];
   return (
     <div className="el-settings-v2" data-testid="screen-moments-card">
-      <p className="el-secondary">
-        {t("During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at this page”, so the transcript knows what was on screen. Screens are stored encrypted on this computer until they reach your server, and deleted here once they did.")}
-      </p>
+      <p className="el-secondary">{t("Keeps what a meeting shows on screen, so the transcript knows what was there.")}</p>
       <Group footer={notes.length ? <>{notes.map((line) => <p key={line} data-testid={line === blocked ? "screens-blocked" : undefined}>{line}</p>)}</> : undefined}>
         {locked ? (
           // A plan without screen moments keeps the row in view with its plan's badge; nothing is captured.
@@ -159,6 +165,7 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
             )}
             {on && status?.platform === "macos" && (
               <ListRow compact anchor="screen.permission" title={setting("screen.permission").title} value={status.permission ? t("Allowed") : t("Not allowed")}
+                meta={status.permission ? t("macOS asks again about once a month: choose Allow.") : undefined}
                 control={!status.permission ? (
                   <span className="el-row__buttons">
                     <Button size="sm" onClick={() => void allow()}>{t("Allow Screen Recording")}</Button>
@@ -170,6 +177,11 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
           </>
         )}
       </Group>
+      {/* Learn more: what screen moments are, and this platform's notes, in full. */}
+      <details className="el-more el-group__note el-caption el-secondary" data-testid="screen-learn-more">
+        <summary><Icon icon={Icons.ChevronEndIcon} directional />{t("Learn more")}</summary>
+        {more.map((line) => <p key={line}>{line}</p>)}
+      </details>
       <ResetDefaults page={t("Screen moments")} onReset={() => void patch({ screenMoments: true, screenTarget: "meeting_window" })} />
     </div>
   );
