@@ -202,10 +202,10 @@ describe("a project's page: every word has its Urdu, and English is as it was", 
     expect(summaryLine(0, undefined)).toBe(`${iso(0)} ریکارڈنگز`);
     expect(memoryGroups(WS.memory).map((g) => g.heading)).toEqual(["فیصلے", "تبدیلیاں", "حل طلب سوالات"]);
     expect(MEMORY_KINDS.map((k) => k.label)).toEqual(["فیصلہ", "اسکوپ", "تبدیلی", "حل طلب سوال"]);
-    expect(WS.files.map(fileLine)).toEqual([`PDF · ${iso(2)} صفحات · 117 KB`, "ہدایات · 2 KB", "پڑھی نہیں جا سکی"]);
+    expect(WS.files.map(fileLine)).toEqual([`PDF · ${iso(2)} صفحات · ${iso("117 KB")}`, `ہدایات · ${iso("2 KB")}`, "پڑھی نہیں جا سکی"]);
     expect([fileLine(file("f", "a.md", { pages: 1 })), fileLine(file("f", "a.txt", { pages: null })), fileLine(file("f", "a.docx", { status: "extracting" })),
       fileLine(file("f", "a.docx", { status: "failed", error: "Scanned image" })), fileLine(file("f", "a.docx", { pages: null, size_bytes: null }))])
-      .toEqual([`Markdown · ${iso(1)} صفحہ · 117 KB`, "ٹیکسٹ · 117 KB", "پڑھی جا رہی ہے…", `پڑھی نہیں جا سکی: ${iso("Scanned image")}`, "Word"]);
+      .toEqual([`Markdown · ${iso(1)} صفحہ · ${iso("117 KB")}`, `ٹیکسٹ · ${iso("117 KB")}`, "پڑھی جا رہی ہے…", `پڑھی نہیں جا سکی: ${iso("Scanned image")}`, "Word"]);
     expect(memberRows([link({ audience: "people", people: ["sara@acme.pk"] })], [{ item: sentTo("s1", null, "sara@acme.pk") as never, from: { id: "c1", name: "Qureshi Textiles" } }])[0].how)
       .toBe(`${iso("Qureshi Textiles")} کو بھیج دیا گیا · جب تک آپ شیئر کرنا بند نہ کریں، وہ اسے کھول سکتے ہیں؛ شیئر لنک کے ذریعے`);
     expect([dragLabel(["Kick-off"]), dragLabel([null]), dragLabel(["a", "b", "c"])])
@@ -318,7 +318,7 @@ describe("a project's page in Urdu", () => {
     expect(screen.getByRole("button", { name: "فائلیں شامل کریں" })).toBeInTheDocument();
     const files = screen.getByRole("list", { name: "فائلیں" });
     expect(within(files).getAllByRole("listitem").map((r) => r.querySelector(".el-row__meta")?.textContent))
-      .toEqual([`PDF · ${iso(2)} صفحات · 117 KB`, "ہدایات · 2 KB", "پڑھی نہیں جا سکی"]);
+      .toEqual([`PDF · ${iso(2)} صفحات · ${iso("117 KB")}`, `ہدایات · ${iso("2 KB")}`, "پڑھی نہیں جا سکی"]);
     // The screens kept in its meetings: none here; its heading names the plan that has them.
     expect(screen.getByRole("region", { name: "یہاں کوئی اسکرین نہیں" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^اسکرینز Pro$/ }).querySelector(".plan-badge")).toHaveAttribute("title", `${iso("اسکرینز")}، ${iso("Pro")} میں ہے`);

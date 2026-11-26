@@ -9,7 +9,7 @@ import { confirmAction } from "../../lib/confirm";
 import { fileSize as formatSize } from "../../lib/format";
 import { CLIENT_FILE_TYPES, fileExtension } from "../../views/main/ClientWorkspace";
 import { Button, Card, EmptyState, Icons, List, ListRow, TextArea, TextField } from "../components";
-import { lineDir, t, tc, useLanguage } from "../../i18n";
+import { isolate, isRtl, lineDir, t, tc, useLanguage } from "../../i18n";
 import type { WorkspaceUpdate } from "./WorkspaceV2";
 
 const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
@@ -20,11 +20,14 @@ const kindOf = (name: string) => {
     : ext ? ext.toUpperCase() : null;
 };
 
+/** A size in a right-to-left line keeps its own order ("178 KB", never "KB 178"); English is as it was. */
+const sizeIn = (size: string) => (isRtl() ? isolate(size) : size);
+
 /** "PDF · 3 pages · 120 KB", or what is happening to it, in the window's language. */
 export function fileLine(file: ClientFile): string {
   if (file.status === "extracting") return t("Reading…");
   if (file.status === "failed") return file.error ? t("Couldn't read it: :error", { error: file.error }) : t("Couldn't read it");
-  return [file.instructions ? t("Instructions") : kindOf(file.name), file.pages ? tc(":count page|:count pages", file.pages) : null, file.size_bytes ? formatSize(file.size_bytes) : null]
+  return [file.instructions ? t("Instructions") : kindOf(file.name), file.pages ? tc(":count page|:count pages", file.pages) : null, file.size_bytes ? sizeIn(formatSize(file.size_bytes)) : null]
     .filter(Boolean).join(" · ");
 }
 
