@@ -49,7 +49,7 @@ describe("D-257: a shared control's default words", () => {
     expect(screen.getByRole("button", { name: "منسوخ کریں" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(screen.getByRole("button", { name: "بند کریں" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "واپس جائیں" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "پیچھے" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "ہٹا دیں" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "واپس کریں" })).toBeInTheDocument();
     expect(screen.getByLabelText("اطلاعات")).toBeInTheDocument();
