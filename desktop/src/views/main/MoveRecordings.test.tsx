@@ -6,6 +6,7 @@ import MainApp from "./MainApp";
 import { LibraryView } from "./LibraryView";
 import { OrganisePanel } from "./LibraryOrganise";
 import { movedText } from "./ProjectDialogs";
+import { resetLanguageForTests, setLanguage } from "../../i18n";
 import type { ClientFolder, LibraryItem } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus, makeTranscript, anyTarget } from "../../test/fixtures";
@@ -69,6 +70,23 @@ describe("the Move dialog", () => {
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c3" } }]));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices", false, { kind: "project", id: "c3" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("in an Urdu window the classic dialog's notice stays its English (the classic Library is English)", async () => {
+    await act(() => setLanguage("ur", { root: false }));
+    try {
+      respond("session_organise", { data: ITEMS[1] });
+      const notify = vi.fn();
+      render(<LibraryView notify={notify} projects={PROJECTS} />);
+      await within(screen.getByTestId("library-list")).findByText("Loose call");
+      rowMenu("Loose call");
+      const dialog = screen.getByRole("dialog", { name: "Move “Loose call”" });
+      fireEvent.click(within(within(dialog).getByRole("radiogroup", { name: "Move to" })).getByRole("radio", { name: /Invoices/ }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+      await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices", false, { kind: "project", id: "c3" }));
+    } finally {
+      resetLanguageForTests();
+    }
   });
 
   it("moves the selection with one bulk action, into the Inbox", async () => {

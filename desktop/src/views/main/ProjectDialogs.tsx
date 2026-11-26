@@ -209,7 +209,8 @@ export function MoveRecordingsDialog({ ids, title = null, current, projects, not
     setBusy(true);
     try {
       await moveRecordings(ids, projectId);
-      notify(movedText(count, title, list, projectId), false, projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
+      // The classic Library's dialog (LibraryView, LibraryOrganise): its notice in its English, in an Urdu window too.
+      notify(movedText(count, title, list, projectId, "en"), false, projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
       onMoved?.(projectId);
       onClose();
     } catch (e) {

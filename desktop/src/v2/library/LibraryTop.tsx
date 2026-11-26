@@ -80,11 +80,11 @@ export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord }: L
             <li key={item.id} className={`el-step${item.done ? " el-step--done" : ""}`}>
               <span className="el-step__number" aria-hidden="true">{item.done ? <Icon icon={Icons.CheckIcon} /> : i + 1}</span>
               <div className="el-step__main el-home-check">
-                {/* Home's checklist words (HomeV2.tsx), said in the window's language. */}
-                <span className="el-step__title">{t(item.title)}</span>
+                {/* Home's checklist words (HomeV2.tsx's checklist()), already in the window's language. */}
+                <span className="el-step__title">{item.title}</span>
                 <span className="el-caption">{item.done ? t("Done") : t("To do")}</span>
               </div>
-              {!item.done && <Button size="sm" onClick={() => run(item.id)}>{t(item.action)}</Button>}
+              {!item.done && <Button size="sm" onClick={() => run(item.id)}>{item.action}</Button>}
             </li>
           ))}
         </ol>
