@@ -53,4 +53,9 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   "workspace_context.kind_word": "Word",
   "workspace_context.kind_text": "Text",
   "workspace_context.ways_separator": "; ",
+  // A call note's change (D-261, NotesSections): what was added, removed or changed, nouns (اضافہ, حذف, ترمیم), not the
+  // buttons' verbs (ur.json's "Add" شامل کریں, "Remove" ہٹائیں, "Change" بدلیں).
+  "notes_context.change_add": "Add",
+  "notes_context.change_remove": "Remove",
+  "notes_context.change_modify": "Change",
 };

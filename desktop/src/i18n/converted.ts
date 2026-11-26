@@ -110,4 +110,6 @@ export const CONVERTED: readonly string[] = [
   "v2/workspace/RecordingsTab.tsx",
   "v2/workspace/FilesTab.tsx",
   "v2/workspace/MembersTab.tsx",
+  // and its Ask tab, which is the Ask page too.
+  "v2/ask/AskV2.tsx",
 ];
