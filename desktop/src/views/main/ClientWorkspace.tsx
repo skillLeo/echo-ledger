@@ -218,9 +218,9 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
           const feature = lockedTab[id];
           return feature ? (
             <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab locked" aria-selected={false} aria-disabled="true"
-              aria-label={`${label}, ${featureWords(entitlements, feature).name} is in the ${lowestPlan(entitlements, feature)?.name ?? "paid"} plan`}
+              aria-label={`${label}, ${featureWords(entitlements, feature, "en").name} is in the ${lowestPlan(entitlements, feature)?.name ?? "paid"} plan`}
               data-testid={`locked-tab-${id}`} onClick={() => openUpgradeSheet(feature)}>
-              {label}<BadgeMark feature={feature} />
+              {label}<BadgeMark feature={feature} lang="en" />
             </button>
           ) : (
             <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>
@@ -250,7 +250,7 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
         {tab === "files" && ws && <Files ws={ws} clientId={client.id} notify={notify} onChange={setWs} />}
         {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} inPlan={aiNotesInPlan && !aiLocked} />}
         {tab === "screens" && (screensRead?.page ? (
-          <ProjectScreens client={client} first={screensRead.page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />
+          <ProjectScreens client={client} first={screensRead.page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} lang="en" />
         ) : screensRead?.error ? (
           <div className="notice error sync-error" role="alert">
             <span>Couldn't load {client.name}'s screens. {screensRead.error}</span>
@@ -304,12 +304,12 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
     return (
       <>
         <section className="ws-section" aria-label="AI">
-          <div className="card small muted row" data-testid="ai-not-in-plan"><span>{NO_AI_NOTES}</span><span className="spacer" /><PlanBadge feature="ai_notes" /></div>
+          <div className="card small muted row" data-testid="ai-not-in-plan"><span>{NO_AI_NOTES}</span><span className="spacer" /><PlanBadge feature="ai_notes" lang="en" /></div>
         </section>
         {/* Ask stays in view with its badge (v1.6.2): the badge opens the upgrade sheet, never a question. */}
         {askLocked && (
           <section className="ws-section" aria-label="Ask">
-            <LockedChip feature="ai_notes" label="Ask: answers about this project, from its recordings and files" />
+            <LockedChip feature="ai_notes" label="Ask: answers about this project, from its recordings and files" lang="en" />
           </section>
         )}
         <Brief ws={ws} clientId={client.id} notify={notify} onChange={onChange} onReload={onReload} canMake={false} />

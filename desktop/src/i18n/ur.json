@@ -2326,5 +2326,21 @@
   "The transcript was unclear here: check it before you rely on it": "یہاں ٹرانسکرپٹ واضح نہیں تھا: اس پر بھروسا کرنے سے پہلے اسے جانچ لیں",
   "notes_context.change_add": "اضافہ",
   "notes_context.change_remove": "حذف",
-  "notes_context.change_modify": "ترمیم"
+  "notes_context.change_modify": "ترمیم",
+  "plan_context.paid": "پیڈ",
+  ":title, in a paid plan": ":title، کسی پیڈ پلان میں",
+  "Record and upload": "ریکارڈ اور اپ لوڈ",
+  "Transcription on EchoLedger": "EchoLedger کی ٹرانسکرپشن",
+  "Roman Urdu, English and Urdu": "رومن اردو، انگریزی اور اردو",
+  "Roman Urdu, English and Urdu views": "رومن اردو، انگریزی اور اردو ویوز",
+  "Call notes, memory and Ask": "کال نوٹس، یادداشت اور پوچھیں",
+  "Live Translate is listening · :keys to show": "لائیو ترجمہ سن رہا ہے · :keys سے دکھائیں",
+  "Done (:keys)": "ہو گیا (:keys)",
+  "Screen moments of this project": "اس پروجیکٹ کے اسکرین کے لمحات",
+  "The desktop keeps what was on screen during :name's meetings.": ":name کی میٹنگز کے دوران اسکرین پر جو کچھ تھا، کمپیوٹر ایپ اسے محفوظ رکھتی ہے۔",
+  "Nothing on screen is kept for meetings filed under :name.": ":name میں رکھی گئی میٹنگز کی اسکرین سے کچھ محفوظ نہیں ہوتا۔",
+  "No screen moments yet": "ابھی اسکرین کے کوئی لمحات نہیں",
+  "When a meeting of :name is recorded on the desktop, what was on the shared screen shows here, next to its moment in the transcript.": "جب :name کی کوئی میٹنگ کمپیوٹر ایپ پر ریکارڈ ہو تو شیئر کی گئی اسکرین پر جو کچھ تھا وہ یہاں نظر آتا ہے، ٹرانسکرپٹ میں اپنے لمحے کے ساتھ۔",
+  "Show more": "مزید دکھائیں",
+  "The picture could not be loaded.": "تصویر لوڈ نہیں ہو سکی۔"
 }
