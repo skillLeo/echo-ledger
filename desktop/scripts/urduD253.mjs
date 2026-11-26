@@ -13,6 +13,7 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { onScreen } from "./textOnScreen.mjs";
 import { FLAGS } from "../src/v2/gallery/cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -119,7 +120,7 @@ try {
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(out, `${platform}-${step}${theme === "dark" ? "-dark" : ""}.png`) });
       const at = await root(page);
-      const speaks = await page.getByText(words, { exact: false }).first().isVisible().catch(() => false);
+      const speaks = await onScreen(page, words);
       const { cut, keys, rail } = await drawn(page);
       console.log(`${tag}: ${step}; <html> ${at}; ${speaks ? "in Urdu" : "NOT in Urdu"}; rail ${rail.join(" · ")}; keys ${keys.map((k) => k.text).join(" ") || "none"}${cut.length ? `; CUT ${cut.join(", ")}` : ""}`);
       if (at !== "ur/rtl") problems.push(`${tag}: ${step} is ${at}, not ur/rtl`);
