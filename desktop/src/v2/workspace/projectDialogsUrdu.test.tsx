@@ -145,14 +145,34 @@ describe("the new design's name dialogs and notices, in Urdu", () => {
     await urdu();
     await open({ project: "c3" });
     pick("منتقل کریں…");
-    // The move dialog itself is still the classic page's; its notice is the window's language.
+    // The move dialog (D-263): its title, words, picker and buttons in the window's language, the names as they are.
     const mover = screen.getByRole("dialog");
+    expect(title(mover)).toBe(`${iso("Invoices")} منتقل کریں`);
+    expect(mover).toHaveTextContent("اس کی ریکارڈنگز، فائلیں اور فولڈرز بھی ساتھ منتقل ہو جاتے ہیں۔");
+    expect(within(mover).getByRole("radiogroup", { name: "کہاں منتقل کریں" })).toHaveTextContent("اوپری سطح");
+    expect(within(mover).getByRole("radio", { name: /Acme Holdings/ }).closest("label")).toHaveTextContent("ابھی یہیں ہے");
+    expect(latinIn(mover.textContent ?? "", NAMES)).toBe(false);
     fireEvent.click(within(mover).getByRole("radio", { name: /Zed Logistics/ }));
-    fireEvent.click(within(mover).getByRole("button", { name: "Move" }));
+    fireEvent.click(within(mover).getByRole("button", { name: "منتقل کریں" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(`${iso("Invoices")} کو ${iso("Zed Logistics")} میں منتقل کر دیا گیا`, false, anyTarget));
 
     act(() => page?.onMoveRecordings(["s1"], "c2"));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(`“${iso("Kick-off")}” ${iso("Zed Logistics")} میں منتقل ہو گئی`, false, { kind: "project", id: "c2" }));
+  });
+
+  it("Delete project (D-263): its title, what happens to its recordings and folders, and its buttons in Urdu", async () => {
+    await urdu();
+    await open({ project: "c1" });
+    pick("پروجیکٹ حذف کریں…");
+    const dialog = screen.getByRole("dialog");
+    expect(title(dialog)).toBe(`${iso("Acme Holdings")} حذف کریں؟`);
+    expect([...dialog.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      `اس کی ${iso(2)} ریکارڈنگز ان باکس میں چلی جاتی ہیں، اس لیے کچھ ضائع نہیں ہوتا۔`,
+      "اس کا فولڈر اپنی ریکارڈنگز سمیت اوپری سطح پر چلا جاتا ہے۔",
+      "اس کی فائلیں، بریف، نوٹس، یادداشت اور فائلنگ کے قاعدے بھی ساتھ حذف ہو جاتے ہیں۔",
+    ]);
+    expect(within(dialog).getAllByRole("button").map((b) => b.textContent)).toEqual(["منسوخ کریں", "پروجیکٹ حذف کریں"]);
+    expect(latinIn(dialog.textContent ?? "", NAMES)).toBe(false);
   });
 
   it("a delete's notice in Urdu: the project, its recordings to the Inbox, its folders up", async () => {
@@ -160,7 +180,7 @@ describe("the new design's name dialogs and notices, in Urdu", () => {
     await urdu();
     await open({ project: "c1" });
     pick("پروجیکٹ حذف کریں…");
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete project" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "پروجیکٹ حذف کریں" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(
       `${iso("Acme Holdings")} حذف ہو گیا · ${iso(2)} ریکارڈنگز ان باکس میں منتقل ہو گئیں · ${iso(1)} فولڈر ایک سطح اوپر چلا گیا`, false, { kind: "library", folder: "inbox" }));
   });
@@ -212,6 +232,26 @@ describe("the classic Projects page in an Urdu window keeps its English", () => 
     typeName(dialog, "Agreements");
     fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Renamed", false, anyTarget));
+  });
+
+  it("Move and Delete project from the classic menu stay English (D-263)", async () => {
+    await urdu();
+    await open({ project: "c3", v2: false });
+    const menu = (item: string) => {
+      fireEvent.click(screen.getByRole("button", { name: "Project menu" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: item }));
+    };
+    menu("Move…");
+    let dialog = screen.getByRole("dialog");
+    expect(title(dialog)).toBe("Move Invoices");
+    expect(within(dialog).getByRole("radiogroup", { name: "Move to" })).toHaveTextContent("Top level");
+    expect(within(dialog).getByRole("radio", { name: /Acme Holdings/ }).closest("label")).toHaveTextContent("It is here now");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    menu("Delete project…");
+    dialog = screen.getByRole("dialog");
+    expect(title(dialog)).toBe("Delete Invoices?");
+    expect(dialog).toHaveTextContent("Its recording goes to the Inbox, so nothing is lost.");
+    expect(within(dialog).getAllByRole("button").map((b) => b.textContent)).toEqual(["Cancel", "Delete project"]);
   });
 
   it("movedText and deletedText asked in English stay English in an Urdu window", async () => {

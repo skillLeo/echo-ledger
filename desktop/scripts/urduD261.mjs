@@ -2,7 +2,7 @@
 // "&applang=ur"; 1280 × 800), on a Mac and on Windows, in the light and the dark theme, in Urdu and in English: the
 // screens the new design still showed in English. The Record page (Home), Live, a project's page (Acme Holdings) on
 // each of its tabs, and its name dialogs: New project (from All projects), New folder in a project and Rename (from the
-// project's menu). The app's navigation is found by data-nav="main", its name being the window's language.
+// project's menu), and the menu's Move and Delete project dialogs (D-263). The app's navigation is found by data-nav="main", its name being the window's language.
 // Saves docs/design/screens/desktop/urdu-d261/<platform>-<scene>[-en][-dark].png and fails (listing each problem with
 // its scene and its text) when, in Urdu, the window doesn't read right to left (<html lang="ur" dir="rtl">), a scene's
 // own text has Latin letters left that aren't kept (the brands and plans that stay Latin, file formats, the fixture's
@@ -86,8 +86,10 @@ const latinLeft = (text) => {
 
 /** The words each language's controls have, to reach the scenes. */
 const WORDS = {
-  ur: { newProject: "نیا پروجیکٹ", newFolder: "اندر نیا فولڈر", rename: "نام بدلیں", newProjectTitle: "نیا پروجیکٹ", newFolderTitle: "میں نیا فولڈر", renameTitle: "کا نام بدلیں" },
-  en: { newProject: "New project", newFolder: "New folder inside", rename: "Rename", newProjectTitle: "New project", newFolderTitle: "New folder in", renameTitle: "Rename" },
+  ur: { newProject: "نیا پروجیکٹ", newFolder: "اندر نیا فولڈر", rename: "نام بدلیں", newProjectTitle: "نیا پروجیکٹ", newFolderTitle: "میں نیا فولڈر", renameTitle: "کا نام بدلیں",
+    move: "منتقل کریں…", moveTitle: "منتقل کریں", remove: "پروجیکٹ حذف کریں…", removeTitle: "حذف کریں؟" },
+  en: { newProject: "New project", newFolder: "New folder inside", rename: "Rename", newProjectTitle: "New project", newFolderTitle: "New folder in", renameTitle: "Rename",
+    move: "Move…", moveTitle: "Move", remove: "Delete project…", removeTitle: "Delete" },
 };
 
 try {
@@ -160,7 +162,7 @@ try {
       }
 
       // All projects: New project. Then Acme Holdings' page, each tab, and its menu's New folder inside and Rename.
-      if (!scenes || scenes.some((s) => s.startsWith("project-") || ["new-project", "new-folder", "rename"].includes(s))) {
+      if (!scenes || scenes.some((s) => s.startsWith("project-") || ["new-project", "new-folder", "rename", "move-project", "delete-project"].includes(s))) {
         const page = await open("projects");
         await page.locator(".el-project-card").first().waitFor();
         if (wanted("new-project")) {
@@ -184,7 +186,8 @@ try {
         }
         if (count) await tabs.first().click();
         const menu = page.locator('[data-v2="workspace"] .el-page__actions button[aria-haspopup="menu"]').last();
-        for (const [scene, item, title] of [["new-folder", words.newFolder, words.newFolderTitle], ["rename", words.rename, words.renameTitle]]) {
+        for (const [scene, item, title] of [["new-folder", words.newFolder, words.newFolderTitle], ["rename", words.rename, words.renameTitle],
+          ["move-project", words.move, words.moveTitle], ["delete-project", words.remove, words.removeTitle]]) {
           if (!wanted(scene)) continue;
           await menu.click();
           await page.getByRole("menuitem", { name: item, exact: true }).click();
