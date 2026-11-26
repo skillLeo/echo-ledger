@@ -106,8 +106,8 @@ const latinLeft = (text) => {
 
 /** The words each language's controls have, to reach the scenes and to know they opened. */
 const WORDS = {
-  ur: { newSession: "نیا سیشن", prepTitle: "نیا لائیو اسسٹ سیشن", meetingType: "میٹنگ کی قسم", files: "فائلیں", more: "مزید دکھائیں" },
-  en: { newSession: "New session", prepTitle: "New Live Assist session", meetingType: "Meeting type", files: "Files", more: "Show more" },
+  ur: { newSession: "نیا سیشن", prepTitle: "نیا لائیو اسسٹ سیشن", meetingType: "میٹنگ کی قسم", files: "فائلیں", more: "مزید دکھائیں", keep: "اسکرین کے لمحات محفوظ کریں" },
+  en: { newSession: "New session", prepTitle: "New Live Assist session", meetingType: "Meeting type", files: "Files", more: "Show more", keep: "Keep screen moments" },
 };
 
 try {
@@ -227,8 +227,12 @@ try {
         // The section's top at the window's top (the page scrolls in its own box).
         await page.locator('section[aria-labelledby="el-project-screens"]').evaluate((section) => section.scrollIntoView({ block: "start" }));
         await page.waitForTimeout(1200);
-        // (Its Keep screen moments switch isn't there: the new design gives the page the project without its `screens`.)
-        if (wanted("project-screens")) await shot(page, "project-screens", 'section[aria-labelledby="el-project-screens"]', words.more);
+        if (wanted("project-screens")) {
+          // Classic's Keep screen moments switch is on the page (D-265: the new design gives it the project's `screens`).
+          const keep = await page.getByRole("switch", { name: words.keep, exact: true }).isVisible().catch(() => false);
+          if (!keep) problems.push(`${label} project-screens: no “${words.keep}” switch`);
+          await shot(page, "project-screens", 'section[aria-labelledby="el-project-screens"]', words.more);
+        }
         if (wanted("project-screens-viewer")) {
           await grid.locator("button.screen-thumb").nth(1).click();
           await page.locator(".screen-viewer").waitFor();

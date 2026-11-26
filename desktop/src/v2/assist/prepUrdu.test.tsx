@@ -164,6 +164,8 @@ describe("the prep screen in Urdu", () => {
     expect(newDraft("existing_client").goals).toBe("اگلا آرڈر اور اس کی ادائیگی کی شرائط طے کریں۔");
     expect(withType(newDraft("interview", "en"), "boss").goals).toBe("اگلے دو ہفتوں کی ترجیحات طے کریں۔");
     expect(withType({ ...newDraft("interview"), goals: "Talk about the Lahore launch." }, "boss").goals).toBe("Talk about the Lahore launch.");
+    // A brief left as the Urdu template, its type changed in an English window: untouched still, so English's template comes.
+    expect(withType(newDraft("interview", "ur"), "boss", "en").goals).toBe("Agree priorities for the next two weeks.");
     expect(MEETING_TYPES.map((m) => m.label)).toEqual(["Interview", "Existing client", "Prospective client", "Boss", "Other meeting"]);
     expect(TEMPLATES.boss.goals).toBe("Agree priorities for the next two weeks.");
   });
@@ -362,6 +364,19 @@ describe("the Live Assist card in Urdu", () => {
       "وہ Tell me about a time you handled a difficult client.", "میں Sure, it was with a textile exporter in Faisalabad.",
     ]);
     expect(latinLines(SESSION_KEPT, card)).toEqual([]);
+  });
+
+  it("what the card keeps is worded when drawn, so a language changed mid-session says it in the new one; one minute is singular", async () => {
+    const state = play([READY, { type: "mode_changed", from: "balanced", to: "fast", reason: "budget" },
+      { type: "error", code: "rate_limited", message: "relay text", retry: true, suggestion_id: null, in_reply_to: null, fatal: false },
+      { type: "budget", seconds_left: 60, seconds_total: 7200 }]);
+    const view = render(<AssistCard state={state} hint="outline" muted={false} actions={actions()} />);
+    const said = () => [view.container.querySelector(".el-assist__mode")?.textContent, screen.getByRole("alert").textContent,
+      screen.getByRole("progressbar").getAttribute("aria-valuetext")].map((w) => stripIsolates(w ?? ""));
+    expect(said()).toEqual(["Switched to Fast to stay within your assist hours.", "Too many requests at once. Try again in a moment.", "1 minute of assist left this month"]);
+    await urdu();
+    view.rerender(<AssistCard state={state} hint="outline" muted={false} actions={actions()} />);
+    expect(said()).toEqual(["اسسٹ کے گھنٹوں میں رہنے کے لیے تیز پر منتقل کر دیا۔", "ایک ساتھ بہت زیادہ درخواستیں۔ ذرا دیر بعد دوبارہ کوشش کریں۔", "اس مہینے اسسٹ کا 1 منٹ باقی ہے"]);
   });
 
   it("a client meeting's consent line stays English with Copy; muted, writing, no reply and the wait in Urdu; why the mode changed", async () => {

@@ -81,7 +81,8 @@ export type AssistMessage =
   | { type: "session_active"; session_id: string; practice: boolean; text: string; action: string };
 
 /** The running session a start ran into (409 session_active), as the core describes it. */
-export type SessionActive = { session_id: string | null; practice: boolean; text: string; action: string };
+/** A running session (409 session_active): the core's own words where it sends them, null for the app's (sessionActiveWords). */
+export type SessionActive = { session_id: string | null; practice: boolean; text: string | null; action: string | null };
 
 export type AssistSnapshot = { messages: AssistMessage[]; hint_level: HintLevel; paused: boolean; muted_until: string | null; meeting_type?: MeetingType | null };
 

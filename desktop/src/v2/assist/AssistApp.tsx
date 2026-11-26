@@ -29,6 +29,7 @@ type Action =
 export function reduce(state: CardState, a: Action): CardState {
   switch (a.type) {
     case "reset": return a.messages.reduce(cardReducer, EMPTY_CARD);
+    // A failure the app met itself (a command refused): its words as said then (failureText), the core's text or the app's.
     case "local_error": return { ...state, error: { text: a.text, fatal: false, suggestionId: null } };
     case "starting": return { ...state, pendingStart: { prepId: a.prepId, clientRef: a.clientRef }, offer: null, error: null };
     case "session_active_refused": return { ...state, sessionActive: a.active };
@@ -86,7 +87,7 @@ export default function AssistApp() {
   const concealed = useConcealed();
   // live_assist alone: the card is the same in classic and the new design (classic reaches it from its Record page).
   const on = fixture || ui.flags.live_assist;
-  useHitRegions([on, state.shownId, state.captions.length, state.modeNote, concealed]);
+  useHitRegions([on, state.shownId, state.captions.length, state.modeChange, concealed]);
   useEffect(() => {
     if (local.mutedUntil <= now) return;
     const t = window.setTimeout(() => setNow(Date.now()), local.mutedUntil - now);

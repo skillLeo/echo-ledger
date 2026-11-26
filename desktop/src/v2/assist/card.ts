@@ -40,10 +40,16 @@ export type CardState = {
   turns: Record<string, string>;
   /** The captions strip: the last two lines. */
   captions: CaptionLine[];
-  /** Why the mode changed, in words, until the next change. */
-  modeNote: string | null;
-  /** The last error the card shows (a failed suggestion or the session). */
-  error: { text: string; fatal: boolean; suggestionId: string | null; code?: string } | null;
+  /**
+   * Why the mode changed, until the next change: the mode and the reason, worded when the card is drawn (modeNote), so a
+   * language changed meanwhile says it in the new one. Null when there is nothing to say (the person asked for it).
+   */
+  modeChange: { mode: LiveMode; reason: ModeReason } | null;
+  /**
+   * The last error the card shows (a failed suggestion or the session): the relay's code and whether it retries, worded
+   * when drawn (errorText); or, for a failure the app met itself, its words as said then (`text`).
+   */
+  error: { code?: string; retry?: boolean; text?: string; fatal: boolean; suggestionId: string | null } | null;
   /** The core offers Live Assist for this call (a matching prep). */
   offer: { prepId: string; title: string; clientRef: string; caller: string | null } | null;
   /** Another session runs (409 session_active): the card offers to end it and start this one. */
@@ -58,7 +64,7 @@ export type CardState = {
 
 export const EMPTY_CARD: CardState = {
   sessionId: null, meetingType: null, mode: "balanced", requestedMode: null, allowedModes: [], suggestions: [], shownId: null, turns: {},
-  captions: [], modeNote: null, error: null, skipped: false, budget: { left: null, total: null }, ended: false,
+  captions: [], modeChange: null, error: null, skipped: false, budget: { left: null, total: null }, ended: false,
   offer: null, sessionActive: null, pendingStart: null,
 };
 
@@ -74,8 +80,11 @@ export function modeLabel(mode: LiveMode, lang?: Lang): string {
   }
 }
 
+/** Why a mode changed, as the relay says it. */
+export type ModeReason = Extract<AssistMessage, { type: "mode_changed" }>["reason"];
+
 /** Why the mode changed, in words (never a code), in the window's language. */
-export function modeNote(mode: LiveMode, reason: Extract<AssistMessage, { type: "mode_changed" }>["reason"], lang?: Lang): string | null {
+export function modeNote(mode: LiveMode, reason: ModeReason, lang?: Lang): string | null {
   const { t } = wordsIn(lang);
   if (reason === "requested") return null;
   if (mode === "captions_only") {
@@ -182,12 +191,12 @@ export function cardReducer(state: CardState, m: AssistMessage): CardState {
       return { ...next, skipped: true, shownId: state.shownId === m.suggestion_id ? null : state.shownId };
     }
     case "mode_changed":
-      return { ...state, mode: m.to, requestedMode: m.requested ?? state.requestedMode, modeNote: modeNote(m.to, m.reason) };
+      return { ...state, mode: m.to, requestedMode: m.requested ?? state.requestedMode, modeChange: m.reason === "requested" ? null : { mode: m.to, reason: m.reason } };
     case "error": {
       const next = m.suggestion_id ? patch(state, m.suggestion_id, (x) => ({ ...x, text: "", status: "failed" })) : state;
       if (m.code === "session_active") return { ...next, sessionActive: sessionActiveOf(m), error: null };
-      const text = errorWords(m.code, m.retry, m.message);
-      return text === null ? next : { ...next, error: { text, fatal: m.fatal, suggestionId: m.suggestion_id, code: m.code } };
+      // Whether the card says anything doesn't depend on the language; its words are found when it is drawn.
+      return errorWords(m.code, m.retry) === null ? next : { ...next, error: { code: m.code, retry: m.retry, fatal: m.fatal, suggestionId: m.suggestion_id } };
     }
     case "turn": {
       const turns = m.channel === "other" ? { ...state.turns, [m.turn_id]: m.text } : state.turns;
@@ -250,15 +259,23 @@ export function isSessionActive(e: unknown): boolean {
   return code === "session_active" || (typeof e === "string" && /session_active/.test(e));
 }
 
-/** The core's description of the running session, with the app's words (the window's language, or `lang`) where it sends none. */
-export function sessionActiveOf(e: unknown, lang?: Lang): SessionActive {
-  const { t } = wordsIn(lang);
+/** The core's description of the running session: its own words where it sends them, else null (sessionActiveWords). */
+export function sessionActiveOf(e: unknown): SessionActive {
   const o = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return { session_id: str(o.session_id), practice: o.practice === true, text: str(o.text), action: str(o.action) };
+}
+
+/** What the card says of a running session when it is drawn: the core's words, else the app's (the window's language, or `lang`). */
+export function sessionActiveWords(a: SessionActive, lang?: Lang): { text: string; action: string } {
+  const { t } = wordsIn(lang);
   return {
-    session_id: str(o.session_id),
-    practice: o.practice === true,
-    text: str(o.text) ?? (o.practice === true ? t("A practice session is running.") : t("Another Live Assist session is running.")),
-    action: str(o.action) ?? t("End it and start this one"),
+    text: a.text ?? (a.practice ? t("A practice session is running.") : t("Another Live Assist session is running.")),
+    action: a.action ?? t("End it and start this one"),
   };
+}
+
+/** An error's words when the card is drawn: the app's own failure as said then, else the relay's code in the window's language (or `lang`). */
+export function errorText(error: NonNullable<CardState["error"]>, lang?: Lang): string {
+  return error.text ?? errorWords(error.code ?? "", error.retry ?? false, "", lang) ?? "";
 }

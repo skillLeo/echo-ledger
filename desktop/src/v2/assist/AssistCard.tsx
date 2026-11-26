@@ -8,7 +8,7 @@ import { useState, type ReactNode } from "react";
 import { isRtl, lineDir, t, tc, useLanguage, wordsIn, type Lang } from "../../i18n";
 import { Button, Icons, Progress } from "../components";
 import { CONSENT_LINE, type AssistMode, type HintLevel, type SendKind } from "./adapter";
-import { boldParts, modeLabel, offerQuestion, parseSuggestion, shown, type CardState, type ParsedSuggestion } from "./card";
+import { boldParts, errorText, modeLabel, modeNote, offerQuestion, parseSuggestion, sessionActiveWords, shown, type CardState, type ParsedSuggestion } from "./card";
 
 export { CONSENT_LINE } from "./adapter";
 
@@ -83,14 +83,18 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
   const offer = state.offer ? offerQuestion(state.offer) : null;
 
   // Only for a start made from this card (its offer): the question needs something to start again.
+  const activeWords = state.sessionActive ? sessionActiveWords(state.sessionActive) : null;
+  const note = state.modeChange ? modeNote(state.modeChange.mode, state.modeChange.reason) : null;
   const sessionActive = state.sessionActive && state.pendingStart && (
     <div className="el-assist__note" role="alert">
-      <span dir={lineDir(state.sessionActive?.text ?? "")}>{state.sessionActive?.text}</span>
-      <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>{state.sessionActive?.action}</Button>
+      <span dir={lineDir(activeWords?.text ?? "")}>{activeWords?.text}</span>
+      <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>{activeWords?.action}</Button>
       <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>{t("Keep running")}</Button>
     </div>
   );
-  const error = state.error && <p className="el-field__error" role="alert" dir={lineDir(state.error.text)}>{state.error.text}</p>;
+  // What the state keeps (codes, the core's own words) is worded here, at draw time, so it follows a language change.
+  const errorLine = state.error ? errorText(state.error) : "";
+  const error = state.error && <p className="el-field__error" role="alert" dir={lineDir(errorLine)}>{errorLine}</p>;
   // Before a session: the core's offer for a prepared meeting's call (it never starts by itself).
   if (!state.sessionId) {
     if (!state.offer && !sessionActive && !state.error) return null;
@@ -129,7 +133,7 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
         <Button size="sm" variant="quiet" aria-pressed={muted} disabled={captionsOnly} onClick={actions.onMute}>{muted ? t("Muted for 60 s") : t("Mute 60 s")}</Button>
         {state.budget.left != null && state.budget.total ? (
           <span className="el-assist__budget">
-            <Progress label={t("Assist time left")} value={state.budget.left} max={state.budget.total} valueText={tc(":count minutes of assist left this month", minutesLeft)} />
+            <Progress label={t("Assist time left")} value={state.budget.left} max={state.budget.total} valueText={tc(":count minute of assist left this month|:count minutes of assist left this month", minutesLeft)} />
           </span>
         ) : <span className="el-assist__budget" />}
         <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Hide the card")} onClick={actions.onHide} />
@@ -142,7 +146,7 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
           <Button size="sm" variant="quiet" onClick={() => setNoteSeen(true)}>{t("OK")}</Button>
         </div>
       )}
-      {state.modeNote && <p className="el-assist__mode el-caption" role="status">{state.modeNote}</p>}
+      {note && <p className="el-assist__mode el-caption" role="status">{note}</p>}
       {sessionActive}
 
       <div className="el-assist__body" aria-live="polite" aria-busy={s?.status === "streaming"}>
