@@ -508,6 +508,25 @@ thead .fi-ta-selection-cell {
     background-color: var(--surface);
 }
 
+/* The row actions' heading (W-229): words for a screen reader only, in a cell as narrow as the empty heading
+   Filament draws without them (.fi-ta-empty-header-cell: one spacing unit wide, no padding). */
+.fi-ta-header-cell:has(> .el-actions-heading) {
+    width: calc(var(--spacing) * 1);
+    padding: 0;
+}
+
+.el-actions-heading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* The plain tables on the Usage, Workspace and Accuracy Lab pages have the same header. */
 .fi-section-content table th {
     font-size: 12px;
