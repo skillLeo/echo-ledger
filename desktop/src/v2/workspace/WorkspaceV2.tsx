@@ -113,7 +113,8 @@ export function memoryGroups(lines: readonly MemoryLine[]): { kind: MemoryKind; 
 export type WorkspaceUpdate = (update: (current: ClientWorkspace) => ClientWorkspace) => void;
 
 export type WorkspaceV2Props = {
-  project: { id: string; name: string; ai_notes?: boolean };
+  /** `screens`: whether the desktop keeps its meetings' screens (classic's "Keep screen moments" switch, on Files). */
+  project: { id: string; name: string; ai_notes?: boolean; screens?: boolean };
   /** Every project (its folders' recordings, the drag targets). */
   projects?: readonly ClientFolder[];
   /** The project it sits in; Back goes there (null: the Projects page). */

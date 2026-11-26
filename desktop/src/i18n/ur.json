@@ -2434,5 +2434,6 @@
   "No screen moments yet": "ابھی اسکرین کے کوئی لمحات نہیں",
   "When a meeting of :name is recorded on the desktop, what was on the shared screen shows here, next to its moment in the transcript.": "جب :name کی کوئی میٹنگ کمپیوٹر ایپ پر ریکارڈ ہو تو شیئر کی گئی اسکرین پر جو کچھ تھا وہ یہاں نظر آتا ہے، ٹرانسکرپٹ میں اپنے لمحے کے ساتھ۔",
   "Show more": "مزید دکھائیں",
-  "The picture could not be loaded.": "تصویر لوڈ نہیں ہو سکی۔"
+  "The picture could not be loaded.": "تصویر لوڈ نہیں ہو سکی۔",
+  "prep_context.with": "کس کے ساتھ"
 }

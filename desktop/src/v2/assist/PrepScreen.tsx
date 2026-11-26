@@ -189,7 +189,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted, lang }: {
             onChange={(v) => setDraft((d) => withType(d, v as MeetingType, lang))} />
           <TextField label={t("Title")} value={draft.title} placeholder={t("Interview at Mehran Foods")} onChange={(e) => set("title", e.target.value)} />
           <div className="el-form__row">
-            <TextField label={t("With")} value={draft.counterpart} placeholder={t("Ayesha Siddiqui")} onChange={(e) => set("counterpart", e.target.value)} />
+            <TextField label={t("prep_context.with")} value={draft.counterpart} placeholder={t("Ayesha Siddiqui")} onChange={(e) => set("counterpart", e.target.value)} />
             <TextField label={t("Company")} value={draft.company} placeholder={t("Mehran Foods")} onChange={(e) => set("company", e.target.value)} />
           </div>
           <Select label={t("Project")} value={draft.project_id ?? ""} onChange={(v) => set("project_id", v || null)}

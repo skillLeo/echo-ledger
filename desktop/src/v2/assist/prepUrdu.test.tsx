@@ -103,7 +103,7 @@ describe("the prep screen in Urdu", () => {
 
     expect(screen.getByRole("combobox", { name: /^میٹنگ کی قسم/ })).toHaveAccessibleName("میٹنگ کی قسم انٹرویو");
     expect(screen.getByRole("textbox", { name: "عنوان" })).toHaveAttribute("placeholder", "مہران فوڈز میں انٹرویو");
-    expect(screen.getByRole("textbox", { name: "کے ساتھ" })).toHaveAttribute("placeholder", "عائشہ صدیقی");
+    expect(screen.getByRole("textbox", { name: "کس کے ساتھ" })).toHaveAttribute("placeholder", "عائشہ صدیقی");
     expect(screen.getByRole("textbox", { name: "کمپنی" })).toHaveAttribute("placeholder", "مہران فوڈز");
     expect(screen.getByRole("combobox", { name: /^پروجیکٹ/ })).toHaveAccessibleName("پروجیکٹ کوئی پروجیکٹ نہیں");
     expect(screen.getByRole("region", { name: "دستاویزات" })).toHaveTextContent(
@@ -176,7 +176,7 @@ describe("the prep screen in Urdu", () => {
     expect(screen.getByRole("heading", { level: 1, name: "تیاری میں ترمیم کریں" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /^میٹنگ کی قسم/ })).toHaveAccessibleName("میٹنگ کی قسم موجودہ کلائنٹ");
     expect(screen.getByRole("textbox", { name: "عنوان" })).toHaveValue("March order");
-    expect(screen.getByRole("textbox", { name: "کے ساتھ" })).toHaveValue("Bilal Qureshi");
+    expect(screen.getByRole("textbox", { name: "کس کے ساتھ" })).toHaveValue("Bilal Qureshi");
     expect(screen.getByRole("combobox", { name: /^پروجیکٹ/ })).toHaveAccessibleName("پروجیکٹ Qureshi Textiles");
 
     const use = screen.getByRole("group", { name: "اس سیشن میں استعمال کریں" });

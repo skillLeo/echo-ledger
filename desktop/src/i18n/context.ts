@@ -61,4 +61,7 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // D-264: a paid feature's tag when the plan that has it isn't named: the adjective (پیڈ, as "کسی پیڈ پلان میں"), not
   // a payment made (ur.json's "Paid until :date", ادائیگی ہو چکی).
   "plan_context.paid": "Paid",
+  // D-264: the Live Assist prep field for who the call is with, a label of its own (کس کے ساتھ, "with whom"); ur.json's
+  // "With" (کے ساتھ) is the web's, inside a sentence.
+  "prep_context.with": "With",
 };
