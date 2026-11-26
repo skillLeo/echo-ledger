@@ -65,7 +65,13 @@ object SettingsIndex {
             "Auto-record apps",
             "whatsapp zoom teams meet telegram signal skype phone call record automatically khud record"
         ),
-        item("calls.after", "calls", "after-call", "After a call", "keep discard ask before saving decision timeout wait undecided"),
+        item(
+            "calls.after",
+            "calls",
+            "after-call",
+            "After each call",
+            "ask me transcribe every call save audio only don't record calls when to ask start keep discard decision undecided"
+        ),
         item("mic.source", "mic", "microphone", "Microphone source", "echo cancelled raw voice communication input"),
         item("mic.test", "mic", "microphone", "Test recording", "check try sample far side other person silent"),
         item("mic.permissions", "mic", "microphone", "Permissions and battery", "overlay battery optimisation background helper shizuku"),
@@ -101,13 +107,20 @@ object SettingsIndex {
         item("notifications.activity", "notifications", "notifications", "Activity notifications", "alerts bell transcript ready notify"),
         item("notifications.quiet", "notifications", "notifications", "Quiet hours", "do not disturb night silent from to"),
         item("lock.app", "lock", "app-lock", "App lock", "fingerprint face unlock screen lock pin security biometric"),
-        item("lock.hide", "lock", "app-lock", "Hide in recent apps", "screenshots recents secure privacy widget titles home screen"),
+        item("lock.hide", "lock", "app-lock", "Widget titles", "widget titles home screen hide privacy"),
+        item(
+            "privacy.block",
+            "privacy",
+            "screen-share",
+            "Block screenshots of EchoLedger",
+            "screenshot screenshots block secure recents capture hide content"
+        ),
         item(
             "privacy.share",
             "privacy",
             "screen-share",
-            "During screen sharing",
-            "screen share recording cast meeting floating windows private black box show hide dot"
+            "Hide EchoLedger's live words from screenshots and screen shares",
+            "screen share sharing recording cast meeting floating windows captions live assist translate black box private"
         ),
         item("storage.space", "storage", "storage", "Space used", "storage disk space full free up delete"),
         item("storage.kept", "storage", "storage", "How long recordings are kept", "retention deleted bin days"),

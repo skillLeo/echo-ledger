@@ -3,13 +3,16 @@
 // original, a line edited in place, and the call notes of a recording filed under a project. Same commands as classic.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
-  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision,
+  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision, type TranscriptView,
 } from "../../lib/ipc";
+import { convertFailedText, convertingText } from "../../lib/progress";
 import { formatWhen, timestamp } from "../../lib/format";
 import { confirmAction } from "../../lib/confirm";
 import { usePoll } from "../../lib/usePoll";
 import { notesWorking } from "../../views/main/CallNotes";
-import { Badge, Button, Checkbox, Dialog, EmptyState, Icons, Loading, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, Progress, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { sayProblem, type Say } from "./organise";
+import { t } from "../../i18n";
 
 /** Find in this transcript: the field, "N of M", previous and next; Enter, Shift+Enter and Esc as classic. */
 export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
@@ -35,12 +38,12 @@ export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
     }
   };
   return (
-    <div className="el-findbar" role="search" aria-label="Find in this transcript" ref={ref}>
-      <SearchField label="Find in this transcript" value={query} onChange={onQuery} onKeyDown={key} />
-      <span className="el-caption el-secondary el-num" role="status">{query.trim() ? (count ? `${current + 1} of ${count}` : "No matches") : ""}</span>
-      <Button size="sm" variant="quiet" icon={Icons.ChevronStartIcon} aria-label="Previous match" disabled={!count} onClick={() => onStep(-1)} />
-      <Button size="sm" variant="quiet" icon={Icons.ChevronEndIcon} aria-label="Next match" disabled={!count} onClick={() => onStep(1)} />
-      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close find" onClick={onClose} />
+    <div className="el-findbar" role="search" aria-label={t("Find in this transcript")} ref={ref}>
+      <SearchField label={t("Find in this transcript")} value={query} onChange={onQuery} onKeyDown={key} />
+      <span className="el-caption el-secondary el-num" role="status">{query.trim() ? (count ? t(":current of :total", { current: current + 1, total: count }) : t("No matches")) : ""}</span>
+      <Button size="sm" variant="quiet" icon={Icons.ChevronStartIcon} aria-label={t("Previous match")} disabled={!count} onClick={() => onStep(-1)} />
+      <Button size="sm" variant="quiet" icon={Icons.ChevronEndIcon} aria-label={t("Next match")} disabled={!count} onClick={() => onStep(1)} />
+      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Close find")} onClick={onClose} />
     </div>
   );
 }
@@ -61,11 +64,11 @@ export function LineEditor({ text, onSave, onCancel }: { text: string; onSave: (
   useEffect(() => () => {
     if (done.current) return;
     done.current = true;
-    const { value: v, text: t, onSave: save } = latest.current;
-    if (v.trim() && v.trim() !== t.trim()) save(v.trim());
+    const { value: v, text: before, onSave: save } = latest.current;
+    if (v.trim() && v.trim() !== before.trim()) save(v.trim());
   }, []);
   return (
-    <textarea className="el-line-editor" aria-label="Edit line" value={value} dir="auto" rows={Math.min(6, Math.max(2, Math.ceil(value.length / 70)))} autoFocus
+    <textarea className="el-line-editor" aria-label={t("Edit line")} value={value} dir="auto" rows={Math.min(6, Math.max(2, Math.ceil(value.length / 70)))} autoFocus
       onChange={(e) => setValue(e.target.value)} onBlur={() => finish(true)}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
@@ -79,7 +82,7 @@ export function ReplaceDialog({ transcriptId, onReplaced, onClose, say }: {
   transcriptId: string;
   onReplaced: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
@@ -92,9 +95,9 @@ export function ReplaceDialog({ transcriptId, onReplaced, onClose, say }: {
     try {
       const r = await api.replaceInTranscript(transcriptId, find, replace, matchCase, whole);
       onReplaced(r.transcript);
-      if (r.replaced === 0) setNote("Nothing matched.");
+      if (r.replaced === 0) setNote(t("Nothing matched."));
       else {
-        say(r.replaced === 1 ? "Replaced 1 place" : `Replaced ${r.replaced} places`);
+        say(r.replaced === 1 ? t("Replaced 1 place") : t("Replaced :count places", { count: r.replaced }));
         onClose();
       }
     } catch (e) {
@@ -104,12 +107,12 @@ export function ReplaceDialog({ transcriptId, onReplaced, onClose, say }: {
     }
   };
   return (
-    <Dialog open title="Find and replace" onClose={onClose} description={note ?? undefined}
-      actions={<><Button onClick={onClose}>Close</Button><Button variant="primary" disabled={!find.trim()} loading={busy} loadingLabel="Replacing…" onClick={() => void run()}>Replace all</Button></>}>
-      <TextField label="Find" value={find} onChange={(e) => setFind(e.target.value)} autoFocus />
-      <TextField label="Replace with" value={replace} onChange={(e) => setReplace(e.target.value)} />
-      <Checkbox label="Match case" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
-      <Checkbox label="Whole words" checked={whole} onChange={(e) => setWhole(e.target.checked)} />
+    <Dialog open title={t("Find and replace")} onClose={onClose} description={note ?? undefined}
+      actions={<><Button onClick={onClose}>{t("Close")}</Button><Button variant="primary" disabled={!find.trim()} loading={busy} loadingLabel={t("Replacing…")} onClick={() => void run()}>{t("Replace all")}</Button></>}>
+      <TextField label={t("Find")} value={find} onChange={(e) => setFind(e.target.value)} autoFocus />
+      <TextField label={t("Replace with")} value={replace} onChange={(e) => setReplace(e.target.value)} />
+      <Checkbox label={t("Match case")} checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
+      <Checkbox label={t("Whole words")} checked={whole} onChange={(e) => setWhole(e.target.checked)} />
     </Dialog>
   );
 }
@@ -122,7 +125,7 @@ export function SpeakersDialog({ sessionId, labels, names, hasProject, onSaved, 
   hasProject: boolean;
   onSaved: (names: Record<string, string>) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(labels.map((l) => [l, names[l] ?? ""])));
   const [remember, setRemember] = useState(false);
@@ -134,30 +137,34 @@ export function SpeakersDialog({ sessionId, labels, names, hasProject, onSaved, 
     try {
       const r = await api.renameSpeakers(sessionId, Object.fromEntries(labels.map((l) => [l, draft[l]?.trim() || null])), remember);
       onSaved(r.speaker_names);
-      say("Speakers renamed");
+      say(t("Speakers renamed"));
       onClose();
     } catch (e) {
-      setError(`The names weren't saved: ${errorMessage(e)}`);
+      setError(t("The names weren't saved: :error", { error: errorMessage(e) }));
       setBusy(false);
     }
   };
   return (
-    <Dialog open title="Speakers" description={error ?? "Names shown instead of the speaker labels, here and in what you copy or export."} onClose={onClose}
-      actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => void save()}>Save</Button></>}>
+    <Dialog open title={t("Speakers")} description={error ?? t("Names shown instead of the speaker labels, here and in what you copy or export.")} onClose={onClose}
+      actions={<><Button onClick={onClose}>{t("Cancel")}</Button><Button variant="primary" loading={busy} loadingLabel={t("Saving…")} onClick={() => void save()}>{t("Save")}</Button></>}>
       {labels.map((l) => (
         <TextField key={l} label={l} placeholder={l} value={draft[l] ?? ""} maxLength={80} onChange={(e) => setDraft((d) => ({ ...d, [l]: e.target.value }))} />
       ))}
-      {hasProject && <Checkbox label="Use these names for this project's next recordings" checked={remember} onChange={(e) => setRemember(e.target.checked)} />}
+      {hasProject && <Checkbox label={t("Use these names for this project's next recordings")} checked={remember} onChange={(e) => setRemember(e.target.checked)} />}
     </Dialog>
   );
 }
 
-const REVISION_WORDS: Record<TranscriptRevision["source"], string> = {
-  original: "Original from the engine",
-  edit: "Edited",
-  replace: "Find and replace or vocabulary",
-  restore: "Original restored",
-};
+/** What made a revision, in the window's language (an unknown source as the server says it). */
+function revisionWords(source: TranscriptRevision["source"]): string {
+  switch (source) {
+    case "original": return t("Original from the engine");
+    case "edit": return t("Edited");
+    case "replace": return t("Find and replace or vocabulary");
+    case "restore": return t("Original restored");
+    default: return source;
+  }
+}
 
 /** The transcript's history; Restore original asks first (the edits stay in the history). */
 export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }: {
@@ -165,7 +172,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
   edited: boolean;
   onRestored: (t: TranscriptDetail) => void;
   onClose: () => void;
-  say: (text: string) => void;
+  say: Say;
 }) {
   const [revisions, setRevisions] = useState<TranscriptRevision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -177,24 +184,24 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
     };
   }, [transcriptId]);
   const restore = async () => {
-    if (!(await confirmAction({ title: "Put the original text back?", body: "Your edits stay in the history.", confirm: "Restore" }))) return;
+    if (!(await confirmAction({ title: t("Put the original text back?"), body: t("Your edits stay in the history."), confirm: t("Restore") }))) return;
     try {
       onRestored(await api.restoreTranscript(transcriptId));
-      say("The original text is back");
+      say(t("The original text is back"));
       onClose();
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     }
   };
   return (
-    <Dialog open title="History" onClose={onClose} description={error ?? undefined}
-      actions={<>{edited && <Button variant="danger" onClick={() => void restore()}>Restore original</Button>}<Button onClick={onClose}>Close</Button></>}>
-      {revisions === null && !error ? <Loading label="Loading the history"><Skeleton /></Loading>
-        : revisions?.length === 0 ? <p className="el-secondary">Not edited yet. Edits and corrections appear here, and the original can always be restored.</p>
+    <Dialog open title={t("History")} onClose={onClose} description={error ?? undefined}
+      actions={<>{edited && <Button variant="danger" onClick={() => void restore()}>{t("Restore original")}</Button>}<Button onClick={onClose}>{t("Close")}</Button></>}>
+      {revisions === null && !error ? <Loading label={t("Loading the history")}><Skeleton /></Loading>
+        : revisions?.length === 0 ? <p className="el-secondary">{t("Not edited yet. Edits and corrections appear here, and the original can always be restored.")}</p>
           : (
-            <ul className="el-history" aria-label="Changes">
+            <ul className="el-history" aria-label={t("Changes")}>
               {revisions?.map((r) => (
-                <li key={r.id}><span>{REVISION_WORDS[r.source] ?? r.source}</span><span className="el-caption el-secondary">{formatWhen(r.created_at)}{r.author ? ` · by ${r.author}` : ""}</span></li>
+                <li key={r.id}><span>{revisionWords(r.source)}</span><span className="el-caption el-secondary">{formatWhen(r.created_at)}{r.author ? ` · ${t("by :author", { author: r.author })}` : ""}</span></li>
               ))}
             </ul>
           )}
@@ -203,7 +210,7 @@ export function HistoryDialog({ transcriptId, edited, onRestored, onClose, say }
 }
 
 /** The call notes of a recording in a project: written on the server, in English or Roman Urdu; a line plays its moment. */
-export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: (text: string) => void }) {
+export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onSeek: (ms: number) => void; say: Say }) {
   const [notes, setNotes] = useState<CallNotes | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<AnswerLanguage>("en");
@@ -232,31 +239,31 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
       setNotes((await api.writeSessionNotes(sessionId, lang)).data);
       setLanguage(lang);
     } catch (e) {
-      say(errorMessage(e));
+      sayProblem(say, errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
   if (error) {
-    return <EmptyState tone="error" icon={Icons.ErrorIcon} title="The call notes didn't load" body={error} action={<Button onClick={() => void load()}>Try again</Button>} />;
+    return <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("The call notes didn't load")} body={error} action={<Button onClick={() => void load()}>{t("Try again")}</Button>} />;
   }
-  if (notes === undefined) return <Loading label="Loading the call notes"><Skeleton width="long" /><Skeleton width="medium" /></Loading>;
+  if (notes === undefined) return <Loading label={t("Loading the call notes")}><Skeleton width="long" /><Skeleton width="medium" /></Loading>;
   return (
     <div className="el-notes">
       <div className="el-notes__bar">
-        <Segmented label="Notes language" value={language} onChange={(v) => (notes ? void write(v) : setLanguage(v))}
-          options={[{ value: "en" as AnswerLanguage, label: "English" }, { value: "roman_urdu" as AnswerLanguage, label: "Roman Urdu" }]} />
+        <Segmented label={t("Notes language")} value={language} onChange={(v) => (notes ? void write(v) : setLanguage(v))}
+          options={[{ value: "en" as AnswerLanguage, label: t("English") }, { value: "roman_urdu" as AnswerLanguage, label: t("Roman Urdu") }]} />
       </div>
       {notes === null ? (
-        <EmptyState icon={Icons.SparkleIcon} title="No notes for this call yet" body="What was asked for, decided and still to confirm, from the transcript."
-          action={<Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void write(language)}>Write call notes</Button>} />
+        <EmptyState icon={Icons.SparkleIcon} title={t("No notes for this call yet")} body={t("What was asked for, decided and still to confirm, from the transcript.")}
+          action={<Button variant="primary" loading={busy} loadingLabel={t("Starting…")} onClick={() => void write(language)}>{t("Write call notes")}</Button>} />
       ) : notes.status === "pending" ? (
-        <p className="el-secondary" role="status">Writing the call notes… this takes a minute.</p>
+        <p className="el-secondary" role="status">{t("Writing the call notes… this takes a minute.")}</p>
       ) : notes.status === "failed" || notes.status === "skipped" ? (
-        <EmptyState tone="error" icon={Icons.WarningIcon} title={notes.status === "skipped" ? "No notes were written for this call" : "The notes could not be written"}
-          body={notes.error ?? "Try again in a moment."} action={<Button loading={busy} onClick={() => void write(language)}>Try again</Button>} />
+        <EmptyState tone="error" icon={Icons.WarningIcon} title={notes.status === "skipped" ? t("No notes were written for this call") : t("The notes could not be written")}
+          body={notes.error ?? t("Try again in a moment.")} action={<Button loading={busy} onClick={() => void write(language)}>{t("Try again")}</Button>} />
       ) : notes.sections.length === 0 ? (
-        <p className="el-secondary">Nothing to note from this call.</p>
+        <p className="el-secondary">{t("Nothing to note from this call.")}</p>
       ) : (
         notes.sections.map((section) => (
           <section key={section.key} className="el-group" aria-label={section.heading}>
@@ -267,10 +274,10 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
                 return (
                   <li key={i}>
                     <button type="button" className="el-notes__line" disabled={at === null} onClick={() => at !== null && onSeek(at)}
-                      aria-label={at !== null ? `${item.text} · Play from ${timestamp(at)}` : undefined}>
+                      aria-label={at !== null ? t(":text · Play from :time", { text: item.text, time: timestamp(at) }) : undefined}>
                       <span className="el-num el-caption el-secondary">{at !== null ? timestamp(at) : ""}</span>
                       <span dir="auto">{item.text}</span>
-                      {item.verify && <Badge tone="warning">Verify</Badge>}
+                      {item.verify && <Badge tone="warning">{t("Verify")}</Badge>}
                     </button>
                   </li>
                 );
@@ -280,5 +287,35 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
         ))
       )}
     </div>
+  );
+}
+
+/**
+ * Over the transcript while its default view is written: a small spinner and "Converting to Roman Urdu… 60%" (no
+ * percent until the first lines are done). When it could not be written, "Couldn't convert to Roman Urdu" and Try again.
+ */
+export function ConvertingLine({ view, percent = null, failed = false, retrying = false, onRetry }: {
+  view: TranscriptView | null;
+  percent?: number | null;
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
+  if (failed) {
+    return (
+      <span className="el-converting el-converting--failed" role="status" data-testid="convert-failed">
+        <Icon icon={Icons.ErrorIcon} size="sm" />
+        <span className="el-caption">{convertFailedText(view)}</span>
+        {onRetry && <Button size="sm" variant="quiet" loading={retrying} loadingLabel={t("Starting…")} onClick={onRetry}>{t("Try again")}</Button>}
+      </span>
+    );
+  }
+  return (
+    <span className="el-converting" role="status" data-testid="converting-line">
+      <span className="el-spinner" aria-hidden="true" />
+      <span className="el-caption el-secondary">{convertingText(view, percent)}</span>
+      {/* How far, once lines are written (classic's slim bar). */}
+      {percent !== null && <Progress value={percent} label={convertingText(view, null)} valueText={`${percent}%`} />}
+    </span>
   );
 }

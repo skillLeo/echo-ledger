@@ -34,7 +34,7 @@ final class PasskeyLoginController extends Controller
         if ($user === null || ! $user->canAccessPanel($panel)) {
             $audit->record('login_failed', $user?->id, null, 'Sign-in with a passkey failed');
 
-            return response()->json(['message' => 'That passkey could not sign you in. Try again or use your password.'], 422);
+            return response()->json(['message' => __('That passkey could not sign you in. Try again or use your password.')], 422);
         }
         $request->session()->put('audit.passkey_login', true);
         Auth::guard('web')->login($user);

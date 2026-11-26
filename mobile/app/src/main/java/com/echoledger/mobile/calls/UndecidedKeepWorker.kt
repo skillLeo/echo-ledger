@@ -36,11 +36,15 @@ class UndecidedKeepWorker(context: Context, params: WorkerParameters) : Coroutin
         /** The choices offered in Settings: hours, 0 = never. */
         val CHOICES = listOf(24 to "After 24 hours (default)", 72 to "After 3 days", 0 to "Never")
 
-        /** Ids of the waiting calls that started more than [hours] ago; none when [hours] is 0 (never). */
+        /**
+         * Ids of the waiting calls that started more than [hours] ago; none when [hours] is 0 (never). A call back from a
+         * Delete lost when EchoLedger closed ([LocalRecording.restoredDelete]) is never kept by itself: it waits for the
+         * person, as on the desktop.
+         */
         fun due(waiting: List<LocalRecording>, hours: Int, now: Instant): List<String> {
             if (hours <= 0) return emptyList()
             val cutoff = now.minusSeconds(hours * 3_600L)
-            return waiting.filter { it.state == "pending_decision" }
+            return waiting.filter { it.state == "pending_decision" && !it.restoredDelete }
                 .filter { runCatching { Instant.parse(it.startedAt) }.getOrNull()?.isBefore(cutoff) == true }
                 .map { it.id }
         }

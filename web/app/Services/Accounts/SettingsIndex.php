@@ -18,6 +18,10 @@ use Normalizer;
  * Scores: the title (or an alias) starting with the query 1000, every word in the title 800, with an option 650, with
  * the description 500, with a keyword 400, only the path 300; a forgiven typo costs 300. Then 15 less per level of
  * depth and 40 more for a page. Short ambiguous words are pinned (SettingsRegistry::PINS).
+ *
+ * In another console language the title, options, description and path are also indexed as they are shown there
+ * (__()), so a search finds a row by its English words and by its shown words; shown words are never typo-forgiven.
+ * Results show the title and path in that language (title(), breadcrumb()); in English nothing changes.
  */
 final class SettingsIndex
 {
@@ -37,8 +41,9 @@ final class SettingsIndex
 
     private const TIERS = [self::TITLE => 800, self::OPTION => 650, self::DESCRIPTION => 500, self::KEYWORD => 400, self::PATH => 300];
 
-    /** Words never indexed: values ("On", "Off") and the commonest small words of the descriptions. */
-    private const STOP = ['on', 'off', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'your', 'you', 'is', 'are', 'it', 'with', 'we', 'our', 'at', 'by', 'be', 'from', 'this', 'that', 'when', 'as', 'if', 'its', 'can', 'into', 'each'];
+    /** Words never indexed: values ("On", "Off", آن, آف) and the commonest small words of the descriptions, English and Urdu. */
+    private const STOP = ['on', 'off', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'your', 'you', 'is', 'are', 'it', 'with', 'we', 'our', 'at', 'by', 'be', 'from', 'this', 'that', 'when', 'as', 'if', 'its', 'can', 'into', 'each',
+        'آن', 'آف', 'کا', 'کی', 'کے', 'کو', 'میں', 'سے', 'پر', 'اور', 'ہے', 'ہیں', 'یا', 'آپ', 'اپنی', 'اپنا', 'اپنے', 'یہ', 'وہ', 'جب', 'بھی', 'تو'];
 
     private const SPELLINGS = ['colour' => 'color', 'colours' => 'colors', 'grey' => 'gray', 'organise' => 'organize', 'cancelled' => 'canceled'];
 
@@ -69,7 +74,7 @@ final class SettingsIndex
             return $empty;
         }
         // Small words ("on", "the") are not indexed, so they are not asked for either; numbers stay ("2 step").
-        $tokens = array_values(array_filter(explode(' ', $normal), fn (string $w): bool => $w !== '' && $w !== '—' && ! in_array($w, self::STOP, true)));
+        $tokens = array_values(array_filter(explode(' ', $normal), fn (string $w): bool => $w !== '' && $w !== '—' && ! isset(self::stops()[$w])));
         if ($tokens === []) {
             return $empty;
         }
@@ -261,6 +266,12 @@ final class SettingsIndex
         $titleTokens = self::tokensOf($titles);
         $options = in_array($entry['kind'], ['choice', 'segmented'], true) ? array_map('strval', (array) $entry['options']) : [];
         $optionTokens = self::tokensOf($options);
+        $path = array_slice(self::path($entry), 0, -1);
+        // The words as the console's language shows them (none in English): searched like the English ones.
+        $shownTitles = self::shown([(string) $entry['title'], ...array_map('strval', (array) $entry['aliases'])]);
+        $shownOptions = self::shown($options);
+        $shownDescription = self::shown([(string) $entry['description']]);
+        $shownPath = self::shown($path);
         $english = array_map('strval', (array) $entry['keywords']);
         $other = [...array_map('strval', (array) $entry['ru']), ...array_map('strval', (array) $entry['ur'])];
         $phrases = [];
@@ -275,14 +286,14 @@ final class SettingsIndex
             'entry' => $entry,
             'order' => $order,
             'depth' => self::depth($entry),
-            'titles' => $titles,
+            'titles' => [...$titles, ...array_values(array_filter(array_map(self::normalize(...), $shownTitles)))],
             'phrases' => $phrases,
             'fields' => [
-                self::TITLE => $titleTokens,
-                self::OPTION => $optionTokens,
-                self::DESCRIPTION => self::tokensOf([(string) $entry['description']]),
+                self::TITLE => self::merged($titleTokens, self::tokensOf($shownTitles)),
+                self::OPTION => self::merged($optionTokens, self::tokensOf($shownOptions)),
+                self::DESCRIPTION => self::tokensOf([(string) $entry['description'], ...$shownDescription]),
                 self::KEYWORD => self::tokensOf($english),
-                self::PATH => self::tokensOf(array_slice(self::path($entry), 0, -1)),
+                self::PATH => self::tokensOf([...$path, ...$shownPath]),
             ],
             // Roman Urdu and Urdu words match whole (or with doubled letters folded), never by their start: "dark" is
             // not "darkhwast".
@@ -290,6 +301,52 @@ final class SettingsIndex
             'fuzzy' => array_values(array_unique([...$titleTokens, ...$optionTokens, ...self::tokensOf($english)])),
             'near' => array_values(array_unique([...$titleTokens, ...self::tokensOf($english)])),
         ];
+    }
+
+    /**
+     * Of [$texts], those the console's language shows differently (__()), as shown; none in English.
+     *
+     * @param  list<string>  $texts
+     * @return list<string>
+     */
+    private static function shown(array $texts): array
+    {
+        // English shows the registry's own words: no lookups (the index is built on every ⌘K keystroke).
+        if (app()->isLocale('en')) {
+            return [];
+        }
+        $out = [];
+        foreach ($texts as $text) {
+            $shown = $text === '' ? '' : __($text);
+            if (is_string($shown) && $shown !== $text) {
+                $out[] = $shown;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $a
+     * @param  list<string>  $b
+     * @return list<string>
+     */
+    private static function merged(array $a, array $b): array
+    {
+        return array_values(array_unique([...$a, ...$b]));
+    }
+
+    /**
+     * The title a result shows, in the console's language.
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    public static function title(array $entry): string
+    {
+        $title = SettingsRegistry::titleOf($entry);
+        $shown = __($title);
+
+        return is_string($shown) ? $shown : $title;
     }
 
     /**
@@ -302,7 +359,7 @@ final class SettingsIndex
     public static function path(array $entry): array
     {
         $page = $entry['page'] ?? null;
-        $title = (string) $entry['title'];
+        $title = SettingsRegistry::titleOf($entry);
         if ($page === null) {
             return ['Settings', $title];
         }
@@ -315,22 +372,21 @@ final class SettingsIndex
     }
 
     /**
-     * The breadcrumb a result shows: "Settings › Appearance › Theme" ("Settings › Appearance" for the page itself).
+     * The breadcrumb a result shows, in the console's language: "Settings › Appearance › Theme" ("Settings ›
+     * Appearance" for the page itself).
      *
      * @param  array<string, mixed>  $entry
      */
     public static function breadcrumb(array $entry): string
     {
-        if (($entry['kind'] ?? null) === 'help') {
-            return 'Settings › Help';
-        }
-        $path = self::path($entry);
+        $path = ($entry['kind'] ?? null) === 'help' ? ['Settings', 'Help'] : self::path($entry);
         $path[0] = 'Settings';
-        if (count($path) === 2 && $entry['page'] === null) {
-            $path = [$path[0], $path[1]];
-        }
 
-        return implode(' › ', $path);
+        return implode(' › ', array_map(function (string $part): string {
+            $shown = __($part);
+
+            return is_string($shown) ? $shown : $part;
+        }, $path));
     }
 
     /**
@@ -348,7 +404,14 @@ final class SettingsIndex
                     $length = max($length, mb_strlen($token));
                 }
             }
-            $out[] = $length > 0 ? '<mark>'.e(mb_substr($part, 0, $length)).'</mark>'.e(mb_substr($part, $length)) : e($part);
+            // As many letters of the title as the matched start, counting the marks normalising drops (اِن is ان).
+            $letters = 0;
+            if ($length > 0) {
+                do {
+                    $letters++;
+                } while ($letters < mb_strlen($part) && mb_strlen(self::normalize(mb_substr($part, 0, $letters))) < $length);
+            }
+            $out[] = $letters > 0 ? '<mark>'.e(mb_substr($part, 0, $letters)).'</mark>'.e(mb_substr($part, $letters)) : e($part);
         }
 
         return implode('', $out);
@@ -382,12 +445,24 @@ final class SettingsIndex
         return implode(' ', array_map(fn (string $w): string => self::SPELLINGS[$w] ?? $w, array_filter($words, fn (string $w): bool => $w !== '')));
     }
 
+    /**
+     * The small words as normalised text compares them (آن is ان once its madda is dropped).
+     *
+     * @return array<string, true>
+     */
+    private static function stops(): array
+    {
+        static $stops = null;
+
+        return $stops ??= array_fill_keys(array_map(self::normalize(...), self::STOP), true);
+    }
+
     /** @return list<string> the indexed words of a normalised text: no small words, values or bare numbers */
     public static function tokens(string $normal): array
     {
         $out = [];
         foreach (explode(' ', $normal) as $word) {
-            if ($word === '' || $word === '—' || in_array($word, self::STOP, true) || ctype_digit($word)) {
+            if ($word === '' || $word === '—' || isset(self::stops()[$word]) || ctype_digit($word)) {
                 continue;
             }
             $out[] = $word;

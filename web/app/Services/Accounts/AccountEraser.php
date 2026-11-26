@@ -11,12 +11,15 @@ use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
+use App\Models\CallDeclinedOffer;
+use App\Models\CallRule;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
@@ -39,7 +42,7 @@ use Illuminate\Support\Facades\DB;
  * workspace with their audio, transcripts and screens (CaptureSession::purgeMedia(), so the encrypted files go too),
  * its projects with their files (ProjectTree::delete(), which moves anyone else's recordings in them to the Inbox),
  * the files it added to teammates' projects, its request links, exports, devices and tokens, its console sessions,
- * its Live Assist (since v1.9: settings, preps, sessions with every word, reports and usage, in every workspace);
+ * its profile picture (since 2.0.0-l), its Live Assist (since v1.9: settings, preps, sessions with every word, reports and usage, in every workspace);
  * every workspace only it belongs to with everything still in it; then the account. Workspace rows are deleted only once they are empty, never to let foreign
  * keys cascade over encrypted files. Provider copies were erased when the recordings were transcribed or deleted; a
  * live recording is deleted first so ProviderCopyEraser runs for it too. Safe to run again after a failure.
@@ -107,12 +110,21 @@ final class AccountEraser
         // Payment receipts (v1.7): their rows go with the account by its foreign key; the encrypted files go first.
         $proofs = app(PaymentProofs::class);
         $proofs->eraseFilesOf(userId: $user->id);
+        // Since 2.0.0-l: the profile picture's stored copies.
+        app(Avatars::class)->eraseFilesOf($user);
         foreach ($solo as $workspaceId) {
             $proofs->eraseFilesOf(workspaceId: $workspaceId);
         }
 
         // Since 2.0.0-i: their label colours (the foreign keys would take them with the account too).
         LabelColor::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
+        // Since 2.0.0-m: their lists.
+        LabelList::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
+        // Since 2.0.0-w: their call rules, with the numbers and names of the people in them (the account's own column
+        // goes with the row).
+        CallRule::query()->where('user_id', $user->id)->delete();
+        // Since 2.0.0-x: the offers they turned down, with the numbers and names in them.
+        CallDeclinedOffer::query()->where('user_id', $user->id)->delete();
 
         // Since v1.8 P6.3: the invitations they sent and nobody used (their invite links too), and those waiting for
         // their address: nobody joins on the word of an account that is gone.

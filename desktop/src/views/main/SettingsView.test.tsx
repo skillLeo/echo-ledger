@@ -259,6 +259,8 @@ describe("every row comes from the registry, and every entry has its row", () =>
   // entries made at run time or found only through search (the upgrade flow's own steps).
   const CONDITIONAL = new Set(["calls.browser_tabs", "mic.perm.system_audio", "screen.permission", "help.mac_check", "privacy.cancel_deletion",
     "share_privacy.old_windows", "share_privacy.displays",
+    // Since 2.0.0-l, on a server with the account routes only (the fixture's account is from an older one).
+    "profile.picture", "security.passkeys",
     "profile.workspace", "plan.usage.members", "plan.usage.uploads", "plan.request", "plan.history", "plan.payment_details", "plan.receipt"]);
   const pages = SETTINGS.filter((e) => e.kind === "page").map((e) => e.id);
 
@@ -333,10 +335,10 @@ describe("rows that save", () => {
     expect(live).toHaveAttribute("aria-checked", "false");
   });
 
-  it("chooses whether the other floating windows are hidden from screen sharing on the Screen-share privacy page", async () => {
+  it("chooses whether Live Translate (the other floating windows before FIX-01) is hidden from screen sharing on the Screen-share privacy page", async () => {
     await setup({ settings: { hideFromSharing: "floating" } });
     await go("Screen-share privacy");
-    const select = await screen.findByLabelText("Other floating windows");
+    const select = await screen.findByLabelText("Live Translate");
     expect(select).toHaveValue("all");
     expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Hidden from screen shares", "Shown in screen shares"]);
     fireEvent.change(select, { target: { value: "off" } });

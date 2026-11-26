@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +28,7 @@ import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoCard
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
+import com.echoledger.mobile.ui.v2.components.LocalPageMargin
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -38,11 +43,21 @@ class LibraryTopActions(
     val onFix: () -> Unit,
     /** Opens Activity, where everything that needs the person is listed. */
     val onReview: () -> Unit,
-    val onRetryUploads: () -> Unit
+    val onRetryUploads: () -> Unit,
+    /** A server banner's Update: the update check (the website build) or the store page. */
+    val onUpdate: () -> Unit = {},
+    /** A server announcement's ×: closed on this phone until the text changes. */
+    val onCloseAnnouncement: (String) -> Unit = {}
 )
 
 /** The one thing the Needs action banner says, and how many more there are. */
-data class NeedsBanner(val kind: Kind, val count: Int, val more: Int) {
+data class NeedsBanner(
+    val kind: Kind,
+    val count: Int,
+    val more: Int,
+    /** Why calls are not recorded, as Setup & health words it (a string resource); null when unknown. */
+    val reason: Int? = null
+) {
     enum class Kind { CallsOff, Waiting, FailedUploads, FailedTranscripts }
 }
 
@@ -52,7 +67,7 @@ object LibraryTop {
      * card shows its "Call recording ready" row ([setupShowsCapture]), calls not recorded is left to that row and the
      * Calls chip, so the page says it once.
      */
-    fun banner(chip: ReadyChip, needs: List<NeedsAction>, setupShowsCapture: Boolean = false): NeedsBanner? {
+    fun banner(chip: ReadyChip, needs: List<NeedsAction>, setupShowsCapture: Boolean = false, blocking: String? = null): NeedsBanner? {
         val all = buildList {
             if (chip == ReadyChip.NOT_READY && !setupShowsCapture) add(NeedsBanner.Kind.CallsOff to 1)
             needs.filterIsInstance<NeedsAction.WaitingDecision>().size.takeIf { it > 0 }?.let { add(NeedsBanner.Kind.Waiting to it) }
@@ -62,7 +77,14 @@ object LibraryTop {
             }
         }
         val (kind, count) = all.firstOrNull() ?: return null
-        return NeedsBanner(kind, count, all.size - 1)
+        val reason = if (kind ==
+            NeedsBanner.Kind.CallsOff
+        ) {
+            blocking?.let { com.echoledger.mobile.ui.v2.setup.HealthChecks.failWords(it) }
+        } else {
+            null
+        }
+        return NeedsBanner(kind, count, all.size - 1, reason)
     }
 }
 
@@ -71,18 +93,40 @@ object LibraryTop {
  * is done, then one quiet Needs action banner with its one button (Fix, Review or Retry).
  */
 @Composable
-fun V2LibraryTop(checklist: List<Pair<ChecklistItem, Boolean>>, setupHidden: Boolean, banner: NeedsBanner?, actions: LibraryTopActions) {
+fun V2LibraryTop(
+    checklist: List<Pair<ChecklistItem, Boolean>>,
+    setupHidden: Boolean,
+    banner: NeedsBanner?,
+    actions: LibraryTopActions,
+    server: List<com.echoledger.mobile.core.ServerBanners.Banner> = emptyList()
+) {
+    // As classic (v1.6.1): every banner has ×. An announcement stays closed on this phone; the others close for now and
+    // come back once what they say changes (another reason, another count).
+    var closed by remember { mutableStateOf(emptySet<String>()) }
     Column {
+        server.forEach { b ->
+            val key = "server:${b.kind}:${b.text}"
+            if (key !in closed) {
+                ServerLine(b, actions) { b.key?.let(actions.onCloseAnnouncement) ?: run { closed = closed + key } }
+            }
+        }
         if (checklist.isNotEmpty() && !setupHidden) SetupCard(checklist, actions)
-        banner?.let { NeedsLine(it, actions) }
+        banner?.let { b ->
+            val key = "needs:$b"
+            if (key !in closed) NeedsLine(b, actions) { closed = closed + key }
+        }
     }
 }
 
 @Composable
-private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions) {
+private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions, onClose: () -> Unit) {
     val res = LocalContext.current.resources
     val words = when (banner.kind) {
-        NeedsBanner.Kind.CallsOff -> res.getString(R.string.v2_lib_need_calls_off)
+        // Since v1.5, in its own words ("…: the helper stopped when the phone restarted"), never only "not recorded".
+        // v2.1 UX-14: "Calls won't record · Fix", in its own words when it has them.
+        NeedsBanner.Kind.CallsOff -> banner.reason?.let {
+            res.getString(R.string.v2_lib_need_wont_record_why, res.getString(it).replaceFirstChar { ch -> ch.lowercase() })
+        } ?: res.getString(R.string.v2_lib_need_wont_record)
 
         NeedsBanner.Kind.Waiting -> if (banner.count == 1) {
             res.getString(R.string.v2_lib_need_waiting_one)
@@ -90,11 +134,8 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions) {
             res.getString(R.string.v2_lib_need_waiting, banner.count)
         }
 
-        NeedsBanner.Kind.FailedUploads -> if (banner.count == 1) {
-            res.getString(R.string.v2_home_failed_upload_one)
-        } else {
-            res.getString(R.string.v2_home_failed_uploads, banner.count)
-        }
+        // "3 didn't upload · Retry all".
+        NeedsBanner.Kind.FailedUploads -> res.getQuantityString(R.plurals.v2_lib_need_not_uploaded, banner.count, banner.count)
 
         NeedsBanner.Kind.FailedTranscripts -> if (banner.count == 1) {
             res.getString(R.string.v2_home_failed_transcript_one)
@@ -108,7 +149,7 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions) {
         NeedsBanner.Kind.FailedUploads -> if (banner.more ==
             0
         ) {
-            res.getString(R.string.v2_home_retry) to actions.onRetryUploads
+            res.getString(if (banner.count > 1) R.string.v2_lib_need_retry_all else R.string.v2_home_retry) to actions.onRetryUploads
         } else {
             res.getString(R.string.v2_lib_need_review) to
                 actions.onReview
@@ -119,9 +160,36 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions) {
     EchoBanner(
         if (banner.more > 0) res.getString(R.string.v2_lib_need_more, words, banner.more) else words,
         if (banner.kind == NeedsBanner.Kind.CallsOff) EchoBannerKind.Warning else EchoBannerKind.Info,
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
         actionLabel = label,
-        onAction = run
+        onAction = run,
+        onClose = onClose,
+        closeLabel = res.getString(R.string.v2_lib_server_close)
+    )
+}
+
+/**
+ * A server banner, as classic shows it at the top of Library: an app update (Update), maintenance, or the admin's
+ * announcement (its × closes it on this phone for good; the others' for now). The server's own words; the app's fallbacks in the screen's language.
+ */
+@Composable
+private fun ServerLine(banner: com.echoledger.mobile.core.ServerBanners.Banner, actions: LibraryTopActions, onClose: () -> Unit) {
+    val res = LocalContext.current.resources
+    val words = when (banner.text) {
+        com.echoledger.mobile.core.ServerBanners.UPDATE_FALLBACK -> res.getString(R.string.v2_lib_server_update)
+        com.echoledger.mobile.core.ServerBanners.REFUSED -> res.getString(R.string.v2_lib_server_refused)
+        com.echoledger.mobile.core.ServerBanners.MAINTENANCE_FALLBACK -> res.getString(R.string.v2_lib_server_maintenance)
+        else -> banner.text
+    }
+    val update = banner.kind == com.echoledger.mobile.core.ServerBanners.Kind.UPDATE
+    EchoBanner(
+        words,
+        if (banner.warning) EchoBannerKind.Warning else EchoBannerKind.Info,
+        Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
+        actionLabel = if (update) res.getString(R.string.v2_lib_server_update_action) else null,
+        onAction = actions.onUpdate,
+        onClose = onClose,
+        closeLabel = res.getString(R.string.v2_lib_server_close)
     )
 }
 
@@ -133,7 +201,7 @@ fun setupShowsCapture(checklist: List<Pair<ChecklistItem, Boolean>>, setupHidden
 @Composable
 private fun SetupCard(items: List<Pair<ChecklistItem, Boolean>>, actions: LibraryTopActions) {
     val c = EchoV2.colors
-    EchoCard(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)) {
+    EchoCard(Modifier.padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(

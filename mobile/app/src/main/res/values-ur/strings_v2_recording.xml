@@ -2,7 +2,7 @@
 <!-- The v2 recording page (parity with classic's recording page). -->
 <resources>
     <string name="v2_rec_more">مزید</string>
-    <string name="v2_rec_menu_organise">ترتیب</string>
+    <string name="v2_rec_menu_organise">منظم کریں</string>
     <string name="v2_rec_menu_transcript">ٹرانسکرپٹ</string>
     <string name="v2_rec_menu_export">ایکسپورٹ</string>
     <string name="v2_rec_rename">نام بدلیں</string>
@@ -28,6 +28,8 @@
     <string name="v2_rec_keep">ہمیشہ رکھیں</string>
     <string name="v2_rec_stop_keeping">ہمیشہ رکھنا بند کریں</string>
     <string name="v2_rec_kept">ہمیشہ کے لیے رکھ لی گئی</string>
+    <string name="v2_rec_marked_important">اہم نشان زد ہو گئی</string>
+    <string name="v2_rec_unmarked_important">اب اہم نہیں</string>
     <string name="v2_rec_not_kept">اب ہمیشہ کے لیے نہیں رکھی جائے گی</string>
     <string name="v2_rec_retranscribe">زبان بدل کر دوبارہ ٹرانسکرائب کریں</string>
     <string name="v2_rec_retranscribe_title">دوبارہ ٹرانسکرائب کریں، زبان:</string>
@@ -55,7 +57,8 @@
     <string name="v2_rec_export_pack_zip">میٹنگ پیک (ZIP)</string>
     <string name="v2_rec_export_not_ready">ٹرانسکرپٹ تیار ہونے کے بعد ایکسپورٹ ہو سکے گا۔</string>
     <string name="v2_rec_copy">کاپی کریں</string>
-    <string name="v2_rec_copy_text">متن کاپی کریں</string>
+    <string name="v2_rec_copy_main">متن وقت کے بغیر کاپی کریں</string>
+    <string name="v2_rec_copy_more">کاپی کے مزید طریقے</string>
     <string name="v2_rec_copy_with">وقت کے ساتھ کاپی کریں</string>
     <string name="v2_rec_copy_without">وقت کے بغیر کاپی کریں</string>
     <string name="v2_rec_copy_ai">AI کے لیے کاپی کریں</string>
@@ -73,6 +76,13 @@
     <string name="v2_rec_wa_voice">متن اور آواز</string>
     <string name="v2_rec_wa_link">لنک (7 دن کام کرے گا)</string>
     <string name="v2_rec_wa_text_copied">ٹرانسکرپٹ کلپ بورڈ پر بھی ہے، اگر واٹس ایپ اسے چھوڑ دے۔</string>
+    <string name="v2_rec_wa_saving">آواز محفوظ ہو رہی ہے…</string>
+    <string name="v2_rec_wa_voice_failed">آواز محفوظ نہیں ہو سکی، اس لیے کچھ نہیں بھیجا گیا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_rec_wa_wait">انتظار کریں: آواز ابھی محفوظ ہو رہی ہے۔</string>
+    <string name="v2_rec_wa_closed">نہیں بھیجا گیا: تیار ہونے سے پہلے شیئر بند کر دیا گیا۔</string>
+    <string name="v2_rec_wa_failed">نہیں بھیجا گیا: کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_rec_wa_not_opened">واٹس ایپ نہیں کھل سکا، اس لیے کچھ نہیں بھیجا گیا۔</string>
+    <string name="v2_rec_wa_chooser">بھیجیں</string>
     <string name="v2_rec_view_original">اصل</string>
     <string name="v2_rec_view_roman">رومن اردو</string>
     <string name="v2_rec_view_urdu">اردو</string>
@@ -109,6 +119,7 @@
     <string name="v2_rec_detail_device">ڈیوائس</string>
     <string name="v2_rec_detail_created">ریکارڈ ہوئی</string>
     <string name="v2_rec_detail_labels">لیبل</string>
+    <string name="v2_rec_detail_size">فائل کا سائز</string>
     <string name="v2_rec_detail_kept">رکھی گئی</string>
     <string name="v2_rec_detail_kept_forever">ہمیشہ کے لیے</string>
     <string name="v2_rec_detail_kept_rules">آپ کے پلان کے اصولوں کے مطابق</string>
@@ -129,8 +140,10 @@
     <string name="v2_rec_left">تقریباً %1$s باقی</string>
     <string name="v2_rec_seconds">%1$d سیکنڈ</string>
     <string name="v2_rec_minutes">%1$d منٹ</string>
-    <string name="v2_rec_improving_view">%1$s بہتر ہو رہی ہے…</string>
-    <string name="v2_rec_improving_view_pct">%1$s بہتر ہو رہی ہے… %2$d%%</string>
+    <string name="v2_rec_improving_view">%1$s میں تبدیل ہو رہا ہے…</string>
+    <string name="v2_rec_improving_view_pct">%1$s میں تبدیل ہو رہا ہے… %2$d%%</string>
+    <string name="v2_rec_convert_failed">%1$s میں تبدیل نہیں ہو سکا · دوبارہ کوشش کریں</string>
+    <string name="v2_rec_convert_failed_page">%1$s میں تبدیل نہیں ہو سکا۔</string>
     <string name="v2_rec_failed_line">ٹرانسکرپشن نہیں ہو سکی</string>
     <string name="v2_rec_notify">تیار ہونے پر مجھے بتائیں</string>
     <string name="v2_rec_notify_set">تیار ہونے پر آپ کو اطلاع ملے گی۔</string>

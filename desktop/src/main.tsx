@@ -4,7 +4,12 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
-import { api } from "./lib/ipc";
+import { api, listenTo } from "./lib/ipc";
+import { watchTitlebar, watchWinTitlebar } from "./lib/titlebar";
+import { loadZoom, setZoom, ZOOM_DEFAULT } from "./lib/zoom";
+import { installNativeFeel, SYNC_NOW_EVENT } from "./lib/nativeFeel";
+import { watchTitleDoubleClick } from "./lib/titleClick";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WindowErrorBoundary } from "./components/WindowErrorBoundary";
 
 // One index.html for every window; the view is chosen from the window label.
@@ -49,18 +54,43 @@ applyTheme(getThemeChoice());
 watchSystemTheme();
 // Account → Preferences (v1.6): the sidebar's style, density and the clock, before anything is drawn.
 applyPreferences(loadPreferences());
+// UX-07: the main window's kept zoom, before it first shows (it is hidden until its page is ready), so it doesn't jump;
+// only when the core's cached flags say v21_zoom is on, so with it off the window never opens zoomed.
+if (label === "main" && loadZoom() !== ZOOM_DEFAULT) {
+  api.uiFlags().then((a) => { if (a.ui_flags?.v21_zoom) setZoom(loadZoom(), false); }, () => undefined);
+}
 
 // C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
 // accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core
 // says the material applied; the native title bar follows the app's theme.
+// The main window's title bar is overlaid on a Mac: its buttons get their strip, except in full screen (D-214). The core
+// ran titlebarStart.js before this page, so the strip is already drawn: the window is asked at once whether it is full
+// screen (no wait for window_appearance), and only that answer can take the strip away.
+const isFullscreen = () => getCurrentWindow().isFullscreen();
+let watchingTitlebar = false;
+if (label === "main" && document.documentElement.dataset.platform === "macos") {
+  watchingTitlebar = true;
+  watchTitlebar("macos", isFullscreen);
+  // A double click on the title row does what the Mac's setting says (UX-20), not always zoom.
+  watchTitleDoubleClick("macos");
+}
 api
   .windowAppearance()
   .then((a) => {
     document.documentElement.dataset.platform = a.platform;
     if (label === "main" && a.material !== "none") document.documentElement.dataset.material = a.material;
+    if (label === "main" && !watchingTitlebar) {
+      watchTitlebar(a.platform, isFullscreen);
+      watchTitleDoubleClick(a.platform);
+    }
+    // Windows with v21_win_titlebar: the page draws the title row and the window's buttons (wintitle.rs).
+    if (label === "main" && a.platform === "windows") watchWinTitlebar(api.windowTitlebar, (follow) => listenTo<boolean>("window:titlebar", follow));
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);
+// FIX-10: an app, not a web page. In a release build the web view's menu and keys go from the main window (its
+// floating windows have their own few keys and no menu either); F5 and ⌘R sync now.
+installNativeFeel({ release: import.meta.env.PROD, onSyncNow: () => window.dispatchEvent(new Event(SYNC_NOW_EVENT)) });
 
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 

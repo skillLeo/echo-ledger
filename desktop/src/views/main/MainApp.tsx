@@ -4,27 +4,37 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount } from "../../lib/badge";
+import { needsAction as needsActionItem, railBadge } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
-import { TopBar } from "./TopBar";
+import { TopBar, workspacesOf } from "./TopBar";
 import { HelpDialog } from "./HelpDialog";
 import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
 import { SharedView } from "./SharedView";
 import { RequestLinksSheet } from "./RequestLinks";
-import { settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
+import { settingsAvailability, signOutBody } from "./SettingsView";
 import { ConfirmHost } from "./ConfirmHost";
 import { roleOf } from "./AccountSettings";
-import { searchSettings } from "../../lib/settingsIndex";
+import { palettePages, paletteSettings } from "../../v2/settings/palette";
 import { OnboardingView } from "./OnboardingView";
-import { PermissionLossNotice } from "./Permissions";
+import { OtherSideBanner, PermissionLossNotice } from "./Permissions";
 import { AfterCallNotice } from "./AfterCallNotice";
 import { ShareDefaultNotice } from "./ShareDefaultNotice";
 import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
-import { UpdateBanner } from "./UpdateSettings";
+import { RestartToUpdate, UpdateBanner } from "./UpdateSettings";
+import { MenuBar } from "../../v2/actions/useMenuBar";
+import { listenToMenuPicks, menuPicksReady, setPickedHandler, useMenuPart } from "../../v2/actions/menuState";
+import { runPicked } from "../../v2/actions/popup";
+import { registerAction } from "../../v2/actions/registry";
+import { ZOOM_DEFAULT, loadZoom, setZoom, useZoom, watchZoomWheel, zoomBy, zoomKey, zoomNow } from "../../lib/zoom";
+import { ZoomBubble, ZoomChip, zoomStepper } from "../../v2/shell/Zoom";
+import { useAvatar } from "./AccountFlows";
+import { forgetPersonPictures } from "../../v2/activity/ActorAvatar";
+import { minutesLine } from "../../v2/settings/AccountCard";
+import { SYNC_NOW_EVENT } from "../../lib/nativeFeel";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { SettingsView } from "./SettingsView";
@@ -34,29 +44,52 @@ import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
-import { isViewer, viewerSentence } from "../../lib/plan";
+import { isViewer, ROLE_LABEL, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
-import { OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
+import { call as accountCall, failureText, replyText } from "../../lib/account";
+import { t, useLanguage, type Lang } from "../../i18n";
+import { accountLanguage, useFollowLanguage } from "../../i18n/language";
+import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { ShareNotice } from "./PrivacySettings";
-import { Notice } from "../../components/Notice";
+import { Notice, NoticeLook } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
 import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
-import { shellStatus as shellStatusOf } from "../../v2/shell/status";
+import { shellChip } from "../../v2/shell/status";
+import { useActivityBadge } from "../../v2/activity/useBadge";
+import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
+import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
+import type { LibraryPlaceState } from "../../v2/library/LibraryV2";
+import type { Place as NavPlace } from "../../v2/shell/NavRail";
+import { noteRecentProject } from "../../v2/shell/recentProjects";
+import { readKept, writeKept } from "../../v2/shell/kept";
+import type { ActivityShow } from "../../v2/shell/PlacePanels";
+import * as Icons from "../../v2/components/icons";
+import { syncLibrary } from "../../v2/library/syncClock";
+import { lastViewsAccount, rememberViewsAccount, settleViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
+import { sourceAppLabel } from "../../lib/format";
+import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
+import { entryOf, groupOf } from "../../v2/settings/groups";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
 const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
 const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
+const LibraryNavV2 = lazy(() => v2().then((m) => ({ default: m.LibraryNav })));
+const LivePanelV2 = lazy(() => v2().then((m) => ({ default: m.LivePanel })));
+const AskPanelV2 = lazy(() => v2().then((m) => ({ default: m.AskPanel })));
+const ActivityPanelV2 = lazy(() => v2().then((m) => ({ default: m.ActivityPanel })));
+const SettingsPanelV2 = lazy(() => v2().then((m) => ({ default: m.SettingsPanel })));
+const LibraryFootV2 = lazy(() => v2().then((m) => ({ default: m.LibraryFoot })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
@@ -68,16 +101,33 @@ const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
 const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
 const RequestLinkSheetV2 = lazy(() => v2().then((m) => ({ default: m.RequestLinkSheet })));
+const ImportSheetV2 = lazy(() => v2().then((m) => ({ default: m.ImportSheetV2 })));
+const DropHintV2 = lazy(() => v2().then((m) => ({ default: m.DropHintV2 })));
+const ProjectsListV2 = lazy(() => v2().then((m) => ({ default: m.ProjectsListV2 })));
+const NameDialogV2 = lazy(() => v2().then((m) => ({ default: m.NameDialogV2 })));
+const AppToastV2 = lazy(() => v2().then((m) => ({ default: m.AppToastV2 })));
+const OnboardingV2 = lazy(() => v2().then((m) => ({ default: m.OnboardingV2 })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
+/** Whether the account had no project when last read (kept.ts), so the Projects panel needn't show while they load. */
+const NO_PROJECTS_KEY = "echoledger-no-projects";
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
+/** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
+export const WIZARD_FLAGS_WAIT_MS = 1500;
+/** Help's group in two levels (UX-11): its way back goes to that group's page. */
+const HELP_GROUP = (() => {
+  const group = groupOf("help")!;
+  return { title: group.title, entry: entryOf(group) };
+})();
+/** The pages in words, for a Back link that returns to one ("Library"). */
+const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
 
-const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept but not transcribed.";
+const BUDGET_REACHED = "Monthly transcription limit reached. New recordings are kept as audio only.";
 const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
 
 /**
@@ -99,11 +149,50 @@ export function typingIn(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
+/** The menu bar's commands the main window answers itself (FIX-05); the shell (NavShell) and the pages add theirs. */
+const MENU_COMMANDS = [
+  "app.accountPlan", "app.checkUpdates", "file.syncNow", "file.newProject", "view.themeLight", "view.themeDark", "view.themeSystem",
+  "go.allRecordings", "go.needsYou", "go.unread", "go.audioOnly", "go.trash", "go.shared", "live.pauseRecording", "live.captions", "window.pill",
+  "help.help", "help.shortcuts", "help.setupHealth",
+] as const;
+
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
-  // Interface flags: read at start and on each page change, never while recording (v2/flags.ts).
-  const [ui, setUi] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  // Interface flags: read at start, on each page change and when a recording ends, never while recording; the core's
+  // first config answer (ui:flags) applies at once when the window read before it (v2/flags.ts).
+  const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  // UX-07 (v21_zoom): zoom like Chrome, in this window only. Off, the window is at 100% (main.tsx may have put a kept
+  // zoom back before the flags were known). On: the kept zoom, the keys (⌘+ ⌘= ⌘− ⌘0, Ctrl elsewhere, the number pad's
+  // too; the menu bar's own on a Mac), Ctrl + the wheel, and the menu bar's View items.
+  const zoomOn = ui.flags.v21_zoom;
+  const zoomLevel = useZoom();
+  const flagsKnown = flagsReadFor !== null;
+  useEffect(() => {
+    if (!flagsKnown) return;
+    if (!zoomOn) {
+      if (zoomNow() !== ZOOM_DEFAULT) setZoom(ZOOM_DEFAULT, false);
+      return;
+    }
+    setZoom(loadZoom(), false);
+    const key = (e: KeyboardEvent) => {
+      const dir = zoomKey(e, menuPlatform.current === "macos");
+      if (dir === null || e.defaultPrevented) return;
+      e.preventDefault();
+      zoomBy(dir);
+    };
+    window.addEventListener("keydown", key);
+    // Ctrl + the wheel off a Mac (a Mac's pinch is the system's own).
+    const stopWheel = menuPlatform.current === "macos" ? () => undefined : watchZoomWheel();
+    const offs = [registerAction("view.zoomIn", () => zoomBy(1)), registerAction("view.zoomOut", () => zoomBy(-1)), registerAction("view.actualSize", () => zoomBy(0))];
+    return () => {
+      window.removeEventListener("keydown", key);
+      stopWheel();
+      offs.forEach((off) => off());
+    };
+  }, [zoomOn, flagsKnown]);
+  const threeLevels = useRef(false);
+  threeLevels.current = ui.flags["ui_v2.library"];
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
   const [chosenCollapsed, setCollapsed] = useState(loadCollapsed);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -139,12 +228,56 @@ export default function MainApp() {
     if (done) saveSidebarWidth(width);
   }, []);
   const [help, setHelp] = useState(false);
-  const [requestSheet, setRequestSheet] = useState(false);
+  // Help & shortcuts in the new design: Settings › Help on its Shortcuts tab ("?", the sidebar, the palette).
+  // `from`: the page "?" was pressed on; Help's Back goes there (Settings when it was opened from Settings).
+  const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number; from: Tab | null } | null>(null);
+  const openHelpRef = useRef<() => void>(() => setHelp(true));
+  // Request files: the sheet, and the project new links send into (null: the Inbox).
+  const [requestSheet, setRequestSheet] = useState<false | { projectId: string | null }>(false);
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
+  // Desktop Urdu (v21_urdu), in the new design only: the window speaks the account's language (the last one known on
+  // this computer while it loads or can't be read; the system's only when signed out); Settings › Appearance › Language
+  // changes it on the server, for the web and the phone too.
+  const urdu = ui.flags.v21_urdu && !ui.classic && ui.flags["ui_v2.shell"];
+  useFollowLanguage(urdu, flagsKnown, status ? status.paired : null, account);
+  const lang = useLanguage();
+  const [languageError, setLanguageError] = useState<string | null>(null);
+  // One change at a time (PATCH /api/account allows 10 an hour, with name changes): a click while one is on its way,
+  // or on the language the account has already, sends nothing.
+  const languagePending = useRef(false);
+  const changeLanguage = async (next: Lang) => {
+    if (languagePending.current || next === (accountLanguage(account) ?? lang)) return;
+    languagePending.current = true;
+    setLanguageError(null);
+    try {
+      const reply = await accountCall<Account>("language", { language: next });
+      if (!reply.ok) return setLanguageError(replyText(reply));
+      // The server's account as it answers (the same as GET), so the window says what the server has.
+      const data = reply.data && typeof reply.data === "object" ? reply.data : null;
+      setAccount((now) => (now ? { ...now, ...data, language: accountLanguage(data) ?? next } : now));
+    } catch (e) {
+      setLanguageError(failureText(e));
+    } finally {
+      languagePending.current = false;
+    }
+  };
+  // The person's photo for the rail's avatar (DES-08), kept on this computer by its version; the initials without one.
+  const avatarPhoto = useAvatar(account);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
+  // UX-08: the server's one number (GET /api/badge), the same on the phone and the web console; counted here from the list
+  // while it can't be read (offline, an older server).
+  const serverBadge = useActivityBadge(!!status?.paired, status?.signIn ?? null);
+  // FIX-11: the Dock icon's number is the rail's; the core adds the calls waiting that only this computer knows, so the
+  // rest is sent (the server's number, or, counted here, the list and the calls the server has sessions for).
+  const waitingAll = status?.pendingDecisions ?? 0;
+  const waitingHere = status?.pendingDecisionsHere ?? waitingAll;
+  const activityPart = Math.max(0, railBadge(serverBadge, activityItems, waitingAll, waitingHere).count - waitingHere);
+  useEffect(() => {
+    void api.dockActivitySet(activityPart).catch(() => undefined);
+  }, [activityPart]);
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
   const [projects, setProjects] = useState<ClientFolder[] | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -156,6 +289,63 @@ export default function MainApp() {
   // Waiting, Pinned and Failed uploads (v1.6, P4.2): views of the whole Library, not server folders.
   const [libraryView, setLibraryView] = useState<LibraryViewKey | null>(null);
   const [sharedTab, setSharedTab] = useState<SharedTab>("with-me");
+  // The new design's Library (PLAN_LIBRARY_FILTERS): what the sidebar chose (a library view, one of My views, a label,
+  // Trash), the request that tells the Library, and the recordings the sidebar counts from (read here, and fresher from
+  // the Library while it is open, with what was opened there).
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>(ALL_SCOPE);
+  const [scopeRequest, setScopeRequest] = useState<{ scope: LibraryScope; seq: number; restore?: LibraryPlaceState } | null>(null);
+  // The three levels' memory (PLAN_NAV_3_LEVELS §6): each place as it was left, to come back to from the rail.
+  const libraryPlace = useRef<LibraryPlaceState | null>(null);
+  const lastProject = useRef<string | null>(null);
+  const lastSettings = useRef<string | null>(null);
+  const [activityShow, setActivityShow] = useState<ActivityShow>("all");
+  const [askProject, setAskProject] = useState<{ id: string | null; seq: number; question?: string }>({ id: null, seq: 0 });
+  // The title row's search asks for a place (Ask about "…", UX-20).
+  const [placeRequest, setPlaceRequest] = useState<{ place: NavPlace; seq: number } | null>(null);
+  const [filtersRequest, setFiltersRequest] = useState<{ seq: number } | null>(null);
+  const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
+  const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
+  // My views are each account's own in each workspace (the server, the email, the workspace), synced through
+  // /api/views. Whose they were last is kept on this computer for this sign-in: an offline start shows (and saves) that
+  // account's views until the account can be read; signing out forgets it, and another account's sign-in replaces it.
+  // What is kept for this is tied to the core's id for this sign-in: another sign-in, or none, finds nothing of it (and
+  // the copies of a sign-in that is over go, but for what still waits to be sent). The remembered account's views show
+  // and change here only; they are sent once account_get confirms the same server, email and workspace.
+  const liveViews = viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id);
+  const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
+  // The places' memory is one sign-in's: another sign-in (or none) starts every place afresh.
+  useEffect(() => {
+    // The people's pictures asked for are the last sign-in's too (the core forgets its copies then).
+    forgetPersonPictures();
+    libraryPlace.current = null;
+    lastProject.current = null;
+    lastSettings.current = null;
+    setAskProject((a) => ({ id: null, seq: a.seq + 1 }));
+    setActivityShow("all");
+    setLibraryScope(ALL_SCOPE);
+    // And what was asked of the Library for the last sign-in: a Library opened later (a notice, a shared item) never
+    // applies it.
+    setScopeRequest(null);
+    setLibraryViewV2(null);
+    setOpenRequest(null);
+    setReviewV2(null);
+    setFiltersRequest(null);
+  }, [signIn]);
+  useEffect(() => {
+    if (signIn !== undefined) settleViewsAccount(signIn);
+  }, [signIn]);
+  useEffect(() => {
+    if (liveViews && signIn) rememberViewsAccount(status?.serverUrl, liveViews, signIn);
+  }, [liveViews, signIn, status?.serverUrl]);
+  const lastViews = useMemo(() => (signIn ? lastViewsAccount(status?.serverUrl, signIn) : null), [signIn, status?.serverUrl, liveViews]);
+  useViewsAccount(liveViews ?? lastViews, liveViews !== null);
+  // UX-09: whether this account had no project when last read, so the Projects panel doesn't show and then go away
+  // (260 px) on a cold start, or stay empty while offline.
+  const projectsAccount = liveViews ?? lastViews;
+  const hadNoProjects = readKept(NO_PROJECTS_KEY, projectsAccount) === "1";
+  useEffect(() => {
+    if (projects) writeKept(NO_PROJECTS_KEY, projectsAccount, projects.length === 0 ? "1" : "0");
+  }, [projects, projectsAccount]);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -170,12 +360,61 @@ export default function MainApp() {
   // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
   const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+  // FIX-05: the window's one listener for every pick from a menu the system drew (menuState.ts), in the classic shell
+  // too; the platform is read at each pick. The Mac menu bar itself is the <MenuBar /> leaf (with the new design's
+  // shell), and the window's own commands (MENU_COMMANDS) are registered below while the app is in use.
+  const menuPlatform = useRef<"macos" | "windows">("windows");
+  menuPlatform.current = status?.platform === "macos" ? "macos" : "windows";
+  useEffect(() => listenToMenuPicks(() => menuPlatform.current), []);
+  // A right-click menu's (numbered) picks are its own (actions/popup.ts): run by the item they came from.
+  useEffect(() => setPickedHandler(runPicked), []);
+  const menuCommands = useRef<Partial<Record<(typeof MENU_COMMANDS)[number], () => void>>>({});
+  // The panel tree's project menu (3b): what the window can do for a project from there; the rest are the Projects page's.
+  const projectCommands = useRef<{ open: (id: string) => void; requestFiles: (id: string) => void; tab: (id: string, tab: "memory" | "members") => void }>({
+    open: () => undefined, requestFiles: () => undefined, tab: () => undefined,
+  });
+  /** A project opened on one of its tabs (the project menu's Instructions & memory… and Members…, UX-09). */
+  const [projectTab, setProjectTab] = useState<{ id: string; tab: "memory" | "members"; seq: number } | null>(null);
+  // What Live's hiding items follow, as the core works it out (privacy_status): the main window hidden from screen
+  // shares now (an expired 15 minutes is not), the person's Hide EchoLedger windows, and its shortcut.
+  const [privacyNow, setPrivacyNow] = useState({ hiding: false, windowsHidden: false, hideAllShortcut: "" });
+  useMenuPart({ state: {
+    themeLight: theme === "light", themeDark: theme === "dark", themeSystem: theme === "system",
+    paused: !!status?.paused, captionsShown: !!status?.captionsLive, pillShown: !!status?.recording && !status.pillHidden,
+    hiding: privacyNow.hiding, windowsHidden: privacyNow.windowsHidden, hideAllShortcut: privacyNow.hideAllShortcut,
+  } });
+  useEffect(() => {
+    let alive = true;
+    let expiry = 0;
+    const read = () => {
+      void Promise.all([api.privacyStatus(), api.settings()]).then(([p, s]) => {
+        if (!alive) return;
+        setPrivacyNow({ hiding: !!p.mainHide, windowsHidden: !!p.hiddenByShortcut, hideAllShortcut: s.shortcuts?.hide_all ?? "" });
+        // A hide for a time is read again when its time comes.
+        window.clearTimeout(expiry);
+        const until = p.mainHide?.until;
+        if (until?.kind === "at") expiry = window.setTimeout(read, Math.max(0, until.at_ms - Date.now()) + 1000);
+      }).catch(() => undefined);
+    };
+    read();
+    const offs = [listenTo("privacy:changed", read), listenTo("settings:changed", read)];
+    return () => {
+      alive = false;
+      window.clearTimeout(expiry);
+      offs.forEach((off) => void off.then((f) => f()).catch(() => undefined));
+    };
+  }, []);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
   const [palette, setPalette] = useState(false);
+  // What was typed in the title row before searching everything (UX-20: the scope chip's ✕).
+  const [paletteFrom, setPaletteFrom] = useState("");
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  // The first-run wizard's design is chosen once, when it first shows (signed in: once the flags are read), so a
+  // late answer never swaps it under the person halfway through.
+  const [wizardDesign, setWizardDesign] = useState<"v2" | "classic" | null>(null);
   // C9: a new main window opens where the last one was closed (page, open recording, scroll).
   const [restored, setRestored] = useState(false);
   const [restoredRecording, setRestoredRecording] = useState<string | null>(null);
@@ -209,6 +448,25 @@ export default function MainApp() {
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);
+
+  useEffect(() => {
+    if (setupDone !== false || wizardDesign !== null || !status) return;
+    // Signed out, the flags can't be read: classic's wizard (it signs in on its own step).
+    if (status.paired && flagsReadFor === null) return;
+    setWizardDesign(status.paired && ui.flags["ui_v2.shell"] ? "v2" : "classic");
+  }, [setupDone, wizardDesign, status, flagsReadFor, ui.flags]);
+  // Flags that never come (a core without the command hanging, a slow server) never leave the window blank: after a
+  // moment the wizard is classic's.
+  const waitingForWizard = setupDone === false && wizardDesign === null;
+  useEffect(() => {
+    if (!waitingForWizard) return;
+    const timer = window.setTimeout(() => setWizardDesign((d) => d ?? "classic"), WIZARD_FLAGS_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [waitingForWizard]);
+  // A new start of the wizard (Settings can show it again) chooses again.
+  useEffect(() => {
+    if (setupDone === true) setWizardDesign(null);
+  }, [setupDone]);
 
   // First-run wizard (B19): shown until it is finished or skipped.
   useEffect(() => {
@@ -250,14 +508,15 @@ export default function MainApp() {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat || typingIn(e.target)) return;
       const open = !!document.querySelector(".palette-backdrop, .sheet-backdrop");
       // "[" folds the sidebar to its rail and back; "?" lists every key (v1.6, P4.1).
-      if (e.key === "[" && statusRef.current?.paired && !open) {
+      // Not with the three levels: the panel's ⊟ and ⌘\ hide it there (a single key never folds it).
+      if (e.key === "[" && statusRef.current?.paired && !open && !threeLevels.current) {
         e.preventDefault();
         toggleSidebar();
         return;
       }
       if (e.key === "?" && statusRef.current?.paired && !open) {
         e.preventDefault();
-        setHelp(true);
+        openHelpRef.current();
         return;
       }
       if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !open) {
@@ -340,7 +599,8 @@ export default function MainApp() {
       }),
     ];
     // After the kept view is applied, so a navigation sent while the window was built wins over it.
-    announceReady([restore, ...unlisten], () => alive);
+    // And once the menus' listener hears picks: a pick the core kept while the window was built reaches it.
+    announceReady([restore, ...unlisten, menuPicksReady()], () => alive);
     return () => {
       alive = false;
       unlisten.forEach((p) => p.then((f) => f()).catch(() => undefined));
@@ -383,7 +643,11 @@ export default function MainApp() {
   const [libraryTotal, setLibraryTotal] = useState(0);
   // The smart folders' counts; a server older than v1.5 sends none and the sidebar lists no smart folders.
   const loadViews = useCallback(async () => {
-    api.library().then((items) => setLibraryTotal(Array.isArray(items) ? items.filter((i) => !i.deleted).length : 0)).catch(() => undefined);
+    api.library().then((items) => {
+      const list = Array.isArray(items) ? items : [];
+      setLibraryTotal(list.filter((i) => !i.deleted).length);
+      setLibraryItems((now) => ({ items: list, read: now?.read ?? new Set() }));
+    }).catch(() => undefined);
     let tz: string | null = null;
     try {
       tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
@@ -443,9 +707,20 @@ export default function MainApp() {
     }
     if (!ready) return;
     let alive = true;
-    api.account().then((a) => alive && setAccount(a ?? null), () => alive && setAccount(null));
+    let read = false;
+    const ask = () => api.account().then((a) => {
+      if (!alive) return;
+      read = true;
+      setAccount(a ?? null);
+    }, () => alive && setAccount((now) => now ?? null));
+    void ask();
+    // Not read (offline at the start): asked again after the next library sync that worked.
+    const un = listen("library:updated", () => {
+      if (!read) void ask();
+    });
     return () => {
       alive = false;
+      void un.then((f) => f()).catch(() => undefined);
     };
   }, [paired, ready]);
   const entitlements = useEntitlements();
@@ -453,7 +728,7 @@ export default function MainApp() {
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
   /** Counts the times Settings was pressed again while open: the v2 Settings starts again from its list. */
   const [settingsVisit, setSettingsVisit] = useState(0);
-  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
+  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed" | LibraryViewKey | "all"; seq: number } | null>(null);
   /** Activity's Review: the new Library with its waiting recordings open. */
   const [reviewV2, setReviewV2] = useState<{ seq: number } | null>(null);
   useEffect(() => {
@@ -549,6 +824,8 @@ export default function MainApp() {
   }, [toast]);
 
   const notify: Notify = showToast;
+  // A view saved offline that the server then refused (30 already): said once, where the views are.
+  useEffect(() => viewsStore.onProblem((text) => showToast(text, true, { kind: "library", view: null })), [showToast]);
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
     if (viewer.current) {
@@ -575,13 +852,55 @@ export default function MainApp() {
     }
   };
 
+  // F5 and ⌘R (Ctrl+R) in a release build (FIX-10, lib/nativeFeel.ts): Sync now, as the search's "Sync the library".
+  // Only in the app itself (unlocked, set up), never behind a dialog; syncLibrary keeps the sidebar's "Synced … ago".
+  const syncNow = useRef(() => undefined as unknown);
+  syncNow.current = () => {
+    if (!status?.paired || !restored || lock?.locked || setupDone === false || document.querySelector('[aria-modal="true"]')) return;
+    return syncLibrary().catch((e) => notify(errorMessage(e), true));
+  };
+  useEffect(() => {
+    const on = () => void syncNow.current();
+    window.addEventListener(SYNC_NOW_EVENT, on);
+    return () => window.removeEventListener(SYNC_NOW_EVENT, on);
+  }, []);
+
   // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
   // window back to the sign-in form, must stay visible (A6.DU1).
   // A message that confirms something carries the check that pops in (as on the phone).
   // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
-  const toastView = toast && (
+  // The window's own menu commands, only while the app is in use (signed in, unlocked, set up): on the lock screen, at
+  // sign-in and in setup nothing here can run them, so the menu bar greys them. Their functions are the latest render's.
+  useEffect(() => {
+    if (!inApp) return;
+    const target = (ctx: { targets?: readonly string[] }) => ctx.targets?.[0];
+    const offs = [
+      ...MENU_COMMANDS.map((id) => registerAction(id, () => menuCommands.current[id]?.())),
+      registerAction("project.open", (ctx) => { const id = target(ctx); if (id) projectCommands.current.open(id); }),
+      registerAction("project.requestFiles", (ctx) => { const id = target(ctx); if (id) projectCommands.current.requestFiles(id); }),
+      // UX-09: the project's page has a tab for each (Memory & instructions, Members).
+      registerAction("project.instructions", (ctx) => { const id = target(ctx); if (id) projectCommands.current.tab(id, "memory"); }),
+      registerAction("project.members", (ctx) => { const id = target(ctx); if (id) projectCommands.current.tab(id, "members"); }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [inApp]);
+  // The Mac menu bar's leaf (FIX-05), in every screen of the new design's window; classic keeps the core's own bar.
+  const menuBarView = status?.platform === "macos" && ui.flags["ui_v2.shell"] ? <MenuBar platform="macos" /> : null;
+  // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
+  // The new design's window keeps its message regions mounted; only the message in them changes.
+  const toastV2 = inApp && ui.flags["ui_v2.shell"];
+  const toastView = toastV2 ? (
+    <Suspense fallback={null}>
+      <div className="el-root el-embedded">
+        <AppToastV2 duration={(m) => (m.error ? ERROR_MS : MESSAGE_MS)}
+          message={toast ? { id: toast.id, text: toast.text, error: toast.error, onOpen: toast.target ? () => goRef.current?.(toast.target!) : undefined } : null}
+          onClose={() => setToast((t) => (t?.id === toast?.id ? null : t))} />
+        {zoomOn && <ZoomBubble />}
+      </div>
+    </Suspense>
+  ) : toast && (
     <div className="toast-region">
       <Notice key={toast.id} kind="toast" className={`toast ${toast.error ? "error" : ""}`} tone={toast.error ? "error" : "neutral"}
         role={toast.error ? "alert" : "status"} timeoutMs={toast.error ? ERROR_MS : MESSAGE_MS}
@@ -604,6 +923,7 @@ export default function MainApp() {
     return (
       <>
         <LockScreen status={lock} onUnlocked={setLock} />
+        {menuBarView}
         {toastView}
       </>
     );
@@ -612,7 +932,13 @@ export default function MainApp() {
   if (status && setupDone === false) {
     return (
       <>
-        <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />
+        {/* The new design's wizard when its flag is on (known once signed in); classic's otherwise. */}
+        {wizardDesign === null ? null : wizardDesign === "v2" ? (
+          <Suspense fallback={null}>
+            <div className="el-root el-embedded"><OnboardingV2 status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} /></div>
+          </Suspense>
+        ) : <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />}
+        {menuBarView}
         {toastView}
       </>
     );
@@ -622,19 +948,35 @@ export default function MainApp() {
     return (
       <main className="gate">
         {status && !status.paired ? <SignInView onSignedIn={signedIn} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
+        {menuBarView}
         {toastView}
       </main>
     );
   }
 
-  const needsYou = actionCount(activityItems, status.pendingDecisions);
+  // The rail's number: the server's, plus the calls waiting on this computer (only it holds them); red when something failed.
+  const activityBadge = railBadge(serverBadge, activityItems, waitingAll, waitingHere);
+  const needsYou = activityBadge.count;
   const canRecord = !isViewer(status);
+  /** Auto-record calls on or off: Record's menu and the Live page's switch (UX-15). */
+  const toggleAutoRecord = () => void run(() => api.updateSettings({ autoMode: !status.autoMode }), status.autoMode ? "Call recording is off" : "Call recording is on");
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
     setLibraryFolder(folder);
     setLibraryView(null);
     setSharedFocus(null);
+    // The new design's sidebar: every recording is All (a folder is a Source or Project filter there now).
+    if (folder === null && ui.flags["ui_v2.library"]) openScope(ALL_SCOPE);
+  };
+  /** The new design's Library on what the sidebar chose: a library view, one of My views, a label or Trash. */
+  const openScope = (scope: LibraryScope) => {
+    setTab("library");
+    setLibraryFolder(null);
+    setLibraryView(null);
+    setSharedFocus(null);
+    setLibraryScope(scope);
+    setScopeRequest({ scope, seq: ++navigations.current });
   };
   /** The Library on Waiting, Pinned or Failed uploads (v1.6, P4.2). */
   const openLibraryView = (view: LibraryViewKey | null) => {
@@ -642,6 +984,8 @@ export default function MainApp() {
     setLibraryFolder(null);
     setLibraryView(view);
     setSharedFocus(null);
+    // The new design's Library has these views itself (Views ▾): the sidebar's place opens it there.
+    setLibraryViewV2({ view: view ?? "all", seq: ++navigations.current });
   };
   const openPlace = (place: LibraryPlace) => (place.view ? openLibraryView(place.view) : openFolder(place.folder));
   const openRecording = (id: string, ms = 0) => {
@@ -652,6 +996,8 @@ export default function MainApp() {
   const openProject = (id: string | null) => {
     setTab("projects");
     setProjectId(id);
+    lastProject.current = id;
+    if (id) noteRecentProject(id);
   };
   const openShared = (next: SharedTab) => {
     setTab("shared");
@@ -686,11 +1032,96 @@ export default function MainApp() {
   const openAccount = (section: string) => {
     setTab("settings");
     setSettingsSection({ id: section, seq: ++navigations.current });
+    lastSettings.current = section;
   };
+  /**
+   * A place chosen in the rail: back as it was left (the Library's view, filters, search and tab; the project; the
+   * Settings page), or, pressed again while shown, started over (All recordings, All projects, Settings' list).
+   */
+  /** Live's panel: the part of the Live page to show. */
+  const showLivePart = (part: "assist" | "translate" | "dictation" | "captions") => {
+    const words = { assist: /live assist/i, translate: /translate/i, dictation: /dictation/i, captions: /caption/i }[part];
+    window.requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>(".page-live h2, .page-live h3, .page-live [aria-label]")].find((el) => words.test(el.getAttribute("aria-label") ?? el.textContent ?? ""));
+      target?.scrollIntoView({ block: "start" });
+    });
+  };
+  const openNavPlace = (place: NavPlace, again: boolean) => {
+    switch (place) {
+      case "library": {
+        const kept = !again ? libraryPlace.current : null;
+        setTab("library");
+        setLibraryFolder(null);
+        setLibraryView(null);
+        setSharedFocus(null);
+        const scope = kept?.scope ?? ALL_SCOPE;
+        setLibraryScope(scope);
+        setScopeRequest({ scope, seq: ++navigations.current, restore: kept ?? undefined });
+        return;
+      }
+      case "projects": return openProject(again ? null : lastProject.current);
+      case "settings":
+        if (again || !lastSettings.current) {
+          lastSettings.current = null;
+          return goTo("settings");
+        }
+        return openAccount(lastSettings.current);
+      case "activity":
+        if (again) setActivityShow("all");
+        return setTab("activity");
+      case "ask":
+        if (again) setAskProject((a) => ({ id: null, seq: a.seq + 1 }));
+        return;
+      case "live": return;
+    }
+  };
+  const helpInV2 = ui.flags["ui_v2.shell"] && ui.flags["ui_v2.settings"] && helpV2Reachable(ui.flags);
+  const openHelp = () => {
+    if (!helpInV2) return setHelp(true);
+    const seq = ++navigations.current;
+    setHelpStart({ tab: "shortcuts", seq, from: tab === "settings" ? null : tab });
+    setTab("settings");
+    setSettingsSection({ id: "help", seq });
+  };
+  openHelpRef.current = openHelp;
   const newProject = () => {
     setTab("projects");
     setProjectId(null);
     setProjectRequest({ kind: "new", seq: ++navigations.current });
+  };
+  const setupPage = ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic";
+  projectCommands.current = {
+    open: (id) => openProject(id),
+    requestFiles: (id) => setRequestSheet({ projectId: id }),
+    tab: (id, which) => {
+      openProject(id);
+      setProjectTab({ id, tab: which, seq: ++navigations.current });
+    },
+  };
+  menuCommands.current = {
+    "app.accountPlan": () => openAccount("plan"),
+    "app.checkUpdates": () => {
+      openAccount("about");
+      void api.checkForUpdates().catch(() => undefined);
+    },
+    // The same as ⌘R (FIX-10): only in the app itself and never behind a dialog; it keeps the sidebar's "Synced … ago".
+    "file.syncNow": () => void syncNow.current(),
+    "file.newProject": newProject,
+    "view.themeLight": () => chooseTheme("light"),
+    "view.themeDark": () => chooseTheme("dark"),
+    "view.themeSystem": () => chooseTheme("system"),
+    "go.allRecordings": () => openScope(ALL_SCOPE),
+    "go.needsYou": () => openScope({ kind: "view", view: "needs" }),
+    "go.unread": () => openScope({ kind: "view", view: "unread" }),
+    "go.audioOnly": () => openScope({ kind: "view", view: "audio_only" }),
+    "go.trash": () => openScope({ kind: "trash" }),
+    "go.shared": () => openShared(SHARED_TABS[0][0] as SharedTab),
+    "live.pauseRecording": () => void run(status.paused ? api.resumeRecording : api.pauseRecording),
+    "live.captions": () => void run(api.toggleCaptions),
+    "window.pill": () => void run(() => api.setPillHidden(!status.pillHidden)),
+    "help.help": openHelp,
+    "help.shortcuts": openHelp,
+    "help.setupHealth": () => openAccount(setupPage),
   };
   const signOut = async () => {
     if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out", tone: "danger" }))) return;
@@ -701,6 +1132,18 @@ export default function MainApp() {
   const voiceNote = () => void run(api.toggleMicNote);
 
   // The Library's places with their counts: the server's, and what only this computer knows (v1.6, P4.2).
+  // The new sidebar's counts (PLAN_LIBRARY_FILTERS): each library view's, from the synced list; Needs you with the calls
+  // waiting and the uploads that failed on this computer; each label's.
+  const libraryCounts = libraryFacts ? {
+    ...libraryViewCounts(libraryFacts.facts),
+    // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
+    // The calls waiting here add only those the server has no session for (the others are those items): never twice.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisionsHere ?? status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+  } : null;
+  const labelCounts: Record<string, number> = {};
+  for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;
+  /** A place's words in the new design: the Inbox is "No project" (no "Inbox" anywhere). */
+  const placeWords = (p: { key: string; label: string }) => (p.key === "inbox" ? "No project" : p.label);
   const places = libraryPlaces(views, {
     total: libraryTotal,
     waiting: status.pendingDecisions,
@@ -708,22 +1151,22 @@ export default function MainApp() {
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
   // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
-  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status) });
-  const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
-    .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
+  const findSettings = (query: string) => paletteSettings(query, settingsAvailable, openAccount);
   const upgradeOpen = !!openUpgradeRequest(entitlements);
   // Every page, place, project and Settings page by name, for the window's search (the palette).
   const pages: ShellPage[] = [
     { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
     { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
-    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: p.label, group: "Library", keywords: "smart folder recordings", open: () => openPlace(p) })),
+    // The new design says no "Inbox": recordings in no project are Project › No project.
+    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: placeWords(p), group: "Library", keywords: `smart folder recordings${p.key === "inbox" ? " inbox" : ""}`, open: () => openPlace(p) })),
     { id: "projects", label: "Projects", keywords: "clients folders", open: () => openProject(null) },
     ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, group: "Projects", keywords: "project client", open: () => openProject(p.id) })),
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
-    ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
-    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
+    ...palettePages(settingsAvailable, openAccount),
+    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
   // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
@@ -731,12 +1174,28 @@ export default function MainApp() {
   const uploading = status.pendingUploads === 0 ? null
     : waitingFor ? `${status.pendingUploads === 1 ? "1 recording waits" : `${status.pendingUploads} recordings wait`}: ${waitingFor}`
       : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
+  // The new sidebar's workspace menu (classic's top bar switcher): Invite people for an owner or admin, or with the
+  // plan's name when the plan leaves teams out; the rest is in the browser.
+  const workspaceList = workspacesOf(account, status);
+  const workspaceHere = workspaceList.find((w) => w.current) ?? workspaceList[0];
+  const teamLocked = isLocked(entitlements, "team");
+  const openWorkspaces = () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true));
+  const roleWord = (role: string | null) => (role && role in ROLE_LABEL ? ROLE_LABEL[role as keyof typeof ROLE_LABEL] : null);
+  const shellWorkspace = account === undefined ? null : {
+    name: workspaceHere.name,
+    role: roleWord(workspaceHere.role),
+    others: workspaceList.filter((w) => w !== workspaceHere).map((w) => ({ key: w.key, name: w.name, role: roleWord(w.role) })),
+    invite: teamLocked ? { locked: `in ${planName(lowestPlan(entitlements, "team")) || "a paid plan"}`, onPick: () => openUpgradeSheet("team") }
+      : workspaceHere.role === "owner" || workspaceHere.role === "admin" ? { locked: null, onPick: openWorkspaces } : null,
+    onManage: openWorkspaces,
+  };
   const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
   const banners = (
     <>
       {/* One banner at a time, the most important first (BannerSlot); the next one shows once it goes. */}
       <BannerSlot>
+      {status.platform === "macos" && <OtherSideBanner />}
       <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
       <ServerBanners server={status.server} notify={notify} />
       {/* The new shell shows its own (ui_v2.shell). */}
@@ -761,7 +1220,10 @@ export default function MainApp() {
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
-            onOpenProject={(id) => openProject(id)}
+            folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={() => setLibraryFolder(null)}
+            scopeRequest={scopeRequest} onScope={setLibraryScope} onPlace={(p) => { libraryPlace.current = p; }} filtersRequest={filtersRequest}
+            onItems={(items, read) => setLibraryItems({ items, read })}
+            onOpenProject={(id) => openProject(id)} initialOpen={restoredRecording} onOpenChange={rememberRecording}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
               onSetup: () => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic"),
@@ -780,13 +1242,27 @@ export default function MainApp() {
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          onRequestLink={ui.flags["ui_v2.shell"] ? (id) => setRequestSheet({ projectId: id }) : undefined}
+          renderList={ui.flags["ui_v2.ask"] ? (ctx) => (
+            <Suspense fallback={null}>
+              <div className="el-root el-embedded">
+                <ProjectsListV2 projects={ctx.projects} error={ctx.error} onRetry={ctx.onReload} items={ctx.items} expanded={ctx.expanded} onToggle={ctx.onToggle}
+                  onOpen={ctx.onOpenProject} onNew={ctx.onNew} onRequest={ctx.onRequest} overview={ui.flags["ui_v2.library"]} />
+              </div>
+            </Suspense>
+          ) : null}
+          renderNameDialog={ui.flags["ui_v2.ask"] ? (props) => (
+            <Suspense fallback={null}><div className="el-root el-embedded"><NameDialogV2 {...props} /></div></Suspense>
+          ) : null}
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
-                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} onSend={ctx.onSend ?? undefined} onRequest={ctx.onRequest ?? undefined}
+                  startTab={projectTab?.id === ctx.project.id ? projectTab : null}
+                  rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
                   onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
-                  onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
+                  onBack={() => openProject(ctx.parent?.id ?? null)} onProjects={() => openProject(null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
               </div>
             </Suspense>
@@ -800,8 +1276,10 @@ export default function MainApp() {
               onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
+              run={run} onImport={canRecord ? () => void pickImport() : undefined} notifications={activityItems.filter(needsActionItem).length}
               onAction={(a) => {
-                if (a === "failed") openLibraryView("failed");
+                if (a === "notifications") goTo("activity");
+                else if (a === "failed") openLibraryView("failed");
                 else if (a === "waiting") openLibraryView("waiting");
                 else if (a === "missed") goTo("activity");
                 else {
@@ -825,7 +1303,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
+            <ActivityV2 status={status} show={activityShow} needsYou={needsYou} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -852,13 +1330,22 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
             <SettingsV2 key={settingsVisit} available={settingsAvailable} section={settingsSection} onSignOut={() => void signOut()} setupHealth={ui.flags["ui_v2.setup_health"]}
+              inPanel={ui.flags["ui_v2.library"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
-                ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
+                // Two levels (UX-11): Setup & health is the rail's own place, with no "‹ Settings".
+                ? <SetupHealthV2 platform={status.platform} onBack={ui.flags["ui_v2.library"] ? undefined : onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
-                  : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                    start={helpStart} onSettings={openAccount}
+                    {...(helpStart?.from && settingsSection?.seq === helpStart.seq
+                      ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
+                      // Two levels: back to its group's page (About & help), never to "Settings".
+                      : ui.flags["ui_v2.library"] ? { onBack: () => openAccount(HELP_GROUP.entry), backLabel: t(HELP_GROUP.title) } : { onBack: onHome })} />
+                  : hasV2Page(section.id, ui.flags["ui_v2.library"])
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} grouped={ui.flags["ui_v2.library"]} available={settingsAvailable} zoom={ui.flags.v21_zoom}
+                      language={urdu && account ? { value: accountLanguage(account) ?? lang, onChange: (l) => void changeLanguage(l), error: languageError } : undefined}
+                      onHome={onHome} onSection={(id) => openAccount(id)} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
@@ -870,30 +1357,53 @@ export default function MainApp() {
   const overlays = (
     <>
     {palette && (
-        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"}
+        <CommandPalette status={status} onClose={() => { setPalette(false); setPaletteFrom(""); }} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"} initialQuery={paletteFrom}
+          inRow={ui.flags["ui_v2.shell"] && ui.flags["ui_v2.library"]}
+          actionState={{ canRecord, recording: !!status.recording, autoRecord: status.autoMode }}
+          onShowAll={(q) => {
+            // The Library becomes the results: All recordings, nothing filtered, searched for what was typed.
+            setTab("library");
+            setLibraryFolder(null);
+            setLibraryView(null);
+            setSharedFocus(null);
+            setLibraryScope(ALL_SCOPE);
+            setScopeRequest({ scope: ALL_SCOPE, seq: ++navigations.current, restore: { scope: ALL_SCOPE, spec: {}, query: q, tab: "all" } });
+          }}
+          onAsk={ui.flags["ui_v2.ask"] ? (q) => {
+            setAskProject((a) => ({ id: a.id, seq: a.seq + 1, question: q }));
+            setPlaceRequest((r) => ({ place: "ask", seq: (r?.seq ?? 0) + 1 }));
+          } : undefined}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
-          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
+          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet({ projectId: null }),
             invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true),
             upgrade: entitlements && (upgradeOpen || plansAbove(entitlements).length > 0) ? { open: upgradeOpen, run: () => (upgradeOpen ? openUpgradeSheet(null, { step: "status" }) : openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })) } : undefined }}
           settings={findSettings}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
-      {dragging && !importPaths && (
+      {dragging && !importPaths && !ui.flags["ui_v2.shell"] && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
-      {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
-      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
+      {importPaths && !ui.flags["ui_v2.shell"] && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {/* The new design's drop hint and import sheet: the same drop handler, its own look. */}
+      {dragging && !importPaths && ui.flags["ui_v2.shell"] && <Suspense fallback={null}><div className="el-root el-embedded"><DropHintV2 /></div></Suspense>}
+      {importPaths && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
+        </Suspense>
+      )}
+      {help && <HelpDialog platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} zoom={ui.flags.v21_zoom} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <RequestLinkSheetV2 projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
+            <RequestLinkSheetV2 projects={projects ?? []} projectId={requestSheet.projectId} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
           </div>
         </Suspense>
       )}
       <UpgradeSheet />
       <ConfirmHost />
+      {menuBarView}
       {toastView}
     </>
   );
@@ -902,21 +1412,92 @@ export default function MainApp() {
   if (ui.flags["ui_v2.shell"]) {
     return (
       <>
-        <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
+        {/* macOS, a normal window, the classic sidebar: the empty strip for the window's own buttons, which drags and zooms
+            the window (D-214, lib/titlebar.ts); in full screen it is not drawn and the classic strip below keeps 2.0.12's
+            window. The three levels have their title row instead (UX-20): the buttons sit in the rail's top cell. */}
+        {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
+        {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app, "en"))}
+            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
+            workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
+            projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned, archived: !!p.archived || !!p.archived_at }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
-            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
-            me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
+            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={(typed?: string) => { setPaletteFrom(typed ?? ""); setPalette(true); }} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
+            library={ui.flags["ui_v2.library"] ? (
+              <Suspense fallback={null}>
+                <LibraryNavV2 current={tab === "library" ? scopeKey(libraryScope) : tab === "shared" ? `shared:${sharedTab}` : null}
+                  counts={libraryCounts} labelCounts={labelCounts} onScope={openScope}
+                  shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
+                  onNewView={() => { if (tab !== "library") openScope(libraryScope); setFiltersRequest({ seq: ++navigations.current }); }}
+                  say={(text, _action, error) => notify(text, !!error, NO_TARGET)} onLibraryChanged={() => void syncLibrary().catch(() => undefined)} />
+              </Suspense>
+            ) : undefined}
+            libraryAttention={(libraryCounts?.needs ?? 0) > 0}
+            nav={{
+              panelFlyout: ui.flags.v21_panel_flyout,
+              noProjects: projects !== null ? projects.length === 0 : hadNoProjects,
+              projectsLoading: projects === null && !projectsError,
+              projectsError: projects === null ? projectsError : null,
+              layoutFor: liveViews ?? lastViews,
+              // The status items: Restart to update, then the zoom's chip while it isn't 100% (UX-07).
+              titleEnd: <><RestartToUpdate appStatus={status} notify={notify} />{zoomOn && <ZoomChip />}</>,
+              placeRequest,
+              onPlace: openNavPlace,
+              libraryCount: libraryCounts?.needs || undefined,
+              liveDot: !!status.recording || status.captionsLive || status.dictationActive,
+              liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
+              setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
+              callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
+              account: account ? [
+                // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).
+                { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
+                { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
+                { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
+                // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme.
+                ...(zoomOn ? [{ label: "Zoom", icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
+                ...(shellWorkspace ? [
+                  { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
+                  ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),
+                  { label: "Switch or manage in the browser", icon: Icons.WebIcon, group: "Workspace", onPick: shellWorkspace.onManage },
+                ] : []),
+                ...(account.super_admin === true ? [{ label: "Admin panel", icon: Icons.LinkIcon, onPick: () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) }] : []),
+                { label: "Sign out", icon: Icons.SignOutIcon, separator: true, onPick: () => void signOut() },
+              ] : undefined,
+              panels: {
+                live: <Suspense fallback={null}><LivePanelV2 callRecording={status.autoMode} onCalls={() => openAccount("calls")} onPart={showLivePart} /></Suspense>,
+                ask: <Suspense fallback={null}><AskPanelV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} current={askProject.id}
+                  onAsk={(id) => setAskProject((a) => ({ id, seq: a.seq + 1 }))} /></Suspense>,
+                activity: <Suspense fallback={null}><ActivityPanelV2 show={activityShow} needs={needsYou} onShow={(next) => { setActivityShow(next); setTab("activity"); }} /></Suspense>,
+                settings: <Suspense fallback={null}><SettingsPanelV2 current={tab === "settings" ? settingsSection?.id ?? null : null} onOpen={openAccount} available={settingsAvailable} /></Suspense>,
+              },
+            }}
+            footStart={ui.flags["ui_v2.library"] ? (
+              <Suspense fallback={null}>
+                <LibraryFootV2 trashCurrent={tab === "library" && libraryScope.kind === "trash"} onTrash={() => openScope({ kind: "trash" })}
+                  onSync={() => void syncLibrary().catch((e) => notify(errorMessage(e), true))} />
+              </Suspense>
+            ) : undefined}
+            places={{
+              // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
+              // with me is Shared's own, under Library.
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: placeWords(p) }))
+                .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
+              current: libraryFolder ?? libraryView ?? null,
+              open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },
+            }}
+            onAdmin={account?.super_admin === true ? () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) : undefined}
+            me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null,
+              usage: minutesLine(entitlements?.limits.monthly_minutes?.used, entitlements?.limits.monthly_minutes?.limit), color: account.avatar_color ?? null, photo: avatarPhoto } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
               <ShareDefaultNotice text={status.shareNotice} />
             </div></Suspense>}
             ask={ui.flags["ui_v2.ask"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
-                <AskV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
+                <AskV2 key={askProject.seq} initialProjectId={askProject.id} initialQuestion={askProject.question} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
                   onOpenProject={(id) => openProject(id)} onLibrary={() => openFolder(null)} />
               </div></Suspense>
             ) : undefined}
@@ -924,10 +1505,10 @@ export default function MainApp() {
               <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
                   onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
-                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} run={run} />
+                  onCaptions={() => void run(api.toggleCaptions)} onAutoRecord={canRecord ? toggleAutoRecord : undefined} onSettings={openAccount} run={run} />
               </div></Suspense>
             ) : undefined}
-            banners={<div className="shell-banners">{banners}</div>}>
+            banners={<NoticeLook.Provider value="v2"><div className="el-root el-embedded el-app-banners" role="status" aria-live="polite" aria-label="Notices" data-testid="app-banners">{banners}</div></NoticeLook.Provider>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>
         </Suspense>
@@ -952,7 +1533,7 @@ export default function MainApp() {
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
           onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
-          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
+          onRequestLink={() => setRequestSheet({ projectId: null })} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab}`}>
           {banners}
           {page}

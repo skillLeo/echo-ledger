@@ -229,6 +229,59 @@
         }
       },
       "$description": "Label colours: text on fill reaches 4.5:1, the dot 3:1 on every background."
+    },
+    "avatar": {
+      "$description": "DES-08: the initials circle's 8 colours, 0-7 in the order the server stores (avatar_color, BE-06), each with white text at 4.5:1 or more in light and dark. The plan's indigo (2) and purple (3) are cyan and olive here: the accent and avatar rule bans purple, indigo and violet (hue 225-300).",
+      "0": {
+        "$type": "color",
+        "$value": "#0F766E",
+        "$description": "teal"
+      },
+      "1": {
+        "$type": "color",
+        "$value": "#1D5FB4",
+        "$description": "blue"
+      },
+      "2": {
+        "$type": "color",
+        "$value": "#0E7490",
+        "$description": "cyan"
+      },
+      "3": {
+        "$type": "color",
+        "$value": "#4D7C0F",
+        "$description": "olive"
+      },
+      "4": {
+        "$type": "color",
+        "$value": "#BE185D",
+        "$description": "pink"
+      },
+      "5": {
+        "$type": "color",
+        "$value": "#C2410C",
+        "$description": "orange"
+      },
+      "6": {
+        "$type": "color",
+        "$value": "#15803D",
+        "$description": "green"
+      },
+      "7": {
+        "$type": "color",
+        "$value": "#475569",
+        "$description": "slate"
+      },
+      "text": {
+        "$type": "color",
+        "$value": "#FFFFFF",
+        "$description": "The initials, on every avatar colour"
+      },
+      "ring": {
+        "$type": "color",
+        "$value": "#FFFFFF1F",
+        "$description": "The 1 px inner ring: black at 8% in light, white at 12% in dark"
+      }
     }
   }
 }

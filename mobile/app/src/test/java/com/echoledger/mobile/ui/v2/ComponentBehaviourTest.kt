@@ -15,23 +15,32 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
+import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -44,6 +53,7 @@ import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSelect
 import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
+import com.echoledger.mobile.ui.v2.components.EchoSplitButton
 import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastResult
@@ -108,6 +118,49 @@ class ComponentBehaviourTest {
         compose.onNodeWithText("Moved to Shaheen Pharma").assertDoesNotExist()
         assertEquals(0, undone)
         assertEquals(EchoToastResult.Dismissed, result)
+    }
+
+    /** v2.1 FIX-03: a message is a Material 3 snackbar a swipe left or right closes, as its time running out does. */
+    @Test
+    fun aSwipeLeftOrRightClosesTheSnackbarAndRunsNoUndo() {
+        var undone = 0
+        val results = mutableListOf<EchoToastResult>()
+        var next by mutableStateOf(0)
+        show {
+            val toasts = rememberEchoToastState()
+            LaunchedEffect(next) { if (next > 0) results += toasts.showUndo("Deleted $next", "Undo") { undone++ } }
+            EchoToastHost(toasts)
+        }
+        // From the middle of the message across the screen's width (measured once it shows), left then right.
+        var wide = 0f
+        val swipes = listOf<androidx.compose.ui.test.TouchInjectionScope.() -> Unit>(
+            { swipeLeft(startX = centerX, endX = centerX - wide) },
+            { swipeRight(startX = centerX, endX = centerX + wide) }
+        )
+        swipes.forEachIndexed { i, swipe ->
+            next = i + 1
+            compose.onNodeWithText("Deleted ${i + 1}").assertExists()
+            wide = compose.onRoot().fetchSemanticsNode().size.width.toFloat()
+            compose.onNodeWithText("Deleted ${i + 1}").performTouchInput(swipe)
+            compose.waitForIdle()
+            compose.onNodeWithText("Deleted ${i + 1}").assertDoesNotExist()
+            assertEquals(i + 1, results.size)
+        }
+        assertEquals(listOf(EchoToastResult.Dismissed, EchoToastResult.Dismissed), results)
+        assertEquals("a swipe is not Undo", 0, undone)
+    }
+
+    @Test
+    fun twoQuickMessagesNeverShowAtOnce() {
+        show {
+            val toasts = rememberEchoToastState()
+            LaunchedEffect(Unit) { toasts.show("Moved to Shaheen Pharma") }
+            LaunchedEffect(Unit) { toasts.showUndo("Deleted 3 recordings", "Undo") {} }
+            EchoToastHost(toasts)
+        }
+        val onScreen = listOf("Moved to Shaheen Pharma", "Deleted 3 recordings")
+            .filter { compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("one message at a time: $onScreen", 1, onScreen.size)
     }
 
     @Test
@@ -330,6 +383,28 @@ class ComponentBehaviourTest {
         assertFalse("the title is not cut", layouts.first().hasVisualOverflow)
     }
 
+    /** Seen in UX-14's shots: at the largest text a banner's words were one per line beside Fix and ×. */
+    @Test
+    fun atTwiceTheTextSizeABannersActionIsUnderItsWords() {
+        show {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale = 2f)) {
+                com.echoledger.mobile.ui.v2.components.EchoBanner(
+                    "Calls won't record: call capture isn't set up yet",
+                    com.echoledger.mobile.ui.v2.components.EchoBannerKind.Warning,
+                    actionLabel = "Fix",
+                    onClose = {},
+                    closeLabel = "Close"
+                )
+            }
+        }
+        val words = compose.onNodeWithText("Calls won't record", substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val fix = compose.onNodeWithText("Fix", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val banner = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue("Fix is under the words", fix.top >= words.bottom)
+        assertTrue("the words take most of the width", words.width >= banner.width * 0.6f)
+    }
+
     @Test
     fun wallpaperColoursKeepTheBrandAccentOnTheRedesignedScreens() {
         var accent: androidx.compose.ui.graphics.Color? = null
@@ -359,5 +434,45 @@ class ComponentBehaviourTest {
         }
         compose.onNodeWithContentDescription("Voice note").assertExists()
         compose.onNodeWithContentDescription("Zoom on a computer").assertExists()
+    }
+
+    @Test
+    fun aSplitButtonsMainPartActsAtOnceAndItsChevronOpensTheMenu() {
+        var copied = 0
+        show {
+            EchoSplitButton(
+                text = "Copy",
+                onClick = { copied++ },
+                menuLabel = "More copy options",
+                mainLabel = "Copy text"
+            ) { close -> EchoActionItem(EchoIcons.Export, "Copy with timestamps", { close() }) }
+        }
+        compose.onNodeWithContentDescription("Copy text").performClick()
+        assertEquals(1, copied)
+        compose.onAllNodesWithText("Copy with timestamps").assertCountEquals(0)
+        compose.onNodeWithContentDescription("More copy options").performClick()
+        compose.onNodeWithText("Copy with timestamps").assertExists()
+        assertEquals(1, copied)
+    }
+
+    @Test
+    fun aSplitButtonsMainPartIsReadByItsOwnNameAndItsChevronSaysWhetherTheMenuIsOpen() {
+        show {
+            EchoSplitButton(
+                text = "Copy",
+                onClick = {},
+                menuLabel = "More copy options",
+                mainLabel = "Copy text"
+            ) { close -> EchoActionItem(EchoIcons.Export, "Copy with timestamps", { close() }) }
+        }
+        compose.onNode(hasContentDescription("Copy text") and hasClickAction()).assertExists()
+        val main = compose.onNodeWithContentDescription("Copy text").fetchSemanticsNode()
+        assertEquals(listOf("Copy text"), main.config[SemanticsProperties.ContentDescription])
+        // The word on it is not read again after its name.
+        assertEquals(false, main.config.contains(SemanticsProperties.Text))
+        val chevron = compose.onNodeWithContentDescription("More copy options")
+        chevron.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
+        chevron.performClick()
+        chevron.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
     }
 }

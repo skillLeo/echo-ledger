@@ -2,7 +2,10 @@ import { processName } from "./format";
 // Pure helpers behind the recording pill, the after-call toast and chip, and the ask chip (unit-tested in
 // controls.test.ts).
 import { SOURCE_APP_LABELS, formatDuration, timestamp } from "./format";
-import type { AskPayload, MissingPermission, PendingItem, RecordingState } from "./ipc";
+import type { AskPayload, MissingPermission, PendingItem, PermissionsStatus, RecordingState } from "./ipc";
+
+/** The button that opens the system's privacy settings, in the platform's words (none where there is no such page). */
+export const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
 
 /** Display label of a `source_app` value; unknown values read as words instead of a raw id. */
 export function sourceLabel(app: string | null | undefined): string {
@@ -99,9 +102,19 @@ export function askSeconds(ask: AskPayload): number {
   return Number.isFinite(ask.seconds) && ask.seconds > 0 ? ask.seconds : 8;
 }
 
+/**
+ * A call's other side the recording itself found not recorded (2.0.6): a tap that failed or gives buffers with no
+ * data (System Audio Recording). None otherwise.
+ */
+export function otherSideNotRecorded(missing: MissingPermission[] | undefined): MissingPermission | null {
+  return (missing ?? []).find((m) => !!m.otherSide) ?? null;
+}
+
 /** What the pill and the captions say when the system does not let a recording use something (one short line). */
 export function missingShort(missing: MissingPermission[] | undefined, mode?: RecordingState["mode"]): string | null {
   const kinds = (missing ?? []).map((m) => m.kind);
+  const found = otherSideNotRecorded(missing);
+  if (found && !kinds.includes("microphone")) return "The other side isn't being recorded";
   if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission";
   // A note has one side, so without it nothing is being recorded.
   if ((mode === "mic_note" && kinds.includes("microphone")) || (mode === "voice_note" && kinds.includes("system_audio"))) return "Nothing is being recorded: no permission";

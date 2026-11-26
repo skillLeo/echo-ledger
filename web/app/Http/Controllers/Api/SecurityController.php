@@ -28,16 +28,33 @@ final class SecurityController extends Controller
 
         return response()->json([
             'devices' => $devices->map(fn (Device $d): array => $d->listItem($device->id))->values(),
-            'events' => $events->map(fn (AuditEvent $e): array => [
+            'events' => self::eventsPayload($events, $names->all()),
+        ]);
+    }
+
+    /**
+     * The audit entries as the apps read them (also in GET /api/account/security since 2.0.0-l).
+     *
+     * @param  iterable<AuditEvent>  $events
+     * @param  array<string, string>  $deviceNames  device id => readable name
+     * @return list<array<string, mixed>>
+     */
+    public static function eventsPayload(iterable $events, array $deviceNames): array
+    {
+        $out = [];
+        foreach ($events as $e) {
+            $out[] = [
                 'id' => $e->id,
                 'event' => $e->event,
                 'label' => AuditLog::label($e->event),
                 'summary' => $e->summary,
                 'actor' => $e->actor,
-                'device' => $e->device_id !== null ? ($names[$e->device_id] ?? 'A removed device') : null,
+                'device' => $e->device_id !== null ? ($deviceNames[$e->device_id] ?? 'A removed device') : null,
                 'at' => $e->created_at->toAtomString(),
-            ])->values(),
-        ]);
+            ];
+        }
+
+        return $out;
     }
 
     /** DELETE /api/devices/{id}: revokes another paired device of the owner. */

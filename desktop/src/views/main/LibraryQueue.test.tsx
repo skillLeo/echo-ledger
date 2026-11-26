@@ -1,6 +1,9 @@
 // The Library's waiting line ("2 calls waiting · Review", v1.5) with its list, and "Uploads that need you" (contract
 // 5.3 item 1), driven through the Library screen with the same commands and events the Rust core uses.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
@@ -16,6 +19,8 @@ const NOW = new Date(2026, 9, 24, 12, 0, 0);
 const local = (hour: number, minute = 0) => new Date(2026, 9, 24, hour, minute).toISOString();
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }, { id: "c2", name: "Northwind", keyterm_count: 0 }] };
 const DISCARD = "Discard this recording? It can't be undone.";
+/** The waiting list's Delete asks this (the call choice's words); a failed upload's Discard keeps DISCARD. */
+const DELETE = "Delete this recording? You can undo it for a few seconds.";
 
 const scrollIntoView = vi.fn();
 
@@ -29,6 +34,9 @@ function mockBackend(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("list_clients", CLIENTS);
   respond("pending_keep", undefined);
   respond("pending_discard", undefined);
+  respond("pending_delete", 1);
+  respond("pending_delete_undo", 1);
+  respond("pending_keep_audio", undefined);
   respond("upload_retry", undefined);
   respond("upload_discard", undefined);
 }
@@ -112,35 +120,56 @@ describe("Waiting recordings", () => {
 
   it("keeps a recording: calls pending_keep with its id, removes the row and confirms", async () => {
     const { notify } = await renderLibrary([makePendingItem("p1"), makePendingItem("p2")]);
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Keep" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Transcribe" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]));
     await waitFor(() => expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument());
     expect(row("p2")).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("Kept", false, { kind: "library", view: null });
+    expect(notify).toHaveBeenCalledWith("Transcribing…", false, { kind: "library", view: null });
   });
 
   it("reports a recording that is no longer waiting and re-reads the list", async () => {
     const { notify } = await renderLibrary([makePendingItem("p1")]);
     fail("pending_keep", "This recording is no longer waiting.");
     respond("pending_list", []);
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Keep" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Transcribe" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("This recording is no longer waiting.", true));
     await waitFor(() => expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument());
     expect(callsOf("pending_list")).toHaveLength(2);
   });
 
-  it("asks before discarding and discards only when confirmed", async () => {
+  it("asks before deleting, deletes only when confirmed, and then says Deleted · Undo, which brings it back", async () => {
     const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { notify } = await renderLibrary([makePendingItem("p1")]);
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Discard" }));
-    expect(confirm).toHaveBeenCalledWith(DISCARD);
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Delete" }));
+    expect(confirm).toHaveBeenCalledWith(DELETE);
     await flushAsync();
-    expect(callsOf("pending_discard")).toHaveLength(0);
+    expect(callsOf("pending_delete")).toHaveLength(0);
     expect(row("p1")).toBeInTheDocument();
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Discard" }));
-    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }]));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(callsOf("pending_delete")).toEqual([{ ids: ["p1"] }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Discarded", false, undefined);
+    expect(callsOf("pending_discard"), "never the immediate delete").toHaveLength(0);
+    const [text, error, target] = notify.mock.calls.at(-1)!;
+    expect([text, error]).toEqual(["Deleted · Undo", false]);
+    respond("pending_list", [makePendingItem("p1")]);
+    target.run();
+    await waitFor(() => expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p1"] }]));
+    await waitFor(() => expect(waitingLine()).toBeInTheDocument());
+    expect(callsOf("pending_keep")).toHaveLength(0);
+  });
+
+  it("a recording whose Delete was still waiting when EchoLedger closed says so on its row", async () => {
+    await renderLibrary([makePendingItem("p1", { restoredDelete: true }), makePendingItem("p2")]);
+    expect(within(row("p1")).getByTestId("restored-delete")).toHaveTextContent("Deleted just before EchoLedger closed. Choose again.");
+    expect(within(row("p2")).queryByTestId("restored-delete")).toBeNull();
+    for (const name of ["Transcribe", "Save audio only", "Delete"]) expect(within(row("p1")).getByRole("button", { name })).toBeInTheDocument();
+  });
+
+  it("Save audio only keeps one as audio, not transcribed", async () => {
+    const { notify } = await renderLibrary([makePendingItem("p1")]);
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Save audio only" }));
+    await waitFor(() => expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }]));
+    expect(notify).toHaveBeenCalledWith("Saved as audio", false, { kind: "library", view: null });
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
@@ -148,8 +177,8 @@ describe("Waiting recordings", () => {
     let release: (v: unknown) => void = () => undefined;
     await renderLibrary([makePendingItem("p1")]);
     respondWith("pending_keep", () => new Promise((resolve) => (release = resolve)));
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Keep" }));
-    await waitFor(() => expect(within(row("p1")).getByRole("button", { name: "Discard" })).toBeDisabled());
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Transcribe" }));
+    await waitFor(() => expect(within(row("p1")).getByRole("button", { name: "Delete" })).toBeDisabled());
     await act(async () => release(undefined));
     await waitFor(() => expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument());
   });
@@ -192,8 +221,8 @@ describe("Waiting recordings: slim line", () => {
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("pending-p2")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Keep all" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Discard all" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Transcribe all" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete all" })).not.toBeInTheDocument();
   });
 
   it("opens the list with Review and closes it with Hide", async () => {
@@ -203,8 +232,8 @@ describe("Waiting recordings: slim line", () => {
     expect(hide).toHaveAttribute("aria-expanded", "true");
     expect(row("p1")).toBeInTheDocument();
     expect(row("p2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Keep all" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Discard all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Transcribe all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete all" })).toBeInTheDocument();
     fireEvent.click(hide);
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
@@ -220,58 +249,70 @@ describe("Waiting recordings: slim line", () => {
     expect(screen.getByRole("heading", { name: "1 call waiting" })).toBeInTheDocument();
   });
 
-  it("keeps every recording with Keep all", async () => {
+  it("transcribes every recording with Transcribe all", async () => {
     const { notify } = await renderLibrary(items());
-    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Kept 2 recordings", false, { kind: "library", view: null });
+    expect(notify).toHaveBeenCalledWith("Transcribing 2 recordings", false, { kind: "library", view: null });
     expect(callsOf("pending_discard")).toHaveLength(0);
   });
 
-  it("reports a recording Keep all could not keep and still keeps the rest", async () => {
+  it("reports a recording Transcribe all could not send and still sends the rest", async () => {
     const { notify } = await renderLibrary(items());
     respondWith("pending_keep", ({ id }) => (id === "p1" ? Promise.reject("This recording is no longer waiting.") : undefined));
     respond("pending_list", [makePendingItem("p2")]);
-    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Kept 1 recording", false, anyTarget));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Transcribing 1 recording", false, anyTarget));
     expect(notify).toHaveBeenCalledWith("This recording is no longer waiting.", true);
   });
 
-  it("asks once before Discard all and discards every recording", async () => {
+  it("asks once before Delete all, which can be undone like every Delete: Deleted 2 recordings · Undo", async () => {
     const confirm = answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary(items());
-    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    respond("pending_delete", 2);
+    respond("pending_delete_undo", 2);
+    fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
-    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? You can undo it for a few seconds.");
+    await waitFor(() => expect(callsOf("pending_delete")).toEqual([{ ids: ["p1", "p2"] }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith("Discarded 2 recordings", false, anyTarget);
+    expect(callsOf("pending_discard"), "never the immediate delete").toHaveLength(0);
+    const [text, , target] = notify.mock.calls.at(-1)!;
+    expect(text).toBe("Deleted 2 recordings · Undo");
+    target.run();
+    await waitFor(() => expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p1", "p2"] }]));
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
-  it("discards nothing when Discard all is cancelled", async () => {
+  it("Save all as audio only keeps every one as audio, not transcribed", async () => {
+    const { notify } = await renderLibrary(items());
+    fireEvent.click(screen.getByRole("button", { name: "Save all as audio only" }));
+    await waitFor(() => expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    expect(notify).toHaveBeenCalledWith("Saved 2 recordings as audio", false, { kind: "library", view: null });
+  });
+
+  it("deletes nothing when Delete all is cancelled", async () => {
     const confirm = answerConfirm().mockReturnValue(false);
     const { notify } = await renderLibrary(items());
-    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
     await flushAsync();
-    expect(callsOf("pending_discard")).toHaveLength(0);
+    expect(callsOf("pending_delete")).toHaveLength(0);
     expect(row("p1")).toBeInTheDocument();
     expect(row("p2")).toBeInTheDocument();
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it("disables Keep all, Discard all and the rows while Keep all runs", async () => {
+  it("disables Transcribe all, Delete all and the rows while Transcribe all runs", async () => {
     let release: (v: unknown) => void = () => undefined;
     await renderLibrary(items());
     respondWith("pending_keep", () => new Promise((resolve) => (release = resolve)));
-    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Discard all" })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Keep all" })).toBeDisabled();
-    expect(within(row("p2")).getByRole("button", { name: "Keep" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete all" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Transcribe all" })).toBeDisabled();
+    expect(within(row("p2")).getByRole("button", { name: "Transcribe" })).toBeDisabled();
     await act(async () => release(undefined));
     await act(async () => release(undefined));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
@@ -397,6 +438,30 @@ describe("Waiting recordings: assign client", () => {
     expect(within(row("p1")).getByRole("combobox", { name: "Language" })).toHaveValue("ur");
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]));
+  });
+
+  it("D-038: the closed language chip says the short name, a screen reader hears the full choice, and focus shows on the chip", async () => {
+    await renderLibrary([makePendingItem("p1"), makePendingItem("p2", { language: "ur" })]);
+    const select = within(row("p1")).getByRole("combobox", { name: "Language" }) as HTMLSelectElement;
+    const chip = select.closest(".queue-language") as HTMLElement;
+    // The chip around the select shows "Auto", not "Auto (English / Urdu / Arabic)" cut to "Auto (English / Urdu / Ara…".
+    expect(chip).not.toBe(select);
+    const shown = chip.querySelector(".queue-language-label");
+    expect(shown).toHaveTextContent(/^Auto$/);
+    expect(shown).toHaveAttribute("aria-hidden", "true");
+    // The select keeps its own name and value: a screen reader hears the whole choice, and its list is unchanged.
+    expect(select.selectedOptions[0].text).toBe("Auto (English / Urdu / Arabic)");
+    expect(select).toHaveAttribute("title", "Language of the transcript");
+    const urdu = within(row("p2")).getByRole("combobox", { name: "Language" }) as HTMLSelectElement;
+    expect(urdu.selectedOptions[0].text).toBe("Urdu (with English words)");
+    expect(urdu.closest(".queue-language")?.querySelector(".queue-language-label")).toHaveTextContent(/^Urdu$/);
+    // The select lies transparent over the chip, and keyboard focus draws its ring on the chip.
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    expect(css).toMatch(/\.queue-language > select\s*\{[^}]*position: absolute;[^}]*opacity: 0/);
+    expect(css).toMatch(/\.queue-language:has\(> select:focus-visible\)\s*\{[^}]*outline: 2px solid var\(--focus\)/);
+    // Its list keeps the list's own colours (not an active chip's accent), and the arrow sits at the end in right to left.
+    expect(css).toMatch(/\.queue-language > select option\s*\{[^}]*color: var\(--text\);[^}]*background: var\(--surface\)/);
+    expect(css).toMatch(/\[dir="rtl"\] \.chip\.queue-language\s*\{[^}]*background-position: 10px 50%, 15px 50%/);
   });
 
   it("sends an explicit null for No project", async () => {

@@ -31,12 +31,30 @@ final class ConsoleV2
         return self::flag('ui_v2.library');
     }
 
+    /**
+     * The three levels of navigation (docs/PLAN_NAV_3_LEVELS.md): the rail, the place's panel and the page's tabs, in
+     * place of the sidebar, with the new frame and the new Library together (NavFrame).
+     */
+    public static function frame(): bool
+    {
+        return self::shell() && self::library();
+    }
+
     /** The admin panel on the design values (ui_v2.admin), for the member of staff signed in to it. */
     public static function admin(): bool
     {
         $user = auth()->user();
 
         return $user instanceof User && Filament::getCurrentPanel()?->getId() === 'admin' && app(InterfaceFlags::class)->active('ui_v2.admin', $user);
+    }
+
+    /**
+     * UX-07 and UX-18 (v21_zoom): the account menu's Zoom row. On the web the browser zooms the page (its own keys, which
+     * move every menu and the layout's breakpoints with it); a page can't set that zoom, so the row gives the keys.
+     */
+    public static function zoom(): bool
+    {
+        return self::shell() && self::flag('v21_zoom');
     }
 
     /** Whether any of the console's v2.0 parts is on: the design values load then. */

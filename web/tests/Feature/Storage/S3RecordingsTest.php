@@ -359,7 +359,8 @@ describe('a queued assembly', function () {
             ->and($this->bucket->keys('parts/'))->toBe([]);
     });
 
-    it('asks for the file again only after a trouble that outlasts every wait', function () {
+    it('keeps the parts through a trouble that outlasts every wait, and the recovery finishes it once the bucket answers', function () {
+        // A bucket that is down is the server's fault, not the upload's (W-INC-1124): the device is not asked again.
         $this->bucket->failNext('GET', 503, 9, "parts/{$this->id}/1.part");
 
         s3RunOneQueuedJob();
@@ -372,11 +373,34 @@ describe('a queued assembly', function () {
         s3RunOneQueuedJob();
 
         $recording = Recording::query()->findOrFail($this->id);
+        expect($recording->upload_status)->toBe(UploadStatus::Assembling)
+            ->and($recording->error)->toBeNull()
+            ->and($recording->received_chunks)->toBe([0, 1, 2])
+            ->and($this->bucket->keys("parts/{$this->id}/"))->toHaveCount(3)
+            ->and(DB::table('failed_jobs')->count())->toBe(1)
+            ->and($this->workFiles())->toBe([]);
+
+        $this->travel(16)->minutes();
+        expect(Artisan::call('recordings:recover'))->toBe(0);
+        s3RunOneQueuedJob();
+
+        expect($recording->refresh()->upload_status)->toBe(UploadStatus::Ready)
+            ->and(s3PlainOf($recording))->toBe($this->audio)
+            ->and($this->bucket->keys('parts/'))->toBe([])
+            ->and($this->workFiles())->toBe([]);
+    });
+
+    it('asks for the file again at once when a part in the bucket was changed', function () {
+        $this->bucket->objects["parts/{$this->id}/1.part"] = $this->bucket->objects["parts/{$this->id}/0.part"];
+
+        s3RunOneQueuedJob();
+
+        $recording = Recording::query()->findOrFail($this->id);
         expect($recording->upload_status)->toBe(UploadStatus::Failed)
             ->and($recording->error)->toBe(ChunkedUploadService::NOT_FINISHED)
             ->and($recording->received_chunks)->toBe([])
             ->and($this->bucket->keys('parts/'))->toBe([])
-            ->and(DB::table('failed_jobs')->count())->toBe(1)
+            ->and(DB::table('failed_jobs')->count())->toBe(0)
             ->and($this->workFiles())->toBe([]);
     });
 });

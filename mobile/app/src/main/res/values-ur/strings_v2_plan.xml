@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Plan & usage settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_pl_plan">%1$s پلان</string>
+    <string name="v2_pl_member">%1$s، %2$s پر ہے۔ پلان اس کا مالک سنبھالتا ہے۔</string>
+    <string name="v2_pl_your_workspace">آپ کی ورک اسپیس</string>
+    <string name="v2_pl_free_key">ٹرانسکرپٹس آپ کی اپنی مفت Groq کلید سے بنتی ہیں۔</string>
+    <string name="v2_pl_no_end">کوئی آخری تاریخ نہیں</string>
+    <string name="v2_pl_ends_today">آج ختم ہو رہا ہے، %1$s۔</string>
+    <plurals name="v2_pl_ends_in">
+        <item quantity="one">%1$d دن میں ختم، %2$s کو۔</item>
+        <item quantity="other">%1$d دن میں ختم، %2$s کو۔</item>
+    </plurals>
+    <string name="v2_pl_paid_until">%1$s تک ادا شدہ</string>
+    <string name="v2_pl_stops_on">آپ کا پلان %1$s کو رک جائے گا۔ خود بخود کوئی رقم نہیں کٹتی۔</string>
+    <string name="v2_pl_upgrade">اپ گریڈ کریں</string>
+    <string name="v2_pl_upgrade_to">%1$s پر اپ گریڈ کریں</string>
+    <string name="v2_pl_compare">پلانز کا موازنہ کریں</string>
+    <string name="v2_pl_top">آپ ہمارے سب سے اوپر والے پلان پر ہیں۔</string>
+    <string name="v2_pl_open_request">درخواست کھولیں</string>
+    <string name="v2_pl_rq_requested">%1$s کی درخواست کی گئی</string>
+    <string name="v2_pl_rq_waiting">ادائیگی کا انتظار</string>
+    <string name="v2_pl_rq_send">%1$s ہمارے بینک اکاؤنٹ میں بھیجیں، پھر رسید کا اسکرین شاٹ لگائیں۔</string>
+    <string name="v2_pl_rq_reference">حوالہ %1$s۔</string>
+    <string name="v2_pl_rq_the_amount">رقم</string>
+    <string name="v2_pl_rq_checking">آپ کی ادائیگی دیکھی جا رہی ہے</string>
+    <string name="v2_pl_rq_in_review">جانچ میں</string>
+    <string name="v2_pl_rq_got_on">ہمیں آپ کی رسید %1$s کو ملی۔</string>
+    <string name="v2_pl_rq_got">ہمیں آپ کی رسید مل گئی۔</string>
+    <string name="v2_pl_rq_need_receipt">ہمیں ایک اور رسید چاہیے</string>
+    <string name="v2_pl_rq_action">کارروائی درکار</string>
+    <string name="v2_pl_rq_still_open">آپ کی درخواست ابھی کھلی ہے۔ دوبارہ ادائیگی کی ضرورت نہیں۔</string>
+    <string name="v2_pl_rq_declined">ہم آپ کی ادائیگی کی تصدیق نہیں کر سکے</string>
+    <string name="v2_pl_rq_not_approved">منظور نہیں ہوئی</string>
+    <string name="v2_pl_rq_declined_body">اگر آپ ادائیگی کر چکے ہیں تو ہماری ای میل کا جواب اپنی ٹرانزیکشن آئی ڈی کے ساتھ دیں، ہم دوبارہ دیکھیں گے۔</string>
+    <string name="v2_pl_rq_cancelled_title">درخواست منسوخ</string>
+    <string name="v2_pl_rq_cancelled">منسوخ</string>
+    <string name="v2_pl_rq_cancelled_body">آپ نے یہ درخواست منسوخ کی۔ منسوخ کرنے سے ادائیگی واپس نہیں ہوتی۔</string>
+    <string name="v2_pl_rq_on">آپ %1$s پر ہیں</string>
+    <string name="v2_pl_rq_approved">منظور</string>
+    <string name="v2_pl_rq_thanks">شکریہ۔</string>
+    <string name="v2_pl_rq_on_until">%1$s، %2$s تک چالو ہے۔</string>
+    <string name="v2_pl_payment_details">ادائیگی کی تفصیل</string>
+    <string name="v2_pl_cancel_request">درخواست منسوخ کریں</string>
+    <string name="v2_pl_view_request">درخواست دیکھیں</string>
+    <string name="v2_pl_add_receipt">رسید لگائیں</string>
+    <string name="v2_pl_request_again">دوبارہ درخواست دیں</string>
+    <string name="v2_pl_dismiss">ہٹائیں</string>
+    <string name="v2_pl_cancel_title">یہ درخواست منسوخ کریں؟</string>
+    <string name="v2_pl_cancel_body">اگر آپ ادائیگی کر چکے ہیں تو اس کی بجائے رسید لگائیں۔ منسوخ کرنے سے ادائیگی واپس نہیں ہوتی۔</string>
+    <string name="v2_pl_keep_request">درخواست رکھیں</string>
+    <string name="v2_pl_this_month">اس مہینے</string>
+    <string name="v2_pl_transcription">ٹرانسکرپشن</string>
+    <string name="v2_pl_key_added">کلید شامل ہے</string>
+    <string name="v2_pl_key_not_added">شامل نہیں۔ اپنی کلید شامل کرنے کے لیے تھپتھپائیں</string>
+    <string name="v2_pl_your_key">آپ کی Groq کلید</string>
+    <string name="v2_pl_paused_until">ٹرانسکرپشن %1$s تک رکی ہوئی ہے۔</string>
+    <string name="v2_pl_used_pct">آپ اپنے منٹوں کا %1$d%% استعمال کر چکے ہیں۔ یہ %2$s کو دوبارہ شروع ہوں گے۔</string>
+    <string name="v2_pl_resets">%1$s کو دوبارہ شروع</string>
+    <string name="v2_pl_storage">اسٹوریج</string>
+    <string name="v2_pl_storage_full">جگہ خالی کرنے تک نئی ریکارڈنگز اپ لوڈ نہیں ہو سکتیں۔</string>
+    <string name="v2_pl_devices">ڈیوائسز</string>
+    <string name="v2_pl_devices_full">ایک اور شامل کرنے کے لیے کسی ڈیوائس سے سائن آؤٹ کریں۔</string>
+    <string name="v2_pl_team">ٹیم کے ارکان</string>
+    <string name="v2_pl_minutes_reset">منٹ ہر مہینے کی پہلی تاریخ کو دوبارہ شروع ہوتے ہیں۔ بچے ہوئے منٹ اگلے مہینے نہیں جاتے۔</string>
+    <string name="v2_pl_included">آپ کے پلان میں شامل</string>
+    <string name="v2_pl_kept">ریکارڈنگز کتنی دیر رکھی جاتی ہیں</string>
+    <string name="v2_pl_longest">سب سے لمبی ریکارڈنگ</string>
+    <string name="v2_pl_uploads">روزانہ اپ لوڈز</string>
+    <string name="v2_pl_up_to">زیادہ سے زیادہ %1$s</string>
+    <string name="v2_pl_just_you">صرف آپ</string>
+    <string name="v2_pl_up_to_people">زیادہ سے زیادہ %1$d لوگ</string>
+    <string name="v2_pl_every_plan">ہر پلان میں ریکارڈ، منظم، تلاش، لنک شیئر اور ایکسپورٹ کیا جا سکتا ہے۔</string>
+    <string name="v2_pl_every_feature">ہر فیچر دیکھیں</string>
+    <string name="v2_pl_every_feature_title">ہر فیچر</string>
+    <string name="v2_pl_feature_included">شامل</string>
+    <string name="v2_pl_plans">پلانز</string>
+    <string name="v2_pl_everything_in">%1$s میں سب کچھ، اور:</string>
+    <string name="v2_pl_choose">%1$s چنیں</string>
+    <string name="v2_pl_bank">ادائیگی بینک ٹرانسفر سے ہوتی ہے۔ ہمارے اکاؤنٹ میں رقم آنے کے بعد ہم آپ کا پلان چالو کر دیتے ہیں۔</string>
+    <string name="v2_pl_no_limit">کوئی حد نہیں</string>
+    <string name="v2_pl_of">%2$s میں سے %1$s</string>
+    <string name="v2_pl_min">%1$s منٹ</string>
+    <plurals name="v2_pl_days">
+        <item quantity="one">%1$d دن</item>
+        <item quantity="other">%1$d دن</item>
+    </plurals>
+    <plurals name="v2_pl_years">
+        <item quantity="one">%1$d سال</item>
+        <item quantity="other">%1$d سال</item>
+    </plurals>
+    <plurals name="v2_pl_hours">
+        <item quantity="one">%1$d گھنٹہ</item>
+        <item quantity="other">%1$d گھنٹے</item>
+    </plurals>
+    <plurals name="v2_pl_minutes">
+        <item quantity="one">%1$d منٹ</item>
+        <item quantity="other">%1$d منٹ</item>
+    </plurals>
+</resources>

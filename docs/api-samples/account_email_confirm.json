@@ -1,0 +1,31 @@
+{
+    "name": "Sample Owner",
+    "email": "sample.new@example.test",
+    "email_verified": true,
+    "two_factor": false,
+    "google": false,
+    "created_at": "2026-11-24T13:15:51+00:00",
+    "workspace": {
+        "id": 1,
+        "name": "Personal",
+        "role": "owner"
+    },
+    "deletes_at": null,
+    "super_admin": true,
+    "workspaces": [
+        {
+            "id": 1,
+            "name": "Personal",
+            "role": "owner",
+            "current": true
+        }
+    ],
+    "avatar_url": "https://echoledger.test/api/avatars/1/1795526153?expires=sample&signature=sample",
+    "avatar_version": 1795526153,
+    "avatar_color": 1,
+    "has_password": true,
+    "pending_email": null,
+    "pending_email_expires_at": null,
+    "passkeys_available": true,
+    "language": "en"
+}

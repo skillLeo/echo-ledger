@@ -16,18 +16,25 @@ use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
 use App\Models\CallNote;
+use App\Models\CallRule;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
+use App\Models\LabelList;
 use App\Models\Recording;
+use App\Models\SavedView;
 use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\Assist\AssistDefaults;
 use App\Services\Assist\AssistRecords;
 use App\Services\AuditLog;
+use App\Services\CallRules;
+use App\Services\Library\SavedViews;
+use App\Services\Lists\LabelLists;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
 use App\Services\Storage\RecordingFiles;
@@ -46,9 +53,10 @@ use ZipArchive;
 /**
  * "Export my data" (since v1.5, docs/API.md "Your account"): one ZIP with every recording of the account (its
  * decrypted audio, its transcripts as .txt and .json in the original and every view that was made, its screens and
- * call notes), every project of it (notes, brief, memory and files) and, since v1.9, its Live Assist (settings, preps
+ * call notes), every project of it (notes, brief, memory and files), since v1.9 its Live Assist (settings, preps
  * with their documents, and every session with its lines, suggestions, facts, summary, report and usage, in every
- * workspace), with a manifest.json listing it all. The ZIP
+ * workspace) and since 2.0.0-p its lists and saved Library views (library.json, every workspace), with a manifest.json
+ * listing it all. The ZIP
  * is built in a working folder of its own, stored encrypted on the recordings disk (exports/) and its link emailed.
  */
 final class AccountExporter
@@ -121,6 +129,9 @@ final class AccountExporter
                 'recordings' => $this->recordings($user, $work),
                 'projects' => $this->projects($user, $work),
                 'live_assist' => $this->liveAssist($user),
+                'library' => $this->library($user),
+                // Since 2.0.0-w: the call rules, as GET /api/call-rules gives them.
+                'call_rules' => $this->callRules($user),
             ];
             $this->addText('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $this->close();
@@ -278,6 +289,28 @@ final class AccountExporter
     }
 
     /**
+     * The person's lists (labels with a name, a colour and a place) and saved Library views (contract 2.0.0-p), in every
+     * workspace: library.json. A view holds filters, a search and how the list is shown, never content.
+     */
+    private function library(User $user): string
+    {
+        $names = Workspace::query()->whereIn('id', LabelList::query()->where('user_id', $user->id)->pluck('workspace_id')
+            ->merge(SavedView::query()->withoutGlobalScopes()->where('user_id', $user->id)->pluck('workspace_id'))->unique()->all())->pluck('name', 'id');
+        $workspaces = [];
+        foreach ($names as $id => $name) {
+            $workspaces[] = [
+                'workspace' => $name,
+                'lists' => app(LabelLists::class)->rows((int) $id, $user->id)
+                    ->map(fn (LabelList $l): array => ['name' => $l->name, 'color' => $l->color, 'position' => $l->position])->values()->all(),
+                'views' => array_map(fn (array $view): array => array_diff_key($view, ['id' => true, 'client_ref' => true]), app(SavedViews::class)->index((int) $id, $user->id)),
+            ];
+        }
+        $this->addText('library.json', (string) json_encode(['workspaces' => $workspaces], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        return 'library.json';
+    }
+
+    /**
      * Live Assist (since v1.9), in every workspace, deleted sessions too (what is kept of them): live-assist/settings.json,
      * preps.json, and a folder per session with session.json (its lines, suggestions, facts, summary, report and
      * usage) and report.md.
@@ -347,6 +380,17 @@ final class AccountExporter
     }
 
     /** Adds text to the ZIP through a file of the working folder. */
+    /** Since 2.0.0-w: the person's call rules and After each call settings, as GET /api/call-rules gives them. */
+    private function callRules(User $user): ?string
+    {
+        if ($user->call_settings === null && ! CallRule::query()->where('user_id', $user->id)->exists()) {
+            return null;
+        }
+        $this->addText('call-rules.json', (string) json_encode(app(CallRules::class)->payload($user), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        return 'call-rules.json';
+    }
+
     private function addText(string $name, string $text): void
     {
         $plain = $this->part();

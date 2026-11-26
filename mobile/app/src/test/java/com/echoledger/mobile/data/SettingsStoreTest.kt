@@ -297,4 +297,134 @@ class SettingsStoreTest : AppTest() {
         store.update { it.copy(secureScreen = true) }
         assertEquals("a choice made afterwards is kept", true, store.current().secureScreen)
     }
+
+    // ---- 2.0.5: the app lock's "hide content" became Block screenshots of EchoLedger -----------------------------------
+
+    private val before205 = """{"serverUrl":"https://x.example","deviceId":"d1","onboardingDone":true,"settingsVersion":2"""
+
+    @Test
+    fun `Block screenshots is off by default`() = runBlocking {
+        assertEquals(false, AppSettings().blockScreens)
+        assertEquals(false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `a phone whose lock hid content keeps screenshots blocked after the update`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":true}")
+        assertEquals(true, store.current().blockScreens)
+        assertEquals("the lock itself is untouched", true, store.current().appLockEnabled)
+
+        // The choice is written with the next change, so turning it off later stays off.
+        store.update { it.copy(blockScreens = false) }
+        assertEquals(false, store.current().blockScreens)
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("turned off stays off though the old switch is still on", false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `hide content without the lock blocked nothing, so it blocks nothing after the update`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":false,\"secureScreen\":true}")
+        assertEquals(false, store.current().blockScreens)
+
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":false}")
+        assertEquals("the lock alone blocked nothing", false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `a Block screenshots choice already stored wins over the old switch`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":true,\"blockScreens\":false}")
+        assertEquals(false, store.current().blockScreens)
+
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":false,\"secureScreen\":false,\"blockScreens\":true}")
+        assertEquals(true, store.current().blockScreens)
+    }
+
+    // ---- 2.0.5, the owner's decision: During screen sharing became Hide EchoLedger's live words --------------------
+
+    @Test
+    fun `Hide live words is on on a new phone`() = runBlocking {
+        assertEquals(true, AppSettings().hideLiveWords)
+        assertEquals(true, store.current().hideLiveWords)
+    }
+
+    @Test
+    fun `each old During screen sharing value becomes the switch, and a later choice stays`() = runBlocking {
+        listOf("show" to false, "hide" to true, "black_box" to true).forEach { (mode, hide) ->
+            plantRaw("settings_json", "$before205,\"screenShareMode\":\"$mode\"}")
+            assertEquals(mode, hide, store.current().hideLiveWords)
+        }
+        plantRaw("settings_json", "$before205}")
+        assertEquals("nothing chosen: on", true, store.current().hideLiveWords)
+
+        plantRaw("settings_json", "$before205,\"screenShareMode\":\"hide\"}")
+        store.update { it.copy(hideLiveWords = false) }
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("written with the next change, so it stays off", false, store.current().hideLiveWords)
+    }
+
+    // ---- 2.0.5: "After a call" became After each call ------------------------------------------------------------
+
+    @Test
+    fun `After each call is Ask me after the call on a new phone`() = runBlocking {
+        assertEquals("ask", store.current().afterEachCall)
+        assertEquals("after", store.current().whenToAsk)
+    }
+
+    @Test
+    fun `Keep automatically and Ask me both become Ask me`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"afterCall\":\"keep\"}")
+        assertEquals("ask", store.current().afterEachCall)
+        plantRaw("settings_json", "$before205}")
+        assertEquals("the old default, never written, too", "ask", store.current().afterEachCall)
+        plantRaw("settings_json", "$before205,\"afterCall\":\"ask\",\"decisionTimeout\":\"discard\",\"decisionTimeoutChosen\":true}")
+        assertEquals("ask", store.current().afterEachCall)
+        assertEquals("the old timeout is kept as it was", "discard", store.current().decisionTimeout)
+
+        // Written with the next change, so a choice made afterwards stays.
+        store.update { it.copy(afterEachCall = "off") }
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("off", store.current().afterEachCall)
+    }
+
+    @Test
+    fun `settings from before v1_1_1 still have screenshots allowed`() = runBlocking {
+        // Then hide content was on by default and was reset once; it never becomes a block.
+        plantRaw("settings_json", """{"serverUrl":"https://x.example","deviceId":"d1","appLockEnabled":true,"secureScreen":true}""")
+        assertEquals(false, store.current().blockScreens)
+    }
+
+    // ---- the hot copy for windows outside the app (latest) ----------------------------------------------------------
+
+    @Test
+    fun `signing out reaches the hot copy at once`() = runBlocking {
+        store.update { it.copy(serverUrl = "https://ledger.example.com", deviceId = "01JDEVICE", deviceName = "Galaxy S25") }
+        assertEquals("01JDEVICE", store.latest.value?.deviceId)
+        store.clearPairing()
+        assertNull(store.latest.value?.deviceId)
+        assertNull(store.latest.value?.deviceName)
+        assertEquals("the server address stays", "https://ledger.example.com", store.latest.value?.serverUrl)
+    }
+
+    @Test
+    fun `a read that comes late never puts an older value over a save`() = runBlocking {
+        // Before any save, a read fills the hot copy.
+        store.current()
+        assertEquals("system", store.latest.value?.textSize)
+        store.update { it.copy(textSize = "larger") }
+        assertEquals("larger", store.latest.value?.textSize)
+        // A value the store's flow emits after the save (here planted behind the store's back, as an old read would
+        // arrive) is not published: saves are the authority.
+        plantRaw("settings_json", """{"textSize":"smaller","settingsVersion":2}""")
+        assertEquals("smaller", store.current().textSize)
+        assertEquals("larger", store.latest.value?.textSize)
+        // The next save is published again.
+        store.update { it.copy(textSize = "largest") }
+        assertEquals("largest", store.latest.value?.textSize)
+    }
+
+    @Test
+    fun `concurrent saves leave the hot copy on the last one the store applied`() = runBlocking {
+        (1..40).map { n -> async(kotlinx.coroutines.Dispatchers.IO) { store.update { it.copy(lockAfterMs = n.toLong()) } } }.awaitAll()
+        assertEquals(store.current().lockAfterMs, store.latest.value?.lockAfterMs)
+    }
 }

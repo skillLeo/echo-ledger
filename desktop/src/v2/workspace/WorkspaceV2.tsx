@@ -2,33 +2,50 @@
 // (views/main/ClientWorkspace.tsx; workspace.test.tsx keeps the two lists equal):
 // - Recordings: search (titles and what was said), sort, its folders' recordings, its folders, drag onto a project,
 //   filing rules;
-// - Files: Add files, files dropped on the window, Paste instructions with a name, Remove after a confirmation;
-// - Ask: Ask with Copy answer (when the plan has AI notes);
+// - Files: Add files, files dropped on the window, Paste instructions with a name, Remove after a confirmation; then the
+//   screens kept in its meetings (once a tab of their own);
 // - Memory & instructions: the AI notes switch and budget, the brief (Edit, Save brief, Write again), memory (pin,
-//   remove, add), instructions;
-// - Call notes and Screens, as today;
-// and Share and the project menu, whose dialogs stay the Projects page's.
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+//   remove, add), instructions; then the call notes (once a tab of their own);
+// - Ask: Ask with Copy answer (when the plan has AI notes);
+// - Members: who can open it (UX-09): you, and whoever its share links let in, with Share and Send a copy;
+// and Share, Request files and the project menu, whose dialogs stay the Projects page's. The tabs' order is UX-09's:
+// Recordings · Files · Memory & instructions · Ask · Members.
+import { PanelToggle } from "../shell/NavRail";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type BriefSections, type ClientFolder, type ClientWorkspace, type LibraryItem, type MemoryKind, type MemoryLine } from "../../lib/ipc";
 import { formatDuration, formatWhen, rowDate, timestamp } from "../../lib/format";
 import { usePoll } from "../../lib/usePoll";
+import { ancestors } from "../../lib/projects";
+import { notifyWhenAway } from "../../lib/notify";
 import { confirmAction } from "../../lib/confirm";
 import { NO_AI_NOTES } from "../../lib/plan";
 import { BRIEF_FIELDS, budgetLine, workspaceBusy } from "../../views/main/ClientWorkspace";
 import { NotesSections } from "../../views/main/CallNotes";
-import { LockedChip, PlanBadge, useLocked } from "../../views/main/Upgrade";
+import { clientSummary } from "../../views/main/ClientAvatar";
+import { LockedChip, PlanBadge, useLocked, useLockedTag } from "../../views/main/Upgrade";
 import { ProjectScreens } from "../../views/main/ScreenMoments";
 import type { Notify } from "../../lib/notice";
 import {
+  Breadcrumbs,
   Banner, Button, Card, EmptyState, Icons, List, ListRow, ListSection, Loading, Select, SkeletonRow, Tabs, TextArea, TextField, Toast, ToastRegion, Toggle,
 } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
+import { MembersTab } from "./MembersTab";
 import { AskV2 } from "../ask/AskV2";
 import { RulesV2 } from "./Rules";
 import { RecordingsTab } from "./RecordingsTab";
 import { FilesTab, fileLine } from "./FilesTab";
 
-type Tab = "recordings" | "files" | "ask" | "memory" | "notes" | "screens";
+/** When the latest of these was recorded, by the instant itself (offsets differ from one device to another). */
+export function latestStart(items: readonly Pick<LibraryItem, "started_at">[]): string | undefined {
+  let best: string | undefined;
+  for (const { started_at: at } of items) {
+    if (at && !Number.isNaN(Date.parse(at)) && (best === undefined || Date.parse(at) > Date.parse(best))) best = at;
+  }
+  return best;
+}
+
+type Tab = "recordings" | "files" | "memory" | "ask" | "members";
 
 export const MEMORY_KINDS: readonly { value: MemoryKind; label: string; heading: string }[] = [
   { value: "decision", label: "Decision", heading: "Decisions" },
@@ -61,6 +78,12 @@ export type WorkspaceV2Props = {
   menu?: MenuItem[];
   /** Share: a link to the project's recordings, or send it to a teammate. */
   onShare?: () => void;
+  /** Send a copy to a teammate (Members). */
+  onSend?: () => void;
+  /** Request files into it: a button in its header (UX-09); none without request links. */
+  onRequest?: () => void;
+  /** Open on a tab (the project menu's Instructions & memory… and Members…); each request has a new seq. */
+  startTab?: { tab: "memory" | "members"; seq: number } | null;
   /** Filing rules are shown (a server with projects in folders). */
   rules?: boolean;
   /** The plan has call notes, memory writing and Ask (`ai_notes`); without it they wait for an upgrade, as today. */
@@ -72,32 +95,38 @@ export type WorkspaceV2Props = {
   /** Today's screens list reports through the app's notices. */
   notify?: Notify;
   onBack: () => void;
+  /** The breadcrumbs' first step: the Projects page. */
+  onProjects?: () => void;
   onOpenProject?: (id: string) => void;
   onOpenRecording: (id: string, ms?: number) => void;
   onLibrary: () => void;
 };
 
 export function WorkspaceV2({
-  project, projects = [], parent = null, folders = [], menu = [], onShare, rules = false, aiNotesInPlan = true, onMoveRecordings, onProjectChanged,
-  notify = () => undefined, onBack, onOpenProject, onOpenRecording, onLibrary,
+  project, projects = [], parent = null, folders = [], menu = [], onShare, onSend, onRequest, startTab = null, rules = false, aiNotesInPlan = true, onMoveRecordings, onProjectChanged,
+  notify = () => undefined, onBack, onProjects, onOpenProject, onOpenRecording, onLibrary,
 }: WorkspaceV2Props) {
-  const [tab, setTab] = useState<Tab>("recordings");
+  const [tab, setTab] = useState<Tab>(startTab?.tab ?? "recordings");
+  useEffect(() => {
+    if (startTab) setTab(startTab.tab);
+  }, [startTab?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [itemsFailed, setItemsFailed] = useState(false);
   const [ws, setWs] = useState<ClientWorkspace | null>(null);
   const [wsFailed, setWsFailed] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [message, setMessage] = useState<{ id: number; text: string; action?: { label: string; run: () => void } } | null>(null);
-  const say = useCallback((text: string, action?: { label: string; run: () => void }) => setMessage({ id: Date.now(), text, action }), []);
+  const [message, setMessage] = useState<{ id: number; text: string; action?: { label: string; run: () => void }; error?: boolean } | null>(null);
+  const say = useCallback((text: string, action?: { label: string; run: () => void }, error?: boolean) => setMessage({ id: Date.now(), text, action, error }), []);
   const update: WorkspaceUpdate = useCallback((change) => setWs((cur) => (cur ? change(cur) : cur)), []);
   const askLocked = useLocked("ai_notes");
+  const screensLock = useLockedTag("screen_moments");
   // The brief, memory and recent call notes as one text for another AI chat, as today.
   const copyForAi = async () => {
     try {
       await navigator.clipboard.writeText(await api.clientBundle(project.id));
       say("Copied the brief, memory and recent call notes for AI");
     } catch (e) {
-      say(typeof e === "string" ? e : "The project couldn't be copied. Try again.");
+      say(typeof e === "string" ? e : "The project couldn't be copied. Try again.", undefined, true);
     }
   };
 
@@ -116,18 +145,35 @@ export function WorkspaceV2({
   useEffect(() => void load(), [load, attempt]);
   // Anything the server is still writing or reading is asked for again until it is done, as today.
   usePoll(workspaceBusy(ws), load);
+  // Work that finished while the person looked elsewhere: a native notification says what is ready (classic's).
+  const previous = useRef<ClientWorkspace | null>(null);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = ws;
+    if (!before || !ws || before.client.id !== ws.client.id) return;
+    if (before.brief?.status === "working" && ws.brief?.status === "ready") void notifyWhenAway("Brief ready", `${project.name}'s brief was written again.`);
+    for (const file of ws.files) {
+      const was = before.files.find((f) => f.id === file.id);
+      if (was?.status === "extracting" && file.status !== "extracting") {
+        void notifyWhenAway(file.status === "ready" ? "File read" : "File not read", `${project.name}: ${file.name}`);
+      }
+    }
+  }, [ws, project.name]);
 
   const all = useMemo(() => (projects.length ? projects : [project as ClientFolder]), [projects, project]);
-  const ownCount = useMemo(() => (items ? items.filter((i) => !i.deleted && i.client?.id === project.id).length : null), [items, project.id]);
+  const own = useMemo(() => (items ? items.filter((i) => !i.deleted && i.client?.id === project.id) : null), [items, project.id]);
+  const ownCount = own ? own.length : null;
+  // Classic's summary: how many, and when the last call was.
+  const lastCall = useMemo(() => (own ? latestStart(own) : undefined), [own]);
   // AI notes while they are on for the project and in the plan; a plan without them keeps memory and the brief.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : project.ai_notes !== false);
-  const tabs: { value: Tab; label: string }[] = [
-    { value: "recordings", label: "Recordings" },
-    { value: "files", label: "Files" },
-    ...(aiNotesInPlan ? [{ value: "ask" as const, label: "Ask" }] : []),
+  // The tabs that list things say how many (classic's): its recordings, its files. UX-09's five, in its order.
+  const tabs: { value: Tab; label: string; badge?: string | null; count?: number | null; countLabel?: string }[] = [
+    { value: "recordings", label: "Recordings", count: ownCount, countLabel: ownCount === null ? undefined : ownCount === 1 ? "1 recording" : `${ownCount} recordings` },
+    { value: "files", label: "Files", count: ws ? ws.files.length : null, countLabel: ws ? (ws.files.length === 1 ? "1 file" : `${ws.files.length} files`) : undefined },
     { value: "memory", label: "Memory & instructions" },
-    ...(aiNotes ? [{ value: "notes" as const, label: "Call notes" }] : []),
-    { value: "screens", label: "Screens" },
+    ...(aiNotesInPlan ? [{ value: "ask" as const, label: "Ask" }] : []),
+    { value: "members", label: "Members" },
   ];
   const wsPart = (body: (ws: ClientWorkspace) => ReactNode) => (
     wsFailed && !ws ? (
@@ -142,11 +188,19 @@ export function WorkspaceV2({
     <div className="el-page el-page--narrow" data-v2="workspace">
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{parent ? parent.name : "Projects"}</Button>
       <header className="el-page__head el-page__head--top">
+        <PanelToggle />
         <div className="el-page__titles">
+          {/* Projects › the folders it sits in › this project: each step opens its page. */}
+          {onProjects && <Breadcrumbs label="Where this project is" crumbs={[
+            { label: "Projects", onOpen: onProjects },
+            ...ancestors(all, project.id).map((c) => ({ label: c.name, onOpen: onOpenProject ? () => onOpenProject(c.id) : undefined })),
+            { label: project.name },
+          ]} />}
           <h1 className="el-title-l" dir="auto">{project.name}</h1>
-          {ownCount !== null && <p className="el-secondary">{ownCount === 1 ? "1 recording" : `${ownCount} recordings`}</p>}
+          {ownCount !== null && <p className="el-secondary" data-testid="project-summary" dir="auto">{ownCount === 0 ? "0 recordings" : clientSummary(ownCount, lastCall)}</p>}
         </div>
         <div className="el-page__actions">
+          {onRequest && <Button icon={Icons.RequestFilesIcon} title="A link anyone can use to send you voice notes and files, filed into this project" onClick={onRequest}>Request files</Button>}
           {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>Share</Button>}
           <Button title="The brief, memory and recent call notes as one text, ready to paste into a chat" onClick={() => void copyForAi()}>Copy for AI</Button>
           {menu.length > 0 && <Menu label="Project menu" items={menu} button={{ variant: "quiet", icon: Icons.MoreIcon }} />}
@@ -158,7 +212,18 @@ export function WorkspaceV2({
             onOpenRecording={onOpenRecording} onOpenProject={onOpenProject} onMoveRecordings={onMoveRecordings} onLibrary={onLibrary}
             rules={rules ? <RulesV2 projectId={project.id} projectName={project.name} say={say} /> : undefined} />
         )}
-        {tab === "files" && wsPart((w) => <FilesTab projectId={project.id} files={w.files} onChanged={update} say={say} />)}
+        {tab === "files" && (
+          <>
+            {wsPart((w) => <FilesTab projectId={project.id} files={w.files} onChanged={update} say={say} />)}
+            {/* The screens kept in its meetings (once their own tab); a plan without screen moments names the plan that has them. */}
+            <section className="el-group el-workspace-part" aria-labelledby="el-project-screens">
+              <h2 className="el-caption el-body-strong el-group__title" id="el-project-screens">
+                Screens{screensLock?.tag && <>{" "}<span className="plan-badge static mark" title={`Screens is in ${screensLock.tag}`}>{screensLock.tag}</span></>}
+              </h2>
+              <ScreensTab project={project as ClientFolder} notify={notify} onOpenRecording={onOpenRecording} onProjectChanged={onProjectChanged} />
+            </section>
+          </>
+        )}
         {tab === "ask" && (askLocked ? (
           <LockedChip feature="ai_notes" label="Ask: answers about this project, from its recordings and files" />
         ) : (
@@ -166,14 +231,22 @@ export function WorkspaceV2({
             onOpenProject={() => setTab("files")} onLibrary={onLibrary} />
         ))}
         {tab === "memory" && wsPart((w) => (
-          <Memory projectId={project.id} projectName={project.name} ws={w} onChanged={update} onOpenRecording={onOpenRecording} say={say}
-            aiNotesInPlan={aiNotesInPlan && !askLocked} onProjectChanged={onProjectChanged} />
+          <>
+            <Memory projectId={project.id} projectName={project.name} ws={w} onChanged={update} onOpenRecording={onOpenRecording} say={say}
+              aiNotesInPlan={aiNotesInPlan && !askLocked} onProjectChanged={onProjectChanged} />
+            {/* The notes written after its calls (once their own tab), while AI notes are on. */}
+            {aiNotes && (
+              <section className="el-group el-workspace-part" aria-labelledby="el-project-notes">
+                <h2 className="el-caption el-body-strong el-group__title" id="el-project-notes">Call notes</h2>
+                <CallNotesTab ws={w} projectName={project.name} onOpenRecording={onOpenRecording} />
+              </section>
+            )}
+          </>
         ))}
-        {tab === "notes" && wsPart((w) => <CallNotesTab ws={w} projectName={project.name} onOpenRecording={onOpenRecording} />)}
-        {tab === "screens" && <ScreensTab project={project as ClientFolder} notify={notify} onOpenRecording={onOpenRecording} onProjectChanged={onProjectChanged} />}
+        {tab === "members" && <MembersTab projectId={project.id} projectName={project.name} within={ancestors(all, project.id)} onShare={onShare} onSend={onSend} />}
       </Tabs>
       <ToastRegion>
-        {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} onClose={() => setMessage(null)} />}
+        {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} error={message.error} onClose={() => setMessage(null)} />}
       </ToastRegion>
     </div>
   );

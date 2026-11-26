@@ -45,7 +45,7 @@ import org.junit.Test
 
 /**
  * The v2 recording page's shared parts, against a scripted server: the ⋮ menu (Organise, Transcript, Export ▸, Delete
- * last), each of its actions as the request classic's page sends, Copy ▾ and what it puts on the clipboard.
+ * last), each of its actions as the request classic's page sends, the Copy split button and what it puts on the clipboard.
  */
 class RecordingPageTest : ScreenTest() {
     private var backs = 0
@@ -87,6 +87,21 @@ class RecordingPageTest : ScreenTest() {
         keep = keep,
         labels = listOf("urgent")
     )
+
+    /** v2.1 UX-16: "Audio · 18 days left" is on the page of audio kept without a transcript (it left the row). */
+    @Test
+    fun audioKeptWithoutATranscriptSaysOnItsPageHowManyDaysAreLeft() {
+        val expires = java.time.OffsetDateTime.now().plusDays(17).plusHours(6).toString()
+        val audioOnly = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, finalStatus = null)
+            .replace("\"updated_at\"", "\"expires_at\":\"$expires\",\"updated_at\"")
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(200, audioOnly.trimEnd().removeSuffix("}") + ""","recordings":[],"transcripts":[],"playback_url":null}""")
+        )
+        open(item().copy(transcript = null, expiresAt = expires))
+        awaitText("Audio · 18 days left")
+    }
 
     private fun open(item: LibraryItem = item(), language: EchoLanguage = EchoLanguage.English) = show {
         EchoV2Theme(darkTheme = false, language = language) {
@@ -289,26 +304,53 @@ class RecordingPageTest : ScreenTest() {
     }
 
     @Test
+    fun copysMainPartCopiesTheTextWithoutTimestampsAtOnceAndSaysSo() {
+        open()
+        awaitText("Hi, thanks for calling.")
+        press("Copy text without timestamps")
+        awaitText("Copied")
+        assertEquals("You: Hello there.\nClient: Hi, thanks for calling.", clipboard()?.trim()?.replace("Me:", "You:"))
+        assertTrue(clipboard()!!, !clipboard()!!.contains("0:12"))
+        // No menu came up: the main part acts at once.
+        compose.onAllNodesWithText("Copy with timestamps").assertCountEquals(0)
+        compose.onAllNodesWithText("Copy for AI").assertCountEquals(0)
+    }
+
+    @Test
     fun copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader() {
         open()
         awaitText("Hi, thanks for calling.")
-        press("Copy")
-        press("Copy text")
-        awaitText("Copied")
-        assertEquals("You: Hello there.\nClient: Hi, thanks for calling.", clipboard()?.trim()?.replace("Me:", "You:"))
-        press("Copy")
+        press("More ways to copy")
+        listOf("Copy with timestamps", "Copy without timestamps", "Copy for AI").forEach {
+            compose.onAllNodesWithText(it).onFirst().assertExists()
+        }
         press("Copy with timestamps")
+        awaitText("Copied with timestamps")
         pumpUntil("with times") { clipboard()?.contains("0:12") == true }
-        press("Copy")
+        compose.onAllNodesWithText("Copy for AI").assertCountEquals(0)
+        press("More ways to copy")
         press("Copy without timestamps")
         pumpUntil("without times") { clipboard()?.contains("0:12") == false }
-        press("Copy")
+        press("More ways to copy")
         press("Copy for AI")
         pumpUntil("for AI") { clipboard()?.startsWith("Title: Call with Acme") == true }
         val forAi = clipboard()!!
         assertTrue(forAi, forAi.contains("Date: 20 Oct 2026"))
         assertTrue(forAi, forAi.contains("Language: English"))
         assertTrue(forAi, forAi.contains("Hi, thanks for calling."))
+    }
+
+    @Test
+    fun inUrduCopysChevronSitsOnTheLeftOfItsMainPartAndBothHaveNames() {
+        open(language = EchoLanguage.Urdu)
+        awaitText("Hi, thanks for calling.")
+        val main = compose.onAllNodes(hasContentDescription("متن وقت کے بغیر کاپی کریں") and hasClickAction())
+            .fetchSemanticsNodes().single().boundsInRoot
+        val chevron = compose.onAllNodes(hasContentDescription("کاپی کے مزید طریقے") and hasClickAction())
+            .fetchSemanticsNodes().single().boundsInRoot
+        assertTrue("chevron $chevron, main $main", chevron.right <= main.left + 1f)
+        press("کاپی کے مزید طریقے")
+        compose.onAllNodesWithText("AI کے لیے کاپی کریں").onFirst().assertExists()
     }
 
     /** A transcript whose Roman Urdu and English views are made. */
@@ -336,8 +378,7 @@ class RecordingPageTest : ScreenTest() {
         press("Roman Urdu")
         awaitText("Shukriya call karne ka.")
         compose.onNodeWithText("Roman Urdu view. The transcript itself is unchanged.").assertExists()
-        press("Copy")
-        press("Copy text")
+        press("Copy text without timestamps")
         pumpUntil("copied in the view") { clipboard()?.contains("Shukriya call karne ka.") == true }
         press("Original")
         awaitText("Hi, thanks for calling.")

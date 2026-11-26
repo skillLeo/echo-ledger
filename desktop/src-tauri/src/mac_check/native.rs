@@ -85,8 +85,9 @@ impl MacProbe for NativeProbe {
         Some(version())
     }
 
+    /// With what EchoLedger found itself: system audio that did not record counts as off (`Memory::overlay`).
     fn permissions(&self) -> Permissions {
-        crate::permissions::read()
+        self.app.state::<crate::AppState>().permissions_now()
     }
 
     fn can_tell_not_asked(&self) -> bool {

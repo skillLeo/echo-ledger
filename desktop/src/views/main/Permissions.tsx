@@ -8,6 +8,7 @@ import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
+import { SETTINGS_LABEL, otherSideNotRecorded } from "../../lib/controls";
 import { StateBanner } from "../../components/StateBanner";
 import { useBannerTurn } from "../../components/BannerSlot";
 
@@ -206,7 +207,7 @@ export function PermissionGuide({ permissions, onChange, onClose }: { permission
   );
 }
 
-const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
+export { SETTINGS_LABEL };
 
 /** Record page: what is missing and what a recording holds without it. */
 export function PermissionBanner({ recordingRef }: { recordingRef: string | null }) {
@@ -234,6 +235,36 @@ export function PermissionBanner({ recordingRef }: { recordingRef: string | null
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The main window, while a call records and the recording itself found its other side not recorded (2.0.6: a tap
+ * held back, System Audio Recording). It stays until the other side is heard, with Open System Settings (System Audio
+ * Recording's own pane) and Try again; after a try that did not help its words say to quit and reopen.
+ */
+export function OtherSideBanner() {
+  const [warning, setWarning] = useState<MissingPermission | null>(null);
+  useEffect(() => {
+    const un = listenTo("recording:state", (state) => setWarning(state.active ? otherSideNotRecorded(state.missing) : null));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  // Closed by hand it stays closed until its words change (a try that did not help says to quit and reopen).
+  const [closed, setClosed] = useState<string | null>(null);
+  const shown = useBannerTurn("other-side", !!warning && closed !== warning.sentence);
+  if (!shown || !warning) return null;
+  const open = () => void api.openPrivacySettings("system_audio").catch(() => undefined);
+  return (
+    <Notice kind="banner" tone="danger" className="banner danger" role="alert" testId="other-side-not-recorded" icon={<AlertIcon size={16} />} timeoutMs={null}
+      onOpen={open} openLabel={`${warning.sentence} Open System Settings`} onDismiss={() => setClosed(warning.sentence)}
+      actions={<>
+        <button type="button" className="btn compact" onClick={open}>Open System Settings</button>
+        <button type="button" className="btn compact" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+      </>}>
+      <span>{warning.sentence}</span>
+    </Notice>
   );
 }
 

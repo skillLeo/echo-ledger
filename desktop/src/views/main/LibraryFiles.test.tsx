@@ -106,7 +106,7 @@ describe("Rename", () => {
     await flushAsync();
     expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: null } }]);
     expect(within(detail()).getByRole("heading", { name: "Zoom call" })).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("The automatic title will be used", false, anyTarget);
+    expect(notify).toHaveBeenCalledWith("Back to the title EchoLedger gives it", false, anyTarget);
   });
 
   it("marks an automatic title, and a title the person types replaces the mark (E4)", async () => {
@@ -275,6 +275,14 @@ describe("Save and export", () => {
     await flushAsync();
     expect(callsOf("sessions_export")).toEqual([{ ids: ["a", "b"], format: "json" }]);
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("exports the zip in the view the list shows (U19: Roman Urdu for Urdu calls)", async () => {
+    respond("sessions_export", null);
+    render(<BulkBar ids={["a", "b"]} view="roman" clients={[]} knownLabels={[]} notify={vi.fn()} onDone={vi.fn()} onClientCreated={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Export transcripts" }));
+    await flushAsync();
+    expect(callsOf("sessions_export")).toEqual([{ ids: ["a", "b"], format: "docx", view: "roman" }]);
   });
 });
 

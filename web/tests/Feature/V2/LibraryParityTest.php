@@ -10,7 +10,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Services\InterfaceFlags;
-use Filament\Actions\Action;
+use App\Services\Library\LibraryFacets;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
@@ -38,7 +38,7 @@ beforeEach(function () {
     $this->transcribing = Fx::session($this->owner, $this->device, ['title' => 'Being written out', 'started_at' => $at(2)]);
     $this->transcribing->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing]);
     $this->waiting = Fx::session($this->owner, $this->device, ['title' => 'Call to keep or discard', 'status' => SessionStatus::Recording, 'started_at' => $at(3)]);
-    $this->failed = Fx::session($this->owner, $this->device, ['title' => 'Transcript that failed', 'status' => SessionStatus::Failed, 'started_at' => $at(4)]);
+    $this->failed = Fx::session($this->owner, $this->device, ['title' => 'Transcript that failed', 'status' => SessionStatus::Failed, 'started_at' => $at(4), 'ended_at' => $at(4)->addMinutes(10)]);
     Fx::readyRecording($this->failed, 'audio of the failed call');
     $this->failed->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error_code' => 'engine_error']);
     Filament::setCurrentPanel('app');
@@ -57,11 +57,13 @@ function libraryRows(string $html): array
 }
 
 it('groups by date, source, project, language, status, device or none from Group by, and remembers it', function () {
+    // Since 2.0.0-p Group by is in Sort & display.
     $page = Livewire::test(ListCaptureSessions::class);
-    expect($page->html())->toContain('data-menu="group"')->toContain('data-option="group-app"')->toContain('data-option="group-none"');
+    expect($page->html())->toContain('data-menu="display"')->toContain('data-option="group-app"')->toContain('data-option="group-none"');
 
     $page->call('setLibraryGroup', 'app');
-    expect($page->get('tableGrouping'))->toBe('app:asc')->and($page->html())->toContain('WhatsApp')->toContain('Group by: Source');
+    expect($page->get('tableGrouping'))->toBe('app:asc')->and($page->html())->toContain('WhatsApp')
+        ->and(libraryMenuOption($page->html(), 'group-app'))->toContain('aria-checked="true"')->toContain('Source');
     expect($this->owner->fresh()->console_preferences['library']['all']['group'])->toBe('app');
     foreach (['project', 'language', 'status', 'device'] as $group) {
         expect($page->call('setLibraryGroup', $group)->get('tableGrouping'))->toBe($group.':asc');
@@ -92,8 +94,9 @@ it('heads the date groups with Pinned and shows each section\'s count; the secti
     $html = Livewire::test(ListCaptureSessions::class)->html();
     $flat = (string) preg_replace(['/<!--.*?-->/s', '/\s+/'], ['', ' '], $html);
     preg_match_all('~class="fi-ta-group-heading" > ([^<]+?) </h2> <p class="fi-ta-group-description" > ([^<]+?) </p>~', $flat, $m);
+    // Since 2.0.0-p the call waiting for its decision is in Needs you only, so Today holds four.
     expect($m[1][0] ?? null)->toBe('Pinned')->and($m[2][0] ?? null)->toBe('1 recording')
-        ->and($m[1][1] ?? null)->toBe('Today')->and($m[2][1] ?? null)->toBe('5 recordings')
+        ->and($m[1][1] ?? null)->toBe('Today')->and($m[2][1] ?? null)->toBe('4 recordings')
         ->and($html)->toContain('fi-ta-group-header fi-collapsible')->toContain("isGroupCollapsed('Pinned')");
     // The pinned recording is in Pinned only, not in its day too.
     expect(substr_count($html, 'Rate for 12 mm rebar'))->toBe(1);
@@ -115,20 +118,28 @@ it('names the device on the row and stars a recording to pin it to the top, or u
     expect($other->fresh()->pinned)->toBeFalse();
 });
 
-it('shows Uploading, Transcribing, Waiting and Failed on their rows, and nothing on a finished one', function () {
+it('shows Waiting to upload, Transcribing…, Waiting and Failed · Retry on their rows, and nothing on a finished one', function () {
+    // Since v2.1 the glossary's words (docs/PLAN_V2_1_POLISH.md section 1), from each recording's one Status.
     $rows = collect(libraryRows(Livewire::test(ListCaptureSessions::class)->html()));
     $row = fn (string $title): string => (string) $rows->first(fn (string $r): bool => str_contains($r, $title));
-    expect($row('Still on its way'))->toContain('Uploading')
-        ->and($row('Being written out'))->toContain('Transcribing')
-        ->and($row('Call to keep or discard'))->toContain('Waiting')
-        ->and($row('Transcript that failed'))->toContain('Failed')
-        ->and($row('Payment terms'))->not->toContain('Uploading')->not->toContain('Transcribing')->not->toContain('Failed');
+    expect($row('Still on its way'))->toContain('Waiting to upload')
+        ->and($row('Being written out'))->toContain('Transcribing…')
+        ->and($row('Transcript that failed'))->toContain('Failed · Retry')
+        ->and($row('Payment terms'))->not->toContain('Waiting to upload')->not->toContain('Transcribing')->not->toContain('Failed');
+    // Since 2.0.0-p the call waiting for its decision is in Needs you (with the failures), not among the recordings.
+    expect($row('Call to keep or discard'))->toBe('');
+    $needs = collect(libraryRows(Livewire::withQueryParams(['tab' => 'needs_you'])->test(ListCaptureSessions::class)->html()));
+    expect((string) $needs->first(fn (string $r): bool => str_contains($r, 'Call to keep or discard')))->toContain('Waiting')
+        ->and((string) $needs->first(fn (string $r): bool => str_contains($r, 'Transcript that failed')))->toContain('Failed');
 });
 
 it('offers Retry and Delete on a failed recording\'s row in Failed uploads, and Retry transcribes it again', function () {
+    // Since 2.0.0-p Failed uploads is in Needs you (with the waiting call, which has neither button).
     $page = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'failed');
+    expect($page->get('activeTab'))->toBe('needs_you');
     $page->assertCanSeeTableRecords([$this->failed])->assertCanNotSeeTableRecords([$this->call])
-        ->assertTableActionVisible('retryFailed', $this->failed)->assertTableActionVisible('deleteFailed', $this->failed);
+        ->assertTableActionVisible('retryFailed', $this->failed)->assertTableActionVisible('deleteFailed', $this->failed)
+        ->assertTableActionHidden('retryFailed', $this->waiting);
     // Retry queues a new run of the failed transcript, which waits for the engine again.
     Queue::fake();
     $failed = $this->failed->finalTranscript()->first();
@@ -155,13 +166,14 @@ it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retr
     };
 
     $page = Livewire::test(ListCaptureSessions::class);
-    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('واٹس ایپ')->toContain('فون کال')->not->toContain('WhatsApp');
-    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('ان باکس')->not->toContain('Inbox');
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('WhatsApp')->toContain('فون کال');
+    // Since docs/PLAN_NAV_3_LEVELS.md section 0 nothing is called the Inbox: a recording without a project is "No project".
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('کوئی پروجیکٹ نہیں')->not->toContain('Inbox')->not->toContain('ان باکس');
     expect(implode(' | ', $heads($page->call('setLibraryGroup', 'status')->html())))->toContain('ناکام')->not->toContain('Failed');
 
     // The table's App column too.
     $page->call('setLibraryGroup', 'none')->call('setLibraryLayout', 'table')
-        ->assertTableColumnFormattedStateSet('source_app', 'واٹس ایپ', $this->call)
+        ->assertTableColumnFormattedStateSet('source_app', 'WhatsApp', $this->call)
         ->assertTableColumnFormattedStateSet('source_app', 'فون کال', $this->pinned)
         ->assertTableColumnFormattedStateNotSet('source_app', 'Phone call', $this->pinned);
 
@@ -183,15 +195,19 @@ function libraryMenuOption(string $html, string $option): string
     return $m[0] ?? '';
 }
 
-it('ticks the current choice in the Group by, Sort, Source and Views menus, as classic does', function () {
-    // The tick is heroicon m-check (classic's), read by its path.
+it('ticks the current choice in Sort & display (Group by, Sort, Density) and the filter panel (Source), as classic does', function () {
+    // The tick is heroicon m-check (classic's), read by its path. Since 2.0.0-p the Views are the sidebar's places and
+    // the Source menu the filter panel's Source, its choice a ticked box.
     $page = Livewire::test(ListCaptureSessions::class);
     $html = $page->html();
     expect(libraryMenuOption($html, 'group-date'))->toContain('aria-checked="true"')->toContain('M16.704 4.153')
         ->and(libraryMenuOption($html, 'group-app'))->toContain('aria-checked="false"')->not->toContain('M16.704 4.153')
         ->and(libraryMenuOption($html, 'sort-newest'))->toContain('aria-checked="true"')->toContain('M16.704 4.153')
         ->and(libraryMenuOption($html, 'sort-oldest'))->not->toContain('M16.704 4.153')
-        ->and(libraryMenuOption($html, 'view-all'))->toContain('M16.704 4.153');
+        ->and(libraryMenuOption($html, 'density-comfortable'))->toContain('aria-checked="true"');
+    $source = $page->call('applyFilters', ['source' => ['op' => 'is', 'values' => ['whatsapp']]])->html();
+    expect($source)->toMatch('~<input type="checkbox" id="lf-source-[0-9a-f]{10}" name="source" value="whatsapp" data-value\s+checked~')
+        ->not->toMatch('~<input type="checkbox" id="lf-source-[0-9a-f]{10}" name="source" value="phone_call" data-value\s+checked~');
 
     // The tick follows the choice.
     $html = $page->call('setLibraryGroup', 'app')->call('setLibrarySort', 'oldest')->html();
@@ -201,10 +217,17 @@ it('ticks the current choice in the Group by, Sort, Source and Views menus, as c
         ->and(libraryMenuOption($html, 'sort-newest'))->not->toContain('M16.704 4.153');
 });
 
-it('makes Upload recording the filled primary action and New voice note the outlined one', function () {
-    Livewire::test(ListCaptureSessions::class)
-        ->assertActionExists('upload', fn (Action $a): bool => $a->getLabel() === 'Upload recording' && ! $a->isOutlined() && in_array($a->getColor(), [null, 'primary'], true))
-        ->assertActionExists('voiceNote', fn (Action $a): bool => $a->getLabel() === 'New voice note' && $a->isOutlined() && $a->getColor() === 'gray');
+it('moves Upload recording and New voice note to the rail\'s ● Record, the frame\'s one filled button', function () {
+    // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 6): Record a voice note, and Import audio files in its menu
+    // (the file picker on the Library); the page itself has no header actions. Since docs/PLAN_NAV_3_LEVELS.md section 2
+    // the round accent button at the top of the rail.
+    Livewire::test(ListCaptureSessions::class)->assertActionDoesNotExist('upload')->assertActionDoesNotExist('voiceNote');
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toMatch('~href="[^"]*/app/upload\?record=1" class="v2-rail-rec[^"]*" data-sidebar-upload data-record~')
+        ->toContain('data-record-menu')->toContain('Record a voice note')->toContain('Import audio files')
+        ->toContain("\$dispatch('el-upload-pick')");
+    $css = (string) file_get_contents(resource_path('css/v2/console.css'));
+    expect($css)->toContain('.v2-rail-rec-dot {')->toContain('border-radius: var(--el-radius-full);')->toContain('background-color: var(--el-role-accent-default);');
 });
 
 it('lets a row\'s title take its own direction, so an English title in Urdu ends in its own "…"', function () {
@@ -225,20 +248,31 @@ it('keeps the bell\'s count inside the bell with space before the avatar, puts t
     expect(strpos($css, '@media (max-width: 720px) { .v2-library .fi-ta-header-toolbar > div:last-child:has(> .v2-lib-tools) { min-width: 0; }'))->not->toBeFalse();
 });
 
-it('says how many calls wait for a decision, with Review, in one quiet line', function () {
-    $page = Livewire::test(ListCaptureSessions::class);
-    expect($page->html())->toContain('1 call waiting for a decision')->toContain('data-waiting="1"');
-    $page->call('openPlace', 'waiting');
-    expect($page->html())->not->toContain('data-waiting=')->and($page->get('activeTab'))->toBe('waiting');
-    $page->assertCanSeeTableRecords([$this->waiting])->assertCanNotSeeTableRecords([$this->call]);
+it('counts the calls waiting for a decision in the sidebar\'s Needs you, strong, and lists them there', function () {
+    // Since 2.0.0-p "1 call waiting for a decision · Review" is the sidebar's Needs you (the waiting call, the failed one
+    // and any stuck for more than 24 hours), and the list no longer carries a line above it.
+    $needs = app(LibraryFacets::class)->needsYou((int) $this->owner->current_workspace_id, $this->owner->id);
+    expect($needs['waiting'])->toBe(1)->and($needs['failed'])->toBe(1);
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toMatch('~data-place="needs_you".*?<span class="v2-sb-subcount is-strong">'.$needs['count'].'</span>~s')->not->toContain('data-waiting=');
+    $page = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'needs_you');
+    expect($page->get('activeTab'))->toBe('needs_you');
+    $page->assertCanSeeTableRecords([$this->waiting, $this->failed])->assertCanNotSeeTableRecords([$this->call]);
 });
 
-it('lists every classic view under Views, with its count, and opens each', function () {
+it('gives every classic view its home: a sidebar place or a filter, with its count', function () {
+    // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 6): Today → Date › Today, This week → Date › Last 7 days,
+    // Waiting for decision and Failed uploads → Needs you, Bookmarked → Bookmarks › Any bookmark, Pinned → Marked ›
+    // Pinned, Untranscribed → Not transcribed. An old address with the view opens that home, with its rows.
+    $this->call->markers()->create(['at_ms' => 1000, 'tag' => 'Decision']);
     $page = Livewire::test(ListCaptureSessions::class);
-    $menu = collect($page->instance()->v2ViewMenu())->keyBy('key');
-    expect($menu->keys()->all())->toBe(['all', 'today', 'this_week', 'waiting', 'bookmarked', 'failed', 'pinned', 'untranscribed'])
-        ->and($menu['pinned']['count'])->toBe(1)->and($menu['waiting']['count'])->toBe(1)->and($menu['failed']['count'])->toBe(1);
-    foreach (['this_week', 'bookmarked'] as $view) {
-        expect($page->call('openPlace', $view)->get('activeTab'))->toBe($view);
-    }
+    $counts = fn (string $section): array => collect(collect($page->instance()->filterPanel())->firstWhere('key', $section)['options'])->pluck('count', 'value')->all();
+    expect($counts('date')['today'])->toBe(4)->and($counts('date')['last_7_days'])->toBe(5)
+        ->and($counts('marked')['pinned'])->toBe(1)->and($counts('bookmarks')['any'])->toBe(1);
+    $page->call('applyFilters', ['bookmarks' => ['op' => 'is', 'values' => ['any']]])->assertCanSeeTableRecords([$this->call])->assertCanNotSeeTableRecords([$this->pinned]);
+    $page->call('applyFilters', ['marked' => ['op' => 'is', 'values' => ['pinned']]])->assertCanSeeTableRecords([$this->pinned])->assertCanNotSeeTableRecords([$this->call]);
+    Livewire::withQueryParams(['tab' => 'bookmarked'])->test(ListCaptureSessions::class)->assertSet('activeTab', 'all')
+        ->assertSet('lf', ['bookmarks' => ['op' => 'is', 'values' => ['any']]])->assertCanSeeTableRecords([$this->call])->assertCanNotSeeTableRecords([$this->pinned]);
+    Livewire::withQueryParams(['tab' => 'this_week'])->test(ListCaptureSessions::class)->assertSet('activeTab', 'all')
+        ->assertSet('lf.date', ['op' => 'is', 'values' => ['custom'], 'from' => '2026-11-16', 'to' => '2026-11-22'])->assertCanSeeTableRecords([$this->call, $this->pinned]);
 });

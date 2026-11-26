@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Microphone & audio settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_mic_yours">Your microphone</string>
+    <string name="v2_mic_yours_help">Calls always record your side unprocessed.</string>
+    <string name="v2_mic_reduce_echo">Reduce echo (recommended)</string>
+    <string name="v2_mic_unprocessed">Unprocessed</string>
+    <string name="v2_mic_quality">Recording quality</string>
+    <string name="v2_mic_quality_help">Higher keeps more detail for the transcript; the files grow with it.</string>
+    <string name="v2_mic_standard">Standard</string>
+    <string name="v2_mic_high">High</string>
+    <string name="v2_mic_highest">Highest (larger files)</string>
+    <string name="v2_mic_record_from">Record from</string>
+    <string name="v2_mic_automatic">Automatic</string>
+    <string name="v2_mic_in_builtin">Phone microphone</string>
+    <string name="v2_mic_in_wired">Wired headset</string>
+    <string name="v2_mic_in_bluetooth">Bluetooth headset</string>
+    <string name="v2_mic_in_usb">USB microphone</string>
+    <string name="v2_mic_not_connected">That microphone is not connected, so the phone chooses one.</string>
+    <string name="v2_mic_helper_note">Calls captured through the helper use the microphone the call uses.</string>
+    <string name="v2_mic_test">Test recording</string>
+    <string name="v2_mic_test_help">Records %1$d seconds of your microphone, then plays it back.</string>
+    <string name="v2_mic_test_start">Test %1$d s</string>
+    <string name="v2_mic_testing">Recording…</string>
+    <string name="v2_mic_me">Me</string>
+    <string name="v2_mic_peak">Peak</string>
+    <string name="v2_mic_level">%1$s level: %2$d percent</string>
+    <string name="v2_mic_heard">Your microphone is working. Play it back to check how you sound.</string>
+    <string name="v2_mic_not_heard">We did not hear your microphone. Check the microphone above and the microphone permission.</string>
+    <string name="v2_mic_play_back">Play back</string>
+    <string name="v2_mic_finish_first">Finish the current recording to run a test.</string>
+    <string name="v2_mic_silent">Warn me when the other side is silent</string>
+    <string name="v2_mic_silent_help">If a call has not heard the other side for 30 seconds.</string>
+    <string name="v2_mic_permissions">Permissions</string>
+    <string name="v2_mic_allowed">Allowed</string>
+    <string name="v2_mic_fix">Fix</string>
+    <string name="v2_mic_fix_named">Fix %1$s</string>
+    <string name="v2_mic_p_microphone">Microphone</string>
+    <string name="v2_mic_p_microphone_why">Needed to record you.</string>
+    <string name="v2_mic_p_helper">Call capture helper</string>
+    <string name="v2_mic_p_helper_why">Needed to record the other side of calls.</string>
+    <string name="v2_mic_p_notifications">Notifications</string>
+    <string name="v2_mic_p_notifications_why">Asks Transcribe, Save audio only or Delete after a call and shows the recording controls.</string>
+    <string name="v2_mic_p_overlay">Display over other apps</string>
+    <string name="v2_mic_p_overlay_why">Shows live captions over the call.</string>
+    <string name="v2_mic_p_battery">Unrestricted battery use</string>
+    <string name="v2_mic_p_battery_why">Keeps auto-record ready while the phone sleeps.</string>
+    <string name="v2_mic_p_caller_names">Notification access</string>
+    <string name="v2_mic_p_caller_names_why">Shows who each WhatsApp call was with. Only WhatsApp call notifications are read.</string>
+    <string name="v2_mic_p_call_log">Call log</string>
+    <string name="v2_mic_p_call_log_why">Gives each recorded phone call its number.</string>
+    <string name="v2_mic_p_contacts">Contacts</string>
+    <string name="v2_mic_p_contacts_why">Gives each recorded phone call the contact\'s name.</string>
+</resources>

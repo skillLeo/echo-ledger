@@ -11,6 +11,7 @@ use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
 use App\Models\SessionLabel;
+use App\Services\Library\LibraryFilters;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
@@ -23,7 +24,8 @@ final class RecordingRow
     /**
      * @return array{id: string, title: string, app: string, device: string, tile: string, icon: string, device_icon: string,
      *     time: string, full_time: string, iso: string, meta: string, status: array{label: string, tone: string, icon: string, spin: bool}|null,
-     *     progress: array{active: string, steps: list<array{key: string, label: string, state: string, detail: string|null, percent: int|null}>, summary: string}|null}
+     *     progress: array{active: string, steps: list<array{key: string, label: string, state: string, detail: string|null, percent: int|null}>, summary: string}|null,
+     *     convert_failed: string|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -31,34 +33,39 @@ final class RecordingRow
         $at = $session->started_at->copy()->setTimezone($zone);
         $labels = $session->relationLoaded('labels') ? $session->labels->map(fn (SessionLabel $l): string => $l->label)->all() : [];
         $with = $session->client->name ?? ($session->caller_name !== null && $session->caller_name !== '' ? $session->caller_name : null);
+        $progress = RecordingProgress::for($session);
+        $conversion = $progress === null ? RecordingProgress::conversion($session) : null;
 
         return [
             'id' => (string) $session->id,
             'title' => $session->displayTitle(),
-            'app' => $session->source_app->getLabel(),
-            'device' => CaptureSessionsTable::deviceLabel($session),
+            // In the console's language ("WhatsApp · Galaxy S25"); a device's own name stays as it is.
+            'app' => __($session->source_app->getLabel()),
+            'device' => $session->device !== null ? CaptureSessionsTable::deviceLabel($session) : __(CaptureSessionsTable::deviceLabel($session)),
             'tile' => self::tile($session->source_app),
             'icon' => self::appIcon($session->source_app),
             'device_icon' => self::deviceIcon($session->source_device),
             'time' => self::shortTime($at, $zone),
-            'full_time' => $at->format('M j, Y · '.Shell::timeFormat()),
+            'full_time' => ConsoleDates::dateTime($at, Shell::timeFormat()),
             'iso' => $session->started_at->toIso8601ZuluString(),
             'meta' => implode(' · ', array_filter([CaptureSessionsTable::duration($session->duration_ms), $with, $labels[0] ?? null])),
             'status' => self::status($session),
             // Since v1.5 (Phase 1C): Upload · Transcribing · Improving while one of them is moving.
-            'progress' => RecordingProgress::for($session),
+            'progress' => $progress,
+            // Since U19: "Couldn't convert to Roman Urdu" when the view it opens in could not be made.
+            'convert_failed' => $conversion !== null && $conversion['state'] === 'failed' ? $conversion['label'] : null,
         ];
     }
 
-    /** Today's recordings show the time; older ones the day, with the year when it is not this year. */
+    /** Today's recordings show the time; older ones the day, with the year when it is not this year (ConsoleDates). */
     public static function shortTime(Carbon $at, string $zone): string
     {
         $now = Carbon::now($zone);
         if ($at->isSameDay($now)) {
-            return $at->format(Shell::timeFormat());
+            return ConsoleDates::time($at, Shell::timeFormat());
         }
 
-        return $at->year === $now->year ? $at->format('M j') : $at->format('M j, Y');
+        return $at->year === $now->year ? ConsoleDates::day($at) : ConsoleDates::date($at);
     }
 
     /**
@@ -74,7 +81,11 @@ final class RecordingRow
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
 
         return match (true) {
-            $session->status === SessionStatus::Recording => ['label' => 'Waiting', 'tone' => 'brand', 'icon' => 'heroicon-o-clock', 'spin' => false],
+            // Since 2.0.0-z: waiting only once the call is over (LibraryFilters::isWaiting); a call still being recorded is
+            // not uploaded yet, as the v2 rows and every app say.
+            $session->status === SessionStatus::Recording && LibraryFilters::isWaiting($session->status->value, $session->ended_at?->getTimestamp(),
+                $session->started_at->getTimestamp(), now()->getTimestamp()) => ['label' => 'Waiting', 'tone' => 'brand', 'icon' => 'heroicon-o-clock', 'spin' => false],
+            $session->status === SessionStatus::Recording => ['label' => 'Waiting to upload', 'tone' => 'neutral', 'icon' => 'heroicon-o-arrow-up-tray', 'spin' => false],
             // Since v1.8 (contract 1.8.0-e): kept as audio, transcribed when the person asks.
             $session->status === SessionStatus::AudioOnly => ['label' => 'Audio only', 'tone' => 'neutral', 'icon' => 'heroicon-o-speaker-wave', 'spin' => false],
             $session->status === SessionStatus::Uploading => ['label' => 'Uploading', 'tone' => 'brand', 'icon' => 'heroicon-o-arrow-path', 'spin' => CaptureSessionsTable::isPending($session)],

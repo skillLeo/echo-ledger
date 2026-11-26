@@ -140,10 +140,10 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN) ?: intent?.let(::linkRequest)
         if (savedInstanceState == null) signedIn(intent)
-        // Content hidden in Recents and screenshots while the app lock and its "hide content" option are on.
+        // Content hidden in Recents and screenshots while Block screenshots of EchoLedger is on (off by default).
         lifecycleScope.launch {
             vm.settingsState.collect { state ->
-                if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.appLockEnabled && state.settings.secureScreen)
+                if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.blockScreens)
             }
         }
         setContent {
@@ -175,6 +175,12 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The clipboard can be read again: a copied secret that came due while the app was behind is cleared now.
+        if (hasFocus) com.echoledger.mobile.account.SecretClip.sweep(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -236,6 +242,9 @@ class MainActivity : FragmentActivity() {
         var showSetup by rememberSaveable { mutableStateOf(false) }
         // Waiting for you (since 1.3.2): every call waiting for Keep or Discard on one screen.
         var showWaiting by rememberSaveable { mutableStateOf(false) }
+        // In the v2 shell the calls waiting for Keep or Discard are in Activity (with Rename and Project there).
+        var shellActivity by rememberSaveable { mutableIntStateOf(0) }
+        var shellLibrary by rememberSaveable { mutableIntStateOf(0) }
 
         // The tab a Record page was opened from through the New sheet: Back goes there (since v1.8.1, bug P-026).
         var recordReturnTab by rememberSaveable { mutableStateOf<String?>(null) }
@@ -279,6 +288,8 @@ class MainActivity : FragmentActivity() {
 
         fun publish() {
             lockState = machine.state
+            // A secret copied from two-step (the key, the recovery codes) leaves the clipboard when the app locks.
+            if (lockState == LockState.Locked) com.echoledger.mobile.account.SecretClip.clearNow(this@MainActivity)
             if (machine.takeNoScreenLockNotice()) vm.showMessage(NO_SCREEN_LOCK)
         }
 
@@ -386,6 +397,13 @@ class MainActivity : FragmentActivity() {
                 showSetup = false
                 tab = TAB_ACTIVITY
             }
+            if (open == OPEN_LIBRARY) {
+                showItem(null)
+                showSetup = false
+                showWaiting = false
+                tab = TAB_LIBRARY
+                shellLibrary++
+            }
             // Since v1.8 (0.3): a settings page (the Phone app's recordings waiting for the person).
             open?.takeIf { it.startsWith(OPEN_SETTINGS_PREFIX) }?.let {
                 showItem(null)
@@ -477,6 +495,12 @@ class MainActivity : FragmentActivity() {
         }
         val shellOn = flags.shell
         var shellPlans by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(showWaiting, shellOn) {
+            if (showWaiting && shellOn) {
+                showWaiting = false
+                shellActivity++
+            }
+        }
 
         LaunchedEffect(message) {
             // The v2 shell shows the messages as its own toasts.
@@ -735,7 +759,36 @@ class MainActivity : FragmentActivity() {
 
                         !settings.onboardingDone -> OnboardingScreen(vm)
 
+                        // Signed out with the new design chosen on this phone: its sign-in (parity.csv PH-OTH-039).
+                        !settings.paired && shellOn -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                            com.echoledger.mobile.ui.v2.account.V2SignInScreen(vm)
+                        }
+
                         !settings.paired -> PairingScreen(vm)
+
+                        // The new design's page for the notes when its Library is on (parity.csv PH-OTH-038).
+                        sharedNotes != null && shellOn && flags.library ->
+                            com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                                com.echoledger.mobile.ui.v2.live.V2SharedNotesScreen(
+                                    vm,
+                                    sharedNotes.orEmpty().split(',').filter { it.isNotBlank() },
+                                    onLeave = {
+                                        sharedNotes = null
+                                        showItem(null)
+                                        tab = TAB_LIBRARY
+                                    },
+                                    sourceApp = sharedFrom?.let { pkg ->
+                                        runCatching {
+                                            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                                        }.getOrNull()
+                                    },
+                                    onBackToSource = {
+                                        sharedNotes = null
+                                        tab = TAB_LIBRARY
+                                        moveTaskToBack(true)
+                                    }
+                                )
+                            }
 
                         sharedNotes != null -> SharedNotesScreen(
                             vm,
@@ -778,7 +831,7 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                        showWaiting -> WaitingScreen(vm, onBack = { showWaiting = false })
+                        showWaiting && !shellOn -> WaitingScreen(vm, onBack = { showWaiting = false })
 
                         // A row opens its recording with a shared transition (since v1.3): the app tile and the title
                         // move into place; the rest fades.
@@ -833,6 +886,15 @@ class MainActivity : FragmentActivity() {
 
                         // The v2 shell (behind `ui_v2.shell`, contract 2.0.0-a): its own navigation and toasts; every area whose own
                         // flag is off shows the classic screen here.
+                        // Upgrade in the new design when its Settings is on (parity.csv PH-OTH-041); an open request
+                        // opens where it stands. As classic's canBuy, the Google Play build and a team member or viewer
+                        // get the plans without prices and nothing to buy.
+                        shellPlans && flags.settings -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                            com.echoledger.mobile.ui.v2.plan.V2UpgradeFlow(vm, startPlan = null, feature = null, startAt = null) {
+                                shellPlans = false
+                            }
+                        }
+
                         shellPlans -> {
                             BackHandler { shellPlans = false }
                             SettingsScreen(vm, onSetup = { showSetup = true }, openPage = "plan")
@@ -888,7 +950,9 @@ class MainActivity : FragmentActivity() {
                             onReadyCheck = { turnOn ->
                                 readyFix = if (turnOn) ReadyFix.TURN_ON else null
                                 showReady = true
-                            }
+                            },
+                            openActivity = shellActivity,
+                            openLibrary = shellLibrary
                         )
                     }
                 }
@@ -913,8 +977,12 @@ class MainActivity : FragmentActivity() {
             com.echoledger.mobile.ui.v2.live.LiveEntry.Record ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.CALLS, onReviewWaiting = onReviewWaiting)
 
-            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote ->
-                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.VOICE, onReviewWaiting = onReviewWaiting)
+            // The voice note on the v2 components (Record, Pause, Stop, Discard with Undo, Import files).
+            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote -> com.echoledger.mobile.ui.v2.live.V2VoiceNoteScreen(vm, onBack)
+
+            // The New sheet's Import audio (v2.1): the voice page with its file picker open.
+            com.echoledger.mobile.ui.v2.live.LiveEntry.ImportAudio ->
+                com.echoledger.mobile.ui.v2.live.V2VoiceNoteScreen(vm, onBack, importNow = true)
 
             com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
@@ -975,6 +1043,9 @@ class MainActivity : FragmentActivity() {
 
         /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
         const val OPEN_PENDING = "pending"
+
+        /** The Library (since 2.0.5): the after-call card's Review on "3 calls saved as audio". */
+        const val OPEN_LIBRARY = "library"
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"

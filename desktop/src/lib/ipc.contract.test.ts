@@ -1,6 +1,9 @@
 // Cross-checks the TypeScript IPC layer (lib/ipc.ts) against the Rust sources it talks to, so a renamed command,
 // argument, enum value or struct field on either side fails here instead of at runtime inside the webview.
 import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import ipcTs from "./ipc.ts?raw";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
 import { AWAITING_CORE, awaitedNames, type AwaitedCommand } from "./awaitingCore";
@@ -23,11 +26,35 @@ import detectRs from "../../src-tauri/src/detect/mod.rs?raw";
 import geometryRs from "../../src-tauri/src/overlay/geometry.rs?raw";
 import shortcutsRs from "../../src-tauri/src/shortcuts.rs?raw";
 import { SHORTCUT_ACTIONS } from "./settingsRegistry";
+import { UI_FLAG_NAMES } from "../v2/flags";
 import modelsRs from "../../src-tauri/src/net/models.rs?raw";
 import captionsRs from "../../src-tauri/src/stt/captions.rs?raw";
 
+/**
+ * Every file under `dir` matching `keep`, read from disk when the test runs, keyed by its path relative to this file
+ * ("../../src-tauri/src/net/api.rs", "../v2/live/LiveV2.tsx", "./ipc.ts"). Not import.meta.glob: Vitest keeps this test
+ * module's transform in its module cache by the test file's own content, so a glob's list of files is the one from the
+ * last run before a file was added, and a new command (title_click.rs, native_menu.rs) went unseen.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+function readTree(dir: string, keep: (path: string) => boolean): Record<string, string> {
+  // Sorted, so a lookup that takes the first match finds the same file on every system.
+  const walk = (at: string): string[] => readdirSync(at).sort().flatMap((name) => {
+    const path = join(at, name);
+    return statSync(path).isDirectory() ? walk(path) : [path];
+  });
+  return Object.fromEntries(walk(dir).filter(keep).map((path) => {
+    const rel = relative(here, path).split("\\").join("/");
+    return [rel.startsWith(".") ? rel : `./${rel}`, readFileSync(path, "utf8")];
+  }));
+}
+
 // Every Rust source, for types whose module may move: a struct or enum is looked up by name across all files.
-const allRustSources = import.meta.glob<string>("../../src-tauri/src/**/*.rs", { query: "?raw", import: "default", eager: true });
+const allRustSources = readTree(join(here, "../../src-tauri/src"), (path) => path.endsWith(".rs"));
+// An empty or moved folder must not pass in silence: two sources only a full walk finds.
+for (const known of ["../../src-tauri/src/title_click.rs", "../../src-tauri/src/native_menu.rs", "../../src-tauri/src/net/models.rs"]) {
+  if (!(known in allRustSources)) throw new Error(`the Rust sources were not all read: ${known} is missing`);
+}
 
 /** The Rust source declaring `pub struct|enum <name>` (fails with the name when no file declares it). */
 function rustSourceDeclaring(kind: "struct" | "enum", name: string): string {
@@ -167,11 +194,15 @@ const sorted = (values: string[]) => [...values].sort();
 
 // Every app source (not the tests), by its path under src/.
 const appSources = Object.fromEntries(
-  Object.entries(import.meta.glob<string>("../**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }))
+  Object.entries(readTree(join(here, ".."), (path) => /\.tsx?$/.test(path)))
     .filter(([path]) => !/\.test\.tsx?$/.test(path) && !path.includes("/test/"))
     // Globbed from src/lib: "../v2/live/LiveV2.tsx" and "./ipc.ts" become "v2/live/LiveV2.tsx" and "lib/ipc.ts".
     .map(([path, text]) => [path.startsWith("./") ? `lib/${path.slice(2)}` : path.replace(/^\.\.\//, ""), text]),
 );
+// An empty or moved folder must not pass in silence.
+for (const known of ["views/main/MainApp.tsx", "lib/ipc.ts", "v2/shell/NavShell.tsx"]) {
+  if (!(known in appSources)) throw new Error(`the app's sources were not all read: ${known} is missing`);
+}
 
 /** The api wrappers in ipc.ts that invoke `command` ("liveTranslateStatus" for live_translate_status). */
 function wrappersOf(command: string, ipc: string = ipcTs): string[] {
@@ -398,6 +429,21 @@ describe("wire types", () => {
     expect(rustFields(rustSourceDeclaring("struct", "DataList"), "DataList", false)).toEqual(["data"]);
   });
 
+  it("D-250: the flags the window reads are exactly the ones the core passes on (ui_flags::KNOWN): none is always off", () => {
+    const source = Object.values(allRustSources).find((text) => text.includes("pub const KNOWN: [&str;"));
+    if (!source) throw new Error("no Rust source declares pub const KNOWN");
+    const list = balanced(source, source.indexOf("pub const KNOWN: [&str;") + "pub const KNOWN: [&str;".length, "[", "]");
+    const known = [...list.replace(/\/\/.*$/gm, "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(sorted(known)).toEqual(sorted([...UI_FLAG_NAMES]));
+    expect(known).toContain("v21_urdu");
+  });
+
+  it("an Activity item's person has the fields the Rust model reads (2.0.0-aa)", () => {
+    expect(sorted(tsInterfaceKeys("ActivityActor"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ActivityActor"), "ActivityActor", false)));
+    expect(rustFields(rustSourceDeclaring("struct", "ActivityItem"), "ActivityItem", false)).toContain("actor");
+    expect(tsInterfaceKeys("ActivityItem")).toContain("actor");
+  });
+
   it("a screen has the fields the Rust model reads, file_name and said included (2.0.0-e)", () => {
     expect(sorted(tsInterfaceKeys("ScreenMoment"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ScreenMoment"), "ScreenMoment", false)));
   });
@@ -434,14 +480,14 @@ describe("wire types", () => {
     expect(sorted(tsUnionValues("ScreenTarget"))).toEqual(sorted(consts));
   });
 
-  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus", "PlanInfo", "SignInOutcome", "UpdateStatus"])(
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "CallDone", "CallGroup", "CardStreak", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus", "PlanInfo", "SignInOutcome", "UpdateStatus"])(
     "%s fields match the Rust struct",
     (name) => {
       expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));
     },
   );
 
-  it.each(["AfterCall", "SkipReason", "TrayState", "BudgetState", "IgnoreReason", "SignInResult", "UpdatePhase"])(
+  it.each(["AfterCall", "AskWhen", "AfterEachCall", "CallChoice", "SkipReason", "TrayState", "BudgetState", "IgnoreReason", "SignInResult", "UpdatePhase"])(
     "%s values match the serde names of the Rust enum",
     (name) => {
       expect(sorted(tsUnionValues(name))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", name), name)));

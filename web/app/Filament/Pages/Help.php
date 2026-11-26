@@ -53,9 +53,14 @@ class Help extends Page
         return auth()->user() instanceof User && ConsoleAccess::open();
     }
 
+    public function getTitle(): string
+    {
+        return __('Help');
+    }
+
     public function getSubheading(): string
     {
-        return 'Search the guide, see what is new, or write to support.';
+        return __('Search the guide, see what is new, or write to support.');
     }
 
     public function mount(): void
@@ -74,15 +79,15 @@ class Help extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('contactSupport')->label('Contact support')->icon(Heroicon::OutlinedEnvelope)
-                ->modalDescription(fn (): string => 'Your message goes to '.app(SupportMessages::class)->address().'; the reply comes to your email.')
+            Action::make('contactSupport')->label(__('Contact support'))->icon(Heroicon::OutlinedEnvelope)
+                ->modalDescription(fn (): string => __('Your message goes to :address; the reply comes to your email.', ['address' => app(SupportMessages::class)->address()]))
                 ->schema([
-                    TextInput::make('subject')->label('Subject')->required()->maxLength(120),
-                    Textarea::make('message')->label('Message')->required()->rows(6)->maxLength(5000),
-                    Checkbox::make('include_device_report')->label('Attach my devices\' latest reports')
-                        ->helperText('Their app versions and the checks of their setup (recording, captions, permissions). No recordings, no words.'),
+                    TextInput::make('subject')->label(__('Subject'))->required()->maxLength(120),
+                    Textarea::make('message')->label(__('Message'))->required()->rows(6)->maxLength(5000),
+                    Checkbox::make('include_device_report')->label(__("Attach my devices' latest reports"))
+                        ->helperText(__('Their app versions and the checks of their setup (recording, captions, permissions). No recordings, no words.')),
                 ])
-                ->modalSubmitActionLabel('Send')
+                ->modalSubmitActionLabel(__('Send'))
                 ->action(function (array $data): void {
                     /** @var User $user */
                     $user = auth()->user();
@@ -94,7 +99,7 @@ class Help extends Page
 
                         throw new Halt;
                     }
-                    Notification::make()->title('Message sent')->body('The reply comes to '.$user->email.'.')->success()->send();
+                    Notification::make()->title(__('Message sent'))->body(__('The reply comes to :email.', ['email' => $user->email]))->success()->send();
                 }),
         ];
     }

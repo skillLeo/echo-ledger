@@ -1,16 +1,21 @@
 // Home in the new look (ui_v2.home, IA 1): the status strip, the get-started checklist until everything is done, what
-// needs action (failed uploads, calls waiting for a decision, untranscribed recordings, missed calls), the last five
+// needs action (failed uploads, calls waiting for a decision, recordings kept as audio only, missed calls), the last five
 // recordings and the month's minutes. Everything comes from data the app already reads.
+import { RowMetaText } from "../library/RecordingRow";
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type LibraryItem, type SkippedItem } from "../../lib/ipc";
 import { useReadyReport } from "../../views/main/ReadyCheck";
 import { accessOf, usePermissions } from "../../views/main/Permissions";
 import { permissionKinds } from "../setup/SetupHealth";
 import { useEntitlements } from "../../lib/entitlements";
-import { Badge, Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
+import { Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
-import { isUntranscribed, rowModel } from "../library/model";
+import { rowModel } from "../library/model";
+import { statusOf } from "../library/facets";
 import { minutesLine } from "../settings/AccountCard";
+import { isViewer, viewerSentence } from "../../lib/plan";
+import { RecordSection, type Run } from "./RecordSection";
+import { useClosedUntilChange } from "../../components/StateBanner";
 
 export type ChecklistItem = { id: "permissions" | "ready" | "first"; title: string; done: boolean; action: string };
 
@@ -24,18 +29,37 @@ export function checklist(input: { permissionsOk: boolean | null; ready: boolean
   return items.every((i) => i.done) ? null : items;
 }
 
-export type NeedsAction = { id: "failed" | "waiting" | "untranscribed" | "missed"; title: string; count: number };
+export type NeedsAction = { id: "failed" | "waiting" | "untranscribed" | "missed" | "notifications"; title: string; count: number; line?: string };
 
 /** What needs action (IA 1.3), only the kinds with something in them. */
-export function needsAction(input: { failed: number; waiting: number; untranscribed: number; missed: number }): NeedsAction[] {
+export function needsAction(input: { failed: number; waiting: number; untranscribed: number; missed: number; notifications?: number }): NeedsAction[] {
   const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace("#", String(n)));
   const all: NeedsAction[] = [
     { id: "failed", count: input.failed, title: plural(input.failed, "1 recording didn't upload", "# recordings didn't upload") },
     { id: "waiting", count: input.waiting, title: plural(input.waiting, "1 call waits for your decision", "# calls wait for your decision") },
-    { id: "untranscribed", count: input.untranscribed, title: plural(input.untranscribed, "1 recording isn't transcribed", "# recordings aren't transcribed") },
+    { id: "untranscribed", count: input.untranscribed, title: plural(input.untranscribed, "1 recording is audio only", "# recordings are audio only") },
     { id: "missed", count: input.missed, title: plural(input.missed, "1 short call was skipped in the last day", "# short calls were skipped in the last day") },
+    { id: "notifications", count: input.notifications ?? 0, title: plural(input.notifications ?? 0, "1 notification needs you", "# notifications need you"),
+      line: "A transcript that failed, the monthly limit, or an answer to your upgrade request." },
   ];
   return all.filter((a) => a.count > 0);
+}
+
+export const NEEDS_ICONS: Record<NeedsAction["id"], typeof Icons.ErrorIcon> = {
+  failed: Icons.ErrorIcon, waiting: Icons.ClockIcon, untranscribed: Icons.TranscriptIcon, missed: Icons.PhoneIcon, notifications: Icons.BellIcon,
+};
+
+/**
+ * One thing that needs the person: a press opens it, × closes it until its count changes (classic's Home cards, the
+ * same closed state: "home-waiting" closed in one design stays closed in the other for this run).
+ */
+function NeedsRow({ action: a, onOpen }: { action: NeedsAction; onOpen: () => void }) {
+  const [closed, close] = useClosedUntilChange(`home-${a.id === "notifications" ? "problems" : a.id}`, String(a.count));
+  if (closed) return null;
+  return (
+    <ListRow compact iconStyle="plain" icon={NEEDS_ICONS[a.id]} title={a.title} meta={a.line} onClick={onOpen} actionsShown="always"
+      actions={<Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={`Dismiss: ${a.title}`} title="Hide until it changes" onClick={close} />} />
+  );
 }
 
 export type HomeV2Props = {
@@ -48,9 +72,15 @@ export type HomeV2Props = {
   onLibrary: () => void;
   onAction: (id: NeedsAction["id"]) => void;
   onPlan: () => void;
+  /** Runs a core command and says how it went (MainApp's run); without it the Record section isn't shown. */
+  run?: Run;
+  /** Unread notifications that need the person (a failed transcript, the limit, an upgrade answer): Activity has them. */
+  notifications?: number;
+  /** Upload: the file picker, then the import sheet. */
+  onImport?: () => void;
 };
 
-export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpenRecording, onLibrary, onAction, onPlan }: HomeV2Props) {
+export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpenRecording, onLibrary, onAction, onPlan, run, onImport, notifications = 0 }: HomeV2Props) {
   const [report] = useReadyReport();
   const [permissions] = usePermissions();
   const entitlements = useEntitlements();
@@ -75,8 +105,10 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
   const actions = needsAction({
     failed: status.failedUploads,
     waiting: status.pendingDecisions,
-    untranscribed: live.filter(isUntranscribed).length,
+    // The Audio only view's recordings (Status not_transcribed), so the line and the view it opens agree.
+    untranscribed: live.filter((i) => statusOf(i) === "not_transcribed").length,
     missed: skipped.length,
+    notifications,
   });
   const recent = [...live].sort((a, b) => Date.parse(b.started_at ?? "") - Date.parse(a.started_at ?? "")).slice(0, 5);
   const minutes = entitlements?.limits.monthly_minutes;
@@ -85,7 +117,10 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
 
   return (
     <div className="el-page el-page--narrow" data-v2="home">
-      <header className="el-page__head"><h1 className="el-title-l">Home</h1></header>
+      <header className="el-page__head">
+        <h1 className="el-title-l">Home</h1>
+        {onImport && !isViewer(status) && <div className="el-page__actions"><Button icon={Icons.ShareIcon} onClick={onImport}>Upload</Button></div>}
+      </header>
 
       <Card className="el-home-strip" label="Status">
         <Status kind={strip.kind} live>{strip.text}</Status>
@@ -93,6 +128,17 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
           : strip.kind === "setup" ? <Button variant="primary" onClick={onSetup}>Fix setup</Button>
             : onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
       </Card>
+      {/* A viewer records nothing: said instead of a Record button that isn't there (classic's notice). */}
+      {isViewer(status) && strip.kind !== "recording" && (
+        <div className="el-home-viewer" data-testid="home-viewer">
+          <Card>
+            <EmptyState icon={Icons.RecordIcon} title="Recording is off for viewers"
+              body={`${viewerSentence(status.plan.workspace)} An owner or admin of the workspace can change your role in the console.`} />
+          </Card>
+        </div>
+      )}
+
+      {run && (!isViewer(status) || status.recording) && <RecordSection status={status} run={run} onImport={onImport} />}
 
       {list && (
         <section className="el-group" aria-label="Get started">
@@ -119,11 +165,7 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
           <h2 className="el-caption el-body-strong el-group__title">Needs action</h2>
           <Card>
             <List label="Needs action" className="el-group__rows">
-              {actions.map((a) => (
-                <ListRow key={a.id} compact iconStyle="plain"
-                  icon={a.id === "failed" ? Icons.ErrorIcon : a.id === "waiting" ? Icons.ClockIcon : a.id === "untranscribed" ? Icons.TranscriptIcon : Icons.PhoneIcon}
-                  title={a.title} chevron onClick={() => onAction(a.id)} />
-              ))}
+              {actions.map((a) => <NeedsRow key={a.id} action={a} onOpen={() => onAction(a.id)} />)}
             </List>
           </Card>
         </section>
@@ -147,9 +189,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
               {recent.map((item) => {
                 const r = rowModel(item);
                 return (
-                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
-                    endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
+                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={<RowMetaText r={r} />}
+                    endTop={r.when} endBottom={r.duration ? <span className="el-ltr">{r.duration}</span> : undefined}
                     onClick={() => onOpenRecording(item.id)} />
                 );
               })}

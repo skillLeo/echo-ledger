@@ -38,6 +38,7 @@ use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use App\Stt\SttManager;
 use App\Stt\TranscriptNormalizer;
+use App\Support\Api\FieldErrors;
 use Closure;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -240,7 +241,7 @@ final class SessionController extends Controller
      * The instant must not be before $start. Laravel's after_or_equal would parse a numeric start field with a
      * TypeError (a server error), so the comparison only runs when both sides are parsable text or a date.
      */
-    private static function notBefore(mixed $start, string $startLabel): Closure
+    public static function notBefore(mixed $start, string $startLabel): Closure
     {
         return static function (string $attribute, mixed $value, Closure $fail) use ($start, $startLabel): void {
             if (! is_string($value) || (! is_string($start) && ! $start instanceof DateTimeInterface)) {
@@ -252,6 +253,23 @@ final class SessionController extends Controller
                 }
             } catch (Throwable) {
                 // An unparsable start is reported on its own field.
+            }
+        };
+    }
+
+    /**
+     * The instant must not be more than 5 minutes ahead of the server (a device's clock may run that fast). Used by the
+     * end of a call (PATCH /api/sessions/{id}, since 2.0.0-z), which only a call already over can send.
+     */
+    public static function notLaterThanSoon(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            try {
+                if (is_string($value) && Carbon::parse($value)->gt(now()->addMinutes(5))) {
+                    $fail('The :attribute field must not be in the future.');
+                }
+            } catch (Throwable) {
+                // An unparsable instant is reported by instantRules().
             }
         };
     }
@@ -318,6 +336,89 @@ final class SessionController extends Controller
         SessionOpen::mark($this->readableSession($request, $id)->id, $device->user_id);
 
         return response()->noContent();
+    }
+
+    /**
+     * Mark as unread (contract 2.0.0-t): takes back only the asking person's own open of a recording they can read (the
+     * same recordings as opened(), through readableSession), idempotently. Like opening, it never touches the
+     * recording: no updated_at, no re-sync of the library.
+     */
+    public function unopened(Request $request, string $id): Response
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        SessionOpen::unmark($this->readableSession($request, $id)->id, $device->user_id);
+
+        return response()->noContent();
+    }
+
+    /**
+     * Mark as read for many (contract 2.0.0-y): `{"ids": [...]}`, 1 to 200, each as opened() does it for one, in one
+     * upsert. The ids the person cannot read are listed back in `not_found`, never an error for the batch.
+     */
+    public function openedMany(Request $request): JsonResponse
+    {
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
+            $now = now();
+            SessionOpen::query()->upsert(
+                array_map(fn (string $id): array => ['capture_session_id' => $id, 'user_id' => $person, 'opened_at' => $now], $stored),
+                ['capture_session_id', 'user_id'], ['opened_at'],
+            );
+        }
+
+        return response()->json(['done' => $done, 'not_found' => $missing]);
+    }
+
+    /**
+     * Mark as unread for many (contract 2.0.0-y): each as unopened() does it for one, in one delete; only the asking
+     * person's own opens, idempotently. Never a recording to the bin (that is DELETE sessions/{id}).
+     */
+    public function unopenedMany(Request $request): JsonResponse
+    {
+        [$person, $done, $missing, $stored] = $this->readableMany($request);
+        if ($stored !== []) {
+            SessionOpen::query()->where('user_id', $person)->whereIn('capture_session_id', $stored)->delete();
+        }
+
+        return response()->json(['done' => $done, 'not_found' => $missing]);
+    }
+
+    /**
+     * The ids of a bulk request (1 to 200, an id sent twice counts once) split into those the person can read, as
+     * readableSession() decides for one (their own in this workspace, or one sent to them), and the rest, both in the
+     * order they were sent. An id is a ULID, kept in lower case and the same in any case (a database compares it with
+     * or without regard to case): the answer gives each id back as it was sent, the writes use the stored one.
+     *
+     * @return array{0: int, 1: list<string>, 2: list<string>, 3: list<string>} person, done and not found as sent, the stored ids of done
+     */
+    private function readableMany(Request $request): array
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        $data = FieldErrors::validate($request->only('ids'), [
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['required', 'string', 'max:64'],
+        ]);
+        // The ids as sent, once each whatever their case (the first form is kept), by the lower case the database keeps.
+        $sent = [];
+        foreach (array_map('strval', $data['ids']) as $id) {
+            $sent[mb_strtolower($id)] ??= $id;
+        }
+        $keys = array_keys($sent);
+        $readable = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)
+            ->whereIn('id', $keys)->pluck('id')->map(fn ($id): string => mb_strtolower((string) $id))->all();
+        $left = array_values(array_diff($keys, $readable));
+        if ($left !== []) {
+            $readable = [...$readable, ...app(Teammates::class)->sharedSessions($device->user)->whereIn('id', $left)->pluck('id')
+                ->map(fn ($id): string => mb_strtolower((string) $id))->all()];
+        }
+        $found = array_flip($readable);
+        $stored = array_values(array_filter($keys, fn (string $key): bool => isset($found[$key])));
+        $done = array_map(fn (string $key): string => $sent[$key], $stored);
+        $missing = array_values(array_map(fn (string $key): string => $sent[$key], array_filter($keys, fn (string $key): bool => ! isset($found[$key]))));
+
+        return [(int) $device->user_id, $done, $missing, $stored];
     }
 
     public function show(Request $request, string $id): JsonResponse
@@ -469,11 +570,11 @@ final class SessionController extends Controller
 
     /**
      * Checks every segment in one pass: channel 1|2, 0 ≤ start_ms ≤ end_ms ≤ $maxEnd, text 1-20 000 characters,
-     * speaker ≤ 40, optional words (text ≤ 1000, times ≥ 0, confidence 0-1). The first problem is a 422 on
-     * `segments.<i>.<field>`.
+     * speaker ≤ 40, optional words (text ≤ 1000, times ≥ 0, confidence 0-1), optional language ≤ 16 (since 2.0.0-o).
+     * The first problem is a 422 on `segments.<i>.<field>`.
      *
      * @param  list<mixed>  $segments
-     * @return list<array{channel: int, speaker: string|null, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>}>
+     * @return list<array{channel: int, speaker: string|null, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>, language: string|null}>
      */
     private static function validatedSegments(array $segments, int $maxEnd): array
     {
@@ -520,9 +621,15 @@ final class SessionController extends Controller
                 $fail("{$at}.text", 'The :attribute field must not be greater than 20000 characters.');
             }
 
+            // Since 2.0.0-o: the line's language when the device's engine knows it (kept when it is one of ours).
+            $language = $segment['language'] ?? null;
+            if ($language !== null && (! is_string($language) || mb_strlen($language) > 16)) {
+                $fail("{$at}.language", 'The :attribute field must be a string of at most 16 characters.');
+            }
+
             $rows[] = [
                 'channel' => $channel, 'speaker' => $speaker, 'start_ms' => $start, 'end_ms' => $end, 'text' => $text,
-                'words' => self::validatedWords($segment['words'] ?? null, "{$at}.words", $fail),
+                'words' => self::validatedWords($segment['words'] ?? null, "{$at}.words", $fail), 'language' => $language,
             ];
         }
 

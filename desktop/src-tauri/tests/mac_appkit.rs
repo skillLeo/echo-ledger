@@ -116,6 +116,37 @@ fn main() {
     assert_eq!(isa(unsafe { &*(second.ns_window() as *const NSWindow) }), TAO_WINDOW_CLASS, "only the first");
     drop((plain, panel, first, second));
 
+    // The main window (titled, its content under a transparent title bar, as tauri.conf.json's `titleBarStyle: Overlay`
+    // builds it) is never a panel and keeps its close, minimise and zoom buttons: built alone, or after a floating window
+    // in the same build_as_panel call. Built first inside one (which the app never does: the main window is built from
+    // its own thread, and the main thread runs no other build while a floating window's is under way), it would be the
+    // panel, and the smoke test's check says so.
+    use tao::platform::macos::WindowBuilderExtMacOS;
+    let new_main_window = || {
+        tao::window::WindowBuilder::new().with_visible(false).with_focused(false).with_inner_size(tao::dpi::LogicalSize::new(1100.0, 740.0))
+            .with_titlebar_transparent(true).with_title_hidden(true).with_fullsize_content_view(true).build(&event_loop).expect("tao builds the main window")
+    };
+    let facts = |window: &tao::window::Window| {
+        // SAFETY: as above.
+        let ns_window: &NSWindow = unsafe { &*(window.ns_window() as *const NSWindow) };
+        desktop_lib::mac_check::WindowFacts {
+            exists: true,
+            class: isa(ns_window),
+            style: ns_window.styleMask().0 as u64,
+            ns_panel: ns_window.isKindOfClass(AnyClass::get(c"NSPanel").unwrap()),
+            ..desktop_lib::mac_check::WindowFacts::missing("main")
+        }
+    };
+    let alone = new_main_window();
+    assert_eq!(desktop_lib::smoke::main_window_problem(&facts(&alone)), None, "{:?}", facts(&alone));
+    let (floating, beside) = desktop_lib::overlay::macos::build_as_panel(|| (new_tao_window(), new_main_window()));
+    assert_eq!(facts(&floating).class, PANEL_CLASS);
+    assert_eq!(desktop_lib::smoke::main_window_problem(&facts(&beside)), None, "{:?}", facts(&beside));
+    let first_in = desktop_lib::overlay::macos::build_as_panel(new_main_window);
+    let caught = desktop_lib::smoke::main_window_problem(&facts(&first_in)).expect("a main window built as the panel is caught");
+    assert!(caught.starts_with(&format!("the main window is a panel ({PANEL_CLASS}")), "{caught}");
+    drop((alone, floating, beside, first_in));
+
     // The fix: tao builds the floating window as a panel from the start (build_as_panel), so everything that observes it
     // later observes a panel: KVO makes its class for the panel, and every observer is told and removed as usual.
     let tao_window = desktop_lib::overlay::macos::build_as_panel(new_tao_window);

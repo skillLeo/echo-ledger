@@ -58,12 +58,12 @@ final class UpgradeRequests
         }
     }
 
-    /** A notice in the bell of every member of staff who answers upgrade requests. */
-    public function tellStaff(string $title, string $body): void
+    /** A notice in the bell of every member of staff who answers upgrade requests; [$customer] is who it is about. */
+    public function tellStaff(string $title, string $body, ?User $customer = null): void
     {
         User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
             ->filter(fn (User $staff): bool => StaffAccess::can('upgrades.manage', $staff))
-            ->each(fn (User $staff) => app(ActivityFeed::class)->post($staff, 'upgrade_requested', $title, $body, null, 'heroicon-o-arrow-trending-up'));
+            ->each(fn (User $staff) => app(ActivityFeed::class)->post($staff, 'upgrade_requested', $title, $body, null, 'heroicon-o-arrow-trending-up', actor: $customer));
     }
 
     public function pendingFor(User $user): ?UpgradeRequest
@@ -192,8 +192,11 @@ final class UpgradeRequests
         $when = $until?->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
         Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/app')));
         $approved
-            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', "You are on {$planName} now", $reply ?? ($when !== null ? "Until {$when}. Thank you!" : 'Thank you! Everything in it is on.'), null, 'heroicon-o-check-badge')
-            : app(ActivityFeed::class)->post($user, 'upgrade_declined', "Your request for {$planName} was declined", $reply ?? 'Write to us if you have a question.', null, 'heroicon-o-x-circle');
+            // Lines in the reader's language (W-218); staff's reply as they wrote it.
+            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', ActivityFeed::line('You are on :plan now', ['plan' => $planName]),
+                $reply ?? ($when !== null ? ActivityFeed::line('Until :date. Thank you!', ['date' => $when]) : ActivityFeed::line('Thank you! Everything in it is on.')), null, 'heroicon-o-check-badge')
+            : app(ActivityFeed::class)->post($user, 'upgrade_declined', ActivityFeed::line('Your request for :plan was declined', ['plan' => $planName]),
+                $reply ?? ActivityFeed::line('Write to us if you have a question.'), null, 'heroicon-o-x-circle');
     }
 
     /** The request's row, held until the transaction ends. */

@@ -56,8 +56,7 @@
     <string name="v2_set_item_notifications_activity">Activity notifications</string>
     <string name="v2_set_item_notifications_quiet">Quiet hours</string>
     <string name="v2_set_item_lock_app">App lock</string>
-    <string name="v2_set_item_lock_hide">Hide in recent apps</string>
-    <string name="v2_set_item_privacy_share">During screen sharing</string>
+    <string name="v2_set_item_lock_hide">Widget titles</string>
     <string name="v2_set_item_storage_space">Space used</string>
     <string name="v2_set_item_storage_kept">How long recordings are kept</string>
     <string name="v2_set_item_plan_usage">Plan &amp; usage</string>
@@ -86,6 +85,9 @@
     <string name="v2_set_value_raw_mic">Raw microphone</string>
     <string name="v2_set_value_tap_to_start">Tap to start</string>
     <string name="v2_set_value_hold_to_talk">Hold to talk</string>
+    <string name="v2_set_value_keyboard_on">Keyboard on</string>
+    <string name="v2_set_value_keyboard_off">Keyboard off</string>
+    <string name="v2_set_language_not_saved">Couldn\'t change the language. Try again.</string>
     <string name="v2_set_value_added">Added</string>
     <string name="v2_set_value_not_added">Not added</string>
     <string name="v2_set_value_not_set_up">Not set up</string>
@@ -105,6 +107,7 @@
     <string name="v2_set_activity_help">Transcripts ready, failed uploads, new devices</string>
     <string name="v2_set_quiet_help">From %1$s to %2$s, notifications arrive silently</string>
     <string name="v2_set_sign_out">Sign out</string>
+    <string name="v2_set_audio_kept">Audio kept: %1$s · cleaned up automatically after %2$s</string>
     <string name="v2_set_sign_out_title">Sign out of this phone?</string>
     <string name="v2_set_sign_out_body">Recordings that haven\'t uploaded yet stay on this phone until you sign in again.</string>
     <string name="v2_set_theme">Theme</string>

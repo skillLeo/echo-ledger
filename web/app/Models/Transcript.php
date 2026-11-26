@@ -38,6 +38,7 @@ use Illuminate\Support\Carbon;
  * @property int $attempts
  * @property Carbon|null $submitted_at
  * @property Carbon|null $completed_at
+ * @property Carbon|null $attempt_started_at when the current run was started (since 2.0.0-p; null on older rows)
  * @property Carbon|null $edited_at set while the text differs from the provider's original
  * @property Carbon $created_at
  * @property string|null $search_text
@@ -58,7 +59,7 @@ class Transcript extends Model
     protected $fillable = [
         'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
         'provider_deleted_at', 'language', 'text', 'segments', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at',
-        'edited_at',
+        'edited_at', 'attempt_started_at',
     ];
 
     /** Keeps the folded copy that search reads in step with the text (App\Support\UrduText). */
@@ -120,6 +121,7 @@ class Transcript extends Model
             'submitted_at' => 'datetime',
             'completed_at' => 'datetime',
             'edited_at' => 'datetime',
+            'attempt_started_at' => 'datetime',
         ];
     }
 }

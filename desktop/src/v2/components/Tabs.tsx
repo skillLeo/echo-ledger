@@ -1,6 +1,9 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
-export type TabItem<T extends string> = { value: T; label: string };
+/** `badge`: the plan a locked tab's feature is in ("Pro"), shown after its name. */
+/** `count`: how many the tab lists (a project's recordings, its files), after its name. */
+/** `lang`: the label's own language when it isn't the window's (the Language setting's "اردو" is "ur", "English" "en"). */
+export type TabItem<T extends string> = { value: T; label: string; badge?: string | null; count?: number | string | null; countLabel?: string; lang?: string };
 
 /** Arrow keys in reading order: in right-to-left, ArrowLeft moves forward. Home and End jump to the ends. */
 function nextIndex(e: KeyboardEvent<HTMLElement>, at: number, count: number): number | null {
@@ -37,11 +40,20 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, children 
       <div className="el-tabs__list" role="tablist" aria-label={label} ref={list} onKeyDown={keyDown}>
         {tabs.map((t, i) => (
           <button key={t.value} type="button" role="tab" className="el-tab" id={`${id}-tab-${t.value}`}
+            aria-describedby={t.count !== undefined && t.count !== null ? `${id}-count-${t.value}` : undefined}
             aria-selected={i === at} aria-controls={`${id}-panel`} tabIndex={i === at ? 0 : -1} onClick={() => onChange(t.value)}>
             {t.label}
+            {/* The count is drawn after the name; in words it is the tab's description (below), so the name stays. */}
+            {t.count !== undefined && t.count !== null && <span className="el-tab__count el-caption el-num" aria-hidden="true">{t.count}</span>}
+            {t.badge && <>{" "}<span className="plan-badge static mark" title={`${t.label} is in ${t.badge}`}>{t.badge}</span></>}
           </button>
         ))}
       </div>
+      {tabs.some((t) => t.count !== undefined && t.count !== null) && (
+        <span className="el-visually-hidden">
+          {tabs.filter((t) => t.count !== undefined && t.count !== null).map((t) => <span key={t.value} id={`${id}-count-${t.value}`}>{t.countLabel ?? String(t.count)}</span>)}
+        </span>
+      )}
       <div className="el-tabs__panel" role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${tabs[at]?.value}`} tabIndex={0}>
         {children}
       </div>
@@ -70,7 +82,9 @@ export function Segmented<T extends string>({ label, options, value, onChange }:
       {options.map((o, i) => (
         <button key={o.value} type="button" role="radio" className="el-segmented__item" aria-checked={i === at}
           tabIndex={i === at ? 0 : -1} onClick={() => onChange(o.value)}>
-          {o.label}
+          {/* D-223: each label in its own direction (an English "12-hour" stays left to right in an Urdu window), and in
+              its own language when it says one (Nastaliq at the Urdu size for "اردو"). */}
+          <span dir="auto" lang={o.lang}>{o.label}</span>
         </button>
       ))}
     </div>

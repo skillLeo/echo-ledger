@@ -17,6 +17,7 @@ use App\Services\Entitlements\PromoCodes;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\SettingsRepository;
 use App\Support\Formats;
+use DateTimeInterface;
 use Illuminate\Support\Carbon;
 
 /**
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  */
 final class UpgradeFlow
 {
-    /** A paid feature as one short line on a plan card. */
+    /** A paid feature as one short line on a plan card (the English key; shown through the translator). */
     public const HIGHLIGHTS = [
         'views' => 'Roman Urdu, English and Urdu side by side',
         'double_check' => 'A second check on words that were unclear',
@@ -73,7 +74,7 @@ final class UpgradeFlow
     public static function planName(?string $key): string
     {
         if ($key === null || $key === '') {
-            return 'a plan';
+            return __('a plan');
         }
 
         return (string) (Plan::query()->where('key', $key)->value('name') ?? ucfirst($key));
@@ -158,7 +159,9 @@ final class UpgradeFlow
     }
 
     /**
-     * The request card (Plan & usage, the request's page): title, stage tag, body lines and its actions.
+     * The request card (Plan & usage, the request's page): title, stage tag, body lines and its actions. The words are
+     * in the console's language; an action's label stays the English key (pages tell the actions apart by it) and is
+     * shown through the translator.
      *
      * @return array{stage: string, title: string, tag: string, tone: string, body: list<string>, primary: array{label: string, url: string}|null, secondary: array{label: string, url?: string, action?: string, danger?: bool}|null}
      */
@@ -172,37 +175,73 @@ final class UpgradeFlow
         $reply = is_string($payload['reply'] ?? null) && trim((string) $payload['reply']) !== '' ? trim((string) $payload['reply']) : null;
 
         return match ($stage) {
-            'in_review' => ['stage' => $stage, 'title' => 'Checking your payment', 'tag' => 'In review', 'tone' => 'neutral',
+            'in_review' => ['stage' => $stage, 'title' => __('Checking your payment'), 'tag' => __('In review'), 'tone' => 'neutral',
                 'body' => array_filter([
-                    ($paid = $payment['paid_at'] ?? null) !== null ? 'We got your receipt on '.Formats::shortDate((string) $paid).' at '.Formats::time((string) $paid).'.' : 'We got your receipt.',
+                    ($paid = $payment['paid_at'] ?? null) !== null ? __('We got your receipt on :date at :time.', ['date' => self::day((string) $paid), 'time' => self::clock((string) $paid)]) : __('We got your receipt.'),
                     is_string($payment['review_hours'] ?? null) ? (string) $payment['review_hours'] : null,
                 ]),
                 'primary' => ['label' => 'View request', 'url' => self::statusUrl($request)], 'secondary' => null],
-            'needs_receipt' => ['stage' => $stage, 'title' => 'We need another receipt', 'tag' => 'Action needed', 'tone' => 'warning',
+            'needs_receipt' => ['stage' => $stage, 'title' => __('We need another receipt'), 'tag' => __('Action needed'), 'tone' => 'warning',
                 'body' => array_values(array_filter([
                     is_array($payment['proof_request'] ?? null) ? (string) ($payment['proof_request']['note'] ?? '') : null,
-                    "Your request is still open. You don't need to pay again.",
+                    __("Your request is still open. You don't need to pay again."),
                 ])),
                 'primary' => ['label' => 'Add receipt', 'url' => self::receiptUrl($request)], 'secondary' => ['label' => 'Payment details', 'url' => self::payUrl($request)]],
-            'declined' => ['stage' => $stage, 'title' => "We couldn't confirm your payment", 'tag' => 'Not approved', 'tone' => 'neutral',
-                'body' => array_values(array_filter([$reply, "If you've paid, reply to our email with your transaction ID and we'll look again."])),
+            'declined' => ['stage' => $stage, 'title' => __("We couldn't confirm your payment"), 'tag' => __('Not approved'), 'tone' => 'neutral',
+                'body' => array_values(array_filter([$reply, __("If you've paid, reply to our email with your transaction ID and we'll look again.")])),
                 'primary' => ['label' => 'Request again', 'url' => self::chooseUrl($request->plan)], 'secondary' => ['label' => 'Dismiss', 'action' => 'dismissRequest']],
-            'approved' => ['stage' => $stage, 'title' => "You're on {$plan}", 'tag' => 'Approved', 'tone' => 'success',
+            'approved' => ['stage' => $stage, 'title' => __("You're on :plan", ['plan' => $plan]), 'tag' => __('Approved'), 'tone' => 'success',
                 'body' => [self::approvedLine($request, $plan)],
                 'primary' => null, 'secondary' => ['label' => 'Dismiss', 'action' => 'dismissRequest']],
-            'cancelled' => ['stage' => $stage, 'title' => "You cancelled your {$plan} request", 'tag' => 'Cancelled', 'tone' => 'neutral',
-                'body' => ['You can start again any time.'], 'primary' => null, 'secondary' => null],
-            default => ['stage' => 'awaiting_payment', 'title' => "{$plan} requested", 'tag' => 'Waiting for payment', 'tone' => 'neutral',
-                'body' => ['Send '.self::amount($request).' to our bank account, then add a screenshot of the receipt.'.($reference !== null ? " Reference {$reference}." : '')],
+            'cancelled' => ['stage' => $stage, 'title' => __('You cancelled your :plan request', ['plan' => $plan]), 'tag' => __('upgrade_context.tag_cancelled'), 'tone' => 'neutral',
+                'body' => [__('You can start again any time.')], 'primary' => null, 'secondary' => null],
+            default => ['stage' => 'awaiting_payment', 'title' => __(':plan requested', ['plan' => $plan]), 'tag' => __('Waiting for payment'), 'tone' => 'neutral',
+                'body' => [$reference !== null
+                    ? __('Send :amount to our bank account, then add a screenshot of the receipt. Reference :reference.', ['amount' => self::amount($request), 'reference' => $reference])
+                    : __('Send :amount to our bank account, then add a screenshot of the receipt.', ['amount' => self::amount($request)])],
                 'primary' => ['label' => 'Payment details', 'url' => self::payUrl($request)], 'secondary' => ['label' => 'Cancel request', 'action' => 'cancelRequest', 'danger' => true]],
         };
+    }
+
+    /**
+     * A day as Formats::shortDate writes it, in the console's language: "17 Nov" (this year) or "17 Nov 2026", in Urdu
+     * "17 نومبر" or "17 نومبر 2026". English is Formats' own format, byte for byte.
+     */
+    public static function day(DateTimeInterface|string|null $at, bool $year = false): string
+    {
+        $date = Formats::local($at);
+        if ($date === null) {
+            return '';
+        }
+        $withYear = $year || $date->year !== Formats::local(now())?->year;
+
+        return ConsoleDates::format($date, $withYear ? 'j M Y' : 'j M', $withYear ? 'j F Y' : 'j F');
+    }
+
+    /** A day as Formats::longDate writes it ("9 December 2026"), in Urdu "9 دسمبر 2026". */
+    public static function longDay(DateTimeInterface|string|null $at): string
+    {
+        $date = Formats::local($at);
+
+        return $date !== null ? ConsoleDates::format($date, 'j F Y', 'j F Y') : '';
+    }
+
+    /** A time as Formats::time writes it ("3:42 pm" or "15:42", as the person chose), in Urdu "3:42 شام". */
+    public static function clock(DateTimeInterface|string|null $at): string
+    {
+        $date = Formats::local($at);
+        if ($date === null || ! ConsoleDates::urdu()) {
+            return Formats::time($at);
+        }
+
+        return ConsoleDates::time($date, Shell::preferences()['clock'] === '24h' ? 'H:i' : 'g:i a');
     }
 
     public static function approvedLine(UpgradeRequest $request, string $plan): string
     {
         return $request->approved_until !== null
-            ? "Thank you. {$plan} is on until ".Formats::longDate($request->approved_until).'.'
-            : "Thank you. {$plan} is on.";
+            ? __('Thank you. :plan is on until :date.', ['plan' => $plan, 'date' => self::longDay($request->approved_until)])
+            : __('Thank you. :plan is on.', ['plan' => $plan]);
     }
 
     /**
@@ -225,26 +264,26 @@ final class UpgradeFlow
         $times['requested'] ??= $request->created_at->toAtomString();
         $payment = is_array($payload['payment'] ?? null) ? $payload['payment'] : [];
         $times['receipt_sent'] ??= $payment['paid_at'] ?? null;
-        $when = fn (?string $at): ?string => $at !== null ? Formats::shortDate($at).', '.Formats::time($at) : null;
+        $when = fn (?string $at): ?string => $at !== null ? __(':date, :time', ['date' => self::day($at), 'time' => self::clock($at)]) : null;
 
-        $steps = [['label' => 'Requested', 'state' => 'done', 'at' => $when($times['requested']), 'note' => null]];
+        $steps = [['label' => __('Requested'), 'state' => 'done', 'at' => $when($times['requested']), 'note' => null]];
         $sent = $times['receipt_sent'] !== null;
-        $steps[] = ['label' => 'Receipt sent', 'state' => $sent ? 'done' : ($stage === 'awaiting_payment' ? 'current' : 'upcoming'), 'at' => $sent ? $when((string) $times['receipt_sent']) : null, 'note' => null];
+        $steps[] = ['label' => __('Receipt sent'), 'state' => $sent ? 'done' : ($stage === 'awaiting_payment' ? 'current' : 'upcoming'), 'at' => $sent ? $when((string) $times['receipt_sent']) : null, 'note' => null];
         if (isset($times['receipt_requested'])) {
             $note = is_array($payment['proof_request'] ?? null) ? (string) ($payment['proof_request']['note'] ?? '') : null;
-            $steps[] = ['label' => 'New receipt asked for', 'state' => $stage === 'needs_receipt' ? 'current' : 'done', 'at' => $when((string) $times['receipt_requested']), 'note' => $note !== '' ? $note : null];
+            $steps[] = ['label' => __('New receipt asked for'), 'state' => $stage === 'needs_receipt' ? 'current' : 'done', 'at' => $when((string) $times['receipt_requested']), 'note' => $note !== '' ? $note : null];
         }
         $decided = $request->decided_at?->toAtomString() ?? ($times['decided'] ?? null);
 
         return match ($stage) {
-            'declined' => [...$steps, ['label' => 'Not approved', 'state' => 'done', 'at' => $when($decided), 'note' => null]],
-            'cancelled' => [...$steps, ['label' => 'Cancelled by you', 'state' => 'done', 'at' => $when($times['cancelled'] ?? $decided), 'note' => null]],
+            'declined' => [...$steps, ['label' => __('upgrade_context.step_not_approved'), 'state' => 'done', 'at' => $when($decided), 'note' => null]],
+            'cancelled' => [...$steps, ['label' => __('Cancelled by you'), 'state' => 'done', 'at' => $when($times['cancelled'] ?? $decided), 'note' => null]],
             'approved' => [...$steps,
-                ['label' => 'Checked by our team', 'state' => 'done', 'at' => $when($decided), 'note' => null],
-                ['label' => "{$plan} on", 'state' => 'done', 'at' => $request->approved_until !== null ? 'until '.Formats::shortDate($request->approved_until, year: true) : null, 'note' => null]],
+                ['label' => __('Checked by our team'), 'state' => 'done', 'at' => $when($decided), 'note' => null],
+                ['label' => __(':plan on', ['plan' => $plan]), 'state' => 'done', 'at' => $request->approved_until !== null ? __('until :date', ['date' => self::day($request->approved_until, year: true)]) : null, 'note' => null]],
             default => [...$steps,
-                ['label' => 'Checked by our team', 'state' => $stage === 'in_review' ? 'current' : 'upcoming', 'at' => null, 'note' => null],
-                ['label' => "{$plan} on", 'state' => 'upcoming', 'at' => null, 'note' => null]],
+                ['label' => __('Checked by our team'), 'state' => $stage === 'in_review' ? 'current' : 'upcoming', 'at' => null, 'note' => null],
+                ['label' => __(':plan on', ['plan' => $plan]), 'state' => 'upcoming', 'at' => null, 'note' => null]],
         };
     }
 
@@ -257,18 +296,18 @@ final class UpgradeFlow
     {
         $user = $context->user;
         if ($user->deletes_at !== null) {
-            return ['icon' => 'heroicon-o-exclamation-triangle', 'tone' => 'warning', 'text' => 'Your account will be deleted on '.Formats::shortDate($user->deletes_at).'.',
-                'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion'), 'dismiss' => null, 'action' => ['label' => 'Cancel deletion', 'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion')]];
+            return ['icon' => 'heroicon-o-exclamation-triangle', 'tone' => 'warning', 'text' => __('Your account will be deleted on :date.', ['date' => self::day($user->deletes_at)]),
+                'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion'), 'dismiss' => null, 'action' => ['label' => __('Cancel deletion'), 'url' => EditProfile::settingsUrl('privacy', 'privacy.cancel_deletion')]];
         }
         $request = $context->latestRequest();
         $stage = $request !== null ? self::stage($request) : null;
         $plan = $request !== null ? self::planName($request->plan) : '';
         $row = match (true) {
             $request === null => null,
-            $stage === 'needs_receipt' => ['icon' => 'heroicon-o-exclamation-circle', 'tone' => 'warning', 'text' => "We need another receipt for {$plan}", 'url' => self::statusUrl($request), 'dismiss' => null],
-            $stage === 'declined' && self::showsDecided($request, $context) => ['icon' => 'heroicon-o-information-circle', 'tone' => 'muted', 'text' => "Your {$plan} request wasn't approved", 'url' => self::statusUrl($request), 'dismiss' => $request->id],
-            $stage === 'awaiting_payment' => ['icon' => 'heroicon-o-clock', 'tone' => 'muted', 'text' => "{$plan} requested. Waiting for your payment", 'url' => self::payUrl($request), 'dismiss' => null],
-            $stage === 'in_review' => ['icon' => 'heroicon-o-clock', 'tone' => 'muted', 'text' => "Checking your payment for {$plan}", 'url' => self::statusUrl($request), 'dismiss' => null],
+            $stage === 'needs_receipt' => ['icon' => 'heroicon-o-exclamation-circle', 'tone' => 'warning', 'text' => __('We need another receipt for :plan', ['plan' => $plan]), 'url' => self::statusUrl($request), 'dismiss' => null],
+            $stage === 'declined' && self::showsDecided($request, $context) => ['icon' => 'heroicon-o-information-circle', 'tone' => 'muted', 'text' => __("Your :plan request wasn't approved", ['plan' => $plan]), 'url' => self::statusUrl($request), 'dismiss' => $request->id],
+            $stage === 'awaiting_payment' => ['icon' => 'heroicon-o-clock', 'tone' => 'muted', 'text' => __(':plan requested. Waiting for your payment', ['plan' => $plan]), 'url' => self::payUrl($request), 'dismiss' => null],
+            $stage === 'in_review' => ['icon' => 'heroicon-o-clock', 'tone' => 'muted', 'text' => __('Checking your payment for :plan', ['plan' => $plan]), 'url' => self::statusUrl($request), 'dismiss' => null],
             default => null,
         };
         if ($row !== null) {
@@ -277,16 +316,19 @@ final class UpgradeFlow
         $expires = $context->workspace()?->plan_expires_at;
         $current = $context->plan();
         if ($expires !== null && $current->key !== Plan::FREE && $expires->isFuture() && $expires->lessThanOrEqualTo(now()->addDays(7))) {
-            return ['icon' => 'heroicon-o-calendar', 'tone' => 'warning', 'text' => "{$current->name} ends on ".Formats::shortDate($expires).'.', 'url' => EditProfile::settingsUrl('plan'), 'dismiss' => null, 'action' => null];
+            return ['icon' => 'heroicon-o-calendar', 'tone' => 'warning', 'text' => __(':plan ends on :date.', ['plan' => $current->name, 'date' => self::day($expires)]), 'url' => EditProfile::settingsUrl('plan'), 'dismiss' => null, 'action' => null];
         }
         if ($request !== null && $stage === 'approved' && self::showsDecided($request, $context)) {
-            $until = $request->approved_until !== null ? ' until '.Formats::shortDate($request->approved_until, year: true) : '';
+            $on = self::planName($request->approved_plan ?? $request->plan);
+            $text = $request->approved_until !== null
+                ? __("You're on :plan until :date", ['plan' => $on, 'date' => self::day($request->approved_until, year: true)])
+                : __("You're on :plan", ['plan' => $on]);
 
-            return ['icon' => 'heroicon-o-check-circle', 'tone' => 'success', 'text' => "You're on ".self::planName($request->approved_plan ?? $request->plan).$until,
+            return ['icon' => 'heroicon-o-check-circle', 'tone' => 'success', 'text' => $text,
                 'url' => EditProfile::settingsUrl('plan'), 'dismiss' => $request->id, 'action' => null];
         }
         if ($context->flag('free_or_key') && ! $context->flag('key')) {
-            return ['icon' => 'heroicon-o-key', 'tone' => 'muted', 'text' => 'Set up free transcription (2 minutes)', 'url' => EditProfile::settingsUrl('transcription-key'), 'dismiss' => null, 'action' => null];
+            return ['icon' => 'heroicon-o-key', 'tone' => 'muted', 'text' => __('Set up free transcription (2 minutes)'), 'url' => EditProfile::settingsUrl('transcription-key'), 'dismiss' => null, 'action' => null];
         }
 
         return null;
@@ -312,55 +354,64 @@ final class UpgradeFlow
         $limit = $minutes['limit'] ?? null;
         if ($limit === 0 || $limit === 0.0) {
             $key = $context->flag('key');
-            $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => 'Your Groq key', 'percent' => null, 'tone' => 'neutral',
-                'line' => $key ? 'Key added' : 'Not added.', 'link' => $key ? null : ['label' => 'Add key', 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
-                'label' => 'Transcription, with your own Groq key, '.($key ? 'key added' : 'not added')];
+            $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => __('Your Groq key'), 'percent' => null, 'tone' => 'neutral',
+                'line' => $key ? __('Key added') : __('Not added.'), 'link' => $key ? null : ['label' => __('Add key'), 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
+                'label' => $key ? __('Transcription, with your own Groq key, key added') : __('Transcription, with your own Groq key, not added')];
         } else {
             $used = (int) ($minutes['used'] ?? 0);
             $meter = self::meter($used, $limit === null ? null : (int) $limit);
-            $value = $limit === null ? number_format($used).' min' : number_format($used).' of '.number_format((int) $limit).' min';
-            $day = $resets->format('j M');
+            // In the console's language: "230 of 600 min" · "600 میں سے 230 منٹ"; "Resets 1 Dec" · "1 دسمبر کو دوبارہ شروع ہوگا".
+            $value = $limit === null ? __(':n min', ['n' => number_format($used)]) : __(':used of :limit min', ['used' => number_format($used), 'limit' => number_format((int) $limit)]);
+            // "1 Dec" · "1 دسمبر"; the screen readers' "1 December" · "1 دسمبر".
+            $day = ConsoleDates::format($resets, 'j M', 'j F');
             $near = $meter['percent'] !== null && $meter['percent'] >= 80 && $meter['percent'] < 100;
             $line = match (true) {
-                $meter['percent'] !== null && $meter['percent'] >= 100 => "Transcription is paused until {$day}.",
-                $near => "You've used {$meter['percent']}% of your minutes.".($buyer ? '' : " They reset on {$day}."),
-                default => "Resets {$day}",
+                $meter['percent'] !== null && $meter['percent'] >= 100 => __('Transcription is paused until :date.', ['date' => $day]),
+                $near => $buyer ? __("You've used :percent% of your minutes.", ['percent' => $meter['percent']])
+                    : __("You've used :percent% of your minutes. They reset on :date.", ['percent' => $meter['percent'], 'date' => $day]),
+                default => __('Resets :date', ['date' => $day]),
             };
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => $line, 'link' => $near && $buyer ? ['label' => 'Upgrade', 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? " or wait until {$day}." : null,
-                'label' => "Transcription, {$value} used, resets ".$resets->format('j F')];
+                'line' => $line, 'link' => $near && $buyer ? ['label' => __('Upgrade'), 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? ' '.__('or wait until :date.', ['date' => $day]) : null,
+                'label' => __('Transcription, :value used, resets :date', ['value' => $value, 'date' => ConsoleDates::format($resets, 'j F', 'j F')])];
         }
 
         $storage = (array) ($limits['storage_bytes'] ?? []);
         $meter = self::meter((int) ($storage['used'] ?? 0), isset($storage['limit']) ? (int) $storage['limit'] : null);
-        $value = Formats::bytes((int) ($storage['used'] ?? 0)).(isset($storage['limit']) ? ' of '.Formats::bytes((int) $storage['limit']) : '');
+        $value = self::ofLimit(Formats::bytes((int) ($storage['used'] ?? 0)), isset($storage['limit']) ? Formats::bytes((int) $storage['limit']) : null);
         $out[] = ['id' => 'plan.usage.storage', 'title' => 'Storage', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? ($buyer ? "New recordings can't upload until you free up space or upgrade." : "New recordings can't upload until you free up space.") : null,
-            'link' => null, 'after' => null, 'label' => "Storage, {$value} used"];
+            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? ($buyer ? __("New recordings can't upload until you free up space or upgrade.") : __("New recordings can't upload until you free up space.")) : null,
+            'link' => null, 'after' => null, 'label' => __('Storage, :value used', ['value' => $value])];
 
         $devices = (array) ($limits['devices'] ?? []);
         $meter = self::meter((int) ($devices['used'] ?? 0), isset($devices['limit']) ? (int) $devices['limit'] : null);
-        $value = number_format((int) ($devices['used'] ?? 0)).(isset($devices['limit']) ? ' of '.number_format((int) $devices['limit']) : '');
+        $value = self::ofLimit(number_format((int) ($devices['used'] ?? 0)), isset($devices['limit']) ? number_format((int) $devices['limit']) : null);
         $out[] = ['id' => 'plan.usage.devices', 'title' => 'Devices', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'Sign out a device to add another.' : null, 'link' => null, 'after' => null, 'label' => "Devices, {$value} signed in"];
+            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? __('Sign out a device to add another.') : null, 'link' => null, 'after' => null, 'label' => __('Devices, :value signed in', ['value' => $value])];
 
         $seats = (array) ($limits['seats'] ?? []);
         if (! isset($seats['limit']) || (int) $seats['limit'] > 1) {
-            $value = number_format((int) ($seats['used'] ?? 1)).(isset($seats['limit']) ? ' of '.number_format((int) $seats['limit']) : '');
+            $value = self::ofLimit(number_format((int) ($seats['used'] ?? 1)), isset($seats['limit']) ? number_format((int) $seats['limit']) : null);
             $meter = self::meter((int) ($seats['used'] ?? 1), isset($seats['limit']) ? (int) $seats['limit'] : null);
             $out[] = ['id' => 'plan.usage.members', 'title' => 'Team members', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'warning' : $meter['tone'],
-                'line' => null, 'link' => null, 'after' => null, 'label' => "Team members, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => __('Team members, :value', ['value' => $value])];
         }
 
         $uploads = (array) ($limits['uploads_per_day'] ?? []);
         if (isset($uploads['limit']) && (int) $uploads['limit'] > 0 && (int) ($uploads['used'] ?? 0) * 100 >= 80 * (int) $uploads['limit']) {
             $meter = self::meter((int) $uploads['used'], (int) $uploads['limit']);
-            $value = number_format((int) $uploads['used']).' of '.number_format((int) $uploads['limit']);
+            $value = self::ofLimit(number_format((int) $uploads['used']), number_format((int) $uploads['limit']));
             $out[] = ['id' => 'plan.usage.uploads', 'title' => 'Uploads in the last 24 hours', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => null, 'link' => null, 'after' => null, 'label' => "Uploads in the last 24 hours, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => __('Uploads in the last 24 hours, :value', ['value' => $value])];
         }
 
         return $out;
+    }
+
+    /** "4 MB of 1 GB" · "1 GB میں سے 4 MB", or the amount alone when there is no limit. */
+    private static function ofLimit(string $used, ?string $limit): string
+    {
+        return $limit === null ? $used : __(':used of :limit', ['used' => $used, 'limit' => $limit]);
     }
 
     /** @return array{percent: int|null, tone: string} */
@@ -385,10 +436,13 @@ final class UpgradeFlow
         return now(app(SettingsRepository::class)->displayTimezone())->startOfMonth()->addMonth();
     }
 
-    /** The price of a plan as its card writes it ("Rs 2,999 a month"). */
+    /** The price of a plan as its card writes it ("Rs 2,999 a month"; the amount kept whole in Urdu, "⁨Rs 2,999⁩ ماہانہ"). */
     public static function priceText(Plan $plan): string
     {
         $card = Entitlements::planCard($plan);
+        if (is_int($card['price_pkr'] ?? null)) {
+            return __(':amount a month', ['amount' => Formats::rupees($card['price_pkr'])]);
+        }
 
         return is_string($card['price_text'] ?? null) && $card['price_text'] !== '' ? (string) $card['price_text'] : $plan->displayPrice();
     }
@@ -419,17 +473,19 @@ final class UpgradeFlow
         $lines = [];
         $minutes = $plan->limit('monthly_minutes');
         if ($minutes !== null && $minutes > 0 && ($below === null || $below->limit('monthly_minutes') !== $minutes)) {
-            $lines[] = number_format((int) $minutes).' transcription minutes a month'.($below === null || ! $below->allows('platform_transcription') ? ', no key needed' : '');
+            $lines[] = $below === null || ! $below->allows('platform_transcription')
+                ? __(':minutes transcription minutes a month, no key needed', ['minutes' => number_format((int) $minutes)])
+                : __(':minutes transcription minutes a month', ['minutes' => number_format((int) $minutes)]);
         }
         $seats = $plan->limit('seats');
         if (($seats === null || $seats > 1) && ($below === null || $below->limit('seats') !== $seats)) {
-            $lines[] = $seats === null ? 'A team of any size' : 'A team of up to '.number_format((int) $seats).' people';
+            $lines[] = $seats === null ? __('A team of any size') : __('A team of up to :count people', ['count' => number_format((int) $seats)]);
         }
         foreach (Features::paid() as $feature) {
             if (in_array($feature, ['platform_transcription', 'team'], true) || ! $plan->allows($feature) || ($below !== null && $below->allows($feature))) {
                 continue;
             }
-            $lines[] = self::HIGHLIGHTS[$feature] ?? Features::all()[$feature]['description'];
+            $lines[] = __(self::HIGHLIGHTS[$feature] ?? Features::all()[$feature]['description']);
         }
 
         return array_slice($lines, 0, 5);

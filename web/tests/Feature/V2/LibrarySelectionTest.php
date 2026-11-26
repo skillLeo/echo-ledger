@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Services\InterfaceFlags;
+use Filament\Actions\BulkActionGroup;
 use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
 use Filament\Notifications\NotificationMailbox;
@@ -33,18 +37,50 @@ beforeEach(function () {
     $this->actingAs($this->owner->fresh(), 'web');
 });
 
-it('shows the four main actions and ⋮ with Organise, Export and Danger, and × to leave', function () {
+it('shows the four main actions and ⋮ with Organise, Export ▸ and Delete last and red, in one row of selection actions, and × to leave', function () {
     $page = Livewire::test(ListCaptureSessions::class)->selectTableRecords($this->recordings->pluck('id')->all());
 
     $bar = collect($page->instance()->getTable()->getToolbarActions());
     expect($bar->map(fn ($a) => $a->getLabel())->all())->toBe(['Move to project', 'Label', 'Export', 'Delete', 'More']);
+    // One row: Filament also draws the toolbar's copies above the table; each is hidden unless it is in the selection bar.
+    foreach ($bar as $action) {
+        expect($action->getExtraAttributes())->toHaveKey('x-bind:hidden', "\$el.closest('.v2-sel-actions') === null");
+    }
+    $label = fn ($a): string => (string) $a->getLabel();
     $groups = collect($bar->last()->getActions());
-    expect($groups->map(fn ($g) => $g->getLabel())->all())->toBe(['Organise', 'Export', 'Danger'])
-        ->and(collect($groups[0]->getActions())->map(fn ($a) => $a->getLabel())->all())
-        ->toBe(['Pin', 'Unpin', 'Keep forever', 'Stop keeping', 'Move to project', 'Add label', 'Remove label'])
-        ->and($groups[2]->getActions()[0]->getColor())->toBe('danger');
+    // Each group opens with its heading, as the desktop's and the phone's menus.
+    expect($groups->map(fn ($g) => $label(collect($g->getActions())->first()))->all())->toBe(['Organise', 'Export', 'Danger'])
+        ->and($groups->map(fn ($g) => collect($g->getActions())->first()->getView())->unique()->all())->toBe(['filament.v2.menu-heading'])
+        ->and(collect($groups[0]->getActions())->skip(1)->map($label)->values()->all())
+        ->toBe(['Pin', 'Unpin', 'Mark important', 'Unmark important', 'Keep forever', 'Stop keeping', 'Move to project', 'Add label', 'Remove label', 'Transcribe…']);
+    // Export: one Export ▸ sub-menu of every format, then Copy for AI.
+    $export = collect($groups[1]->getActions())->skip(1)->values();
+    expect($export->map($label)->all())->toBe(['Export', 'Copy for AI'])
+        ->and($export[0])->toBeInstanceOf(BulkActionGroup::class)
+        ->and($export[0]->hasDropdown())->toBeTrue()
+        ->and(collect($export[0]->getActions())->map(fn ($a) => strip_tags($label($a)))->all())
+        ->toBe(['Word (.docx)', 'Text (.txt)', 'Markdown (.md)', 'Subtitles (.srt)', 'Subtitles (.vtt)', 'Web page (.html)', 'JSON']);
+    // Delete last, red.
+    $danger = collect($groups[2]->getActions())->last();
+    expect($groups->keys()->last())->toBe(2)->and($label($danger))->toBe('Delete')->and($danger->getColor())->toBe('danger');
 
     $this->get('/app/sessions')->assertOk()->assertSee('data-selection-exit', false)->assertSee('Leave the selection');
+});
+
+it('keeps each format\'s extension left to right and reads the menu in Urdu', function () {
+    expect((string) CaptureSessionsTable::formatLabel('Word (.docx)'))->toBe('Word <bdi dir="ltr">(.docx)</bdi>')
+        ->and(CaptureSessionsTable::formatLabel('JSON'))->toBe('JSON');
+    $prefs = $this->owner->console_preferences ?? [];
+    $prefs['shell'] = ['app_language' => 'ur'];
+    $this->owner->forceFill(['console_preferences' => $prefs])->save();
+    $this->actingAs($this->owner->fresh(), 'web');
+    app()->setLocale('ur');
+
+    expect((string) CaptureSessionsTable::formatLabel('Word (.docx)'))->toBe('ورڈ <bdi dir="ltr">(.docx)</bdi>');
+    $page = Livewire::test(ListCaptureSessions::class)->selectTableRecords($this->recordings->pluck('id')->all());
+    $organise = collect(collect(collect($page->instance()->getTable()->getToolbarActions())->last()->getActions())[0]->getActions());
+    expect($organise->map(fn ($a): string => (string) $a->getLabel())->all())
+        ->toBe(['منظم کریں', 'پن کریں', 'پن ہٹائیں', 'اہم نشان لگائیں', 'اہم کا نشان ہٹائیں', 'ہمیشہ رکھیں', 'ہمیشہ رکھنا بند کریں', 'پروجیکٹ میں منتقل کریں', 'لیبل لگائیں', 'لیبل ہٹائیں', 'ٹرانسکرائب کریں…']);
 });
 
 /** The notices sent so far, as JSON (read the way assertNotified reads them, so they are taken). */
@@ -135,13 +171,13 @@ it('offers Export as a sub-menu of every format, Web page (.html) too, and expor
     $ids = $this->recordings->take(2)->pluck('id')->all();
     $page = Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids);
     $export = collect($page->instance()->getTable()->getToolbarActions())->first(fn ($a) => $a->getLabel() === 'Export');
-    expect(collect($export->getActions())->map(fn ($a) => $a->getLabel())->all())
+    expect(collect($export->getActions())->map(fn ($a) => strip_tags((string) $a->getLabel()))->all())
         ->toBe(['Word (.docx)', 'Text (.txt)', 'Markdown (.md)', 'Subtitles (.srt)', 'Subtitles (.vtt)', 'Web page (.html)', 'JSON']);
 
     $page->callTableBulkAction('exportHtml', $ids, data: ['view' => null])->assertHasNoTableBulkActionErrors()->assertFileDownloaded();
     $more = collect($page->instance()->getTable()->getToolbarActions())->last();
     expect(collect(collect($more->getActions())[0]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('moveInMenu')
-        ->and(collect(collect($more->getActions())[1]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('exportInMenuHtml');
+        ->and(collect(collect(collect($more->getActions())[1]->getActions())[1]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('exportInMenuHtml');
 });
 
 it('decides the keys and the mouse as the Node test says (Ctrl/Cmd+A, Shift-click, Delete, right-click, never while typing)', function () {
@@ -158,4 +194,28 @@ it('starts another place, folder or search of the list with nothing selected', f
     Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('openPlace', 'today')->assertDispatched('deselectAllTableRecords');
     Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('chooseFolder', 'whatsapp')->assertDispatched('deselectAllTableRecords');
     Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->set('tableSearch', 'Call 1')->assertDispatched('deselectAllTableRecords');
+});
+
+it('brings every recording of a big Delete back with Undo, not only the first 200, and changes every one of a big selection', function () {
+    $device = Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $ids = collect(range(1, 230))->map(fn (int $i): string => (string) Fx::session($this->owner, $device, ['title' => "Bulk {$i}"])->id)->all();
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
+    preg_match('/"token":"([A-Za-z0-9]{32})"/', selectionNotices(), $m);
+    expect(CaptureSession::onlyTrashed()->whereIn('id', $ids)->count())->toBe(230);
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $m[1] ?? '')->assertNotified('230 recordings are back');
+    expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(230);
+
+    // The bulk path takes 200 at a time: the selection goes through in turns, none dropped.
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('pinInMenu', $ids);
+    expect(selectionNotices())->toContain('230 recordings updated');
+    expect(CaptureSession::query()->whereIn('id', $ids)->where('pinned', true)->count())->toBe(230);
+
+    // Export takes the first 200 into its zip and says so.
+    foreach (CaptureSession::query()->whereIn('id', $ids)->get() as $session) {
+        $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai',
+            'status' => TranscriptStatus::Completed, 'text' => 'Line', 'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 500, 'text' => 'Line', 'words' => []]]]);
+    }
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('exportTxt', $ids, data: ['view' => null]);
+    expect(selectionNotices())->toContain('Exported the first 200 of 230');
 });

@@ -452,7 +452,10 @@ class MainActivityTest : AppTest() {
         awaitText("Weekly sync")
         compose.waitForIdle()
 
-        assertEquals(1, server.requestsTo("GET", "/api/library").size)
+        // One sync (the waiting calls, which it leaves out, are read beside it once too).
+        val reads = server.requestsTo("GET", "/api/library")
+        assertEquals(1, reads.count { it.url.queryParameter("status") == null })
+        assertEquals(1, reads.count { it.url.queryParameter("status") == "recording" })
     }
 
     // ---- what the launching intent asks for ------------------------------------------------------------------------------------
@@ -576,6 +579,38 @@ class MainActivityTest : AppTest() {
 
         awaitText("Waiting for you")
         assertTrue(!present("Weekly sync"))
+    }
+
+    @Test
+    fun `in the v2 shell open=pending (the after-call card's title) opens Activity with the call waiting, not the classic list`() {
+        serve()
+        server.on("GET", "/api/activity.*", FakeServer.json(200, """{"data":[],"unread_count":0}"""))
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.shell" to true, "ui_v2.library" to true)) }
+            app.graph.library.refresh()
+        }
+        app.storeRecording(id = "call-1", state = "pending_decision", sourceApp = "whatsapp")
+        val controller = buildActivity(MainActivity::class.java, pendingIntent()).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+        // v2 Activity: the waiting call with its Transcribe, Delete and Rename; the classic "Waiting for you" never shows.
+        awaitText("Transcribe")
+        awaitText("Delete")
+        val renamable = androidx.compose.ui.test.SemanticsMatcher("can be renamed") { node ->
+            node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.OnClick) { null }?.label == "Rename"
+        }
+        assertTrue(compose.onAllNodes(renamable).fetchSemanticsNodes().isNotEmpty())
+        assertFalse(present("Waiting for you"))
+        // Opened again while the app is open: Activity again.
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        pumpUntil("back in Library") {
+            compose.waitForIdle()
+            !present("Transcribe")
+        }
+        controller.newIntent(pendingIntent())
+        awaitText("Transcribe")
+        assertFalse(present("Waiting for you"))
     }
 
     @Test

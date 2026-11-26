@@ -8,6 +8,8 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
+use App\Exceptions\AssemblyDataFault;
+use App\Exceptions\RecordingUndecryptable;
 use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
 use App\Models\Device;
@@ -22,6 +24,7 @@ use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 /**
  * Resumable raw-body chunk uploads (docs/API.md "Sessions, recordings, uploads", PLAN.md D4).
@@ -79,6 +82,8 @@ final class ChunkedUploadService
             'total_chunks' => max(1, (int) ceil($size / $chunkSize)),
             'received_chunks' => [],
             'upload_status' => UploadStatus::Pending,
+            // Since 2.0.0-p: when this upload began (Needs you's "stuck" counts from it).
+            'upload_started_at' => now(),
         ]);
     }
 
@@ -150,7 +155,7 @@ final class ChunkedUploadService
                 hash_update($hash, $buffer);
                 fwrite($out, $buffer);
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             fclose($out);
             @unlink($tmp);
             throw $e;
@@ -170,12 +175,19 @@ final class ChunkedUploadService
         return DB::transaction(function () use ($recording, $index): Recording {
             /** @var Recording $locked */
             $locked = Recording::query()->lockForUpdate()->findOrFail($recording->id);
-            // The first chunk after a failure starts afresh: nothing received earlier is still on disk.
-            $earlier = $locked->upload_status === UploadStatus::Failed ? [] : $locked->received_chunks;
+            // The first chunk after a failure starts afresh: nothing received earlier is still on disk, and the upload's
+            // clock starts again (Needs you's "stuck", since 2.0.0-p).
+            $restart = $locked->upload_status === UploadStatus::Failed;
+            $earlier = $restart ? [] : $locked->received_chunks;
             $received = array_values(array_unique([...$earlier, $index]));
             sort($received);
-            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading, 'error' => null]);
+            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading, 'error' => null,
+                ...($restart ? ['upload_started_at' => now()] : [])]);
             $locked->captureSession->update(['status' => SessionStatus::Uploading]);
+            if ($restart) {
+                // No longer failed: the other devices hear of it with the library's changes.
+                $locked->captureSession->touch();
+            }
 
             return $locked;
         });
@@ -208,6 +220,21 @@ final class ChunkedUploadService
     public const NOT_FINISHED = 'Upload could not be finished. Send the file again.';
 
     /**
+     * How long the parts are kept for another try after a fault of the server (W-INC-1124): until 48 hours after
+     * `complete`, or 8 rounds of recordings:recover, whichever comes first. The rounds wait 15 minutes, then twice as
+     * long each time up to 8 hours (15 m, 30 m, 1 h, 2 h, 4 h, 8 h, 8 h, 8 h: about 32 hours for all eight), so an
+     * outage of hours is waited out, and a fault that never clears costs at most 8 tries before the device is asked
+     * for the file again.
+     */
+    public const KEEP_PARTS_HOURS = 48;
+
+    public const RECOVERY_ROUNDS = 8;
+
+    public const FIRST_ROUND_MINUTES = 15;
+
+    public const LONGEST_ROUND_MINUTES = 480;
+
+    /**
      * Idempotent `complete`: a repeat while assembling or after a failure (before new chunks arrive) gives the same
      * answer again.
      */
@@ -221,14 +248,14 @@ final class ChunkedUploadService
         if ($missing !== []) {
             return CompleteOutcome::incomplete($missing);
         }
-        $recording->update(['upload_status' => UploadStatus::Assembling]);
+        $recording->update(['upload_status' => UploadStatus::Assembling, 'assembling_since' => now(), 'recovery_rounds' => 0]);
 
         $queued = true;
         if ($recording->declared_size_bytes <= self::SYNC_ASSEMBLE_MAX_BYTES) {
             try {
                 Bus::dispatchNow(new AssembleRecordingJob($recording->id));
                 $queued = false;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 report($e); // fall through to the queue so the recording still gets processed
             }
         }
@@ -260,7 +287,13 @@ final class ChunkedUploadService
         $this->files()->eraseFolder($recording->partsDirectory());
     }
 
-    /** Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. */
+    /**
+     * Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. A size or SHA-256
+     * mismatch discards the parts here; a part that is missing or does not decrypt throws AssemblyDataFault (the job
+     * discards them); anything else is the server's fault and leaves the parts for another try.
+     *
+     * @throws AssemblyDataFault
+     */
     public function assemble(Recording $recording): void
     {
         $plainPath = $this->tempPath('assemble');
@@ -271,15 +304,22 @@ final class ChunkedUploadService
         $hash = hash_init('sha256');
         $size = 0;
         try {
-            for ($i = 0; $i < $recording->total_chunks; $i++) {
-                $this->files()->readPart($recording->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
-                    while (! feof($part)) {
-                        $buffer = (string) fread($part, 1024 * 1024);
-                        $size += strlen($buffer);
-                        hash_update($hash, $buffer);
-                        fwrite($out, $buffer);
-                    }
-                });
+            try {
+                for ($i = 0; $i < $recording->total_chunks; $i++) {
+                    $this->files()->readPart($recording->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                        while (! feof($part)) {
+                            $buffer = (string) fread($part, 1024 * 1024);
+                            $size += strlen($buffer);
+                            hash_update($hash, $buffer);
+                            fwrite($out, $buffer);
+                        }
+                    });
+                }
+            } catch (RecordingUndecryptable $e) {
+                throw new AssemblyDataFault('A part of the upload does not decrypt.', 0, $e);
+            } catch (Throwable $e) {
+                // Only a part that is really gone is the upload's fault; a disk or bucket that fails is the server's.
+                throw $this->partsGone($recording) ? new AssemblyDataFault('A part of the upload is missing.', 0, $e) : $e;
             }
             fclose($out);
 
@@ -296,6 +336,29 @@ final class ChunkedUploadService
                 fclose($out);
             }
             @unlink($plainPath);
+        }
+    }
+
+    /** Whether a recording kept after a fault of the server has had its tries (KEEP_PARTS_HOURS, RECOVERY_ROUNDS). */
+    public function pastKeeping(Recording $recording): bool
+    {
+        return (int) $recording->recovery_rounds >= self::RECOVERY_ROUNDS
+            || ($recording->assembling_since !== null && $recording->assembling_since->lt(now()->subHours(self::KEEP_PARTS_HOURS)));
+    }
+
+    /** How long recordings:recover waits since the last try before the next round: 15 minutes, doubling up to 8 hours. */
+    public static function roundWaitMinutes(int $rounds): int
+    {
+        return min(self::LONGEST_ROUND_MINUTES, self::FIRST_ROUND_MINUTES * 2 ** min(max(0, $rounds), 6));
+    }
+
+    /** Whether a part is missing, as one listing says; a listing that fails says nothing, so it answers false. */
+    private function partsGone(Recording $recording): bool
+    {
+        try {
+            return $this->missingChunks($recording) !== [];
+        } catch (Throwable) {
+            return false;
         }
     }
 

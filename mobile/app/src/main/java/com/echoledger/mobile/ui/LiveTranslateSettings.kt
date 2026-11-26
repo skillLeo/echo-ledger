@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -41,17 +41,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -264,22 +271,35 @@ private fun sampleTranslation(target: String): String = when (target) {
     else -> "Come on guys, the enemy is at the red house"
 }
 
-/** A dark, blurred-looking "game scene" so the box is judged against what it will float over. */
+/**
+ * A dark, blurred-looking "game scene" so the box is judged against what it will float over. 16:9 at least, and taller
+ * when the text needs it (P-119: at 1.3 text the sample line was cut by the frame's bottom).
+ */
 @Composable
 private fun SampleFrame(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
-    Box(
-        modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(Radius.md)).background(
-            Brush.linearGradient(listOf(Color(0xFF2B3A2F), Color(0xFF6B5B3E), Color(0xFF8FA3B8)))
-        ).semantics { contentDescription = "Preview over a sample game scene" }
-    ) { content() }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        Box(
+            Modifier.fillMaxWidth().heightIn(min = maxWidth * 9f / 16f).clip(RoundedCornerShape(Radius.md)).background(
+                Brush.linearGradient(listOf(Color(0xFF2B3A2F), Color(0xFF6B5B3E), Color(0xFF8FA3B8)))
+            ).semantics { contentDescription = "Preview over a sample game scene" }
+        ) { content() }
+    }
 }
 
 /** The game box as it will look (plan B2): dark / light / no background, final text solid, original line above. */
 @Composable
-internal fun BoxPreview(style: BoxStyle, target: String, text: String? = null, original: String? = null) {
+internal fun BoxPreview(
+    style: BoxStyle,
+    target: String,
+    text: String? = null,
+    original: String? = null,
+    /** [text] is a Try it notice ("Listening…", why it stopped): shown whole, never clipped like a growing line. */
+    notice: Boolean = false
+) {
     val s = style.sanitized()
     SampleFrame {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Space.s3), contentAlignment = Alignment.TopCenter) {
+        // Room under the box too, now that the frame grows with it (P-119).
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = Space.s3), contentAlignment = Alignment.TopCenter) {
             val (bg, fg) = when (s.backgroundKind) {
                 BoxBackground.DARK -> Color.Black.copy(alpha = 0.72f) to Color.White
                 BoxBackground.LIGHT -> Color.White.copy(alpha = 0.85f) to Color(0xFF1C2024)
@@ -304,9 +324,9 @@ internal fun BoxPreview(style: BoxStyle, target: String, text: String? = null, o
                     )
                 }
                 val rtl = TranslateLanguages.rtl(target)
-                Text(
+                PreviewLines(
                     text ?: sampleTranslation(target),
-                    style = TextStyle(
+                    TextStyle(
                         fontSize = (s.textSp * 0.75f).sp,
                         lineHeight = (s.textSp * 0.75f * if (target == "ur") 1.7f else 1.3f).sp,
                         fontWeight = FontWeight.Medium,
@@ -315,7 +335,8 @@ internal fun BoxPreview(style: BoxStyle, target: String, text: String? = null, o
                         textDirection = if (rtl) TextDirection.Rtl else TextDirection.Ltr,
                         fontFamily = if (target == "ur") com.echoledger.mobile.ui.design.UrduNastaliq else null
                     ),
-                    maxLines = s.lines,
+                    lines = s.lines,
+                    newest = text != null && !notice,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -325,14 +346,20 @@ internal fun BoxPreview(style: BoxStyle, target: String, text: String? = null, o
 
 /** Watch subtitles as they will look (plan B4): bottom centre, white with an outline, optional box. */
 @Composable
-internal fun SubtitlePreview(style: SubtitleStyle, target: String, text: String? = null) {
+internal fun SubtitlePreview(
+    style: SubtitleStyle,
+    target: String,
+    text: String? = null,
+    /** [text] is a Try it notice: shown whole. */
+    notice: Boolean = false
+) {
     val s = style.sanitized()
     SampleFrame {
         Box(Modifier.fillMaxWidth().padding(bottom = (s.offsetDp / 6).dp + Space.s2).align(Alignment.BottomCenter)) {
             val rtl = TranslateLanguages.rtl(target)
-            Text(
+            PreviewLines(
                 text ?: sampleTranslation(target).let { if (target == "en") "The enemy is at the red house" else it },
-                style = TextStyle(
+                TextStyle(
                     fontSize = (s.textSp * 0.7f).sp,
                     lineHeight = (s.textSp * 0.7f * if (target == "ur") 1.7f else 1.3f).sp,
                     color = Color.White,
@@ -341,7 +368,8 @@ internal fun SubtitlePreview(style: SubtitleStyle, target: String, text: String?
                     textDirection = if (rtl) TextDirection.Rtl else TextDirection.Ltr,
                     fontFamily = if (target == "ur") com.echoledger.mobile.ui.design.UrduNastaliq else null
                 ),
-                maxLines = s.lines,
+                lines = s.lines,
+                newest = text != null && !notice,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.88f)
                     .then(
                         if (s.box) {
@@ -354,6 +382,42 @@ internal fun SubtitlePreview(style: SubtitleStyle, target: String, text: String?
                     )
             )
         }
+    }
+}
+
+/**
+ * P-127: [text] from [from] on, as the preview shows its newest lines. Cut mid-line, digits at its start would resolve as
+ * European numbers (the Arabic letter before them is gone), so a ٪, % or - beside them could change sides: a mark of the
+ * line's direction goes first, for the layout only (U+061C, the Arabic letter mark, right to left; U+200E left to right),
+ * so they read as they did in the whole line. Uncut, the text is as it is.
+ */
+internal fun newestText(text: String, from: Int, rtl: Boolean): String =
+    if (from <= 0) text else (if (rtl) "\u061C" else "\u200E") + text.substring(from)
+
+/**
+ * P-119: a preview's translation line. Try it's growing line ([newest]) shows its newest [lines] lines, as the overlay
+ * does (TranslateTextView: older lines move up out of its window), its end always in view: the whole line is laid out
+ * to find where those lines start, and only the text from there is shown, so nothing of an older line shows (Nastaliq
+ * reaches into the line above and below). A sample or a notice is shown whole, and the frame grows with it. Lines break
+ * greedily, as the overlay's StaticLayout, so the newest lines break where they did in the whole. Sized in its one
+ * measure pass, so it never shows one size and then another.
+ */
+@Composable
+private fun PreviewLines(text: String, style: TextStyle, lines: Int, newest: Boolean, modifier: Modifier = Modifier) {
+    val greedy = style.copy(lineBreak = LineBreak.Simple)
+    val whole = remember { arrayOfNulls<TextLayoutResult>(1) }
+    SubcomposeLayout(modifier) { constraints ->
+        val loose = constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)
+        // The whole line, only measured (never drawn, and never heard twice by TalkBack).
+        subcompose("measure") {
+            Text(text, style = greedy, onTextLayout = { whole[0] = it }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
+        }.single().measure(loose)
+        val laid = whole[0]
+        val from = if (newest && laid != null && laid.lineCount > lines) laid.getLineStart(laid.lineCount - lines) else 0
+        val shown = subcompose("shown") {
+            Text(newestText(text, from, style.textDirection == TextDirection.Rtl), style = greedy, modifier = Modifier.fillMaxWidth())
+        }.single().measure(loose)
+        layout(constraints.constrainWidth(shown.width), constraints.constrainHeight(shown.height)) { shown.place(0, 0) }
     }
 }
 
@@ -539,7 +603,8 @@ internal fun HelpSection(
     SectionCard {
         PanelTitle("Help & diagnostics")
         if (captureInBuild || engineering) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            // P-117: when both don't fit, Audio probe goes under Capture test, never cut to "Audio".
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
                 if (captureInBuild) EchoButton("Capture test", onSetup, kind = ButtonKind.Secondary)
                 if (engineering) EchoButton("Audio probe", { probing = true }, kind = ButtonKind.Secondary)
             }

@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { ExportMenu, PlayerDock } from "./TranscriptTools";
 import { LinkRow, ActionRow } from "./SettingsControls";
 import { CaptionPreview } from "./CaptureSettings";
+import { ScreenViewer } from "./ScreenMoments";
+import { makeScreen } from "../../test/fixtures";
 
 const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
 beforeAll(() => {
@@ -57,9 +59,10 @@ describe("an English sentence in a right-to-left window", () => {
     expect(getComputedStyle(container.querySelector(".el-meta")!).unicodeBidi).not.toBe("plaintext");
   });
 
-  it("leaves an element's own alignment alone (a centred empty state stays centred)", () => {
-    const { container } = rtl(<div className="empty-state"><p style={{ textAlign: "center" }}>No recordings yet.</p></div>);
+  it("leaves an element's own alignment alone (a centred empty line stays centred)", () => {
+    const { container } = rtl(<p className="empty">No recordings yet.</p>);
     expect(getComputedStyle(container.querySelector("p")!).textAlign).toBe("center");
+    expect(getComputedStyle(container.querySelector("p")!).unicodeBidi).toBe("plaintext");
   });
 });
 
@@ -97,11 +100,18 @@ describe("every classic select's options", () => {
   });
 });
 
+describe("the account menu's Light / Dark / System switch", () => {
+  it("keeps its own 26 px height (the segmented control grew to fit Urdu, D4 §3.5)", () => {
+    const { container } = render(<div className="menu-theme"><div className="segmented"><button type="button">Light</button></div></div>);
+    expect(getComputedStyle(container.querySelector("button")!).minHeight).toBe("26px");
+  });
+});
+
 describe("caption lines", () => {
   it("each preview line takes its own direction, as the overlay draws it", () => {
     const { container } = rtl(<CaptionPreview style={{ size: "medium", opacity: 80, compact: false, clientColor: null, meColor: null } as never} />);
-    const lines = container.querySelectorAll(".caption-sample > div");
-    expect(lines).toHaveLength(2);
+    const lines = container.querySelectorAll(".caption-sample-lines > div");
+    expect(lines).toHaveLength(3);
     lines.forEach((line) => expect(line).toHaveAttribute("dir", "auto"));
   });
 });
@@ -136,7 +146,13 @@ describe("chevrons along the reading direction", () => {
     expect(getComputedStyle(ltr.container.querySelector(".set-trail")!).transform).not.toBe("scaleX(-1)");
   });
 
-  it.each([".crumb-step svg", ".back-link svg", ".screen-step svg"])("%s turns round in right to left", (selector) => {
+  it("the screens of a recording run left to right in every language, as ← and → step through them", () => {
+    const shots = [makeScreen(1, 60_000), makeScreen(2, 90_000)];
+    rtl(<ScreenViewer screens={shots} index={0} onIndex={() => undefined} onClose={() => undefined} />);
+    expect(document.querySelector(".screen-viewer-body")).toHaveAttribute("dir", "ltr");
+  });
+
+  it.each([".crumb-step svg", ".back-link svg"])("%s turns round in right to left", (selector) => {
     const [wrap, el] = selector.split(" ");
     const { container } = rtl(<span className={wrap.slice(1)}><svg /></span>);
     expect(getComputedStyle(container.querySelector(el)!).transform).toBe("scaleX(-1)");

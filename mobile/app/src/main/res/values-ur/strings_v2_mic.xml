@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Microphone & audio settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_mic_yours">آپ کا مائیکروفون</string>
+    <string name="v2_mic_yours_help">کالز میں آپ کی آواز ہمیشہ بغیر تبدیلی کے ریکارڈ ہوتی ہے۔</string>
+    <string name="v2_mic_reduce_echo">گونج کم کریں (تجویز کردہ)</string>
+    <string name="v2_mic_unprocessed">بغیر تبدیلی</string>
+    <string name="v2_mic_quality">ریکارڈنگ کا معیار</string>
+    <string name="v2_mic_quality_help">زیادہ معیار ٹرانسکرپٹ کے لیے زیادہ تفصیل رکھتا ہے؛ فائلیں بھی بڑی ہوتی ہیں۔</string>
+    <string name="v2_mic_standard">عام</string>
+    <string name="v2_mic_high">اعلیٰ</string>
+    <string name="v2_mic_highest">سب سے اعلیٰ (بڑی فائلیں)</string>
+    <string name="v2_mic_record_from">کہاں سے ریکارڈ کریں</string>
+    <string name="v2_mic_automatic">خودکار</string>
+    <string name="v2_mic_in_builtin">فون کا مائیکروفون</string>
+    <string name="v2_mic_in_wired">تار والا ہیڈسیٹ</string>
+    <string name="v2_mic_in_bluetooth">بلوٹوتھ ہیڈسیٹ</string>
+    <string name="v2_mic_in_usb">یو ایس بی مائیکروفون</string>
+    <string name="v2_mic_not_connected">وہ مائیکروفون جڑا ہوا نہیں، اس لیے فون خود چنتا ہے۔</string>
+    <string name="v2_mic_helper_note">ہیلپر کے ذریعے ریکارڈ ہونے والی کالز وہی مائیکروفون استعمال کرتی ہیں جو کال کر رہی ہو۔</string>
+    <string name="v2_mic_test">آزمائشی ریکارڈنگ</string>
+    <string name="v2_mic_test_help">آپ کے مائیکروفون کے %1$d سیکنڈ ریکارڈ کر کے سناتا ہے۔</string>
+    <string name="v2_mic_test_start">%1$d سیکنڈ آزمائیں</string>
+    <string name="v2_mic_testing">ریکارڈ ہو رہا ہے…</string>
+    <string name="v2_mic_me">میں</string>
+    <string name="v2_mic_peak">سب سے اونچی آواز</string>
+    <string name="v2_mic_level">%1$s کی سطح: %2$d فیصد</string>
+    <string name="v2_mic_heard">آپ کا مائیکروفون کام کر رہا ہے۔ سن کر دیکھیں کہ آپ کی آواز کیسی ہے۔</string>
+    <string name="v2_mic_not_heard">آپ کا مائیکروفون سنائی نہیں دیا۔ اوپر مائیکروفون اور مائیکروفون کی اجازت دیکھیں۔</string>
+    <string name="v2_mic_play_back">سنیں</string>
+    <string name="v2_mic_finish_first">آزمانے کے لیے پہلے موجودہ ریکارڈنگ ختم کریں۔</string>
+    <string name="v2_mic_silent">دوسری طرف خاموشی ہو تو بتائیں</string>
+    <string name="v2_mic_silent_help">اگر کال میں 30 سیکنڈ تک دوسری طرف کی آواز نہ آئے۔</string>
+    <string name="v2_mic_permissions">اجازتیں</string>
+    <string name="v2_mic_allowed">اجازت ہے</string>
+    <string name="v2_mic_fix">ٹھیک کریں</string>
+    <string name="v2_mic_fix_named">%1$s ٹھیک کریں</string>
+    <string name="v2_mic_p_microphone">مائیکروفون</string>
+    <string name="v2_mic_p_microphone_why">آپ کو ریکارڈ کرنے کے لیے ضروری ہے۔</string>
+    <string name="v2_mic_p_helper">کال ریکارڈ کرنے والا ہیلپر</string>
+    <string name="v2_mic_p_helper_why">کالز میں دوسری طرف کی آواز ریکارڈ کرنے کے لیے ضروری ہے۔</string>
+    <string name="v2_mic_p_notifications">اطلاعات</string>
+    <string name="v2_mic_p_notifications_why">کال کے بعد پوچھتا ہے: ٹرانسکرپٹ بنائیں، صرف آڈیو محفوظ کریں یا حذف کریں، اور ریکارڈنگ کے کنٹرول دکھاتا ہے۔</string>
+    <string name="v2_mic_p_overlay">دوسری ایپس کے اوپر دکھائیں</string>
+    <string name="v2_mic_p_overlay_why">کال کے اوپر لائیو کیپشنز دکھاتا ہے۔</string>
+    <string name="v2_mic_p_battery">بیٹری کا بلا روک ٹوک استعمال</string>
+    <string name="v2_mic_p_battery_why">فون سویا ہو تب بھی خودکار ریکارڈنگ تیار رکھتا ہے۔</string>
+    <string name="v2_mic_p_caller_names">اطلاعات تک رسائی</string>
+    <string name="v2_mic_p_caller_names_why">دکھاتا ہے کہ ہر WhatsApp کال کس کے ساتھ تھی۔ صرف WhatsApp کال کی اطلاعات پڑھی جاتی ہیں۔</string>
+    <string name="v2_mic_p_call_log">کال لاگ</string>
+    <string name="v2_mic_p_call_log_why">ہر ریکارڈ شدہ فون کال کو اس کا نمبر دیتا ہے۔</string>
+    <string name="v2_mic_p_contacts">رابطے</string>
+    <string name="v2_mic_p_contacts_why">ہر ریکارڈ شدہ فون کال کو رابطے کا نام دیتا ہے۔</string>
+</resources>

@@ -214,7 +214,7 @@ final class ClientWorkspaceController extends Controller
 
         return $note->toApi() + ['session' => $session === null ? null : [
             'id' => $session->id,
-            'title' => $session->title,
+            'title' => $session->displayTitle(),
             'started_at' => $session->started_at->toIso8601ZuluString(),
             'duration_ms' => $session->duration_ms,
         ]];

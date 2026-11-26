@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onAllNodesWithText
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.data.FeatureDto
@@ -35,9 +37,11 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.util.AppClock
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.robolectric.annotation.Config
@@ -182,9 +186,9 @@ class SettingsV17Test : ScreenTest() {
         condition()
     }
 
-    private fun signedIn(plan: PlanState, latest: UpgradeRequestDto? = null) {
+    private fun signedIn(plan: PlanState, latest: UpgradeRequestDto? = null, email: String = "ayesha@example.com") {
         runBlocking { app.pairLocally(server) }
-        server.on("GET", "/api/account", FakeServer.json(200, """{"name":"Ayesha Khan","email":"ayesha@example.com"}"""))
+        server.on("GET", "/api/account", FakeServer.json(200, """{"name":"Ayesha Khan","email":"$email"}"""))
         server.on(
             "GET",
             "/api/upgrade-requests/latest",
@@ -212,6 +216,43 @@ class SettingsV17Test : ScreenTest() {
         compose.onNodeWithText("Appearance").assertExists()
         assertTrue(compose.onAllNodesWithText("PRO ✦").fetchSemanticsNodes().isEmpty())
         capture("settings-free")
+    }
+
+    /** Whether [text]'s line ends in "…" (the text is cut short). */
+    private fun ellipsized(text: String): Boolean {
+        val node = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        return layouts.single().let { layout -> (0 until layout.lineCount).any(layout::isLineEllipsized) }
+    }
+
+    private fun bounds(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+    /**
+     * P-061: on Free, Upgrade beside the card cut an everyday email short ("ayesha@examp…"); when the words don't fit
+     * beside it, it goes under the name. (An email longer than the whole card still ends in "…".)
+     */
+    @Test
+    fun `an email that doesn't fit beside Upgrade is shown whole, with Upgrade under the name`() {
+        val email = "ayesha@example.com"
+        signedIn(free, email = email)
+        shoot { SettingsScreen(vm, onSetup = {}) }
+        waitFor { compose.onAllNodesWithText(email).fetchSemanticsNodes().isNotEmpty() }
+
+        assertFalse("the email is cut short", ellipsized(email))
+        assertFalse("the name is cut short", ellipsized("Ayesha Khan"))
+        assertTrue("Upgrade is under the email", bounds("Upgrade").top >= bounds(email).bottom)
+    }
+
+    /** P-061: a card whose words fit beside Upgrade looks as it did. */
+    @Test
+    fun `a short email keeps Upgrade beside the name`() {
+        signedIn(free, email = "ali@x.pk")
+        shoot { SettingsScreen(vm, onSetup = {}) }
+        waitFor { compose.onAllNodesWithText("ali@x.pk").fetchSemanticsNodes().isNotEmpty() }
+
+        assertFalse(ellipsized("ali@x.pk"))
+        assertTrue("Upgrade is beside the words", bounds("Upgrade").top < bounds("ali@x.pk").bottom)
     }
 
     @Test
@@ -295,6 +336,16 @@ class SettingsV17Test : ScreenTest() {
 
     @Test
     fun `the receipt step takes screenshots, a transaction ID, and sends them`() {
+        // The proof's date is shown against today: the same today on every day it runs (F2).
+        AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try {
+            receiptStep()
+        } finally {
+            AppClock.reset()
+        }
+    }
+
+    private fun receiptStep() {
         val r =
             request(
                 "awaiting_payment",

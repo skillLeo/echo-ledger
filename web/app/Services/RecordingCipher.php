@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Exceptions\MissingPhpExtension;
 use App\Exceptions\RecordingUndecryptable;
+use App\Services\Health\PhpExtensions;
 use RuntimeException;
 use SplTempFileObject;
 
@@ -22,13 +24,26 @@ final class RecordingCipher
 
     public function __construct(private readonly string $key)
     {
+        self::requireSodium();
         if (strlen($key) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES) {
             throw new RuntimeException('Recordings key must be 32 bytes.');
         }
     }
 
+    /**
+     * Without sodium every constant and function below is undefined, and PHP's own error would name a constant, not
+     * the missing extension (W-INC-1124). Checked first, wherever the cipher is made.
+     */
+    private static function requireSodium(): void
+    {
+        if (! app(PhpExtensions::class)->loaded('sodium')) {
+            throw MissingPhpExtension::named('sodium');
+        }
+    }
+
     public static function fromConfig(): self
     {
+        self::requireSodium();
         $encoded = (string) config('echoledger.recordings_key');
         $key = $encoded === '' ? false : base64_decode($encoded, true);
         if ($key === false || strlen($key) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES) {
@@ -40,6 +55,8 @@ final class RecordingCipher
 
     public static function generateKey(): string
     {
+        self::requireSodium();
+
         return base64_encode(sodium_crypto_secretstream_xchacha20poly1305_keygen());
     }
 

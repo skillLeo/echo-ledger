@@ -356,3 +356,205 @@ fn microphone_consent_any_deny_blocks() {
     assert_eq!(consent_from(&[None, None, None]), "unknown");
     assert_eq!(consent_from(&[None, allow, None]), "allowed");
 }
+
+// ---- The other side of a call, checked within 3 s (2.0.6) --------------------------------------------------------
+
+mod system_side {
+    use desktop_lib::audio::RecordingMode;
+    use desktop_lib::audio::health::{
+        DIGITAL_SILENCE, FAR_SIDE_SILENT_MS, FarSideMonitor, PLAYING_EVERY, PlayingCache, SYSTEM_CHECK_AFTER_MS, SystemProblem, SystemSide, SystemVerdict, SystemWatch,
+        far_side_enabled, has_signal, system_side_problem,
+    };
+    use std::time::{Duration, Instant};
+    use desktop_lib::audio::platform::{Streams, open_keeping_mic};
+    use desktop_lib::permissions::{Access, Kind, OtherSide, Permissions, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN, missing_with};
+
+    const CALL: Streams = Streams { mic: true, system: true };
+    const ON: Permissions = Permissions { microphone: Access::Allowed, system_audio: Access::Allowed, screen: Access::Allowed };
+    /// 16 kHz: frames per second of the other side.
+    const PER_S: u64 = 16_000;
+
+    /// An allowed tap with nothing to hear: zero-valued frames, for `ms`.
+    fn zeros(ms: u64, mic_heard: bool) -> SystemSide {
+        SystemSide { running_ms: ms, frames: ms * PER_S / 1_000, mic_heard, ..SystemSide::default() }
+    }
+    /// A tap macOS does not let through: buffers with no data, no frames.
+    fn empty(ms: u64) -> SystemSide {
+        SystemSide { running_ms: ms, empty_buffers: ms / 10, mic_heard: true, ..SystemSide::default() }
+    }
+    fn heard(ms: u64) -> SystemSide {
+        SystemSide { signal: true, ..zeros(ms, true) }
+    }
+
+    #[test]
+    fn you_speak_first_and_nothing_plays_no_warning() {
+        // You speak, the other person is muted or not there yet, nothing plays: zeros, never this warning, however long.
+        for ms in [3_000, 10_000, 30_000, 120_000] {
+            assert_eq!(system_side_problem(&zeros(ms, true)), None, "{ms} ms");
+        }
+        let mut watch = SystemWatch::default();
+        for ms in (0..=60_000).step_by(1_000) {
+            assert_eq!(watch.look(&zeros(ms, true)), SystemVerdict::Same, "{ms} ms");
+        }
+        assert_eq!(watch.warning(), None);
+    }
+
+    /// A long silence is the one 30-second "not hearing the other side" warning: under the person's setting, and on a
+    /// Mac only while another app plays sound (a tap with nothing to hear gives zeros).
+    #[test]
+    fn a_long_silence_is_the_far_side_warning_under_its_setting() {
+        let asked = std::cell::Cell::new(0);
+        let playing = |answer: bool| {
+            asked.set(asked.get() + 1);
+            answer
+        };
+        // Under 30 s the process list is not even read.
+        assert!(far_side_enabled(true, Some(FAR_SIDE_SILENT_MS - 1), true, || playing(false)));
+        assert!(far_side_enabled(true, None, true, || playing(false)));
+        assert_eq!(asked.get(), 0);
+        // 30 s of silence on a Mac: only while another app plays sound.
+        assert!(far_side_enabled(true, Some(FAR_SIDE_SILENT_MS), true, || playing(true)));
+        assert!(!far_side_enabled(true, Some(FAR_SIDE_SILENT_MS), true, || playing(false)));
+        assert_eq!(asked.get(), 2);
+        // The person's setting off: never, and nothing is read.
+        assert!(!far_side_enabled(false, Some(120_000), true, || playing(true)));
+        assert_eq!(asked.get(), 2);
+        // Windows' loopback delivers nothing while nothing plays: as before.
+        assert!(far_side_enabled(true, Some(120_000), false, || playing(false)));
+        assert_eq!(asked.get(), 2);
+        // Through the monitor: said once at 30 s while another app plays, cleared when it stops.
+        let mut monitor = FarSideMonitor::default();
+        let mut tick = |ms: u64, plays: bool| monitor.tick(Some(ms), far_side_enabled(true, Some(ms), true, || plays));
+        assert_eq!(tick(29_000, true), None);
+        assert!(tick(30_000, true).is_some_and(|p| p.silent));
+        assert_eq!(tick(31_000, true), None, "once");
+        assert!(tick(32_000, false).is_some_and(|p| !p.silent), "nothing plays any more: taken back");
+        let mut quiet = FarSideMonitor::default();
+        assert_eq!(quiet.tick(Some(60_000), far_side_enabled(true, Some(60_000), true, || false)), None, "you speak, nothing plays: never");
+    }
+
+    #[test]
+    fn whether_another_app_plays_is_read_at_most_every_5_s() {
+        assert_eq!(PLAYING_EVERY, Duration::from_secs(5));
+        let start = Instant::now();
+        let mut cache = PlayingCache::default();
+        let mut reads = 0;
+        let mut at = |s: u64, answer: bool| {
+            cache.get(start + Duration::from_secs(s), || {
+                reads += 1;
+                answer
+            })
+        };
+        assert!(at(0, true));
+        for s in 1..5 {
+            assert!(at(s, false), "kept for 5 s");
+        }
+        assert!(!at(5, false), "read again");
+        assert!(!at(9, true));
+        assert_eq!(reads, 2);
+    }
+
+    #[test]
+    fn a_look_from_before_the_other_side_was_heard_never_shows_the_warning_again() {
+        let mut watch = SystemWatch::default();
+        let missing = watch.look(&empty(3_000));
+        assert_eq!(missing, SystemVerdict::Missing(SystemProblem::NoData));
+        assert!(watch.still(&missing));
+        // The other side speaks before the job of that look runs: its verdict is old, and dropped.
+        let heard_now = watch.look(&heard(3_500));
+        assert_eq!(heard_now, SystemVerdict::Recording);
+        assert!(!watch.still(&missing), "no flash of the warning after the other side spoke");
+        assert!(watch.still(&heard_now));
+        // And the other way: a "recording" from before it went missing again never clears the warning.
+        let again = watch.look(&SystemSide { failure: Some("tap gone".into()), ..empty(0) });
+        assert!(matches!(again, SystemVerdict::Missing(SystemProblem::Failed(_))));
+        assert!(!watch.still(&heard_now));
+        assert!(watch.still(&SystemVerdict::Same));
+    }
+
+    #[test]
+    fn empty_buffers_are_the_permission_warning() {
+        assert_eq!(system_side_problem(&empty(2_999)), None, "not before 3 s");
+        let problem = system_side_problem(&empty(3_000)).expect("said at 3 s");
+        assert_eq!(problem, SystemProblem::NoData);
+        assert_eq!(problem.reason(), "the system audio tap delivered buffers with no audio data for 3 s");
+        let mut watch = SystemWatch::default();
+        assert_eq!(watch.look(&empty(3_000)), SystemVerdict::Missing(SystemProblem::NoData));
+        assert_eq!(watch.warning(), Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
+        assert_eq!(SYSTEM_NOT_RECORDED, "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.");
+        // No IOProc call at all is the device's matter (the supervisor says it), not the permission.
+        assert_eq!(system_side_problem(&SystemSide { running_ms: 10_000, ..SystemSide::default() }), None);
+        assert_eq!(SYSTEM_CHECK_AFTER_MS, 3_000);
+    }
+
+    #[test]
+    fn a_failed_tap_keeps_the_microphone_and_says_why_at_once() {
+        // The tap does not open (OSStatus from AudioHardwareCreateProcessTap): the call records the microphone alone.
+        let mut asked = Vec::new();
+        let (stream, failure) = open_keeping_mic(CALL, |with_tap| {
+            asked.push(with_tap);
+            if with_tap { Err("system audio tap (OSStatus 560947818); allow System Audio Recording".to_string()) } else { Ok("microphone only") }
+        })
+        .expect("the recording starts");
+        assert_eq!(asked, [true, false], "with the tap first, then without it");
+        assert_eq!(stream, "microphone only", "the microphone is kept");
+        let failure = failure.expect("the reason is kept");
+        let problem = system_side_problem(&SystemSide { failure: Some(failure.clone()), ..SystemSide::default() }).expect("said at once");
+        assert_eq!(problem, SystemProblem::Failed(failure));
+        assert!(problem.reason().starts_with("the system audio tap did not open: system audio tap (OSStatus 560947818)"));
+        let missing = missing_with(RecordingMode::Call, &ON, Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
+        assert_eq!(missing.len(), 1);
+        assert_eq!((missing[0].kind, missing[0].sentence.as_str(), missing[0].other_side), (Kind::SystemAudio, SYSTEM_NOT_RECORDED, Some(OtherSide::Permission)));
+    }
+
+    #[test]
+    fn what_opens_with_its_tap_or_is_not_a_call_is_left_as_it_was() {
+        assert_eq!(open_keeping_mic(CALL, |_| Ok::<_, String>(7)).unwrap(), (7, None));
+        let mut asked = 0;
+        let note = open_keeping_mic(Streams { mic: false, system: true }, |_| {
+            asked += 1;
+            Err::<u8, _>("no tap".to_string())
+        });
+        assert_eq!(note.unwrap_err(), "no tap", "a voice note of this computer's sound has nothing without its tap");
+        assert_eq!(asked, 1);
+        let both = open_keeping_mic(CALL, |_| Err::<u8, _>("no device".to_string()));
+        assert_eq!(both.unwrap_err(), "no device", "the microphone alone could not open either: the recording's error");
+    }
+
+    #[test]
+    fn the_warning_stays_through_a_resume_and_a_try_until_the_other_side_is_heard() {
+        let mut watch = SystemWatch::default();
+        assert_eq!(watch.look(&empty(3_000)), SystemVerdict::Missing(SystemProblem::NoData));
+        assert_eq!(watch.look(&empty(4_000)), SystemVerdict::Same, "said once");
+        // A resume starts the counts afresh: the first seconds know nothing yet, and the warning stays.
+        for ms in [0, 1_000, 2_000] {
+            assert_eq!(watch.look(&empty(ms)), SystemVerdict::Same, "{ms} ms after the resume");
+            assert_eq!(watch.warning(), Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
+        }
+        assert_eq!(watch.look(&empty(3_000)), SystemVerdict::Same, "the same problem: no flicker");
+        // Try again: the warning stays; the look after it still finds no data and says to quit and reopen.
+        watch.retry();
+        assert_eq!(watch.look(&empty(500)), SystemVerdict::Same);
+        assert_eq!(watch.warning(), Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
+        assert_eq!(watch.look(&empty(3_000)), SystemVerdict::Missing(SystemProblem::NoData));
+        assert_eq!(watch.warning(), Some((OtherSide::Permission, SYSTEM_NOT_RECORDED_REOPEN)));
+        assert!(SYSTEM_NOT_RECORDED_REOPEN.contains("quit and reopen EchoLedger"));
+        assert_eq!(watch.look(&empty(4_000)), SystemVerdict::Same);
+        // Heard: the warning goes, and system audio counts as working.
+        assert_eq!(watch.look(&heard(5_000)), SystemVerdict::Recording);
+        assert_eq!(watch.warning(), None);
+        assert_eq!(watch.look(&heard(6_000)), SystemVerdict::Same);
+    }
+
+    #[test]
+    fn the_warning_never_hides_that_nothing_is_recorded_and_a_note_has_no_other_side() {
+        let none = Permissions { microphone: Access::Denied, system_audio: Access::Denied, ..ON };
+        let missing = missing_with(RecordingMode::Call, &none, Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
+        assert_eq!(missing.iter().map(|m| m.kind).collect::<Vec<_>>(), [Kind::Microphone, Kind::SystemAudio]);
+        assert!(missing.iter().all(|m| m.sentence.contains("nothing to record") && m.other_side.is_none()));
+        assert!(missing_with(RecordingMode::MicNote, &ON, Some((OtherSide::Permission, SYSTEM_NOT_RECORDED))).is_empty());
+        assert!(missing_with(RecordingMode::Call, &ON, None).is_empty());
+        assert!(!has_signal(&[0.0, DIGITAL_SILENCE, -DIGITAL_SILENCE]));
+        assert!(has_signal(&[0.0, 0.001]));
+    }
+}

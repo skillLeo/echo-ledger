@@ -66,6 +66,9 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not signed in to an EchoLedger server.")
 
+/** A server id that may go into a request path as one segment. */
+private val SAFE_ID = Regex("[A-Za-z0-9_-]{1,128}")
+
 const val HTTPS_ONLY = "The server address must use https://"
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
 const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. If this Wi-Fi has a sign-in page, open it first; " +
@@ -80,7 +83,14 @@ class ApiException(
     /** The plan an answer names (since v1.6.2: `promo_other_plan`). */
     val planKey: String? = null,
     /** The session a `409 session_active` names (Live Assist, 1.9.0-k). */
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    /** The name an answer gives (`409 list_exists`: the person's list of that name, contract 2.0.0-m). */
+    val name: String? = null,
+    /** The whole answer (since 2.0.0-l: `error_codes`, `accepts`, `until`), or null when it was not JSON. */
+    val body: kotlinx.serialization.json.JsonObject? = null,
+    /** A `403 budget_exceeded` (2.0.0-j): the minutes the transcripts need and the minutes left this month. */
+    val minutesNeeded: Long? = null,
+    val minutesLeft: Long? = null
 ) : IOException(message)
 
 /**
@@ -101,6 +111,20 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     }
 
     private fun url(path: String) = "$base/api/${path.trimStart('/')}"
+
+    /** The server's origin: scheme, host and port (what the picture cache is kept under). */
+    val origin: String by lazy {
+        base.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" } ?: base
+    }
+
+    /**
+     * A device, browser or passkey id from the server as one path segment: only `[A-Za-z0-9_-]{1,128}`, so an id can
+     * never reach another path (`../`, `/`, `?`, `#`, `%`).
+     */
+    private fun segment(id: String): String {
+        require(SAFE_ID.matches(id)) { "Not an id: the server sent something else." }
+        return id
+    }
 
     private fun request(path: String): Request.Builder {
         val builder = Request.Builder().url(url(path)).header("Accept", "application/json")
@@ -140,7 +164,21 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
         val plan = json?.get("plan")?.let { (it as? JsonPrimitive)?.contentOrNull }
         val session = json?.get("session_id")?.let { (it as? JsonPrimitive)?.contentOrNull }
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session)
+        val name = json?.get("name")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        val needed = json?.get("minutes_needed")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() }
+        val left = json?.get("minutes_left")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() }
+        throw ApiException(
+            resp.code,
+            message ?: "Request failed (${resp.code})",
+            code,
+            retryAfter,
+            plan,
+            session,
+            name,
+            body = json,
+            minutesNeeded = needed,
+            minutesLeft = left
+        )
     }
 
     private val jsonType = "application/json".toMediaType()
@@ -520,9 +558,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$sessionId/transcripts").post(body).build(), null as KSerializer<Unit>?)
     }
 
-    suspend fun library(since: String?, cursor: String?): LibraryResponse {
+    /** `GET /api/library`; [status] `recording` lists the calls still waiting for Keep or Discard, which a sync leaves out. */
+    suspend fun library(since: String?, cursor: String?, status: String? = null): LibraryResponse {
         val builder = url("library").toHttpUrl().newBuilder().addQueryParameter("limit", "100")
         since?.let { builder.addQueryParameter("since", it) }
+        status?.let { builder.addQueryParameter("status", it) }
         cursor?.let { builder.addQueryParameter("cursor", it) }
         val req = Request.Builder().url(builder.build()).header("Accept", "application/json")
             .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
@@ -670,16 +710,101 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         clearClient: Boolean = false,
         labels: List<String>? = null,
         keep: Boolean? = null,
-        title: String? = null
+        title: String? = null,
+        important: Boolean? = null
     ) {
         val body = buildJsonObject {
             title?.let { put("title", it) }
             pinned?.let { put("pinned", it) }
+            important?.let { put("important", it) }
             keep?.let { put("keep", it) }
             if (clearClient) put("client_id", kotlinx.serialization.json.JsonNull) else clientId?.let { put("client_id", it) }
             labels?.let { list -> put("labels", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
         }.toString().toRequestBody(jsonType)
         call(request("sessions/$id").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    /**
+     * `PATCH /api/sessions/{id}` with the end of a call (contract 2.0.0-z): `ended_at` (ISO 8601 UTC) and `duration_ms`, so
+     * every device shows it waiting at once. The server keeps the first one (a retry is safe); an older one answers 200
+     * and stores nothing.
+     */
+    suspend fun endCall(sessionId: String, endedAt: String, durationMs: Long) {
+        val body = buildJsonObject {
+            put("ended_at", endedAt)
+            put("duration_ms", durationMs)
+        }.toString().toRequestBody(jsonType)
+        call(request("sessions/$sessionId").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    // ---- Lists (contract 2.0.0-m) ----------------------------------------------------------------------------------
+
+    private fun listPath(key: String) = "lists/" + java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20")
+
+    /** `GET /api/lists`: the person's lists in the chip row's order. */
+    suspend fun lists(): List<com.echoledger.mobile.data.ListDto> =
+        call(request("lists").get().build(), com.echoledger.mobile.data.ListsResponse.serializer())!!.data
+
+    /** `POST /api/lists`: an empty list at the end of the row, in [color] (`#rrggbb`). */
+    suspend fun createList(name: String, color: String?): com.echoledger.mobile.data.ListDto {
+        val body = buildJsonObject {
+            put("name", name)
+            color?.let { put("color", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("lists").post(body).build(), com.echoledger.mobile.data.ListResponse.serializer())!!.data
+    }
+
+    /** `PATCH /api/lists/{key}`: a new name (on every recording of the person at once) and/or colour. */
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): com.echoledger.mobile.data.ListDto {
+        val body = buildJsonObject {
+            name?.let { put("name", it) }
+            color?.let { put("color", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request(listPath(key)).patch(body).build(), com.echoledger.mobile.data.ListResponse.serializer())!!.data
+    }
+
+    /** `DELETE /api/lists/{key}`: the label comes off every recording and the list goes; the recordings stay. */
+    suspend fun deleteList(key: String): com.echoledger.mobile.data.ListDeletedAnswer =
+        call(request(listPath(key)).delete().build(), com.echoledger.mobile.data.ListDeletedAnswer.serializer())!!
+
+    /** `PUT /api/lists/order`: every list's key once, in the new order. */
+    suspend fun orderLists(keys: List<String>): List<com.echoledger.mobile.data.ListDto> {
+        val body = buildJsonObject {
+            put("keys", buildJsonArray { keys.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+        }.toString().toRequestBody(jsonType)
+        return call(request("lists/order").put(body).build(), com.echoledger.mobile.data.ListsResponse.serializer())!!.data
+    }
+
+    // ---- Saved views (contract 2.0.0-p) ----------------------------------------------------------------------------
+
+    /** `GET /api/views`: the person's views in their order, and their version. */
+    suspend fun views(): com.echoledger.mobile.data.SavedViewsAnswer =
+        call(request("views").get().build(), com.echoledger.mobile.data.SavedViewsAnswer.serializer())!!
+
+    /** `POST /api/views`: a new view at the end of My views; the same [body]'s `client_ref` again answers the one it made. */
+    suspend fun createView(body: kotlinx.serialization.json.JsonObject): com.echoledger.mobile.data.SavedViewAnswer = call(
+        request("views").post(body.toString().toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SavedViewAnswer.serializer()
+    )!!
+
+    /** `PATCH /api/views/{id}`: the fields in [body] change, the others stay. */
+    suspend fun updateView(id: String, body: kotlinx.serialization.json.JsonObject): com.echoledger.mobile.data.SavedViewAnswer = call(
+        request("views/" + java.net.URLEncoder.encode(id, "UTF-8")).patch(body.toString().toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SavedViewAnswer.serializer()
+    )!!
+
+    /** `DELETE /api/views/{id}`. */
+    suspend fun deleteView(id: String): com.echoledger.mobile.data.SavedViewDeleted = call(
+        request("views/" + java.net.URLEncoder.encode(id, "UTF-8")).delete().build(),
+        com.echoledger.mobile.data.SavedViewDeleted.serializer()
+    )!!
+
+    /** `PUT /api/views/order`: every view's id once, in the new order. */
+    suspend fun orderViews(ids: List<String>): com.echoledger.mobile.data.SavedViewsAnswer {
+        val body = buildJsonObject {
+            put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+        }.toString().toRequestBody(jsonType)
+        return call(request("views/order").put(body).build(), com.echoledger.mobile.data.SavedViewsAnswer.serializer())!!
     }
 
     /** `POST /api/sessions/bulk` (since v1.1): one action for up to 200 recordings; how many changed. */
@@ -692,6 +817,26 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         }.toString().toRequestBody(jsonType)
         return call(request("sessions/bulk").post(body).build(), BulkAnswer.serializer())!!.changed
     }
+
+    /** `POST /api/sessions/{id}/transcribe` (2.0.0-j): starts the first transcript of an audio-only recording. */
+    suspend fun transcribeSession(sessionId: String): com.echoledger.mobile.data.SessionTranscribeAnswer = call(
+        request("sessions/$sessionId/transcribe").post("{}".toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SessionTranscribeAnswer.serializer()
+    )!!
+
+    private fun idsBody(ids: List<String>) = buildJsonObject {
+        put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+    }.toString().toRequestBody(jsonType)
+
+    /** `POST /api/sessions/transcribe-estimate` (2.0.0-j): the plan minutes transcribing [ids] would use; no side effects. */
+    suspend fun transcribeEstimate(ids: List<String>): com.echoledger.mobile.data.TranscribeEstimateAnswer = call(
+        request("sessions/transcribe-estimate").post(idsBody(ids)).build(),
+        com.echoledger.mobile.data.TranscribeEstimateAnswer.serializer()
+    )!!
+
+    /** `POST /api/sessions/transcribe` (2.0.0-j): "Transcribe selected", all or nothing for the month's minutes. */
+    suspend fun transcribeSessions(ids: List<String>): com.echoledger.mobile.data.TranscribeManyAnswer =
+        call(request("sessions/transcribe").post(idsBody(ids)).build(), com.echoledger.mobile.data.TranscribeManyAnswer.serializer())!!
 
     /** `POST /api/sessions/export` (since v1.1): the finished transcripts of many recordings in one zip file. */
     suspend fun exportSessions(ids: List<String>, format: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
@@ -743,7 +888,7 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("clients/$id").patch(body).build(), ClientResponse.serializer())!!.data
     }
 
-    /** `DELETE /api/clients/{id}`: its recordings go to the Inbox, its subfolders up a level. */
+    /** `DELETE /api/clients/{id}`: its recordings go to No project, its subfolders up a level. */
     suspend fun deleteProject(id: String): DeletedProjectAnswer =
         call(request("clients/$id").delete().build(), DeletedProjectAnswer.serializer())!!
 
@@ -912,6 +1057,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("clients/$id/ask").post(body).build(), com.echoledger.mobile.data.AskResponse.serializer())!!.data
     }
 
+    /** `POST /api/sessions/{id}/ask` (since 2.0.0-o): Ask about one recording; the same answer as a project's. */
+    suspend fun askRecording(id: String, question: String, language: String): com.echoledger.mobile.data.AskAnswerDto =
+        askAt("sessions/$id/ask", question, language)
+
+    /** `POST /api/ask` (since 2.0.0-o): Ask across all of the person's own recordings. */
+    suspend fun askEverywhere(question: String, language: String): com.echoledger.mobile.data.AskAnswerDto =
+        askAt("ask", question, language)
+
+    private suspend fun askAt(path: String, question: String, language: String): com.echoledger.mobile.data.AskAnswerDto {
+        val body = buildJsonObject {
+            put("question", question)
+            put("language", language)
+        }.toString().toRequestBody(jsonType)
+        return call(request(path).post(body).build(), com.echoledger.mobile.data.AskResponse.serializer())!!.data
+    }
+
     /** `GET /api/clients/{id}/bundle`: "Copy for AI" text. */
     suspend fun bundle(id: String, notes: Int = 5): String =
         call(request("clients/$id/bundle?notes=$notes").get().build(), com.echoledger.mobile.data.BundleResponse.serializer())!!.data.text
@@ -988,7 +1149,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return liveHttp.newCall(req)
     }
 
-    /** The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere. */
+    /**
+     * The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere,
+     * and a profile picture is read from it alone.
+     */
     private val liveHttp: OkHttpClient by lazy { http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
 
     /** `POST /api/assist/sessions/{id}/token`: new relay grant (tokens last at most 15 minutes). */
@@ -1107,12 +1271,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     /** `PATCH /api/devices/{id}` (since v1.6): a new name for one of this person's devices. */
     suspend fun renameDevice(id: String, name: String) {
         val body = buildJsonObject { put("name", name.trim().take(60)) }.toString().toRequestBody(jsonType)
-        call(request("devices/$id").patch(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
+        call(request("devices/${segment(id)}").patch(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
     }
 
     /** `DELETE /api/devices/{id}` (since v1.1): revokes another paired device. */
     suspend fun revokeDevice(id: String) {
-        call(request("devices/$id").delete().build(), null as KSerializer<Unit>?)
+        call(request("devices/${segment(id)}").delete().build(), null as KSerializer<Unit>?)
     }
 
     /** `POST /api/vocabulary/keyterms`: for the client, or for every recording without one. */
@@ -1123,6 +1287,158 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         }.toString().toRequestBody(jsonType)
         call(request("vocabulary/keyterms").post(body).build(), null as KSerializer<Unit>?)
     }
+
+    // ---- Account and security from the apps (contract 2.0.0-l) -------------------------------------------------
+
+    private fun jsonBody(build: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) =
+        buildJsonObject(build).toString().toRequestBody(jsonType)
+
+    private suspend fun noAnswer(req: Request) {
+        call(req, null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
+    /** `GET /api/account/security`: the ways in, browsers, devices of every workspace and the latest events. */
+    suspend fun accountSecurity(): com.echoledger.mobile.data.AccountSecurityDto =
+        call(request("account/security").get().build(), com.echoledger.mobile.data.AccountSecurityDto.serializer())!!
+
+    /** `POST /api/account/proof-code` → 202: a 6-digit code to the current address, for an account without a password or two-step. */
+    suspend fun sendProofCode() = noAnswer(request("account/proof-code").post("{}".toRequestBody(jsonType)).build())
+
+    /** `PATCH /api/account {"name"}`: the account as it is now. */
+    suspend fun updateName(name: String): com.echoledger.mobile.data.AccountDto =
+        call(request("account").patch(jsonBody { put("name", name.trim()) }).build(), com.echoledger.mobile.data.AccountDto.serializer())!!
+
+    /** `PATCH /api/account {language}` (BE-06): the account's language, `en` or `ur`, for every device. */
+    suspend fun updateLanguage(language: String): com.echoledger.mobile.data.AccountDto =
+        call(request("account").patch(jsonBody { put("language", language) }).build(), com.echoledger.mobile.data.AccountDto.serializer())!!
+
+    /** `POST /api/account/avatar`, multipart `image` (a JPEG made on the phone, at most 5 MB). */
+    suspend fun uploadAvatar(jpeg: ByteArray): com.echoledger.mobile.data.AvatarDto {
+        val body = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("image", "avatar.jpg", jpeg.toRequestBody("image/jpeg".toMediaType()))
+            .build()
+        return call(request("account/avatar").post(body).build(), com.echoledger.mobile.data.AvatarDto.serializer())!!
+    }
+
+    /** `DELETE /api/account/avatar` → 204. */
+    suspend fun removeAvatar() = noAnswer(request("account/avatar").delete().build())
+
+    /**
+     * A person's picture from its signed address (no token: the signature is the permission), on this server only;
+     * null when the signature expired (403) or the version was replaced (404): the caller keeps its copy or initials.
+     */
+    suspend fun avatarImage(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        if (!onServer(url)) return@withContext null
+        val req = Request.Builder().url(url).get().build()
+        // Never a redirect: a picture is read from this server or not at all.
+        liveHttp.newCall(req).execute().use { resp -> if (resp.isSuccessful) resp.body.bytes() else null }
+    }
+
+    /** `POST /api/account/email {"email", …proof}` → 202: the address waiting for its code. */
+    suspend fun startEmailChange(email: String, proof: com.echoledger.mobile.data.Proof): com.echoledger.mobile.data.PendingEmailDto = call(
+        request("account/email").post(
+            jsonBody {
+                put("email", email.trim())
+                proof.into(this)
+            }
+        ).build(),
+        com.echoledger.mobile.data.PendingEmailDto.serializer()
+    )!!
+
+    /** `POST /api/account/email/confirm {"code"}`: the account with its new address. */
+    suspend fun confirmEmailChange(code: String): com.echoledger.mobile.data.AccountDto = call(
+        request("account/email/confirm").post(jsonBody { put("code", code.trim()) }).build(),
+        com.echoledger.mobile.data.AccountDto.serializer()
+    )!!
+
+    /** `DELETE /api/account/email` → 204: the waiting change is cancelled. */
+    suspend fun cancelEmailChange() = noAnswer(request("account/email").delete().build())
+
+    /**
+     * `PUT /api/account/password` → 204. [current] when the account has a password; an account made with Google sets
+     * its first one with [proof] (an email code or an authenticator code). With two-step on, [proof] carries the code.
+     */
+    suspend fun changePassword(current: String?, new: String, proof: com.echoledger.mobile.data.Proof?, signOutOthers: Boolean) = noAnswer(
+        request("account/password").put(
+            jsonBody {
+                if (current.isNullOrEmpty()) put("current", kotlinx.serialization.json.JsonNull) else put("current", current)
+                put("new", new)
+                put("sign_out_others", signOutOthers)
+                proof?.copy(password = null)?.into(this)
+            }
+        ).build()
+    )
+
+    /** `PATCH /api/account/devices/{id} {"name"}`: a device of any of the person's workspaces. */
+    suspend fun renameAccountDevice(id: String, name: String) =
+        noAnswer(request("account/devices/${segment(id)}").patch(jsonBody { put("name", name.trim()) }).build())
+
+    /** `DELETE /api/account/devices/{id}` → 204 (`409 current_device` for this phone). */
+    suspend fun signOutAccountDevice(id: String) = noAnswer(request("account/devices/${segment(id)}").delete().build())
+
+    /** `DELETE /api/account/browsers/{id}` → 204. */
+    suspend fun signOutBrowser(id: String) = noAnswer(request("account/browsers/${segment(id)}").delete().build())
+
+    /** `DELETE /api/account/google {…proof}` → 204 (`409 last_sign_in_method`). */
+    suspend fun unlinkGoogle(proof: com.echoledger.mobile.data.Proof) =
+        noAnswer(request("account/google").delete(jsonBody { proof.into(this) }).build())
+
+    /** `POST /api/account/passkeys/options {…proof}`: the creation options for Credential Manager (5 minutes). */
+    suspend fun passkeyOptions(proof: com.echoledger.mobile.data.Proof): com.echoledger.mobile.data.PasskeyOptionsDto = call(
+        request("account/passkeys/options").post(jsonBody { proof.into(this) }).build(),
+        com.echoledger.mobile.data.PasskeyOptionsDto.serializer()
+    )!!
+
+    /** `POST /api/account/passkeys {"ceremony", "name", "credential"}` → 201. */
+    suspend fun savePasskey(
+        ceremony: String,
+        name: String,
+        credential: kotlinx.serialization.json.JsonObject
+    ): com.echoledger.mobile.data.AddedPasskeyDto = call(
+        request("account/passkeys").post(
+            jsonBody {
+                put("ceremony", ceremony)
+                put("name", name.trim())
+                put("credential", credential)
+            }
+        ).build(),
+        com.echoledger.mobile.data.AddedPasskeyDto.serializer()
+    )!!
+
+    /** `PATCH /api/account/passkeys/{id} {"name"}`. */
+    suspend fun renamePasskey(id: String, name: String) =
+        noAnswer(request("account/passkeys/${segment(id)}").patch(jsonBody { put("name", name.trim()) }).build())
+
+    /** `DELETE /api/account/passkeys/{id} {…proof}` → 204. */
+    suspend fun removePasskey(id: String, proof: com.echoledger.mobile.data.Proof) =
+        noAnswer(request("account/passkeys/${segment(id)}").delete(jsonBody { proof.into(this) }).build())
+
+    /** `POST /api/account/two-factor {…proof}`: the secret to add to an authenticator app (nothing saved yet). */
+    suspend fun startTwoFactor(proof: com.echoledger.mobile.data.Proof): com.echoledger.mobile.data.TwoFactorSetupDto = call(
+        request("account/two-factor").post(jsonBody { proof.into(this) }).build(),
+        com.echoledger.mobile.data.TwoFactorSetupDto.serializer()
+    )!!
+
+    /** `POST /api/account/two-factor/confirm {"ceremony", "code"}`: two-step is on; the recovery codes, shown once. */
+    suspend fun confirmTwoFactor(ceremony: String, code: String): com.echoledger.mobile.data.RecoveryCodesDto = call(
+        request("account/two-factor/confirm").post(
+            jsonBody {
+                put("ceremony", ceremony)
+                put("code", code.trim().replace(" ", ""))
+            }
+        ).build(),
+        com.echoledger.mobile.data.RecoveryCodesDto.serializer()
+    )!!
+
+    /** `POST /api/account/two-factor/recovery-codes {"otp"}`: new codes; the old ones stop working. */
+    suspend fun newRecoveryCodes(otp: String): com.echoledger.mobile.data.RecoveryCodesDto = call(
+        request("account/two-factor/recovery-codes").post(jsonBody { com.echoledger.mobile.data.Proof(otp = otp).into(this) }).build(),
+        com.echoledger.mobile.data.RecoveryCodesDto.serializer()
+    )!!
+
+    /** `DELETE /api/account/two-factor {"otp"}` → 204 (an authenticator or recovery code, never a password alone). */
+    suspend fun turnOffTwoFactor(otp: String) =
+        noAnswer(request("account/two-factor").delete(jsonBody { com.echoledger.mobile.data.Proof(otp = otp).into(this) }).build())
 }
 
 /** File names of exports (`Content-Disposition`), safe for the phone's storage. */

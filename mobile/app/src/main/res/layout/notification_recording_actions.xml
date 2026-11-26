@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The recording notification's expanded view (since v1.3): title, detail and the control pill's four buttons. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rec_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -12,7 +13,7 @@
         style="@style/TextAppearance.Compat.Notification.Title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxLines="1"
+        android:maxLines="2"
         android:ellipsize="end" />
 
     <TextView
@@ -23,17 +24,22 @@
         android:maxLines="2"
         android:ellipsize="end" />
 
+    <!-- At least 48 dp (the touch target); taller when the text is (Urdu at Largest with a large phone font). Not
+         aligned on baselines: a button of two lines would be pushed down past the row. -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
         android:layout_marginTop="6dp"
+        android:baselineAligned="false"
         android:orientation="horizontal">
 
         <TextView
             android:id="@+id/rec_pause"
             style="@style/TextAppearance.Compat.Notification.Info"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_weight="1"
             android:gravity="center"
             android:text="Pause"
@@ -43,7 +49,8 @@
             android:id="@+id/rec_stop"
             style="@style/TextAppearance.Compat.Notification.Info"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_weight="1"
             android:gravity="center"
             android:text="Stop"
@@ -53,7 +60,8 @@
             android:id="@+id/rec_captions"
             style="@style/TextAppearance.Compat.Notification.Info"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_weight="1"
             android:gravity="center"
             android:text="Captions"
@@ -63,7 +71,8 @@
             android:id="@+id/rec_discard"
             style="@style/TextAppearance.Compat.Notification.Info"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_weight="1"
             android:gravity="center"
             android:text="Discard"

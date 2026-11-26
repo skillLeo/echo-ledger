@@ -7,6 +7,7 @@ import { formatWhen } from "../../lib/format";
 import { DownloadIcon } from "../../components/Icons";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { StateBanner } from "../../components/StateBanner";
+import { t } from "../../i18n";
 
 /** Where updates stand, kept current by `update:status`; null until the core answered. */
 export function useUpdateStatus(): [UpdateStatus | null, (s: UpdateStatus) => void] {
@@ -27,21 +28,24 @@ export function useUpdateStatus(): [UpdateStatus | null, (s: UpdateStatus) => vo
 export function updateLine(status: UpdateStatus): string {
   switch (status.phase) {
     case "checking":
-      return "Checking for updates…";
+      return t("Checking for updates…");
     case "downloading":
-      return `Downloading EchoLedger ${status.version ?? ""}${status.progress !== null ? ` · ${status.progress}%` : "…"}`;
+      return status.progress !== null
+        ? t("Downloading EchoLedger :version · :progress%", { version: status.version ?? "", progress: status.progress })
+        : t("Downloading EchoLedger :version…", { version: status.version ?? "" });
     case "ready":
-      return `Update ready — EchoLedger ${status.version}. Restart to install it, or it installs the next time EchoLedger starts.`;
+      return t("Update ready — EchoLedger :version. Restart to install it, or it installs the next time EchoLedger starts.", { version: String(status.version) });
     case "up_to_date":
     case "failed":
     case "unavailable":
       return status.message ?? "";
     default:
-      return "EchoLedger looks for updates when it starts and every 6 hours.";
+      return t("EchoLedger looks for updates when it starts and every 6 hours.");
   }
 }
 
-export const RECORDING_BLOCKS = "Stop the recording first: EchoLedger restarts to install the update.";
+/** Why Restart waits: the recording would stop (in the window's language). */
+export const recordingBlocks = (): string => t("Stop the recording first: EchoLedger restarts to install the update.");
 
 /** Settings → About: the version, Check for updates, and Restart once an update is ready. */
 export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
@@ -74,7 +78,7 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
         </div>
         <span className="spacer" />
         {status.phase === "ready" ? (
-          <button type="button" className="btn primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>
+          <button type="button" className="btn primary" disabled={!!appStatus.recording} title={appStatus.recording ? recordingBlocks() : undefined} onClick={() => void install()}>
             Restart
           </button>
         ) : (
@@ -82,9 +86,31 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
         )}
       </div>
       {status.phase === "ready" && status.notes && <p className="small muted update-notes">{status.notes}</p>}
-      {status.phase === "ready" && appStatus.recording && <p className="small muted">{RECORDING_BLOCKS}</p>}
+      {status.phase === "ready" && appStatus.recording && <p className="small muted">{recordingBlocks()}</p>}
       {error && <div className="notice error small" role="alert">{error}</div>}
     </div>
+  );
+}
+
+/**
+ * UX-20: "Restart to update" at the end of the title row once an update is downloaded (like VS Code's Update button);
+ * nothing otherwise. Not while recording: it says why instead.
+ */
+export function RestartToUpdate({ appStatus, notify }: { appStatus: AppStatus; notify: Notify }) {
+  const [status] = useUpdateStatus();
+  if (status?.phase !== "ready" || !status.version) return null;
+  const install = async () => {
+    try {
+      await api.installUpdate();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  return (
+    <button type="button" className="el-button el-button--secondary el-button--sm el-titlerow__update" disabled={!!appStatus.recording}
+      title={appStatus.recording ? recordingBlocks() : `Restart to install EchoLedger ${status.version}`} onClick={() => void install()}>
+      <span>Restart to update</span>
+    </button>
   );
 }
 
@@ -105,7 +131,7 @@ export function UpdateBanner({ appStatus, notify, onOpen }: { appStatus: AppStat
     <StateBanner id="update-ready" slot="update-ready" remember state={status.version} tone="accent" testId="update-banner" role="status" icon={<DownloadIcon size={16} />}
       onOpen={onOpen} openLabel={`Update ready: EchoLedger ${status.version}. Open the updates`}
       actions={<>
-        <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart</button>
+        <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? recordingBlocks() : undefined} onClick={() => void install()}>Restart</button>
         <button type="button" className="btn compact ghost" onClick={() => { setLater(status.version); notify("The update installs the next time EchoLedger starts.", false, NO_TARGET); }}>Later</button>
       </>}>
       <span><b>Update ready</b> — EchoLedger {status.version}</span>

@@ -37,11 +37,27 @@
         default => 'outline',
     };
     $planUrl = EditProfile::settingsUrl('plan');
+    // BE-06: the person's photo, else their initials in their colour (avatar_color); since DES-08 the new design draws
+    // both with the one avatar component.
+    $photo = \App\Services\Accounts\Avatars::of($user)['avatar_url'];
+    $v2 = \App\Filament\Support\ConsoleV2::any();
     $label = "{$name}, {$user->email}, {$plan->name} plan".($expires !== null && $plan->key !== 'free' ? ', paid until '.Formats::longDate($expires) : '').'. Opens plan and usage.';
+    // FIX-06: in the new console the card's name is the words it shows, in their order, then where it leads (voice
+    // control users say what they see). A line's own full stop goes, so the name never reads "…X.. Opens".
+    if ($v2) {
+        $label = implode(', ', array_filter([$name, $user->email, $plan->name, rtrim((string) $line, '.'), rtrim((string) $teamLine, '.')])).'. '.__('Opens plan and billing.');
+    }
 @endphp
 <div class="el-pcard" data-profile-card>
     <a href="{{ $planUrl }}" class="el-pcard-body" aria-label="{{ $label }}">
-        <img class="el-pcard-avatar" src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
+        @if ($v2)
+            {{-- DES-08: the one avatar component, its initials drawn by CSS so the link's text stays the name and email. --}}
+            <x-el.avatar :person="$user" size="xl" :drawn="true" />
+        @elseif ($photo !== null)
+            <img class="el-pcard-avatar" src="{{ $photo }}" alt="" aria-hidden="true">
+        @else
+            <img class="el-pcard-avatar" src="{{ InitialsAvatarProvider::dataUri($name) }}" alt="" aria-hidden="true">
+        @endif
         <span class="el-pcard-text">
             <span class="el-pcard-name">{{ $name }}</span>
             <span class="el-pcard-email">{{ $user->email }}</span>
@@ -53,6 +69,6 @@
         </span>
     </a>
     @if ($button !== null)
-        <a href="{{ UpgradeFlow::chooseUrl($context->higherPlans()[0]->key ?? null) }}" class="el-btn {{ $button === 'primary' ? 'el-btn-primary' : 'el-btn-outline' }}" data-upgrade="{{ $button }}">Upgrade</a>
+        <a href="{{ UpgradeFlow::chooseUrl($context->higherPlans()[0]->key ?? null) }}" class="el-btn {{ $button === 'primary' ? 'el-btn-primary' : 'el-btn-outline' }}" data-upgrade="{{ $button }}">{{ __('Upgrade') }}</a>
     @endif
 </div>

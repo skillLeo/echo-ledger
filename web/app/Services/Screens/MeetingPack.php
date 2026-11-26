@@ -235,7 +235,7 @@ final class MeetingPack
                 $face = '@font-face{font-family:"'.$font.'";src:url(data:font/woff2;base64,'.base64_encode((string) file_get_contents($file)).') format("woff2");'
                     .'font-weight:400 700;font-display:block;unicode-range:'.self::ARABIC_SCRIPT_RANGE.'}';
             }
-            $title = $session->displayTitle();
+            $title = $session->outsideTitle();
             fwrite($out, '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
                 .'<meta name="robots" content="noindex"><title>'.$e($title).'</title><style>'.$face
                 .'body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;color:#111;max-width:760px;margin:32px auto;padding:0 20px}'
@@ -300,7 +300,7 @@ final class MeetingPack
         // Pictures and audio are added from files, read when the zip closes; they are deleted right after.
         $temp = [];
         try {
-            $md = '# '.TranscriptExporter::mdEscape($session->displayTitle())."\n\n";
+            $md = '# '.TranscriptExporter::mdEscape($session->outsideTitle())."\n\n";
             foreach ($this->facts($session, $lines, $screens->count()) as $name => $value) {
                 $md .= '- **'.$name.':** '.TranscriptExporter::mdEscape($value)."\n";
             }
@@ -380,7 +380,7 @@ final class MeetingPack
     private function screensTable(CaptureSession $session, Collection $screens, array $lines): string
     {
         $cell = fn (?string $v): string => $v === null || trim($v) === '' ? '—' : str_replace(["\r\n", "\n", "\r"], ' / ', TranscriptExporter::mdEscape(trim($v)));
-        $out = ['# Screens of '.TranscriptExporter::mdEscape($session->displayTitle()), '',
+        $out = ['# Screens of '.TranscriptExporter::mdEscape($session->outsideTitle()), '',
             '| # | Time | File | Description | What was said |', '|---|---|---|---|---|'];
         foreach ($screens as $i => $screen) {
             $name = self::imageName($screen, $i + 1, $screens->count());
@@ -405,7 +405,7 @@ final class MeetingPack
             $out[] = self::AI_NOTE;
             $out[] = '';
         }
-        $out[] = $session->displayTitle();
+        $out[] = $session->outsideTitle();
         foreach ($this->facts($session, $lines, $screens->count()) as $name => $value) {
             $out[] = $name.': '.$value;
         }

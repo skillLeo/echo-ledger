@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -177,13 +178,65 @@ private tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (th
     else -> null
 }
 
-/** Hides the window's content in Recents and blocks screenshots and screen recording while [secure] is true. */
-fun Window.applySecureScreen(secure: Boolean) {
-    if (secure) {
+/**
+ * Who wants FLAG_SECURE on one window: Block screenshots of EchoLedger ([lock], the app lock's "hide content" until
+ * 2.0.5) and each secret screen showing now ([screens], the two-step key and the recovery codes). The flag is on while
+ * any of them wants it, so a secret screen closing never clears the block, and turning the block off never uncovers a
+ * secret screen.
+ */
+internal class SecureHolds {
+    var lock = false
+    var screens = 0
+    val wanted: Boolean get() = lock || screens > 0
+}
+
+private val holdsByWindow = java.util.WeakHashMap<Window, SecureHolds>()
+
+/** This window's [SecureHolds] (main thread only, like the window itself). */
+private val Window.secureHolds: SecureHolds get() = holdsByWindow.getOrPut(this) { SecureHolds() }
+
+private fun Window.refreshSecure() {
+    if (secureHolds.wanted) {
         setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
     } else {
         clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
+}
+
+/** Hides the window's content in Recents and blocks screenshots and screen recording while [secure] is true. */
+fun Window.applySecureScreen(secure: Boolean) {
+    secureHolds.lock = secure
+    refreshSecure()
+}
+
+/** A secret screen holds FLAG_SECURE on this window until the returned release is called (once). */
+fun Window.holdSecure(): () -> Unit {
+    secureHolds.screens++
+    refreshSecure()
+    var released = false
+    return {
+        if (!released) {
+            released = true
+            secureHolds.screens = (secureHolds.screens - 1).coerceAtLeast(0)
+            refreshSecure()
+        }
+    }
+}
+
+/** While this is composed its window carries FLAG_SECURE: no screenshot, recording or Recents picture of a secret. */
+@Composable
+fun SecureWhileShown() {
+    val window = LocalContext.current.findActivity()?.window ?: return
+    DisposableEffect(window) {
+        val release = window.holdSecure()
+        onDispose { release() }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /** Neutral first frame while the stored settings load: background and brand mark, nothing else. */

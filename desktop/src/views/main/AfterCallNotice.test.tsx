@@ -8,7 +8,7 @@ import { resetClosedBanners } from "../../components/StateBanner";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
-const TEXT = "After a call now asks before transcribing. To transcribe every call as before, choose Always transcribe";
+const TEXT = "After each call now asks before transcribing. To transcribe every call as before, choose Transcribe every call";
 
 beforeEach(() => {
   resetTauriMock();
@@ -17,11 +17,11 @@ beforeEach(() => {
 });
 
 describe("After a call notice", () => {
-  it("says what changed once, with Always transcribe one tap away", async () => {
+  it("says what changed once, with Transcribe every call one tap away", async () => {
     const notify = vi.fn();
     render(<AfterCallNotice text={TEXT} notify={notify} />);
     expect(screen.getByTestId("after-call-notice")).toHaveTextContent(TEXT);
-    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe every call" }));
     await flushAsync();
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
     expect(notify).toHaveBeenCalledWith("Every call is now transcribed", false, NO_TARGET);

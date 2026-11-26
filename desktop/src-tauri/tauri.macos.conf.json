@@ -1,6 +1,15 @@
 {
   "bundle": {
     "targets": ["app", "dmg"],
+    "fileAssociations": [
+      {
+        "ext": ["m4a", "mp3", "wav", "aac", "ogg", "opus", "amr", "flac", "webm"],
+        "name": "Audio",
+        "description": "Audio to transcribe with EchoLedger",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
     "macOS": {
       "minimumSystemVersion": "14.4",
       "entitlements": "./Entitlements.plist"

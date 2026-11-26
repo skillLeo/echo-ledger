@@ -3,6 +3,12 @@
 // command palette search them (lib/settingsIndex.ts), and SettingsView.test.tsx keeps rows and entries equal both ways.
 // Ids, titles, options and keywords follow the shared settings registry, so the phone, the console and this app use
 // the same names in the same order.
+//
+// The entries' words are English data (search, ids and tests read them as they are). In the window's language they are
+// shown through the accessors below: setting(), titleV2(), titleOf(), pathOf(), breadcrumbOf() and optionLabel() give
+// them through t() (desktop Urdu, D3), so English is exactly as before and Urdu reads the catalogue's lines.
+
+import { language, t } from "../i18n";
 
 export type SettingKind = "page" | "switch" | "choice" | "segmented" | "slider" | "action" | "link" | "info" | "list" | "help";
 /** The headers of the Settings root, in order. */
@@ -13,6 +19,8 @@ export interface SettingOption {
   value: string;
   label: string;
   default?: boolean;
+  /** The label's own language when it isn't the window's (a language's name in that language). */
+  lang?: string;
 }
 
 export interface SettingRequires {
@@ -22,6 +30,12 @@ export interface SettingRequires {
   account?: boolean;
   /** Only while the server sends plans (entitlements). */
   plans?: boolean;
+  /** Only in a window with the rail (the rail · panel · page layout). */
+  rail?: boolean;
+  /** Only with zoom (UX-07, v21_zoom). */
+  zoom?: boolean;
+  /** Only where the app speaks Urdu too (v21_urdu). */
+  urdu?: boolean;
 }
 
 export interface SettingEntry {
@@ -114,8 +128,6 @@ export const SETTINGS: readonly SettingEntry[] = [
   // ---- Recording ----------------------------------------------------------------------------------------------------
   { id: "calls", title: "Calls & meetings", page: null, root: "Recording", kind: "page",
     keywords: ["call recording", "auto record", "meeting", "whatsapp call", "call"], ru: ["call", "kol", "call record", "mulaqat"], ur: ["کال", "ریکارڈنگ", "میٹنگ"] },
-  { id: "calls.auto", title: "Auto-record calls", page: "calls", section: "Record automatically", kind: "switch", resettable: true,
-    keywords: ["automatic", "record calls"], ru: ["khud record"], ur: ["خودکار ریکارڈ"] },
   ...CALL_APPS.map(([app, name]): SettingEntry => ({ id: `calls.app.${app}`, title: name, page: "calls", section: "Record automatically", kind: "switch", resettable: true,
     keywords: [name.toLowerCase(), "auto record"] })),
   { id: "calls.ask_unknown", title: "Ask about unknown apps", page: "calls", section: "Record automatically", kind: "switch", resettable: true,
@@ -123,9 +135,16 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["unknown app", "unrecognised app", "prompt", "ask me"] },
   { id: "calls.browser_tabs", title: "Read browser tab addresses", page: "calls", section: "Record automatically", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["google meet browser", "tab", "url"] },
-  { id: "calls.after", title: "After a call", page: "calls", section: "After a call", kind: "choice", resettable: true,
-    options: opts(["ask", "Ask me", true], ["always_transcribe", "Always transcribe"], ["always_audio", "Always save audio"]), keywords: ["keep", "save", "save audio", "transcribe", "discard", "ask before saving"], ru: ["baad mein", "save karo"], ur: ["کال کے بعد"] },
-  { id: "calls.skip_short", title: "Skip calls shorter than", page: "calls", section: "After a call", kind: "choice", resettable: true,
+  // The call choice (docs/v2/copy/call-choice.md): one choice of four, each with its help line. Don't record calls is the
+  // one switch for recording calls by themselves (autoMode off, afterEachCallOf); there is no separate Auto-record row.
+  { id: "calls.after", title: "After each call", page: "calls", section: "After each call", kind: "choice", resettable: true, aliases: ["After a call", "Auto-record calls"],
+    options: opts(["ask", "Ask me", true], ["always_transcribe", "Transcribe every call"], ["always_audio", "Save audio only"], ["off", "Don't record calls"]),
+    keywords: ["save", "save audio", "audio only", "transcribe", "delete", "ask before saving", "card after the call", "don't record", "automatic", "record calls", "auto record"],
+    ru: ["baad mein", "save karo", "khud record"], ur: ["ہر کال کے بعد", "کال کے بعد", "خودکار ریکارڈ"] },
+  { id: "calls.ask_when", title: "When to ask", page: "calls", section: "After each call", kind: "choice", resettable: true,
+    options: opts(["after", "After the call (recommended)", true], ["start", "At the start of the call"]),
+    keywords: ["ask at the start", "banner", "start of the call", "after the call"], ru: ["kab poochen"], ur: ["کب پوچھیں"] },
+  { id: "calls.skip_short", title: "Skip calls shorter than", page: "calls", section: "After each call", kind: "choice", resettable: true,
     options: opts(["0", "Never"], ["5", "5 seconds"], ["10", "10 seconds", true], ["20", "20 seconds"], ["30", "30 seconds"]),
     keywords: ["short calls", "skip", "minimum length"], ru: ["chhoti call"], ur: ["مختصر کال"] },
   { id: "calls.sites", title: "Call sites", page: "calls", section: "Websites", kind: "page", keywords: ["never record", "website rules", "browser"] },
@@ -207,9 +226,20 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["assist card", "answer card", "show this card in screen shares"], ru: ["card dikhao"], ur: ["کارڈ"] },
   { id: "share_privacy.captions", title: "Captions", page: "share_privacy", kind: "info",
     keywords: ["captions in screen share", "show captions in screen shares"], ru: ["captions dikhao"], ur: ["کیپشن"] },
-  { id: "share_privacy.hiding", title: "Other floating windows", page: "share_privacy", kind: "choice", resettable: true, aliases: ["Hide from screen sharing", "Hide EchoLedger from screen sharing"],
+  // Since 2.0.14 (FIX-01) the setting covers Live Translate only: the recording controls, the after-call card and the
+  // dictation box always show; the captions and the Live Assist card are shown only from their own window.
+  // FIX-01: the windows that always show in screen shares and screenshots (the dictation box is decision 8's exception).
+  { id: "share_privacy.always", title: "Recording controls", page: "share_privacy", kind: "info",
+    aliases: ["Recording controls & after-call card", "After-call card"],
+    keywords: ["always shown", "screenshots", "screen recording"], ru: ["hamesha dikhe"], ur: ["ہمیشہ دکھائی دے"] },
+  { id: "share_privacy.dictation", title: "Dictation box", page: "share_privacy", kind: "info",
+    keywords: ["always shown", "dictation", "your own words", "screenshots"], ru: ["dictation hamesha dikhe"], ur: ["ڈکٹیشن"] },
+  { id: "share_privacy.hiding", title: "Live Translate", page: "share_privacy", kind: "choice", resettable: true,
+    aliases: ["Other floating windows", "Hide live words", "Hide from screen sharing", "Hide EchoLedger from screen sharing"],
     options: opts(["all", "Hidden from screen shares", true], ["off", "Shown in screen shares"]),
-    keywords: ["show during screen share", "hide overlays", "recording controls", "dictation box"], ru: ["screen share mein chupao", "chupana"], ur: ["اسکرین شیئر میں چھپائیں"] },
+    // The help line (the call choice plan, lead decision): the OS has one flag for screen sharing and screenshots.
+    description: "Also hidden from your own screenshots",
+    keywords: ["live translate", "translation", "live words", "show during screen share", "screenshot", "screen capture"], ru: ["screen share mein chupao", "chupana", "tarjuma"], ur: ["اسکرین شیئر میں چھپائیں", "ترجمہ"] },
   { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge", "black box"], ru: ["haalat", "private"], ur: ["حالت", "نجی"] },
   { id: "share_privacy.old_windows", title: "On this Windows version", page: "share_privacy", kind: "choice", requires: { os: "windows" }, resettable: true,
     options: opts(["black_box", "Black box", true], ["show", "Show normally"]), keywords: ["black box", "older windows", "windows 10"], ru: ["purani windows", "kala dabba"], ur: ["پرانی ونڈوز"] },
@@ -220,9 +250,9 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "share_privacy.one_window", title: "I share one window or a tab", page: "share_privacy", section: "Meeting apps", kind: "switch", requires: { os: "macos" }, resettable: true,
     description: "EchoLedger stays on screen when you share your whole screen.",
     keywords: ["one window", "tab", "whole screen", "safety net"], ru: ["ek window", "tab"], ur: ["ایک ونڈو", "ٹیب"] },
-  { id: "share_privacy.demo", title: "Show in screen share for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
+  { id: "share_privacy.demo", title: "Show Live Translate for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
   { id: "share_privacy.hide_all", title: "Hide EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info",
-    keywords: ["shortcut", "hide windows", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao"], ur: ["ونڈوز چھپائیں", "چھپائیں"] },
+    keywords: ["shortcut", "hide windows", "hide echoledger windows now", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao", "windows dikhao"], ur: ["ونڈوز چھپائیں", "چھپائیں", "ونڈوز دکھائیں"] },
   { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"], ru: ["doosri screen"], ur: ["دوسری اسکرین"] },
   { id: "share_privacy.diagnostics", title: "Send diagnostics", page: "share_privacy", section: "Diagnostics", kind: "switch", resettable: true,
     description: "Sends each check's result with your system and app version to EchoLedger, never a picture or a window title.",
@@ -235,6 +265,15 @@ export const SETTINGS: readonly SettingEntry[] = [
     options: opts(["light", "Light", true], ["dark", "Dark"], ["grey", "Soft grey"]), keywords: ["sidebar colour", "menu"] },
   { id: "appearance.density", title: "Density", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["comfortable", "Comfortable", true], ["compact", "Compact"]), keywords: ["spacing", "compact", "dense"] },
+  { id: "appearance.compact_rail", title: "Compact rail (icons only)", page: "appearance", kind: "switch", requires: { rail: true }, resettable: true,
+    description: "The rail shows its icons without their names. Point at an icon to see its name.",
+    keywords: ["rail", "icons only", "hide names", "hide labels", "labels", "compact", "smaller"], ru: ["sirf icons", "naam chhupao"], ur: ["صرف آئیکن"] },
+  { id: "appearance.language", title: "Language", page: "appearance", kind: "segmented", requires: { urdu: true, account: true },
+    description: "The same on the web and the phone.", options: opts(["en", "English", true], ["ur", "اردو"]).map((o) => ({ ...o, lang: o.value })),
+    keywords: ["language", "urdu", "english", "translate", "right to left"], ru: ["zaban", "urdu", "angrezi"], ur: ["زبان", "اردو", "انگریزی"] },
+  { id: "appearance.zoom", title: "Zoom", page: "appearance", kind: "slider", requires: { zoom: true }, resettable: true,
+    description: "Zoom in and out, or back to 100%.",
+    keywords: ["zoom", "zoom in", "zoom out", "bigger", "smaller", "scale", "magnify", "actual size"], ru: ["bara karo", "chhota karo"], ur: ["زوم", "بڑا کریں"] },
   { id: "appearance.clock", title: "Times", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["12", "12-hour", true], ["24", "24-hour"]), keywords: ["clock", "time format", "am pm"], ru: ["waqt", "ghanta"], ur: ["وقت"] },
   { id: "appearance.design", title: "Design", page: "appearance", kind: "action",
@@ -269,9 +308,20 @@ export const SETTINGS: readonly SettingEntry[] = [
   ...SHORTCUT_ACTIONS.map(([action, title]): SettingEntry => ({ id: `shortcuts.global.${action}`, title, page: "shortcuts", section: "Global shortcuts", kind: "action", resettable: true, keywords: ["shortcut", "hotkey"] })),
   { id: "shortcuts.app", title: "In the app", page: "shortcuts", section: "In the app", kind: "list", keywords: ["keys", "search", "play pause", "find"] },
   { id: "app.autostart", title: "Start when I sign in", page: null, root: "App", kind: "switch", resettable: true, keywords: ["launch at login", "startup", "autostart", "open at login"] },
+  // FIX-11: the Mac's menu bar icon, its timer, and the Dock icon's number.
+  { id: "app.menu_bar_icon", title: "Show EchoLedger in the menu bar", description: "Shown while recording", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "status bar", "icon", "tray"], ru: ["menu bar icon"], ur: ["مینو بار"] },
+  { id: "app.menu_bar_timer", title: "Show timer in the menu bar", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["menu bar", "timer", "recording time", "clock"], ru: ["timer"], ur: ["ٹائمر"] },
+  // FIX-12: Windows' ✕.
+  { id: "app.on_close", title: "When I close the window", page: null, root: "App", kind: "choice", requires: { os: "windows" }, resettable: true,
+    keywords: ["close", "quit", "exit", "background", "tray", "notification area"], ru: ["band karo"], ur: ["بند کریں"] },
+  { id: "app.dock_badge", title: "Show count on the app icon", page: null, root: "App", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["dock", "badge", "count", "number", "app icon"], ru: ["dock ginti"], ur: ["ڈاک", "گنتی"] },
 
   // ---- Account ------------------------------------------------------------------------------------------------------
   { id: "profile", title: "Profile", page: null, root: "Account", kind: "page", requires: { account: true }, keywords: ["name", "email", "account", "me"], ru: ["naam", "mera account"], ur: ["پروفائل", "نام"] },
+  { id: "profile.picture", title: "Picture", page: "profile", kind: "action", requires: { account: true }, keywords: ["photo", "avatar", "profile picture", "change photo"], ru: ["tasveer", "photo"], ur: ["تصویر"] },
   { id: "profile.name", title: "Name", page: "profile", kind: "info", requires: { account: true }, keywords: ["change name"], ru: ["naam"], ur: ["نام"] },
   { id: "profile.email", title: "Email", page: "profile", kind: "info", requires: { account: true }, keywords: ["change email"], ru: ["email"], ur: ["ای میل"] },
   { id: "profile.workspace", title: "Workspace", page: "profile", kind: "info", requires: { account: true }, keywords: ["team", "role"], ru: ["team"], ur: ["ٹیم"] },
@@ -307,6 +357,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "security.two_step", title: "Two-step sign-in", page: "security", kind: "link", requires: { account: true },
     keywords: ["2fa", "two factor", "authenticator", "otp", "mfa", "2 step", "two step", "verification code"] },
   { id: "security.google", title: "Google sign-in", page: "security", kind: "info", requires: { account: true }, keywords: ["google", "gmail", "link google"], ru: ["google"] },
+  { id: "security.passkeys", title: "Passkeys", page: "security", section: "Passkeys", kind: "link", requires: { account: true }, keywords: ["passkey", "fingerprint", "face id", "webauthn"] },
   { id: "security.activity", title: "Sign-in activity", page: "security", kind: "page", requires: { account: true }, keywords: ["audit log", "recent activity", "history"] },
   { id: "security.signout_all", title: "Sign out everywhere", page: "security", kind: "action", requires: { account: true }, keywords: ["log out all devices", "logout everywhere"], ru: ["sab se logout"] },
 
@@ -319,7 +370,8 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["close account", "remove account", "delete account"], ru: ["account khatam", "account delete", "hatao"], ur: ["اکاؤنٹ ختم"] },
 
   // ---- Support ------------------------------------------------------------------------------------------------------
-  { id: "help", title: "Help", page: null, root: "Support", kind: "page", keywords: ["support", "help", "problem", "not working"], ru: ["madad", "masla"], ur: ["مدد"] },
+  { id: "help", title: "Help", page: null, root: "Support", kind: "page", description: "Guides, keyboard shortcuts, what's new and contact support",
+    keywords: ["support", "help", "problem", "not working"], ru: ["madad", "masla"], ur: ["مدد"] },
   { id: "help.mac_check", title: "Mac check", page: "help", kind: "page", requires: { os: "macos" }, keywords: ["macos permissions", "diagnostics", "report"] },
   { id: "about", title: "About", page: null, root: "Support", kind: "page", keywords: ["version", "app info"] },
   { id: "about.version", title: "Version", page: "about", kind: "info", keywords: ["version", "build"] },
@@ -340,16 +392,48 @@ export const SETTINGS: readonly SettingEntry[] = [
 
 const BY_ID = new Map(SETTINGS.map((e) => [e.id, e]));
 
-/** One entry by id (throws for an id that is not in the registry, so a typo fails in tests at once). */
+/** Titles that read differently in their place: their context key (i18n/context.ts), whose English is the title. */
+const TITLE_KEYS: Readonly<Record<string, string>> = {
+  "notifications.quiet_from": "settings_context.quiet_from",
+  "notifications.quiet_to": "settings_context.quiet_to",
+};
+/** Entries whose title is a name (a call app): the same in every language, as the app's own name is. */
+const NAMED = new Set(CALL_APPS.map(([app]) => `calls.app.${app}`));
+
+/** An entry's title in the window's language: a name as it is, a title read in its place by its context key. */
+export function shownTitle(entry: SettingEntry): string {
+  const own = BY_ID.get(entry.id) ?? entry;
+  return NAMED.has(own.id) ? own.title : t(TITLE_KEYS[own.id] ?? own.title);
+}
+
+/**
+ * An entry as the window shows it: in English the entry itself; in another language a copy whose title, title in the
+ * new look, description and options' labels are the catalogue's. An option named in its own language (lang: "اردو",
+ * "English") keeps its words. The id, page, kind, keywords and the rest stay as they are.
+ */
+function shown(entry: SettingEntry): SettingEntry {
+  if (language() === "en") return entry;
+  return {
+    ...entry,
+    title: shownTitle(entry),
+    ...(entry.titleV2 ? { titleV2: t(entry.titleV2) } : {}),
+    ...(entry.description ? { description: t(entry.description) } : {}),
+    ...(entry.options ? { options: entry.options.map((o) => (o.lang ? o : { ...o, label: t(o.label) })) } : {}),
+  };
+}
+
+/** One entry by id, in the window's language (throws for an id that is not in the registry, so a typo fails at once). */
 export function setting(id: string): SettingEntry {
   const entry = BY_ID.get(id);
   if (!entry) throw new Error(`No setting "${id}" in the registry`);
-  return entry;
+  return shown(entry);
 }
 
-/** The title the new look shows: its own when it has one ("Trash"), else the title. */
+/** The title the new look shows, in the window's language: its own when it has one ("Trash"), else the title. */
 export function titleV2(entry: SettingEntry): string {
-  return entry.titleV2 ?? entry.title;
+  // From the registry's own entry (a copy setting() gave is already in the window's language).
+  const own = BY_ID.get(entry.id) ?? entry;
+  return own.titleV2 ? t(own.titleV2) : shownTitle(own);
 }
 
 /** The entry, or none for an id that is not in the registry. */
@@ -357,7 +441,7 @@ export function findSetting(id: string): SettingEntry | undefined {
   return BY_ID.get(id);
 }
 
-/** The title of a setting: rows read it from here. */
+/** The title of a setting, in the window's language: rows read it from here. */
 export function titleOf(id: string): string {
   return setting(id).title;
 }
@@ -370,17 +454,21 @@ export function rootOf(entry: SettingEntry): RootSection {
   return current?.root ?? "";
 }
 
-/** `[root header, page title, sub-page title]`: where the entry lives; a page's own path ends with its title. */
-export function pathOf(entry: SettingEntry): string[] {
+/**
+ * `[root header, page title, sub-page title]`: where the entry lives, in the window's language; a page's own path ends
+ * with its title.
+ */
+export function pathOf(given: SettingEntry, say: (words: string) => string = t): string[] {
+  const entry = BY_ID.get(given.id) ?? given;
   const chain: string[] = [];
   let current: SettingEntry | undefined = entry.kind === "page" ? entry : entry.page ? BY_ID.get(entry.page) : undefined;
   while (current) {
-    chain.unshift(current.title);
+    chain.unshift(say(current.title));
     current = current.page ? BY_ID.get(current.page) : undefined;
   }
   const root = rootOf(entry);
-  if (entry.page === null && entry.kind !== "page") chain.push(entry.title);
-  return root ? [root, ...chain] : chain;
+  if (entry.page === null && entry.kind !== "page") chain.push(say(entry.title));
+  return root ? [say(root), ...chain] : chain;
 }
 
 /** How deep an entry is: a root row or root page 1, a row on a page 2, a row on a sub-page 3. */
@@ -394,11 +482,16 @@ export function depthOf(entry: SettingEntry): number {
   return depth;
 }
 
-/** The breadcrumb a search result shows: the path without its last segment when that is the title ("App › Appearance"). */
-export function breadcrumbOf(entry: SettingEntry): string {
-  const path = pathOf(entry);
+/**
+ * The breadcrumb a search result shows: the path without its last segment when that is the title ("App › Appearance"),
+ * in the window's language (`say`: the English, for the search index).
+ */
+export function breadcrumbOf(given: SettingEntry, say: (words: string) => string = t): string {
+  // Which segment goes is decided on the English path and title, then the rest is said in the window's language.
+  const entry = BY_ID.get(given.id) ?? given;
+  const path = pathOf(entry, (english) => english);
   if (path[path.length - 1] === entry.title) path.pop();
-  return path.join(" › ");
+  return path.map(say).join(" › ");
 }
 
 /** The page a result opens: the entry's own page for a page, else the page it sits on (null: the root). */

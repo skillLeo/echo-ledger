@@ -191,7 +191,10 @@ class VendorNamesTest {
         "v2_tr_key_field",
         // The v2 recording page's failure lines for the same step (classic's two sentences above, in Urdu too).
         "v2_rec_fail_needs_key",
-        "v2_rec_fail_own_key"
+        "v2_rec_fail_own_key",
+        // Settings v2's Plan & usage: the Free plan's line and its key row (classic's "Your Groq key", above).
+        "v2_pl_free_key",
+        "v2_pl_your_key"
     )
 
     /** Every text of the app's resources (strings, labels, descriptions) and manifests. */

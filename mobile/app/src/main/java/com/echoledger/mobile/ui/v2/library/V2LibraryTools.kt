@@ -69,15 +69,26 @@ sealed interface SelectionAction {
     data class Label(val label: String, val add: Boolean) : SelectionAction
     data class Pin(val on: Boolean) : SelectionAction
     data class Keep(val on: Boolean) : SelectionAction
+    data class Important(val on: Boolean) : SelectionAction
     data class Export(val format: String) : SelectionAction
+
+    /** Copy for AI: every selected recording's transcript for an AI chat, the note once. */
+    data object CopyForAi : SelectionAction
+
+    /** Transcribe the audio-only ones (2.0.0-j): the minutes are shown first. */
+    data object Transcribe : SelectionAction
     data class Rename(val title: String) : SelectionAction
     data object Delete : SelectionAction
 }
+
+/** The selection's export formats: classic's (Organise.EXPORT_FORMATS, in its order), then a Web page (.html). */
+val SELECTION_EXPORTS: List<String> = Organise.EXPORT_FORMATS.map { it.first } + "html"
 
 /** The export formats, in classic's order (Organise.EXPORT_FORMATS), with their names. */
 @Composable
 fun exportName(format: String): String = stringResource(
     when (format) {
+        "html" -> R.string.v2_rec_export_html
         "docx" -> R.string.v2_lib_fmt_docx
         "txt" -> R.string.v2_lib_fmt_txt
         "md" -> R.string.v2_lib_fmt_md
@@ -91,10 +102,18 @@ fun exportName(format: String): String = stringResource(
  * Which of Pin / Unpin and Keep forever / Allow auto clean-up the selection's ⋮ offers: only the one that applies, both
  * only when the selection is mixed (some pinned and some not).
  */
-data class OrganiseChoices(val pin: Boolean, val unpin: Boolean, val keep: Boolean, val unkeep: Boolean) {
+data class OrganiseChoices(
+    val pin: Boolean,
+    val unpin: Boolean,
+    val keep: Boolean,
+    val unkeep: Boolean,
+    /** Mark important unless all are, Unmark important unless none is (both when mixed). */
+    val important: Boolean = false,
+    val unimportant: Boolean = false
+) {
     companion object {
         /** Every action, for a selection whose recordings are not known. */
-        val ALL = OrganiseChoices(pin = true, unpin = true, keep = true, unkeep = true)
+        val ALL = OrganiseChoices(pin = true, unpin = true, keep = true, unkeep = true, important = true, unimportant = true)
 
         fun of(items: List<com.echoledger.mobile.data.LibraryItem>): OrganiseChoices {
             if (items.isEmpty()) return ALL
@@ -102,7 +121,9 @@ data class OrganiseChoices(val pin: Boolean, val unpin: Boolean, val keep: Boole
                 pin = items.any { !it.pinned },
                 unpin = items.any { it.pinned },
                 keep = items.any { !it.keep },
-                unkeep = items.any { it.keep }
+                unkeep = items.any { it.keep },
+                important = items.any { !it.important },
+                unimportant = items.any { it.important }
             )
         }
     }
@@ -124,7 +145,11 @@ fun SelectionBar(
     onClose: () -> Unit,
     onSelectAll: (Boolean) -> Unit,
     onAction: (SelectionAction) -> Unit,
-    choices: OrganiseChoices = OrganiseChoices.ALL
+    choices: OrganiseChoices = OrganiseChoices.ALL,
+    /** ⋮ › Add to list (D14 §3), when the person's lists are known. */
+    onAddToList: (() -> Unit)? = null,
+    /** ⋮ › Transcribe…, when some of the selection is kept as audio only. */
+    canTranscribe: Boolean = false
 ) {
     val c = EchoV2.colors
     var sheet by remember { mutableStateOf<String?>(null) }
@@ -161,11 +186,15 @@ fun SelectionBar(
                     if (exportOpen) {
                         // TODO-DS: a sub-menu in the shared menu component; until then Export ▸ swaps the menu for its formats.
                         SubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }
-                        Organise.EXPORT_FORMATS.forEach { (format, _) ->
+                        SELECTION_EXPORTS.forEach { format ->
                             MenuItem(EchoIcons.Export, exportName(format)) {
                                 close()
                                 onAction(SelectionAction.Export(format))
                             }
+                        }
+                        MenuItem(RecordingIcons.Copy, stringResource(R.string.v2_rec_copy_ai)) {
+                            close()
+                            onAction(SelectionAction.CopyForAi)
                         }
                         return@ProvidePageLook
                     }
@@ -180,7 +209,19 @@ fun SelectionBar(
                         close()
                         sheet = "export"
                     }
+                    if (canTranscribe) {
+                        MenuItem(EchoIcons.Transcribe, stringResource(R.string.v2_tx_menu)) {
+                            close()
+                            onAction(SelectionAction.Transcribe)
+                        }
+                    }
                     MenuHeader(stringResource(R.string.v2_lib_organise))
+                    onAddToList?.let { add ->
+                        MenuItem(EchoIcons.Label, stringResource(R.string.v2_lists_add_to)) {
+                            close()
+                            add()
+                        }
+                    }
                     if (choices.pin) {
                         MenuItem(EchoIcons.Pin, stringResource(R.string.v2_lib_pin)) {
                             close()
@@ -191,6 +232,18 @@ fun SelectionBar(
                         MenuItem(EchoIcons.Unpin, stringResource(R.string.v2_lib_unpin)) {
                             close()
                             onAction(SelectionAction.Pin(false))
+                        }
+                    }
+                    if (choices.important) {
+                        MenuItem(EchoIcons.Important, stringResource(R.string.v2_lib_mark_important)) {
+                            close()
+                            onAction(SelectionAction.Important(true))
+                        }
+                    }
+                    if (choices.unimportant) {
+                        MenuItem(EchoIcons.Important, stringResource(R.string.v2_lib_unmark_important)) {
+                            close()
+                            onAction(SelectionAction.Important(false))
                         }
                     }
                     if (choices.keep) {
@@ -232,12 +285,16 @@ fun SelectionBar(
         }
 
         "export" -> EchoBottomSheet(onDismiss = { sheet = null }, title = stringResource(R.string.v2_lib_export_as)) {
-            Organise.EXPORT_FORMATS.forEach { (format, _) ->
+            SELECTION_EXPORTS.forEach { format ->
                 EchoSettingRow(exportName(format), icon = EchoIcons.Export, onClick = {
                     sheet = null
                     onAction(SelectionAction.Export(format))
                 })
             }
+            EchoSettingRow(stringResource(R.string.v2_rec_copy_ai), icon = RecordingIcons.Copy, onClick = {
+                sheet = null
+                onAction(SelectionAction.CopyForAi)
+            })
         }
 
         "rename" -> SelectionRenameSheet(oneTitle.orEmpty(), { sheet = null }) {
@@ -398,175 +455,6 @@ private fun SelectionRenameSheet(title: String, onDismiss: () -> Unit, onSave: (
     }
 }
 
-/** Library's filters beyond classic's chips: the saved views (Untranscribed) the classic filters don't have. */
-data class V2Filters(val base: LibraryFilters = LibraryFilters(), val untranscribed: Boolean = false) {
-    val count: Int get() = base.count + if (untranscribed) 1 else 0
-}
-
-/** The chip a filter sheet belongs to. */
-enum class FilterChip { Views, Source, Date, Project, Language, Status, Label, Bookmark }
-
-/**
- * One scrollable chip row (docs/PLAN_V2_PARITY.md section 3): Views ▾ · Source ▾ · Date ▾ · Project ▾ · Language ▾ ·
- * Status ▾ · Label ▾ · Bookmark ▾ (Label and Bookmark only when there are some), each with how many choices are on;
- * "Clear all" while any is. Each opens a sheet with its choices, Clear and Apply.
- */
-@Composable
-fun LibraryFilterRow(
-    filters: V2Filters,
-    folders: List<ClientDto>,
-    labels: List<String>,
-    tags: List<String>,
-    languages: List<String>,
-    onChange: (V2Filters) -> Unit
-) {
-    var open by remember { mutableStateOf<FilterChip?>(null) }
-    val f = filters.base
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4),
-        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        fun count(chip: FilterChip): Int = when (chip) {
-            FilterChip.Views -> (if (filters.untranscribed) 1 else 0) + f.views.count { it in VIEWS }
-            FilterChip.Source -> f.devices.size
-            FilterChip.Date -> f.views.count { it in DATES }
-            FilterChip.Project -> f.folders.size
-            FilterChip.Language -> f.languages.size
-            FilterChip.Status -> f.views.count { it in STATUSES }
-            FilterChip.Label -> f.labels.size
-            FilterChip.Bookmark -> f.tags.size
-        }
-        val chips = FilterChip.entries.filter {
-            (it != FilterChip.Label || labels.isNotEmpty()) && (it != FilterChip.Bookmark || tags.isNotEmpty()) &&
-                (it != FilterChip.Language || languages.isNotEmpty())
-        }
-        chips.forEach { chip ->
-            val n = count(chip)
-            val name = chipName(chip)
-            EchoChip(if (n > 0) stringResource(R.string.v2_lib_with_count, name, n) + " ▾" else "$name ▾", n > 0, { open = chip })
-        }
-        if (filters.count > 0) {
-            Text(
-                stringResource(R.string.v2_lib_clear_all),
-                style = EchoV2.type.label,
-                color = EchoV2.colors.accentText,
-                modifier = Modifier.heightIn(min = EchoTokens.Layout.controlTouchMin)
-                    .clickable(role = Role.Button) { onChange(V2Filters()) }
-                    .padding(horizontal = EchoTokens.Space.s8, vertical = EchoTokens.Space.s12)
-            )
-        }
-    }
-    open?.let { chip ->
-        FilterSheet(chip, filters, folders, labels, tags, languages, { open = null }) {
-            onChange(it)
-            open = null
-        }
-    }
-}
-
-private val VIEWS = setOf(SmartView.PINNED, SmartView.BOOKMARKED)
-private val DATES = setOf(SmartView.TODAY, SmartView.THIS_WEEK)
-private val STATUSES = setOf(SmartView.WAITING, SmartView.FAILED)
-
-@Composable
-private fun chipName(chip: FilterChip): String = stringResource(
-    when (chip) {
-        FilterChip.Views -> R.string.v2_lib_views
-        FilterChip.Source -> R.string.v2_lib_source
-        FilterChip.Date -> R.string.v2_lib_date
-        FilterChip.Project -> R.string.v2_lib_project
-        FilterChip.Language -> R.string.v2_lib_language
-        FilterChip.Status -> R.string.v2_lib_status
-        FilterChip.Label -> R.string.v2_lib_label
-        FilterChip.Bookmark -> R.string.v2_lib_bookmark
-    }
-)
-
-@Composable
-fun smartViewName(view: SmartView): String = stringResource(
-    when (view) {
-        SmartView.TODAY -> R.string.v2_lib_today
-        SmartView.THIS_WEEK -> R.string.v2_lib_this_week
-        SmartView.WAITING -> R.string.v2_lib_waiting
-        SmartView.BOOKMARKED -> R.string.v2_lib_bookmarked
-        SmartView.FAILED -> R.string.v2_lib_failed
-        SmartView.PINNED -> R.string.v2_lib_pinned
-        SmartView.ALL -> R.string.v2_lib_views
-    }
-)
-
-@Composable
-private fun FilterSheet(
-    chip: FilterChip,
-    filters: V2Filters,
-    folders: List<ClientDto>,
-    labels: List<String>,
-    tags: List<String>,
-    languages: List<String>,
-    onDismiss: () -> Unit,
-    onApply: (V2Filters) -> Unit
-) {
-    var draft by remember { mutableStateOf(filters) }
-    val f = draft.base
-    fun base(change: (LibraryFilters) -> LibraryFilters) {
-        draft = draft.copy(base = change(draft.base))
-    }
-    EchoBottomSheet(onDismiss = onDismiss, title = chipName(chip)) {
-        when (chip) {
-            FilterChip.Views -> {
-                EchoCheckbox(draft.untranscribed, { draft = draft.copy(untranscribed = it) }, v2TextUntranscribed())
-                VIEWS.forEach { v -> EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v)) }
-            }
-
-            FilterChip.Date -> DATES.forEach { v ->
-                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v))
-            }
-
-            FilterChip.Status -> STATUSES.forEach { v ->
-                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v))
-            }
-
-            FilterChip.Source -> SourceDevice.entries.forEach { d ->
-                EchoCheckbox(d in f.devices, { base { b -> b.copy(devices = b.devices.toggle(d)) } }, deviceName(d))
-            }
-
-            FilterChip.Project -> {
-                EchoCheckbox("" in f.folders, {
-                    base { b -> b.copy(folders = b.folders.toggle("")) }
-                }, stringResource(R.string.v2_lib_no_project))
-                folders.forEach { p -> EchoCheckbox(p.id in f.folders, { base { b -> b.copy(folders = b.folders.toggle(p.id)) } }, p.name) }
-            }
-
-            FilterChip.Language -> languages.forEach { l ->
-                EchoCheckbox(l in f.languages, { base { b -> b.copy(languages = b.languages.toggle(l)) } }, l)
-            }
-
-            FilterChip.Label -> labels.forEach { l ->
-                EchoCheckbox(l in f.labels, { base { b -> b.copy(labels = b.labels.toggle(l)) } }, l)
-            }
-
-            FilterChip.Bookmark -> {
-                EchoCheckbox(Bookmarks.ANY in f.tags, {
-                    base { b -> b.copy(tags = b.tags.toggle(Bookmarks.ANY)) }
-                }, stringResource(R.string.v2_lib_any_bookmark))
-                tags.forEach { t -> EchoCheckbox(t in f.tags, { base { b -> b.copy(tags = b.tags.toggle(t)) } }, t) }
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(EchoTokens.Space.s16),
-            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
-        ) {
-            EchoButton(stringResource(R.string.v2_lib_clear), { onApply(clearChip(chip, draft)) }, kind = EchoButtonKind.Secondary)
-            EchoButton(stringResource(R.string.v2_lib_apply), { onApply(draft) })
-        }
-    }
-}
-
-@Composable
-private fun v2TextUntranscribed(): String = com.echoledger.mobile.ui.v2.shell.v2Text.untranscribed
-
 @Composable
 fun deviceName(d: SourceDevice): String = stringResource(
     when (d) {
@@ -576,25 +464,13 @@ fun deviceName(d: SourceDevice): String = stringResource(
     }
 )
 
-/** The filters with one chip's choices cleared. */
-fun clearChip(chip: FilterChip, f: V2Filters): V2Filters = when (chip) {
-    FilterChip.Views -> f.copy(untranscribed = false, base = f.base.copy(views = f.base.views - VIEWS))
-    FilterChip.Date -> f.copy(base = f.base.copy(views = f.base.views - DATES))
-    FilterChip.Status -> f.copy(base = f.base.copy(views = f.base.views - STATUSES))
-    FilterChip.Source -> f.copy(base = f.base.copy(devices = emptySet()))
-    FilterChip.Project -> f.copy(base = f.base.copy(folders = emptySet()))
-    FilterChip.Language -> f.copy(base = f.base.copy(languages = emptySet()))
-    FilterChip.Label -> f.copy(base = f.base.copy(labels = emptySet()))
-    FilterChip.Bookmark -> f.copy(base = f.base.copy(tags = emptySet()))
-}
-
 /**
- * Sort and group (the button in the search row): Group by, Sort by and Density as chip groups (as classic has them),
- * so all three fit on one screen; remembered per view on this phone. One chip of each group is on.
+ * Sort & display (Library's ⋮): Group by, Sort by and Density as chip groups (as classic has them), so all three fit on
+ * one screen; remembered per place on this phone. One chip of each group is on.
  */
 @Composable
 fun SortGroupSheet(choice: LibraryViewChoice, onDismiss: () -> Unit, onChoose: (LibraryViewChoice) -> Unit) {
-    EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_lib_sort_group)) {
+    EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_lf_sort_display)) {
         Column(Modifier.padding(bottom = EchoTokens.Space.s16)) {
             ChoiceGroup(stringResource(R.string.v2_lib_group_by), GroupBy.entries, choice.groupBy, { groupName(it) }) {
                 onChoose(choice.copy(group = it.key))

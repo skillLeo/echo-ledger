@@ -166,7 +166,8 @@ class DiscardBatch(
 
     fun discard(id: String) {
         scope.launch {
-            val discarding = withContext(Dispatchers.IO) { Decisions.discardLater(context, id, toasts.clock()) } ?: return@launch
+            val discarding =
+                withContext(Dispatchers.IO) { Decisions.discardLater(context, id, toasts.clock(), undoHere = true) } ?: return@launch
             vm.reloadLocal()
             val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return@launch
             calls += id to endsAt
@@ -315,7 +316,7 @@ fun V2HomeContent(
                         meta = row.meta,
                         titleEnd = row.time,
                         metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                        leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
+                        leading = { com.echoledger.mobile.ui.v2.library.RowSourceLogo(row) },
                         tall = true,
                         onClick = { actions.onOpenRecording(item.id) }
                     )
@@ -460,7 +461,8 @@ private fun WaitingCall(
     Column {
         EchoListRow(
             title = afterCallTitle(res, rec),
-            meta = stringResource(R.string.v2_home_waiting_decision),
+            // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
+            meta = stringResource(com.echoledger.mobile.calls.CallChoice.chooseAgainWords(rec) ?: R.string.v2_home_waiting_decision),
             metaEnd = { Text(formatClock(rec.durationMs + 500), style = EchoV2.type.mono, color = c.textSecondary) },
             leading = { EchoAvatar(icon = LibraryModel.icon(com.echoledger.mobile.core.SourceApp.from(rec.sourceApp))) },
             tall = true

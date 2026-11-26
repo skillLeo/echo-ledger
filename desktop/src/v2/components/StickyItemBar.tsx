@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import { Button } from "./Button";
 import { Menu, type MenuItem } from "./Menu";
 import { ChevronStartIcon, MoreIcon } from "./icons";
+import { t } from "../../i18n";
 
 /** The CSS variable the bar's drawn height is published as, for the sticky layers under it and scroll padding. */
 export const ITEM_BAR_HEIGHT = "--item-bar-h";
@@ -115,7 +116,7 @@ export type StickyItemBarProps = {
  * --item-bar-h, so the layers under it and the scroll padding stack on it. It sticks at --item-bar-top, which falls
  * back to the top bar's height (--topbar-h) and then to 0.
  */
-export function StickyItemBar({ title, onBack, backLabel = "Back", sentinel, menu }: StickyItemBarProps) {
+export function StickyItemBar({ title, onBack, backLabel = t("Back"), sentinel, menu }: StickyItemBarProps) {
   const shown = useScrolledPast(sentinel);
   const bar = useRef<HTMLDivElement>(null);
   usePublishedHeight(bar, ITEM_BAR_HEIGHT, shown);

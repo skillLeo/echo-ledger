@@ -2,12 +2,15 @@ package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -91,7 +94,7 @@ class V2ShellTest : ScreenTest() {
     fun libraryIsTheV2OneAndOtherTabsStayClassic() {
         seed()
         shell(v2)
-        compose.onNode(hasText("Library") and isHeading()).assertExists()
+        compose.onNode(hasText("All recordings") and isHeading()).assertExists()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
         compose.onNodeWithText("Live").performClick()
         compose.onNodeWithText("Classic live").assertExists()
@@ -126,7 +129,9 @@ class V2ShellTest : ScreenTest() {
     fun settingsFromTheAvatarOffersClassicLook() {
         seed()
         shell(v2)
+        // The Library's avatar opens its menu (UX-14); Settings is in it.
         compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Switch back to classic").performClick()
         assertEquals(listOf(true), switched)
         compose.onNodeWithText("All settings").performClick()
@@ -158,7 +163,7 @@ class V2ShellTest : ScreenTest() {
         shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
         // Home's Needs action is Activity now: the bell in Library's header.
         compose.onNodeWithContentDescription("Activity", substring = true).performClick()
-        compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Discard")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
+        compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Delete")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
         compose.mainClock.autoAdvance = false
     }
 
@@ -196,7 +201,7 @@ class V2ShellTest : ScreenTest() {
     private fun advanceTo(wallMs: Long) = compose.mainClock.advanceTimeBy(wallMs - clock())
 
     private fun discard(index: Int = 0) =
-        compose.onAllNodesWithText("Discard", useUnmergedTree = true)[index].performScrollTo().performClick()
+        compose.onAllNodesWithText("Delete", useUnmergedTree = true)[index].performScrollTo().performClick()
 
     @Test
     fun homeDiscardIsTheDelayedDiscardAndUndoBringsTheCallBack() {
@@ -208,7 +213,7 @@ class V2ShellTest : ScreenTest() {
         compose.onNodeWithText("Undo").performClick()
         settle { state() == "pending_decision" && vm.pending.value.any { it.id == "r-omar" && it.state == "pending_decision" } }
         // When nobody undoes it, the discard worker ends it.
-        untilShown("Discard")
+        untilShown("Delete")
         discard()
         settle { state() == "discarding" }
         runWorker(DiscardLaterWorker::class.java, "r-omar")
@@ -375,12 +380,12 @@ class V2ShellTest : ScreenTest() {
     }
 
     @Test
-    fun theFilterChipsNarrowTheListAndClearAllBringsItBack() {
+    fun theFiltersNarrowTheListAndClearAllBringsItBack() {
         seed()
         shell(v2)
-        compose.onNodeWithText("Views ▾").performClick()
-        compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
+        compose.onNode(hasContentDescription("Filters") and hasClickAction()).performClick()
+        compose.onNode(hasText("Not transcribed") and isToggleable()).performScrollTo().performClick()
+        compose.onAllNodes(hasText("Show ", substring = true) and hasClickAction()).onFirst().performClick()
         compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertExists()
         compose.onNodeWithText("Clear all").performClick()
@@ -391,7 +396,8 @@ class V2ShellTest : ScreenTest() {
     fun sortAndGroupIsRememberedForTheView() {
         seed()
         shell(v2)
-        compose.onNodeWithContentDescription("Sort and group").performClick()
+        // The chips row's last chip (v2.1 UX-14; it was in ⋮).
+        compose.onNode(hasText("Sort & display") and hasClickAction()).performClick()
         compose.onNode(hasText("Name A–Z") and isSelectable()).performSemanticsAction(SemanticsActions.OnClick)
         pumpUntil("sort saved") { vm.settings.value.libraryViews.values.any { it.sort == "title" } }
     }

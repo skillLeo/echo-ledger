@@ -85,7 +85,7 @@ describe("v2 uses tokens only", () => {
   });
 
   it("lets a media query name a breakpoint from tokens.css, and no other width", () => {
-    expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1440px", "720px", "780px"]);
+    expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1100px", "1280px", "1440px", "720px", "780px"]);
     expect(violations("@media (width < 720px) {")).toEqual([]);
     expect(violations("@media (width >= 1024px) and (width < 1440px) {")).toEqual([]);
     expect(violations("@media (width < 700px) {")).not.toEqual([]);
@@ -117,6 +117,8 @@ describe("scaled fills", () => {
   it("text that finds its own direction lines up with its column, in the form Chromium and WebKit read too", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
     expect(css).toMatch(/\.el-row__title, [^{]*\{\s*text-align: match-parent;\s*text-align: -webkit-match-parent;\s*\}/);
-    expect(css).toMatch(/\.el-screens-strip__title \{\s*text-align: match-parent;/);
+    expect(css).toMatch(/\.el-screens-strip__title, \.el-nav-item__label \{\s*text-align: match-parent;/);
+    // The Library sidebar's names ("All recordings", a label's own name) sit beside their icon right to left too.
+    expect(readFileSync(join(here, "library", "LibraryNav.tsx"), "utf8")).toMatch(/className="el-nav-item__label" dir="auto"/);
   });
 });

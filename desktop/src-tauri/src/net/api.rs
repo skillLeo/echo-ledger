@@ -11,6 +11,9 @@ use super::models::*;
 use super::pinning::build_http_client;
 use crate::error::{AppError, AppResult};
 
+/// Ids per `POST` / `DELETE /api/sessions/opened` request (contract 2.0.0-y: 1 to 200).
+pub const OPENED_IDS_PER_REQUEST: usize = 200;
+
 #[derive(Clone)]
 pub struct ApiClient {
     base: String,
@@ -21,6 +24,9 @@ pub struct ApiClient {
     /// This install's id (since v1.6, P3), sent by every sign-in route so the same computer keeps its row.
     install_id: Option<String>,
 }
+
+/// How long a person's picture may take to come (the live client has no total timeout of its own).
+const AVATAR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// A transcript the month's minutes can't cover (`budget_exceeded` with `minutes_needed` and `minutes_left`), in the
 /// person's words (pure).
@@ -535,6 +541,60 @@ impl ApiClient {
         }
     }
 
+    /// One of the account routes of 2.0.0-l (`my_account::ACTIONS`), answered whole: the status, the body and
+    /// `Retry-After`, refusals included, so the window can say each in its own words. Only `401` is an error (this
+    /// computer is signed out). `body` is sent as JSON when it is not `null` (a proof goes with a `DELETE` too).
+    pub async fn account_request(&self, method: &str, path: &str, body: &serde_json::Value) -> AppResult<crate::my_account::AccountReply> {
+        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| AppError::msg("That is not something this app can change."))?;
+        let mut request = self.http.request(method, self.url(path));
+        if !body.is_null() {
+            request = request.json(body);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::account_reply(resp).await
+    }
+
+    async fn account_reply(resp: reqwest::Response) -> AppResult<crate::my_account::AccountReply> {
+        let status = resp.status().as_u16();
+        if status == 401 {
+            return Err(AppError::NotPaired);
+        }
+        let retry_after = resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+        let text = resp.text().await.unwrap_or_default();
+        let body = if text.trim().is_empty() { serde_json::Value::Null } else { serde_json::from_str(&text).unwrap_or(serde_json::Value::Null) };
+        Ok(crate::my_account::AccountReply::from_answer(status, body, retry_after))
+    }
+
+    /// `POST /api/account/avatar` (since 2.0.0-l): the picture as multipart `image`, already made ready here.
+    pub async fn upload_avatar(&self, picture: &crate::my_account::AvatarFile) -> AppResult<crate::my_account::AccountReply> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_file(&boundary, "image", picture.name, picture.mime, &picture.bytes);
+        let resp = self
+            .authed(self.http.post(self.url("account/avatar")))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .body(body)
+            .send()
+            .await?;
+        Self::account_reply(resp).await
+    }
+
+    /// A person's picture from its signed link (no token: the signature is the key). `None` only when there is no picture
+    /// to have: an expired, replaced or removed link (`403`, `404`, `410`), or a redirect, which is refused (the live
+    /// client follows none: a picture comes from the link the server signed, never from where it points); the window
+    /// answers it with the initials and may keep that answer. Offline, a timeout, a 5xx, a 429 or any other answer is an
+    /// error, so the window asks again later.
+    pub async fn avatar_bytes(&self, url: &str) -> AppResult<Option<Vec<u8>>> {
+        let resp = self.live.get(url).timeout(AVATAR_TIMEOUT).send().await?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(Some(resp.bytes().await?.to_vec()));
+        }
+        if status.is_redirection() || matches!(status.as_u16(), 403 | 404 | 410) {
+            return Ok(None);
+        }
+        Err(Self::error(resp).await)
+    }
+
     /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this
     /// computer's token included.
     pub async fn sign_out_everywhere(&self) -> AppResult<()> {
@@ -963,6 +1023,15 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PATCH /api/sessions/{id}` with the end of a call (contract 2.0.0-z): when it ended and how long it lasted, so
+    /// every device shows it waiting for a choice. The server keeps the first one; an older server answers `200` and
+    /// stores nothing. Not an organise action (`update_session` stays as it is).
+    pub async fn end_call(&self, session_id: &str, ended_at: &str, duration_ms: u64) -> AppResult<()> {
+        let body = json!({ "ended_at": ended_at, "duration_ms": duration_ms });
+        let resp = self.authed(self.http.patch(self.url(&format!("sessions/{session_id}"))))?.json(&body).send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(|_| ())
+    }
+
     pub async fn update_session(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.patch(self.url(&format!("sessions/{id}"))))?.json(patch).send().await?;
         Self::parse(resp).await
@@ -1034,6 +1103,139 @@ impl ApiClient {
     /// `{"moved_sessions", "moved_projects"}`.
     pub async fn delete_client(&self, id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/{id}/opened` (since v1.3): the person opened the recording; `204`.
+    pub async fn session_opened(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `DELETE /api/sessions/{id}/opened` (since 2.0.0-t): Mark as unread, the person's own open taken back; `204`.
+    pub async fn session_unopen(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/sessions/opened` (since 2.0.0-y): Mark as read for many recordings, one request per
+    /// [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_opened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, true).await
+    }
+
+    /// `DELETE /api/sessions/opened` (since 2.0.0-y): Mark as unread for many recordings, the person's own opens taken
+    /// back, one request per [`OPENED_IDS_PER_REQUEST`] ids. See [`Self::opened_many`].
+    pub async fn sessions_unopened(&self, ids: &[String]) -> AppResult<Option<OpenedMany>> {
+        self.opened_many(ids, false).await
+    }
+
+    /// The ids in chunks of [`OPENED_IDS_PER_REQUEST`], their answers joined. `None` only when the first answer says the
+    /// server is older than the route: `405`, `404` (its `DELETE` reaches `DELETE /api/sessions/{id}` with the id
+    /// "opened" and deletes nothing), `403` for a `DELETE` (that route's answer to someone who may not record), or a
+    /// success without a `done` list; the caller then marks them one by one. Anything else (a 5xx, 408, 429, the network)
+    /// is an error, so a server that is down is never asked once per recording. A later chunk that fails ends the run
+    /// with what was done: its ids are in neither list.
+    async fn opened_many(&self, ids: &[String], opened: bool) -> AppResult<Option<OpenedMany>> {
+        let mut all = OpenedMany::default();
+        for (n, chunk) in ids.chunks(OPENED_IDS_PER_REQUEST).enumerate() {
+            let url = self.url("sessions/opened");
+            let request = if opened { self.http.post(url) } else { self.http.delete(url) };
+            let answer = match self.authed(request)?.json(&json!({ "ids": chunk })).send().await {
+                Err(e) => Err(e.into()),
+                Ok(resp) if resp.status().is_success() => Ok(resp.json::<OpenedMany>().await.ok()),
+                Ok(resp) if matches!(resp.status().as_u16(), 404 | 405) || (resp.status().as_u16() == 403 && !opened) => Ok(None),
+                Ok(resp) => Err(Self::error(resp).await),
+            };
+            match answer {
+                Ok(Some(answer)) => {
+                    all.done.extend(answer.done);
+                    all.not_found.extend(answer.not_found);
+                }
+                Ok(None) if n == 0 => return Ok(None),
+                Err(e) if n == 0 => return Err(e),
+                _ => break,
+            }
+        }
+        Ok(Some(all))
+    }
+
+    /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
+    fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(key) = key {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(key);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/lists` (since 2.0.0-m): the person's lists in their order, with counts.
+    pub async fn lists(&self) -> AppResult<ListsResponse> {
+        let resp = self.authed(self.http.get(self.list_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/lists` (since 2.0.0-m): a new, empty list at the end; without a colour the server picks the one
+    /// fewest lists have.
+    pub async fn create_list(&self, name: &str, color: Option<&str>) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.post(self.list_url(None)?))?.json(&json!({ "name": name, "color": color })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/lists/{key}` (since 2.0.0-m): `name` and/or `color`; a rename relabels every recording in it.
+    pub async fn update_list(&self, key: &str, patch: &serde_json::Value) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.patch(self.list_url(Some(key))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/lists/{key}` (since 2.0.0-m): the label comes off its recordings, which stay.
+    pub async fn delete_list(&self, key: &str) -> AppResult<ListDeleted> {
+        let resp = self.authed(self.http.delete(self.list_url(Some(key))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/lists/order` (since 2.0.0-m): every list's key once, in the new order.
+    pub async fn order_lists(&self, keys: &[String]) -> AppResult<ListsResponse> {
+        let url = format!("{}/order", self.list_url(None)?);
+        let resp = self.authed(self.http.put(url))?.json(&json!({ "keys": keys })).send().await?;
+        Self::parse(resp).await
+    }
+
+    fn views_url(&self, tail: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("views")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(tail) = tail {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(tail);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/views` (since 2.0.0-p): the person's saved views in their order, with `views_version` and `limit`.
+    pub async fn views(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.views_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/views` (since 2.0.0-p): a view at the end; its `client_ref` sent again answers the view it made.
+    pub async fn create_view(&self, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.views_url(None)?))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/views/{id}` (since 2.0.0-p): any of name, filters, search, sort, group, density.
+    pub async fn update_view(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.views_url(Some(id))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/views/{id}` (since 2.0.0-p).
+    pub async fn delete_view(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.delete(self.views_url(Some(id))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/views/order` (since 2.0.0-p): every view's id once, in the new order.
+    pub async fn order_views(&self, ids: &[String]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.put(self.views_url(Some("order"))?))?.json(&json!({ "ids": ids })).send().await?;
         Self::parse(resp).await
     }
 
@@ -1201,6 +1403,31 @@ impl ApiClient {
     /// `GET /api/activity?limit=` (since v1.1): the activity centre, newest first.
     pub async fn activity(&self, limit: u32) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url("activity")).query(&[("limit", limit.to_string())]))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/activity?group=&limit=` (2.0.0-r): only that group's items (`upload_failed`), newest first.
+    pub async fn activity_in_group(&self, group: &str, limit: u32) -> AppResult<serde_json::Value> {
+        let query = [("group", group.to_string()), ("limit", limit.to_string())];
+        let resp = self.authed(self.http.get(self.url("activity")).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/activity/groups` (2.0.0-r): the groups that hold an unresolved item, with how many.
+    pub async fn activity_groups(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("activity/groups")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/activity/retry-all` (2.0.0-r): asks every device of the person to retry that group's uploads.
+    pub async fn activity_retry_all(&self, group: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("activity/retry-all")))?.json(&json!({ "group": group })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/badge` (2.0.0-r): the one Activity number every app shows, `{count, label, tone}`.
+    pub async fn badge(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("badge")))?.send().await?;
         Self::parse(resp).await
     }
 

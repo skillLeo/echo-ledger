@@ -143,7 +143,8 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
           <span className="small muted" aria-live="polite">{at + 1} of {screens.length}</span>
           <button type="button" className="btn ghost icon-only" aria-label="Close" title="Close" onClick={onClose}><CloseIcon size={16} /></button>
         </div>
-        <div className="screen-viewer-body">
+        {/* The screens run in time order, left to right in every language (D4 §7), as ← and → step through them. */}
+        <div className="screen-viewer-body" dir="ltr">
           <button type="button" className="btn ghost icon-only screen-step" aria-label="Previous screen" title="Previous screen" disabled={at === 0} onClick={() => step(-1)}>
             <ChevronLeftIcon size={20} />
           </button>

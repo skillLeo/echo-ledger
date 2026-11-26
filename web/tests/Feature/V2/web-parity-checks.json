@@ -13,7 +13,7 @@
  },
  "WEB-NAV-003": {
   "type": "controls",
-  "page": "library",
+  "page": "projects",
   "scope": "sidebar",
   "keys": [
    "a|projects",
@@ -24,13 +24,15 @@
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|recently deleted"
+  "key": "a|trash"
  },
  "WEB-NAV-005": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|shared"
+  "keys": [
+   "a|shared with me"
+  ]
  },
  "WEB-NAV-007": {
   "type": "control",
@@ -56,7 +58,7 @@
   "page": "library",
   "scope": "sidebar",
   "keys": [
-   "a|upload recording"
+   "menuitem|record options › import audio files"
   ]
  },
  "WEB-NAV-012": {
@@ -68,34 +70,37 @@
  "WEB-NAV-013": {
   "type": "controls",
   "page": "library",
-  "scope": "main",
+  "scope": "sidebar",
   "keys": [
-   "menuitem|views › all recordings",
-   "menuitem|views › today",
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › pinned",
-   "menuitem|views › failed uploads",
-   "button|voice notes"
+   "a|all recordings",
+   "a|needs you",
+   "a|unread",
+   "a|important",
+   "a|audio only"
   ]
  },
  "WEB-NAV-014": {
-  "type": "control",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
-  "key": "menuitem|source › any source"
+  "keys": [
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
+  ]
  },
  "WEB-NAV-015": {
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "button|collapse"
+  "key": "button|hide the panel"
  },
  "WEB-NAV-017": {
   "type": "control",
   "page": "library",
-  "scope": "sidebar",
-  "key": "button|help and shortcuts"
+  "scope": "usermenu",
+  "key": "menuitem|account › keyboard shortcuts ?"
  },
  "WEB-NAV-018": {
   "type": "control",
@@ -107,7 +112,8 @@
   "type": "html",
   "page": "library",
   "contains": [
-   "wire:name=\"App\\Livewire\\ActivityBell\""
+   "data-module=\"activity\"",
+   "class=\"v2-rail-badge\""
   ]
  },
  "WEB-NAV-022": {
@@ -125,61 +131,61 @@
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › personal · owner"
+  "key": "menuitem|personal owner › personal · owner"
  },
  "WEB-NAV-024": {
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › qureshi textiles team · owner"
+  "key": "menuitem|personal owner › qureshi textiles team · owner"
  },
  "WEB-NAV-025": {
   "type": "control",
   "page": "library",
   "scope": "switcher",
-  "key": "menuitem|p personal owner › manage workspace"
+  "key": "menuitem|personal owner › manage workspace"
  },
  "WEB-NAV-026": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › bq bilal qureshi bilal@qureshi-textiles.example personal"
+  "key": "menuitem|account › add photo"
  },
  "WEB-NAV-027": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › upgrade"
+  "key": "menuitem|account › plan & billing"
  },
  "WEB-NAV-028": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › settings"
+  "key": "menuitem|account › settings"
  },
  "WEB-NAV-029": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › system"
+  "key": "menuitem|account › system"
  },
  "WEB-NAV-030": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › light"
+  "key": "menuitem|account › light"
  },
  "WEB-NAV-031": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › dark"
+  "key": "menuitem|account › dark"
  },
  "WEB-NAV-032": {
   "type": "control",
   "page": "library",
   "scope": "usermenu",
-  "key": "menuitem|bq › sign out"
+  "key": "menuitem|account › sign out"
  },
  "WEB-KEY-001": {
   "type": "html",
@@ -219,38 +225,33 @@
   ]
  },
  "WEB-LIB-001": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|upload recording"
- },
- "WEB-LIB-002": {
   "type": "controls",
   "page": "library",
-  "scope": "main",
+  "scope": "sidebar",
   "keys": [
-   "button|views",
-   "menuitem|views › all recordings",
-   "menuitem|views › today",
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › bookmarked",
-   "menuitem|views › failed uploads",
-   "menuitem|views › pinned"
+   "menuitem|record options › import audio files"
+  ]
+ },
+ "WEB-LIB-002": {
+  "type": "panel",
+  "page": "library",
+  "keys": [
+   "input|today",
+   "input|last days",
+   "input|any bookmark",
+   "input|pinned",
+   "input|failed"
   ]
  },
  "WEB-LIB-003": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "button|source",
-   "menuitem|source › any source",
-   "menuitem|source › inbox",
-   "menuitem|source › whatsapp",
-   "menuitem|source › zoom",
-   "menuitem|source › phone",
-   "button|voice notes"
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
   ]
  },
  "WEB-LIB-007": {
@@ -258,13 +259,12 @@
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|newest",
-   "button|newest",
-   "menuitem|newest › oldest",
-   "menuitem|newest › longest",
-   "menuitem|newest › shortest",
-   "menuitem|newest › name a–z",
-   "menuitem|newest › recently opened"
+   "menuitem|sort & display › newest",
+   "menuitem|sort & display › oldest",
+   "menuitem|sort & display › longest",
+   "menuitem|sort & display › shortest",
+   "menuitem|sort & display › name a–z",
+   "menuitem|sort & display › recently opened"
   ]
  },
  "WEB-LIB-008": {
@@ -288,30 +288,30 @@
   "pattern": "^input\\|select/deselect item "
  },
  "WEB-LIB-012": {
-  "type": "controls",
+  "type": "html",
   "page": "library",
-  "scope": "main",
-  "keys": [
-   "button|more",
-   "menuitem|more › open",
-   "menuitem|more › rename",
-   "menuitem|more › send to whatsapp…",
-   "menuitem|more › delete"
+  "contains": [
+   "data-row-menu",
+   "window.elV2ContextMenu.openFromButton($el, $event)",
+   "\"file.rename\"",
+   "\"file.sendToWhatsApp\"",
+   "\"recording.moveToTrash\""
   ]
  },
  "WEB-LIB-013": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "menuitem|menu › reset",
-   "menuitem|menu › status",
-   "menuitem|menu › bookmark tag",
-   "menuitem|menu › label",
-   "menuitem|menu › has bookmarks",
-   "menuitem|menu › from",
-   "menuitem|menu › until",
-   "menuitem|menu › apply filters"
+   "button|close filters",
+   "input|is",
+   "input|is not",
+   "input|transcribed",
+   "input|audio only",
+   "input|in progress",
+   "input|failed",
+   "input|any bookmark",
+   "input|custom dates",
+   "button|save as view"
   ]
  },
  "WEB-LIB-014": {
@@ -405,9 +405,8 @@
   "page": "projects",
   "scope": "main",
   "keys": [
-   "a|new project",
    "input|search",
-   "a|qt qureshi textiles recordings · last call nov automatic pin to the top",
+   "a|qt qureshi textiles recordings last activity nov pin to the top",
    "button|pin to the top"
   ]
  },
@@ -821,7 +820,7 @@
   "keys": [
    "a|bilal qureshi bilal@qureshi-textiles.example personal personal, owner",
    "a|upgrade",
-   "a|plan & usage personal"
+   "a|plan & billing personal"
   ]
  },
  "WEB-SET-002": {
@@ -1022,7 +1021,7 @@
   "type": "control",
   "page": "recording",
   "scope": "main",
-  "key": "menuitem|more › find and replace"
+  "key": "menuitem|more › edit text"
  },
  "WEB-HOM-001": {
   "type": "html",
@@ -1066,40 +1065,38 @@
   "key": "button|switch back to classic"
  },
  "WEB-LIB-016": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › bookmarked"
+   "input|last days",
+   "input|any bookmark"
   ]
  },
  "WEB-LIB-004": {
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|list"
+  "key": "menuitem|sort & display › list"
  },
  "WEB-LIB-005": {
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|table"
+  "key": "menuitem|sort & display › table"
  },
  "WEB-LIB-006": {
   "type": "controls",
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|group by: date",
-   "menuitem|group by: date › date",
-   "menuitem|group by: date › source",
-   "menuitem|group by: date › project",
-   "menuitem|group by: date › language",
-   "menuitem|group by: date › status",
-   "menuitem|group by: date › device",
-   "menuitem|group by: date › none"
+   "button|sort & display",
+   "menuitem|sort & display › date",
+   "menuitem|sort & display › source",
+   "menuitem|sort & display › project",
+   "menuitem|sort & display › language",
+   "menuitem|sort & display › status",
+   "menuitem|sort & display › device",
+   "menuitem|sort & display › none"
   ]
  },
  "WEB-LIB-011": {
@@ -1118,18 +1115,22 @@
   ]
  },
  "WEB-NAV-010": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|upload recording"
+  "keys": [
+   "a|record",
+   "menuitem|record options › record a voice note",
+   "menuitem|record options › import audio files"
+  ]
  },
  "WEB-NAV-016": {
   "type": "html",
   "page": "library",
   "contains": [
-   "class=\"v2-sb-resize\" role=\"separator\"",
-   "x-on:pointerdown=\"startResize($event)\"",
-   "x-on:keydown=\"resizeKey($event)\""
+   "data-panel-toggle",
+   "x-on:click=\"togglePanel()\"",
+   "x-bind:hidden=\"shown() !=="
   ]
  },
  "WEB-NAV-019": {
@@ -1160,5 +1161,11 @@
    "button|dark",
    "button|soft grey"
   ]
+ },
+ "WEB-LIB-032": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|needs you"
  }
 }

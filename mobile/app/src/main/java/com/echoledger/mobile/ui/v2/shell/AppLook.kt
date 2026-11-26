@@ -2,6 +2,9 @@ package com.echoledger.mobile.ui.v2.shell
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -16,6 +19,43 @@ object AppLook {
         "larger" -> 1.15f
         "largest" -> 1.3f
         else -> 1f
+    }
+
+    /** The languages the app speaks. */
+    private val SPOKEN = setOf("en", "ur")
+
+    /**
+     * The language to speak, as a choice ("en", "ur", or "system" for the phone's), for everything the app writes.
+     * Signed in, the account's (its `language`, the same on every device; the last one known on this phone while it
+     * loads or can't be read), else English: never the phone's own, nor a choice made while signed out. Signed out, the
+     * choice made then in Settings, which may follow the phone. The desktop's rule too (src/i18n/language.ts).
+     */
+    fun choice(s: com.echoledger.mobile.data.AppSettings): String = if (s.paired) {
+        s.accountLanguage?.takeIf { it in SPOKEN } ?: "en"
+    } else {
+        s.appLanguage
+    }
+
+    /**
+     * The language of the last settings this process saw, kept in a small file of its own so the first words after a
+     * cold start (a notification, a card over another app) are the person's before the settings store has answered.
+     */
+    @Volatile var lastKnown: String? = null
+        private set
+
+    private const val LOOK_PREFS = "app_look"
+    private const val LOOK_LANGUAGE = "language"
+
+    /** Reads the kept language (Application.onCreate, as DesignChoice.load). */
+    fun load(context: android.content.Context) {
+        lastKnown = context.getSharedPreferences(LOOK_PREFS, android.content.Context.MODE_PRIVATE).getString(LOOK_LANGUAGE, null)
+    }
+
+    /** Keeps [choice] for the next cold start (each saved change of the settings). */
+    fun keep(context: android.content.Context, choice: String) {
+        if (lastKnown == choice) return
+        lastKnown = choice
+        context.getSharedPreferences(LOOK_PREFS, android.content.Context.MODE_PRIVATE).edit().putString(LOOK_LANGUAGE, choice).apply()
     }
 
     /** The app's language: `en` or `ur` as chosen, else the phone's ([system]). */
@@ -35,4 +75,52 @@ object AppLook {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * factor), content = content)
     }
+}
+
+/**
+ * The person's app language and text size for what v2 draws outside the app's window (the recording pill, the
+ * after-call card, the Live Assist card), as the shell gives its pages; dark unless [dark] says otherwise (the
+ * after-call card follows the app's theme). Always the app's own font, never the phone's (a handwritten system font made
+ * the after-call card hard to read over other apps; the call-choice plan, 2.0.5). It starts
+ * from the app's hot copy of the stored settings ([settings]), so nothing waits while it draws. Just after a cold start,
+ * before the store has been read once, it draws nothing (a few frames: the read was asked for, off the main thread)
+ * rather than the phone's look; if the store has not answered after [OVERLAY_WAIT_MS], the phone's own look.
+ */
+@Composable
+fun OverlayLook(
+    settings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>?,
+    dark: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val flow = androidx.compose.runtime.remember(settings) { settings ?: kotlinx.coroutines.flow.MutableStateFlow(null) }
+    val stored = flow.collectAsState().value
+    var waited by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(OVERLAY_WAIT_MS)
+        waited = true
+    }
+    if (stored == null && !waited) return
+    val look = stored ?: com.echoledger.mobile.data.AppSettings()
+    // The store not answering yet: the language kept at the last save, else English (never the phone's while signed in).
+    val choice = stored?.let(AppLook::choice) ?: AppLook.lastKnown ?: "en"
+    com.echoledger.mobile.ui.v2.theme.EchoV2Theme(
+        darkTheme = dark,
+        language = AppLook.language(choice, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
+        phoneFont = false
+    ) {
+        AppLook.TextSize(look.textSize, content)
+    }
+}
+
+/** How long a window outside the app waits for the settings' first read before it shows the phone's own look. */
+const val OVERLAY_WAIT_MS = 1_500L
+
+/**
+ * The app's stored settings, kept hot, for a window outside the activity. Before they have been read once (a process a
+ * call has just started), it asks for that read, once, off the main thread, without waiting for it.
+ */
+fun overlaySettings(context: android.content.Context): kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>? {
+    val graph = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph ?: return null
+    graph.readSettingsOnce()
+    return graph.liveSettings
 }

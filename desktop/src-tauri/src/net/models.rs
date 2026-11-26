@@ -400,6 +400,29 @@ pub struct AccountDto {
     /// Every workspace the person belongs to (v1.6 shell, for the switcher); empty when the server does not list them.
     #[serde(default, deserialize_with = "lenient_list")]
     pub workspaces: Vec<AccountWorkspaceEntry>,
+    /// The person's picture (since 2.0.0-l): a signed link and the version it is kept by; none shows the initials.
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub avatar_version: Option<u64>,
+    /// The account has a password (one made with Google may not); `None` from a server before 2.0.0-l.
+    #[serde(default)]
+    pub has_password: Option<bool>,
+    /// An email change waiting for its code, and until when.
+    #[serde(default)]
+    pub pending_email: Option<String>,
+    #[serde(default)]
+    pub pending_email_expires_at: Option<String>,
+    /// The server takes phone passkeys (the desktop adds them on the website either way).
+    #[serde(default)]
+    pub passkeys_available: Option<bool>,
+    /// The colour of the initials' circle without a photo, 0–7 (since 2.0.0-r, BE-06), picked once by the server so it
+    /// is the same on every device; `None` (an older server, or anything else) lets the app derive one from the email.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub avatar_color: Option<u8>,
+    /// The apps' and the console's interface language, "en" or "ur" (since 2.0.0-r, BE-06): the same setting everywhere.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// One of the person's workspaces in `account.workspaces` (v1.6 shell).
@@ -682,11 +705,47 @@ pub struct LibraryItem {
     pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
+/// One of the person's lists (contract 2.0.0-m): a label with a name, a colour and its place in the Library's row.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListDto {
+    /// The name in lower case: the list's key in the paths and in every label it matches.
+    pub key: String,
+    pub name: String,
+    /// "#rrggbb", or none (drawn in the neutral colour).
+    pub color: Option<String>,
+    pub position: u32,
+    /// The person's recordings in it, not in Trash.
+    pub count: u64,
+}
+
+/// `GET /api/lists`, `PUT /api/lists/order`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListsResponse {
+    pub data: Vec<ListDto>,
+}
+
+/// `POST /api/lists`, `PATCH /api/lists/{key}`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListResponse {
+    pub data: ListDto,
+}
+
+/// `DELETE /api/lists/{key}`: the recordings that lost the label.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListDeleted {
+    pub key: String,
+    pub changed: u64,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct LibraryResponse {
     pub data: Vec<LibraryItem>,
     pub next_cursor: Option<String>,
     pub server_time: String,
+    /// The person's saved views' version (since 2.0.0-p): when it differs from the one the app has, it reads
+    /// `GET /api/views` again. None from an older server.
+    #[serde(default)]
+    pub views_version: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -779,6 +838,20 @@ pub struct AuthOptions {
     /// Email codes are offered (since v1.6).
     #[serde(default)]
     pub code: bool,
+    /// What a new password needs (since 2.0.0-l), so the app can say it before sending; the server still decides.
+    #[serde(default, alias = "password_rules")]
+    pub password_rules: Option<PasswordRules>,
+}
+
+/// `password_rules` of `GET /api/auth/options` (since 2.0.0-l).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PasswordRules {
+    #[serde(default)]
+    pub min: u32,
+    #[serde(default)]
+    pub letters: bool,
+    #[serde(default)]
+    pub numbers: bool,
 }
 
 fn yes() -> bool {
@@ -1662,4 +1735,14 @@ pub struct ScreenMoment {
 #[serde(default)]
 pub struct UploadedScreen {
     pub data: ScreenMoment,
+}
+
+/// The answer to `POST` / `DELETE /api/sessions/opened` (contract 2.0.0-y, Mark as read / unread for many): the
+/// recordings marked, and every other id as it was sent (another workspace's, another person's, in the bin, none at
+/// all), which is never an error for the whole batch. Without a `done` list it is not this answer (an older server).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenedMany {
+    pub done: Vec<String>,
+    #[serde(default)]
+    pub not_found: Vec<String>,
 }

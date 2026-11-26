@@ -120,17 +120,17 @@ export const COPY: Record<Lang, Copy> = {
     },
     rows: [
       { id: "r1", app: "whatsapp", title: "بلال قریشی · قریشی ٹیکسٹائلز", meta: "مارچ کی شپمنٹ کے لیے ادائیگی کی شرائط", time: "صبح 11:42", duration: "18:24", day: "today" },
-      { id: "r2", app: "google_meet", title: "ہفتہ وار سیلز جائزہ، مہران فوڈز", meta: "گوگل میٹ · 6 افراد · کراچی اور لاہور دفاتر", time: "صبح 10:05", duration: "46:10", day: "today" },
+      { id: "r2", app: "google_meet", title: "ہفتہ وار سیلز جائزہ، مہران فوڈز", meta: "Google Meet · 6 افراد · کراچی اور لاہور دفاتر", time: "صبح 10:05", duration: "46:10", day: "today" },
       { id: "r3", app: "voice_note", title: "وائس نوٹ", meta: "پورٹ قاسم کنٹینر کے بارے میں کسٹمز ایجنٹ کو کال کریں", time: "صبح 9:18", duration: "2:14", day: "today", untranscribed: true },
       { id: "r4", app: "phone_call", title: "عثمان چوہدری · چوہدری اسٹیل", meta: "12 ملی میٹر سریے کا ریٹ، گوجرانوالہ ڈیلیوری", time: "صبح 8:47", duration: "7:32", day: "today", untranscribed: true },
-      { id: "r5", app: "zoom", title: "حبیب اینڈ کمپنی کے ساتھ آڈٹ کا آغاز", meta: "زوم · سہ ماہی سیلز ٹیکس ریٹرن اور انوائسز", time: "شام 4:30", duration: "38:02", day: "yesterday" },
+      { id: "r5", app: "zoom", title: "حبیب اینڈ کمپنی کے ساتھ آڈٹ کا آغاز", meta: "Zoom · سہ ماہی سیلز ٹیکس ریٹرن اور انوائسز", time: "شام 4:30", duration: "38:02", day: "yesterday" },
       { id: "r6", app: "whatsapp_business", title: "فاطمہ ملک · لاہور لیدر ورکس", meta: "300 جیکٹوں کے نمونے کی منظوری، ایف او بی قیمت", time: "دوپہر 2:12", duration: "12:51", day: "yesterday" },
-      { id: "r7", app: "microsoft_teams", title: "انٹرویو: اکاؤنٹس آفیسر", meta: "مائیکروسافٹ ٹیمز · کامران بٹ، دوسرا راؤنڈ", time: "صبح 11:00", duration: "32:05", day: "yesterday" },
+      { id: "r7", app: "microsoft_teams", title: "انٹرویو: اکاؤنٹس آفیسر", meta: "Microsoft Teams · کامران بٹ، دوسرا راؤنڈ", time: "صبح 11:00", duration: "32:05", day: "yesterday" },
       { id: "r8", app: "whatsapp", title: "سعدیہ حسن · زمزم ٹریولز", meta: "فروری میں 14 افراد کے عمرہ گروپ کی بکنگ", time: "صبح 9:40", duration: "5:48", day: "yesterday", untranscribed: true },
     ],
     recording: {
       back: "لائبریری", title: "مارچ کی شپمنٹ کے لیے ادائیگی کی شرائط",
-      meta: "بلال قریشی کے ساتھ واٹس ایپ کال · قریشی ٹیکسٹائلز · آج، صبح 11:42", status: "ٹرانسکرپٹ تیار",
+      meta: "بلال قریشی کے ساتھ WhatsApp کال · قریشی ٹیکسٹائلز · آج، صبح 11:42", status: "ٹرانسکرپٹ تیار",
       share: "شیئر کریں", move: "منتقل کریں", remove: "حذف کریں", more: "مزید اختیارات",
       tabs: { transcript: "ٹرانسکرپٹ", summary: "خلاصہ", ask: "پوچھیں", moments: "اہم لمحات", details: "تفصیلات" }, tabsLabel: "ریکارڈنگ",
       transcriptLabel: "ٹرانسکرپٹ", speed: "چلانے کی رفتار", play: "چلائیں", pause: "روکیں", seek: "مقام", of: "میں سے",
@@ -145,10 +145,10 @@ export const COPY: Record<Lang, Copy> = {
     },
     settings: {
       title: "ترتیبات", search: "ترتیبات تلاش کریں", name: "عائشہ صدیقی", email: "ayesha@qureshitextiles.pk",
-      plan: "مفت پلان", usage: "اس مہینے 300 میں سے 212 منٹ استعمال ہوئے", upgrade: "اپ گریڈ کریں",
+      plan: "Free پلان", usage: "اس مہینے 300 میں سے 212 منٹ استعمال ہوئے", upgrade: "اپ گریڈ کریں",
       groups: [
         { title: "ریکارڈنگ", rows: [
-          { icon: "record", title: "خودکار ریکارڈنگ کے ذرائع", value: "واٹس ایپ، میٹ، زوم" },
+          { icon: "record", title: "خودکار ریکارڈنگ کے ذرائع", value: "WhatsApp، Meet، Zoom" },
           { icon: "after", title: "کال کے بعد", value: "خلاصہ دکھائیں" },
           { icon: "captions", title: "لائیو کیپشنز", toggle: true },
         ] },

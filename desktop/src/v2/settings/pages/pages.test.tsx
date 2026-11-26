@@ -36,6 +36,10 @@ const SETTINGS = makeSettings({
   dictationSnippets: [{ trigger: "insert signature", text: "Regards,\nAyesha" }],
 });
 const ACCOUNT: Account = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: true, google: false, created_at: null, workspace: null, deletes_at: null };
+/** An account on a server with the account routes of 2.0.0-l (a picture, two-step on). */
+const NATIVE: Account = { ...ACCOUNT, has_password: true, avatar_url: "https://ledger.example.test/a", avatar_version: 3, pending_email: null, passkeys_available: true };
+const NATIVE_SECURITY = { password: true, google: { linked: false, email: null }, passkeys: [{ id: "pk1", name: "Phone", created_at: null, last_used_at: null }],
+  two_factor: { enabled: true, recovery_codes_left: 6 }, browsers: [], devices: [] };
 const HISTORY = [{ at: "2026-11-17T08:00:00Z", text: "Send the proforma today." }];
 const run = <T,>(fn: () => Promise<T>) => fn().catch(() => undefined);
 const CHECK_OK: CheckItem = { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null };
@@ -573,7 +577,7 @@ describe("Appearance v2", () => {
     fireEvent.click(group("Density").getByRole("radio", { name: "Compact" }));
     fireEvent.click(group("Times").getByRole("radio", { name: "24-hour" }));
     expect(getThemeChoice()).toBe("dark");
-    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24", compactRail: false });
     expect(document.documentElement.dataset.density).toBe("compact");
     expect(followed).toHaveBeenCalledTimes(3);
     expect(group("Theme").getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
@@ -581,8 +585,34 @@ describe("Appearance v2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     await act(flushAsync);
     expect(getThemeChoice()).toBe("system");
-    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false });
     window.removeEventListener("echoledger:preferences", followed);
+  });
+
+  it("Compact rail (icons only): only where the window has the rail, off by default, followed at once; Reset turns it off", async () => {
+    localStorage.clear();
+    await show("appearance");
+    expect(screen.queryByRole("switch", { name: "Compact rail (icons only)" })).toBeNull();
+    cleanup();
+    const followed = vi.fn();
+    const listen = (e: Event) => followed((e as CustomEvent).detail.compactRail);
+    window.addEventListener("echoledger:preferences", listen);
+    try {
+      render(<div className="el-root"><SettingsPagesV2 section={{ id: "appearance", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} threeLevels /></div>);
+      await act(flushAsync);
+      const toggle = screen.getByRole("switch", { name: "Compact rail (icons only)" });
+      expect(toggle).not.toBeChecked();
+      fireEvent.click(toggle);
+      expect(loadPreferences().compactRail).toBe(true);
+      expect(followed).toHaveBeenLastCalledWith(true);
+      answerConfirm().mockReturnValue(true);
+      fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+      await act(flushAsync);
+      expect(loadPreferences().compactRail).toBe(false);
+      expect(screen.getByRole("switch", { name: "Compact rail (icons only)" })).not.toBeChecked();
+    } finally {
+      window.removeEventListener("echoledger:preferences", listen);
+    }
   });
 
   it("the app's theme is the one shown, and a change goes to the app (the top bar's toggle agrees)", async () => {
@@ -639,7 +669,10 @@ describe("Keyboard shortcuts v2", () => {
 
   it("warns when a shortcut is one browsers use", async () => {
     await show("shortcuts");
-    expect(screen.getByText(/This shortcut also opens the element picker \(DevTools\) in browsers; EchoLedger takes it over\./)).toBeInTheDocument();
+    // EL-UX (D3a review): who else uses it, never what it does there, so the app's name is the only value.
+    // Start or stop saving (Ctrl+Shift+R) and Copy the last 2 minutes (Ctrl+Shift+C), both browsers' keys.
+    const notes = screen.getAllByText("This shortcut is also used by browsers; EchoLedger takes it over.");
+    expect(notes.map((note) => note.closest("[data-setting]")?.getAttribute("data-setting"))).toEqual(["shortcuts.global.toggle_saving", "shortcuts.global.copy_last2_min"]);
   });
 });
 
@@ -687,6 +720,7 @@ describe("Plan & usage v2", () => {
     expect(screen.getByTestId("plan-ultra")).toHaveTextContent("Everything in Pro, plus:");
     fireEvent.click(screen.getByRole("button", { name: /^See every feature/ }));
     expect(screen.getByRole("table", { name: "Every feature" })).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Every feature" })).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Feature", "Free (yours)", "Pro", "Ultra"]);
     expect(screen.getByRole("button", { name: /^See every feature/ })).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(screen.getByRole("button", { name: "Promo code" }));
     expect(screen.getByTestId("sheet")).toHaveTextContent("pro|choose");
@@ -741,6 +775,19 @@ describe("Plan & usage v2", () => {
     cleanup();
     await show("key");
     expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+  });
+
+  it("D-230: near the uploads a day the meter says uploads, never team members; a team with no plan known says who manages it", async () => {
+    const e = sampleEntitlements("pro");
+    e.limits.uploads_per_day = { limit: 200, used: 170 };
+    await showPlan(e);
+    expect(screen.getByTestId("meter-uploads_per_day")).toHaveTextContent("You've used 85% of your daily uploads.");
+    expect(screen.getByTestId("meter-uploads_per_day")).not.toHaveTextContent("team members");
+    cleanup();
+    respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
+    await showPlan({ ...sampleEntitlements("pro"), plan: null });
+    expect(screen.getByText("Qureshi Textiles's plan is managed by its owner.")).toBeInTheDocument();
+    expect(screen.queryByText(/is on Your/)).toBeNull();
   });
 
   it("a team's member: the plan's facts, who manages it, and no button", async () => {
@@ -1004,7 +1051,7 @@ describe("parity with today's Settings pages, in every state", () => {
     ...(["windows", "macos"] as const).flatMap((platform) => [true, false].map((autoMode): Page => ({
       name: `Calls & meetings, ${platform}, auto-record ${autoMode ? "on" : "off"}`, section: "calls", platform, settings: { autoMode },
       today: (st) => <CallsPage settings={st} patch={patch} platform={platform} onSites={() => undefined} consentRead={false} onConsent={() => undefined} />, steps: [reset],
-      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
+      map: { "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
     }))),
     { name: "Call sites", section: "calls.sites", today: (st) => <CallSitesPage rules={st.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] },
       steps: [{ name: "a site typed", today: type("Address or title contains", "meet.jit.si") }] },
@@ -1066,7 +1113,7 @@ describe("parity with today's Settings pages, in every state", () => {
     { name: "Never capture these apps", section: "screen.excluded", today: (st) => <ExcludedAppsPage settings={st} patch={patch} platform="windows" />,
       steps: [{ name: "an app typed", today: type("App or process name", "Signal.exe") }] },
     { name: "Appearance", section: "appearance",
-      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset],
+      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12", compactRail: false }} setPref={() => undefined} />, steps: [reset],
       otherSide: { "button: Try the new design": "classic's side of the design switch; the new design's Appearance has Switch back to classic (v2/designSwitch.test.tsx)" } },
     ...(["windows", "macos"] as const).map((platform): Page => ({
       name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,
@@ -1115,6 +1162,18 @@ describe("parity with today's Settings pages, in every state", () => {
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
+    // Since 2.0.0-l the account is changed in the app: the same rows and the same dialogs in both designs.
+    { name: "Profile, changed in the app", section: "profile", account: NATIVE,
+      today: () => <ProfilePage account={NATIVE} status={makeStatus()} run={run} />,
+      // UX-11 (lead decision 10): with the profile changed in the app, the new look has no way out to the website's.
+      otherSide: { "button: Edit profile, opens in browser": "UX-11: the profile is edited in the app; the website is only for billing" },
+      steps: [{ name: "Change name", today: press("Change name") }, { name: "Change email", today: press("Change email") }, { name: "Remove picture", today: press("Remove picture") }],
+      lines: ["Your teammates see your name and picture.", "This is the name your teammates see.", "Your initials show instead, everywhere."] },
+    { name: "Sign-in & security, changed in the app", section: "security", account: NATIVE,
+      today: () => <SecurityPage account={NATIVE} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
+      steps: [{ name: "Change password", today: press("Change password") }, { name: "Turn off two-step", today: press("Turn off two-step sign-in") },
+        { name: "New recovery codes", today: press("New recovery codes") }, { name: "Remove a passkey", today: press("Remove passkey Phone") }],
+      lines: ["Passkeys sign you in with your phone, fingerprint or face. Add one on the website.", "This computer stays signed in.", "Your old recovery codes stop working."] },
   ];
 
   /** The controls on screen and the confirm questions asked, after `step` (none: the page as it opens). */
@@ -1140,6 +1199,9 @@ describe("parity with today's Settings pages, in every state", () => {
       respond("lock_status", { enabled: !!page.settings?.appLock, locked: false, hasPin: page.lock?.hasPin ?? false, osMethod: "windows_hello", retryAfterSeconds: 0 });
       resetEntitlementsForTests(page.entitlements ?? sampleEntitlements("free"));
       respond("account_get", page.account ?? ACCOUNT);
+      respond("account_call", { ok: true, status: 200, data: NATIVE_SECURITY, code: null, message: null, accepts: [], errorCodes: null, errors: null, retryAfter: null, qr: null });
+      respond("account_avatar_image", null);
+      respond("auth_options", null);
       respond("security_overview", { devices: page.devices ? DEVICES : [], events: [{ id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: "2026-11-17T08:00:00Z" }] });
       respond("update_status", { ...UPDATE_IDLE, ...page.update });
       respond("mac_check_last", page.macLast ?? null);

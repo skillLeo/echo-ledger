@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui.v2
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,6 +35,10 @@ class AskScreenTest : ScreenTest() {
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         vm.refresh()
         compose.setContent { EchoV2Theme(darkTheme = false, language = EchoLanguage.English) { V2AskScreen(vm, onOpenAt = { _, _ -> }) } }
+        // Since 2.0.0-o the Ask tab starts on All my recordings: these ask a project, so they choose one first.
+        compose.waitUntil(5_000) { has("All my recordings") && vm.clients.value.isNotEmpty() }
+        compose.onAllNodesWithText("Ask about", useUnmergedTree = true).onFirst().performClick()
+        compose.onAllNodes(hasText("Acme Holdings") and hasClickAction()).onFirst().performClick()
         compose.waitUntil(5_000) { has("Acme Holdings") }
     }
 

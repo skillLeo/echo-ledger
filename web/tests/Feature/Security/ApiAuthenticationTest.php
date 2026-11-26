@@ -56,6 +56,8 @@ function secDeviceGuardedRoutes(): array
         'POST clients/{id}/files' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/files', 'sessions:write'],
         'DELETE clients/{id}/files/{file}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID.'/files/'.Fx::MISSING_ID, 'sessions:write'],
         'POST clients/{id}/ask' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        'POST sessions/{id}/ask' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        'POST ask' => ['POST', '/api/ask', 'sessions:write'],
         'GET sessions/{id}/notes' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'library:read'],
         'POST sessions/{id}/notes' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'sessions:write'],
         'POST transcripts/{id}/suggestions/{suggestion}' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/suggestions/0', 'sessions:write'],
@@ -63,12 +65,29 @@ function secDeviceGuardedRoutes(): array
         'POST usage' => ['POST', '/api/usage', 'stt:token'],
         'POST live-translate/token' => ['POST', '/api/live-translate/token', 'stt:token'],
         'POST sessions/{id}/opened' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/opened', 'library:read'],
+        'DELETE sessions/{id}/opened' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID.'/opened', 'library:read'],
+        // Since 2.0.0-y: the same for many.
+        'POST sessions/opened' => ['POST', '/api/sessions/opened', 'library:read'],
+        'DELETE sessions/opened' => ['DELETE', '/api/sessions/opened', 'library:read'],
         // Since 2.0.0-j: audio only and "Transcribe later".
         'POST sessions/{id}/transcribe' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcribe', 'sessions:write'],
         'POST sessions/transcribe' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
         'POST sessions/transcribe-estimate' => ['POST', '/api/sessions/transcribe-estimate', 'library:read'],
         // Since 2.0.0-i: a label's colour.
         'PUT labels/color' => ['PUT', '/api/labels/color', 'sessions:write'],
+        // Since 2.0.0-m: lists.
+        'GET lists' => ['GET', '/api/lists', 'config:read'],
+        'POST lists' => ['POST', '/api/lists', 'sessions:write'],
+        'PUT lists/order' => ['PUT', '/api/lists/order', 'sessions:write'],
+        'PATCH lists/{key}' => ['PATCH', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE lists/{key}' => ['DELETE', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
+        // Since 2.0.0-p: saved views and the filter panel's counts.
+        'GET views' => ['GET', '/api/views', 'library:read'],
+        'POST views' => ['POST', '/api/views', 'sessions:write'],
+        'PUT views/order' => ['PUT', '/api/views/order', 'sessions:write'],
+        'PATCH views/{id}' => ['PATCH', '/api/views/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE views/{id}' => ['DELETE', '/api/views/'.Fx::MISSING_ID, 'sessions:write'],
+        'GET library/facets' => ['GET', '/api/library/facets', 'library:read'],
         'POST sessions' => ['POST', '/api/sessions', 'sessions:write'],
         'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish', 'sessions:write'],
         'POST sessions/{id}/markers' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/markers', 'sessions:write'],
@@ -121,9 +140,41 @@ function secDeviceGuardedRoutes(): array
         // Since 2.0.0-a: the person's "Switch back to classic".
         'PUT account/ui' => ['PUT', '/api/account/ui', 'config:read'],
         'GET account/ui' => ['GET', '/api/account/ui', 'config:read'],
+        // Since 2.0.0-w: call rules (404 while the call_rules flag is off, after the token and its ability).
+        'GET call-rules' => ['GET', '/api/call-rules', 'config:read'],
+        'PUT call-rules/settings' => ['PUT', '/api/call-rules/settings', 'sessions:write'],
+        'POST call-rules' => ['POST', '/api/call-rules', 'sessions:write'],
+        'PATCH call-rules/{id}' => ['PATCH', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE call-rules/{id}' => ['DELETE', '/api/call-rules/'.Fx::MISSING_ID, 'sessions:write'],
+        // Since 2.0.0-x (CC5).
+        'PATCH call-rules/preferences' => ['PATCH', '/api/call-rules/preferences', 'sessions:write'],
+        'POST call-rules/declined' => ['POST', '/api/call-rules/declined', 'sessions:write'],
+        'DELETE call-rules/declined' => ['DELETE', '/api/call-rules/declined', 'sessions:write'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
+        // Since 2.0.0-l: account and security from the apps.
+        'GET account/security' => ['GET', '/api/account/security', 'config:read'],
+        'POST account/proof-code' => ['POST', '/api/account/proof-code', 'sessions:write'],
+        'PATCH account' => ['PATCH', '/api/account', 'sessions:write'],
+        'POST account/avatar' => ['POST', '/api/account/avatar', 'sessions:write'],
+        'DELETE account/avatar' => ['DELETE', '/api/account/avatar', 'sessions:write'],
+        'POST account/email' => ['POST', '/api/account/email', 'sessions:write'],
+        'POST account/email/confirm' => ['POST', '/api/account/email/confirm', 'sessions:write'],
+        'DELETE account/email' => ['DELETE', '/api/account/email', 'sessions:write'],
+        'PUT account/password' => ['PUT', '/api/account/password', 'sessions:write'],
+        'PATCH account/devices/{id}' => ['PATCH', '/api/account/devices/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/devices/{id}' => ['DELETE', '/api/account/devices/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/browsers/{id}' => ['DELETE', '/api/account/browsers/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/google' => ['DELETE', '/api/account/google', 'sessions:write'],
+        'POST account/passkeys/options' => ['POST', '/api/account/passkeys/options', 'sessions:write'],
+        'POST account/passkeys' => ['POST', '/api/account/passkeys', 'sessions:write'],
+        'PATCH account/passkeys/{id}' => ['PATCH', '/api/account/passkeys/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/passkeys/{id}' => ['DELETE', '/api/account/passkeys/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST account/two-factor' => ['POST', '/api/account/two-factor', 'sessions:write'],
+        'POST account/two-factor/confirm' => ['POST', '/api/account/two-factor/confirm', 'sessions:write'],
+        'POST account/two-factor/recovery-codes' => ['POST', '/api/account/two-factor/recovery-codes', 'sessions:write'],
+        'DELETE account/two-factor' => ['DELETE', '/api/account/two-factor', 'sessions:write'],
         // Since v1.9 (L1): Live Assist.
         'GET assist/preps' => ['GET', '/api/assist/preps', 'library:read'],
         'GET assist/preps/{id}' => ['GET', '/api/assist/preps/'.Fx::MISSING_ID, 'library:read'],
@@ -204,6 +255,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     expect($public)->toBe([
         // Since v1.5 (Phase 1C): what the sign-in screen offers.
         'GET api/auth/options',
+        // Since 2.0.0-l: a profile picture, by its signed, expiring, versioned URL (AvatarController checks the signature).
+        'GET api/avatars/{user}/{version}',
         // Since v1.9 (L1): the Live Assist relay's internal API, never a device token: HMAC-signed by the relay
         // (VerifyAssistRelay; tests/Feature/Assist/AssistRelayInternalTest.php).
         'GET api/internal/assist/providers',
@@ -224,7 +277,11 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(140);
+    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
+    // 2.0.0-p: the five saved view routes and the filter counts; 2.0.0-r: the badge, the Activity's groups and Retry all;
+    // 2.0.0-t: Mark as unread (DELETE sessions/{id}/opened); 2.0.0-w: the five call rules routes; 2.0.0-x: three more;
+    // 2.0.0-y: Mark as read / unread for many.
+    expect($guarded)->toBe(188);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

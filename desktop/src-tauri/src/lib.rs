@@ -24,6 +24,11 @@ pub mod lock;
 pub mod mac_check;
 mod main_thread;
 pub mod material;
+pub mod native_feel;
+pub mod native_menu;
+pub mod dock;
+pub mod taskbar;
+pub mod my_account;
 pub mod net;
 pub mod notifications;
 pub mod overlay;
@@ -39,7 +44,9 @@ pub mod receipts;
 pub mod recovery;
 pub mod refusal;
 pub mod screens;
+pub mod secret_copy;
 pub mod settings;
+pub mod share_sheet;
 pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
@@ -47,11 +54,13 @@ pub mod smoke;
 pub mod stall;
 pub mod spaces;
 pub mod stt;
+pub mod title_click;
 pub mod translate;
 pub mod tray;
 pub mod ui_flags;
 pub mod updates;
 pub mod whatsapp;
+pub mod wintitle;
 pub mod server_notice;
 
 use std::path::PathBuf;
@@ -108,8 +117,12 @@ pub struct AppState {
     pub pill_hidden: AtomicBool,
     /// Captions were on when the recording was paused, so resume reopens them (sockets close on pause, A5.3).
     pub captions_on_resume: AtomicBool,
-    /// The after-call window (v1.5): the Saved toast, the chip, and what Undo needs.
+    /// The after-call window (the call choice): the card, the one confirmation or the grouped card, and what Undo needs.
     pub after_call: Mutex<after_call::Surfaces>,
+    /// The choice made on the pill's menu for the running recording (its client_ref): no card when it ends.
+    pub call_choice: Mutex<Option<(String, after_call::CallChoice)>>,
+    /// "Recording this call · Don't record" beside the pill: the recording it is for and when it started.
+    pub start_banner: Mutex<Option<(String, Instant)>>,
     /// The current recording's microphone is Bluetooth (v1.5): the pill says "Accuracy is lower with Bluetooth mics".
     pub bluetooth_mic: AtomicBool,
     /// The once-a-second `recording:state` task is running.
@@ -144,6 +157,10 @@ pub struct AppState {
     pub recording_missing: Mutex<Vec<permissions::Missing>>,
     /// Which permissions were granted last time, and what the person has not been told is gone yet (Phase 1B).
     pub permission_memory: Mutex<permissions::Memory>,
+    /// Whether the running call recording records the other side (`actions::check_system_side`).
+    pub system_watch: Mutex<audio::health::SystemWatch>,
+    /// What went wrong with the last recording's capture, for Copy diagnostics.
+    pub last_capture_notes: Mutex<Vec<String>>,
     /// The devices of the running recording: a channel without one, or news of a change (Phase 1B).
     pub device_status: Mutex<audio::devices::DeviceStatus>,
     /// The last Mac check of this run (Phase 1B).
@@ -166,7 +183,14 @@ impl AppState {
         let token = None;
         let library = LibraryCache::load(&paths::library(&data_dir));
         let settings_locked = settings.app_lock && lock::LockFile::load(&paths::app_lock(&data_dir)).pin_hash.is_some();
-        let permission_memory = permissions::Memory::load(&permissions::Memory::path(&data_dir));
+        // Another copy of EchoLedger (an update, another signature) asks for its permissions afresh: macOS may not have
+        // carried them over although its privacy call still says yes.
+        let stored = permissions::Memory::load(&permissions::Memory::path(&data_dir));
+        let permission_memory = stored.for_identity(&permissions::identity());
+        if permission_memory != stored {
+            eprintln!("[echoledger] permissions: another copy of EchoLedger than last time; what was granted is asked again");
+            permission_memory.save(&permissions::Memory::path(&data_dir));
+        }
         Self {
             data_dir,
             settings: Mutex::new(settings),
@@ -197,6 +221,8 @@ impl AppState {
             pill_hidden: AtomicBool::new(false),
             captions_on_resume: AtomicBool::new(false),
             after_call: Mutex::new(after_call::Surfaces::default()),
+            call_choice: Mutex::new(None),
+            start_banner: Mutex::new(None),
             bluetooth_mic: AtomicBool::new(false),
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
@@ -213,6 +239,8 @@ impl AppState {
             updates: updates::Updates::default(),
             recording_missing: Mutex::new(Vec::new()),
             permission_memory: Mutex::new(permission_memory),
+            system_watch: Mutex::new(audio::health::SystemWatch::default()),
+            last_capture_notes: Mutex::new(Vec::new()),
             device_status: Mutex::new(audio::devices::DeviceStatus::default()),
             mac_check: Mutex::new(None),
             ready: Mutex::new(None),
@@ -275,6 +303,46 @@ impl AppState {
         id
     }
 
+    /// A sign-in saved (adopt_registration): the server, its pins and this device, and a fresh id for this sign-in, so
+    /// nothing the window kept for an earlier one is read as this one's.
+    pub fn note_sign_in(&self, server_url: &str, pins: &[String], device_id: &str, device_name: &str) -> AppResult<Settings> {
+        self.update_settings(|s| {
+            s.server_url = Some(server_url.to_string());
+            s.pins = pins.to_vec();
+            s.device_id = Some(device_id.to_string());
+            s.device_name = Some(device_name.to_string());
+            s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());
+        })
+    }
+
+    /// Signed out (unpair): this device and the sign-in's id are forgotten (the server stays, for the next sign-in).
+    pub fn note_sign_out(&self) -> AppResult<Settings> {
+        self.update_settings(|s| {
+            s.device_id = None;
+            s.device_name = None;
+            s.sign_in_id = None;
+        })
+    }
+
+    /// This sign-in's id (AppStatus.signIn), none while signed out. A sign-in kept from before 2.0.0-p gets one now.
+    pub fn sign_in_id(&self) -> Option<String> {
+        if !self.is_paired() {
+            return None;
+        }
+        if let Some(id) = self.settings().sign_in_id {
+            return Some(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        match self.update_settings(|s| s.sign_in_id = Some(id.clone())) {
+            Ok(_) => Some(id),
+            // Not kept: none (the window keeps nothing for this sign-in rather than something for any).
+            Err(e) => {
+                eprintln!("[echoledger] the sign-in id could not be kept: {e}");
+                None
+            }
+        }
+    }
+
     pub fn is_paired(&self) -> bool {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }
@@ -299,9 +367,21 @@ impl AppState {
         self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
+    /// What a real look at system audio found (a recording's other side, a short tap): kept, and said by
+    /// [`AppState::permissions_now`] from now on.
+    pub fn system_audio_checked(&self, result: Option<Result<(), String>>) {
+        let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
+        let next = memory.with_system_audio(result);
+        if next != *memory {
+            next.save(&permissions::Memory::path(&self.data_dir));
+            *memory = next;
+        }
+    }
+
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
+    /// System audio that did not record although the privacy call allows it counts as off (`Memory::overlay`).
     pub fn permissions_now(&self) -> permissions::Permissions {
-        let now = permissions::read();
+        let now = self.permission_memory_now().overlay(permissions::read());
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
             let (can_tell, run) = (permissions::can_tell_not_asked(), permissions::this_run());
@@ -420,6 +500,9 @@ pub fn run() {
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
         .setup(move |app| {
+            // No window tabs on a Mac (FIX-05): macOS would add Show Tab Bar and Show All Tabs to the View menu.
+            #[cfg(target_os = "macos")]
+            app_menu::no_window_tabs();
             let smoke_test = smoke_dir.is_some();
             let data_dir = match smoke_dir {
                 Some(dir) => dir,
@@ -447,10 +530,26 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
             // Without a Developer ID macOS may forget permissions at an update: looked at every start (Phase 1B).
             app.state::<AppState>().permissions_now();
+            // Another copy of EchoLedger (the first start after an update): system audio looked at for real once, when it
+            // was allowed before (`Memory::wants_probe`).
+            if cfg!(target_os = "macos") && app.state::<AppState>().permission_memory_now().wants_probe() {
+                let verifying = handle.clone();
+                tauri::async_runtime::spawn(async move { commands::verify_system_audio(&verifying).await });
+            }
             // An update downloaded by the last run installs now, before anything records (v1.5).
             updates::install_kept(&handle);
 
             tray::create(&handle)?;
+            // FIX-11: the menu bar icon as the settings say (shown or not), and the Dock's number.
+            tray::follow_settings(&handle);
+            // FIX-12 (Windows): the Jump List's Tasks and Open with, the tray tip once after install; a start from the
+            // Jump List runs its task, a start with audio files (Open with) imports them.
+            taskbar::register(&handle);
+            #[cfg(windows)]
+            taskbar::tray_tip_once(&handle);
+            let args: Vec<String> = std::env::args().collect();
+            taskbar::run_jump_task(&handle, &args);
+            dock::opened(&handle, taskbar::opened_files(&args));
             // C9: no window is built here. The main window and the overlays are built when first needed
             // (lifecycle.rs), so an idle app (in the Dock and the menu bar, or the notification area) runs no web view.
             audio::platform::set_preferred_mic(settings.input_device.clone());
@@ -552,6 +651,11 @@ pub fn run() {
             commands::translate_stop,
             commands::translate_toggle_lock,
             commands::window_appearance,
+            title_click::title_double_click,
+            native_menu::native_menu_popup,
+            dock::dock_activity_set,
+            wintitle::window_titlebar,
+            app_menu::app_menu_set,
             commands::set_window_theme,
             commands::pair_device,
             commands::sign_in_password,
@@ -585,6 +689,11 @@ pub fn run() {
             commands::sign_in_browser_cancel,
             commands::unpair,
             commands::account_get,
+            commands::account_call,
+            commands::account_avatar_choose,
+            commands::account_avatar_image,
+            commands::account_recovery_codes_save,
+            commands::account_recovery_codes_copy,
             commands::account_sign_out_everywhere,
             commands::account_delete,
             commands::account_export_start,
@@ -642,6 +751,7 @@ pub fn run() {
             commands::save_audio,
             commands::save_audio_downloads,
             commands::whatsapp_open,
+            commands::whatsapp_share_voice,
             commands::copy_last_minutes,
             commands::library_list,
             commands::library_refresh,
@@ -665,6 +775,7 @@ pub fn run() {
             commands::permission_request,
             commands::permission_notice_dismiss,
             commands::open_privacy_settings,
+            commands::capture_retry_system,
             commands::ready_check,
             commands::ready_last,
             commands::ready_fix,
@@ -692,7 +803,11 @@ pub fn run() {
             commands::bin_erase,
             commands::storage_info,
             commands::activity_list,
+            commands::activity_group_list,
+            commands::activity_groups,
             commands::activity_read,
+            commands::activity_retry_all,
+            commands::badge_get,
             commands::settings_export,
             commands::settings_import,
             commands::session_organise,
@@ -702,6 +817,21 @@ pub fn run() {
             commands::sessions_transcribe,
             commands::sessions_transcribe_estimate,
             commands::client_create,
+            commands::session_opened,
+            commands::session_unopen,
+            commands::sessions_opened,
+            commands::sessions_unopened,
+            commands::lists_get,
+            commands::list_create,
+            commands::list_update,
+            commands::list_delete,
+            commands::lists_order,
+            commands::views_get,
+            commands::view_create,
+            commands::view_update,
+            commands::view_delete,
+            commands::views_order,
+            commands::library_views_version,
             commands::client_update,
             commands::client_delete,
             commands::library_views,
@@ -773,6 +903,15 @@ pub fn run() {
             commands::saved_undo,
             commands::after_call_discard,
             commands::after_call_discard_undo,
+            commands::call_card_answer,
+            commands::call_undo,
+            commands::call_done_transcribe,
+            commands::call_always,
+            commands::call_group_close,
+            commands::call_choice,
+            commands::pill_expanded,
+            commands::pending_delete,
+            commands::pending_delete_undo,
             commands::skipped_list,
             commands::recovered_sessions,
             commands::skipped_restore,
@@ -788,6 +927,11 @@ pub fn run() {
     if !app_life::mac::answer_quits_from_outside(app.handle()) {
         eprintln!("[echoledger] a quit from the Dock would not keep a running recording first");
     }
+    // FIX-11: the Dock icon's menu, taught to the delegate the same way.
+    #[cfg(target_os = "macos")]
+    if !dock::mac::install(app.handle()) {
+        eprintln!("[echoledger] the Dock icon has no menu of EchoLedger's");
+    }
     // Its menu bar menu opens over another app's full-screen window (`spaces`).
     #[cfg(target_os = "macos")]
     spaces::mac::install();
@@ -797,8 +941,10 @@ pub fn run() {
         // registers the scheme).
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls, .. } = &event {
-            let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
-            actions::handle_links(handle, &urls);
+            // Audio files opened with EchoLedger (Finder's Open With, a drop on the Dock icon) are imported (FIX-11).
+            dock::opened(handle, dock::opened_files(urls));
+            let links: Vec<String> = urls.iter().filter(|u| u.scheme() != "file").map(|u| u.to_string()).collect();
+            actions::handle_links(handle, &links);
         }
         // A click on the Dock icon, or opening the app again from Finder, Launchpad or Spotlight, starts no second copy on
         // a Mac (the single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the
@@ -807,6 +953,10 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         if let RunEvent::Reopen { .. } = &event {
             actions::show_main_from_outside(handle, &[]);
+        }
+        // Quitting: recovery codes copied a moment ago leave the clipboard with the app.
+        if let RunEvent::Exit = &event {
+            secret_copy::clear_now_on_main_thread(handle);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // The last window closed (no code): EchoLedger keeps running. A Quit (app.exit) or the updater's restart exits.
@@ -824,6 +974,17 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
         // C9: closing the main window destroys it (the app keeps running: in the Dock and the menu bar of a Mac, the
         // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
         // (main_view_get).
+        // FIX-12: on Windows "When I close the window" decides (keep, said the first time, or quit); a Mac's red button
+        // always keeps EchoLedger running.
+        #[cfg(windows)]
+        WindowEvent::CloseRequested { api, .. } if window.label() == lifecycle::MAIN => {
+            if taskbar::main_close_requested(window.app_handle()) {
+                lifecycle::main_closing(window.app_handle());
+            } else {
+                api.prevent_close();
+            }
+        }
+        #[cfg(not(windows))]
         WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
         // The Live Assist card was dragged: its place is kept for the next session.
         WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),

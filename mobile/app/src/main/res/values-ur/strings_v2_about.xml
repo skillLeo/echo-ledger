@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 About settings page and the line under the profile card. values/ is English, values-ur/ Urdu. -->
+<resources>
+    <string name="v2_ab_version">EchoLedger %1$s</string>
+    <string name="v2_ab_server">سرور %1$s</string>
+    <string name="v2_ab_server_api">سرور %1$s · API %2$s</string>
+    <string name="v2_ab_check">اپ ڈیٹس دیکھیں</string>
+    <string name="v2_ab_checking">اپ ڈیٹس تلاش ہو رہی ہیں…</string>
+    <string name="v2_ab_newest">آپ کے پاس سب سے نیا ورژن ہے۔</string>
+    <string name="v2_ab_ready">EchoLedger %1$s انسٹال کے لیے تیار ہے (%2$s)۔</string>
+    <string name="v2_ab_update">اپ ڈیٹ کریں</string>
+    <string name="v2_ab_downloading">اپ ڈیٹ ڈاؤن لوڈ ہو رہی ہے… %1$d %%</string>
+    <string name="v2_ab_allow_help">EchoLedger کو ایپس انسٹال کرنے کی اجازت دیں (Android ایک بار پوچھتا ہے)، پھر دوبارہ اپ ڈیٹ پر تھپتھپائیں۔</string>
+    <string name="v2_ab_allow">اجازت دیں</string>
+    <string name="v2_ab_installing">اپ ڈیٹ انسٹال ہو رہی ہے: Android کی اسکرین پر تصدیق کریں۔</string>
+    <string name="v2_ab_try_again">دوبارہ کوشش کریں</string>
+    <string name="v2_ab_transfer">آپ کی سیٹنگز</string>
+    <string name="v2_ab_transfer_help">اپنی ترجیحات فائل میں محفوظ کریں یا دوسرے فون پر لوڈ کریں۔ فائل میں کبھی آپ کی پیئرنگ، ٹوکن یا لاک نہیں ہوتا۔</string>
+    <string name="v2_ab_export">سیٹنگز ایکسپورٹ کریں</string>
+    <string name="v2_ab_import">سیٹنگز امپورٹ کریں</string>
+    <string name="v2_ab_phone">یہ فون</string>
+    <string name="v2_ab_setup_guide">سیٹ اپ گائیڈ</string>
+    <string name="v2_st_deletes">آپ کا اکاؤنٹ %1$s کو حذف ہو جائے گا۔</string>
+    <string name="v2_st_receipt">%1$s کے لیے ہمیں ایک اور رسید چاہیے</string>
+    <string name="v2_st_waiting">%1$s کی درخواست ہو گئی۔ آپ کی ادائیگی کا انتظار ہے</string>
+    <string name="v2_st_checking">%1$s کے لیے آپ کی ادائیگی دیکھی جا رہی ہے</string>
+    <string name="v2_st_ends">%1$s، %2$s کو ختم ہو گا</string>
+    <string name="v2_st_key">مفت ٹرانسکرپشن سیٹ اپ کریں (2 منٹ)</string>
+</resources>

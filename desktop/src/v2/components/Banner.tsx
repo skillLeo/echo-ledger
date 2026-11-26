@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { Button, Icon, type IconType } from "./Button";
 import { CloseIcon } from "./icons";
+import { t } from "../../i18n";
 
 /** A message at the top of a page that stays until it is answered or closed: one sentence, at most one action. */
-export function Banner({ icon, children, action, onClose, closeLabel = "Close", tone = "info", testId }: {
+export function Banner({ icon, children, action, onClose, closeLabel = t("Close"), tone = "info", testId }: {
   icon?: IconType;
   children: ReactNode;
   action?: ReactNode;
@@ -15,7 +16,7 @@ export function Banner({ icon, children, action, onClose, closeLabel = "Close", 
   return (
     <div className={`el-banner el-banner--${tone}`} role={tone === "info" ? "status" : "alert"} data-testid={testId}>
       {icon && <span className="el-banner__icon"><Icon icon={icon} /></span>}
-      <span className="el-banner__text">{children}</span>
+      <span className="el-banner__text" dir="auto">{children}</span>
       {action}
       {onClose && <Button size="sm" variant="quiet" icon={CloseIcon} aria-label={closeLabel} onClick={onClose} />}
     </div>

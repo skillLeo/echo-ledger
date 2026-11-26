@@ -97,6 +97,19 @@ final class MailSettings
         return (array) ($this->original['from'] ?? config('mail.from'));
     }
 
+    /**
+     * Whether an email can leave the server (W-INC-1125): an SMTP server in Settings → Email, or a .env mailer that
+     * sends. `log` and `array` only write it down, so alerts never reach anyone.
+     */
+    public function delivers(): bool
+    {
+        if (filled((new SettingsRepository)->all()['mail.host'] ?? null)) {
+            return true;
+        }
+
+        return ! in_array((string) ($this->original['default'] ?? config('mail.default')), ['log', 'array'], true);
+    }
+
     /** Puts the stored settings into the mail configuration; mailers already made are rebuilt when they changed. */
     public function apply(?MailManager $manager = null): void
     {

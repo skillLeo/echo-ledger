@@ -8,6 +8,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Concerns\LiveAssistOnly;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
+use App\Filament\Support\RtlIcons;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Services\Assist\AssistAsk;
@@ -67,28 +68,28 @@ class AssistReportPage extends Page
         $session = $this->session();
         $prep = $session->prep;
 
-        return $prep instanceof AssistPrep && $prep->title !== null ? $prep->title : ($session->practice ? 'Practice report' : 'Live Assist report');
+        return $prep instanceof AssistPrep && $prep->title !== null ? $prep->title : ($session->practice ? __('Practice report') : __('Live Assist report'));
     }
 
     public function getBreadcrumbs(): array
     {
-        return [AssistSessions::getUrl() => 'Live Assist sessions', 'Report'];
+        return [AssistSessions::getUrl() => __('Live Assist sessions'), __('Report')];
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('ask')->label('Ask')->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+            Action::make('ask')->label(__('Ask'))->icon(RtlIcons::icon(Heroicon::OutlinedChatBubbleLeftEllipsis))
                 ->visible(fn (): bool => self::canChange() && $this->session()->ended() && $this->session()->turns()->exists())
-                ->modalHeading('Ask about this session')
-                ->modalDescription('Answered from what was said, its summary and its facts, with the moments it rests on. It counts toward this month\'s allowance.')
-                ->schema([Textarea::make('question')->label('Your question')->required()->rows(3)->maxLength((int) config('assist.ask.question_chars', 500))
-                    ->placeholder('What did they say about the budget?')])
-                ->modalSubmitActionLabel('Ask')
+                ->modalHeading(__('Ask about this session'))
+                ->modalDescription(__("Answered from what was said, its summary and its facts, with the moments it rests on. It counts toward this month's allowance."))
+                ->schema([Textarea::make('question')->label(__('Your question'))->required()->rows(3)->maxLength((int) config('assist.ask.question_chars', 500))
+                    ->placeholder(__('What did they say about the budget?'))])
+                ->modalSubmitActionLabel(__('Ask'))
                 ->action(function (array $data): void {
                     $key = 'ask:'.self::personId();
                     if (RateLimiter::tooManyAttempts($key, 20)) {
-                        Notification::make()->title('Too many questions. Try again in a minute.')->danger()->send();
+                        Notification::make()->title(__('Too many questions. Try again in a minute.'))->danger()->send();
 
                         throw new Halt;
                     }
@@ -102,7 +103,7 @@ class AssistReportPage extends Page
                     }
                     array_unshift($this->answers, ['question' => trim((string) $data['question']), ...$answer]);
                 }),
-            Action::make('download')->label('Download')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
+            Action::make('download')->label(__('Download'))->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                 ->visible(fn (): bool => $this->session()->report !== null)
                 ->action(function (): StreamedResponse {
                     $session = $this->session();
@@ -110,16 +111,16 @@ class AssistReportPage extends Page
 
                     return response()->streamDownload(fn () => print ($markdown), 'live-assist-report-'.$session->started_at->format('Y-m-d').'.md', ['Content-Type' => 'text/markdown; charset=UTF-8']);
                 }),
-            Action::make('print')->label('Print')->icon(Heroicon::OutlinedPrinter)->color('gray')
+            Action::make('print')->label(__('Print'))->icon(Heroicon::OutlinedPrinter)->color('gray')
                 ->visible(fn (): bool => $this->session()->report !== null)
                 ->alpineClickHandler('window.print()'),
-            Action::make('delete')->label('Delete')->icon(Heroicon::OutlinedTrash)->color('danger')
+            Action::make('delete')->label(__('Delete'))->icon(Heroicon::OutlinedTrash)->color('danger')
                 ->visible(fn (): bool => self::canChange())
-                ->requiresConfirmation()->modalHeading('Delete this session?')
-                ->modalDescription('Its words, suggestions and report go now. The time it used still counts this month.')
+                ->requiresConfirmation()->modalHeading(__('Delete this session?'))
+                ->modalDescription(__('Its words, suggestions and report go now. The time it used still counts this month.'))
                 ->action(function (): void {
                     AssistRecords::eraseSession($this->session());
-                    Notification::make()->title('Session deleted')->success()->send();
+                    Notification::make()->title(__('Session deleted'))->success()->send();
                     $this->redirect(AssistSessions::getUrl());
                 }),
         ];
@@ -135,7 +136,7 @@ class AssistReportPage extends Page
             'session' => $session,
             'report' => $session->report,
             'making' => $session->ended() && $session->report_status === 'queued',
-            'meetingType' => AssistRecords::MEETING_TYPES[$prep instanceof AssistPrep ? $prep->meeting_type : 'general'],
+            'meetingType' => __(AssistRecords::MEETING_TYPES[$prep instanceof AssistPrep ? $prep->meeting_type : 'general']),
             'tz' => app(SettingsRepository::class)->displayTimezone(),
             'answers' => $this->answers,
         ];

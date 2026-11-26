@@ -85,32 +85,37 @@ fun OrganiseSection(
 ) {
     var label by remember { mutableStateOf("") }
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Organise", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(
-                onClick = { onKeep(!item.keep) },
-                modifier = Modifier.semantics {
-                    contentDescription =
-                        if (item.keep) "Stop keeping" else "Keep forever"
+        // P-112: when they don't fit beside it (a small phone, large text), Keep forever and Pin go under the title together,
+        // and the title keeps its word whole.
+        FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
+            Text("Organise", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { onKeep(!item.keep) },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            if (item.keep) "Stop keeping" else "Keep forever"
+                    }
+                ) {
+                    Text(if (item.keep) "Kept forever" else "Keep forever", color = if (item.keep) Brand.Success else Brand.Muted)
                 }
-            ) {
-                Text(if (item.keep) "Kept forever" else "Keep forever", color = if (item.keep) Brand.Success else Brand.Muted)
-            }
-            TextButton(
-                onClick = { onPin(!item.pinned) },
-                modifier = Modifier.semantics {
-                    contentDescription =
-                        if (item.pinned) "Unpin" else "Pin"
+                TextButton(
+                    onClick = { onPin(!item.pinned) },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            if (item.pinned) "Unpin" else "Pin"
+                    }
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Rounded.PushPin,
+                        contentDescription = null,
+                        tint = if (item.pinned) Brand.Warning else Brand.Muted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (item.pinned) "Pinned" else "Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
                 }
-            ) {
-                Icon(
-                    androidx.compose.material.icons.Icons.Rounded.PushPin,
-                    contentDescription = null,
-                    tint = if (item.pinned) Brand.Warning else Brand.Muted,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(if (item.pinned) "Pinned" else "Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
             }
         }
         FolderChooser("Folder", folders, item.client?.id, onMove, onCreateClient)
@@ -158,15 +163,21 @@ fun eraseIn(eraseAt: String?, now: java.time.Instant = java.time.Instant.now()):
 /** Recently deleted (B17): the 48-hour undo bin with Restore, and Delete now after a second tap. */
 @Composable
 fun BinSection(
-    load: suspend () -> List<com.echoledger.mobile.data.BinItemDto>,
+    load: suspend () -> Result<List<com.echoledger.mobile.data.BinItemDto>>,
     restore: suspend (String) -> Boolean,
     erase: suspend (String) -> Boolean,
     onClose: () -> Unit
 ) {
     var items by remember { mutableStateOf<List<com.echoledger.mobile.data.BinItemDto>?>(null) }
+    // A bin the server could not give is not an empty one (EL-UX's audit): it says so, with Try again.
+    var failed by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    androidx.compose.runtime.LaunchedEffect(Unit) { items = load() }
+    suspend fun reload() {
+        load().onSuccess { items = it }
+        failed = items == null
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { reload() }
     SectionCard(Modifier.fillMaxWidth().semantics { contentDescription = "Recently deleted" }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Recently deleted", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -179,6 +190,19 @@ fun BinSection(
         )
         val list = items
         when {
+            failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Couldn't load Recently deleted. Check the internet connection.",
+                    color = Brand.Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    failed = false
+                    scope.launch { reload() }
+                }) { Text("Try again") }
+            }
+
             list == null -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
 
             list.isEmpty() -> Text("Nothing deleted in the last 48 hours.", color = Brand.Muted, fontSize = 12.sp)
@@ -189,11 +213,11 @@ fun BinSection(
                         Text(b.title)
                         Text(listOfNotNull(b.client?.name, eraseIn(b.eraseAt)).joinToString(" · "), color = Brand.Muted, fontSize = 12.sp)
                     }
-                    TextButton(onClick = { scope.launch { if (restore(b.id)) items = load() } }) { Text("Restore") }
+                    TextButton(onClick = { scope.launch { if (restore(b.id)) reload() } }) { Text("Restore") }
                     if (confirming == b.id) {
                         TextButton(onClick = {
                             confirming = null
-                            scope.launch { if (erase(b.id)) items = load() }
+                            scope.launch { if (erase(b.id)) reload() }
                         }) { Text("Erase now", color = Brand.Danger) }
                     } else {
                         TextButton(onClick = { confirming = b.id }) { Text("Delete now", color = Brand.Danger) }

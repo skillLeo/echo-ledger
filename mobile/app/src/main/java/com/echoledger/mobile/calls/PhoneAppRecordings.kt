@@ -880,17 +880,13 @@ object PhoneAppRecordings {
         val settings = graph.settings.current()
         done.forEach { h ->
             val rec = graph.recordings.get(h.recordingId)?.takeIf { it.state == "pending_decision" } ?: return@forEach
-            val now = graph.recordings.update(rec.id) { it.copy(state = PostCallPrompt.stateFor(settings.afterCall)) } ?: return@forEach
+            val outcome = PostCallPrompt.outcome(context, settings)
+            val now = graph.recordings.update(rec.id) { PostCallPrompt.stored(it, outcome) } ?: return@forEach
+            if (outcome == CallChoice.Outcome.AUDIO_QUIET) QuietSaved.mark(context, rec.id)
             log(context, PhoneAppNote.of(PhoneAppNote.Kind.COPY_DID_NOT_COME).english)
             if (cardNow(h.endMs, nowMs, MissedRecordingWorker.ongoing(context))) {
                 withContext(Dispatchers.Main.immediate) {
-                    PostCallPrompt.show(
-                        context,
-                        now,
-                        settings.afterCall,
-                        settings.themeMode,
-                        com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
-                    )
+                    PostCallPrompt.show(context, now, settings.themeMode)
                 }
             } else {
                 PostCallPrompt.quietly(context, now)
@@ -1203,6 +1199,7 @@ object PhoneAppRecordings {
         }
         val name = call.name?.takeIf { it.isNotBlank() } ?: call.number?.let { PhoneCallLog.contactNameOf(context, it) }
         val span = spanOf(file)
+        val outcome = PostCallPrompt.outcome(context, settings)
         val meta = LocalRecording(
             id = UUID.randomUUID().toString(),
             sourceApp = SourceApp.PHONE_CALL.wire,
@@ -1217,7 +1214,8 @@ object PhoneAppRecordings {
             plainSize = 0,
             sha256 = "",
             // A second copy of a call already kept waits for the person: nothing is transcribed twice by itself.
-            state = if (second) "pending_decision" else PostCallPrompt.stateFor(settings.afterCall),
+            state = if (second) "pending_decision" else CallChoice.stored(outcome).first,
+            transcribe = if (second) null else CallChoice.stored(outcome).second,
             language = settings.transcriptionLanguage,
             callerName = name,
             callerSource = if (name != null) "contacts" else "phone",
@@ -1227,6 +1225,7 @@ object PhoneAppRecordings {
             skipDuplicate = true
         )
         val stored = runCatching { graph.recordings.importPlainFile(meta, copy) }.getOrNull()
+        if (stored != null && !second && outcome == CallChoice.Outcome.AUDIO_QUIET) QuietSaved.mark(context, stored.id)
         copy.delete()
         if (stored == null) return Copy.Later
         // Stored: settled for good at once, so nothing can bring this file in a second time.
@@ -1289,13 +1288,7 @@ object PhoneAppRecordings {
         val callEnd = maxOf(call.dateMs + call.talkS * 1000, span.first + file.durationMs)
         if (prompt && cardNow(callEnd, nowMs, MissedRecordingWorker.ongoing(context))) {
             withContext(Dispatchers.Main.immediate) {
-                PostCallPrompt.show(
-                    context,
-                    stored,
-                    settings.afterCall,
-                    settings.themeMode,
-                    com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
-                )
+                PostCallPrompt.show(context, stored, settings.themeMode)
             }
             return false
         }

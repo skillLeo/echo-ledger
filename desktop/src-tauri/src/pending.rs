@@ -23,9 +23,9 @@ use crate::settings::AfterCall;
 /// Every `pending_*` command answers this when the id is not (or no longer) waiting.
 pub const NOT_WAITING: &str = "This recording is no longer waiting.";
 pub const TITLE_TOO_LONG: &str = "Use 200 characters or fewer.";
-/// "Ask me": with no answer this long after the call ended, the chip saves the recording as audio only, not
-/// transcribed (v1.8 P1: "No answer within 12 s → Save audio"; contract 1.8.0-e).
-pub const CHIP_SECONDS: i64 = 12;
+/// "Ask me": with no answer this long after the call ended, the card saves the recording as audio only, not
+/// transcribed (contract 1.8.0-e; the call choice made it 8 s, it was 12 s).
+pub const CHIP_SECONDS: i64 = crate::after_call::CARD_SECONDS;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_FIRST_LINE_CHARS: usize = 140;
 /// The title of a recording recovered after a restart (since v1.3).
@@ -88,6 +88,9 @@ pub struct PendingItem {
     pub caller_name: Option<String>,
     /// Screens kept for this recording on this computer (the after-call card's "3 screens"); they upload with it.
     pub screens: usize,
+    /// Back in the waiting list because its Delete was still waiting when EchoLedger closed: "Deleted just before
+    /// EchoLedger closed. Choose again." on its row.
+    pub restored_delete: bool,
 }
 
 /// The name of who the running recording `client_ref` is with, from the caller noted for it (none for a caller noted
@@ -176,6 +179,13 @@ pub struct PendingDecision {
     /// (`discard_later`, `undo_discard`, `discard_due`); none otherwise.
     #[serde(default)]
     discard_at: Option<DateTime<Utc>>,
+    /// The call choice made (the card, the pill, the setting): applied at `keep_at`, once its confirmation's Undo time
+    /// is over (`choose`); none while the card asks or the recording waits.
+    #[serde(default)]
+    chosen: Option<crate::after_call::CallChoice>,
+    /// Its Delete was not applied before the app closed, so it was put back in the waiting list at start.
+    #[serde(default)]
+    restored_delete: bool,
 }
 
 impl PendingDecision {
@@ -217,6 +227,8 @@ impl PendingDecision {
             owner: None,
             recovered: false,
             discard_at: None,
+            chosen: None,
+            restored_delete: false,
         }
     }
 
@@ -225,6 +237,18 @@ impl PendingDecision {
         self.keep_at = Some(at);
         self.saves_audio_when_due = true;
         self
+    }
+
+    /// The same decision with its choice made: transcribed or saved as audio at `at`, deleted at `at` (Delete), unless
+    /// Undo comes first.
+    pub fn chosen_at(mut self, choice: crate::after_call::CallChoice, at: DateTime<Utc>) -> Self {
+        apply_choice(&mut self, choice, at);
+        self
+    }
+
+    /// The call choice made for it, waiting for its Undo time to be over.
+    pub fn chosen(&self) -> Option<crate::after_call::CallChoice> {
+        self.chosen
     }
 
     /// When it keeps itself; none while it waits for the person.
@@ -305,6 +329,8 @@ impl PendingDecision {
             owner: None,
             recovered: true,
             discard_at: None,
+            chosen: None,
+            restored_delete: false,
         }
     }
 
@@ -330,6 +356,7 @@ impl PendingDecision {
             language: self.language.clone(),
             caller_name: self.caller_name().map(str::to_string),
             screens: 0,
+            restored_delete: self.restored_delete,
         }
     }
 
@@ -376,6 +403,21 @@ impl PendingDecision {
             recovered: self.is_recovered(),
             ..PendingUpload::default()
         }
+    }
+}
+
+/// Marks `choice` on a decision, to be applied at `at`: Delete is a discard whose files wait for its Undo time; the others
+/// keep it then, transcribed or as audio only.
+fn apply_choice(d: &mut PendingDecision, choice: crate::after_call::CallChoice, at: DateTime<Utc>) {
+    use crate::after_call::CallChoice;
+    d.chosen = Some(choice);
+    if choice == CallChoice::Delete {
+        d.keep_at = None;
+        d.discard_at = Some(at);
+    } else {
+        d.keep_at = Some(at);
+        d.saves_audio_when_due = choice == CallChoice::Audio;
+        d.discard_at = None;
     }
 }
 
@@ -427,6 +469,12 @@ impl PendingStore {
     /// Recordings that wait for the person (the tray, the sidebar and the Library's waiting line count these).
     pub fn waiting(&self) -> usize {
         self.items.iter().filter(|d| d.waits()).count()
+    }
+
+    /// Those of them the server doesn't know (UX-08): no session was opened for them (captions open one). The server's
+    /// badge already counts a waiting call it has a session for, so the rail and the Dock add only these.
+    pub fn waiting_here(&self) -> usize {
+        self.items.iter().filter(|d| d.waits() && d.server_session_id.is_none()).count()
     }
 
     /// The earliest moment a chip keeps its recording.
@@ -599,13 +647,70 @@ impl DecisionFiles {
         Ok(due.into_iter().map(|(id, _)| id).collect())
     }
 
+    /// The call choice for `id` (the card's answer, Transcribe on "Saved as audio"): applied at `at`, when its Undo time
+    /// is over; until then nothing is uploaded or deleted. An error when it is no longer here (its time was over).
+    pub fn choose(&self, id: &str, choice: crate::after_call::CallChoice, at: DateTime<Utc>) -> AppResult<PendingDecision> {
+        self.update(id, |d| apply_choice(d, choice, at))
+    }
+
+    /// At start: every Delete chosen before the app quit and not applied yet (its Undo can no longer be shown) goes back to
+    /// the waiting list instead, for Transcribe, Save audio only or Delete there; nothing of it was deleted. Returns their
+    /// ids. Pending Transcribe and Save audio only choices are left to `keep_due`: their audio is kept either way.
+    pub fn restore_unapplied_deletes(&self) -> AppResult<Vec<String>> {
+        let mut store = self.load();
+        let mut back = Vec::new();
+        for d in store.items.iter_mut().filter(|d| d.discard_at.is_some()) {
+            d.discard_at = None;
+            d.chosen = None;
+            d.keep_at = None;
+            d.restored_delete = true;
+            back.push(d.id.clone());
+        }
+        if !back.is_empty() {
+            store.save(&self.pending)?;
+        }
+        Ok(back)
+    }
+
+    /// Undo on the waiting list's Delete: the recording waits in the list again, as before. An error when its files
+    /// already went.
+    pub fn restore_waiting(&self, id: &str) -> AppResult<PendingDecision> {
+        if !self.load().find(id).is_some_and(PendingDecision::discarding) {
+            return Err(AppError::msg(NOT_WAITING));
+        }
+        self.update(id, |d| {
+            d.discard_at = None;
+            d.chosen = None;
+            d.keep_at = None;
+        })
+    }
+
+    /// Undo on a confirmation: no choice now, the card asks again until `keep_at` (then saves the audio only). An error
+    /// when the choice was already applied.
+    pub fn ask_again(&self, id: &str, keep_at: DateTime<Utc>) -> AppResult<PendingDecision> {
+        self.update(id, |d| {
+            d.chosen = None;
+            d.discard_at = None;
+            d.keep_at = Some(keep_at);
+            d.saves_audio_when_due = true;
+        })
+    }
+
+    /// The card of `id` ran out of time with no choice while on screen: it is saved as audio only at `at`, after the
+    /// "Saved as audio · Transcribe · Undo" confirmation. False when it is not a card whose time is over (answered,
+    /// gone, or still counting).
+    pub fn time_out_card(&self, id: &str, now: DateTime<Utc>, at: DateTime<Utc>) -> AppResult<bool> {
+        let due = self.load().find(id).is_some_and(|d| d.chosen.is_none() && d.saves_audio_when_due && d.keep_at.is_some_and(|k| k <= now));
+        if due {
+            self.choose(id, crate::after_call::CallChoice::Audio, at)?;
+        }
+        Ok(due)
+    }
+
     /// Discard from the after-call chip: the recording leaves every list and count now, its chip stops counting, and
     /// its files stay until `at` so Undo can bring it back (`undo_discard`); `discard_due` finishes it then.
     pub fn discard_later(&self, id: &str, at: DateTime<Utc>) -> AppResult<PendingDecision> {
-        self.update(id, |d| {
-            d.keep_at = None;
-            d.discard_at = Some(at);
-        })
+        self.update(id, |d| apply_choice(d, crate::after_call::CallChoice::Delete, at))
     }
 
     /// Undo after a chip's Discard: the recording is back as it was, its chip counting again until `keep_at`. An error
@@ -614,12 +719,7 @@ impl DecisionFiles {
         if !self.load().find(id).is_some_and(PendingDecision::discarding) {
             return Err(AppError::msg(NOT_WAITING));
         }
-        self.update(id, |d| {
-            d.discard_at = None;
-            d.keep_at = Some(keep_at);
-            // The chip is back as this version shows it: "Saves the audio in N s".
-            d.saves_audio_when_due = true;
-        })
+        self.ask_again(id, keep_at)
     }
 
     /// Discards every recording whose Undo time is over at `now` (files, server session), one by one: the ones that went
@@ -639,7 +739,10 @@ impl DecisionFiles {
 
     /// The person opened the recording in the main window: no chip keeps it now, it waits for Keep or Discard.
     pub fn stop_countdown(&self, id: &str) -> AppResult<PendingDecision> {
-        self.update(id, |d| d.keep_at = None)
+        self.update(id, |d| {
+            d.keep_at = None;
+            d.chosen = None;
+        })
     }
 }
 

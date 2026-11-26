@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Plan & usage settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_pl_plan">%1$s plan</string>
+    <string name="v2_pl_member">%1$s is on %2$s. Its owner manages the plan.</string>
+    <string name="v2_pl_your_workspace">Your workspace</string>
+    <string name="v2_pl_free_key">Transcripts use your own free Groq key.</string>
+    <string name="v2_pl_no_end">No end date</string>
+    <string name="v2_pl_ends_today">Ends today, %1$s.</string>
+    <plurals name="v2_pl_ends_in">
+        <item quantity="one">Ends in %1$d day, on %2$s.</item>
+        <item quantity="other">Ends in %1$d days, on %2$s.</item>
+    </plurals>
+    <string name="v2_pl_paid_until">Paid until %1$s</string>
+    <string name="v2_pl_stops_on">Your plan stops on %1$s. Nothing is charged automatically.</string>
+    <string name="v2_pl_upgrade">Upgrade</string>
+    <string name="v2_pl_upgrade_to">Upgrade to %1$s</string>
+    <string name="v2_pl_compare">Compare plans</string>
+    <string name="v2_pl_top">You\'re on our top plan.</string>
+    <string name="v2_pl_open_request">Open the request</string>
+    <string name="v2_pl_rq_requested">%1$s requested</string>
+    <string name="v2_pl_rq_waiting">Waiting for payment</string>
+    <string name="v2_pl_rq_send">Send %1$s to our bank account, then add a screenshot of the receipt.</string>
+    <string name="v2_pl_rq_reference">Reference %1$s.</string>
+    <string name="v2_pl_rq_the_amount">the amount</string>
+    <string name="v2_pl_rq_checking">Checking your payment</string>
+    <string name="v2_pl_rq_in_review">In review</string>
+    <string name="v2_pl_rq_got_on">We got your receipt on %1$s.</string>
+    <string name="v2_pl_rq_got">We got your receipt.</string>
+    <string name="v2_pl_rq_need_receipt">We need another receipt</string>
+    <string name="v2_pl_rq_action">Action needed</string>
+    <string name="v2_pl_rq_still_open">Your request is still open. You don\'t need to pay again.</string>
+    <string name="v2_pl_rq_declined">We couldn\'t confirm your payment</string>
+    <string name="v2_pl_rq_not_approved">Not approved</string>
+    <string name="v2_pl_rq_declined_body">If you\'ve paid, reply to our email with your transaction ID and we\'ll look again.</string>
+    <string name="v2_pl_rq_cancelled_title">Request cancelled</string>
+    <string name="v2_pl_rq_cancelled">Cancelled</string>
+    <string name="v2_pl_rq_cancelled_body">You cancelled this request. Cancelling doesn\'t refund a payment.</string>
+    <string name="v2_pl_rq_on">You\'re on %1$s</string>
+    <string name="v2_pl_rq_approved">Approved</string>
+    <string name="v2_pl_rq_thanks">Thank you.</string>
+    <string name="v2_pl_rq_on_until">%1$s is on until %2$s.</string>
+    <string name="v2_pl_payment_details">Payment details</string>
+    <string name="v2_pl_cancel_request">Cancel request</string>
+    <string name="v2_pl_view_request">View request</string>
+    <string name="v2_pl_add_receipt">Add receipt</string>
+    <string name="v2_pl_request_again">Request again</string>
+    <string name="v2_pl_dismiss">Dismiss</string>
+    <string name="v2_pl_cancel_title">Cancel this request?</string>
+    <string name="v2_pl_cancel_body">If you\'ve already paid, add your receipt instead. Cancelling doesn\'t refund a payment.</string>
+    <string name="v2_pl_keep_request">Keep request</string>
+    <string name="v2_pl_this_month">This month</string>
+    <string name="v2_pl_transcription">Transcription</string>
+    <string name="v2_pl_key_added">Key added</string>
+    <string name="v2_pl_key_not_added">Not added. Tap to add your key</string>
+    <string name="v2_pl_your_key">Your Groq key</string>
+    <string name="v2_pl_paused_until">Transcription is paused until %1$s.</string>
+    <string name="v2_pl_used_pct">You\'ve used %1$d%% of your minutes. They reset on %2$s.</string>
+    <string name="v2_pl_resets">Resets %1$s</string>
+    <string name="v2_pl_storage">Storage</string>
+    <string name="v2_pl_storage_full">New recordings can\'t upload until you free up space.</string>
+    <string name="v2_pl_devices">Devices</string>
+    <string name="v2_pl_devices_full">Sign out a device to add another.</string>
+    <string name="v2_pl_team">Team members</string>
+    <string name="v2_pl_minutes_reset">Minutes reset on the 1st of each month. Unused minutes don\'t carry over.</string>
+    <string name="v2_pl_included">Included in your plan</string>
+    <string name="v2_pl_kept">Recordings kept</string>
+    <string name="v2_pl_longest">Longest recording</string>
+    <string name="v2_pl_uploads">Uploads a day</string>
+    <string name="v2_pl_up_to">Up to %1$s</string>
+    <string name="v2_pl_just_you">Just you</string>
+    <string name="v2_pl_up_to_people">Up to %1$d people</string>
+    <string name="v2_pl_every_plan">Every plan can record, organise, search, share links and export.</string>
+    <string name="v2_pl_every_feature">See every feature</string>
+    <string name="v2_pl_every_feature_title">Every feature</string>
+    <string name="v2_pl_feature_included">Included</string>
+    <string name="v2_pl_plans">Plans</string>
+    <string name="v2_pl_everything_in">Everything in %1$s, plus:</string>
+    <string name="v2_pl_choose">Choose %1$s</string>
+    <string name="v2_pl_bank">Payments are by bank transfer. We switch your plan on after we see the money in our account.</string>
+    <string name="v2_pl_no_limit">No limit</string>
+    <string name="v2_pl_of">%1$s of %2$s</string>
+    <string name="v2_pl_min">%1$s min</string>
+    <plurals name="v2_pl_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="v2_pl_years">
+        <item quantity="one">%1$d year</item>
+        <item quantity="other">%1$d years</item>
+    </plurals>
+    <plurals name="v2_pl_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <plurals name="v2_pl_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+</resources>

@@ -44,6 +44,40 @@ import kotlinx.coroutines.delay
 /** How often the page asks the server how far the shared notes are (only while one is not done). */
 private const val SHARED_POLL_MS = 3_000L
 
+/** One shared note as the page shows it: its [status], and what it was worked out from (its local copy and upload). */
+internal data class SharedNoteView(
+    val status: SharedNotes.Status,
+    val local: com.echoledger.mobile.data.LocalRecording?,
+    val upload: Pair<Int, Int>?,
+    val item: LibraryItem?
+)
+
+/**
+ * The shared notes' stages, live: the local copy while it uploads, then its server recording; the server is asked
+ * again every few seconds until all are done. Both designs' pages read them from here.
+ */
+@Composable
+internal fun rememberSharedNotes(vm: MainViewModel, localIds: List<String>): List<SharedNoteView> {
+    val context = LocalContext.current
+    val pending by vm.pending.collectAsState()
+    val library by vm.library.collectAsState()
+    val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
+    val views = localIds.map { id ->
+        val session = SharedNotes.sessionFor(context, id)
+        val local = pending.firstOrNull { it.id == id }
+        val item = session?.let { s -> library.firstOrNull { it.id == s && !it.deleted } }
+        SharedNoteView(SharedNotes.status(local, session, item, sending[id]), local, sending[id], item)
+    }
+    val allDone = views.all { SharedNotes.done(it.status.stage) }
+    LaunchedEffect(localIds, allDone) {
+        while (!allDone) {
+            vm.refresh()
+            delay(SHARED_POLL_MS)
+        }
+    }
+    return views
+}
+
 /**
  * The voice notes just shared to EchoLedger from another app (since v1.3): their status live (uploading, transcribing,
  * ready), then the note itself in its default view with Copy and Copy for AI. One note opens straight on its page once
@@ -67,27 +101,9 @@ internal fun SharedNotesScreen(
     }
 ) {
     val context = LocalContext.current
-    val pending by vm.pending.collectAsState()
     val library by vm.library.collectAsState()
-    val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
-    val statuses = localIds.map { id ->
-        val session = SharedNotes.sessionFor(context, id)
-        SharedNotes.status(
-            pending.firstOrNull {
-                it.id == id
-            },
-            session,
-            session?.let { s -> library.firstOrNull { it.id == s && !it.deleted } },
-            sending[id]
-        )
-    }
+    val statuses = rememberSharedNotes(vm, localIds).map { it.status }
     val allDone = statuses.all { SharedNotes.done(it.stage) }
-    LaunchedEffect(localIds, allDone) {
-        while (!allDone) {
-            vm.refresh()
-            delay(SHARED_POLL_MS)
-        }
-    }
 
     var opened by rememberSaveable { mutableStateOf<String?>(null) }
     val single = statuses.singleOrNull()?.takeIf { it.stage == SharedNotes.Stage.READY }?.sessionId

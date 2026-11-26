@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 use desktop_lib::net::models::{
-    AccountDto, AccountExport, CompleteResponse, CreateSessionResponse, Entitlements, LibraryResponse, RecordingUpload, RegisterResponse,
-    ServerConfig, SttTokenResponse,
+    AccountDto, AccountExport, CompleteResponse, CreateSessionResponse, Entitlements, LibraryResponse, ListDeleted, ListResponse, ListsResponse,
+    RecordingUpload, RegisterResponse, ServerConfig, SttTokenResponse,
 };
 use desktop_lib::translate::protocol::LiveTranslateToken;
 use serde::de::DeserializeOwned;
@@ -38,7 +38,42 @@ fn the_desktop_reads_every_real_answer_it_has_a_model_for() {
     reads::<LibraryResponse>("library", &mut failures);
     reads::<LibraryResponse>("library_folder", &mut failures);
     reads::<Entitlements>("entitlements", &mut failures);
+    // Since 2.0.0-m: lists.
+    reads::<ListsResponse>("lists", &mut failures);
+    reads::<ListsResponse>("list_order", &mut failures);
+    reads::<ListResponse>("list_create", &mut failures);
+    reads::<ListResponse>("list_update", &mut failures);
+    reads::<ListDeleted>("list_delete", &mut failures);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn the_account_carries_its_picture_password_and_pending_email_since_2_0_0_l() {
+    let account: AccountDto = serde_json::from_str(&sample("account")).unwrap();
+    assert_eq!(account.has_password, Some(true));
+    assert_eq!((account.avatar_url.as_deref(), account.avatar_version, account.pending_email.as_deref()), (None, None, None));
+    assert_eq!(account.passkeys_available, Some(true));
+    let avatar: serde_json::Value = serde_json::from_str(&sample("account_avatar")).unwrap();
+    assert!(avatar["avatar_version"].as_u64().is_some() && avatar["avatar_url"].as_str().is_some());
+    let options: desktop_lib::net::models::AuthOptions = serde_json::from_str(&sample("auth_options")).unwrap();
+    assert_eq!(options.password_rules.map(|r| r.min), Some(12));
+    let two_step: serde_json::Value = serde_json::from_str(&sample("account_two_factor")).unwrap();
+    assert!(desktop_lib::my_account::qr_rows(two_step["otpauth_uri"].as_str().unwrap()).is_some());
+}
+
+#[test]
+fn the_account_carries_its_colour_and_language_since_2_0_0_r() {
+    // BE-06: the avatar's colour, picked once by the server, and the interface language, the same on every device.
+    let account: AccountDto = serde_json::from_str(&sample("account")).unwrap();
+    assert_eq!(account.avatar_color, Some(1));
+    assert_eq!(account.language.as_deref(), Some("en"));
+    // Handed to the window as the server wrote them; an older server's account has neither.
+    let shown = serde_json::to_value(&account).unwrap();
+    assert_eq!((shown["avatar_color"].as_u64(), shown["language"].as_str()), (Some(1), Some("en")));
+    let older: AccountDto = serde_json::from_str(r#"{"name":"A","email":"a@example.test","avatar_color":"teal","language":7}"#).unwrap();
+    assert_eq!((older.avatar_color, older.language.as_deref()), (None, None));
+    let shown = serde_json::to_value(&older).unwrap();
+    assert!(shown.get("avatar_color").is_none() && shown.get("language").is_none());
 }
 
 #[test]

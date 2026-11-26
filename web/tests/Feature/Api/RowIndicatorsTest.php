@@ -7,7 +7,7 @@ use App\Enums\WorkspaceRole;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
-use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
@@ -27,7 +27,8 @@ uses(ApiClient::class);
 
 /*
  * docs/API.md "Important, label colours and days left (since 2.0.0-i)": the important flag (PATCH, bulk, the filter),
- * label colours (PUT /api/labels/color, the library item's label_colors, the views' labels), expires_at as the hourly
+ * label colours (PUT /api/labels/color, the library item's label_colors, the views' labels; kept on the person's lists
+ * since 2.0.0-m), expires_at as the hourly
  * clean-up works it out, and who may see or change each of them.
  */
 
@@ -116,7 +117,7 @@ describe('important', function () {
         $this->api($viewerToken)->postJson('/api/sessions/bulk', ['ids' => [$session->id], 'action' => 'important'])->assertForbidden();
         $this->api($viewerToken)->putJson('/api/labels/color', ['label' => 'Invoice', 'color' => '#000000'])->assertForbidden()->assertJson(['code' => 'not_allowed']);
 
-        expect(stored($session->id)->important)->toBeFalse()->and(LabelColor::query()->count())->toBe(0);
+        expect(stored($session->id)->important)->toBeFalse()->and(LabelList::query()->whereNotNull('color')->count())->toBe(0);
     });
 });
 
@@ -141,15 +142,15 @@ describe('label colours', function () {
         expect($labels['follow up']['color'])->toBeNull()->and($labels['invoice']['color'])->toBe('#16a34a');
 
         // A row stored in capitals some other way still reads in lower case.
-        LabelColor::query()->update(['color' => '#16A34A']);
+        LabelList::query()->whereNotNull('color')->update(['color' => '#16A34A']);
         expect(rowItems($this, $this->token)[$a->id]['label_colors'])->toBe(['Invoice' => '#16a34a']);
 
         // Changing it again keeps one row.
         $this->api($this->token)->putJson('/api/labels/color', ['label' => 'invoice', 'color' => '#2563eb'])->assertOk()->assertJson(['color' => '#2563eb']);
-        expect(LabelColor::query()->count())->toBe(1);
+        expect(LabelList::query()->whereNotNull('color')->count())->toBe(1);
 
         $this->api($this->token)->putJson('/api/labels/color', ['label' => 'invoice', 'color' => null])->assertOk()->assertExactJson(['label' => 'Invoice', 'color' => null]);
-        expect(LabelColor::query()->count())->toBe(0);
+        expect(LabelList::query()->whereNotNull('color')->count())->toBe(0);
         $json = $this->api($this->token)->getJson('/api/library')->assertOk()->getContent();
         // An item without colours carries an empty object, never a list.
         expect($json)->toContain('"label_colors":{}')
@@ -185,7 +186,7 @@ describe('label colours', function () {
         $this->api($mateToken)->putJson('/api/labels/color', ['label' => 'invoice', 'color' => '#0d9488'])->assertOk();
         expect(rowItems($this, $this->token)[$mine->id]['label_colors'])->toBe(['Invoice' => '#dc2626'])
             ->and(rowItems($this, $mateToken)[$theirs->id]['label_colors'])->toBe(['Invoice' => '#0d9488'])
-            ->and(LabelColor::query()->orderBy('user_id')->pluck('user_id')->all())->toBe([$this->me->id, $mate->id]);
+            ->and(LabelList::query()->whereNotNull('color')->orderBy('user_id')->pluck('user_id')->all())->toBe([$this->me->id, $mate->id]);
     });
 
     it('matches labels in any script ignoring capitals only, the same on every database', function () {
@@ -208,7 +209,7 @@ describe('label colours', function () {
             // Accents count: "resume" is another label and has no colour.
             ->and($items[$plain->id]['label_colors'])->toBe([])
             ->and($items[$urdu->id]['label_colors'])->toBe(['بل' => '#2563eb'])
-            ->and(LabelColor::query()->count())->toBe(3);
+            ->and(LabelList::query()->whereNotNull('color')->count())->toBe(3);
     });
 
     it('refuses a missing label, a missing colour and a colour that is not #rrggbb', function () {
@@ -223,7 +224,7 @@ describe('label colours', function () {
         $this->api($this->token)->putJson('/api/labels/color', ['label' => 'Nobody', 'color' => '#000000'])->assertNotFound();
         $this->api()->putJson('/api/labels/color', ['label' => 'Invoice', 'color' => '#000000'])->assertUnauthorized();
 
-        expect(LabelColor::query()->count())->toBe(0);
+        expect(LabelList::query()->whereNotNull('color')->count())->toBe(0);
     });
 
     it('goes with the account when it is erased', function () {
@@ -231,12 +232,12 @@ describe('label colours', function () {
         rowSession($this->me)->labels()->create(['label' => 'Invoice']);
         $this->api($this->token)->putJson('/api/labels/color', ['label' => 'Invoice', 'color' => '#dc2626'])->assertOk();
         $other = Fx::user();
-        LabelColor::query()->create(['workspace_id' => $other->current_workspace_id, 'user_id' => $other->id, 'label_key' => 'kept', 'color' => '#000000']);
+        LabelList::query()->create(['workspace_id' => $other->current_workspace_id, 'user_id' => $other->id, 'label_key' => 'kept', 'name' => 'Kept', 'color' => '#000000']);
         app('auth')->forgetGuards();
 
         app(AccountEraser::class)->erase($this->me->fresh());
 
-        expect(LabelColor::query()->pluck('user_id')->all())->toBe([$other->id]);
+        expect(LabelList::query()->pluck('user_id')->all())->toBe([$other->id]);
     });
 });
 

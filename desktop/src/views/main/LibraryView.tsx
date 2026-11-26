@@ -6,7 +6,7 @@ import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffe
 import { folderLabel, inFolderHere, LIBRARY_VIEWS, type LibraryView as LibraryViewKey } from "../../lib/folders";
 import { PageHeader } from "../../components/Page";
 import { Menu } from "../../components/Menu";
-import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
+import { changePreferences, DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { WhatsAppSheet } from "./WhatsAppSheet";
 import { StateBanner } from "../../components/StateBanner";
@@ -16,7 +16,7 @@ import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialog
 import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, type UnsureMarkers } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, whenPart, whenParts, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, recordingName, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
@@ -34,10 +34,12 @@ import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languag
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
-import { improvingView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { defaultViewOf, improvingView, rowViewsLine, shownExportView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { usePoll } from "../../lib/usePoll";
+import { useRowViews } from "../../lib/rowViews";
 import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
-import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
+import { ConvertFailed, ConvertingBar, RecordingSteps } from "./RecordingProgress";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { confirmAction } from "../../lib/confirm";
@@ -79,6 +81,16 @@ const VIEWS_POLL_MS = 5_000;
 const VIEW_ORDER: TranscriptView[] = ["roman", "urdu", "english"];
 const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "اردو" };
 
+/**
+ * A ready row's line: its length, client and bookmarks; while its default view is written, "Converting to Roman Urdu…
+ * 60%" with a small spinner in its place, and when that failed, the line with "Couldn't convert to Roman Urdu" after it.
+ */
+function RowSub({ sub, line }: { sub: string; line: ReturnType<typeof rowViewsLine> }) {
+  if (line?.state === "making") return <span className="pill processing" data-testid="row-converting"><span className="spinner" aria-hidden="true" />{line.text}</span>;
+  if (line?.state === "failed") return <span className="convert-note" data-testid="row-convert-failed">{[sub, line.text].filter(Boolean).join(" · ")}</span>;
+  return <span>{sub}</span>;
+}
+
 /** A view's line with its "[?word]" marks shown like the original's unsure words: underlined, without brackets (plan A4). */
 function withUnsureMarks(text: string): ReactNode {
   const parts = text.split(/(\[\?[^\]]+\])/);
@@ -105,8 +117,9 @@ const VIEW_LINE: Record<LibraryViewKey, string> = {
 
 /** The row's time: the clock for today, the day before that (the day group names the rest). */
 export function rowTime(iso?: string): string {
-  const when = formatWhen(iso);
-  return when.startsWith("Today · ") || when.startsWith("Yesterday · ") ? when.slice(when.indexOf(" · ") + 3) : when.split(" · ")[0];
+  const parts = whenParts(iso);
+  if (!parts) return "";
+  return whenPart(parts.today || parts.yesterday ? parts.time : parts.day);
 }
 
 /** The speaker's initial for the avatar of a speaker block. */
@@ -214,10 +227,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return () => window.removeEventListener(PREFERENCES_EVENT, follow);
   }, []);
   const chooseDensity = (next: Density) => {
-    const prefs = { ...loadPreferences(), density: next };
-    savePreferences(prefs);
+    changePreferences({ density: next });
     setDensity(next);
-    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
   };
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   useEffect(() => {
@@ -343,6 +354,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     };
   }, [live, shown]);
 
+  // The rows' "Converting to Roman Urdu… 60%" (U19): their views are asked about while they are written; once one is
+  // ready or failed the Library syncs, for the title the server may have written in Roman Urdu meanwhile.
+  const quietSync = useCallback(() => {
+    api.refreshLibrary().then(setItems).catch(() => undefined);
+  }, []);
+  const rowViews = useRowViews(items, quietSync);
+
   const tags = useMemo(() => libraryTags(items), [items]);
   const anyBookmarks = useMemo(() => items.some((i) => !i.deleted && (i.marker_count ?? 0) > 0), [items]);
   const labels = useMemo(() => libraryLabels(items), [items]);
@@ -372,8 +390,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const shared = smartFolder === "shared";
   const folderBase = useMemo(() => {
     if (smartView) return items.filter((i) => inSmartView(i, smartView));
-    if (!smartFolder || smartFolder === "shared") return items;
-    if (folderItems === null) return items.filter((i) => inFolderHere(i, smartFolder) === true);
+    // A call's session still `recording` (being recorded, or waiting for Keep or Discard) is only in Waiting, as on the
+    // server and in the new design (contract 2.0.0-z).
+    const listed = items.filter((i) => i.status !== "recording");
+    if (!smartFolder || smartFolder === "shared") return listed;
+    if (folderItems === null) return listed.filter((i) => inFolderHere(i, smartFolder) === true);
     const saved = new Map(items.map((i) => [i.id, i]));
     return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
   }, [items, smartFolder, folderItems, smartView]);
@@ -459,7 +480,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     try {
       await api.retranscribe(current.id, (retranscribeLanguage || null) as TranscriptionLanguage | null);
-      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
+      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null, "en")}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -470,7 +491,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const language = (current.language ?? null) as TranscriptionLanguage | null;
     try {
       await api.retranscribe(current.id, language);
-      notify(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
+      notify(`Re-transcribing in ${languageLabel(language, "en")}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -566,7 +587,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     );
     return () => window.clearTimeout(timer);
   }, [transcribingFinalId, retryAt, recheck]);
-  const retrying = retryLine(waitingFinal);
+  const retrying = retryLine(waitingFinal, undefined, "en");
   // Find starts over for every recording.
   useEffect(() => {
     setFindOpen(false);
@@ -655,18 +676,45 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const viewsProgress = views?.progress ?? transcript?.views?.progress;
   const barView = viewsMaking ? improvingView(viewsProgress, showAs, transcript?.views?.default) : null;
   const barPercent = barView ? viewPercent(viewsProgress, barView) : null;
+  // The default view (Roman Urdu for an Urdu call) could not be written: it stopped, or went quiet for too long and the
+  // server gave up. Said under the bar's place with Try again, so it never seems to be converting forever.
+  const viewsFailed = (views ? views.status : transcript?.views?.status) === "failed";
+  const failedView = viewsFailed ? (showAs !== "original" ? showAs : defaultViewOf(transcript?.views)) : null;
+  const [viewsRetrying, setViewsRetrying] = useState(false);
+  const retryViews = async () => {
+    const id = transcriptId;
+    if (!id || viewsRetrying) return;
+    setViewsRetrying(true);
+    try {
+      const state = await api.makeTranscriptViews(id);
+      if (shownTranscript.current === id) setViews(state);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    } finally {
+      setViewsRetrying(false);
+    }
+  };
+  // What the page reads about its views goes to its row too, so both say the same.
+  const noteRowViews = rowViews.note;
   useEffect(() => {
-    if (!transcriptId || !viewsMaking || (showAs === "original" && readOnly)) return;
-    let alive = true;
-    const timer = window.setTimeout(() => {
-      // Only for the transcript still on screen: another recording opened meanwhile drops it.
-      api.transcriptViews(transcriptId).then((v) => { if (alive && shownTranscript.current === transcriptId) setViews(v); }).catch(() => undefined);
-    }, views ? VIEWS_POLL_MS : 0);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [transcriptId, showAs, views, viewsMaking, readOnly]);
+    if (views && current && current.transcript?.final_transcript_id === transcriptId) noteRowViews(current, views);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
+  // A failed read never stops it (usePoll keeps asking, and waits while the window is hidden), so the converting line
+  // can't spin for ever on one lost answer; the server says "failed" itself after 20 quiet minutes.
+  const pollingViews = !!transcriptId && viewsMaking && !(showAs === "original" && readOnly);
+  const readViews = async () => {
+    const id = transcriptId;
+    if (!id) return;
+    const v = await api.transcriptViews(id);
+    // Only for the transcript still on screen: another recording opened meanwhile drops it.
+    if (shownTranscript.current === id) setViews(v);
+  };
+  useEffect(() => {
+    if (pollingViews && !views) void readViews().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcriptId, pollingViews]);
+  usePoll(pollingViews, readViews, VIEWS_POLL_MS);
   // Views that become ready swap in where the reader is (C3): the default view, unless the person chose one.
   const anchor = useRef<{ index: number; top: number } | null>(null);
   const keepPlace = () => {
@@ -688,6 +736,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const becameReady = wasMaking.current && views?.status === "ready";
     wasMaking.current = making;
     const preferred = transcript?.views?.default;
+    // The server may have named the recording in Roman Urdu meanwhile: the shown title comes from a fresh read.
+    if (becameReady && !readOnly) quietSync();
     if (becameReady && !viewPicked.current && showAs === "original" && preferred && preferred !== "original" && views?.available.includes(preferred)) {
       keepPlace();
       setShowAs(preferred);
@@ -1114,20 +1164,30 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   // Rename from the row menu (in the list) or by clicking the title of the open recording.
   const [renaming, setRenaming] = useState<{ id: string; where: "list" | "detail" } | null>(null);
   const replaceItem = (id: string, change: (item: LibraryItem) => LibraryItem) => setItems((list) => list.map((i) => (i.id === id ? change(i) : i)));
+  /**
+   * U19 (2.0.0-k), as in the new design: only a title the person chose is theirs to edit. "Call with …", an automatic
+   * title or the app's name start the box empty, with that title as its placeholder. From a server that doesn't say
+   * (no title_source), a title it wrote from what was said (title_auto) is not the person's either; any other is.
+   */
+  const ownTitle = (item: LibraryItem) => item.title_source === "own" || (item.title_source === undefined && !item.title_auto);
+  const titleBox = (item: LibraryItem) => ownTitle(item)
+    ? { initial: item.title ?? "", placeholder: "Leave it empty for the title EchoLedger gives it.", hint: "Leave it empty for the title EchoLedger gives it." }
+    : { initial: "", placeholder: item.title ?? undefined, hint: "Type a title of your own, or leave it empty to keep this one." };
   /** The new name shows at once; the server's answer (and the next sync on other devices) confirms it. */
   const rename = async (item: LibraryItem, text: string) => {
     setRenaming(null);
     const title = text.trim();
-    if (title === (item.title ?? "").trim()) return;
+    // Unchanged, or left empty over a title the person didn't choose: nothing to save.
+    if (title === (ownTitle(item) ? item.title ?? "" : "").trim()) return;
     // An empty title asks the server for its automatic one again (Phase 1C, `title: null`); a title the person types is
     // theirs, and the server never replaces it.
-    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false }));
+    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false, title_source: "own" }));
     try {
       const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
-      notify(title ? "Renamed" : "The automatic title will be used", false, { kind: "recording", id: item.id });
+      notify(title ? "Renamed" : "Back to the title EchoLedger gives it", false, { kind: "recording", id: item.id });
     } catch (e) {
-      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
+      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto, title_source: item.title_source }));
       notify(errorMessage(e), true);
     }
   };
@@ -1272,7 +1332,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 else if (item.session) setSelected(item.session.id);
               }} />
           )}
-          {selecting && !shared && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
+          {selecting && !shared && <BulkBar ids={pickedIds} view={shownExportView(filtered.filter((i) => picked.has(i.id)))} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
           {/* Offline (a state, v1.6.1 Notices): no timer; a click tries again; closed until the next problem. */}
           {syncError && (
             <StateBanner id="library-sync" state={syncError} tone="danger" role="alert" className="sync-error" onOpen={() => void refresh()} openLabel="Couldn't sync with the server. Try again"
@@ -1329,7 +1389,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             )
           )}
           {!shared && tableView && filtered.length > 0 && (
-            <LibraryTable groups={groups} columns={columns} collapsed={collapsedGroups} onToggleGroup={toggleCollapsed} picked={picked} selecting={selecting}
+            <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsedGroups} onToggleGroup={toggleCollapsed} picked={picked} selecting={selecting}
               selected={selected} cursor={cursor} onOpen={(item) => { setCursor(item.id); setSelected(item.id); }} onPick={togglePicked}
               onPickGroup={(items) => { setSelecting(true); setPicked((p) => toggleGroup(items, p)); }} onPointerDown={startDrag}
               menu={(item) => (
@@ -1366,7 +1426,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <div className="row">
                         {avatar}
                         <div className="item-main">
-                          <TitleEditor className="item-rename" initial={item.title ?? ""} onSave={(t) => void rename(item, t)} onCancel={() => setRenaming(null)} />
+                          <TitleEditor className="item-rename" {...titleBox(item)} onSave={(t) => void rename(item, t)} onCancel={() => setRenaming(null)} />
                           <div className="item-sub">{sub}</div>
                         </div>
                       </div>
@@ -1398,10 +1458,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             <span className="item-time">{rowTime(item.started_at)}</span>
                           </div>
                           <div className="item-sub">
-                            {state === "ready" ? <span>{sub}</span> : (
+                            {state === "ready" ? <RowSub sub={sub} line={rowViewsLine(rowViews.summaryFor(item), "en")} /> : (
                               <span className={`pill ${state}`}>
                                 {state === "processing" ? <span className="spinner" aria-hidden="true" /> : state === "failed" ? <AlertIcon size={14} /> : null}
-                                {state === "processing" ? stepOf(item).line ?? STATE_LABEL[state] : STATE_LABEL[state]}
+                                {state === "processing" ? stepOf(item, null, "en").line ?? STATE_LABEL[state] : STATE_LABEL[state]}
                               </span>
                             )}
                           </div>
@@ -1439,7 +1499,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             <>
               <div className="detail-body">
                 {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
-                {!tableView && <ItemBar title={recordingName(current.title)} onBack={backToList} />}
+                {/* Keyed by the recording: another recording opens with its own bar, untitled until its header scrolls under. */}
+                {!tableView && <ItemBar key={current.id} title={recordingName(current.title)} onBack={backToList} />}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1463,7 +1524,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   {readOnly ? (
                     <h2 className="detail-title" dir="auto" data-motion="title">{recordingName(current.title)}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
-                    <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
+                    <TitleEditor className="detail-title-input" {...titleBox(current)} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
                     <h2 className="detail-title" dir="auto" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{recordingName(current.title)}</button>
@@ -1479,9 +1540,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
-                  {transcribedIn(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript)}</div>}
+                  {transcribedIn(current.transcript, "en") && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript, "en")}</div>}
                   {retrying && (
-                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason) ?? undefined}>{retrying}</div>
+                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, "en") ?? undefined}>{retrying}</div>
                   )}
                   {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && !readOnly && (
                     <div className="backup-line" role="status" data-testid="backup-engine">
@@ -1499,8 +1560,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
                         <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
-                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}
+                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o, "en")}</option>)}</optgroup>
                         </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
@@ -1512,7 +1573,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
                         <button type="button" aria-pressed={version === "alternate"} onClick={() => setVersion("alternate")}>
-                          Previous{current.transcript?.alternate_language ? ` (${languageLabel(current.transcript.alternate_language)})` : ""}
+                          Previous{current.transcript?.alternate_language ? ` (${languageLabel(current.transcript.alternate_language, "en")})` : ""}
                         </button>
                       </span>
                     )}
@@ -1522,7 +1583,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu (with English words) to keep every word, or click Re-transcribe anyway.
                     </div>
                   )}
-                  {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning)}</div>}
+                  {scriptWarning(current.transcript?.script_warning, "en") && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning, "en")}</div>}
                 </div>
                 {panel === "share" && !readOnly && (
                   <ShareDialog target={{ kind: "session", id: current.id, title: current.title ?? null, hasAudio: !!playbackUrl }} view={exportView} notify={notify} onClose={() => setPanel(null)} />
@@ -1543,7 +1604,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 {transcript ? (
                   transcript.status === "failed" ? (
                     <div className="notice error" style={{ marginTop: 12 }}>
-                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code)}
+                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code, "en")}
                       {/* What happened in the app's own words per `error_code` (D-130; the server's message can name a provider);
                           the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
@@ -1564,11 +1625,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     </div>
                   ) : isTranscribing(transcript.status) ? (
                     // The library's progress is the fresher one: live status re-reads it every few seconds.
-                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingLine(current.transcript?.final_progress ?? transcript.progress)}</p></div>
+                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingLine(current.transcript?.final_progress ?? transcript.progress, "en")}</p></div>
                   ) : (
                     <>
                       <div className="transcript-bar">
-                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
+                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress, "en") ? ` · ${partsText(current.transcript?.final_progress, "en")}` : ""})`}</span>
                         {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
                           && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
@@ -1586,7 +1647,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           </>
                         )}
                       </div>
-                      {barView !== null && transcript.kind === "final" && <ImprovingBar view={barView} percent={barPercent} />}
+                      {barView !== null && transcript.kind === "final" && <ConvertingBar view={barView} percent={barPercent} />}
+                      {barView === null && failedView !== null && transcript.kind === "final" && <ConvertFailed view={failedView} retrying={viewsRetrying} onRetry={readOnly ? undefined : () => void retryViews()} />}
                       <div className="copy-row">
                         <button className="btn compact" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                         <button className="btn compact" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
@@ -1603,7 +1665,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
-                      {showAs !== "original" && (
+                      {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
+                      {showAs !== "original" && !(transcript.kind === "final" && (barView !== null || failedView !== null)) && (
                         <div className="small muted" role="status" data-testid="view-status" style={{ marginTop: 6 }}>
                           {views?.status === "ready"
                             ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
@@ -1692,7 +1755,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : readingTranscript ? (
                     <div className="empty" role="status" aria-busy="true" data-testid="transcript-loading"><span className="spinner" aria-hidden="true" /> Loading the transcript…</div>
                   ) : (
-                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : transcriptStatusLine(finalStatus)}</div>
+                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress, "en") : transcriptStatusLine(finalStatus, "en")}</div>
                   )
                 )}
                 {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}
@@ -1751,8 +1814,10 @@ function ItemBar({ title, onBack }: { title: string; onBack: () => void }) {
   useEffect(() => {
     const check = () => {
       const el = bar.current;
-      const head = el?.closest(".detail-body")?.querySelector(".detail-title");
-      if (!el || !head) return;
+      // Hidden on a wide page: nothing to measure on every scroll.
+      if (!el || el.offsetParent === null) return;
+      const head = el.closest(".detail-body")?.querySelector(".detail-title");
+      if (!head) return;
       setTitled(head.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom);
     };
     // The page scrolls (.content), not the window: scroll events don't bubble, so listen while they come down.

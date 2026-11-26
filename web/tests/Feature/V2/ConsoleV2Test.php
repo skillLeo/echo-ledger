@@ -119,7 +119,7 @@ describe('the console language', function () {
 });
 
 describe('the Library', function () {
-    it('lists recordings as the apps\' rows with the saved views as chips, and Untranscribed narrows to recordings without a transcript', function () {
+    it('lists recordings as the apps\' rows under one toolbar row, and Not transcribed narrows to recordings without a transcript', function () {
         consoleV2For($this->admin);
         $done = $this->sessionWithTranscript($this->admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Assalam o alaikum']],
             ['title' => 'Rate for 12 mm rebar', 'status' => SessionStatus::Completed]);
@@ -127,13 +127,22 @@ describe('the Library', function () {
 
         $page = $this->panelComponent(ListCaptureSessions::class);
         $html = $page->html();
+        // Since 2.0.0-p the saved views are the sidebar's places (Not transcribed among them) and My views; the page has
+        // one toolbar row: the place's name, Search, Filters and Sort & display.
         expect($html)->toContain('v2-lib-row')->toContain('Umrah group booking for 14 people')->toContain('Rate for 12 mm rebar')
-            ->toContain('data-view="untranscribed"')->toContain('data-view="folder:voice_notes"')->toContain('New voice note')
-            ->not->toContain('el-with-col');
+            ->toContain('data-library-title')->toContain('data-filters-button')->toContain('data-menu="display"')
+            ->not->toContain('data-view="untranscribed"')->not->toContain('el-with-col');
 
-        $page->call('openPlace', 'untranscribed');
-        expect($page->get('activeTab'))->toBe('untranscribed');
+        // Since v2.1 Not transcribed is Audio only (docs/PLAN_V2_1_POLISH.md section 1): one name, one definition.
+        $page->call('openPlace', 'audio_only');
+        expect($page->get('activeTab'))->toBe('audio_only')->and($page->instance()->libraryHeading())->toBe('Audio only');
         $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
+        // Old addresses with Not transcribed and Untranscribed still open it.
+        foreach (['not_transcribed', 'untranscribed'] as $old) {
+            $page->call('openPlace', $old);
+            expect($page->instance()->libraryHeading())->toBe('Audio only', $old);
+            $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
+        }
     });
 
     it('keeps the classic Library without ui_v2.library', function () {
@@ -257,7 +266,9 @@ it('shows the workspace and its role in Urdu under the new frame', function () {
 
     $html = (string) $this->actingAs($this->admin->fresh(), 'web')->get('/app')->assertOk()->getContent();
 
-    expect($html)->toContain('ذاتی')->toContain('مالک')->not->toContain('>Personal<');
+    // The workspace called Personal reads ذاتی; the plan keeps its name (plan names are never translated).
+    expect($html)->toContain('<span class="el-tb-workspace-name">ذاتی</span>')->toContain('مالک')
+        ->not->toContain('<span class="el-tb-workspace-name">Personal</span>');
 });
 
 it('counts the console\'s questions in the API\'s per-person ask limit, both ways', function () {

@@ -66,6 +66,8 @@ final class DeviceConfigPayload
                 'max_recording_bytes' => (int) config('echoledger.max_recording_bytes'),
                 'accepted_mimes' => array_values((array) config('echoledger.accepted_mimes')),
             ],
+            // Since 2.0.0-r (BE-03): when the apps retry a failed upload on their own.
+            'upload_retry' => UploadRetries::schedule(),
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
             'markers' => ['tags' => $this->settings->markerTags()],
@@ -104,6 +106,10 @@ final class DeviceConfigPayload
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),
+            // Since 2.0.0-w (docs/API.md "Call rules"): the person's After each call settings and the rules' version, only
+            // while the call_rules flag is on for them.
+            ...(app(InterfaceFlags::class)->active(InterfaceFlags::CALL_RULES, $device->user, $device->workspace_id)
+                ? ['call_rules' => app(CallRules::class)->settings($device->user)] : []),
             // Since 1.9.0-g (docs/API_ASSIST.md): the relay host's pins, only while Live Assist is on for this person.
             ...(app(InterfaceFlags::class)->active(InterfaceFlags::LIVE_ASSIST, $device->user, $device->workspace_id)
                 ? ['relay_pins' => $this->settings->relayPins()] : []),

@@ -6,13 +6,105 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
+## Tonight 20:00 (2026-11-23) — the call choice and the new navigation, Mac 2.0.11 and phone 2.0.9, about 55 minutes
+
+Builds:
+- **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting to be installed: it goes on after "mac free".
+- **Windows:** `EchoLedger_2.0.11_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.11.
+- **Phone:** 2.0.10 (code 30) is installed (21:46): everything in 2.0.9 (the call choice, screenshots while recording) plus the Library filters and saved views.
+
+**1. Mac, about 15 minutes**
+1. **Install and check permissions.**
+   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.11 (installed 21:46).
+   - Known in 2.0.11 (D-211, fix in 2.0.12): after it opens, the window can keep the old look (Inbox, Pinned, no rail) until you open another screen. Click Settings, then Library: the rail, the panel and the tabs show.
+   - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
+2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
+   - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
+   - Allow it, press Try again, and the warning goes.
+3. **Zoom in Chrome, 1 minute**, with the phone as the other person. The lead watches mic.wav and system.wav grow live. Pass if both sides are in the transcript.
+4. **After the meeting.** The calm card shows next to the pill:
+   - the Zoom logo, the name, "0:44 · just now";
+   - Delete and Transcribe;
+   - "Close to keep audio only".
+   Press Transcribe, then Undo, then Transcribe again.
+5. **Pill menu.** During a second short meeting, click the pill and choose "Save audio only". Pass if no card shows after it.
+6. **Library and navigation (new in 2.0.11).** Click a few views and filters, then press the rail's Library icon: back to All recordings with nothing filtered. Try the tabs All · Calls · Meetings · Voice notes, Filters (F), ⌘[ to go back, and ⌘\\ to hide the panel. Make the window narrow: the panel opens as an overlay.
+   - Known, don't log it: ⌘] (Forward) right after ⌘[ can land on the wrong page. The fix is being built and comes after tomorrow's website update.
+
+**2. Phone, about 25 minutes.** Check `mCallState=0` first.
+1. **Three WhatsApp calls**, each about 20 s, with "After each call: Ask me" (the default after the update):
+   - **Call 1:** Transcribe. "Transcribing…" shows with Undo.
+   - **Call 2:** Delete, then Undo within 5 s. The card comes back.
+   - **Call 3:** swipe the card away. Pass if "Saved as audio · Transcribe" shows.
+2. **Pill choice.** During a call, tap the pill and choose "Transcribe this call". Pass if no card shows after the call.
+3. **At the start.** In Settings › Recording › When to ask, choose "At the start of the call".
+   - Pass if "Recording this call · Don't record" shows for 5 s after the call connects, never while ringing, and never covers the call buttons.
+   - Set it back to "After the call".
+4. **Screenshot while recording.** Pass if the pill shows in the screenshot. With live captions on, note whether you get a black box or Samsung refuses the screenshot.
+5. **Back-to-back calls.** End two calls within 10 s. Pass if there's one grouped line, never two cards.
+
+**3. Approvals, about 10 minutes**
+- **The card, old and new side by side:** `docs/design/screens/call-choice/` (phone `old-*` / `new-*`, desktop `desktop-old-*` / `desktop-new-*`). Approve the look (VISUAL-OK) or say what to change.
+- **D12 rows:** "rows OK" (`~/Desktop/EchoLedger-row-redesign`).
+- **Navigation, before and after:** open `~/Desktop/EchoLedger-nav-compare/index.html`. Your SkillLeo screenshots are at the top. Below them, for each place, are the website before, the website after and the Mac app after, at 1280 or 1440, light or dark, English or Urdu. Put WhatsApp desktop next to it. Reply "NAV-OK" or say what to change.
+
+## Tonight 20:00–21:30 PKT (2026-11-22) — 2.0.4 on the Mac and Windows, phone 2.0.5, about 85 minutes
+
+Builds:
+- **Mac:** 2.0.4, signed with the pinned identity, already in /Applications. It starts only after a quit and reopen, because 2.0.3 was still running.
+- **Phone:** 2.0.5 (code 25), already installed with data kept.
+- **Windows:** `EchoLedger_2.0.4_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.4, SHA-256 `1cfaba63…a867`.
+
+Not in tonight's batch:
+- the call choice redesign (PLAN_CALL_CHOICE), the phone screenshot fix and the desktop system-audio warning are still in build or review. They get their own batch when they're installed.
+- "ship" waits for the call choice, so tonight ends with a fix list, not "ship".
+
+**1. Mac, about 30 minutes**
+1. **Permissions.** Quit EchoLedger (⌘Q). In System Settings › Privacy & Security:
+   - Microphone: EchoLedger on.
+   - Screen & System Audio Recording: EchoLedger on under Screen Recording and under System Audio Recording Only. Remove an old EchoLedger entry with "–" first, if one is there.
+   Open EchoLedger. Help › About shows 2.0.4.
+2. **Window buttons.** If the window is in full screen, leave it with Ctrl+⌘+F. Pass if the close, minimize and zoom buttons show top left. Send a photo if they don't.
+3. **The waiting call.** In the Library, Review › open the waiting WhatsApp call with Muneeb (17:47) › Keep. It uploads and transcribes; only Muneeb's side has sound (2.0.3's silent mic).
+4. **Titles.** Pass if no automatic title is in Urdu letters, e.g. yesterday's 8:41 pm voice note now reads in Roman Urdu.
+5. **Zoom in Chrome.** Join a test meeting with the phone as the other person; talk from both for 2 minutes; stop.
+   - Pass if the transcript has both sides.
+   - The lead checks the audio files at the same time: system.wav must not be empty.
+6. **WhatsApp desktop.** A 1-minute call. Pass if both sides are heard and the after-call card works (the current card; the new one comes later).
+
+**2. Phone (S25), about 25 minutes.** Check `mCallState=0` first.
+1. **A WhatsApp call, 1 minute.**
+   - The pill shows; the recording saves; the title is in Roman Urdu if you spoke Urdu.
+   - Take a screenshot while the pill shows. Since 20:20 the phone has **2.0.6** (code 26): the screenshot must work, with the pill visible in it. Then check Settings › Privacy & data:
+   - "Hide EchoLedger's live words from screenshots and screen shares" is on;
+   - "Block screenshots of EchoLedger" is off;
+   - "During screen sharing" is gone.
+   With live captions on, a screenshot shows a black box where the captions are, or Samsung refuses it; note which.
+2. **Settings › Microphone & audio › Reset.** Pass if SIM calls and the Phone app's recordings stay as they were (Calls & meetings page).
+3. **Settings › Plan & usage.** The plan card and the meters. **Your data:** Export my data reaches "ready" or says why. **About:** version 2.0.5.
+4. **Urdu notifications.** Set the app language to Urdu, then make a short call.
+   - The recording notification reads right to left, with the name at the right.
+   - At the Largest text size, its buttons are whole: `ہٹانا واپس لیں` may wrap but is never cut.
+   - Set the language back.
+5. **Widget.** Add the EchoLedger widget. In Urdu its lines sit at the right; at Largest its text is larger.
+6. **Help › Phone check.** It runs in English and in Urdu; Copy report works.
+
+**3. Windows laptop, about 20 minutes**
+1. Install `EchoLedger_2.0.4_x64-setup.exe` over the old version; Help › About shows 2.0.4.
+2. Record a WhatsApp or Zoom call with both sides for 1 minute. Pass if the transcript has both sides.
+3. Make the window half the screen. Pass if nothing overlaps and the Library header actions stay on one row.
+
+**4. Approvals, about 10 minutes**
+1. **D12 Library rows.** Look at the pictures in `~/Desktop/EchoLedger-row-redesign`; reply "rows OK" or what to change.
+2. **Fix list.** Send what failed above. The call choice batch (3 WhatsApp calls, a choice from the pill, At the start, a screenshot while recording) follows when those builds are in.
+
 ## Tonight 20:00–21:30 PKT (2026-11-17) — the v1.8.1 release candidate, about 85 minutes
 
 Builds: the v1.8.1 release candidate from CI on `release/v1.8.1` (desktop 1.8.1; Android 1.8.1, code 18). Windows
 first: it gates the release.
 
 Update 19:15: the first 1.8.1 candidate froze on permissions (S0, found in the Mac session) and was withdrawn before
-release. The fixed candidate adds the start-up stall fix and the permissions fix; the lead installs it on the Mac and
+release. The fixed candidate adds the start-up stall fix and the permissions fix; it is installed on the Mac and
 posts the Windows download link when its CI is green. Gate 3 and the decisions were settled this afternoon, so
 items 2 and 3 below are done. On the Windows laptop, also check that Record and Live captions respond at once after
 the app opens (the S0 path). The phone already has 1.8.1 (code 18); nothing to install there tonight.
@@ -46,7 +138,7 @@ dark) and approve the new Home lines: "written down" instead of "word for word",
 of "accurate transcripts", "Urdu and Roman Urdu" instead of "Urdu, accurately".
 
 **3. Decisions, 5 minutes**
-Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
+Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (one person, with backup and rollback).
 Also: the desktop app's words are English only (the phone is translated). Its Urdu pictures show the right-to-left
 layout with English words. Translating the desktop interface into Urdu is a separate piece of work: now, or later?
 Each Gate 3 folder (phone and desktop) has an index of its pictures.
@@ -199,7 +291,7 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 
 ## Paused 2026-11-18 03:52 PKT
 
-Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1. See docs/RESUME_HERE.md.
+Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1.
 
 ## Tonight 20:00–21:30 PKT (2026-11-18) — 2.0.2, about 75 minutes
 
@@ -223,7 +315,7 @@ Gate 3: approved 2026-11-17, no images pending.
 4. **Black window / scrolling, 8 min (S1).** Open Library, a recording, Settings, Projects and Activity. Scroll each with the trackpad, then a mouse. Note any screen that goes black or won't scroll.
 
 ### 2. Phone S25 (2.0.2), 20 min
-1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+1. Turn on Wireless debugging; 2.0.2 is installed (2 min, no data cleared).
 2. Open the app: classic, recordings all there, record a 20 s voice note and check it transcribes.
 3. Settings › Appearance › Try the new design. The text uses the app's font, not the Samsung handwriting font.
 4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
@@ -289,7 +381,7 @@ Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی �
 3. Back to your usual appearance. Note anything else that looks off, with a photo.
 
 ### 2. Phone S25 (2.0.2), 20 min
-1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+1. Turn on Wireless debugging; 2.0.2 is installed (2 min, no data cleared).
 2. Open the app: classic, recordings all there; record a 20 s voice note and check it transcribes.
 3. Settings › Appearance › Try the new design. Pass: the text uses the app's font, not the Samsung handwriting font.
 4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
@@ -306,4 +398,115 @@ Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی �
 6. Half the screen (Win + ←): open a recording and scroll it to the end. Note whether the transcript can be reached
    (2.0.2 is before the half-screen fix; this is the baseline for 2.0.3 on Windows).
 
-After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour).
+After each part, every "fail" becomes a bug with an ID (triaged within the hour).
+
+### F6/U15 — Send to WhatsApp, Text and voice (the builds with F6 and U15), Mac 10 min, Windows 15 min, phone 15 min
+Use a recording with audio and a transcript, in the classic design. Send to a test chat (your own number or a test
+group), never to a client. Before you start, note what is in Downloads.
+
+**Mac, WhatsApp installed**
+1. Library › open the recording › Send to WhatsApp › Text and voice. Pass: only that button changes to "Sending…";
+   Text only and Link look as before, and clicking them does nothing while it runs.
+2. WhatsApp 26.40 for Mac has no share extension, so expect the fallback: WhatsApp opens with the text in a new
+   message, and the sheet says "Saved in Downloads: …" and "The voice file is copied: in the chat, press ⌘V to attach
+   it." Choose the chat, press ⌘V. Pass: the voice file is attached (with the text), and sends and plays.
+3. Close the sheet and do step 1 again. Pass: Downloads has the same one file, no "(2)" copy.
+4. If a WhatsApp version with a share extension is installed (WhatsApp appears under Finder › right-click a file ›
+   Share): step 1 instead shows WhatsApp's share on the window with the text and the file. Choose the chat and send.
+   Pass: the sheet closes with "Text and voice sent to WhatsApp", and nothing new is in Downloads. Repeat and close the
+   share with Cancel: the sheet stays open, nothing is said, nothing new is in Downloads.
+
+**Mac, WhatsApp not installed** (or on another Mac without it)
+5. Same click. Pass: the browser opens WhatsApp Web with the text; the sheet says to press ⌘V. In the chat, ⌘V
+   attaches the file.
+
+**Windows 11, WhatsApp installed (Microsoft Store app)**
+6. Same click. Pass: the Windows Share window opens over EchoLedger titled "Send to WhatsApp"; WhatsApp is in its
+   list. Choose WhatsApp, then the chat, and send. Pass: the voice and the text arrive; the sheet closes with "Text
+   and voice sent to WhatsApp"; nothing new is in Downloads.
+7. Repeat and close the Share window without choosing (Esc or click outside). Pass: the sheet stays open, quietly,
+   within a second or two; nothing new is in Downloads.
+8. Repeat and choose another app (Mail, Nearby sharing). Pass: the sheet closes with "Text and voice shared" (not
+   "sent to WhatsApp").
+
+**Windows 10 (build below 20348), WhatsApp installed**
+9. Same click. Pass: the Share window opens, and at once the sheet says "The share is open: finish sending there."
+   (no "sent" claim, no waiting). Send through WhatsApp, then Done.
+10. Repeat, close the Share window, then click "Open WhatsApp with the text instead". Pass: the fallback of step 2
+    (Ctrl+V attaches the file).
+
+**Windows, WhatsApp not installed**
+11. Same click. Pass: no Share window; the browser opens WhatsApp Web with the text; the sheet says "press Ctrl+V to
+    attach it". In the chat, Ctrl+V attaches the file. Doing it again leaves one file in Downloads, no "(2)".
+
+**Both, a long transcript** (an hour-long recording)
+12. In the fallback, the sheet also says "The message has the start of the text" with "Copy the whole text". Attach
+    the voice first (⌘V / Ctrl+V), then click Copy the whole text and paste it. Pass: the whole text arrives.
+
+**Phone S25 (U15)** — phone rules above: install with `pm install -r` only, never uninstall, never clear data; check
+`mCallState=0` first. Use a recording with audio and a transcript; send to a test chat only.
+13. Classic design: open the recording › Send to WhatsApp › Text and voice. Pass: only that button shows progress
+    (the other two look as before). WhatsApp opens; pick the test chat. Pass: the chat preview shows the voice
+    attached, with the transcript as its caption. Tap Send. Pass: the voice arrives and plays.
+14. New design (Settings › Appearance › Try the new design): open the same recording › Share › Send to WhatsApp ›
+    Text and voice. Pass: the sheet stays open until WhatsApp opens; then as in step 13. Switch back to classic after.
+15. Run steps 13–14 twice: once on a phone with WhatsApp, once on a phone with only WhatsApp Business (a test phone
+    that has only Business; never uninstall WhatsApp on the S25 for this). Pass: each time the installed app opens,
+    with the voice and the caption.
+16. Turn on Airplane mode, then Text and voice again. Pass: the app says "The audio could not be downloaded…" and
+    WhatsApp does not open. Turn Airplane mode off.
+
+## Tonight 20:00–21:30 PKT (2026-11-24) — Mac 2.0.14, phone 2.0.12, Windows 2.0.14, about 70 minutes
+
+Each part stands alone: run whichever device is free. Write "pass" or what you saw next to each step; a photo helps
+for anything that looks wrong. The lead installs the builds; you only use the apps.
+
+Builds:
+- **Mac 2.0.14**: installed in /Applications at 18:41 (signature checked; 2.0.13 kept in ~/EchoLedger-backups).
+- **Phone 2.0.12** (code 32): installed with `pm install -r` at 18:3x (data kept, nothing opened; auto-record came
+  back by itself).
+- **Windows 2.0.14**: `EchoLedger_2.0.14_x64-setup.exe` on the GitHub release v2.0.14; run it over the existing
+  install.
+- Not tonight: the after-call notification (v21_aftercall_notify) switches on for you after tomorrow's web deploy.
+  Known and already being fixed for 2.0.15: in a narrow Mac window the page title, "Voice notes" and "Sort & display"
+  get cut.
+
+### 1. Mac 2.0.14 — the new title row and Library, 30 min
+1. Drag any empty part of the top row (between the title and search). Pass: the window moves. Double-click the same
+   place. Pass: it zooms (or minimises, as System Settings › Desktop & Dock says). The traffic lights sit in their own
+   strip above the sidebar, never over the logo.
+2. Full screen (green button), then out again. Pass: as before; the title row stays one row.
+3. Sidebar: every icon has its label under it; Record has its ▾; your initials sit at the bottom.
+4. Library: scroll well down, open a recording, then press ← in the top row. Pass: the list is where you left it and
+   the recording you opened has a quiet grey band (not teal, not purple). Repeat with ⌘[ and with the mouse's back
+   button.
+5. Scroll down more than a screen. Pass: a round ↑ shows at the bottom right; click it: smooth back to the top, the
+   first row focused.
+6. ⌘K in the top row: type a client's name. Pass: results grouped under the field (recordings, projects, commands).
+7. Delete two recordings one after the other. Pass: one message at a time at the bottom, each with ✕; Esc closes it;
+   Undo works.
+8. Press ⌘R and ⌘P on the Library (not in a text field). Pass: no page reload, no print dialog. Select a few words in a
+   transcript and right-click them. Pass: the normal Mac menu (Copy, Look Up…). Right-click empty space. Pass: no
+   "Reload" or "Back" menu.
+
+### 2. Phone S25 2.0.12 — keep your place and the compact header, 20 min
+1. Open the app (new design). Pass: a smaller header: title with ▾, ⌕, the bell and your initials; the chips row under
+   it. Tap your initials. Pass: a menu with Select, Sync now and Settings.
+2. Scroll far down, open a recording, press Back. Pass: the same place, the opened row in light grey, a ↑ at the
+   bottom right. Tap ↑: back to the top.
+3. Open a recording, turn the phone sideways and back, press Back. Pass: still the same place and the grey row.
+4. If you have an imported file: the Other tab shows, and tapping it stays on Other after closing and reopening the app.
+5. Make a short WhatsApp test call. Pass: it records as before (the new after-call notification comes after tomorrow's
+   deploy).
+
+### 3. Windows laptop 2.0.14 — native feel, 20 min
+1. Run the installer over the existing install. Pass: it starts, sign-in kept.
+2. The window has Windows' own title bar (the custom row is off for now). Library: steps 4–7 of the Mac part with
+   Alt+← and the mouse's back button.
+3. Press F5, Ctrl+R, Ctrl+P and F12 on the Library. Pass: nothing happens.
+4. Right-click selected transcript words. Pass: a short menu: Cut, Copy, Paste, Select all only (no Print, no Share).
+   Right-click inside the search field. Pass: Cut, Copy, Paste, Select all (Undo and spelling come in 2.0.15).
+
+After each part, every "fail" becomes a bug with an ID (triaged within the hour). Pending
+approvals you can give from tonight's devices: VISUAL-OK (the look), rows OK (the Library rows), NAV-OK (the sidebar
+and title row).

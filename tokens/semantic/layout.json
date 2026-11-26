@@ -8,6 +8,11 @@
       "mobile": {
         "$type": "dimension",
         "$value": "16px"
+      },
+      "phone": {
+        "$type": "dimension",
+        "$value": "24px",
+        "$description": "One UI's minimum side margin (v2.1 UX-14): the phone Library's header, chips and rows"
       }
     },
     "row": {
@@ -36,6 +41,13 @@
       "touch-min": {
         "$type": "dimension",
         "$value": "48px"
+      }
+    },
+    "titlebar": {
+      "macos": {
+        "$type": "dimension",
+        "$value": "40px",
+        "$description": "The macOS main window's title-bar strip (D-214), with the classic sidebar only: the native row of its traffic lights, 16 px buttons + trafficLightPosition.y (24) in desktop/src-tauri/tauri.conf.json. Empty; the content starts below it. Not in full screen. The three levels have the 52 px title row instead (desktop.titlerow)."
       }
     }
   }

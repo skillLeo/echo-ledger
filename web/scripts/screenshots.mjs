@@ -41,6 +41,352 @@ const themes = (process.env.THEMES ?? 'light,dark').split(',');
 // A name for the account in the file names (web-settings-plan-free-…), for runs with another EMAIL.
 const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 
+/** JavaScript that right-clicks the Library's row [at] a little in from its start (UX-22's menu). */
+const menuOn = (at) => `(() => { const row = document.querySelectorAll('.v2-library .v2-lib-row')[${at}]; const r = row.getBoundingClientRect();`
+    + ` row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height / 2 })); })()`;
+
+/** JavaScript that right-clicks the first `selector` a little in from its start (UX-22 3b: an object's menu). */
+const objectMenuOn = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (! el) return; const r = el.getBoundingClientRect();`
+    + ` el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(40, r.width / 2), clientY: r.top + r.height / 2 })); })()`;
+
+/**
+ * UX-25: the Library keeps your place, in a short window so that a few recordings already scroll. Back to top shows a
+ * screen down, goes to the top and puts the focus on the first row; typing in the search while the list comes back from
+ * a recording keeps the focus in the search; down the list, a recording opened and the browser's Back bring the same
+ * place, the opened row's grey tint and the focus on it (left so for the picture). Answers what went wrong.
+ */
+async function keepPlace(page, base) {
+    const wrong = [];
+    // A busy machine answers slowly, and a row still moving keeps the list's quiet poll going: no wait for "network idle".
+    page.setDefaultTimeout(90000);
+    const open = async (url) => { await page.goto(url, { waitUntil: 'load' }); await page.waitForTimeout(1500); };
+    const back = async () => { await page.goBack({ waitUntil: 'load' }); await page.waitForTimeout(3000); };
+    await page.setViewportSize({ width: page.viewportSize().width, height: 600 });
+    const list = `${base}/app/sessions`;
+    await open(list);
+    await page.waitForSelector('.v2-lib-row');
+    const maxY = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    if (maxY < 200) return ['the list is too short to scroll even in a short window: seed more recordings'];
+    // Back to top.
+    await page.evaluate((y) => window.scrollTo(0, y), maxY);
+    await page.waitForTimeout(800);
+    if (! await page.evaluate(() => document.querySelector('[data-back-top]')?.classList.contains('is-shown'))) wrong.push('Back to top did not show a screen down');
+    await page.click('[data-back-top]');
+    await page.waitForTimeout(1500);
+    const top = await page.evaluate(() => ({ y: Math.round(window.scrollY), first: document.activeElement?.closest('.fi-ta-record') === document.querySelector('.v2-library .fi-ta-record') }));
+    if (top.y !== 0) wrong.push(`Back to top left the list at ${top.y} px`);
+    if (! top.first) wrong.push('Back to top did not put the focus on the first row');
+    // Down the list: the row a third of the way down the window is the one opened.
+    await page.evaluate((y) => window.scrollTo(0, y), Math.round(maxY / 2));
+    await page.waitForTimeout(800);
+    const before = await page.evaluate(() => {
+        const row = [...document.querySelectorAll('.v2-library .v2-lib-row')].find((r) => r.getBoundingClientRect().top > window.innerHeight / 3);
+        return { y: Math.round(window.scrollY), id: row.dataset.recording, top: Math.round(row.getBoundingClientRect().top) };
+    });
+    // Typing in the search while the list comes back: the letters stay in the search, the focus too.
+    await open(`${list}/${before.id}`);
+    await page.goBack({ waitUntil: 'commit' });
+    const search = '.v2-library .fi-ta-search-field input';
+    await page.waitForSelector(search, { timeout: 15000 });
+    await page.click(search);
+    await page.keyboard.type('zq', { delay: 40 });
+    await page.waitForTimeout(4000);
+    const kept = await page.evaluate((sel) => ({ focus: document.activeElement?.matches(sel) === true, value: document.querySelector(sel)?.value ?? '' }), search);
+    if (! kept.focus || ! kept.value.includes('zq')) wrong.push(`typing in the search while the list came back lost the focus (${JSON.stringify(kept)})`);
+    // Back to the same place, the tint and the focus.
+    await open(list);
+    await page.waitForSelector('.v2-lib-row');
+    await page.evaluate((y) => window.scrollTo(0, y), before.y);
+    await page.waitForTimeout(800);
+    await open(`${list}/${before.id}`);
+    await back();
+    await page.mouse.move(2, 2);
+    const after = await page.evaluate((id) => {
+        const record = document.querySelector(`.v2-lib-row[data-recording="${id}"]`)?.closest('.fi-ta-record');
+        return { y: Math.round(window.scrollY), tinted: !! record?.classList.contains('is-last-opened'), focus: !! record?.contains(document.activeElement) };
+    }, before.id);
+    if (Math.abs(after.y - before.y) > 2) wrong.push(`came back at ${after.y} px, not ${before.y}`);
+    if (! after.tinted) wrong.push('the opened row has no tint');
+    if (! after.focus) wrong.push('the focus is not on the opened row');
+
+    return wrong;
+}
+
+/**
+ * In the page: what in the header loses its words (decision 18, PLAN_V2_1_POLISH). A tab or toolbar label that wraps or
+ * is cut (by its own "…", a box that clips it, the window's edge or something drawn over it), a tab that another control
+ * covers even in part, a search placeholder wider
+ * than its field, a button with no name, and a title that is cut (more lines keep its words, and only come last).
+ * The Library's tabs may scroll sideways (their last step): a tab out of their view is not cut. Answers what went wrong
+ * and the steps the rows took.
+ */
+function headerProblems() {
+    const problems = [];
+    const width = window.innerWidth;
+    const shown = (el) => {
+        for (let a = el; a; a = a.parentElement) {
+            const cs = getComputedStyle(a);
+            if (cs.display === 'none' || cs.visibility === 'hidden' || a.hidden) return false;
+        }
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1 && !getComputedStyle(el).clipPath.startsWith('inset(50%');
+    };
+    const words = (el) => (el.textContent || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    // The lines a label's words take, and the box they fill.
+    const lines = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        let n = 0;
+        let bottom = -Infinity;
+        for (const r of [...range.getClientRects()].filter((x) => x.width > 0.5).sort((a, b) => a.top - b.top)) {
+            if (r.top >= bottom - 1) n++;
+            bottom = Math.max(bottom, r.bottom);
+        }
+        return { n, box: range.getBoundingClientRect() };
+    };
+    const scroller = (a) => a.matches('[data-library-tabs], .v2-page-tabs');
+    const label = (el, what, mayWrap = false) => {
+        if (!shown(el)) return;
+        const { n, box } = lines(el);
+        if (n > 1 && !mayWrap) problems.push(`${what} "${words(el)}" wraps`);
+        if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') problems.push(`${what} "${words(el)}" is cut ("…")`);
+        let scrolled = false;
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+            const overflow = getComputedStyle(a).overflowX;
+            if (overflow === 'visible') continue;
+            const r = a.getBoundingClientRect();
+            const out = box.left < r.left - 1 || box.right > r.right + 1;
+            if (scroller(a) && overflow !== 'hidden' && overflow !== 'clip') {
+                scrolled = out;
+                break;
+            }
+            if (out) {
+                problems.push(`${what} "${words(el)}" is cut by its box`);
+                break;
+            }
+        }
+        if (scrolled) return;
+        if (box.left < -0.5 || box.right > width + 0.5) problems.push(`${what} "${words(el)}" is past the window's edge`);
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        if (hit && !el.contains(hit) && !hit.contains(el) && !(hit.closest('a, button')?.contains(el))) problems.push(`${what} "${words(el)}" is covered`);
+    };
+    const placeholder = (input, what) => {
+        if (!shown(input) || !input.placeholder || !input.matches(':placeholder-shown')) return;
+        const cs = getComputedStyle(input);
+        // The ⌕ button: the field folded, its words hidden.
+        if (getComputedStyle(input, '::placeholder').color.replace(/\s/g, '').endsWith(',0)')) return;
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = cs.font;
+        const need = ctx.measureText(input.placeholder).width;
+        const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (need > room + 1) problems.push(`${what} "${input.placeholder}" is wider than its field (${Math.round(need)} in ${Math.round(room)} px)`);
+    };
+    const named = (el, what) => {
+        if (!shown(el)) return;
+        const name = (el.getAttribute('aria-label') || el.textContent || el.title || (el.labels?.[0]?.textContent ?? '')).trim();
+        if (!name) problems.push(`${what} has no name`);
+        const r = el.getBoundingClientRect();
+        if (!el.closest('[data-library-tabs], .v2-page-tabs') && (r.left < -0.5 || r.right > width + 0.5)) problems.push(`${what} "${name.slice(0, 20)}" is past the window's edge`);
+    };
+    // The top bar.
+    document.querySelectorAll('.v2-tb input').forEach((i) => { placeholder(i, 'the top bar\'s search'); named(i, 'the top bar\'s search'); });
+    document.querySelectorAll('.v2-tb button, .v2-tb a').forEach((b) => named(b, 'a top bar button'));
+    // The Library's toolbar row: the title keeps its words (more lines only as the last step), the tabs and the labels whole.
+    document.querySelectorAll('.v2-lib-crumb, .v2-lib-total').forEach((el) => label(el, 'the title'));
+    document.querySelectorAll('.v2-lib-title bdi').forEach((el) => label(el, 'the title', document.documentElement.dataset.libTitle === 'wraps'));
+    document.querySelectorAll('.v2-lib-tabs .v2-tab > span').forEach((el) => label(el, 'a tab'));
+    // No control covers a tab, even in part: of a scrolling row, the part of each tab in sight.
+    const strip = document.querySelector('.v2-lib-shell.is-right [data-library-tabs]');
+    const controls = [...document.querySelectorAll('.v2-lib-shell.is-right [data-library-crumbs], .v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp, .v2-lib-shell.is-right .v2-lib-tools .v2-chip')].filter(shown);
+    if (strip && shown(strip)) {
+        const s = strip.getBoundingClientRect();
+        strip.querySelectorAll('.v2-tab').forEach((tab) => {
+            const t = tab.getBoundingClientRect();
+            const start = Math.max(t.left, s.left);
+            const end = Math.min(t.right, s.right);
+            if (end - start < 1) return;
+            for (const c of controls) {
+                const r = c.getBoundingClientRect();
+                if (Math.min(end, r.right) - Math.max(start, r.left) > 1 && Math.min(t.bottom, r.bottom) - Math.max(t.top, r.top) > 1) {
+                    problems.push(`a tab "${words(tab)}" is covered by ${c.matches('.v2-chip') ? `"${words(c)}"` : c.matches('[data-library-crumbs]') ? 'the title' : 'the search'}`);
+                }
+            }
+        });
+    }
+    document.querySelectorAll('.v2-lib-tools .v2-chip > span:not(.v2-sr)').forEach((el) => label(el, 'a toolbar label'));
+    document.querySelectorAll('.v2-lib-tools .v2-chip').forEach((b) => named(b, 'a toolbar button'));
+    document.querySelectorAll('.v2-library .fi-ta-search-field input').forEach((i) => { placeholder(i, 'the Library\'s search'); named(i, 'the Library\'s search'); });
+    // The row holds as many lines as its step says: one, or the title's and the tabs' (nothing wrapped onto a third).
+    const crumbs = document.querySelector('.v2-lib-shell.is-right [data-library-crumbs]');
+    if (crumbs) {
+        const row = crumbs.parentElement;
+        const items = [crumbs, ...['[data-library-total]', '[data-library-tabs]', '.fi-ta-search-field > .fi-input-wrp', '.v2-lib-tools'].map((s) => row.querySelector(s))]
+            .filter((el) => el && shown(el)).map((el) => el.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+        let taken = 0;
+        let bottom = -Infinity;
+        for (const r of items) {
+            if (r.top >= bottom - 1) taken++;
+            bottom = Math.max(bottom, r.bottom);
+        }
+        const wanted = Number(document.documentElement.dataset.libLines || 1);
+        if (taken !== wanted) problems.push(`the Library's toolbar row takes ${taken} lines, not ${wanted}`);
+    }
+    // Another page's heading, tabs and header buttons.
+    document.querySelectorAll('.fi-header-heading').forEach((el) => label(el, 'the page\'s heading', true));
+    document.querySelectorAll('.v2-page-tabs .v2-tab').forEach((el) => label(el, 'a page tab'));
+    document.querySelectorAll('.fi-header .fi-btn').forEach((b) => {
+        named(b, 'a header button');
+        [...b.querySelectorAll('span')].filter((s) => s.children.length === 0).forEach((s) => label(s, 'a header button'));
+    });
+    const d = document.documentElement.dataset;
+    const steps = Object.keys(d).filter((k) => /^(tb|lib)[A-Z]/.test(k)).map((k) => `${k}=${d[k]}`).join(' ');
+    return { problems: [...new Set(problems)], steps };
+}
+
+/** The console's language for the account signed in (Settings › Appearance), as a person sets it. */
+async function consoleLanguage(page, base, code) {
+    await page.goto(`${base}/app/settings/appearance`, { waitUntil: 'load' });
+    const radio = page.locator(`[data-setting="appearance.app_language"] [role=radio][lang=${code}]`);
+    if ((await radio.getAttribute('aria-checked')) === 'true') return;
+    // Saved, the page is drawn again in that language.
+    await Promise.all([page.waitForEvent('load'), radio.click()]);
+    await page.waitForTimeout(1500);
+}
+
+/**
+ * In the page (W-220): the page itself never scrolls sideways (a wide table scrolls in its own box), naming the box that
+ * pushes it wider; and on a phone the frame's panel, while closed, is out of the window. Right to left the Workspace
+ * page at 390 px was 448 px wide (the invitations table's hidden "Actions" escaped its scrolling box), so the page shifted
+ * and the hidden panel showed over its edge. Answers what went wrong.
+ */
+function pageProblems() {
+    const problems = [];
+    const html = document.documentElement;
+    const over = html.scrollWidth - html.clientWidth;
+    if (over > 1) {
+        // Down from the body, the box whose hiding makes the page narrower, as deep as it goes.
+        let culprit = null;
+        for (let node = document.body, depth = 0; node && depth < 60; depth++) {
+            const next = [...node.children].find((c) => {
+                const before = c.style.display;
+                c.style.display = 'none';
+                const narrower = html.scrollWidth < html.clientWidth + over;
+                c.style.display = before;
+                return narrower;
+            });
+            if (!next) break;
+            culprit = next;
+            node = next;
+        }
+        const what = culprit
+            ? `${culprit.tagName.toLowerCase()}${typeof culprit.className === 'string' && culprit.className.trim() ? '.' + culprit.className.trim().split(/\s+/).slice(0, 2).join('.') : ''} "${(culprit.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`
+            : 'nothing found';
+        problems.push(`the page scrolls sideways by ${over} px (${what})`);
+    }
+    const sidebar = document.querySelector('.fi-main-sidebar');
+    if (sidebar && window.innerWidth < 1024 && !window.Alpine?.store('sidebar')?.isOpen) {
+        const r = sidebar.getBoundingClientRect();
+        const inside = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+        if (inside > 1 && r.height > 1 && getComputedStyle(sidebar).visibility !== 'hidden') problems.push(`the closed panel shows ${Math.round(inside)} px inside the window`);
+    }
+    return problems;
+}
+
+/** The pages pageFits checks, by name: the Workspace page first, then the other pages whose tables are wide. */
+const FIT_PAGES = [['workspace', '/app/workspace'], ['shared', '/app/shared-with-me'], ['links', '/app/shares'], ['usage', '/app/usage'],
+    ['devices', '/app/settings/devices'], ['trash', '/app/recently-deleted']];
+
+/**
+ * W-220: at this width, in English and in Urdu, each of FIT_PAGES fits the window (pageProblems) and its header keeps its
+ * words (headerProblems: the heading and the header's buttons whole, in the window and not covered). The account is left
+ * in English, on the Workspace page. Answers what went wrong.
+ */
+async function pageFits(page, base) {
+    const wrong = [];
+    page.setDefaultTimeout(90000);
+    const width = page.viewportSize().width;
+    try {
+        for (const code of ['en', 'ur']) {
+            await consoleLanguage(page, base, code);
+            for (const [name, path] of FIT_PAGES) {
+                await page.goto(base + path, { waitUntil: 'load' });
+                await page.waitForTimeout(1200);
+                const found = [...await page.evaluate(pageProblems), ...(await page.evaluate(headerProblems)).problems];
+                console.log(`fit ${name} ${width} ${code}: ${found.length ? found.length + ' problems' : 'fits'}`);
+                wrong.push(...found.map((p) => `${name} ${code}: ${p}`));
+            }
+        }
+    } finally {
+        await consoleLanguage(page, base, 'en');
+        await page.goto(base + FIT_PAGES[0][1], { waitUntil: 'load' });
+    }
+
+    return wrong;
+}
+
+/**
+ * Decision 18 on the web console's header: at this width, in English and in Urdu, on the Library (all recordings, a
+ * saved view, and that view with a long name), Live, Activity and Projects, no tab or toolbar label is cut or wrapped,
+ * no placeholder is wider than its field, every button has a name, and the title keeps its words; a folded ⌕ search opens
+ * over its row with a click and folds again on Esc, keeping its words. Logs the steps each row took, and pictures the
+ * header (title-row/<SHOT_PREFIX>-…) as it goes. The account is left in English. Answers what went wrong.
+ */
+async function headerFits(page, base) {
+    const wrong = [];
+    page.setDefaultTimeout(90000);
+    const width = page.viewportSize().width;
+    const shots = `${out}/title-row`;
+    mkdirSync(shots, { recursive: true });
+    const language = (code) => consoleLanguage(page, base, code);
+    try {
+        for (const code of ['en', 'ur']) {
+            await language(code);
+            await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+            const view = await page.evaluate(() => document.querySelector('[data-panel="library"] a[href*="?v="], .v2-panels a[href*="?v="]')?.getAttribute('href') ?? null);
+            const places = [['library', '/app/sessions'], ...(view ? [['view', view], ['view-long', view]] : []), ['live', '/app/live'], ['activity', '/app/activity'], ['projects', '/app/clients']];
+            for (const [name, path] of places) {
+                await page.goto(path.startsWith('http') ? path : base + path, { waitUntil: 'load' });
+                await page.waitForTimeout(1200);
+                if (name === 'view-long') {
+                    // A saved view's name is the person's own: a long one, measured again as its words change.
+                    await page.evaluate(() => { document.querySelector('.v2-lib-title bdi').textContent = 'Calls with the accountant about the yearly return'; });
+                    await page.waitForTimeout(300);
+                }
+                const found = await page.evaluate(headerProblems);
+                console.log(`header ${name} ${width} ${code}: ${found.steps || 'no steps'}`);
+                wrong.push(...found.problems.map((p) => `${name} ${code}: ${p}`));
+                if (['library', 'view-long'].includes(name)) {
+                    await page.screenshot({ path: `${shots}/${process.env.SHOT_PREFIX ?? 'now'}-${name}-${width}-${code}.png`, clip: { x: 0, y: 0, width, height: 240 }, animations: 'disabled' });
+                }
+                // The ⌕ button: a click opens the field over its row; Esc folds it, its words kept (it looks on).
+                const folded = '.v2-lib-shell.is-right .fi-ta-search-field > .fi-input-wrp';
+                if (name === 'library' && await page.evaluate(() => document.documentElement.dataset.libSearch === 'button')) {
+                    const row = await page.evaluate((s) => document.querySelector(s).parentElement.getBoundingClientRect().width, folded);
+                    await page.click(folded);
+                    await page.keyboard.type('zq', { delay: 40 });
+                    const open = await page.evaluate((s) => document.querySelector(s).getBoundingClientRect().width, folded);
+                    if (open < row - 1) wrong.push(`library ${code}: the ⌕ search opened ${Math.round(open)} px wide, not over its row (${Math.round(row)} px)`);
+                    await page.keyboard.press('Escape');
+                    await page.waitForTimeout(300);
+                    const after = await page.evaluate((s) => { const w = document.querySelector(s); return { width: w.getBoundingClientRect().width, words: w.querySelector('input').value, focus: w.contains(document.activeElement) }; }, folded);
+                    if (after.focus || after.width > 40) wrong.push(`library ${code}: Esc did not fold the ⌕ search`);
+                    if (after.words !== 'zq') wrong.push(`library ${code}: Esc lost the search's words`);
+                    // The search emptied again, so the list is as it was.
+                    await page.click(folded);
+                    await page.fill(`${folded} input`, '');
+                    await page.waitForTimeout(1500);
+                    await page.keyboard.press('Tab');
+                }
+            }
+        }
+    } finally {
+        await language('en');
+        await page.goto(`${base}/app/sessions`, { waitUntil: 'load' });
+    }
+
+    return wrong;
+}
+
 // Pages by name. A function gets the page and resolves its path (for records whose ids change per database). `run`
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
 const pages = {
@@ -49,11 +395,11 @@ const pages = {
     // `steps` are run one after another as a guest; `link` reads a signed address from AUTH_LINKS (a JSON file the
     // tour's tinker step writes: reset, invitation, device). Turnstile's test keys make the check pass by itself.
     register: { path: '/app/register', guest: true },
-    'login-password': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }] },
+    'login-password': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[autocomplete=current-password]' }] },
     'login-check': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', 'new.person@example.com'] }, { click: 'button[type=submit]', wait: '[data-turnstile]' }] },
     'register-code': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'new.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
     'register-profile': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'profile.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]' }, { code: 'input[autocomplete=one-time-code]' }, { click: 'button[type=submit]', wait: 'input[autocomplete=name]' }] },
-    'two-step': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }, { fill: ['input[type=password]', password] }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
+    'two-step': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[autocomplete=current-password]' }, { fill: ['input[autocomplete=current-password]', password] }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
     'password-reset': { path: '/app/password-reset/request', guest: true },
     'password-reset-new': { link: 'reset', guest: true },
     invitation: { link: 'invitation' },
@@ -62,10 +408,60 @@ const pages = {
     home: { path: '/app' },
     library: { path: '/app/sessions' },
     'library-drawer': { path: '/app/sessions', waitFor: '.el-row', run: "document.querySelector('.el-row')?.click()", full: false, wide: true },
+    // UX-25: the place kept coming back from a recording, the opened row's tint, Back to top (keepPlace's checks).
+    'library-keep-place': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, wide: true, scenario: keepPlace, settle: 300 },
+    // Decision 18: the header keeps every label and the title's words, in English and Urdu (headerFits' checks).
+    'header-fit': { path: '/app/sessions', waitFor: '.v2-lib-row', full: false, scenario: headerFits, settle: 300 },
+    // W-220: the Workspace page and the other pages with wide tables fit a phone in English and Urdu (pageFits' checks;
+    // ONLY=page-fit WIDTHS=390).
+    'page-fit': { path: '/app/workspace', full: false, scenario: pageFits, settle: 300 },
     'library-table': { path: '/app/sessions', run: "document.querySelector('[data-layout=table]')?.click()", after: "document.querySelector('[data-layout=list]')?.click()", wide: true },
+    // UX-22: a row's right-click menu at the pointer, its Labels › sub-menu, and the menu of two selected rows.
+    'library-menu': { path: '/app/sessions', waitFor: '.v2-lib-row', run: menuOn(1), full: false, wide: true },
+    'library-menu-sub': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `${menuOn(1)};document.querySelector('.v2-ctx [aria-haspopup=menu]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`, full: false, wide: true },
+    // UX-22 3b: the other objects' menus: a view, a label and Trash in the Library's panel, a project in the Projects
+    // panel, an Activity item, a recording in Trash.
+    'menu-view': { path: '/app/sessions', waitFor: '[data-v2-object="view"]', run: objectMenuOn('[data-v2-object="view"] a'), full: false, wide: true },
+    'menu-label': { path: '/app/sessions', waitFor: '[data-v2-object="label"]', run: objectMenuOn('[data-v2-object="label"] a'), full: false, wide: true },
+    'menu-trash': { path: '/app/sessions', waitFor: '[data-v2-object="trash"]', run: objectMenuOn('[data-v2-object="trash"]'), full: false, wide: true },
+    'menu-project': { path: '/app/clients', waitFor: '[data-v2-object="project"]', run: objectMenuOn('[data-v2-object="project"]'), full: false, wide: true },
+    'menu-activity': { path: '/app/activity', waitFor: '[data-v2-object="activity"]', run: objectMenuOn('[data-v2-object="activity"]'), full: false, wide: true },
+    'menu-trash-row': { path: '/app/recently-deleted', waitFor: '[data-v2-object="trashItem"]', run: objectMenuOn('[data-v2-object="trashItem"]'), full: false, wide: true },
+    'library-menu-many': { path: '/app/sessions', waitFor: '.v2-lib-row', run: `[...document.querySelectorAll('.v2-library input.fi-ta-record-checkbox')].slice(0, 2).forEach((b) => b.click());${menuOn(0)}`, full: false, wide: true },
     'library-folder': { path: '/app/sessions?folder=whatsapp' },
     'library-failed': { path: '/app/sessions?tab=failed' },
     'library-empty': { path: '/app/sessions?search=zzzz-nothing-matches' },
+    // The Library's filters and views (contract 2.0.0-p): the window as it opens, the whole page, the filter panel open
+    // (a drawer under 1280 px), filters applied as pills, and nothing matching.
+    // listTop: the guard of docs/PLAN_LIBRARY_FILTERS.md section 4 (below).
+    // reach: every one of these is in the rail or can be scrolled to in the open place's panel, and focused from
+    // either end, and is then seen, not covered (below).
+    'lf-window': { path: '/app/sessions', full: false, listTop: true, reach: ['[data-place]', '[data-new-view]', '[data-label]', '[data-new-label]', '[data-module=library]', '[data-module=projects]', '[data-module=live]', '[data-module=ask]', '[data-module=activity]', '[data-module=settings]', '[data-module=help]', '[data-module=setup]'] },
+    // The three levels (docs/PLAN_NAV_3_LEVELS.md): each place with its panel, the flyout, the filters beside or over
+    // the list, Settings' inner list, and the browser checks of section 8 (navChecks, below).
+    'nav-library': { path: '/app/sessions', full: false, listTop: true, checks: (page, width) => navChecks(page, width) },
+    'nav-projects': { path: '/app/clients', full: false, reach: ['[data-projects-view]', '[data-new-project]', '.v2-panels [data-project]'] },
+    'nav-live': { path: '/app/live', full: false },
+    'nav-ask': { path: '/app/ask', full: false },
+    'nav-activity': { path: '/app/activity?show=needs_you', full: false },
+    'nav-settings': { path: '/app/settings/profile', full: false },
+    // Setup & health, the rail's own place (no panel): Devices and Get the apps as its tabs.
+    'nav-setup': { path: '/app/settings/devices', full: false },
+    // Under the flyout width (1024): each place folded to the rail, and its panel open over the page from its icon.
+    'nav-flyout': { path: '/app/sessions', full: false, click: '[data-rail="library"]' },
+    'nav-projects-flyout': { path: '/app/clients', full: false, click: '[data-rail="projects"]' },
+    'nav-settings-flyout': { path: '/app/settings', full: false, click: '[data-rail="settings"]' },
+    'nav-settings-home': { path: '/app/settings', full: false },
+    'nav-filters': { path: '/app/sessions', full: false, run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))" },
+    'nav-folded': { path: '/app/sessions', full: false, run: "document.querySelector('[data-panel-toggle]')?.click()" },
+    'nav-tab': { path: '/app/sessions?kind=calls', full: false },
+    'lf-full': { path: '/app/sessions' },
+    'lf-panel': { path: '/app/sessions', run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))", full: false },
+    'lf-pills': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp&f[date][op]=is_not&f[date][values][0]=today', full: false },
+    'lf-pill-edit': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp', click: '[data-pill=source]', full: false },
+    'lf-sort': { path: '/app/sessions', click: '[data-menu=display]', full: false },
+    'lf-record': { path: '/app/sessions', click: '[data-record-menu]', full: false },
+    'lf-empty': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=discord', full: false },
     recording: { path: async (page) => `/app/sessions/${await recording(page, 'Retainer check-in')}` },
     'recording-urdu': { path: async (page) => `/app/sessions/${await recording(page, 'Invoice questions')}` },
     upload: { path: '/app/upload' },
@@ -86,6 +482,14 @@ const pages = {
     devices: { path: '/app/devices' },
     usage: { path: '/app/usage' },
     workspace: { path: '/app/workspace' },
+    // DES-08: a person's avatar (their photo, else their initials on their colour) in each list of people: Sent to (a
+    // recording's More menu), the avatar menu, Shared with me and the workspace's people and invitations above.
+    'sent-to': { path: async (page) => `/app/sessions/${await recording(page, 'Retainer check-in')}`, full: false,
+        run: "Livewire.all().find((c) => /ViewCaptureSession$/.test(c.name)).$wire.mountAction('sentTo')", settle: 1500 },
+    // On a phone the avatar is in the menu (☰): it opens first.
+    'avatar-menu': { path: '/app/sessions', full: false, settle: 1200,
+        run: "(async () => { if (innerWidth < 1024) { document.querySelector('.v2-tb-menu')?.click(); await new Promise((r) => setTimeout(r, 600)); }"
+            + " [...document.querySelectorAll('.v2-um-trigger')].find((b) => b.getClientRects().length > 0)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); })()" },
     // Settings (since v1.7). Per account: EMAIL=free@echoledger.local SUFFIX=free (php artisan db:seed --class=SettingsTourSeeder).
     'settings-overview': { path: '/app/settings' },
     'settings-plan': { path: '/app/settings/plan' },
@@ -151,6 +555,8 @@ async function requestPath(page, tail) {
 
 // The first Library row whose title matches (the demo data: php artisan db:seed --class=ConsoleTourSeeder).
 async function recording(page, title) {
+    // A new window is still on about:blank, where a fetch cannot reach the console (a page run alone, ONLY=...).
+    if (!page.url().startsWith(base)) await page.goto(`${base}/app`, { waitUntil: 'load' });
     return page.evaluate(async (url) => {
         const html = await (await fetch(url)).text();
         const match = html.match(/data-recording="([0-9A-Za-z]{26})"/);
@@ -207,6 +613,191 @@ mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 let signedIn = null;
 
+/**
+ * docs/PLAN_NAV_3_LEVELS.md section 8 in a browser, on the Library: a row's source mark filters the list in place; ⌘[
+ * goes back in the address and ⌘] forward; the rail's Library icon starts the Library over, and from another place
+ * brings you back where you left it; ⌘\\ folds the panel and it stays folded for that place; under the flyout width a
+ * rail icon opens the panel over the page and choosing closes it; the filters sit beside the list from 1440 and over it
+ * below. Answers what went wrong.
+ */
+async function navChecks(page, width) {
+    const wrong = [];
+    const at = () => decodeURIComponent(new URL(page.url()).pathname + new URL(page.url()).search);
+    const settle = async () => { await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); };
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.goto(base + '/app/sessions', { waitUntil: 'networkidle' });
+    const forget = () => page.evaluate(() => { try { Object.keys(localStorage).filter((k) => k.startsWith('el-nav')).forEach((k) => localStorage.removeItem(k)); } catch (e) {} });
+    await forget();
+    // The memory is one person's in one workspace: someone else's, and the kind kept before it had a scope, go.
+    await page.evaluate(() => { localStorage.setItem('el-nav-last:library', '/app/sessions?tab=unread'); localStorage.setItem('el-nav:000000000000.00000000:last:library', '/app/sessions?tab=important'); });
+    await page.reload({ waitUntil: 'networkidle' });
+    const memory = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
+    if (memory.includes('el-nav-last:library') || memory.includes('el-nav:000000000000.00000000:last:library')) wrong.push(`someone else's memory stayed: ${memory.join(', ')}`);
+    if (!memory.some((k) => /^el-nav:[0-9a-f]{12}\.[0-9a-f]{8}:last:library$/.test(k))) wrong.push(`no memory of this place for this person: ${memory.join(', ')}`);
+    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens, and the field keeps the focus and what was typed. (A field
+    // of its own, put on the page for the check: the Library's search would search for what the keys typed.)
+    await page.evaluate(() => { const f = Object.assign(document.createElement('input'), { id: 'el-nav-field', value: 'typed' }); Object.assign(f.style, { position: 'fixed', top: '8px', left: '50%', zIndex: '1' }); document.body.appendChild(f); f.focus(); });
+    await page.keyboard.press('Alt+Digit1');
+    await page.keyboard.press(mod + '+Digit2');
+    await page.waitForTimeout(600);
+    const field = await page.evaluate(() => ({ focus: document.activeElement?.id, value: document.getElementById('el-nav-field')?.value }));
+    if (at() !== '/app/sessions') wrong.push(`Alt+1 or ${mod}+2 in a field went to ${at()}`);
+    if (field.focus !== 'el-nav-field' || !String(field.value).startsWith('typed')) wrong.push(`Alt+1 or ${mod}+2 in a field took the focus or the words: ${JSON.stringify(field)}`);
+    await page.evaluate(() => document.getElementById('el-nav-field')?.remove());
+    // Each step waits (up to 5 s, on a busy machine) for the address it should reach, then says where it is.
+    const reach = (ok) => page.waitForFunction(ok, null, { timeout: 5000 }).catch(() => {});
+    const filtered = () => decodeURIComponent(location.search).includes('f[source]');
+    // A row's source mark filters; the recording does not open (Livewire has started on the page first).
+    await page.waitForFunction(() => window.Livewire !== undefined && document.querySelector('.v2-lib-row [data-quick-source]') !== null, null, { timeout: 10000 }).catch(() => {});
+    await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await reach(filtered);
+    await settle();
+    if (!at().startsWith('/app/sessions?') || !at().includes('f[source]')) wrong.push(`source mark went to ${at()}`);
+    // Back and forward from the keyboard.
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press(mod + '+BracketLeft');
+    await reach(() => location.pathname === '/app/sessions' && location.search === '');
+    await settle();
+    if (at() !== '/app/sessions') wrong.push(`⌘[ left ${at()}`);
+    await page.keyboard.press(mod + '+BracketRight');
+    await reach(filtered);
+    await settle();
+    if (!at().includes('f[source]')) wrong.push(`⌘] left ${at()}`);
+    // The Library's rail icon from inside the Library starts it over (All recordings, no filter), at every width.
+    await page.click('[data-rail="library"]');
+    await settle();
+    if (at() !== '/app/sessions') wrong.push(`the Library's icon in the Library went to ${at()}`);
+    if (width < 1100) {
+        const flyout = () => page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
+        const state = (key) => page.evaluate((k) => ({ expanded: document.querySelector('[data-rail="' + k + '"]')?.getAttribute('aria-expanded'),
+            focus: document.activeElement?.getAttribute('data-rail') ?? document.activeElement?.tagName }), key);
+        // Under the flyout width its panel opens over the page too; choosing closes it.
+        if (!(await flyout())) wrong.push('starting the Library over did not open its flyout');
+        await page.click('.v2-panel[data-panel="library"] [data-place="unread"]');
+        await settle();
+        if (at() !== '/app/sessions?tab=unread') wrong.push(`choosing in the flyout went to ${at()}`);
+        if (await flyout()) wrong.push('the flyout stayed open after choosing');
+        // A dialog opened from the flyout (⋮ › Rename on a view) is the flyout's own: Esc closes the dialog, the flyout
+        // stays open, and focus comes back to ⋮.
+        if (await page.locator('.v2-panel[data-panel="library"] [data-view-menu]').count() > 0) {
+            // The Library icon starts it over (All recordings) and opens its flyout on the new page.
+            if (!(await flyout())) { await page.click('[data-rail="library"]'); await settle(); }
+            await page.waitForFunction(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'), null, { timeout: 5000 }).catch(() => {});
+            const menu = page.locator('.v2-panel[data-panel="library"] [data-view-menu]').first();
+            const menuId = await menu.getAttribute('data-view-menu');
+            await menu.click();
+            await page.locator('.v2-panel[data-panel="library"] [data-view-rename]').first().click();
+            await page.waitForFunction(() => [...document.querySelectorAll('.fi-modal-open[aria-modal="true"], [role="dialog"][aria-modal="true"]')].some((el) => el.getClientRects().length > 0), null, { timeout: 5000 }).catch(() => {});
+            // The dialog has opened when its name field has the focus (it opens with a short transition).
+            await page.waitForFunction(() => document.activeElement?.closest('.fi-modal-open') !== null, null, { timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(300);
+            const opened = await flyout();
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(600);
+            const after = await page.evaluate(() => ({ dialog: [...document.querySelectorAll('.fi-modal-open[aria-modal="true"]')].some((el) => el.getClientRects().length > 0), focus: document.activeElement?.getAttribute('data-view-menu') }));
+            if (!opened) wrong.push('opening ⋮ › Rename closed the flyout');
+            if (after.dialog) wrong.push('Esc did not close the Rename dialog');
+            if (!(await flyout())) wrong.push('Esc in the Rename dialog closed the flyout');
+            if (after.focus !== menuId) wrong.push(`after the Rename dialog focus is on ${after.focus ?? 'something else'}, not ⋮`);
+            await page.click('.v2-panel[data-panel="library"] [data-panel-toggle]');
+            await page.waitForTimeout(300);
+        } else {
+            wrong.push('no saved view in the Library panel to check ⋮ › Rename with');
+        }
+        // Another place's icon opens its flyout, expanded; Esc, ⊟ and a click outside close it, focus back on the icon.
+        for (const close of ['Escape', 'toggle', 'outside']) {
+            await page.click('[data-rail="projects"]');
+            await page.waitForTimeout(300);
+            const opened = await state('projects');
+            if (!(await flyout()) || opened.expanded !== 'true') wrong.push(`Projects' flyout (${close}): open ${await flyout()}, aria-expanded ${opened.expanded}`);
+            if (close === 'Escape') await page.keyboard.press('Escape');
+            if (close === 'toggle') await page.click('.v2-panel[data-panel="projects"] [data-panel-toggle]');
+            // A spot of the page with nothing to focus (a plain box put there for the check, far from the rail: the left
+            // in Urdu), so the click leaves the focus nowhere and it comes back to the icon.
+            if (close === 'outside') {
+                const spot = await page.evaluate(() => {
+                    const el = document.createElement('div');
+                    el.id = 'el-nav-empty';
+                    const rtl = document.documentElement.dir === 'rtl';
+                    Object.assign(el.style, { position: 'fixed', bottom: '8px', [rtl ? 'left' : 'right']: '8px', width: '120px', height: '40px', zIndex: '1' });
+                    document.body.appendChild(el);
+                    const r = el.getBoundingClientRect();
+                    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+                });
+                await page.mouse.click(spot.x, spot.y);
+                await page.evaluate(() => document.getElementById('el-nav-empty')?.remove());
+            }
+            await page.waitForTimeout(300);
+            const closed = await state('projects');
+            if (await flyout()) wrong.push(`the flyout stayed open after ${close}`);
+            if (closed.expanded !== 'false' || closed.focus !== 'projects') wrong.push(`after ${close}: aria-expanded ${closed.expanded}, focus on ${closed.focus}`);
+        }
+        // A click outside on something that takes focus itself keeps it there: audio controls, an element a script
+        // made focusable (tabindex -1). Both are put on an empty spot of the page for the check, then removed.
+        for (const probe of ['audio', 'focusable']) {
+            await page.click('[data-rail="projects"]');
+            await page.waitForTimeout(300);
+            const box = await page.evaluate((kind) => {
+                const el = kind === 'audio' ? Object.assign(document.createElement('audio'), { controls: true }) : Object.assign(document.createElement('div'), { tabIndex: -1, textContent: 'probe' });
+                el.id = 'el-nav-probe';
+                const rtl = document.documentElement.dir === 'rtl';
+                Object.assign(el.style, { position: 'fixed', bottom: '8px', [rtl ? 'left' : 'right']: '8px', width: '240px', height: '40px', zIndex: '1' });
+                document.body.appendChild(el);
+                const r = el.getBoundingClientRect();
+                return { x: r.left + 20, y: r.top + r.height / 2 };
+            }, probe);
+            await page.mouse.click(box.x, box.y);
+            await page.waitForTimeout(300);
+            const after = await page.evaluate(() => ({ focus: document.activeElement?.id || document.activeElement?.tagName, open: document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout') }));
+            if (after.open) wrong.push(`the flyout stayed open after a click on the ${probe} probe`);
+            if (after.focus !== 'el-nav-probe') wrong.push(`a click on the ${probe} probe left focus on ${after.focus}`);
+            await page.evaluate(() => document.getElementById('el-nav-probe')?.remove());
+        }
+        await forget();
+        return wrong;
+    }
+    // Where you left it: Unread, then Projects, then the Library's icon brings Unread back.
+    await page.click('[data-place="unread"]');
+    await settle();
+    await page.click('[data-rail="projects"]');
+    await settle();
+    if (!at().startsWith('/app/clients')) wrong.push(`Projects' icon went to ${at()}`);
+    await page.click('[data-rail="library"]');
+    await settle();
+    if (at() !== '/app/sessions?tab=unread') wrong.push(`the Library's icon from Projects went to ${at()} (not where it was left)`);
+    // ⌘\ folds the panel, and the Library stays folded when you come back.
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press(mod + '+Backslash');
+    await page.waitForTimeout(300);
+    const folded = await page.evaluate(() => ! document.querySelector('#fi-main-sidebar')?.classList.contains('fi-sidebar-open'));
+    if (!folded) wrong.push('⌘\\ did not fold the panel');
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(400);
+    const stillFolded = await page.evaluate(() => ! document.querySelector('#fi-main-sidebar')?.classList.contains('fi-sidebar-open'));
+    if (!stillFolded) wrong.push('the Library did not stay folded');
+    await page.keyboard.press(mod + '+Backslash');
+    await page.waitForTimeout(300);
+    // The filters: beside the list (pushing it) from 1440, over it below.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } })));
+    await page.waitForTimeout(500);
+    const shell = await page.evaluate(() => { const s = document.querySelector('.v2-lib-shell'); return { push: s?.classList.contains('is-pushing'), drawer: s?.classList.contains('is-drawer') }; });
+    if (width >= 1440 && !shell.push) wrong.push('the filters do not push the list at this width');
+    if (width < 1440 && !shell.drawer) wrong.push('the filters are not over the list at this width');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('el-filters', { detail: { action: 'close' } })));
+    await page.evaluate(() => { try { localStorage.removeItem('el-lib-filters'); } catch (e) {} });
+    await forget();
+    // Signed out, the login page forgets every place's memory (a fresh window here: no sign-in to lose).
+    const guest = await page.context().browser().newContext();
+    const login = await guest.newPage();
+    await login.goto(base + '/app/login', { waitUntil: 'networkidle' });
+    await login.evaluate(() => { localStorage.setItem('el-nav:0123456789ab.01234567:last:library', '/app/sessions?tab=unread'); localStorage.setItem('el-nav-panel:library', 'closed'); });
+    await login.reload({ waitUntil: 'networkidle' });
+    const left = await login.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
+    if (left.length > 0) wrong.push(`the login page kept ${left.join(', ')}`);
+    await guest.close();
+    return wrong;
+}
+
 for (const theme of themes) {
     for (const width of widths) {
         const context = await browser.newContext({
@@ -226,8 +817,8 @@ for (const theme of themes) {
             // Since v1.6 the sign-in asks for the email first, then the password.
             await page.fill('input[type=email]', email);
             await page.click('button[type=submit]');
-            await page.waitForSelector('input[type=password]');
-            await page.fill('input[type=password]', password);
+            await page.waitForSelector('input[autocomplete=current-password]');
+            await page.fill('input[autocomplete=current-password]', password);
             await page.click('button[type=submit]');
             // Staff with two-step sign-in are asked for the code next.
             const otp = 'input[autocomplete=one-time-code]:visible';
@@ -294,6 +885,109 @@ for (const theme of themes) {
                     await page.keyboard.type(spec.type.text, { delay: 60 });
                     await page.waitForTimeout(1200);
                     await page.waitForLoadState('networkidle');
+                }
+                // The Library's list starts within 120 px of the window's top on a computer (docs/PLAN_LIBRARY_FILTERS.md
+                // section 4). What counts is the list's first item: the first group's heading, or the first row when the
+                // list is not grouped; measured with no filter on (no pills row), from 1024 px wide.
+                if (spec.listTop && width >= 1024) {
+                    const top = await page.evaluate(() => {
+                        const first = document.querySelector('.v2-library .fi-ta-content > *');
+                        const row = document.querySelector('.v2-library .v2-lib-row');
+                        return { first: first ? Math.round(first.getBoundingClientRect().top) : null, row: row ? Math.round(row.getBoundingClientRect().top) : null };
+                    });
+                    console.log(`${name} ${width} ${theme}: the list starts at ${top.first} px (first row at ${top.row} px)`);
+                    if (top.first === null || top.first > 120) {
+                        console.error(`${name} ${width} ${theme}: the list starts at ${top.first} px, more than 120 px from the top`);
+                        process.exitCode = 1;
+                    }
+                }
+                // Reach (docs/PLAN_NAV_3_LEVELS.md): every rail item is in view, and every item of the open place's panel can be
+                // scrolled to in the panel (or, with the earlier sidebar, its scrolling middle) and focused from either end,
+                // and is then the thing under the pointer at the middle of its name (what a fold holds, with the fold
+                // opened). From 1024 px wide, where the frame sits beside the page.
+                if (spec.reach && width >= 1024) {
+                    const missed = await page.evaluate(async (selectors) => {
+                        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+                        const out = [];
+                        const scroller = (el) => el.closest('.v2-panels, [data-sidebar-scroll]') ?? el.closest('.v2-rail');
+                        // Under the flyout width the panel is folded away: its rail icon opens it over the page (as here).
+                        const frameData = window.Alpine && document.querySelector('.v2-frame-inner') ? window.Alpine.$data(document.querySelector('.v2-frame-inner')) : null;
+                        if (frameData && frameData.narrow && frameData.place) frameData.flyout = frameData.place;
+                        await frame();
+                        for (const selector of selectors) {
+                            const found = [...document.querySelectorAll(selector)].filter((el) => scroller(el) !== null && el.closest('[hidden]') === null);
+                            if (found.length === 0) out.push(`${selector}: not in the rail or the open panel`);
+                            for (const el of found) {
+                                const box = scroller(el);
+                                const folds = [];
+                                for (let d = el.parentElement?.closest('details'); d; d = d.parentElement?.closest('details')) {
+                                    if (!d.open && !(el.tagName === 'SUMMARY' && el.parentElement === d)) {
+                                        d.open = true;
+                                        folds.push(d);
+                                    }
+                                }
+                                await frame();
+                                const seen = () => {
+                                    const r = el.getBoundingClientRect();
+                                    const n = box.getBoundingClientRect();
+                                    // At the middle of its name (a row's other end may hold its own button).
+                                    const name = (el.querySelector('.v2-sb-label, .v2-rail-label') ?? el).getBoundingClientRect();
+                                    const hit = document.elementFromPoint(name.left + name.width / 2, name.top + name.height / 2);
+                                    return r.height > 0 && r.top >= n.top - 1 && r.bottom <= n.bottom + 1 && hit !== null && (el === hit || el.contains(hit));
+                                };
+                                const label = `${selector} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`;
+                                // Scrolled within its own box only (scrollIntoView would move the page too).
+                                const before = el.getBoundingClientRect();
+                                const area = box.getBoundingClientRect();
+                                box.scrollTop += before.top - area.top - (area.height - before.height) / 2;
+                                await frame();
+                                if (!seen()) out.push(label);
+                                // Reached with the keyboard, from either end: the browser scrolls it in, clear of the box's edges.
+                                for (const [end, top] of [['top', 0], ['end', box.scrollHeight]]) {
+                                    document.activeElement?.blur();
+                                    box.scrollTop = top;
+                                    await frame();
+                                    el.focus();
+                                    await frame();
+                                    if (document.activeElement !== el || !seen()) out.push(`${label} by keyboard from the ${end}`);
+                                }
+                                el.blur();
+                                for (const d of folds) d.open = false;
+                                box.scrollTop = 0;
+                            }
+                        }
+                        if (frameData) frameData.flyout = null;
+                        await frame();
+                        return out;
+                    }, spec.reach);
+                    if (missed.length > 0) {
+                        console.error(`${name} ${width} ${theme}: out of reach: ${missed.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: every rail and panel item can be reached`);
+                    }
+                }
+                // Browser checks of a page (docs/PLAN_NAV_3_LEVELS.md section 8): `checks` is an async function of the
+                // page and the width that answers a list of what went wrong; the page is loaded again afterwards.
+                if (spec.checks) {
+                    const wrong = await spec.checks(page, width).catch((e) => [`threw: ${e.message.split('\n').slice(0, 3).join(' | ')}`]);
+                    if (wrong.length > 0) {
+                        console.error(`${name} ${width} ${theme}: ${wrong.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: checks passed`);
+                    }
+                    await page.goto(base + path, { waitUntil: 'networkidle' });
+                }
+                // A scenario of its own (keepPlace): what went wrong, and the page is pictured as it leaves it.
+                if (spec.scenario) {
+                    const wrong = await spec.scenario(page, base).catch((e) => [`threw: ${e.message.split('\n').slice(0, 3).join(' | ')}`]);
+                    if (wrong.length > 0) {
+                        console.error(`${name} ${width} ${theme}: ${wrong.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: scenario passed`);
+                    }
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(spec.settle ?? 900);

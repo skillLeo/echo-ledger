@@ -72,6 +72,37 @@ class SettingsTransferTest {
         assertFalse("a lock is switched on by unlocking once", result.appLockEnabled)
     }
 
+    /** A file as a build before 2.0.5 wrote it: During screen sharing and After a call, none of the new keys. */
+    private fun before205(settings: String) = """{"format":"echoledger-settings","version":1,"settings":{$settings}}"""
+
+    @Test
+    fun `a file from before 2_0_5 brings its old choices as the store's migration reads them`() {
+        assertEquals(false, applied(before205(""""screenShareMode":"show"""")).hideLiveWords)
+        assertEquals(true, applied(before205(""""screenShareMode":"hide""""), AppSettings(hideLiveWords = false)).hideLiveWords)
+        assertEquals(true, applied(before205(""""screenShareMode":"black_box""""), AppSettings(hideLiveWords = false)).hideLiveWords)
+        assertEquals("ask", applied(before205(""""afterCall":"keep""""), AppSettings(afterEachCall = "transcribe")).afterEachCall)
+        assertEquals("ask", applied(before205(""""afterCall":"ask""""), AppSettings(afterEachCall = "audio")).afterEachCall)
+        // A newer file's own choice wins over its old key.
+        assertEquals(true, applied(before205(""""screenShareMode":"show","hideLiveWords":true""")).hideLiveWords)
+        assertEquals("off", applied(before205(""""afterCall":"keep","afterEachCall":"off"""")).afterEachCall)
+    }
+
+    @Test
+    fun `the App lock page's Reset leaves the live words switch, which is on Privacy and data`() {
+        val changed = AppSettings(hideLiveWords = false, widgetHideTitles = true)
+        val reset = SettingsReset.resetPage("lock", SettingsGroup.General, changed)
+        assertFalse(reset.hideLiveWords)
+        assertFalse(reset.widgetHideTitles)
+    }
+
+    @Test
+    fun `swipes turned off survive an export and an import on another phone`() {
+        val text = SettingsTransfer.export(AppSettings(librarySwipes = false))
+        assertTrue(text, text.contains("\"librarySwipes\": false"))
+        assertFalse(applied(text, AppSettings(librarySwipes = true)).librarySwipes)
+        assertTrue(applied(SettingsTransfer.export(AppSettings(librarySwipes = true)), AppSettings(librarySwipes = false)).librarySwipes)
+    }
+
     @Test
     fun `a file cannot smuggle in a pairing or turn the lock on`() {
         val text = """

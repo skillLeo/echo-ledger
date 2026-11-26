@@ -3,58 +3,77 @@ package com.echoledger.mobile.calls
 import android.content.Context
 import android.provider.Settings
 import com.echoledger.mobile.core.SourceApp
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.overlay.DecisionPopup
 
 /**
- * What happens when a call recording ends (since v1.5, "After a call" in Calls & meetings):
- * - "keep" (default): the call is kept; the small "Saved · … · Undo" chip shows for 6 s and the upload waits until it
- *   is gone, so nothing has left the phone; Undo discards it with its own "Discarded · Undo" (since v1.8.1). Without the overlay permission a quiet notification with Undo does the same.
- * - "ask": the chip with ✓ and ✕ (or the Keep / Discard notification); nobody choosing keeps the call after 10 s.
+ * What happens when a call recording ends (since 2.0.5, Settings › Recording › After each call; [CallChoice]):
+ * - Ask me (the default): the after-call card ([DecisionPopup]); without the overlay permission a notification asks
+ *   with Transcribe, Save audio only and Delete. Nobody choosing keeps the audio only. Since v2.1, with
+ *   [CallChoice.NOTIFY_FLAG] on, a quiet notification asks instead ([AfterCallActions], UX-13).
+ * - Transcribe every call, Save audio only, a choice made on the pill during the call, "At the start of the call", and
+ *   quiet hours or Do Not Disturb: no question; the call is kept as [CallChoice.outcome] says and sent now.
  * Skipped calls (unanswered, short, silent) never reach this.
  */
 object PostCallPrompt {
+    /** The values of "After a call" until 2.0.5, read once to give After each call its first value. */
     const val KEEP = "keep"
     const val ASK = "ask"
 
-    /** The state a finished call recording is stored with: kept at once, or waiting for the chip. */
-    fun stateFor(afterCall: String): String = if (afterCall == ASK) "pending_decision" else "queued"
-
-    /** [uiFlags]: the person's interface flags; `ui_v2.after_call` draws the v2 card (since 2.0.0-a). */
-    fun show(
+    /**
+     * What a call that just ended becomes ([duringCall]: chosen on the pill; [bannerShown]: At the start's banner was
+     * shown for it). Quiet hours count only for Ask me.
+     */
+    fun outcome(
         context: Context,
-        rec: LocalRecording,
-        afterCall: String,
-        themeMode: String,
-        uiFlags: com.echoledger.mobile.ui.v2.shell.UiFlags = com.echoledger.mobile.ui.v2.shell.UiFlags.Off
-    ) {
-        val overlay = isCall(rec) && Settings.canDrawOverlays(context)
-        val v2 = uiFlags.isOn(com.echoledger.mobile.ui.v2.shell.UiFlags.AFTER_CALL)
-        if (rec.state == "pending_decision") {
-            if (overlay) DecisionPopup.show(context, rec, themeMode, DecisionPopup.Mode.ASK, v2)
-            Notifications.showSaveDecision(context, rec, clientName = null, decisionTimeout = KEEP)
-            DecisionTimeoutWorker.schedule(context, rec.id)
-        } else {
-            UploadWorker.enqueueAfter(context, rec.id, DecisionPopup.SAVED_MS / 1000)
-            val shown = overlay && DecisionPopup.show(context, rec, themeMode, DecisionPopup.Mode.SAVED, v2)
-            if (!shown) Notifications.savedWithUndo(context, rec, DecisionPopup.title(rec))
-        }
+        settings: AppSettings,
+        duringCall: CallChoice.Pick? = null,
+        bannerShown: Boolean = false
+    ): CallChoice.Outcome = CallChoice.outcome(
+        settings,
+        duringCall,
+        quiet = CallChoice.setting(settings) == CallChoice.ASK && CallChoice.quietNow(context, settings),
+        bannerShown = bannerShown
+    )
+
+    /** [rec] as [outcome] stores it: waiting for the card, or kept with or without its transcript. */
+    fun stored(rec: LocalRecording, outcome: CallChoice.Outcome): LocalRecording {
+        val (state, transcribe) = CallChoice.stored(outcome)
+        return rec.copy(state = state, transcribe = transcribe ?: rec.transcribe)
     }
 
-    /** A call back from "Discarded · Undo" (since v1.8.1): asked again if it waited, "Saved" again if it was kept. */
-    fun again(
-        context: Context,
-        rec: LocalRecording,
-        themeMode: String,
-        uiFlags: com.echoledger.mobile.ui.v2.shell.UiFlags = com.echoledger.mobile.ui.v2.shell.UiFlags.Off
-    ) = show(context, rec, if (rec.state == "pending_decision") ASK else KEEP, themeMode, uiFlags)
+    /**
+     * Asks about a waiting call, or sends a kept one. [themeMode]: the card's light or dark look. [again]: put back by
+     * Undo, so it is asked about after a question already on the card, never folded into the grouped line.
+     */
+    fun show(context: Context, rec: LocalRecording, themeMode: String, again: Boolean = false) {
+        if (rec.state != "pending_decision") {
+            UploadWorker.enqueue(context, rec.id)
+            return
+        }
+        // v2.1 UX-13: a quiet notification instead of the card (behind its flag; off, the card as before).
+        val settings = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings?.value
+        if (isCall(rec) && settings != null && CallChoice.notifies(settings)) {
+            AfterCallActions.ask(context, rec, settings)
+            return
+        }
+        val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode, again)
+        // One question at a time: the notification only when the card cannot be drawn.
+        if (!shown) Notifications.showSaveDecision(context, rec, clientName = null)
+        // The card's own time (and the line it waits behind) first; 10 s for the notification.
+        val backstopMs = if (shown) DecisionPopup.backstopMs(rec.id) else DecisionTimeoutWorker.WINDOW_SECONDS * 1000
+        DecisionTimeoutWorker.schedule(context, rec.id, backstopMs)
+    }
+
+    /** A call back from an Undo (a notification, the app's snackbar): asked again if it waited, sent if it was kept. */
+    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(context, rec, themeMode, again = true)
 
     /**
-     * The recording follows "After a call" with nothing on the screen (since v1.8 0.3: a call or a recording is live,
-     * or the call ended a while ago): one waiting for Keep or Discard waits in Record, a kept one uploads now (there is
-     * no Undo chip to wait for).
+     * The recording follows After each call with nothing on the screen (since v1.8 0.3: a call or a recording is live,
+     * or the call ended a while ago): one waiting for the question waits in Record, a kept one uploads now.
      */
     fun quietly(context: Context, rec: LocalRecording) {
         if (rec.state == "pending_decision") DecisionTimeoutWorker.schedule(context, rec.id) else UploadWorker.enqueue(context, rec.id)

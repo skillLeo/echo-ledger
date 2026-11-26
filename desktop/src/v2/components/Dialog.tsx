@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "./Button";
 import { CloseIcon } from "./icons";
+import { lineDir, t } from "../../i18n";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -53,6 +54,7 @@ export type DialogProps = {
   /** A sentence under the title, read with it. */
   description?: ReactNode;
   onClose: () => void;
+  /** The × button's name; left out, "Close" in the window's language (D-247). */
   closeLabel?: string;
   /** The buttons at the bottom, the main one last. */
   actions?: ReactNode;
@@ -65,10 +67,11 @@ export type DialogProps = {
   wide?: boolean;
 };
 
-function Overlay({ kind, open, title, description, onClose, closeLabel = "Close", actions, children, initialFocus, alert, wide }: DialogProps & { kind: "dialog" | "sheet" }) {
+function Overlay({ kind, open, title, description, onClose, closeLabel, actions, children, initialFocus, alert, wide }: DialogProps & { kind: "dialog" | "sheet" }) {
   if (!open) return null;
   return (
-    <Panel kind={kind} title={title} description={description} onClose={onClose} closeLabel={closeLabel} actions={actions}
+    // D-247: × says Close in the window's language unless the caller names it (the gallery's own words).
+    <Panel kind={kind} title={title} description={description} onClose={onClose} closeLabel={closeLabel ?? t("Close")} actions={actions}
       initialFocus={initialFocus} alert={alert} wide={wide} open>{children}</Panel>
   );
 }
@@ -92,7 +95,7 @@ function Panel({ kind, title, description, onClose, closeLabel, actions, childre
         <div className="el-dialog__head">
           <div className="el-dialog__titles">
             <h2 className="el-title-s" id={`${id}-title`}>{title}</h2>
-            {description && <p className="el-secondary" id={`${id}-desc`}>{description}</p>}
+            {description && <p className="el-secondary" id={`${id}-desc`} dir={lineDir(description)}>{description}</p>}
           </div>
           <Button variant="quiet" icon={CloseIcon} aria-label={closeLabel} data-close="true" onClick={onClose} />
         </div>

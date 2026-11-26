@@ -86,6 +86,44 @@ class V2SettingsTest {
     }
 
     @Test
+    fun searchLandsOnEachCaptionAndDictationSettingAndLightsIt() {
+        // Each caption and dictation setting is found by its words and opens its page at that setting.
+        for ((words, id) in listOf(
+            "opacity" to "captions.opacity",
+            "caption position" to "captions.position",
+            "compact" to "captions.compact",
+            "caption colour" to "captions.colours",
+            "hold to talk" to "voice.mic",
+            "snippets" to "voice.snippets",
+            "replacements" to "voice.replacements",
+            "recent dictations" to "voice.history"
+        )) {
+            val hit = SettingsSearch.search(en, words).firstOrNull { it.item.id == id }
+            assertTrue("\"$words\" finds $id", hit != null)
+        }
+        // Every one of v2's own caption, dictation, microphone, game and video settings (7, 7, 3, 4 and 3) is found by its name.
+        val own = SettingsTree.extraItems.filter { it.page in setOf("captions", "voice", "mic", "games", "videos") }
+        assertEquals(24, own.size)
+        for (item in own) {
+            val title = SettingsSearch.itemTitle(en, item)
+            assertTrue("\"$title\" finds ${item.id}", SettingsSearch.search(en, title).any { it.item.id == item.id })
+            assertTrue(
+                "${item.id} lives on ${item.page}",
+                SettingsSearch.search(en, title).first { it.item.id == item.id }.item.page == item.page
+            )
+        }
+        var opened: Pair<String, String?>? = null
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                V2SettingsRoot(AppSettings(), ProfileState.Loading, true, {}, {}, { p, h -> opened = p to h }, {}, {})
+            }
+        }
+        compose.onNodeWithText("Search settings").performTextInput("opacity")
+        compose.onNodeWithText("Background opacity").performClick()
+        assertEquals("captions" to "captions.opacity", opened)
+    }
+
+    @Test
     fun aSearchResultLightsItsSettingOnEveryV2DrawnPage() {
         // Search opens a page with the setting's id (aSearchResultJumpsToItsPageAndSetting); each v2-drawn page must
         // light that id, not an older entry name.
@@ -94,6 +132,40 @@ class V2SettingsTest {
         val ids = SettingsSearch.items().filter { it.page in SettingsTree.nativePages && it.page != SettingsTree.SETUP }.map { it.id }
         assertEquals(emptyList<String>(), ids.filter { it !in lit })
         assertEquals(emptyList<String>(), lit.filter { id -> SettingsSearch.items().none { it.id == id } })
+        // And drawn: each caption, dictation, microphone, game and video setting search reaches lights exactly one part of its page.
+        val drawn = listOf("captions", "voice", "mic", "games", "videos")
+        val each = SettingsSearch.items().filter { it.page in drawn }
+        assertEquals(listOf(9, 9, 7, 7, 5), drawn.map { p -> each.count { it.page == p } })
+        var shown by mutableStateOf<SettingsIndex.Item?>(null)
+        val history = com.echoledger.mobile.dictation.DictationHistory.of(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext()
+        )
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.echoledger.mobile.ui.v2.shell.LocalEchoToasts provides
+                        com.echoledger.mobile.ui.v2.components.rememberEchoToastState()
+                ) {
+                    val item = shown
+                    val s = AppSettings()
+                    when (item?.page) {
+                        "captions" -> com.echoledger.mobile.ui.v2.settings.CaptionsPage(s, {}, item.id, {})
+                        "voice" -> com.echoledger.mobile.ui.v2.settings.VoicePage(s, {}, history, item.id, {})
+                        "mic" -> com.echoledger.mobile.ui.v2.settings.MicPage(s, {}, item.id, {}, helperConnected = true)
+                        "games" -> com.echoledger.mobile.ui.v2.settings.GamesPage(s, {}, item.id, {})
+                        "videos" -> com.echoledger.mobile.ui.v2.settings.VideosPage(s, {}, item.id, {})
+                        else -> com.echoledger.mobile.ui.v2.settings.CaptionsPage(s, {}, null, {})
+                    }
+                }
+            }
+        }
+        val highlighted = androidx.compose.ui.test.SemanticsMatcher.expectValue(com.echoledger.mobile.ui.v2.settings.Highlighted, true)
+        assertEquals(0, compose.onAllNodes(highlighted, useUnmergedTree = true).fetchSemanticsNodes().size)
+        for (item in each) {
+            shown = item
+            compose.waitForIdle()
+            assertEquals(item.id, 1, compose.onAllNodes(highlighted, useUnmergedTree = true).fetchSemanticsNodes().size)
+        }
     }
 
     @Test

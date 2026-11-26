@@ -61,7 +61,7 @@ class Register extends Login
     {
         if (! $this->canSignUp()) {
             return $schema->components([
-                Text::make('Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link they send you.'),
+                Text::make(__('Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link they send you.')),
             ]);
         }
 
@@ -70,17 +70,17 @@ class Register extends Login
 
     public function getTitle(): string|Htmlable
     {
-        return 'Create your account';
+        return __('Create your account');
     }
 
     public function getHeading(): string|Htmlable|null
     {
-        return $this->step === self::STEP_EMAIL ? 'Create your free account' : parent::getHeading();
+        return $this->step === self::STEP_EMAIL ? __('Create your free account') : parent::getHeading();
     }
 
     public function getSubheading(): string|Htmlable|null
     {
-        return $this->step === self::STEP_EMAIL ? 'Enter your email: we send you a code to confirm it.' : parent::getSubheading();
+        return $this->step === self::STEP_EMAIL ? __('Enter your email: we send you a code to confirm it.') : parent::getSubheading();
     }
 
     protected function getEmailFormComponent(): Component

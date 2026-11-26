@@ -1,7 +1,3 @@
-{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
-@php
-    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
-@endphp
 {{--
     Files and instructions the brief and Ask read: PDF, Word, text or Markdown documents (kept encrypted, their text
     read on the queue) and pasted instructions.
@@ -55,7 +51,7 @@
                             <span class="el-row-main">
                                 <span class="el-row-top">
                                     <span class="el-row-title">{{ $file->name }}</span>
-                                    <time class="el-row-time">{{ $file->created_at->copy()->setTimezone($zone)->format('M j') }}</time>
+                                    <time class="el-row-time">{{ \App\Filament\Support\ConsoleDates::day($file->created_at->copy()->setTimezone($zone)) }}</time>
                                 </span>
                                 <span class="el-row-sub">
                                     <span class="el-row-meta">{{ $type($file) }} · {{ $size($file->size_bytes) }}@if ($file->pages) · {{ $file->pages === 1 ? __(':n page', ['n' => 1]) : __(':n pages', ['n' => $file->pages]) }}@endif</span>
@@ -67,7 +63,7 @@
                                     <span class="el-caption" style="color: var(--danger)">{{ $file->errorForPeople() }}</span>
                                 @endif
                             </span>
-                            <button type="button" class="el-icon-btn" wire:click="mountAction('removeFile', { file: '{{ $file->id }}' })" aria-label="{{ __('Remove :name', ['name' => $iso($file->name)]) }}" title="{{ __('Remove') }}">
+                            <button type="button" class="el-icon-btn" wire:click="mountAction('removeFile', { file: '{{ $file->id }}' })" aria-label="{{ __('Remove :name', ['name' => $file->name]) }}" title="{{ __('Remove') }}">
                                 @svg('heroicon-o-trash', ['aria-hidden' => 'true'])
                             </button>
                         </div>

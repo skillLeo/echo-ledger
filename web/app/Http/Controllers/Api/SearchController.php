@@ -42,6 +42,8 @@ final class SearchController extends Controller
         $limit = (int) ($data['limit'] ?? 20);
         $page = (int) ($data['page'] ?? 1);
         $result = $search->search($device->workspace_id, $data['q'], [...$data, 'bookmarked' => $request->boolean('bookmarked')], $limit, $page);
+        // The rows' `facets.status` and `processing_since`, for the whole page at once.
+        LibraryItemResource::loadUploadState($result['items']);
 
         return response()->json([
             'data' => $result['items']->map(fn (CaptureSession $session): array => [

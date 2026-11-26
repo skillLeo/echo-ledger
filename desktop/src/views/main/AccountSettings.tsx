@@ -6,8 +6,12 @@ import { api, errorMessage, type Account, type AccountExport, type AppStatus, ty
 import { ROLE_LABEL } from "../../lib/plan";
 import { rowDateWithYear, sentenceDate } from "../../lib/format";
 import { ConsentNotice } from "./ConsentNotice";
+import { AccountFlow, choosePicture, offers, ROWS, useAvatar, useFlows, useSecurityInfo } from "./AccountFlows";
+import { CLASSIC_KIT } from "./accountKit";
+import { initials } from "../../v2/settings/initials";
 import { Sheet } from "./ProjectDialogs";
 import { ActionRow, DestructiveRow, InfoRow, LinkRow, Section } from "./SettingsControls";
+import { t } from "../../i18n";
 
 /** How often a data export that is being made is asked about. */
 export const EXPORT_POLL_MS = 5000;
@@ -46,42 +50,141 @@ export function workspaceLine(account: Account | null | undefined, status: Pick<
   const role = roleOf(account, status);
   const team = (account?.workspaces?.length ?? 0) > 1 || (role !== null && role !== "owner") || (status.plan.seats ?? 1) > 1;
   if (!workspace || !team) return null;
-  return role ? `${workspace}, ${ROLE_LABEL[role]}` : workspace;
+  return role ? t(":workspace, :role", { workspace, role: t(ROLE_LABEL[role]) }) : workspace;
 }
 
-/** Account › Profile: who is signed in. Name and email are changed on the website. */
-export function ProfilePage({ account, status, run }: { account: Account; status: AppStatus; run: Run }) {
+/** The server serves the account routes of 2.0.0-l: the name, email, password and two-step are changed here. */
+export const accountNative = (account: Account) => account.has_password !== undefined && account.has_password !== null;
+
+/** A secondary action under a row (Remove picture, a passkey's Rename): a plain button, outside the registry's rows. */
+function SubRow({ label, title, danger, onClick }: { label: string; title: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={`set-row set-link${danger ? " set-danger" : ""}`} aria-label={label} onClick={onClick}>
+      <span className="set-title">{title}</span>
+    </button>
+  );
+}
+
+/** Says what a flow did through the page's notices. */
+const sayDone = (run: Run, message: string) => void run(() => Promise.resolve(), message);
+const sayProblem = (run: Run, message: string) => void run(() => Promise.reject(new Error(message)));
+
+/**
+ * Account › Profile: who is signed in. Since 2.0.0-l the picture, name and email are changed here; an older server
+ * changes them on the website.
+ */
+export function ProfilePage({ account: given, status, run }: { account: Account; status: AppStatus; run: Run }) {
+  const [account, setAccount] = useState(given);
+  useEffect(() => setAccount(given), [given]);
   const workspace = workspaceLine(account, status);
+  const avatar = useAvatar(account);
+  const flows = useFlows((patch) => setAccount((a) => ({ ...a, ...patch })), () => undefined);
+  const done = (message: string, patch?: Partial<Account>) => {
+    flows.done(message, patch);
+    sayDone(run, message);
+  };
+  const picture = async () => {
+    const answer = await choosePicture();
+    if (!answer) return;
+    if (answer.ok) {
+      setAccount((a) => ({ ...a, ...answer.account }));
+      sayDone(run, answer.message);
+    } else sayProblem(run, answer.message);
+  };
+  const name = account.name || account.email.split("@")[0];
+  if (!accountNative(account)) {
+    return (
+      <div className="account-card">
+        <Section footer={<p>Your name and email are changed on the website.</p>}>
+          <InfoRow id="profile.name" value={name} />
+          <InfoRow id="profile.email" value={`${account.email}${account.email_verified ? "" : " (not verified)"}`} />
+          {workspace && <InfoRow id="profile.workspace" value={workspace} />}
+          {account.created_at && <InfoRow id="profile.since" value={rowDateWithYear(account.created_at)} />}
+          <LinkRow id="profile.edit" external onOpen={() => void run(() => api.openServerPage("app/profile"))} />
+        </Section>
+      </div>
+    );
+  }
   return (
     <div className="account-card">
-      <Section footer={<p>Your name and email are changed on the website.</p>}>
-        <InfoRow id="profile.name" value={account.name || account.email.split("@")[0]} />
-        <InfoRow id="profile.email" value={`${account.email}${account.email_verified ? "" : " (not verified)"}`} />
+      <Section footer={account.pending_email ? <p>Waiting for the code sent to {account.pending_email}.</p> : <p>Your teammates see your name and picture.</p>}>
+        <ActionRow id="profile.picture" label={ROWS.picture} value={avatar ? <img className="account-avatar" src={avatar} alt="" /> : <span className="account-initials" aria-hidden="true">{initials(account.name, account.email)}</span>}
+          onClick={() => void picture()} />
+        {account.avatar_version != null && <SubRow label={ROWS.removePicture} title={ROWS.removePicture} danger onClick={() => flows.open({ kind: "remove_picture" })} />}
+        <ActionRow id="profile.name" label={ROWS.name} value={<span dir="auto">{name}</span>} onClick={() => flows.open({ kind: "name" })} />
+        <ActionRow id="profile.email" label={account.pending_email ? ROWS.pendingEmail : ROWS.email}
+          value={`${account.email}${account.email_verified ? "" : " (not verified)"}`} onClick={() => flows.open({ kind: "email" })} />
         {workspace && <InfoRow id="profile.workspace" value={workspace} />}
         {account.created_at && <InfoRow id="profile.since" value={rowDateWithYear(account.created_at)} />}
         <LinkRow id="profile.edit" external onOpen={() => void run(() => api.openServerPage("app/profile"))} />
       </Section>
+      {flows.flow && <AccountFlow kit={CLASSIC_KIT} flow={flows.flow} account={account} onClose={flows.close} onDone={done} />}
     </div>
   );
 }
 
-/** Account › Sign-in & security. The password and two-step sign-in are changed on the website. */
-export function SecurityPage({ account, run, onSignedOut, onActivity }: { account: Account; run: Run; onSignedOut: (s: AppStatus) => void; onActivity: () => void }) {
+/**
+ * Account › Sign-in & security. Since 2.0.0-l the password, two-step sign-in, Google and passkeys are changed here
+ * (a passkey is added on the website); an older server changes them on the website.
+ */
+export function SecurityPage({ account: given, run, onSignedOut, onActivity }: { account: Account; run: Run; onSignedOut: (s: AppStatus) => void; onActivity: () => void }) {
+  const [account, setAccount] = useState(given);
+  useEffect(() => setAccount(given), [given]);
   const [confirming, setConfirming] = useState(false);
+  const native = accountNative(account);
+  const { info, reload } = useSecurityInfo();
+  const flows = useFlows((patch) => setAccount((a) => ({ ...a, ...patch })), reload);
+  const done = (message: string, patch?: Partial<Account>) => {
+    flows.done(message, patch);
+    sayDone(run, message);
+  };
   const web = () => void run(() => api.openServerPage("app/profile"));
   const signOutEverywhere = async () => {
     setConfirming(false);
     const signedOut = await run(api.signOutEverywhere, "Signed out everywhere");
     if (signedOut) onSignedOut(signedOut);
   };
+  const o = offers(account, native ? info : null);
   return (
     <>
       <Section footer={<p>Sign-in codes go to {account.email}.</p>}>
-        <LinkRow id="security.password" external onOpen={web} />
-        <LinkRow id="security.two_step" value={account.two_factor ? "On" : "Off"} external onOpen={web} />
-        <InfoRow id="security.google" value={account.google ? "Connected" : "Not connected"} />
+        {native ? (
+          <>
+            <ActionRow id="security.password" label={o.hasPassword ? ROWS.password : ROWS.setPassword} value={o.hasPassword ? "Change" : "Not set"}
+              onClick={() => flows.open({ kind: "password" })} />
+            <ActionRow id="security.two_step" label={o.twoStep ? ROWS.twoStepOff : ROWS.twoStepOn} value={o.twoStep ? "On" : "Off"}
+              onClick={() => flows.open({ kind: o.twoStep ? "two_step_off" : "two_step_on" })} />
+            {o.twoStep && (
+              <SubRow label={ROWS.recoveryCodes} title={o.recoveryLeft != null ? `Recovery codes: ${o.recoveryLeft} left` : "Recovery codes"}
+                onClick={() => flows.open({ kind: "recovery_codes" })} />
+            )}
+            {o.google
+              ? <ActionRow id="security.google" label={ROWS.google} value="Connected" onClick={() => flows.open({ kind: "google" })} />
+              : <InfoRow id="security.google" value="Not connected" />}
+          </>
+        ) : (
+          <>
+            <LinkRow id="security.password" external onOpen={web} />
+            <LinkRow id="security.two_step" value={account.two_factor ? "On" : "Off"} external onOpen={web} />
+            <InfoRow id="security.google" value={account.google ? "Connected" : "Not connected"} />
+          </>
+        )}
         <LinkRow id="security.activity" onOpen={onActivity} chevron />
       </Section>
+      {native && (
+        <Section title="Passkeys" footer={<p>Passkeys sign you in with your phone, fingerprint or face. Add one on the website.</p>}>
+          {o.passkeys.map((p) => (
+            <div key={p.id} className="set-row account-passkey">
+              <span className="set-title" dir="auto">{p.name}</span>
+              <span className="set-end">
+                <button type="button" className="btn text compact" aria-label={ROWS.renamePasskey(p.name)} onClick={() => flows.open({ kind: "rename_passkey", passkey: p })}>Rename</button>
+                <button type="button" className="btn text compact danger" aria-label={ROWS.removePasskey(p.name)} onClick={() => flows.open({ kind: "remove_passkey", passkey: p })}>Remove</button>
+              </span>
+            </div>
+          ))}
+          <LinkRow id="security.passkeys" label={ROWS.addPasskey} external onOpen={() => void run(() => api.openServerPage("app/settings/security/passkeys"))} />
+        </Section>
+      )}
       <Section>
         <DestructiveRow id="security.signout_all" onClick={() => setConfirming(true)} />
       </Section>
@@ -95,6 +198,7 @@ export function SecurityPage({ account, run, onSignedOut, onActivity }: { accoun
           </div>
         </Sheet>
       )}
+      {flows.flow && <AccountFlow kit={CLASSIC_KIT} flow={flows.flow} account={account} onClose={flows.close} onDone={done} />}
     </>
   );
 }

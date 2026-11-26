@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.Serializable
 
 private val Context.dataStore by preferencesDataStore(name = "echoledger_settings")
@@ -19,6 +20,11 @@ data class AppSettings(
     val serverUrl: String? = null,
     val pins: List<String> = emptyList(),
     val deviceId: String? = null,
+    /**
+     * Counts this phone's sign-ins (since 2.0.0-p), one more at each: whose My views are is confirmed for one sign-in
+     * only. The device id can't say it: the server gives the same person's same install its device again.
+     */
+    val signIns: Long = 0,
     val deviceName: String? = null,
     val autoRecordArmed: Boolean = false,
     val captionsEnabled: Boolean = true,
@@ -29,8 +35,16 @@ data class AppSettings(
     val appLockEnabled: Boolean = false,
     /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
     val lockAfterMs: Long = 0L,
-    /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
+    /**
+     * Until 2.0.5: while the lock was on, hide the app's content in Recents and screenshots. Folded into [blockScreens]
+     * (a phone with the lock and this on reads as blocked); kept so older settings files still read.
+     */
     val secureScreen: Boolean = false,
+    /**
+     * Settings › Privacy & data › "Block screenshots of EchoLedger" (since 2.0.5, off by default): FLAG_SECURE on the
+     * app's own screens. Off, screenshots of the app are allowed at any time, also while recording.
+     */
+    val blockScreens: Boolean = false,
     /** What the server last said about updates, an announcement and maintenance (since v1.6, P2.7). */
     val serverNotices: com.echoledger.mobile.core.ServerNotices = com.echoledger.mobile.core.ServerNotices(),
     /** The announcement texts the person closed (their hashes), the latest 20. */
@@ -38,11 +52,16 @@ data class AppSettings(
     /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
     val widgetHideTitles: Boolean = false,
     /**
-     * Since v1.8.1, Settings → Privacy & data → During screen sharing ([com.echoledger.mobile.core.ShareGuard.Mode.of]):
-     * "hide" = Private, the default (FLAG_SECURE on every floating window); "show" = Show; "black_box" (the first v1.8.1
-     * builds) and any unknown value read as Private.
+     * v1.8.1 to 2.0.4, During screen sharing: "hide" (Private, the default), "black_box" (the first v1.8.1 builds) or
+     * "show". Since 2.0.5 it is only read once, to give [hideLiveWords] its first value (Show is off, the others on).
      */
     val screenShareMode: String = "hide",
+    /**
+     * Since 2.0.5, Settings › Privacy & data › "Hide EchoLedger's live words from screenshots and screen shares" (on by
+     * default; [com.echoledger.mobile.core.ShareGuard]): FLAG_SECURE on captions, Live Assist and Live Translate. The pill
+     * and the after-call card never carry it.
+     */
+    val hideLiveWords: Boolean = true,
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
     val settingsVersion: Int = 2,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
@@ -52,10 +71,33 @@ data class AppSettings(
     /** Since 1.3.2: calls still waiting for Keep or Discard after this many hours are kept (24, 72, or 0 = never). */
     val undecidedKeepHours: Int = 24,
     /**
-     * Since v1.5, after a call: "keep" (default: kept at once, a small "Saved · Undo" for 6 s) or "ask" (a small chip
-     * with ✓ and ✕ that keeps the call after 10 s). Settings from before v1.5 have no value and keep automatically.
+     * v1.5 to 2.0.4, after a call: "keep" (kept and transcribed at once) or "ask" (a small chip). Since 2.0.5 it is only
+     * read once, to give [afterEachCall] its first value ([com.echoledger.mobile.calls.CallChoice.fromOld]).
      */
     val afterCall: String = "keep",
+    /**
+     * Since 2.0.5, Settings › Recording › After each call ([com.echoledger.mobile.calls.CallChoice]): "ask" (Ask me, the
+     * default), "transcribe", "audio" or "off" (Don't record calls: automatic call recording only).
+     */
+    val afterEachCall: String = "ask",
+    /** Since 2.0.5, When to ask (with Ask me): "after" the call (recommended, the default) or at the "start" of it. */
+    val whenToAsk: String = "after",
+    /** The after-call card has shown its first-time hint ("You can change this in Settings › After each call."). */
+    val callChoiceHintShown: Boolean = false,
+    /** The card's last choice ("transcribe", "audio" or "delete") and how many times in a row it was made. */
+    val callChoiceStreak: String? = null,
+    val callChoiceStreakCount: Int = 0,
+    /** "Always do this?" was offered (once). */
+    val callChoiceAlwaysOffered: Boolean = false,
+    /**
+     * v2.1 UX-13, Settings › After each call › "Show a small bar on screen" (off by default; needs the overlay
+     * permission): a 56 dp line under the status bar beside the after-call notification.
+     */
+    val afterCallBar: Boolean = false,
+    /** v2.1 UX-15: how many times the app was opened, and the Record hint ("Tap to record · Hold for more"). */
+    val appOpens: Int = 0,
+    val recordHintShows: Int = 0,
+    val recordHintDone: Boolean = false,
     /** Since v1.5: automatic call recordings shorter than this are skipped (0 = never). */
     val skipCallsShorterThanS: Int = 10,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
@@ -122,8 +164,14 @@ data class AppSettings(
     val phoneFont: Boolean = false,
     /** The new design's text size (since 2.0): `system` (the phone's), `smaller`, `larger` or `largest`, on top of the phone's. */
     val textSize: String = "system",
-    /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. */
+    /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. Signed in, the account's wins. */
     val appLanguage: String = "system",
+    /** The account's language (`en` or `ur`) last read on this phone; spoken while signed in, also while it loads. */
+    val accountLanguage: String? = null,
+    /** The account's avatar colour (0-7) last read on this phone, for the initials circle (DES-08). */
+    val avatarColor: Int? = null,
+    /** Library rows swipe (right Pin, left Delete with Undo) in the new design; off, a row only taps and long-presses. */
+    val librarySwipes: Boolean = true,
     /** The setup card at the top of the new design's Library was hidden (since 2.0); Setup & health still has it all. */
     val setupCardHidden: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */
@@ -217,28 +265,67 @@ data class CaptionStyle(
  * Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset.
  * [onSaved] hears every settings change [update] saved (the app graph passes it to screen-share privacy).
  */
-class SettingsStore(private val context: Context, private val cipher: SecretCipher, private val onSaved: (AppSettings) -> Unit = {}) {
+class SettingsStore(
+    private val context: Context,
+    private val cipher: SecretCipher,
+    /** Where [latest] is kept: the app's own, so reading it never makes this store (nor opens the file). */
+    private val latestValue: kotlinx.coroutines.flow.MutableStateFlow<AppSettings?> = kotlinx.coroutines.flow.MutableStateFlow(null),
+    private val onSaved: (AppSettings) -> Unit = {}
+) {
     private object Keys {
         val SETTINGS = stringPreferencesKey("settings_json")
         val TOKEN = stringPreferencesKey("device_token_enc")
         val SETUP_SEEN = booleanPreferencesKey("setup_seen")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
+    /**
+     * The settings as last read or saved, at once and without touching the store (null before the first read): what
+     * draws outside the activity (the recording pill, the after-call card, the Live Assist card) starts from it.
+     */
+    val latest: kotlinx.coroutines.flow.StateFlow<AppSettings?> get() = latestValue
+
+    /**
+     * Writes through this store are the authority for [latest]: each is numbered inside the store's own (serialized)
+     * transaction and published only if no later one was, so a slow write never puts an older value over a newer one.
+     * A read publishes only until the first write has: a reader that lags can't undo a save.
+     */
+    private val order = Any()
+    private var written = 0L
+    private var published = 0L
+
+    private fun nextWrite(): Long = synchronized(order) { ++written }
+
+    private fun publish(write: Long, value: AppSettings) = synchronized(order) {
+        if (write > published) {
+            published = write
+            latestValue.value = value
+        }
+    }
+
+    private fun publishRead(value: AppSettings) = synchronized(order) { if (published == 0L) latestValue.value = value }
+
+    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }.onEach { publishRead(it) }
 
     suspend fun current(): AppSettings = settings.first()
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         var saved: AppSettings? = null
+        var write = 0L
         context.dataStore.edit { prefs ->
             val next = transform(prefs.toSettings())
             prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
             saved = next
+            write = nextWrite()
         }
-        saved?.let(onSaved)
+        saved?.let {
+            publish(write, it)
+            onSaved(it)
+        }
     }
 
     suspend fun saveToken(token: String) {
+        // A new sign-in may be another account or another server: no picture of the last one is kept.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
         val enc = cipher.encrypt(token.toByteArray(), TOKEN_CONTEXT)
         context.dataStore.edit { it[Keys.TOKEN] = Base64.encodeToString(enc, Base64.NO_WRAP) }
     }
@@ -251,10 +338,23 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     suspend fun clearPairing() {
         // A device report sent for this account is never attached to another account's support message.
         com.echoledger.mobile.help.DeviceReports(context).clear()
+        // Nor the account's pictures, nor a two-step key or recovery codes still on the clipboard.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
+        com.echoledger.mobile.account.SecretClip.clearNow(context)
+        // And any account page's remembered step (the two-step key and codes kept across a rotation).
+        com.echoledger.mobile.account.SignOuts.happened()
+        var cleared: AppSettings? = null
+        var write = 0L
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
-            it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))
+            // Signed out: the account's language and colour go with it (the next account brings its own).
+            val next = it.toSettings().copy(deviceId = null, deviceName = null, accountLanguage = null, avatarColor = null)
+            it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
+            cleared = next
+            write = nextWrite()
         }
+        // Windows outside the app see the phone signed out at once (it is a write like any other).
+        cleared?.let { publish(write, it) }
     }
 
     private fun Preferences.toSettings(): AppSettings {
@@ -264,13 +364,42 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         val migrated = if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
         // Until v1.1.1 "Hide content in Recents and screenshots" was on by default; screenshots are always allowed now
         // unless the person turns the option on themselves.
-        return if (!raw.contains(
+        val versioned = if (!raw.contains(
                 "\"settingsVersion\""
             )
         ) {
             migrated.copy(secureScreen = false, settingsVersion = SETTINGS_VERSION)
         } else {
             migrated
+        }
+        // 2.0.5: the app lock's "hide content" became Block screenshots of EchoLedger. Where it was in effect (the lock
+        // on and it on) screenshots stay blocked; nobody else gets a block they didn't choose.
+        val unblocked = if (!raw.contains(
+                "\"blockScreens\""
+            )
+        ) {
+            versioned.copy(blockScreens = versioned.appLockEnabled && versioned.secureScreen)
+        } else {
+            versioned
+        }
+        // 2.0.5 (the owner's decision): During screen sharing became Hide EchoLedger's live words; Show is off, Private
+        // ("hide", or the first v1.8.1 builds' "black_box") is on.
+        val live = if (!raw.contains(
+                "\"hideLiveWords\""
+            )
+        ) {
+            unblocked.copy(hideLiveWords = unblocked.screenShareMode != "show")
+        } else {
+            unblocked
+        }
+        // 2.0.5: "After a call" (keep or ask) became After each call: Ask me, the default, from either (as on the desktop).
+        return if (!raw.contains(
+                "\"afterEachCall\""
+            )
+        ) {
+            live.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.fromOld(live.afterCall))
+        } else {
+            live
         }
     }
 

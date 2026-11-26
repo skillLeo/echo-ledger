@@ -8,6 +8,7 @@ import { titleOf } from "../../lib/settingsRegistry";
 import { reducedMotion } from "../../lib/motion";
 import { LucideChevronRightIcon, LucideExternalLinkIcon } from "../../components/Icons";
 import { confirmAction } from "../../lib/confirm";
+import { t } from "../../i18n";
 
 /** The attributes that make a row a search target. */
 export function rowAttrs(id: string): { id: string; "data-setting": string; tabIndex: number } {
@@ -113,6 +114,33 @@ export function SegmentedRow<T extends string>({ id, title = titleOf(id), value,
         ))}
       </span>
     </div>
+  );
+}
+
+/** One choice of a few, each on its own row with its help line under its name (After each call): native radios, so
+ * the arrow keys move between them. The section's header names it; the group carries the name for screen readers. */
+export function ChoiceListRow<T extends string>({ id, title = titleOf(id), value, options, onChange }: {
+  id: string;
+  title?: string;
+  value: T;
+  options: readonly { value: T; label: string; hint?: string }[];
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="set-choices" {...rowAttrs(id)}>
+      <legend className="sr-only">{title}</legend>
+      {options.map((o) => (
+        <label key={o.value} className="set-row set-choice">
+          <input type="radio" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)}
+            aria-labelledby={`${name}-${o.value}`} aria-describedby={o.hint ? `${name}-${o.value}-hint` : undefined} />
+          <span className="set-main">
+            <span className="set-title" id={`${name}-${o.value}`}>{o.label}</span>
+            {o.hint && <span className="set-sub" id={`${name}-${o.value}-hint`}>{o.hint}</span>}
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -304,7 +332,7 @@ export function useCopied(): [string | null, (key: string, text: string) => Prom
  * the button repeats the verb; red only for what deletes, discards or signs out (`tone`). Keyboard and screen readers:
  * Cancel has the focus when it opens (the safe answer: Enter cancels and never presses the opener again), Tab stays
  * inside, Escape cancels and no window behind it hears it, and the focus goes back to the opener when it closes. */
-export function ConfirmDialog({ title, body, cancel = "Cancel", confirm, onConfirm, onClose, busy = false, error = null, tone = "danger" }: {
+export function ConfirmDialog({ title, body, cancel = t("Cancel"), confirm, onConfirm, onClose, busy = false, error = null, tone = "danger" }: {
   title: string;
   body?: ReactNode;
   cancel?: string;

@@ -88,7 +88,7 @@
                     <tbody>
                         @foreach ($recordings as $recording)
                             <tr>
-                                <td style="{{ $cell }}" dir="auto">{{ $recording->displayTitle() }}</td>
+                                <td style="{{ $cell }}" dir="auto">{{ $recording->outsideTitle() }}</td>
                                 <td style="{{ $cell }}">{{ $recording->started_at?->format('M j, Y H:i') }}</td>
                                 <td style="{{ $cell }}text-align:right"><x-filament::button size="xs" color="gray" wire:click="mountAction('openRecording', { session: '{{ $recording->id }}' })">Open</x-filament::button></td>
                             </tr>

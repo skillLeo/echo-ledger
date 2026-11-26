@@ -16,6 +16,11 @@
       "$type": "dimension",
       "$value": "16px"
     },
+    "group": {
+      "$type": "dimension",
+      "$value": "24px",
+      "$description": "A rounded group of rows (One UI's settings cards, v2.1 UX-16)"
+    },
     "full": {
       "$type": "dimension",
       "$value": "999px"

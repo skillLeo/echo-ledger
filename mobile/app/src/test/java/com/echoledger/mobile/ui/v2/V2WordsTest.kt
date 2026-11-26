@@ -137,9 +137,17 @@ class V2WordsTest {
         assertTrue("no key and not English-only: $missing", missing.isEmpty())
     }
 
+    /** The sentences of core.Problems, the one mapper from a failure to words, which the view model says through it. */
+    private fun problemsSentences(): Set<String> = com.echoledger.mobile.core.Problems::class.java.declaredFields
+        .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+        .map { field ->
+            field.isAccessible = true
+            field.get(null) as String
+        }.toSet()
+
     @Test
     fun everyMappedSentenceAndTemplateIsOneTheViewModelReallySays() {
-        val sentences = viewModelSentences()
+        val sentences = viewModelSentences() + problemsSentences()
         val gone = VmMessages.known.filterNot { it in sentences } + VmMessages.templates.map { it.source }.filterNot { it in sentences }
         assertTrue("no longer in MainViewModel: $gone", gone.isEmpty())
         // Each template filled in reads back through its own pattern.
@@ -156,11 +164,31 @@ class V2WordsTest {
         assertEquals("ayesha@bilaltraders.pk کے طور پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in as ayesha@bilaltraders.pk"))
         assertEquals("3 لوگوں کو بھیج دی گئی", VmMessages.localize(ur, "Sent to 3 people"))
         assertEquals("\u2066echoledger.pk\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to echoledger.pk"))
+        // A server's text set between the sentence's own marks can't close them early or leave one open.
+        assertEquals("\u2066x\u202Ey\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to x\u2069\u202Ey"))
+        assertEquals("\u2066Ali\u2068evil\u2069\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to Ali\u2068evil"))
         // A server's own words have no key and show as they are.
         assertEquals(
             "Monthly limit reached — raise it in Settings",
             VmMessages.localize(ur, "Monthly limit reached — raise it in Settings")
         )
         assertEquals("Restored", VmMessages.localize(V2Testing.resources(EchoLanguage.English), "Restored"))
+    }
+
+    /**
+     * EL-UX's audit: the sentences of core.Problems (can't reach, the server's problem, the certificate, sign in first)
+     * come from that mapper, not from a literal in the view model, so the check above never saw them; they showed in
+     * English on Urdu screens. Each one has a key and reads in Urdu.
+     */
+    @Test
+    fun everySentenceOfProblemsHasAKeyAndReadsInUrdu() {
+        val sentences = problemsSentences()
+        assertTrue("found only ${sentences.size}", sentences.size >= 4)
+        val ur = V2Testing.resources(EchoLanguage.Urdu)
+        for (english in sentences) {
+            assertTrue("no key: $english", english in VmMessages.known)
+            val urdu = VmMessages.localize(ur, english)
+            assertTrue("not in Urdu: $english -> $urdu", urdu != english && urdu.any { it in '\u0600'..'\u06FF' })
+        }
     }
 }

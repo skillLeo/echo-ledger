@@ -229,6 +229,15 @@ it('on Auto gives each side one language: Urdu anywhere runs that side\'s other 
         ->and($transcript->language)->toBe('ur');
 });
 
+it('keeps on each line the language its chunk was heard in (since 2.0.0-o)', function () {
+    noPrep();
+    Http::fake(['api.groq.com/*' => Http::response(groqAnswer('urdu', [seg(1.0, 3.5, 'آپ کل کی meeting reschedule کر دیں')]), 200)]);
+
+    $transcript = runGroq($this, 'ur');
+
+    expect($transcript->segments[0]['language'])->toBe('ur');
+});
+
 it('plans chunks at pauses, leaves long silences out and never cuts more than the limit', function () {
     expect(AudioPrep::plan(1300, [[595, 597], [1000, 1010]], 600))->toBe([[0.0, 596.0], [596.0, 1000.25], [1009.75, 1300.0]])
         ->and(AudioPrep::plan(1500, [], 600))->toBe([[0.0, 600.0], [600.0, 1200.0], [1200.0, 1500.0]])

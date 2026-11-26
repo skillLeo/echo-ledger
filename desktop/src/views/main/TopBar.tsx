@@ -71,7 +71,7 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
   const plan = entitlements?.plan ? planName(entitlements.plan) : null;
   const upgradeOffered = !!entitlements && canUpgrade(here.role) && !openRequest(entitlements) && !!nextPlan(entitlements);
   const recording = status.recording;
-  const what = recording ? (recording.mode === "mic_note" ? "Voice note" : sourceAppLabel(recording.sourceApp)) : "";
+  const what = recording ? (recording.mode === "mic_note" ? "Voice note" : sourceAppLabel(recording.sourceApp, "en")) : "";
   return (
     <header className="topbar" data-tauri-drag-region>
       <Menu label={`Workspace: ${here.name}`} title="Workspace" className="workspace-switch" buttonClass="workspace-btn" align="left"

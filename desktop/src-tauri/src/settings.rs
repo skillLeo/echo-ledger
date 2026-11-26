@@ -9,9 +9,10 @@ use serde_json::Value;
 use crate::overlay::geometry::{Corner, PillPosition};
 use crate::shortcuts::{Action, default_map};
 
-/// "After a call" (contract 1.8.0-e, the same on every app): a call is transcribed only with the person's permission.
-/// `ask` (default): the after-call card asks, and with no answer within 12 s saves the audio, not transcribed;
-/// `always_transcribe`: kept and transcribed at once ("Saved · … · Undo"); `always_audio`: kept at once as audio only.
+/// "After each call" (contract 1.8.0-e; the call choice, docs/v2/copy/call-choice.md): a call is transcribed only with
+/// the person's permission. `ask` (Ask me, default): the card asks, and with no answer within 8 s saves the audio only;
+/// `always_transcribe` (Transcribe every call) and `always_audio` (Save audio only): no question, "Transcribing…" or
+/// "Saved as audio" with Undo for 5 s. Don't record calls is `auto_mode` off ([`AfterEachCall`]).
 /// v1.5's "Keep automatically" (`keep`) and "Ask me" both become `ask`: permission first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -34,8 +35,30 @@ impl AfterCall {
     }
 }
 
+/// "When to ask" under Ask me (the call choice): after the call (the card, default) or at the start of the call (a 5 s
+/// "Recording this call · Don't record" banner beside the pill; with no choice the call is saved as audio only).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AskWhen {
+    #[default]
+    After,
+    Start,
+}
+
+/// "After each call" as Settings shows it: one choice of four. "Don't record calls" (`off`) is "Record calls
+/// automatically" turned off (`auto_mode`): nothing is recorded by itself, a call recorded by hand still is, and the
+/// choice made before (`after_call`) is kept for it and comes back when calls are recorded again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AfterEachCall {
+    Ask,
+    AlwaysTranscribe,
+    AlwaysAudio,
+    Off,
+}
+
 /// What the person reads once when v1.5's "Keep automatically" became Ask me.
-pub const AFTER_CALL_NOTICE: &str = "After a call now asks before transcribing. To transcribe every call as before, choose Always transcribe";
+pub const AFTER_CALL_NOTICE: &str = "After each call now asks before transcribing. To transcribe every call as before, choose Transcribe every call";
 
 /// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -248,6 +271,9 @@ pub struct Settings {
     pub pins: Vec<String>,
     pub device_id: Option<String>,
     pub device_name: Option<String>,
+    /// A fresh id made at each sign-in and forgotten at sign-out (2.0.0-p): what the window keeps for one sign-in only
+    /// (whose My views it showed last) is tied to it, so another sign-in, or none, never reads it.
+    pub sign_in_id: Option<String>,
     /// This install's id (v1.6, P3, `identity`): made once, sent with every sign-in; never exported.
     pub install_id: Option<String>,
     pub shortcuts: HashMap<Action, String>,
@@ -259,8 +285,9 @@ pub struct Settings {
     pub auto_record_apps: HashMap<String, bool>,
     /// Which EchoLedger windows are left out of screen shares (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone); replaces
     /// v1.8's `contentProtection` (floating windows only), see [`Settings::from_value`].
-    /// Since v2.0 it covers only the other floating windows (recording controls, dictation box, after-call card, Live
-    /// Translate): the main window, the Live Assist card and the captions have their own choices below.
+    /// Since v2.0 it covers only the other floating windows, and since 2.0.14 (the capture policy) only Live Translate:
+    /// the recording controls, the after-call card and the dictation box are always shown; the main window, the Live
+    /// Assist card and the captions have their own choices below.
     pub hide_from_sharing: ShareHiding,
     /// The main window is hidden from screen shares, and until when (v2.0); none: shown in screen shares (the default).
     pub main_share_hide: Option<crate::privacy::share::MainHide>,
@@ -276,17 +303,38 @@ pub struct Settings {
     pub send_diagnostics: bool,
     pub overlay_corner: Corner,
     pub autostart: bool,
+    /// FIX-11: EchoLedger's icon in the Mac menu bar (asked in setup; recommended).
+    pub menu_bar_icon: bool,
+    /// FIX-11: the recording's time beside the menu bar icon while it runs.
+    pub menu_bar_timer: bool,
+    /// FIX-11: the Activity number on the app's icon in the Dock (the rail's).
+    pub dock_badge: bool,
+    /// FIX-12 (Windows): ✕ quits instead of keeping EchoLedger in the notification area ("When I close the window").
+    pub close_quits: bool,
+    /// FIX-12 (Windows): the first ✕ said EchoLedger keeps running.
+    pub close_tip_shown: bool,
+    /// FIX-12 (Windows): the tip that Windows hides new tray icons was shown, once after install.
+    pub tray_tip_shown: bool,
     /// "type" (keystrokes into the focused app) | "clipboard"
     pub dictation_output: String,
     /// Default client whose keyterms boost accuracy.
     pub client_id: Option<String>,
     /// One-time consent acknowledgement for recording calls (shown once, never nags).
     pub consent_acknowledged: bool,
-    /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
+    /// What happens when a call ends ("After each call", with `auto_mode` for Don't record calls): the card asks
+    /// (Ask me), or the call is transcribed or saved as audio only without a question.
     pub after_call: AfterCall,
-    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Always transcribe one
+    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Transcribe every call one
     /// tap away ([`AFTER_CALL_NOTICE`]). Cleared once answered.
     pub after_call_notice: bool,
+    /// "When to ask" under Ask me (the call choice).
+    pub ask_when: AskWhen,
+    /// The card's first-time line ("You can change this in Settings › After each call.") was shown.
+    pub card_hint_seen: bool,
+    /// The same choice made on the card this many times in a row ("Always do this?" after 3).
+    pub card_streak: Option<crate::after_call::CardStreak>,
+    /// "Always do this?" was offered (once, ever).
+    pub always_offered: bool,
     /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
     pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
@@ -351,6 +399,7 @@ impl Default for Settings {
             pins: vec![],
             device_id: None,
             device_name: None,
+            sign_in_id: None,
             install_id: None,
             shortcuts: default_map(),
             captions_on_record: true,
@@ -364,6 +413,12 @@ impl Default for Settings {
             send_diagnostics: false,
             overlay_corner: Corner::BottomRight,
             autostart: false,
+            menu_bar_icon: true,
+            menu_bar_timer: true,
+            dock_badge: true,
+            close_quits: false,
+            close_tip_shown: false,
+            tray_tip_shown: false,
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,
@@ -371,6 +426,10 @@ impl Default for Settings {
             // first (contract 1.8.0-e). The old keys are read and ignored.
             after_call: AfterCall::Ask,
             after_call_notice: false,
+            ask_when: AskWhen::After,
+            card_hint_seen: false,
+            card_streak: None,
+            always_offered: false,
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
@@ -412,6 +471,30 @@ pub fn screen_target_or_default(value: Option<&str>) -> &'static str {
 }
 
 impl Settings {
+    /// "After each call" as Settings shows it (Don't record calls when calls are not recorded by themselves).
+    pub fn after_each_call(&self) -> AfterEachCall {
+        if !self.auto_mode {
+            return AfterEachCall::Off;
+        }
+        match self.after_call {
+            AfterCall::Ask => AfterEachCall::Ask,
+            AfterCall::AlwaysTranscribe => AfterEachCall::AlwaysTranscribe,
+            AfterCall::AlwaysAudio => AfterEachCall::AlwaysAudio,
+        }
+    }
+
+    /// Chooses "After each call": Don't record calls turns automatic recording off and keeps the choice made before;
+    /// any other value records calls again with that choice. Choosing answers the one-time notice about it.
+    pub fn set_after_each_call(&mut self, value: AfterEachCall) {
+        match value {
+            AfterEachCall::Off => self.auto_mode = false,
+            AfterEachCall::Ask => (self.auto_mode, self.after_call) = (true, AfterCall::Ask),
+            AfterEachCall::AlwaysTranscribe => (self.auto_mode, self.after_call) = (true, AfterCall::AlwaysTranscribe),
+            AfterEachCall::AlwaysAudio => (self.auto_mode, self.after_call) = (true, AfterCall::AlwaysAudio),
+        }
+        self.after_call_notice = false;
+    }
+
     /// Loads `settings.json`. A missing, empty or non-object file gives the defaults; inside an object, one bad
     /// value never discards the rest of the file (see [`Settings::from_value`]).
     pub fn load(path: &Path) -> Self {
@@ -479,6 +562,8 @@ impl Settings {
             settings.main_share_hide = None;
             settings.share_notice = true;
         }
+        // "Until I quit" ended when the last run did: this launch starts with the main window shown in screen shares.
+        settings.main_share_hide = crate::privacy::share::at_launch(settings.main_share_hide);
         for action in crate::shortcuts::ADDED_LATER {
             if let Some(accelerator) = action.default_accelerator() {
                 settings.shortcuts.entry(action).or_insert_with(|| accelerator.to_string());

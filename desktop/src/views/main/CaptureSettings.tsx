@@ -1,7 +1,7 @@
 // Settings › Recording (v1.7): Calls & meetings (what records by itself, after a call, call sites), Microphone & audio
 // (the device, a 10-second test with its meters, the silent caller warning, the permissions) and Captions with its
 // Style sub-page. Every row comes from the settings registry.
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import {
   api,
   errorMessage,
@@ -24,10 +24,12 @@ import { sourceAppLabel } from "../../lib/format";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../lib/explainer";
 import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { SKIP_SHORTER_THAN } from "../../lib/pending";
+import { skipShorterThan } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
-import { EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
+import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
+import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
+import { t } from "../../i18n";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
@@ -50,16 +52,6 @@ export function callAppsValue(settings: Pick<Settings, "autoMode" | "autoRecordA
 const options = (id: string) => (setting(id).options ?? []).map((o) => [o.value, o.label] as const);
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
-const AFTER_CALL_HINT: Record<Settings["afterCall"], string> = {
-  always_transcribe: "Each call is saved and transcribed at once. A small “Saved, Undo” shows near the tray for a few seconds.",
-  always_audio: "Each call is saved at once as audio only (not transcribed; transcribe it later from the Library). A small “Saved, Undo” shows near the tray for a few seconds.",
-  ask: "A small prompt near the tray asks Keep or Discard, and saves the audio by itself after 12 seconds (not transcribed; transcribe it later from the Library).",
-};
-/** A Mac has no tray: the window is in the corner of the screen. */
-export function afterCallHint(choice: Settings["afterCall"], platform: string): string {
-  return platform === "macos" ? AFTER_CALL_HINT[choice].replace("near the tray", "in the corner of the screen") : AFTER_CALL_HINT[choice];
-}
-
 /** Recording › Calls & meetings. */
 export function CallsPage({ settings, patch, platform, onSites, consentRead, onConsent }: {
   settings: Settings;
@@ -72,8 +64,19 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
   const sites = settings.siteRules.filter((r) => !isNeverRule(r)).length;
   return (
     <>
-      <Section title="Record automatically" footer={<p>{setting("calls.ask_unknown").description}</p>}>
-        <SwitchRow id="calls.auto" on={settings.autoMode} onChange={(v) => void patch({ autoMode: v })} />
+      <Section title={CALL_WORDS.setting_title}>
+        <ChoiceListRow id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Section>
+      {afterEachCallOf(settings) === "ask" && (
+        <Section title={CALL_WORDS.when_title}>
+          <ChoiceListRow id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Section>
+      )}
+      {/* One setting: Don't record calls is the only switch for recording calls by themselves; the apps wait under it. */}
+      <Section title="Record automatically" footer={<>
+        {!settings.autoMode && <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p>}
+        <p>{setting("calls.ask_unknown").description}</p>
+      </>}>
         {CALL_APPS.map(([app, name]) => (
           <div key={app} className={`set-row ${settings.autoMode ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
             <label className="set-hit">
@@ -87,9 +90,8 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         <SwitchRow id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
-      <Section title="After a call" footer={<><p>{afterCallHint(settings.afterCall, platform)}</p><p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p></>}>
-        <SelectRow id="calls.after" value={settings.afterCall} options={options("calls.after") as readonly (readonly [Settings["afterCall"], string])[]} onChange={(v) => void patch({ afterCall: v })} />
-        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => [String(s), label] as const)}
+      <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
+        <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={skipShorterThan("en").map(([s, label]) => [String(s), label] as const)}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Section>
       <Section title="Websites">
@@ -100,7 +102,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         <div className="set-reset"><button type="button" className="btn text" onClick={onConsent}>Read the recording consent notice</button></div>
       )}
       <ResetRow page="Calls & meetings" onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"],
+        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
       })} />
     </>
@@ -138,7 +140,7 @@ function WhyNotRecorded() {
         {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
           <ul className="why-list">
             {users.map((u, i) => (
-              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u, "en")}</b>: {decisionText(u)}</li>
             ))}
           </ul>
         )}
@@ -170,13 +172,13 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
     const pattern = rulePattern(rule);
     const label = isNeverRule(rule) ? `Never record ${pattern}` : `Record calls on ${pattern}`;
     return (
-      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+      <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={pattern} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
         <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} onClick={() => void onSave(withBuiltinEnabled(rules, rule, !on))} />
       </EntityRow>
     );
   };
   const userRow = (rule: SiteRule) => (
-    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app)}>
+    <EntityRow key={rule.id} leading={<SourceAppIcon app={isNeverRule(rule) ? undefined : rule.app} size={18} />} title={rulePattern(rule)} sub={isNeverRule(rule) ? undefined : sourceAppLabel(rule.app, "en")}>
       <button type="button" className="btn ghost compact" aria-label={`Remove ${rulePattern(rule)}`} onClick={() => void onSave(rules.filter((r) => r.id !== rule.id))}>Remove</button>
     </EntityRow>
   );
@@ -212,19 +214,19 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
 /** What the test result says to the user, one sentence per side. */
 export function testVerdict(result: Pick<TestResult, "micHeard" | "systemHeard">): string[] {
   return [
-    result.micHeard ? "Your microphone is working." : "We didn't hear your microphone. Check the microphone above and its permission.",
+    result.micHeard ? t("Your microphone is working.") : t("We didn't hear your microphone. Check the microphone above and its permission."),
     result.systemHeard
-      ? "Sound from this computer was captured."
-      : "No sound from this computer was captured. Play something during the test to check the other side of calls.",
+      ? t("Sound from this computer was captured.")
+      : t("No sound from this computer was captured. Play something during the test to check the other side of calls."),
   ];
 }
 
 export const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
-  allowed: "Allowed",
-  denied: "Not allowed",
-  unknown: "Asked on first use",
+  get allowed() { return t("Allowed"); },
+  get denied() { return t("Not allowed"); },
+  get unknown() { return t("Asked on first use"); },
   // Screen Recording only; never the microphone, kept for completeness.
-  reopen: "Allowed: quit and reopen EchoLedger to finish",
+  get reopen() { return t("Allowed: quit and reopen EchoLedger to finish"); },
 };
 
 /** Recording › Microphone & audio. */
@@ -330,14 +332,27 @@ export const DEFAULT_CLIENT_COLOR = "#0bd8b6";
 /** The swatches after Automatic, the phone's six. */
 export const COLOUR_PRESETS = ["#a78bfa", "#22d3ee", "#34d399", "#fbbf24", "#fb7185", "#ffffff"] as const;
 
-/** The caption as the overlay draws it, with the chosen colours and size. */
-export function CaptionPreview({ style }: { style: CaptionStyle }) {
+/** The overlay's visible lines for the "Caption lines" setting (its visibleLines): 2, 3 or 5; anything else shows 3. */
+export function previewLines(value: unknown): 2 | 3 | 5 {
+  return value === 2 || value === 3 || value === 5 ? value : 3;
+}
+
+/**
+ * The caption as the overlay draws it, with the chosen colours and size, and (D-242) only its newest [lines] lines: the
+ * overlay keeps that many lines' height and shows the newest at the bottom, so at 2 the first turn is out of view.
+ */
+export function CaptionPreview({ style, lines }: { style: CaptionStyle; lines?: number }) {
   const size = style.size === "small" ? 13 : style.size === "large" ? 19 : 15;
+  const sample = { fontSize: size, background: `rgba(24, 25, 27, ${style.opacity / 100})`, "--caption-lines": previewLines(lines) } as CSSProperties;
+  const client = <span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>;
   return (
     <div className="set-preview" aria-hidden="true">
-      <div className="caption-sample" style={{ fontSize: size, background: `rgba(24, 25, 27, ${style.opacity / 100})` }}>
-        <div dir="auto"><span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>Can you send the estimate by Monday?</div>
-        <div dir="auto"><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
+      <div className="caption-sample" style={sample}>
+        <div className="caption-sample-lines">
+          <div dir="auto">{client}Can you send the estimate by Monday?</div>
+          <div dir="auto"><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
+          <div dir="auto">{client}Great, thanks.</div>
+        </div>
       </div>
     </div>
   );
@@ -350,7 +365,7 @@ export const CAPTIONS_SHARE_LINE = "Captions are hidden from screen shares unles
 export function CaptionsPage({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
-      <CaptionPreview style={settings.captionStyle} />
+      <CaptionPreview style={settings.captionStyle} lines={settings.captionLines} />
       <Section footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchRow id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkRow id="captions.style" onOpen={onStyle} chevron />
@@ -385,7 +400,7 @@ export function CaptionStylePage({ settings, patch }: { settings: Settings; patc
   const save = (next: Partial<CaptionStyle>) => void patch({ captionStyle: { ...style, ...next } });
   return (
     <>
-      <CaptionPreview style={style} />
+      <CaptionPreview style={style} lines={settings.captionLines} />
       <Section footer={<p>{setting("captions.compact").description}</p>}>
         <SegmentedRow id="captions.size" value={style.size} options={options("captions.size") as readonly (readonly [CaptionStyle["size"], string])[]} onChange={(size) => save({ size })} />
         <SegmentedRow id="captions.lines" value={String(settings.captionLines)} options={options("captions.lines")} onChange={(v) => void patch({ captionLines: Number(v) })} />

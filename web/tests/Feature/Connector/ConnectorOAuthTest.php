@@ -352,7 +352,8 @@ describe('the code flow with PKCE', function () {
         parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
         $access = connectorExchange($this, $client, (string) $query['code'], $verifier)->assertOk();
         expect(Passport::token()->newQuery()->sole()->scopes)->toBe(['mcp:use'])
-            ->and($access->json('expires_in'))->toBe(3600);
+            // An hour by the OAuth server's own clock (PHP's time(), not Laravel's): a run crossing a second gets 3599 (W-006).
+            ->and($access->json('expires_in'))->toBeGreaterThanOrEqual(3598)->toBeLessThanOrEqual(3600);
     });
 
     it('refuses a redirect the app did not register, without sending the browser there', function () {
@@ -504,7 +505,8 @@ describe('tokens', function () {
         $new = connectorRefresh($this, $connected['client'], $connected['refresh'])->assertOk();
         expect($new->json('refresh_token'))->not->toBe($connected['refresh'])
             ->and($new->json('access_token'))->not->toBe($connected['access'])
-            ->and($new->json('expires_in'))->toBe(3600);
+            // An hour by the OAuth server's own clock (PHP's time(), not Laravel's): a run crossing a second gets 3599 (W-006).
+            ->and($new->json('expires_in'))->toBeGreaterThanOrEqual(3598)->toBeLessThanOrEqual(3600);
 
         connectorRefresh($this, $connected['client'], $connected['refresh'])->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
         connectorMessage($this, $connected['access'], 'tools/list')->assertUnauthorized();

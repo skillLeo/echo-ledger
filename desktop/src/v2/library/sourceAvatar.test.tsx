@@ -58,9 +58,10 @@ describe("source logos", () => {
     const list = screen.getByRole("list", { name: "Recordings" });
     expect(within(list).getByRole("img", { name: "Zoom, on a computer" })).toBeInTheDocument();
     expect(within(list).getByRole("img", { name: "Microsoft Teams, on a computer" })).toBeInTheDocument();
-    // A pinned row says so on its second line, and the row's button reads it.
-    expect(list.querySelectorAll(".el-row__pin")).toHaveLength(1);
-    expect(within(list).getByRole("button", { name: "Standup" })).toHaveAccessibleDescription(/^Pinned/);
+    // No pin icon and no device badge on a row since v2.1 (UX-06): the Pinned section says it, and the row's button reads it.
+    expect(list.querySelectorAll(".el-row__pin, .el-rec__pin, .el-source__device")).toHaveLength(0);
+    expect(within(list).getByRole("button", { name: "Standup" })).toHaveAccessibleDescription(/Pinned/);
+    expect(within(list).getByRole("button", { name: "Kick-off" })).not.toHaveAccessibleDescription(/Pinned/);
   });
 
   it("the recording page shows the source's mark and says where it was recorded in Details", async () => {

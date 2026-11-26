@@ -1,7 +1,11 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, afterCallHint, appRecords, callAppsValue, CAPTIONS_SHARE_LINE, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, CAPTIONS_SHARE_LINE, previewLines, testVerdict } from "./CaptureSettings";
+import { visibleLines } from "../overlay/OverlayApp";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeMicUser, makeSettings } from "../../test/fixtures";
 import { answerConfirm, confirmAsked } from "../../test/confirm";
@@ -19,16 +23,53 @@ describe("Captions and screen share", () => {
 });
 
 describe("Calls & meetings", () => {
-  it("says that Ask me saves the audio, not transcribed, after 12 seconds", () => {
-    expect(afterCallHint("ask", "windows")).toBe("A small prompt near the tray asks Keep or Discard, and saves the audio by itself after 12 seconds (not transcribed; transcribe it later from the Library).");
-    expect(afterCallHint("ask", "macos")).toContain("in the corner of the screen");
+  it("offers After each call: Ask me (the default), Transcribe every call, Save audio only, Don't record calls, each with its help line", () => {
+    const entry = SETTINGS.find((e) => e.id === "calls.after")!;
+    expect(entry.title).toBe("After each call");
+    expect(entry.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([
+      ["ask", "Ask me", true], ["always_transcribe", "Transcribe every call", false], ["always_audio", "Save audio only", false], ["off", "Don't record calls", false],
+    ]);
+    const when = SETTINGS.find((e) => e.id === "calls.ask_when")!;
+    expect(when.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([["after", "After the call (recommended)", true], ["start", "At the start of the call", false]]);
+    render(<CallsPage settings={makeSettings({ autoMode: true, afterCall: "ask" })} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    const group = screen.getByRole("group", { name: "After each call" });
+    expect(within(group).getAllByRole("radio").map((r) => r.closest("label")!.textContent)).toEqual([
+      "Ask meA small card after each call.",
+      "Transcribe every callNo question.",
+      "Save audio onlyNo question. Transcribe later from the Library if you want.",
+      "Don't record callsCalls are not recorded. You can still record one from the pill or Record.",
+    ]);
+    expect(within(group).getByRole("radio", { name: "Ask me" })).toBeChecked();
+    expect(document.body.textContent).not.toMatch(/\b(Keep|Discard)\b/);
   });
 
-  it("offers Ask me (the default), Always transcribe and Always save audio", () => {
-    const entry = SETTINGS.find((e) => e.id === "calls.after")!;
-    expect(entry.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([["ask", "Ask me", true], ["always_transcribe", "Always transcribe", false], ["always_audio", "Always save audio", false]]);
-    expect(afterCallHint("always_audio", "windows")).toContain("audio only (not transcribed");
-    expect(afterCallHint("always_transcribe", "windows")).toContain("saved and transcribed at once");
+  it.each([
+    ["ask", { autoMode: true, afterCall: "ask" }],
+    ["always_transcribe", { autoMode: true, afterCall: "always_transcribe" }],
+    ["always_audio", { autoMode: true, afterCall: "always_audio" }],
+    ["off", { autoMode: false }],
+  ] as const)("choosing %s saves what it means (Don't record calls is auto-record off)", (_value, patchFor) => {
+    const patch = vi.fn(async () => true);
+    const start = _value === "ask" ? makeSettings({ autoMode: false, afterCall: "always_audio" }) : makeSettings({ autoMode: true, afterCall: "ask" });
+    render(<CallsPage settings={start} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    const label = { ask: "Ask me", always_transcribe: "Transcribe every call", always_audio: "Save audio only", off: "Don't record calls" }[_value];
+    fireEvent.click(within(screen.getByRole("group", { name: "After each call" })).getByRole("radio", { name: label }));
+    expect(patch).toHaveBeenCalledWith(patchFor);
+  });
+
+  it("an earlier choice shows as it was: auto-record off reads Don't record calls, and When to ask shows only under Ask me", () => {
+    const { rerender } = render(<CallsPage settings={makeSettings({ autoMode: false, afterCall: "always_transcribe" })} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    expect(screen.getByRole("radio", { name: "Don't record calls" })).toBeChecked();
+    expect(screen.queryByRole("group", { name: "When to ask" })).not.toBeInTheDocument();
+    rerender(<CallsPage settings={makeSettings({ autoMode: true, afterCall: "always_transcribe" })} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    expect(screen.getByRole("radio", { name: "Transcribe every call" })).toBeChecked();
+    expect(screen.queryByRole("group", { name: "When to ask" })).not.toBeInTheDocument();
+    const patch = vi.fn(async () => true);
+    rerender(<CallsPage settings={makeSettings({ autoMode: true, afterCall: "ask", askWhen: "after" })} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    const when = screen.getByRole("group", { name: "When to ask" });
+    expect(within(when).getByRole("radio", { name: "After the call (recommended)" })).toBeChecked();
+    fireEvent.click(within(when).getByRole("radio", { name: "At the start of the call" }));
+    expect(patch).toHaveBeenCalledWith({ askWhen: "start" });
   });
 
   it("treats apps without a stored switch as on, and says which record by themselves", () => {
@@ -71,6 +112,29 @@ describe("Calls & meetings", () => {
 
 describe("Captions › Style", () => {
   const style = makeSettings().captionStyle;
+
+  it("D-242: the preview keeps the overlay's lines (2, 3 or 5), newest at the bottom, as the setting says", () => {
+    for (const lines of [2, 3, 5]) {
+      const { container, unmount } = render(<CaptionStylePage settings={makeSettings({ captionLines: lines })} patch={vi.fn(async () => true)} />);
+      const sample = container.querySelector(".caption-sample") as HTMLElement;
+      expect(sample.style.getPropertyValue("--caption-lines")).toBe(String(lines));
+      // The newest turn is the last one, at the bottom.
+      const turns = [...container.querySelectorAll(".caption-sample-lines > div")].map((d) => d.textContent);
+      expect(turns.at(-1)).toMatch(/Great, thanks\.$/);
+      unmount();
+    }
+    // The overlay's own rule for the setting, so the preview and the overlay never differ.
+    for (const value of [1, 2, 3, 4, 5, 6, "2", null, undefined]) expect(previewLines(value)).toBe(visibleLines(value));
+    // The box is that many lines high and shows its newest ones: lines x the line height, bottom-aligned, the rest hidden.
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    const rule = css.match(/\.caption-sample-lines\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/max-height: calc\(var\(--caption-lines, 3\) \* 1\.4em\)/);
+    expect(rule).toMatch(/justify-content: flex-end/);
+    expect(rule).toMatch(/overflow: hidden/);
+    expect(css).toMatch(/\.caption-sample-lines > div\s*\{[^}]*flex: none/);
+    // In Urdu the card sits on the right, as the overlay's.
+    expect(css).toMatch(/\[dir="rtl"\] \.caption-sample\s*\{[^}]*justify-self: right/);
+  });
 
   it("saves the whole style with the changed value, from segments, selects, the slider and a switch", () => {
     const patch = vi.fn(async () => true);

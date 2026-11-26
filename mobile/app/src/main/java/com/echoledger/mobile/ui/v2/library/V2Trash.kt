@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -15,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.ui.MainViewModel
@@ -84,8 +86,13 @@ fun daysWords(res: android.content.res.Resources, days: Int): String = if (days 
 @Composable
 fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var items by remember { mutableStateOf<List<BinItemDto>?>(null) }
+    var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
-    LaunchedEffect(reload) { items = vm.bin() }
+    // A Trash the server could not give is not an empty one (EL-UX's audit): it says so, with Try again.
+    LaunchedEffect(reload) {
+        vm.binOrError().onSuccess { items = it }
+        failed = items == null
+    }
     val scope = rememberCoroutineScope()
     V2TrashContent(
         items = items,
@@ -93,11 +100,16 @@ fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, 
         onBack = onBack,
         onRestore = { id -> scope.launch { if (vm.restore(id)) reload++ } },
         onErase = { id -> scope.launch { if (vm.eraseNow(id)) reload++ } },
-        modifier = modifier
+        modifier = modifier,
+        failed = failed,
+        onRetry = {
+            failed = false
+            reload++
+        }
     )
 }
 
-/** Trash without the view model; [items] null while loading. */
+/** Trash without the view model; [items] null while loading; [failed]: the server could not give it ([onRetry] asks again). */
 @Composable
 fun V2TrashContent(
     items: List<BinItemDto>?,
@@ -105,7 +117,9 @@ fun V2TrashContent(
     onBack: () -> Unit,
     onRestore: (String) -> Unit,
     onErase: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    failed: Boolean = false,
+    onRetry: () -> Unit = {}
 ) {
     val c = EchoV2.colors
     val text = v2Text
@@ -115,28 +129,35 @@ fun V2TrashContent(
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(text.trash, onBack = onBack)
         when {
+            failed -> EchoEmptyState(text.trashError, "", icon = EchoIcons.Delete, actionLabel = text.tryAgain, onAction = onRetry)
+
             items == null -> EchoSkeletonList(4, Modifier.weight(1f))
 
             items.isEmpty() -> EchoEmptyState(text.trashEmptyTitle, text.trashKeeps(keepHours), icon = EchoIcons.Delete)
 
-            else -> LazyColumn(Modifier.weight(1f)) {
-                item {
-                    Text(
-                        text.trashKeeps(keepHours),
-                        style = EchoV2.type.meta,
-                        color = c.textSecondary,
-                        modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
-                    )
+            else -> Box(Modifier.weight(1f)) {
+                val trashList = androidx.compose.foundation.lazy.rememberLazyListState()
+                LazyColumn(Modifier.fillMaxSize(), state = trashList) {
+                    item {
+                        Text(
+                            text.trashKeeps(keepHours),
+                            style = EchoV2.type.meta,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
+                        )
+                    }
+                    items(items, key = { it.id }) { bin ->
+                        EchoListRow(
+                            title = bin.title.ifBlank { text.recordings },
+                            meta = eraseDay(bin.eraseAt, locale)?.let(text.erasesOn) ?: bin.client?.name,
+                            leading = { EchoAvatar(icon = EchoIcons.Delete) },
+                            tall = true,
+                            onClick = { actionsFor = bin }
+                        )
+                    }
                 }
-                items(items, key = { it.id }) { bin ->
-                    EchoListRow(
-                        title = bin.title.ifBlank { text.recordings },
-                        meta = eraseDay(bin.eraseAt, locale)?.let(text.erasesOn) ?: bin.client?.name,
-                        leading = { EchoAvatar(icon = EchoIcons.Delete) },
-                        tall = true,
-                        onClick = { actionsFor = bin }
-                    )
-                }
+                // Back to top (UX-25).
+                com.echoledger.mobile.ui.v2.components.EchoBackToTop(trashList, Modifier.align(Alignment.BottomEnd))
             }
         }
     }

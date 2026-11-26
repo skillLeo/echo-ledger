@@ -385,7 +385,7 @@ describe("MainApp sidebar and keys", () => {
     expect(help).not.toHaveTextContent(/Account → Preferences|console under Help/);
     expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.");
     expect(help).not.toHaveTextContent(/user guide/i);
-    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support/);
+    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/EchoLedger's windows show in your screenshots; only the live words \(Live Assist, captions, translation\) are hidden from them\. For support, send Copy diagnostics/);
     expect(within(help).getByText(/Shift\+← \/ Shift\+→/)).toBeInTheDocument();
     fireEvent.click(within(help).getByRole("button", { name: "Help articles" }));
     expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
@@ -842,7 +842,7 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
     respond("upgrade_request_latest", null);
     respond("account_get", { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
     await renderPaired({ budget: "reached" });
-    expect(banner()).toHaveTextContent("Monthly transcription limit reached. Recordings are kept but not transcribed.");
+    expect(banner()).toHaveTextContent("Monthly transcription limit reached. New recordings are kept as audio only.");
     expect(banner()).toHaveClass("danger");
     // A state: it never hides by itself (Notice's own tests prove a notice without a time has no timer).
     expect(banner()!.querySelector(".notice-timer")).toBeNull();

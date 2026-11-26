@@ -310,7 +310,8 @@ pub fn keep_above_everything<R: Runtime>(window: &WebviewWindow<R>) {
     });
 }
 
-/// How an overlay stands, for the Mac check, the smoke test and "Copy diagnostics".
+/// How a window stands, for the Mac check, the smoke test and "Copy diagnostics": an overlay (a floating panel), or the
+/// main window (a titled window with its buttons, never a panel: `smoke::main_window_problem`).
 pub fn window_facts<R: Runtime>(window: &WebviewWindow<R>, label: &'static str) -> Option<WindowFacts> {
     let (tx, rx) = mpsc::channel();
     let target = window.clone();
@@ -331,8 +332,10 @@ pub fn window_facts<R: Runtime>(window: &WebviewWindow<R>, label: &'static str) 
             class: object.class().name().to_string_lossy().into_owned(),
             style,
             panel: is_panel && style & MAC_NONACTIVATING as u64 != 0 && !ns_window.canBecomeKeyWindow(),
+            ns_panel: is_panel,
             activation_setter: activation_setter_applied(ns_window),
             sharing: ns_window.sharingType().0 as u64,
+            server_sharing: crate::privacy::window_server_sharing(ns_window.windowNumber() as i64),
         });
     });
     rx.recv_timeout(Duration::from_secs(2)).ok()
@@ -357,6 +360,14 @@ pub fn order<R: Runtime>(window: &WebviewWindow<R>, front: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_main_window_s_buttons_are_appkit_s_style_bits() {
+        let bits: Vec<usize> = super::super::geometry::MAC_MAIN_BUTTONS.iter().map(|(_, bit)| *bit).collect();
+        let appkit = [NSWindowStyleMask::Titled, NSWindowStyleMask::Closable, NSWindowStyleMask::Miniaturizable, NSWindowStyleMask::Resizable].map(|m| m.0);
+        assert_eq!(bits, appkit);
+        assert_eq!(MAC_NONACTIVATING, NSWindowStyleMask::NonactivatingPanel.0);
+    }
 
     extern "C-unwind" fn answer_no(_: *mut AnyObject, _: Sel) -> Bool {
         Bool::NO

@@ -58,6 +58,16 @@ object EchoTokens {
         val labelPinkFill = Color(0xFFF9E7F0)
         val labelPinkText = Color(0xFFBC2F75)
         val labelPinkDot = Color(0xFFD7609C)
+        val avatar0 = Color(0xFF0F766E)
+        val avatar1 = Color(0xFF1D5FB4)
+        val avatar2 = Color(0xFF0E7490)
+        val avatar3 = Color(0xFF4D7C0F)
+        val avatar4 = Color(0xFFBE185D)
+        val avatar5 = Color(0xFFC2410C)
+        val avatar6 = Color(0xFF15803D)
+        val avatar7 = Color(0xFF475569)
+        val avatarText = Color(0xFFFFFFFF)
+        val avatarRing = Color(0x14000000)
     }
 
     object Dark {
@@ -109,6 +119,16 @@ object EchoTokens {
         val labelPinkFill = Color(0xFF3A1D2B)
         val labelPinkText = Color(0xFFD968A1)
         val labelPinkDot = Color(0xFFC4317A)
+        val avatar0 = Color(0xFF0F766E)
+        val avatar1 = Color(0xFF1D5FB4)
+        val avatar2 = Color(0xFF0E7490)
+        val avatar3 = Color(0xFF4D7C0F)
+        val avatar4 = Color(0xFFBE185D)
+        val avatar5 = Color(0xFFC2410C)
+        val avatar6 = Color(0xFF15803D)
+        val avatar7 = Color(0xFF475569)
+        val avatarText = Color(0xFFFFFFFF)
+        val avatarRing = Color(0x1FFFFFFF)
     }
 
     object Space {
@@ -131,18 +151,21 @@ object EchoTokens {
         val md = 8.dp
         val lg = 12.dp
         val sheet = 16.dp
+        val group = 24.dp
         val full = 999.dp
     }
 
     object Layout {
         val pagePaddingDesktop = 24.dp
         val pagePaddingMobile = 16.dp
+        val pagePaddingPhone = 24.dp
         val rowComfortable = 56.dp
         val rowCompact = 44.dp
         val rowMobile = 64.dp
         val controlHeight = 36.dp
         val controlHeightMobile = 48.dp
         val controlTouchMin = 48.dp
+        val titlebarMacos = 40.dp
     }
 
     object Border {
@@ -160,6 +183,12 @@ object EchoTokens {
         val md = 20.dp
         val lg = 24.dp
         val xl = 40.dp
+    }
+
+    /** How much of a colour role a tint lays over a surface (0 to 1). */
+    object Tint {
+        const val returnedLight = 0.06f
+        const val returnedDark = 0.09f
     }
 
     /** Shadow depth of the floating layers (DESIGN_SYSTEM: shadows only on floating layers). */
@@ -184,10 +213,12 @@ object EchoTokens {
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
         val listRowHeightMobileTall = 72.dp
+        val bigButtonHeight = 56.dp
         val recordButton = 56.dp
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500
         val avatarSize = 40.dp
+        val avatarBadge = 16.dp
         val statusDotSize = 8.dp
         val sheetHandleWidth = 32.dp
         val sheetHandleHeight = 4.dp
@@ -208,6 +239,7 @@ object EchoTokens {
         val titleS = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(600))
         val body = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val bodyStrong = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(600))
+        val section = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight(500))
         val caption = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight(400))
         val mono = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val urduBody = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))

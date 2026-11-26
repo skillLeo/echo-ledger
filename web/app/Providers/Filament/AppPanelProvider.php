@@ -10,11 +10,15 @@ use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
+use App\Filament\Pages\GetTheApps;
+use App\Filament\Pages\LiveAssist\AssistPreps;
+use App\Filament\Pages\LiveAssist\AssistSessions;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
+use App\Filament\Support\NavFrame;
 use App\Filament\Support\Palette;
 use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
@@ -22,6 +26,7 @@ use App\Http\Middleware\ConsoleLanguage;
 use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use App\Http\Middleware\NoReferrerOnInvites;
+use App\Http\Middleware\VisitorLanguage;
 use App\Livewire\ActivityBell;
 use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
@@ -84,6 +89,20 @@ class AppPanelProvider extends PanelProvider
         // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));
+        // Since docs/PLAN_NAV_3_LEVELS.md section 4: Live Assist's page tabs (Upcoming · Past reports · Practice) under
+        // its heading, with the three levels.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE, fn (): View|string => ConsoleV2::frame() ? view('filament.v2.page-tabs', ['tabs' => NavFrame::liveAssistTabs(Livewire::current())]) : '',
+            scopes: [AssistSessions::class, AssistPreps::class]);
+        // Setup & health's tabs (Devices · Get the apps), the rail's own place, on Get the apps.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE, fn (): View|string => ConsoleV2::frame() ? view('filament.v2.page-tabs', ['tabs' => NavFrame::setupTabs()]) : '',
+            scopes: [GetTheApps::class]);
+        // Signing out (any way: the menu, Settings, an ended session) lands here: this browser forgets where each place
+        // was left (resources/js/frame-core.cjs allMemory), so nothing of it shows to the next person.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => auth()->check() ? '' : view('filament.v2.forget-places'));
+        // Signed out (since v2.1): the sign-in and sign-up pages' language picker, and the Urdu face for a visitor
+        // reading them in Urdu (VisitorLanguage).
+        FilamentView::registerRenderHook(PanelsRenderHook::SIMPLE_LAYOUT_END, fn (): View => view('filament.visitor.language-picker'), scopes: [Login::class, Register::class]);
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => ! auth()->check() && app()->isLocale('ur') && Filament::getCurrentPanel()?->getId() === 'app' ? view('filament.visitor.urdu-face') : '');
     }
 
     /** The trail or the subtitle the app's page draws no copy of itself (the page being rendered decides). */
@@ -145,7 +164,7 @@ class AppPanelProvider extends PanelProvider
             ->registration(Register::class)
             ->passwordReset(RequestPasswordReset::class)
             // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
-            // Since v1.6 (P6) its number counts only what needs you, "9+" above nine (App\Livewire\ActivityBell).
+            // Since v1.6 (P6) its number counts only what needs you, "99+" above 99 since 2.0.0-r (App\Livewire\ActivityBell).
             ->databaseNotifications(livewireComponent: ActivityBell::class)
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16) and Google (since v1.5) are under the sign-in form itself (Login::content, since v1.6.2).
@@ -235,6 +254,9 @@ class AppPanelProvider extends PanelProvider
                 // Since v1.8 P6.3: the sign-up page with an invitation sends no referrer.
                 NoReferrerOnInvites::class,
             ])
+            // Since v2.1: signed out, the visitor's language (picked on the sign-in page, else the browser's); also for
+            // the sign-in form's own requests. Signed in, ConsoleLanguage decides.
+            ->middleware([VisitorLanguage::class], isPersistent: true)
             ->authMiddleware([
                 Authenticate::class,
                 // B20: the current workspace is checked on every page and Livewire request.

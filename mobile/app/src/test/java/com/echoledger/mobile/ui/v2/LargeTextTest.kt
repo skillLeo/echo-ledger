@@ -37,8 +37,8 @@ import com.echoledger.mobile.ui.v2.library.TranscriptState
 import com.echoledger.mobile.ui.v2.library.V2LibraryContent
 import com.echoledger.mobile.ui.v2.library.V2RecordingContent
 import com.echoledger.mobile.ui.v2.library.V2TrashContent
-import com.echoledger.mobile.ui.v2.live.AfterCallMode
-import com.echoledger.mobile.ui.v2.live.V2AfterCallCard
+import com.echoledger.mobile.ui.v2.live.CallCardScreen
+import com.echoledger.mobile.ui.v2.live.CallChoiceCard
 import com.echoledger.mobile.ui.v2.live.V2LiveTab
 import com.echoledger.mobile.ui.v2.live.V2RecordingPill
 import com.echoledger.mobile.ui.v2.settings.AppearancePage
@@ -269,19 +269,7 @@ class LargeTextTest {
         Backdrop {
             V2RecordingPill(PillState(elapsedMs = 134_000), 0, name, {})
             V2RecordingPill(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR+EN"), 0, name, {})
-            V2AfterCallCard(
-                title = if (ur) "عمر خان سے کال" else "Call with Omar Khan",
-                durationMs = 252_000,
-                sourceWire = "whatsapp",
-                mode = AfterCallMode.Ask,
-                visibleMs = 10_000,
-                onSave = {},
-                onDelete = {},
-                onUndo = {},
-                onTitle = {},
-                onTranscribe = {},
-                countdown = false
-            )
+            CallChoiceCard(CallCardScreen.Ask(name, 252_000, "whatsapp", hint = true), {}, {}, {}, {}, still = true)
         }
     }
 }

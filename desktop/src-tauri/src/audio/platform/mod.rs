@@ -119,6 +119,32 @@ pub trait CaptureBackend: Send {
     fn take_notices(&mut self) -> Vec<crate::audio::devices::DeviceNotice> {
         Vec::new()
     }
+    /// Why the system side could not open while the microphone records on; none while it is open (or not wanted).
+    fn system_failure(&self) -> Option<String> {
+        None
+    }
+    /// Opens the system side again, as soon as it can; false when this backend cannot without a restart.
+    fn retry_system(&mut self) -> bool {
+        false
+    }
+    /// IOProc calls so far whose system buffer carried no data at all (a Mac tap macOS does not let through), as
+    /// opposed to zero-valued frames (nothing playing): `audio::health::SystemSide`.
+    fn system_empty_buffers(&self) -> u64 {
+        0
+    }
+}
+
+/// Whether another app is playing sound now (a Mac: Core Audio's process list, EchoLedger left out). False where it
+/// cannot be told.
+pub fn others_playing() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::others_playing()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Box<dyn CaptureBackend>, CaptureError> {
@@ -134,6 +160,22 @@ pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Box<dyn Capture
     {
         let _ = (streams, tx);
         Err(CaptureError::Unsupported)
+    }
+}
+
+/// Opens a capture with its system side (`open(true)`), else, for a call, without it (`open(false)`), so the
+/// microphone still records; returns the stream and why the system side could not open (pure over `open`). A recording
+/// never fails, or goes on silently without the other side, because of the system side alone: the reason is the
+/// warning's (`health::system_side_problem`).
+pub fn open_keeping_mic<S, E: std::fmt::Display>(streams: Streams, mut open: impl FnMut(bool) -> Result<S, E>) -> Result<(S, Option<String>), E> {
+    match open(true) {
+        Ok(stream) => Ok((stream, None)),
+        Err(error) if streams.mic && streams.system => {
+            let why = error.to_string();
+            eprintln!("[echoledger] capture: the system side could not open ({why}); recording the microphone only");
+            open(false).map(|stream| (stream, Some(why)))
+        }
+        Err(error) => Err(error),
     }
 }
 

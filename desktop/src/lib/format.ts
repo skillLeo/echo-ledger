@@ -1,4 +1,6 @@
-// Formatting helpers shared by views (pure; covered by Vitest in Phase 4).
+// Formatting helpers shared by views (pure; covered by Vitest in Phase 4). Dates, times and numbers in the window's
+// language (src/i18n): Urdu's ur-PK while the app speaks Urdu, the English forms the app has always shown otherwise.
+import { dateLocale, isolate, language, numberLocale, PDI, RLI, t, wordsIn, type Lang } from "../i18n/locale.ts";
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 /** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
@@ -21,9 +23,23 @@ export const SOURCE_APP_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-/** The display label of a `source_app` id; an id the app does not know yet is shown as is. */
-export function sourceAppLabel(app: string): string {
-  return SOURCE_APP_LABELS[app] ?? app;
+/**
+ * The display label of a `source_app` id: an app by its name in every language, the three that are words ("Phone call",
+ * "Voice note", "Other") in the window's language, or in English with `lang` "en" (a window still in English); an id
+ * the app does not know yet is shown as is.
+ */
+export function sourceAppLabel(app: string, lang?: Lang): string {
+  const { t } = wordsIn(lang);
+  switch (app) {
+    case "phone_call":
+      return t("Phone call");
+    case "voice_note":
+      return t("Voice note");
+    case "other":
+      return t("Other");
+    default:
+      return SOURCE_APP_LABELS[app] ?? app;
+  }
 }
 
 export function formatDuration(ms?: number | null): string {
@@ -43,21 +59,55 @@ export function setClock24(on: boolean): void {
 }
 export function clockTime(date: Date): string {
   return clock24
-    ? date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-    : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    ? date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-export function formatWhen(iso?: string, now: Date = new Date()): string {
-  if (!iso) return "";
+/** When something happened, in parts, in the window's language: the day ("Today", "Yesterday", "23 Nov") and the time. */
+export type WhenParts = { day: string; time: string; today: boolean; yesterday: boolean };
+
+/**
+ * The parts of formatWhen, for a place that shows only one of them (Activity's time today, a project's last call, a
+ * row's time): never by splitting formatWhen's line, which in Urdu is one right-to-left run. In Urdu the day is آج, کل
+ * or "23 نومبر" and the time keeps its space from breaking ("2:00 PM" whole). Null with no date, or one that isn't.
+ */
+export function whenParts(iso?: string | null, now: Date = new Date()): WhenParts | null {
+  if (!iso) return null;
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const sameDay = date.toDateString() === now.toDateString();
-  const time = clockTime(date);
-  if (sameDay) return `Today · ${time}`;
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
-  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
+  if (Number.isNaN(date.getTime())) return null;
+  const today = date.toDateString() === now.toDateString();
+  const before = new Date(now);
+  before.setDate(now.getDate() - 1);
+  const yesterday = date.toDateString() === before.toDateString();
+  const urdu = language() === "ur";
+  const time = urdu ? clockTime(date).replace(/\s/g, "\u00A0") : clockTime(date);
+  if (today) return { day: urdu ? t("Today") : "Today", time, today, yesterday };
+  if (yesterday) return { day: urdu ? t("Yesterday") : "Yesterday", time, today, yesterday };
+  return { day: dayMonth(date), time, today, yesterday };
+}
+
+/** A day with its short month, as whenParts says one that is neither today nor yesterday: "23 Nov", in Urdu "23 نومبر". */
+export function dayMonth(date: Date): string {
+  return date.toLocaleDateString(language() === "ur" ? "ur-PK" : [], { month: "short", day: "numeric" });
+}
+
+/** dayMonth of a calendar day written YYYY-MM-DD (the Library filters' own days), taken at that day's local start. */
+export const calendarDayMonth = (day: string): string => dayMonth(new Date(`${day}T00:00:00`));
+
+/** One of whenParts' parts as a line shows it: as it is in English; in Urdu in its own isolate, closed. */
+export function whenPart(part: string): string {
+  return language() === "ur" ? isolate(part) : part;
+}
+
+/**
+ * When something happened: "Today · 2:00 PM", "Yesterday · 2:00 PM", "23 Nov · 2:00 PM". In Urdu the day and the time
+ * are each their own isolated run inside one right-to-left run, so neither a left-to-right box (.el-ltr) nor a sentence
+ * around it swaps the month and the time or puts PM on its own line. English as it always was.
+ */
+export function formatWhen(iso?: string, now: Date = new Date()): string {
+  const parts = whenParts(iso, now);
+  if (!parts) return "";
+  return language() === "ur" ? `${RLI}${whenPart(parts.day)} · ${whenPart(parts.time)}${PDI}` : `${parts.day} · ${parts.time}`;
 }
 
 export function timestamp(ms: number): string {
@@ -159,8 +209,8 @@ export function copiedTranscript(
 }
 
 /** Display form of an accelerator for the current platform. */
-export function prettyShortcut(accelerator: string | undefined, platform: string): string {
-  if (!accelerator) return "Not set";
+export function prettyShortcut(accelerator: string | undefined, platform: string, lang?: Lang): string {
+  if (!accelerator) return wordsIn(lang).t("Not set");
   return accelerator
     .split("+")
     .map((k) => {
@@ -255,12 +305,12 @@ export function fileSize(bytes: number): string {
 
 /** Money as the apps write it: "Rs 2,999" (whole rupees, grouped). */
 export function rupees(amount: number): string {
-  return `Rs ${Math.round(amount).toLocaleString("en-US")}`;
+  return `Rs ${Math.round(amount).toLocaleString(numberLocale())}`;
 }
 
 /** A whole number with groups: "3,000". */
 export function count(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
+  return Math.round(n).toLocaleString(numberLocale());
 }
 
 /** A date in a row: "9 Dec" within this year, "9 Dec 2026" otherwise, in this computer's time zone. */
@@ -269,7 +319,7 @@ export function rowDate(iso: string | null | undefined, now: Date = new Date()):
   const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(at.getTime())) return "";
   const thisYear = at.getFullYear() === now.getFullYear();
-  return at.toLocaleDateString("en-GB", thisYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep");
+  return at.toLocaleDateString(dateLocale(), thisYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep");
 }
 
 /** A date in a row that always has its year: "9 Dec 2026". */
@@ -281,12 +331,12 @@ export function rowDateWithYear(iso: string | null | undefined): string {
 export function sentenceDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
 }
 
 /** A time of day by Settings › Appearance › Times: "3:42 pm" (12-hour) or "15:42" (24-hour). */
 export function formatTime(date: Date): string {
-  if (clock24) return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  if (clock24) return date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const h = date.getHours();
   const m = date.getMinutes();
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
