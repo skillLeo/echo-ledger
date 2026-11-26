@@ -58,6 +58,7 @@ html[lang='ur'] .v2-sb-label,
 html[lang='ur'] .v2-row-title,
 html[lang='ur'] .v2-row-meta,
 html[lang='ur'] .v2-chip,
+html[lang='ur'] .v2-list-chip,
 html[lang='ur'] .v2-btn,
 html[lang='ur'] .v2-bn-item,
 html[lang='ur'] .v2-status,
@@ -2441,6 +2442,13 @@ html[lang='ur'] .v2-library .v2-row-length {
     }
 }
 
+/* With a mouse the row keeps a thin scrollbar: the only sign that it scrolls sideways. */
+@media (pointer: fine) {
+    .v2-lists {
+        scrollbar-width: thin;
+    }
+}
+
 .v2-list-chip {
     display: inline-flex;
     flex: none;
@@ -2515,7 +2523,7 @@ html[lang='ur'] .v2-library .v2-row-length {
     height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
 }
 
-/* The eight label colours as one radio group: 32 px dots in 44 px targets, the chosen one ringed and ticked. The ring
+/* The eight label colours as one radio group: 32 px dots in 48 px targets, the chosen one ringed and ticked. The ring
    is an outline with a gap, and the focus ring goes round the whole target, so a chosen dot that has focus shows both. */
 .v2-colour-picker {
     display: flex;
