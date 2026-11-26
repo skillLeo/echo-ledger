@@ -1094,6 +1094,13 @@ data class ClientResponse(val data: ClientDto)
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
 
+/**
+ * The answer to marking many read or unread (contract 2.0.0-y): the ids it did and the ones it can't find. [done] null
+ * is an older server's answer (its route doesn't exist): the app asks one recording at a time then.
+ */
+@Serializable
+data class OpenedAnswer(val done: List<String>? = null, @SerialName("not_found") val notFound: List<String> = emptyList())
+
 /** A Library item's `transcribe_estimate` (2.0.0-j); [minutesLeft] null: no limit. */
 @Serializable
 data class TranscribeEstimateDto(val minutes: Long = 0, @SerialName("minutes_left") val minutesLeft: Long? = null)

@@ -505,10 +505,17 @@ fun V2LibraryScreen(
                 }
 
                 SelectionAction.Delete -> deleteRows(items)
+
+                // Contract 2.0.0-y: what wasn't done stays selected, and the words say how many.
+                SelectionAction.MarkRead, SelectionAction.MarkUnread -> {
+                    val run = vm.setOpened(ids, action == SelectionAction.MarkRead)
+                    picked = run.left.toSet()
+                    toasts.show(openedWords(res, run, action == SelectionAction.MarkRead))
+                }
             }
-            if (action !is SelectionAction.Export && action !is SelectionAction.CopyForAi && action !is SelectionAction.Transcribe) {
-                picked = emptySet()
-            }
+            val keepsSelection = action is SelectionAction.Export || action is SelectionAction.CopyForAi ||
+                action is SelectionAction.Transcribe || action == SelectionAction.MarkRead || action == SelectionAction.MarkUnread
+            if (!keepsSelection) picked = emptySet()
         }
     }
     if (sortOpen) {
@@ -767,6 +774,12 @@ fun V2LibraryScreen(
                 onRequests = {
                     menuOpen = false
                     onRequests()
+                },
+                // Unread's own ⋮ (as the desktop's and the web's Unread view): every unread recording it lists.
+                onMarkAllRead = {
+                    menuOpen = false
+                    val unread = facts.filter { LibraryFacets.inPlace(it, LibraryPlace.UNREAD) }.map { it.item.id }
+                    scope.launch { toasts.show(openedWords(res, vm.setOpened(unread, true), true, selection = false)) }
                 },
                 onTrash = {
                     menuOpen = false
@@ -1620,3 +1633,27 @@ fun returnedTint(c: com.echoledger.mobile.ui.v2.theme.EchoV2Colors): androidx.co
 
 /** Marks the row come back to (tests read it; screen readers get its focus). */
 val ReturnedRow = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("ReturnedRow")
+
+/**
+ * What marking many read or unread says (contract 2.0.0-y): how many were marked; when some weren't (a stop, or an older
+ * server's limit), how many of how many, and how many are still selected.
+ */
+internal fun openedWords(
+    res: android.content.res.Resources,
+    run: com.echoledger.mobile.ui.MainViewModel.OpenedRun,
+    read: Boolean,
+    /** A selection keeps the ones not done; Mark all as read has none to keep, and says to do it again. */
+    selection: Boolean = true
+): String {
+    val marked = run.done.size
+    return when {
+        run.left.isEmpty() ->
+            res.getQuantityString(if (read) R.plurals.v2_lib_marked_read else R.plurals.v2_lib_marked_unread, marked, marked)
+
+        run.failure != null -> res.getString(R.string.v2_lib_marked_stopped, marked, run.total)
+
+        selection -> res.getString(R.string.v2_lib_marked_some, marked, run.total, run.left.size)
+
+        else -> res.getString(R.string.v2_lib_marked_some_again, marked, run.total)
+    }
+}

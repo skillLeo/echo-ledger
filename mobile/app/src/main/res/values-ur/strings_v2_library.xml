@@ -120,4 +120,21 @@
     <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · دوبارہ کوشش کے لیے ٹیپ کریں</string>
     <string name="v2_lib_row_no_audio">کوئی آواز نہیں</string>
     <string name="v2_lib_not_opened">ابھی کھولی نہیں گئی</string>
+    <!-- Contract 2.0.0-y: پڑھی ہوئی / نہ پڑھی گئی، انتخاب، ان پڑھی کی "سب کو پڑھی ہوئی کریں" اور ایک ریکارڈنگ۔ -->
+    <string name="v2_lib_mark_read">پڑھی ہوئی کریں</string>
+    <string name="v2_lib_mark_unread">نہ پڑھی گئی کریں</string>
+    <string name="v2_lib_mark_all_read">سب کو پڑھی ہوئی کریں</string>
+    <plurals name="v2_lib_marked_read">
+        <item quantity="one">%d ریکارڈنگ پڑھی ہوئی کر دی گئی</item>
+        <item quantity="other">%d ریکارڈنگز پڑھی ہوئی کر دی گئیں</item>
+    </plurals>
+    <plurals name="v2_lib_marked_unread">
+        <item quantity="one">%d ریکارڈنگ نہ پڑھی گئی کر دی گئی</item>
+        <item quantity="other">%d ریکارڈنگز نہ پڑھی گئی کر دی گئیں</item>
+    </plurals>
+    <string name="v2_lib_marked_some">%2$d میں سے %1$d ہو گئیں۔ %3$d ابھی منتخب ہیں۔</string>
+    <string name="v2_lib_marked_stopped">رک گیا: %2$d میں سے %1$d ہو گئیں۔ کنکشن دیکھ کر دوبارہ کوشش کریں۔</string>
+    <string name="v2_lib_marked_some_again">%2$d میں سے %1$d ہو گئیں۔ باقی کے لیے دوبارہ کریں۔</string>
+    <string name="v2_lib_marked_read_one">پڑھی ہوئی کر دی گئی</string>
+    <string name="v2_lib_marked_unread_one">نہ پڑھی گئی کر دی گئی</string>
 </resources>

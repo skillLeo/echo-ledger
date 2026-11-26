@@ -565,4 +565,22 @@ class LibraryRepositoryTest : AppTest() {
         assertTrue(runCatching { repo.refresh() }.isFailure)
         assertEquals(listOf("a"), repo.items.value.map { it.id })
     }
+
+    /** Contract 2.0.0-y and 2.0.0-t: read and unread here follow what the server did, and a sign-out between changes nothing. */
+    @Test
+    fun `rows are marked read or unread here, and not after a sign-out`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"), item("b")))))
+        repo.refresh()
+        val gen = repo.generation()
+        repo.setOpenedLocally(listOf("a", "b"), false, gen)
+        assertEquals(listOf(false, false), repo.items.value.map { it.opened })
+        repo.setOpenedLocally(listOf("a"), true, gen)
+        assertEquals(listOf(true, false), repo.items.value.sortedBy { it.id }.map { it.opened })
+        repo.markUnopenedLocally("a", gen)
+        assertEquals(false, repo.items.value.first { it.id == "a" }.opened)
+        assertEquals("kept in the cache", false, repository().items.value.first { it.id == "a" }.opened)
+        repo.setOpenedLocally(listOf("a"), true, gen + 1)
+        assertEquals("signed out since: nothing changes", false, repo.items.value.first { it.id == "a" }.opened)
+    }
 }

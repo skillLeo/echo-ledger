@@ -256,7 +256,15 @@ fun LibraryScreen(
                         onKeep = { run(ids, if (it) "keep" else "unkeep") },
                         onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
                         onDelete = { run(ids, "delete") },
-                        onRename = { renaming = items.firstOrNull { it.id == ids.singleOrNull() } }
+                        onRename = { renaming = items.firstOrNull { it.id == ids.singleOrNull() } },
+                        // Contract 2.0.0-y: what wasn't done stays selected, and the message says how many.
+                        onRead = { read ->
+                            scope.launch {
+                                val done = vm.setOpened(ids, read)
+                                picked = done.left.toSet()
+                                vm.showMessage(classicOpenedWords(done, read))
+                            }
+                        }
                     )
                 }
             } else if (!searching) {
@@ -801,5 +809,16 @@ fun GroupHeader(name: String, count: Int, folded: Boolean, selection: GroupSelec
             contentDescription = null,
             tint = c.textMuted
         )
+    }
+}
+
+/** Classic's words for marking many read or unread (contract 2.0.0-y), as v2's openedWords. */
+internal fun classicOpenedWords(run: MainViewModel.OpenedRun, read: Boolean): String {
+    val what = if (read) "read" else "unread"
+    val marked = run.done.size
+    return when {
+        run.left.isEmpty() -> if (marked == 1) "1 recording marked as $what" else "$marked recordings marked as $what"
+        run.failure != null -> "Stopped: $marked of ${run.total} marked as $what. Check the connection and try again."
+        else -> "$marked of ${run.total} marked as $what. ${run.left.size} still selected."
     }
 }

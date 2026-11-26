@@ -27,6 +27,7 @@ import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.awaitAppIdle
+import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
@@ -662,4 +663,26 @@ class LibraryScreenTest : ScreenTest() {
     private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
     private fun inDialog(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(isDialog()))
+
+    /** Contract 2.0.0-y: the selection's More actions has Mark as read and Mark as unread, one request for them all. */
+    @Test
+    fun `Mark as read and Mark as unread for the selection go in one request`() {
+        seed(item("a", title = "First call"), item("b", title = "Second call"))
+        server.on("POST", "/api/sessions/opened", FakeServer.json(200, """{"done":["a","b"],"not_found":[]}"""))
+        server.on("DELETE", "/api/sessions/opened", FakeServer.json(200, """{"done":["a"],"not_found":[]}"""))
+        showLibrary()
+        compose.onNodeWithText("First call").performTouchInput { longClick() }
+        compose.onNodeWithText("Second call").performClick()
+        compose.onNodeWithText("2 selected").assertIsDisplayed()
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Mark as read").performClick()
+        pumpUntil("marked") { vm.message.value == "2 recordings marked as read" }
+        val asked = server.requestsTo("POST", "/api/sessions/opened").single().bodyText()
+        assertEquals("a,b", Regex("\"(a|b)\"").findAll(asked).joinToString(",") { it.groupValues[1] })
+        compose.onNodeWithText("First call").performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Mark as unread").performClick()
+        pumpUntil("unmarked") { vm.message.value == "1 recording marked as unread" }
+        assertEquals(1, server.requestsTo("DELETE", "/api/sessions/opened").size)
+    }
 }

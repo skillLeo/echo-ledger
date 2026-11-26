@@ -223,6 +223,11 @@ private fun V2RecordingPage(
             }
         }
 
+        override fun read(on: Boolean) {
+            vm.markReadAs(item, on)
+            scope.launch { say(res.getString(if (on) R.string.v2_lib_marked_read_one else R.string.v2_lib_marked_unread_one)) }
+        }
+
         override fun keep(on: Boolean) {
             scope.launch {
                 if (vm.organise(item.id, keep = on)) say(res.getString(if (on) R.string.v2_rec_kept else R.string.v2_rec_not_kept))

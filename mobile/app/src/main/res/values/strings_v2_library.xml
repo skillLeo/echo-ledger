@@ -120,4 +120,21 @@
     <string name="v2_lib_row_failed">Transcription failed · Tap to retry</string>
     <string name="v2_lib_row_no_audio">No audio</string>
     <string name="v2_lib_not_opened">Not opened yet</string>
+    <!-- Contract 2.0.0-y: Mark as read and Mark as unread, for a selection, Unread's Mark all as read and one recording. -->
+    <string name="v2_lib_mark_read">Mark as read</string>
+    <string name="v2_lib_mark_unread">Mark as unread</string>
+    <string name="v2_lib_mark_all_read">Mark all as read</string>
+    <plurals name="v2_lib_marked_read">
+        <item quantity="one">%d recording marked as read</item>
+        <item quantity="other">%d recordings marked as read</item>
+    </plurals>
+    <plurals name="v2_lib_marked_unread">
+        <item quantity="one">%d recording marked as unread</item>
+        <item quantity="other">%d recordings marked as unread</item>
+    </plurals>
+    <string name="v2_lib_marked_some">%1$d of %2$d marked. %3$d still selected.</string>
+    <string name="v2_lib_marked_stopped">Stopped: %1$d of %2$d marked. Check the connection and try again.</string>
+    <string name="v2_lib_marked_some_again">%1$d of %2$d marked. Do it again for the rest.</string>
+    <string name="v2_lib_marked_read_one">Marked as read</string>
+    <string name="v2_lib_marked_unread_one">Marked as unread</string>
 </resources>
