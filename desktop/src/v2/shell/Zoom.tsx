@@ -1,7 +1,8 @@
 // Zoom, like Chrome (UX-07, v21_zoom): the title row's chip while the zoom isn't 100% ("⌕ 110%"; its menu steps it and
 // resets it, as Chrome's address bar does), and the bubble each change shows near the top for 2 s ("110% · Reset"; a
-// new change replaces it, there are never two).
+// new change replaces it, there are never two). Its words are the window's language (D-255).
 import { useEffect, useState } from "react";
+import { t } from "../../i18n";
 import { Icons } from "../components";
 import { Menu } from "../components/Menu";
 import { ZOOM_DEFAULT, ZOOM_EVENT, ZOOM_STEPS, useZoom, zoomBy } from "../../lib/zoom";
@@ -13,8 +14,8 @@ export const BUBBLE_MS = 2000;
 export function zoomStepper(level: number) {
   return {
     value: `${level}%`,
-    down: { label: "Zoom out", onPick: () => void zoomBy(-1), disabled: level <= ZOOM_STEPS[0] },
-    up: { label: "Zoom in", onPick: () => void zoomBy(1), disabled: level >= ZOOM_STEPS[ZOOM_STEPS.length - 1] },
+    down: { label: t("Zoom out"), onPick: () => void zoomBy(-1), disabled: level <= ZOOM_STEPS[0] },
+    up: { label: t("Zoom in"), onPick: () => void zoomBy(1), disabled: level >= ZOOM_STEPS[ZOOM_STEPS.length - 1] },
   };
 }
 
@@ -22,9 +23,9 @@ export function ZoomChip() {
   const level = useZoom();
   if (level === ZOOM_DEFAULT) return null;
   return (
-    <Menu label={`Zoom, ${level}%`} align="end"
-      items={[{ label: "Zoom", stepper: zoomStepper(level) }, { label: "Reset to 100%", onPick: () => void zoomBy(0) }]}
-      button={{ variant: "quiet", size: "sm", icon: Icons.ZoomIcon, text: `${level}%`, className: "el-zoom-chip", title: `Zoom ${level}%`, "aria-label": `Zoom, ${level}%` }} />
+    <Menu label={t("Zoom, :level%", { level })} align="end"
+      items={[{ label: t("actions_context.zoom"), stepper: zoomStepper(level) }, { label: t("Reset to 100%"), onPick: () => void zoomBy(0) }]}
+      button={{ variant: "quiet", size: "sm", icon: Icons.ZoomIcon, text: `${level}%`, className: "el-zoom-chip", title: t("Zoom :level%", { level }), "aria-label": t("Zoom, :level%", { level }) }} />
   );
 }
 
@@ -48,7 +49,7 @@ export function ZoomBubble() {
       {shown !== null && (
         <>
           <span className="el-num">{shown}%</span>
-          {shown !== ZOOM_DEFAULT && <>{" · "}<button type="button" className="el-zoom-bubble__reset" onClick={() => void zoomBy(0)}>Reset</button></>}
+          {shown !== ZOOM_DEFAULT && <>{" · "}<button type="button" className="el-zoom-bubble__reset" onClick={() => void zoomBy(0)}>{t("Reset")}</button></>}
         </>
       )}
     </div>

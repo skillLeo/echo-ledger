@@ -285,7 +285,7 @@ const SCREENS = [
     }, viewport],
     [`confirm-revoke-link${size}`, "library&plan=free", async (page) => {
       await page.waitForSelector(".app");
-      await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Shared", exact: true }).click();
+      await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Shared", exact: true }).click();
       await page.getByRole("tab", { name: /My links/ }).click();
       await page.getByRole("button", { name: "Revoke", exact: true }).first().click();
       await page.getByRole("alertdialog", { name: "Revoke this link?" }).waitFor();

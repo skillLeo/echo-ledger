@@ -182,7 +182,7 @@ try {
   for (const width of [1280, 1024]) {
     const page = await open(width, "en", "light", "&longtitle=1");
     // Below 1100 px the label is in the Library's flyout.
-    if (width < 1100) await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Library/ }).click();
+    if (width < 1100) await page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Library/ }).click();
     await page.getByRole("button", { name: /Follow up with Qureshi/ }).first().click();
     if (width < 1100 && await page.getByTestId("nav-panel").count()) await page.keyboard.press("Escape");
     await page.waitForTimeout(600);

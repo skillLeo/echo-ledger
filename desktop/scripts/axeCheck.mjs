@@ -19,7 +19,7 @@ const json = arg("json");
 const axePath = join(desktop, "node_modules", "axe-core", "axe.min.js");
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 
-const rail = (page) => page.getByRole("navigation", { name: "Main" });
+const rail = (page) => page.locator('nav[data-nav="main"]');
 const place = (name) => async (page) => {
   await rail(page).getByRole("button", { name: new RegExp(`^${name}`) }).first().click();
   await page.waitForTimeout(1200);

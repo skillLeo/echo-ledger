@@ -182,7 +182,7 @@ describe("the Library in Urdu", () => {
     await act(flushAsync);
     const duplicate = async () => {
       fireEvent.contextMenu(within(screen.getByRole("list", { name: "میرے ویوز" })).getByRole("button", { name: "Calls" }), { clientX: 20, clientY: 30 });
-      fireEvent.click(within(screen.getByRole("menu", { name: "Calls" })).getByRole("menuitem", { name: "Duplicate" }));
+      fireEvent.click(within(screen.getByRole("menu", { name: "Calls" })).getByRole("menuitem", { name: "نقل بنائیں" }));
       await act(flushAsync);
       await act(flushAsync);
     };

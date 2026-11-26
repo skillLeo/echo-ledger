@@ -32,7 +32,7 @@ async function open(width, theme, lang) {
   const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
   page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=activity&theme=${theme}&uiflags=${FLAGS}&platform=macos&lights=1&grouped=1${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).waitFor();
+  await page.locator('nav[data-nav="main"]').waitFor();
   await page.getByRole("heading", { name: "Needs action" }).waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);

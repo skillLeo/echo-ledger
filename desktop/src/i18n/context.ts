@@ -20,4 +20,26 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // Quiet hours' two times, a row each under Quiet hours (ur.json's "From" is a sender's, ماخذ).
   "settings_context.quiet_from": "From",
   "settings_context.quiet_to": "To",
+  // The Mac menu bar's Edit, View and Find (Edit › Find) menus (D-248): menus' names, not the buttons' verbs (ur.json's
+  // "Edit" is ترمیم کریں, "Find" تلاش کریں) nor the layout (انداز).
+  "actions_context.menu_edit": "Edit",
+  "actions_context.menu_view": "View",
+  "actions_context.menu_find": "Find",
+  // The window's Zoom (Window › Zoom) and the avatar's: the size, not the meeting app (ur.json's "Zoom" is the brand).
+  "actions_context.zoom": "Zoom",
+  // Between the parts of a name read out (D-253: the rail's "Activity, 3, something failed", the account's, a locked
+  // command's ", Live Translate is in Pro"): Urdu's comma (،) in Urdu.
+  "shell_context.separator": ", ",
+  // Live's dot in the rail, said after its name: a call being recorded, or captions or dictation running (ur.json's
+  // "recording" is the noun, ریکارڈنگ; "On" a switch's).
+  "shell_context.live_recording": "recording",
+  "shell_context.live_on": "on",
+  // Pages in the window's search whose name reads otherwise in the catalogue (D-253): Upload opens the file picker
+  // (ur.json's "Upload" is the verb), the Library's Waiting and No project places (a state, and an empty project field).
+  "palette_context.upload": "Upload",
+  "palette_context.waiting": "Waiting",
+  "palette_context.no_project": "No project",
+  // The new design's Record command: the verb (ریکارڈ کریں), where the rail's Record is the place (ur.json's "Record",
+  // ریکارڈ).
+  "palette_context.record": "Record",
 };

@@ -2,6 +2,7 @@
 // ids in 3b's order and groups ("-" starts a group). Only what fits is shown: what doesn't apply to what was clicked,
 // or that nothing here can do, is left out (not greyed), and a sub-menu with no choices goes too.
 import type { MenuItem } from "../components/Menu";
+import { tc } from "../../i18n";
 import { latinKey } from "./latinKey";
 import { canRun, findAction, menuItems, type ActionContext } from "./registry";
 
@@ -91,5 +92,5 @@ export function contextItems(ids: readonly string[], ctx: ActionContext, childre
   return out;
 }
 
-/** "3 recordings": a several-things menu's title (3b: a title only when several are chosen). */
-export const manyTitle = (n: number, things = "recordings") => (n > 1 ? `${n} ${things}` : undefined);
+/** "3 recordings": a several-things menu's title (3b: a title only when several are chosen), in the window's language. */
+export const manyTitle = (n: number) => (n > 1 ? tc(":count recording|:count recordings", n) : undefined);
