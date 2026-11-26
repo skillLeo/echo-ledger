@@ -8,6 +8,7 @@ import { titleOf } from "../../lib/settingsRegistry";
 import { reducedMotion } from "../../lib/motion";
 import { LucideChevronRightIcon, LucideExternalLinkIcon } from "../../components/Icons";
 import { confirmAction } from "../../lib/confirm";
+import { t } from "../../i18n";
 
 /** The attributes that make a row a search target. */
 export function rowAttrs(id: string): { id: string; "data-setting": string; tabIndex: number } {
@@ -331,7 +332,7 @@ export function useCopied(): [string | null, (key: string, text: string) => Prom
  * the button repeats the verb; red only for what deletes, discards or signs out (`tone`). Keyboard and screen readers:
  * Cancel has the focus when it opens (the safe answer: Enter cancels and never presses the opener again), Tab stays
  * inside, Escape cancels and no window behind it hears it, and the focus goes back to the opener when it closes. */
-export function ConfirmDialog({ title, body, cancel = "Cancel", confirm, onConfirm, onClose, busy = false, error = null, tone = "danger" }: {
+export function ConfirmDialog({ title, body, cancel = t("Cancel"), confirm, onConfirm, onClose, busy = false, error = null, tone = "danger" }: {
   title: string;
   body?: ReactNode;
   cancel?: string;
