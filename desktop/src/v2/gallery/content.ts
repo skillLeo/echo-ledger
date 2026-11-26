@@ -123,7 +123,7 @@ export const COPY: Record<Lang, Copy> = {
       { id: "r2", app: "google_meet", title: "ہفتہ وار سیلز جائزہ، مہران فوڈز", meta: "Google Meet · 6 افراد · کراچی اور لاہور دفاتر", time: "صبح 10:05", duration: "46:10", day: "today" },
       { id: "r3", app: "voice_note", title: "وائس نوٹ", meta: "پورٹ قاسم کنٹینر کے بارے میں کسٹمز ایجنٹ کو کال کریں", time: "صبح 9:18", duration: "2:14", day: "today", untranscribed: true },
       { id: "r4", app: "phone_call", title: "عثمان چوہدری · چوہدری اسٹیل", meta: "12 ملی میٹر سریے کا ریٹ، گوجرانوالہ ڈیلیوری", time: "صبح 8:47", duration: "7:32", day: "today", untranscribed: true },
-      { id: "r5", app: "zoom", title: "حبیب اینڈ کمپنی کے ساتھ آڈٹ کا آغاز", meta: "Zoom · سہ ماہی سیلز ٹیکس ریٹرن اور انوائسز", time: "شام 4:30", duration: "38:02", day: "yesterday" },
+      { id: "r5", app: "zoom", title: "حبیب اینڈ کمپنی کے ساتھ آڈٹ کا آغاز", meta: "Zoom · سہ ماہی سیلز ٹیکس ریٹرن اور انوائسز", time: "سہ پہر 4:30", duration: "38:02", day: "yesterday" },
       { id: "r6", app: "whatsapp_business", title: "فاطمہ ملک · لاہور لیدر ورکس", meta: "300 جیکٹوں کے نمونے کی منظوری، ایف او بی قیمت", time: "دوپہر 2:12", duration: "12:51", day: "yesterday" },
       { id: "r7", app: "microsoft_teams", title: "انٹرویو: اکاؤنٹس آفیسر", meta: "Microsoft Teams · کامران بٹ، دوسرا راؤنڈ", time: "صبح 11:00", duration: "32:05", day: "yesterday" },
       { id: "r8", app: "whatsapp", title: "سعدیہ حسن · زمزم ٹریولز", meta: "فروری میں 14 افراد کے عمرہ گروپ کی بکنگ", time: "صبح 9:40", duration: "5:48", day: "yesterday", untranscribed: true },

@@ -155,6 +155,25 @@ class LibraryRepository(
     }
 
     /**
+     * Marks [ids] read ([opened]) or unread here (contract 2.0.0-y: the ones the server did), unless signed out since
+     * [expected]; nothing is written when none changes.
+     */
+    suspend fun setOpenedLocally(ids: Collection<String>, opened: Boolean, expected: Int) = lock.withLock {
+        synchronized(this) {
+            if (expected != gen) return@withLock
+            val wanted = ids.toSet()
+            val current = _items.value
+            if (current.none { it.id in wanted && it.opened != opened }) return@withLock
+            val updated = current.map { if (it.id in wanted && it.opened != opened) it.copy(opened = opened) else it }
+            _items.value = updated
+            save(Cache(since, updated))
+        }
+    }
+
+    /** Marks [id] unread here at once (Mark as unread, contract 2.0.0-t), unless signed out since [expected]. */
+    suspend fun markUnopenedLocally(id: String, expected: Int) = setOpenedLocally(listOf(id), false, expected)
+
+    /**
      * Gives [id]'s row the views state the server has now (its `/views`): a view that stopped (failed after 20 minutes
      * with nothing done) does not change the recording, so no sync brings it. Nothing changes when signed out since
      * [expected] (the generation taken before asking the server).

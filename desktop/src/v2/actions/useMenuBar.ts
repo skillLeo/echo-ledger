@@ -2,9 +2,12 @@
 // changes (a command registered or taken back, the sidebar hidden, a recording started, a field focused). Only with the
 // new design's shell (ui_v2.shell): classic keeps the core's own bar (app_menu.rs build). A leaf of its own
 // (<MenuBar />, rendering nothing), so a focus change or a command registered redraws it and nothing else. The picks
-// are heard by the window's one listener (menuState.ts), whatever draws the bar. Windows has no menu bar.
+// are heard by the window's one listener (menuState.ts), whatever draws the bar. Windows has no menu bar. The words are
+// the window's language (D-248): the bar is drawn again when it changes, so it never stays in the language it had at
+// launch.
 import { useEffect, useSyncExternalStore } from "react";
 import { api } from "../../lib/ipc";
+import { useLanguage } from "../../i18n";
 import { handlersVersion, watchHandlers } from "./registry";
 import { menuBarModel } from "./menuBar";
 import { setMenuPart, useMenuSnapshot } from "./menuState";
@@ -42,6 +45,8 @@ export function useMenuBar(platform: string | null | undefined) {
   }, [mac]);
   // A command registered or taken back changes what is greyed: read again then.
   useSyncExternalStore(watchHandlers, handlersVersion, handlersVersion);
+  // Another language changes every word: read again then (the model's words are t()'s, in the language now).
+  useLanguage();
   const now = useMenuSnapshot();
   // Greyed and run as the focused page's selection, of its kind (the Library's Pin, Labels, Move… are a recording's).
   const bar = mac ? JSON.stringify(menuBarModel({ platform: "macos", state: now.state, targets: now.targets }, now.choices, now.kinds)) : null;

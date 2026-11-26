@@ -41,7 +41,7 @@ async function open({ width, height, zoom, platform, screen, place, recording })
   await page.addInitScript((kept) => { try { localStorage.setItem("echoledger-zoom", String(kept)); } catch { /* none */ } }, zoom);
   const where = platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1";
   await page.goto(`${base}scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS}${where}&zoom=${zoom}`);
-  const rail = page.getByRole("navigation", { name: "Main" });
+  const rail = page.locator('nav[data-nav="main"]');
   await rail.waitFor();
   await page.waitForTimeout(800);
   // The place from the rail, or from ⋯ More or the avatar's menu when it isn't in the rail.

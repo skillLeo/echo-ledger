@@ -79,6 +79,10 @@ sealed interface SelectionAction {
     data object Transcribe : SelectionAction
     data class Rename(val title: String) : SelectionAction
     data object Delete : SelectionAction
+
+    /** Mark as read and Mark as unread for the selection (contract 2.0.0-y). */
+    data object MarkRead : SelectionAction
+    data object MarkUnread : SelectionAction
 }
 
 /** The selection's export formats: classic's (Organise.EXPORT_FORMATS, in its order), then a Web page (.html). */
@@ -216,6 +220,14 @@ fun SelectionBar(
                         }
                     }
                     MenuHeader(stringResource(R.string.v2_lib_organise))
+                    MenuItem(EchoIcons.Check, stringResource(R.string.v2_lib_mark_read)) {
+                        close()
+                        onAction(SelectionAction.MarkRead)
+                    }
+                    MenuItem(EchoIcons.Unread, stringResource(R.string.v2_lib_mark_unread)) {
+                        close()
+                        onAction(SelectionAction.MarkUnread)
+                    }
                     onAddToList?.let { add ->
                         MenuItem(EchoIcons.Label, stringResource(R.string.v2_lists_add_to)) {
                             close()

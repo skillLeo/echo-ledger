@@ -66,10 +66,10 @@ async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "mac
   await page.addInitScript((kept) => { try { localStorage.setItem("echoledger-zoom", String(kept)); } catch { /* none */ } }, zoom);
   const where = platform === "windows" ? "&platform=windows&wintitle=1" : "&platform=macos&lights=1";
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${FLAGS}${platform === "windows" ? ",v21_win_titlebar" : ""}${where}&zoom=${zoom}${lang === "ur" ? "&lang=ur" : ""}${long ? "&longtitle=1" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).waitFor();
+  await page.locator('nav[data-nav="main"]').waitFor();
   // The Library from the rail when it is there (in the least window at 200% it may be in the avatar's menu).
   // (The fixture opens a recording: pressing the Library, already the page, starts it over on its list.)
-  const library = page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Library", exact: true });
+  const library = page.locator('nav[data-nav="main"]').getByRole("button", { name: "Library", exact: true });
   const rows = page.locator("button[data-row-id]").first();
   if (await library.count()) await library.click();
   if (!(await rows.waitFor({ timeout: 15_000 }).then(() => true, () => false))) {
@@ -77,7 +77,7 @@ async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "mac
     else {
       // In More, or (when not even More fits) in the avatar's menu.
       const more = page.getByTestId("rail-more").getByRole("button");
-      await ((await more.count()) ? more : page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Account/ })).click();
+      await ((await more.count()) ? more : page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Account/ })).click();
       await page.getByRole("menu").locator('[role^="menuitem"]', { hasText: "Library" }).first().click();
     }
     await rows.waitFor();
@@ -90,7 +90,7 @@ async function open(width, zoom, lang, theme, { height = HEIGHT, platform = "mac
       if (await library.count()) await library.click();
       else {
         const more = page.getByTestId("rail-more").getByRole("button");
-        await ((await more.count()) ? more : page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Account/ })).click();
+        await ((await more.count()) ? more : page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Account/ })).click();
         await page.getByRole("menu").locator('[role^="menuitem"]', { hasText: "Library" }).first().click();
       }
     }
@@ -168,7 +168,7 @@ try {
     let reach = moved === 0;
     let where = "every place shown";
     if (moved > 0) {
-      const holder = m.more ? page.getByTestId("rail-more").getByRole("button") : page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Account/ });
+      const holder = m.more ? page.getByTestId("rail-more").getByRole("button") : page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Account/ });
       await holder.click();
       const listed = await page.getByRole("menu").locator('[role^="menuitem"] .el-menu__label').allTextContents();
       await page.keyboard.press("Escape");
@@ -241,7 +241,7 @@ try {
   // The zoom's own parts, light and dark, at 1280 and 125%.
   for (const theme of ["light", "dark"]) {
     let page = await open(1280, 125, "en", theme);
-    await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Account/ }).click();
+    await page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Account/ }).click();
     await page.getByRole("menuitem", { name: "Zoom, 125%" }).waitFor();
     await page.screenshot({ path: join(out, `ui-avatar-row-${theme}.png`) });
     await page.keyboard.press("Escape");
@@ -257,7 +257,7 @@ try {
     if (!bubble?.includes("150%")) problems.push(`ui-bubble-${theme}: says ${bubble}`);
     await page.close();
     page = await open(1280, 125, "en", theme);
-    await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Settings", exact: true }).click();
+    await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: /^Appearance/ }).first().click();
     await page.getByRole("slider", { name: "Zoom" }).waitFor();
     await page.getByRole("slider", { name: "Zoom" }).scrollIntoViewIfNeeded();

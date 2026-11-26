@@ -180,6 +180,78 @@ class AccountLanguageTest : ScreenTest() {
         assertEquals("the latest choice stays", "en", vm.settings.value.accountLanguage)
     }
 
+    /**
+     * P-128: the latest choice is refused while an earlier one is still on its way and then lands. The server holds the
+     * earlier one, so once nothing else is on its way the phone shows it too, instead of the one before both.
+     */
+    @Test
+    fun anEarlierChoiceThatLandsAfterTheLatestWasRefusedIsShown() {
+        runBlocking { app.pairLocally(server) }
+        server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        runBlocking { app.graph.settings.update { it.copy(accountLanguage = "en") } }
+        val first = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        server.on("PATCH", "/api/account") { _ ->
+            if (asked.incrementAndGet() == 1) {
+                first.await(30)
+                FakeServer.json(200, account("ur"))
+            } else {
+                FakeServer.json(500, """{"message":"x"}""")
+            }
+        }
+        vm.setAccountLanguage("ur")
+        pumpUntil("the first on its way") { asked.get() == 1 }
+        vm.setAccountLanguage("en")
+        pumpUntil("the latest refused") { vm.message.value == "Couldn't change the language. Try again." }
+        assertEquals("put back what the server last said", "en", vm.settings.value.accountLanguage)
+        first.open()
+        pumpUntil("both answered") { vm.languageChangesInFlight() == 0 }
+        assertEquals("what the server holds now", "ur", vm.settings.value.accountLanguage)
+    }
+
+    /**
+     * P-128, the same with three: the latest is refused, the first lands while the second is still on its way (nothing
+     * changes yet), and the second is refused last. The phone ends on what the server confirmed last: the first.
+     */
+    @Test
+    fun withAChangeStillOnItsWayAnEarlierAnswerWaitsAndTheLastOneSettlesIt() {
+        runBlocking { app.pairLocally(server) }
+        server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        runBlocking { app.graph.settings.update { it.copy(accountLanguage = "en") } }
+        val first = server.hold()
+        val second = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        server.on("PATCH", "/api/account") { _ ->
+            when (asked.incrementAndGet()) {
+                1 -> {
+                    first.await(30)
+                    FakeServer.json(200, account("ur"))
+                }
+
+                2 -> {
+                    second.await(30)
+                    FakeServer.json(500, """{"message":"x"}""")
+                }
+
+                else -> FakeServer.json(500, """{"message":"x"}""")
+            }
+        }
+        vm.setAccountLanguage("ur")
+        pumpUntil("the first on its way") { asked.get() == 1 }
+        vm.setAccountLanguage("en")
+        pumpUntil("the second on its way") { asked.get() == 2 }
+        vm.setAccountLanguage("ur")
+        // Its words are in the language just chosen, so the count says it answered.
+        pumpUntil("the latest refused") { asked.get() == 3 && vm.languageChangesInFlight() == 2 }
+        assertEquals("put back what the server last said", "en", vm.settings.value.accountLanguage)
+        first.open()
+        pumpUntil("the first answered") { vm.languageChangesInFlight() == 1 }
+        assertEquals("the second may still change it", "en", vm.settings.value.accountLanguage)
+        second.open()
+        pumpUntil("all answered") { vm.languageChangesInFlight() == 0 }
+        assertEquals("what the server holds now", "ur", vm.settings.value.accountLanguage)
+    }
+
     /** A language the app doesn't speak keeps the last one known. */
     @Test
     fun anUnknownLanguageFromTheServerKeepsTheLastOneKnown() {

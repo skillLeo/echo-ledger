@@ -648,4 +648,34 @@ class ApiClientEndpointsTest {
 
         assertNull(only("GET", "/api/config").headers["Authorization"])
     }
+
+    // ---- Mark as read and unread for many (contract 2.0.0-y) and one (2.0.0-t) ---------------------------------------
+
+    private fun idsSent(method: String) =
+        only(method, "/api/sessions/opened").bodyJson()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+    @Test
+    fun `read and unread for many send their ids, and an older server's answer has no done`() = runBlocking {
+        server.on("POST", "/api/sessions/opened", FakeServer.json(200, """{"done":["01JA"],"not_found":["01JB"]}"""))
+        server.on("DELETE", "/api/sessions/opened", FakeServer.json(200, """{"done":["01JA","01JB"],"not_found":[]}"""))
+        val read = client().markOpenedMany(listOf("01JA", "01JB"))
+        assertEquals(listOf("01JA"), read.done)
+        assertEquals(listOf("01JB"), read.notFound)
+        assertEquals(listOf("01JA", "01JB"), idsSent("POST"))
+        val unread = client().markUnopenedMany(listOf("01JA", "01JB"))
+        assertEquals(listOf("01JA", "01JB"), unread.done)
+        assertEquals(listOf("01JA", "01JB"), idsSent("DELETE"))
+        // A 2xx without done (or with nothing at all) is an older server's answer.
+        server.on("POST", "/api/sessions/opened", FakeServer.json(200, """{"message":"ok"}"""))
+        assertNull(client().markOpenedMany(listOf("01JA")).done)
+        server.on("POST", "/api/sessions/opened", FakeServer.empty(204))
+        assertNull(client().markOpenedMany(listOf("01JA")).done)
+    }
+
+    @Test
+    fun `Mark as unread for one recording deletes its opened mark`() = runBlocking {
+        server.on("DELETE", "/api/sessions/01JA/opened", FakeServer.empty(204))
+        client().markUnopened("01JA")
+        assertNotNull(only("DELETE", "/api/sessions/01JA/opened").headers["Authorization"])
+    }
 }

@@ -58,6 +58,7 @@ html[lang='ur'] .v2-sb-label,
 html[lang='ur'] .v2-row-title,
 html[lang='ur'] .v2-row-meta,
 html[lang='ur'] .v2-chip,
+html[lang='ur'] .v2-list-chip,
 html[lang='ur'] .v2-btn,
 html[lang='ur'] .v2-bn-item,
 html[lang='ur'] .v2-status,
@@ -2266,6 +2267,103 @@ html[dir='rtl'] .v2-row-title {
     background-color: var(--el-role-bg-canvas);
 }
 
+/*
+ * The Library row (D12, docs/v2/design-review/D12-library-row.md): room for two lines (the title, then the first
+ * meaningful sentence), a hairline between rows from the text on, the whole row tinted on hover, one slot for the
+ * marks (.v2-row-marks: unread · pin · important · label dots) and the time over the length in the row's own face.
+ */
+.v2-library .v2-lib-row {
+    padding-block: var(--el-space-12);
+    gap: var(--el-space-16);
+    border-radius: var(--el-radius-md);
+}
+
+.v2-library .fi-ta-record:hover .v2-lib-row,
+.v2-library .fi-ta-record:has(:focus-visible) .v2-lib-row {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-library .fi-ta-record + .fi-ta-record .v2-lib-row {
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-library .v2-lib-row .v2-row-title {
+    font-size: var(--el-text-title-s-size);
+    line-height: var(--el-text-title-s-line);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-library .v2-lib-row [data-snippet] {
+    color: var(--el-role-text-secondary);
+}
+
+.v2-row-marks {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-row-marks:empty {
+    display: none;
+}
+
+.v2-row-marks .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* The time and the length: one size, one face (not mono), figures that line up, each set apart from the words around
+   it. The length ("12:22") reads left to right in every language; the time keeps its own words' direction, since in
+   Urdu it holds a translated month ("5 نومبر"). The face is the row's: the sans token, or Urdu's on an Urdu page, with
+   Urdu's taller line so Nastaliq isn't clipped. */
+.v2-library .v2-row-value time,
+.v2-library .v2-row-length {
+    font-family: var(--el-font-family-sans);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+    color: var(--el-role-text-secondary);
+    font-variant-numeric: tabular-nums;
+    unicode-bidi: isolate;
+}
+
+.v2-library .v2-row-length {
+    direction: ltr;
+}
+
+html[lang='ur'] .v2-library .v2-row-value time,
+html[lang='ur'] .v2-library .v2-row-length {
+    font-family: var(--el-font-family-urdu);
+    line-height: var(--el-text-urdu-caption-line);
+}
+
+/* The source mark's device badge: a ring in the row's colour keeps it off the mark's edge (D12 "The marks"). */
+.v2-library .v2-source-device {
+    inset-block-end: calc(-1 * var(--el-space-4));
+    inset-inline-end: calc(-1 * var(--el-space-4));
+    border: var(--el-border-strong) solid var(--el-role-bg-canvas);
+}
+
+.v2-library .fi-ta-record:hover .v2-source-device {
+    border-color: var(--el-role-bg-subtle);
+}
+
+/* A voice note's own mark: the app's calm accent with the voice glyph, instead of a grey mic. */
+.v2-source--voice {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-source--voice svg {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
 /* A split button (Copy): the main part acts, the chevron part opens the other choices; one shape, a hairline between. */
 .v2-split {
     display: inline-flex;
@@ -2299,6 +2397,169 @@ html[dir='rtl'] .v2-row-title {
 
 .v2-split > button:hover {
     background-color: var(--el-role-bg-canvas);
+}
+
+/* A row's tile holding a source mark draws no tile of its own: the mark is the shape (replaces an inline style). */
+.v2-row-tile:has(> .v2-source) {
+    background-color: transparent;
+}
+
+/* The player bar's moment ticks (bookmarks, pauses) stay 6 px to see, with a larger invisible area to press: about
+   22 px with a mouse and 38 px on touch. The tick is placed absolutely by the player, so it holds its ::after. */
+.fi-body .el-player .el-tick::after {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--el-space-8));
+}
+
+@media (pointer: coarse) {
+    .fi-body .el-player .el-tick::after {
+        inset: calc(-1 * var(--el-space-16));
+    }
+}
+
+/*
+ * Lists (D14, docs/v2/design-review/D14-lists.md): one chip row at the top of the Library: All · Unread · Important ·
+ * the person's lists · +. A list chip is its colour dot (.v2-label-dot--<name>) and its name; the selected chip takes
+ * the accent's tint with a check. The row scrolls sideways under 1280 px and wraps from there.
+ */
+/* The padding keeps the focus ring inside the scroller, which would otherwise cut it; the negative margin gives the
+   room back, as on desktop. */
+.v2-lists {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: calc(var(--el-focus-width) + var(--el-focus-offset));
+    margin: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
+}
+
+@media (min-width: 1280px) {
+    .v2-lists {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+}
+
+/* With a mouse the row keeps a thin scrollbar: the only sign that it scrolls sideways. */
+@media (pointer: fine) {
+    .v2-lists {
+        scrollbar-width: thin;
+    }
+}
+
+.v2-list-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-weight);
+    white-space: nowrap;
+}
+
+.v2-list-chip:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+/* The chip being shown: the row shows one list at a time, so it is aria-current, as on desktop. */
+.v2-list-chip[aria-current='true'],
+.v2-list-chip[aria-pressed='true'] {
+    border-color: var(--el-role-accent-default);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-list-chip:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-list-chip__count {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-list-add {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-component-chip-height);
+    height: var(--el-component-chip-height);
+    padding: 0;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+    cursor: pointer;
+}
+
+.v2-list-add:hover {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-list-add:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+/* Urdu chips are taller (D4: the Urdu caption line plus room); "+" stays round at the same height. */
+:lang(ur) .v2-list-chip {
+    min-height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+}
+
+:lang(ur) .v2-list-add {
+    width: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+    height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+}
+
+/* The eight label colours as one radio group: 32 px dots in 48 px targets, the chosen one ringed and ticked. The ring
+   is an outline with a gap, and the focus ring goes round the whole target, so a chosen dot that has focus shows both. */
+.v2-colour-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-4);
+}
+
+.v2-colour-picker label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-layout-control-touch-min);
+    height: var(--el-layout-control-touch-min);
+    cursor: pointer;
+}
+
+.v2-colour-picker input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.v2-colour-picker .v2-label-dot {
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+}
+
+.v2-colour-picker input:checked + .v2-label-dot {
+    outline: var(--el-border-strong) solid var(--el-role-text-primary);
+    outline-offset: var(--el-border-strong);
+}
+
+.v2-colour-picker label:has(input:focus-visible) {
+    border-radius: var(--el-radius-full);
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
 }
 
 /* ================================================================== 4b. the Library's filters and views (2.0.0-p)

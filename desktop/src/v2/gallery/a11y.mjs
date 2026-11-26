@@ -18,7 +18,7 @@ process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 const FLAGS = "ui_v2.shell,ui_v2.library,ui_v2.settings,ui_v2.setup_health,ui_v2.home,ui_v2.live,ui_v2.ask,live_assist,ui_v2.recording_controls,ui_v2.after_call";
 const app = (screen) => `scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS}`;
 const nav = (name) => async (page) => {
-  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name, exact: true }).click();
+  await page.locator('nav[data-nav="main"]').getByRole("button", { name, exact: true }).click();
   await page.waitForTimeout(1200);
 };
 const project = async (page) => {
@@ -46,8 +46,8 @@ const SCREENS = [
   ["a-trash", app("library"), async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", app("library"), nav("Home")],
   ["a-live", app("library"), nav("Live")],
-  ["a-live-translate", app("library"), async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
-  ["a-live-translate-ended", `${app("library")}&translate=ended`, async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-live-translate", app("library"), async (page) => { await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-live-translate-ended", `${app("library")}&translate=ended`, async (page) => { await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
   ["a-prep", app("library"), async (page) => { await nav("Live")(page); await page.getByRole("button", { name: "New session" }).click(); await page.waitForTimeout(800); }],
   ["a-ask", app("library"), nav("Ask")],
   ["a-project", app("project"), project],

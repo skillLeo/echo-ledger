@@ -29,7 +29,7 @@ const open = async (lang, theme) => {
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme: theme, reducedMotion: "reduce" });
   page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&lights=1${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Library", exact: true }).click();
+  await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Library", exact: true }).click();
   await page.locator("button[data-row-id]").first().waitFor();
   await page.evaluate(() => document.fonts.ready);
   return page;

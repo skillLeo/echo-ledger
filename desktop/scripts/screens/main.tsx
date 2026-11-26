@@ -99,7 +99,9 @@ const UPLOADS: UploadItem[] = [
   { id: "u-check", sourceApp: "google_meet", title: "Budget review", startedAt: new Date(Date.now() - 1_800_000).toISOString(), durationMs: 900_000, state: "verifying", lastError: null, attempts: 1, imported: false, progress: null, heldFor: null },
 ];
 const bluetooth = screen.endsWith("-bluetooth");
-const mac = screen.includes("-mac");
+// "&computer=macos": a Mac, for a screen whose name doesn't say "-mac" (the window's look is "&platform=macos"): what the
+// app is told of the computer says so too, so the keys it takes from it are a Mac's (the search's ⌘K, Record's menu).
+const mac = screen.includes("-mac") || params.get("computer") === "macos";
 const windows10 = screen.endsWith("-windows10");
 const onboarding = screen === "onboarding-mac";
 const NO_SYSTEM_AUDIO = { kind: "system_audio" as const, sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." };

@@ -162,7 +162,7 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           <span className="kbd" aria-hidden="true">{searchKeys}</span>
         </button>
       )}
-        <nav className="nav" aria-label="Main">
+        <nav className="nav" aria-label="Main" data-nav="main">
           <div className="nav-group">
             {navButton("record", "Home", <HomeIcon size={20} filled={tab === "record"} />, recording && <span className="status-dot live" aria-hidden="true" />)}
           </div>

@@ -154,6 +154,9 @@ interface RecordingMenuActions {
     fun skipSilences(on: Boolean)
     fun export(format: ExportFormat)
     fun delete()
+
+    /** Mark as read or Mark as unread (contract 2.0.0-t); nothing where the menu can't. */
+    fun read(on: Boolean) {}
 }
 
 /**
@@ -234,6 +237,12 @@ fun RecordingMenuContent(
             com.echoledger.mobile.ui.v2.components.EchoIcons.Important,
             stringResource(if (item.important) R.string.v2_lib_unmark_important else R.string.v2_lib_mark_important),
             { pick { actions.important(!item.important) } }
+        )
+        val read = item.opened != false
+        MenuRow(
+            if (read) com.echoledger.mobile.ui.v2.components.EchoIcons.Unread else com.echoledger.mobile.ui.v2.components.EchoIcons.Check,
+            stringResource(if (read) R.string.v2_lib_mark_unread else R.string.v2_lib_mark_read),
+            { pick { actions.read(!read) } }
         )
         if (canRetranscribe || hasAudio) MenuGroup(stringResource(R.string.v2_rec_menu_transcript))
         if (canRetranscribe) MenuRow(RecordingIcons.Language, stringResource(R.string.v2_rec_retranscribe), { pick(actions::retranscribe) })

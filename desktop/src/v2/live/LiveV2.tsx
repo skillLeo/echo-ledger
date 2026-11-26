@@ -58,7 +58,8 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
     return <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} />;
   }
 
-  const strip = shellStatus(status);
+  // The strip's buttons are this page's English (not converted yet): its status line says the same language.
+  const strip = shellStatus(status, "en");
   const key = (action: "dictation" | "toggle_captions" | "voice_note") => {
     const k = settings?.shortcuts?.[action];
     return k ? prettyShortcut(k, status.platform) : null;

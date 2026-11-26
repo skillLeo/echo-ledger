@@ -214,7 +214,9 @@ fun RowScope.SelectionActions(
     onKeep: (Boolean) -> Unit,
     onExport: (String) -> Unit,
     onDelete: () -> Unit,
-    onRename: (() -> Unit)? = null
+    onRename: (() -> Unit)? = null,
+    /** Mark as read ([true]) or as unread (contract 2.0.0-y). */
+    onRead: ((Boolean) -> Unit)? = null
 ) {
     var moveOpen by remember { mutableStateOf(false) }
     var labelOpen by remember { mutableStateOf(false) }
@@ -306,6 +308,10 @@ fun RowScope.SelectionActions(
             DropdownMenuItem(text = { Text("Unpin") }, onClick = { pick { onPin(false) } })
             DropdownMenuItem(text = { Text("Keep forever") }, onClick = { pick { onKeep(true) } })
             DropdownMenuItem(text = { Text("Stop keeping") }, onClick = { pick { onKeep(false) } })
+            onRead?.let { read ->
+                DropdownMenuItem(text = { Text("Mark as read") }, onClick = { pick { read(true) } })
+                DropdownMenuItem(text = { Text("Mark as unread") }, onClick = { pick { read(false) } })
+            }
             HorizontalDivider()
             Organise.EXPORT_FORMATS.forEach { (value, text) ->
                 DropdownMenuItem(text = { Text("Export as $text") }, onClick = { pick { onExport(value) } })

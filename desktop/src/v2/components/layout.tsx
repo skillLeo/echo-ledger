@@ -50,8 +50,10 @@ export function Avatar({ initials, size = "md", color, seed, photo, drawn = fals
 }
 
 /** The app's primary navigation; below the rail breakpoint (780 px window) it keeps its icons only. */
-export function Sidebar({ label, brand, brandEnd, children, footer, rail, width }: {
+export function Sidebar({ label, nav, brand, brandEnd, children, footer, rail, width }: {
   label: string;
+  /** A name for the code to find it by, in every language (data-nav: the app's sidebar is "main"). */
+  nav?: string;
   /** Icons only (true) or full (false) whatever the window's width; left out, the window's width decides. */
   rail?: boolean;
   /** Its width in CSS pixels while not a rail (the person's, 200 to 320); left out, the design's. */
@@ -63,7 +65,7 @@ export function Sidebar({ label, brand, brandEnd, children, footer, rail, width 
   footer?: ReactNode;
 }) {
   return (
-    <nav className="el-sidebar" aria-label={label} data-rail={rail === undefined ? undefined : rail ? "on" : "off"}
+    <nav className="el-sidebar" aria-label={label} data-nav={nav} data-rail={rail === undefined ? undefined : rail ? "on" : "off"}
       style={width !== undefined && !rail ? { ["--el-sidebar-width" as string]: `${width}px` } : undefined}>
       {(brand || brandEnd) && (
         <div className="el-sidebar__brand">

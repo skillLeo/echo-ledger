@@ -23,7 +23,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
     page.setDefaultTimeout(120_000);
     await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&lights=1${lang === "ur" ? "&lang=ur" : ""}`);
-    const rail = page.getByRole("navigation", { name: "Main" });
+    const rail = page.locator('nav[data-nav="main"]');
     await rail.waitFor();
     await rail.getByRole("button", { name: /^Library/ }).click();
     await page.locator("button[data-row-id]").first().waitFor();
