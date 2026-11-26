@@ -13,7 +13,7 @@ import { RulesSection } from "./FilingRules";
 import { ShareDialog } from "./ShareDialog";
 import { RequestLinksSheet } from "./RequestLinks";
 import { NO_TARGET, type Notify } from "../../lib/notice";
-import { useLanguage, wordsIn, type Lang } from "../../i18n";
+import { language, useLanguage, wordsIn, type Lang } from "../../i18n";
 
 /** What a project's page in the new look needs from the Projects page: the project, where it sits, its folders, the
  * project menu (whose dialogs this page keeps showing) and Share. */
@@ -118,6 +118,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   useLanguage();
   const words: Lang | undefined = renderNameDialog || renderPage || renderList ? undefined : "en";
   const { t } = wordsIn(words);
+  /** The Move and Delete dialogs' language (they default to classic's English): the window's on the new path (D-263). */
+  const dialogLang: Lang = words ?? language();
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const handledRequest = useRef(0);
@@ -233,11 +235,11 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
           onSubmit={(name) => create(name, dialog.parentId)} onClose={close} />
       )}
       {dialog.kind === "rename" && <NameDialogSwitch render={renderNameDialog} title={t("Rename :name", { name: dialog.project.name })} initial={dialog.project.name} submitLabel={t("Rename")} onSubmit={(name) => rename(dialog.project, name)} onClose={close} />}
-      {dialog.kind === "move" && <MoveProjectDialog project={dialog.project} projects={list} onMove={(parentId) => move(dialog.project, parentId)} onClose={close} />}
+      {dialog.kind === "move" && <MoveProjectDialog project={dialog.project} projects={list} onMove={(parentId) => move(dialog.project, parentId)} onClose={close} lang={dialogLang} />}
       {dialog.kind === "delete" && (
         <DeleteProjectDialog project={dialog.project} recordings={Math.max(dialog.project.session_count ?? 0, items.filter((i) => !i.deleted && i.client?.id === dialog.project.id).length)}
           folders={list.filter((c) => c.parent_id === dialog.project.id).length} parentName={parentName(dialog.project)}
-          onDelete={() => remove(dialog.project)} onClose={close} />
+          onDelete={() => remove(dialog.project)} onClose={close} lang={dialogLang} />
       )}
       {dialog.kind === "share" && <ShareDialog target={{ kind: "project", id: dialog.project.id, name: dialog.project.name }} start={dialog.start} notify={notify} onClose={close} />}
       {dialog.kind === "requests" && <RequestLinksSheet projects={list} projectId={dialog.projectId} focusId={dialog.focusId} notify={notify} onClose={close} />}

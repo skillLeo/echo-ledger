@@ -1263,6 +1263,9 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .pick-row svg { flex: none; color: var(--accent-text); }
 .pick-row.blocked svg { color: var(--text-faint); }
 .pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Urdu (D-263, as the new design's rows in D-262): the name clips its overflow and Nastaliq's ink rises above its line,
+   so in Urdu the clip box takes room on every side that its margins give back; the row's layout is unchanged. */
+:lang(ur) .pick-name { padding: var(--space-3) var(--space-2) var(--space-1); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-2)) calc(-1 * var(--space-1)); }
 .pick-note { flex: none; font-size: var(--text-xs); color: var(--text-faint); }
 .btn.inline-link { height: auto; padding: 0 2px; vertical-align: baseline; font-size: inherit; }
 .shared-list { gap: var(--space-2); }

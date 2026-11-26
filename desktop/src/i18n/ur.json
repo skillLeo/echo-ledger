@@ -2326,5 +2326,20 @@
   "The transcript was unclear here: check it before you rely on it": "یہاں ٹرانسکرپٹ واضح نہیں تھا: اس پر بھروسا کرنے سے پہلے اسے جانچ لیں",
   "notes_context.change_add": "اضافہ",
   "notes_context.change_remove": "حذف",
-  "notes_context.change_modify": "ترمیم"
+  "notes_context.change_modify": "ترمیم",
+  "Move :name": ":name منتقل کریں",
+  "Its recordings, files and folders move with it.": "اس کی ریکارڈنگز، فائلیں اور فولڈرز بھی ساتھ منتقل ہو جاتے ہیں۔",
+  "Top level": "اوپری سطح",
+  "Find a project": "پروجیکٹ تلاش کریں",
+  "No project is called that.": "اس نام کا کوئی پروجیکٹ نہیں۔",
+  "It is here now": "ابھی یہیں ہے",
+  "This project": "یہی پروجیکٹ",
+  "One of its own folders": "اس کا اپنا ایک فولڈر",
+  "Too deep: 4 levels at most": "بہت گہرا: زیادہ سے زیادہ 4 سطحیں",
+  "Its recording goes to the Inbox, so nothing is lost.|Its :count recordings go to the Inbox, so nothing is lost.": "اس کی ریکارڈنگ ان باکس میں چلی جاتی ہے، اس لیے کچھ ضائع نہیں ہوتا۔|اس کی :count ریکارڈنگز ان باکس میں چلی جاتی ہیں، اس لیے کچھ ضائع نہیں ہوتا۔",
+  "Its recordings go to the Inbox, so nothing is lost.": "اس کی ریکارڈنگز ان باکس میں چلی جاتی ہیں، اس لیے کچھ ضائع نہیں ہوتا۔",
+  "Its folder moves up to :parent, with its recordings.|Its :count folders move up to :parent, with their recordings.": "اس کا فولڈر اپنی ریکارڈنگز سمیت :parent میں چلا جاتا ہے۔|اس کے :count فولڈرز اپنی ریکارڈنگز سمیت :parent میں چلے جاتے ہیں۔",
+  "Its folder moves up to the top level, with its recordings.|Its :count folders move up to the top level, with their recordings.": "اس کا فولڈر اپنی ریکارڈنگز سمیت اوپری سطح پر چلا جاتا ہے۔|اس کے :count فولڈرز اپنی ریکارڈنگز سمیت اوپری سطح پر چلے جاتے ہیں۔",
+  "Its files, brief, notes, memory and filing rules are deleted with it.": "اس کی فائلیں، بریف، نوٹس، یادداشت اور فائلنگ کے قاعدے بھی ساتھ حذف ہو جاتے ہیں۔",
+  "Delete project": "پروجیکٹ حذف کریں"
 }
