@@ -423,6 +423,21 @@ export function Menu({ label, items: given, button, chip, header, align }: {
 }
 
 /**
+ * Where a right-click menu goes (pure; viewport coordinates): its start corner at the pointer, so it opens to the
+ * pointer's end side (right in English, left in right to left, D-256), and its sub-menus keep opening on that same side.
+ * Moved just far enough to stay inside the window; the left is returned either way, since the list is placed by it.
+ */
+export function placeContextMenu({ at, size, view, rtl: rightToLeft }: {
+  at: { x: number; y: number }; size: { width: number; height: number }; view: { width: number; height: number }; rtl: boolean;
+}): { x: number; y: number } {
+  const left = rightToLeft ? at.x - size.width : at.x;
+  return {
+    x: Math.max(0, Math.min(left, view.width - size.width)),
+    y: Math.max(0, Math.min(at.y, view.height - size.height)),
+  };
+}
+
+/**
  * The same menu at the pointer (a right-click on a row) or under a focused row (Shift+F10, the context-menu key).
  * It stays inside the window; Esc, a press outside or a pick closes it, and focus goes back to where it was.
  */
@@ -438,10 +453,7 @@ export function ContextMenu({ label, items, at, onClose, title }: {
     const el = list.current;
     if (!el) return;
     const box = el.getBoundingClientRect();
-    setPlace({
-      x: Math.max(0, Math.min(at.x, window.innerWidth - box.width)),
-      y: Math.max(0, Math.min(at.y, window.innerHeight - box.height)),
-    });
+    setPlace(placeContextMenu({ at, size: box, view: { width: window.innerWidth, height: window.innerHeight }, rtl: rtl(el) }));
   }, [at]);
   useEffect(() => {
     const away = (e: PointerEvent) => {
@@ -463,9 +475,9 @@ export function ContextMenu({ label, items, at, onClose, title }: {
   );
 }
 
-/** Where a context menu opens for a keyboard user: under the start of the focused element. */
+/** Where a context menu opens for a keyboard user: under the start of the focused element (its right in right to left). */
 export function menuPointFor(el: Element): { x: number; y: number } {
   const box = el.getBoundingClientRect();
-  return { x: box.left + box.width / 4, y: box.bottom };
+  return { x: rtl(el) ? box.right - box.width / 4 : box.left + box.width / 4, y: box.bottom };
 }
 

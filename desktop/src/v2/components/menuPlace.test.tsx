@@ -2,12 +2,12 @@
 // ran past the page into the sidebar and was clipped: "aren't transcribed"). It floats in its own layer above the app
 // and is placed from its button (placeMenu): flipped to the button's start edge where the end would run out of the
 // page, moved inside the window, and long items wrap inside its width.
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ContextMenu, Menu, placeMenu } from "./Menu";
+import { ContextMenu, Menu, menuPointFor, placeContextMenu, placeMenu } from "./Menu";
 import { SplitButton } from "./SplitButton";
 import { InfoIcon, MoreIcon, PhoneIcon, TranscriptIcon } from "./icons";
 
@@ -237,5 +237,65 @@ describe("an item's words in a right-to-left window", () => {
     }
     // The menu's layer takes the window's direction, so its labels sit on its start side, by their icons.
     expect(screen.getByRole("menu").closest(".el-layer")).toHaveAttribute("dir", "rtl");
+  });
+});
+
+// D-256: in right to left a right-click menu opened to the pointer's right while its sub-menus opened to the left.
+describe("a right-click menu at the pointer", () => {
+  const view = { width: 1280, height: 800 };
+  const size = { width: 224, height: 160 };
+  it("English: its left corner at the pointer, so it opens to the pointer's right (unchanged)", () => {
+    expect(placeContextMenu({ at: { x: 500, y: 300 }, size, view, rtl: false })).toEqual({ x: 500, y: 300 });
+  });
+  it("right to left: its right corner at the pointer, so it opens to the pointer's left, the side its sub-menus open on", () => {
+    expect(placeContextMenu({ at: { x: 500, y: 300 }, size, view, rtl: true })).toEqual({ x: 276, y: 300 });
+  });
+  it("English: near the window's right edge it moves left just enough to stay inside", () => {
+    expect(placeContextMenu({ at: { x: 1270, y: 300 }, size, view, rtl: false }).x).toBe(1280 - 224);
+  });
+  it("right to left: near the window's left edge it moves right just enough to stay inside", () => {
+    expect(placeContextMenu({ at: { x: 10, y: 300 }, size, view, rtl: true }).x).toBe(0);
+  });
+  it("either way it never starts off the window's other edge either (a pointer at or past it)", () => {
+    expect(placeContextMenu({ at: { x: -4, y: 300 }, size, view, rtl: false }).x).toBe(0);
+    expect(placeContextMenu({ at: { x: 1300, y: 300 }, size, view, rtl: true }).x).toBe(1280 - 224);
+  });
+  for (const rtl of [false, true]) {
+    it(`${rtl ? "right to left" : "English"}: near the bottom it moves up to stay inside, and at the top it stays at 0`, () => {
+      expect(placeContextMenu({ at: { x: 500, y: 790 }, size, view, rtl }).y).toBe(800 - 160);
+      expect(placeContextMenu({ at: { x: 500, y: -2 }, size, view, rtl }).y).toBe(0);
+    });
+  }
+
+  describe("drawn", () => {
+    let rect: ReturnType<typeof vi.spyOn<HTMLElement, "getBoundingClientRect">>;
+    beforeEach(() => {
+      rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    });
+    afterEach(() => {
+      document.documentElement.dir = "";
+      rect.mockRestore();
+    });
+    for (const rtl of [false, true]) {
+      it(`${rtl ? "right to left" : "English"}: the list is placed ${rtl ? "to the left of" : "to the right of"} the pointer`, () => {
+        if (rtl) document.documentElement.dir = "rtl";
+        rect.mockImplementation(function (this: HTMLElement) {
+          return domRect(this.getAttribute("role") === "menu" ? { left: 0, top: 0, right: 224, bottom: 160 } : { left: 0, top: 0, right: 0, bottom: 0 });
+        });
+        render(<ContextMenu label="Recording actions" items={[{ label: "Open", onPick: () => undefined }]} at={{ x: 500, y: 300 }} onClose={() => undefined} />);
+        const menu = screen.getByRole("menu");
+        expect(menu.style.left).toBe(rtl ? "276px" : "500px");
+        expect(menu.style.top).toBe("300px");
+      });
+    }
+    it("from the keyboard it opens under the focused row's start: a quarter in from its left, or its right in right to left", () => {
+      const row = document.createElement("div");
+      document.body.appendChild(row);
+      rect.mockImplementation(() => domRect({ left: 100, top: 40, right: 500, bottom: 80 }));
+      expect(menuPointFor(row)).toEqual({ x: 200, y: 80 });
+      document.documentElement.dir = "rtl";
+      expect(menuPointFor(row)).toEqual({ x: 400, y: 80 });
+      row.remove();
+    });
   });
 });
