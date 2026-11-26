@@ -23,7 +23,7 @@ import { noAiNotes } from "../../lib/plan";
 import { BRIEF_FIELDS, budgetLine, workspaceBusy } from "../../views/main/ClientWorkspace";
 import { NotesSections } from "../../views/main/CallNotes";
 import { LockedChip, PlanBadge, useLocked, useLockedTag } from "../../views/main/Upgrade";
-import { ProjectScreens } from "../../views/main/ScreenMoments";
+import { ProjectScreensV2 } from "./ProjectScreensV2";
 import type { Notify } from "../../lib/notice";
 import {
   Breadcrumbs,
@@ -325,7 +325,7 @@ function ScreensTab({ project, notify, onOpenRecording, onProjectChanged }: {
   }
   if (page === undefined) return <Loading label={t("Loading the screens")}><SkeletonRow end={false} /></Loading>;
   if (!page) return <EmptyState icon={Icons.ScreenIcon} title={t("No screens here")} body={t("Screens kept during this project's meetings appear here when the server keeps them.")} />;
-  return <ProjectScreens client={project} first={page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onProjectChanged ?? (() => undefined)} />;
+  return <ProjectScreensV2 client={project} first={page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onProjectChanged ?? (() => undefined)} />;
 }
 
 /** The call notes written after the project's calls, newest first, as today's AI notes tab. */

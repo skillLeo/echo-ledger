@@ -301,7 +301,8 @@ describe("a project's screens (ProjectScreens): the window's language on the new
     await act(flushAsync);
     const part = screen.getByRole("region", { name: "اس پروجیکٹ کے اسکرین کے لمحات" });
     expect(within(part).getByRole("switch", { name: "اسکرین کے لمحات محفوظ کریں" })).toHaveAttribute("aria-checked", "true");
-    const hint = document.getElementById("screens-keep-c1-hint")!;
+    // The new design's settings row (D-267): the switch's line is the row's meta.
+    const hint = part.querySelector(".el-row__meta-text")!;
     expect(hint.textContent).toBe(`${iso("Qureshi Textiles")} کی میٹنگز کے دوران اسکرین پر جو کچھ تھا، کمپیوٹر ایپ اسے محفوظ رکھتی ہے۔`);
     expect(hint).toHaveAttribute("dir", "rtl");
     const grid = screen.getByTestId("project-screens");
@@ -318,7 +319,7 @@ describe("a project's screens (ProjectScreens): the window's language on the new
     expect(viewer).toHaveAccessibleName(`اسکرین ${iso(2)} · ${iso("14:32")}`);
     expect(within(viewer).getByText(`${iso(3)} میں سے ${iso(2)}`)).toBeInTheDocument();
     // The recording's title in its isolate and when (the date keeps its no-break spaces).
-    const sub = viewer.querySelector(".screen-viewer-title .small")!;
+    const sub = viewer.querySelector(".el-screen-viewer__from")!;
     expect(sub.textContent).toBe(`${iso("Kick-off")} · ${dates[0]}`);
     expect(sub).toHaveAttribute("dir", "rtl");
     for (const name of ["بند کریں", "پچھلی اسکرین", "اگلی اسکرین", "یہاں سے چلائیں"]) expect(within(viewer).getByRole("button", { name })).toBeInTheDocument();

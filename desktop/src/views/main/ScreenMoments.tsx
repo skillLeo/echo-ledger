@@ -197,7 +197,8 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
 }
 
 /** "Kick-off · 4 Nov" under a project screen's label; in a right-to-left language the title sits in its isolate. */
-function sessionLine(s: ProjectScreen, lang?: Lang): string {
+/** Where a project's screen is from: its recording's title (isolated in right to left) and when it started. */
+export function sessionLine(s: ProjectScreen, lang?: Lang): string {
   const when = s.session_started_at ? formatWhen(s.session_started_at) : "";
   const title = titleIn(s.session_title, lang);
   return [rtlIn(lang) && s.session_title?.trim() ? isolate(title) : title, when].filter(Boolean).join(" · ");
@@ -210,22 +211,20 @@ function sessionLine(s: ProjectScreen, lang?: Lang): string {
  * Its words are in `lang`, the window's by default (the new design's project page, on its Files tab); classic's
  * project page passes "en". The project's and the recordings' names are as they are.
  */
-export function ProjectScreens({ client, first, notify, onOpenRecording, onClientChanged, lang }: {
+/**
+ * A project's screens and its keep switch, shared by classic's Screens tab (ProjectScreens) and the new design's
+ * (v2/workspace/ProjectScreensV2): the first page and the next ones (Show more), fresh links when a picture's has
+ * expired, and the server's switch.
+ */
+export function useProjectScreens({ client, first, notify, onClientChanged }: {
   client: ClientFolder;
-  /** The first page, read when the project opened (it also told whether the server has screen moments). */
   first: ProjectScreensPage;
   notify: Notify;
-  onOpenRecording: (id: string, ms?: number) => void;
   onClientChanged: (client: Partial<ClientFolder> & { id: string }) => void;
-  lang?: Lang;
 }) {
-  useLanguage();
-  const { t } = wordsIn(lang);
-  const rtl = rtlIn(lang);
   const [screens, setScreens] = useState<ProjectScreen[]>(first.data);
   const [cursor, setCursor] = useState<string | null>(first.next_cursor);
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState<number | null>(null);
   const [keeps, setKeeps] = useState<boolean | undefined>(client.screens);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -274,6 +273,24 @@ export function ProjectScreens({ client, first, notify, onOpenRecording, onClien
       setSaving(false);
     }
   };
+
+  return { screens, cursor, loading, more, renew, keeps, saving, toggle };
+}
+
+export function ProjectScreens({ client, first, notify, onOpenRecording, onClientChanged, lang }: {
+  client: ClientFolder;
+  /** The first page, read when the project opened (it also told whether the server has screen moments). */
+  first: ProjectScreensPage;
+  notify: Notify;
+  onOpenRecording: (id: string, ms?: number) => void;
+  onClientChanged: (client: Partial<ClientFolder> & { id: string }) => void;
+  lang?: Lang;
+}) {
+  useLanguage();
+  const { t } = wordsIn(lang);
+  const rtl = rtlIn(lang);
+  const [open, setOpen] = useState<number | null>(null);
+  const { screens, cursor, loading, more, renew, keeps, saving, toggle } = useProjectScreens({ client, first, notify, onClientChanged });
 
   const switchId = `screens-keep-${client.id}`;
   const hint = keeps ? t("The desktop keeps what was on screen during :name's meetings.", { name: client.name }) : t("Nothing on screen is kept for meetings filed under :name.", { name: client.name });

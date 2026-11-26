@@ -9,7 +9,7 @@ import { saidLines } from "../../lib/screens";
 import { timestamp } from "../../lib/format";
 import { usePicture } from "../../views/main/ScreenMoments";
 import { Button, Dialog, Icon, Icons } from "../components";
-import { lineDir, t, tc, useT } from "../../i18n";
+import { isRtl, lineDir, t, tc, useT } from "../../i18n";
 
 /** "Screen 7 · 14:32", in the window's language. */
 const screenLabel = (screen: Pick<ScreenMoment, "index" | "at_ms">) => t("Screen :index · :time", { index: screen.index, time: timestamp(screen.at_ms) });
@@ -76,11 +76,13 @@ export function LineScreens({ screens, onOpen }: { screens: ScreenMoment[]; onOp
  * The screen enlarged: previous and next (also the arrow keys), what it shows, what was said around it, the text on
  * it and its file name (the server's, once it sends one); Play from here and Delete screen.
  */
-export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay, onDelete, onExpired }: {
+export function ScreenViewerV2({ screens, index, said, heading, onIndex, onClose, onPlay, onDelete, onExpired }: {
   screens: ScreenMoment[];
   index: number;
   /** What was said around a screen ("Speaker: words" lines), the server's or worked out from the transcript. */
   said: (screen: ScreenMoment) => string | null;
+  /** Where a screen is from, when the list mixes recordings (a project's: "Kick-off · 12 Nov"). */
+  heading?: (screen: ScreenMoment) => string | null;
   onIndex: (index: number) => void;
   onClose: () => void;
   onPlay?: (screen: ScreenMoment) => void;
@@ -111,6 +113,7 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
     step((e.key === "ArrowRight") !== rtl ? 1 : -1);
   };
   const lines = saidLines(said(screen));
+  const from = heading?.(screen) ?? null;
   return (
     <Dialog open wide title={screenLabel(screen)} description={screen.description?.trim() || undefined} onClose={onClose}
       actions={(onPlay || onDelete) && (
@@ -129,6 +132,8 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
           </div>
           <Button variant="quiet" icon={Icons.ChevronEndIcon} directional aria-label={t("Next screen")} disabled={at === screens.length - 1} onClick={() => step(1)} />
         </div>
+        {/* The recording's title (in its isolate) then when: in Urdu one right-to-left line, the title's own letters kept. */}
+        {from && <p className="el-caption el-secondary el-screen-viewer__from" dir={isRtl() ? "rtl" : "auto"}>{from}</p>}
         <p className="el-caption el-secondary" aria-live="polite">{tc(":n of :count", screens.length, { n: at + 1 })}</p>
         <section className="el-screen-viewer__said" aria-labelledby="el-screen-said">
           <h3 className="el-body-strong" id="el-screen-said">{t("What was said")}</h3>

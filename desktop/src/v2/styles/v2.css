@@ -1233,6 +1233,14 @@ button.el-step__head { cursor: pointer; }
 .el-screen-thumb__wait { position: absolute; inset: 0; block-size: auto; }
 .el-screen-thumb:hover .el-screen-thumb__picture { border-color: var(--el-role-border-strong); }
 .el-screen-thumb__label { color: var(--el-role-text-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A project's screens (D-267): each recording's thumbnails under its title, wrapping; the keep switch is a settings row. */
+.el-project-screens { display: grid; gap: var(--el-space-16); min-inline-size: 0; }
+.el-project-screens__groups { display: grid; gap: var(--el-space-16); min-inline-size: 0; }
+.el-project-screens__group { display: grid; gap: var(--el-space-8); min-inline-size: 0; }
+.el-project-screens__title { margin: 0; font-size: var(--el-text-body-size); }
+.el-project-screens__grid { display: flex; flex-wrap: wrap; gap: var(--el-space-12); list-style: none; margin: 0; padding: 0; }
+.el-project-screens__more { display: flex; justify-content: center; }
+.el-screen-viewer__from { margin: 0; }
 .el-screens-strip { display: grid; gap: var(--el-space-4); margin-block-end: var(--el-space-16); min-inline-size: 0; }
 .el-screens-strip__title { margin: 0; font-size: var(--el-text-body-size); }
 .el-screens-strip__list {
@@ -1857,6 +1865,9 @@ body.el-resizing { cursor: col-resize; user-select: none; }
 .el-tab__count { margin-inline-start: var(--el-space-4); color: var(--el-role-text-secondary); }
 /* Urdu: a word's last letter reaches past its end (ز's tail), so the count keeps a wider gap ("ریکارڈنگز 2", not "ریکارڈنگز2"). */
 :lang(ur) .el-tab__count { margin-inline-start: var(--el-space-8); }
+/* The count is a number (.el-num, its own fixed direction), which in an Urdu window put its start margin on the far side,
+   against nothing (D-267: "ریکارڈنگز2"); a lone number reads the same either way, so it takes the tab's direction. */
+.el-tab .el-tab__count { direction: inherit; }
 
 /* A Library group's header stays at the top while its group scrolls (classic's); while recordings are being picked
    the selection bar holds the top instead. */
@@ -1952,6 +1963,9 @@ span.el-projects__fold { cursor: default; }
 .el-nav-section__fold + .el-nav-section__link { margin-inline-start: var(--el-space-4); }
 .el-nav-section__link[aria-current="page"] { color: var(--el-role-text-primary); }
 .el-nav-section__head .el-button { min-block-size: var(--el-space-24); min-inline-size: var(--el-space-24); padding: 0; }
+/* Urdu (D-267): a section's heading in Nastaliq rises above its 24 px head, into the row above it (a selected project's
+   box over "پروجیکٹس"), so in Urdu a section after another keeps that much more room above its head. */
+:lang(ur) .el-nav-section + .el-nav-section { margin-block-start: var(--el-space-8); }
 .el-nav-list { display: flex; flex-direction: column; gap: var(--el-border-hairline); }
 .el-nav-list--sub .el-nav-item--row { padding-inline-start: calc(var(--el-space-8) + var(--el-space-24)); }
 .el-nav-item--row { inline-size: 100%; min-block-size: var(--el-space-32); gap: var(--el-space-8); font-size: var(--el-text-body-size); }
