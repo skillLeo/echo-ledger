@@ -42,4 +42,8 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // The new design's Record command: the verb (ریکارڈ کریں), where the rail's Record is the place (ur.json's "Record",
   // ریکارڈ).
   "palette_context.record": "Record",
+  // D-261: the Record page's heading, Home in English, named in Urdu as the Record menu and the window's search name the
+  // page (ریکارڈ کا صفحہ); and its and Live's Record button, the verb (ریکارڈ کریں), where the rail's Record is the place.
+  "home_context.title": "Home",
+  "home_context.record": "Record",
 };

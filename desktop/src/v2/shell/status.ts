@@ -1,6 +1,6 @@
 // The sidebar's status line, kept apart from the shell so the app can work it out without loading the new screens. Its
-// words are the window's language (D-255) unless the caller asks for English (a page still in English: Home, Live); the
-// time is digits, and the app's name is the caller's (appLabel).
+// words are the window's language (D-255) unless the caller asks for English (a page still in English); the time is
+// digits, and the app's name is the caller's (appLabel).
 import { t, wordsIn, type Lang } from "../../i18n";
 
 /** `time`: a recording's length, shown after its words but kept out of the live region (it changes every second). */
@@ -15,7 +15,7 @@ function clock(elapsedMs: number): string {
 
 /**
  * The sidebar's status line from the core's status: recording first, then a Ready check that found problems. In `lang`:
- * the window's when left out, "en" beside a page's own English buttons (Home's and Live's strip).
+ * the window's when left out, "en" beside a page's own English buttons.
  */
 export function shellStatus(s: { recording: unknown; elapsedMs: number; callsReady?: boolean | null }, lang?: Lang): ShellStatus {
   const words = wordsIn(lang);
