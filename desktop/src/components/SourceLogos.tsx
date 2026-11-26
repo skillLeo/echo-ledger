@@ -6,6 +6,9 @@
 import type { ReactNode } from "react";
 
 const WHITE = "#FFFFFF";
+/** The light values of --el-role-accent-soft and --el-role-accent-text (tokens.css), for where the tokens aren't loaded. */
+const ACCENT_SOFT = "#E6F2F1";
+const ACCENT_TEXT = "#0F6E6A";
 
 function Tile({ size, label, children, round = false, bg }: { size: number; label?: string; children: ReactNode; round?: boolean; bg: string }) {
   return (
@@ -84,11 +87,18 @@ const MARKS: Record<string, (size: number, label?: string) => ReactNode> = {
       <path d="m5.4 11.6 11.7-4.5c.5-.2 1 .1.8.9l-2 9.4c-.1.7-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.6-.6.2-1z" fill={WHITE} />
     </Tile>
   ),
+  // The app's own source (D12): calm like the others, the app's accent-soft circle with the audio lines in accent-text,
+  // 20 of 40 with the family's one stroke. It reads the theme's tokens where they are loaded (v2 draws it with
+  // components/SourceMark instead) and falls back to their light values.
   voice_note: (size, label) => (
-    <Tile size={size} label={label} round bg="#5F6B73">
-      <rect x="9.5" y="5" width="5" height="9" rx="2.5" fill={WHITE} />
-      <path d="M7.2 11.5a4.8 4.8 0 0 0 9.6 0M12 16.4v2.6" fill="none" stroke={WHITE} strokeWidth="1.5" strokeLinecap="round" />
-    </Tile>
+    <svg width={size} height={size} viewBox="0 0 24 24" role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}
+      focusable="false" className="source-logo">
+      <circle cx="12" cy="12" r="12" style={{ fill: `var(--el-role-accent-soft, ${ACCENT_SOFT})` }} />
+      <svg x="6" y="6" width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+        style={{ stroke: `var(--el-role-accent-text, ${ACCENT_TEXT})` }}>
+        {["M2 10v3", "M6 6v11", "M10 3v18", "M14 8v7", "M18 5v13", "M22 10v3"].map((d) => <path key={d} d={d} />)}
+      </svg>
+    </svg>
   ),
 };
 
