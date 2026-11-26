@@ -50,7 +50,7 @@ it('reads the WhatsApp window in Urdu: choices, hints, the attach steps and the 
         ->toContain('صرف متن')->toContain('متن اور آواز')->toContain('لنک (7 دن تک چلے گا)')
         ->toContain('جس کے پاس یہ لنک ہو، وہ 7 دن تک پڑھ اور سن سکتا ہے۔')
         ->toContain('آواز آپ کے ڈاؤن لوڈز میں محفوظ ہو گئی ہے:')
-        ->toContain('محفوظ کی گئی آواز کی فائل واٹس ایپ میں لگائیں')->toContain('<b>دستاویز</b>')
+        ->toContain('محفوظ کی گئی آواز کی فائل WhatsApp میں لگائیں')->toContain('<b>دستاویز</b>')
         ->toContain('متن کاپی کریں')->toContain('اے آئی کے لیے کاپی کریں')
         // The words the buttons say after a click come from the same translations, as JSON for Alpine.
         ->toContain('لنک نہیں بن سکا۔ دوبارہ کوشش کریں۔')->toContain('متن کاپی ہو گیا۔')->toContain('لنک بن رہا ہے…')
